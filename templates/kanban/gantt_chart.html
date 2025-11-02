@@ -414,7 +414,10 @@
 <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
 <script>
     {% if tasks %}
-    // Prepare task data for Gantt chart
+    // Collect all task IDs for validation
+    const allTaskIds = new Set([{% for task in tasks %}'{{ task.id }}'{% if not forloop.last %},{% endif %}{% endfor %}]);
+    
+    // Prepare task data for Gantt chart with validated dependencies
     const tasks = [
         {% for task in tasks %}
         {
@@ -424,7 +427,7 @@
             start: '{{ task.start_date|date:"Y-m-d" }}',
             end: '{{ task.due_date|date:"Y-m-d" }}',
             progress: {{ task.progress|default:0 }},
-            dependencies: '{% for dep in task.dependencies.all %}{{ dep.id }}{% if not forloop.last %},{% endif %}{% endfor %}',
+            dependencies: '{% with deps=task.dependencies.all %}{% if deps %}{% for dep in deps %}{% if dep.start_date and dep.due_date %}{{ dep.id }}{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}{% endif %}{% endwith %}',
             custom_class: 'status-{{ task.column.name|lower|cut:" " }}',
             status: '{% if "done" in task.column.name|lower %}done{% elif "progress" in task.column.name|lower %}in_progress{% else %}todo{% endif %}',
             priority: '{{ task.priority }}',
@@ -432,6 +435,19 @@
         }{% if not forloop.last %},{% endif %}
         {% endfor %}
     ];
+    
+    // Validate and clean up dependencies
+    tasks.forEach(task => {
+        if (task.dependencies) {
+            const depIds = task.dependencies.split(',').filter(id => {
+                const trimmedId = id.trim();
+                // Only include dependencies that exist in our task list
+                // and are not self-referencing
+                return trimmedId && allTaskIds.has(trimmedId) && trimmedId !== task.id;
+            });
+            task.dependencies = depIds.join(',');
+        }
+    });
 
     let ganttChart = null;
 

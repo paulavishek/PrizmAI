@@ -767,12 +767,12 @@ def gantt_chart(request, board_id):
     if not (board.created_by == request.user or request.user in board.members.all()):
         return HttpResponseForbidden("You don't have access to this board.")
     
-    # Get all tasks for this board with dates
+    # Get all tasks for this board with dates, ordered by start_date for proper display
     tasks = Task.objects.filter(
         column__board=board,
         start_date__isnull=False,
         due_date__isnull=False
-    ).select_related('assigned_to', 'column').prefetch_related('dependencies')
+    ).select_related('assigned_to', 'column').prefetch_related('dependencies').order_by('start_date', 'id')
     
     context = {
         'board': board,
