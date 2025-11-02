@@ -466,26 +466,9 @@
                 padding: 18,
                 date_format: 'YYYY-MM-DD',
                 language: 'en',
-                custom_popup_html: function(task) {
-                    // Custom tooltip
-                    const start = new Date(task._start);
-                    const end = new Date(task._end);
-                    const duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-                    
-                    return `
-                        <div class="details-container">
-                            <h5>${task.fullName || task.name}</h5>
-                            <p><strong>Assigned to:</strong> ${task.assigned_to}</p>
-                            <p><strong>Duration:</strong> ${duration} days</p>
-                            <p><strong>Progress:</strong> ${task.progress}%</p>
-                            <p><strong>Status:</strong> ${task.status.replace('_', ' ').toUpperCase()}</p>
-                            <p><strong>Priority:</strong> ${task.priority.toUpperCase()}</p>
-                            <p><em>Click to view task details</em></p>
-                        </div>
-                    `;
-                },
+                popup_trigger: 'none', // Disable popup entirely for cleaner navigation
                 on_click: function(task) {
-                    // Redirect to task detail page
+                    // Redirect to task detail page immediately without showing popup
                     window.location.href = `/tasks/${task.id}/`;
                     return false; // Prevent default behavior
                 },
