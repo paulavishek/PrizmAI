@@ -38,6 +38,11 @@ class Command(BaseCommand):
         # Create chat room demo data
         self.create_chat_rooms_demo_data()
         
+        # Fix Gantt chart data with dynamic dates relative to current date
+        self.stdout.write(self.style.NOTICE('\nFixing Gantt chart demo data with dynamic dates...'))
+        from django.core.management import call_command
+        call_command('fix_gantt_demo_data')
+        
         self.stdout.write(self.style.SUCCESS('Successfully populated the database with all features!'))
         
         # Print login credentials for easy testing

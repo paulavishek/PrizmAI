@@ -86,38 +86,40 @@ class Command(BaseCommand):
         """Fix Software Project board with realistic project workflow"""
         self.stdout.write('  Setting up Software Development workflow...')
         
-        # Define a realistic project timeline
-        # Start date: today
+        # Define a realistic project timeline - ALWAYS relative to current date
+        # This ensures demo data is always relevant regardless of when it's run
         base_date = timezone.now().date()
         
         # Define task sequences with realistic durations and dependencies
-        # Each entry: (column_name, task_index, start_offset_days, duration_days)
+        # Offsets are RELATIVE to current date (base_date = today)
+        # Negative offset = days in the past, Positive offset = days in the future
+        # Format: (task_title_pattern, start_offset_days, duration_days)
         task_schedule = {
-            'Backlog': [
-                # Tasks in backlog - planned but not started yet
-                ('Implement user authentication', 30, 7),
-                ('Design database schema', 28, 5),
-                ('Setup CI/CD pipeline', 35, 4),
-            ],
-            'To Do': [
-                # Ready to start
-                ('Create component library', 15, 6),
-                ('Write documentation for API endpoints', 20, 5),
-            ],
-            'In Progress': [
-                # Currently being worked on
-                ('Implement dashboard layout', -3, 6),  # Started 3 days ago
-                ('Setup authentication middleware', -2, 5),  # Started 2 days ago
+            'Done': [
+                # Completed tasks (in the past)
+                ('Setup project repository', -20, 3),      # Started 20 days ago, took 3 days
+                ('Create UI mockups', -25, 5),             # Started 25 days ago, took 5 days
+                ('Remove legacy code', -15, 2),            # Started 15 days ago, took 2 days
             ],
             'Review': [
-                # In review - almost done
-                ('Review homepage design', -1, 3),  # Started yesterday
+                # In review - almost done (very recent)
+                ('Review homepage design', -3, 4),         # Started 3 days ago, 4 day duration
             ],
-            'Done': [
-                # Completed tasks
-                ('Setup project repository', -10, 3),
-                ('Create UI mockups', -13, 5),
-                ('Remove legacy code', -7, 2),
+            'In Progress': [
+                # Currently being worked on (started recently)
+                ('Implement dashboard layout', -5, 8),     # Started 5 days ago, 8 day duration
+                ('Setup authentication middleware', -7, 10), # Started 7 days ago, 10 day duration
+            ],
+            'To Do': [
+                # Ready to start (near future)
+                ('Create component library', 2, 6),        # Starts in 2 days, 6 day duration
+                ('Write documentation for API endpoints', 5, 5), # Starts in 5 days
+            ],
+            'Backlog': [
+                # Tasks in backlog - planned for later
+                ('Design database schema', 12, 5),         # Starts in 12 days
+                ('Implement user authentication', 18, 7),   # Starts in 18 days
+                ('Setup CI/CD pipeline', 25, 4),           # Starts in 25 days
             ],
         }
         
@@ -127,13 +129,16 @@ class Command(BaseCommand):
             for task in task_list:
                 all_tasks_dict[task.title] = task
         
-        # Apply dates to tasks
+        # Track which tasks were scheduled
+        scheduled_tasks = set()
+        
+        # Apply dates to tasks in the schedule
         for col_name, schedule_items in task_schedule.items():
             for title_pattern, start_offset, duration in schedule_items:
                 # Find matching task
                 task = None
                 for task_title, task_obj in all_tasks_dict.items():
-                    if title_pattern.lower() in task_title.lower():
+                    if title_pattern.lower() in task_title.lower() and task_obj not in scheduled_tasks:
                         task = task_obj
                         break
                 
@@ -146,26 +151,62 @@ class Command(BaseCommand):
                     task.due_date = timezone.make_aware(task.due_date) if timezone.is_naive(task.due_date) else task.due_date
                     task.save()
                     
+                    scheduled_tasks.add(task)
                     self.stdout.write(f'    ✓ {task.title[:50]}: {start_date} → {end_date}')
         
+        # Handle any remaining unscheduled tasks based on their column
+        for task in all_tasks_dict.values():
+            if task not in scheduled_tasks:
+                col_name = task.column.name
+                
+                # Assign default dates based on column
+                if col_name.lower() in ['done', 'closed', 'completed']:
+                    start_offset = -22
+                    duration = 4
+                elif col_name.lower() in ['review', 'testing']:
+                    start_offset = -4
+                    duration = 4
+                elif col_name.lower() in ['in progress', 'investigating']:
+                    start_offset = -6
+                    duration = 7
+                elif col_name.lower() in ['to do', 'new']:
+                    start_offset = 3
+                    duration = 5
+                else:  # Backlog or other
+                    start_offset = 20
+                    duration = 5
+                
+                start_date = base_date + timedelta(days=start_offset)
+                end_date = start_date + timedelta(days=duration)
+                
+                task.start_date = start_date
+                task.due_date = datetime.combine(end_date, datetime.max.time())
+                task.due_date = timezone.make_aware(task.due_date) if timezone.is_naive(task.due_date) else task.due_date
+                task.save()
+                
+                self.stdout.write(f'    ✓ {task.title[:50]} (auto): {start_date} → {end_date}')
+        
         # Create finish-to-start dependencies for a realistic project flow
-        # Project flow: Setup → Design → Backend → Frontend → Testing/Docs
+        # Project flow: Setup (Done) → Design (Backlog) → Backend (In Progress/To Do) → Frontend (To Do) → Review
         
         dependency_chains = [
-            # Database design depends on project setup
-            ('Design database schema', ['Setup project repository']),
-            # Authentication depends on database design
-            ('Implement user authentication', ['Design database schema']),
-            ('Setup authentication middleware', ['Design database schema']),
-            # Frontend depends on backend/auth
+            # Phase 1: Foundation (already done)
+            ('Setup authentication middleware', ['Setup project repository']),
+            
+            # Phase 2: Core Implementation (in progress)
             ('Implement dashboard layout', ['Setup authentication middleware']),
-            ('Create component library', ['Implement dashboard layout']),
-            # Review depends on implementation
+            
+            # Phase 3: Review current work
             ('Review homepage design', ['Implement dashboard layout']),
-            # CI/CD can run parallel but should have some deps
-            ('Setup CI/CD pipeline', ['Setup project repository']),
-            # Documentation depends on implementation
-            ('Write documentation for API endpoints', ['Setup authentication middleware', 'Implement user authentication']),
+            
+            # Phase 4: Future work (to do)
+            ('Create component library', ['Review homepage design']),
+            ('Design database schema', ['Setup project repository']),
+            
+            # Phase 5: Advanced features (backlog)
+            ('Implement user authentication', ['Design database schema']),
+            ('Setup CI/CD pipeline', ['Design database schema']),
+            ('Write documentation for API endpoints', ['Create component library', 'Implement user authentication']),
         ]
         
         for task_title, dep_titles in dependency_chains:
@@ -195,27 +236,34 @@ class Command(BaseCommand):
         """Fix Bug Tracking board with bug resolution workflow"""
         self.stdout.write('  Setting up Bug Tracking workflow...')
         
+        # Base date is always current date - keeps demo data fresh
         base_date = timezone.now().date()
         
-        # Define bug fix timeline
-        # Each entry: (task_title_pattern, start_offset_days, duration_days)
+        # Define bug fix timeline - RELATIVE to current date
+        # Negative offset = days in the past, Positive offset = days in the future
+        # Format: (task_title_pattern, start_offset_days, duration_days)
         task_schedule = {
-            'New': [
-                ('Login page not working on Safari', 1, 3),
-                ('Slow response time on search feature', 2, 4),
-            ],
-            'Investigating': [
-                ('Inconsistent data in reports', -1, 4),
-            ],
-            'In Progress': [
-                ('Button alignment issue on mobile', -2, 3),
+            'Closed': [
+                # Fixed bugs (completed in the past)
+                ('Error 500 when uploading large files', -12, 3),  # Fixed 12 days ago
+                ('Typo on welcome screen', -8, 1),                 # Fixed 8 days ago
             ],
             'Testing': [
-                ('Fixed pagination on user list', -3, 2),
+                # In testing phase (recent)
+                ('Fixed pagination on user list', -4, 3),          # Started testing 4 days ago
             ],
-            'Closed': [
-                ('Error 500 when uploading large files', -8, 3),
-                ('Typo on welcome screen', -6, 1),
+            'In Progress': [
+                # Currently being fixed
+                ('Button alignment issue on mobile', -2, 4),       # Started fixing 2 days ago
+            ],
+            'Investigating': [
+                # Under investigation
+                ('Inconsistent data in reports', -1, 5),           # Started investigating yesterday
+            ],
+            'New': [
+                # Recently reported (today/tomorrow)
+                ('Login page not working on Safari', 0, 3),        # Reported today
+                ('Slow response time on search feature', 1, 4),    # Will be reported tomorrow
             ],
         }
         
@@ -225,13 +273,16 @@ class Command(BaseCommand):
             for task in task_list:
                 all_tasks_dict[task.title] = task
         
-        # Apply dates to tasks
+        # Track which tasks were scheduled
+        scheduled_tasks = set()
+        
+        # Apply dates to tasks in the schedule
         for col_name, schedule_items in task_schedule.items():
             for title_pattern, start_offset, duration in schedule_items:
                 # Find matching task
                 task = None
                 for task_title, task_obj in all_tasks_dict.items():
-                    if title_pattern.lower() in task_title.lower():
+                    if title_pattern.lower() in task_title.lower() and task_obj not in scheduled_tasks:
                         task = task_obj
                         break
                 
@@ -244,18 +295,52 @@ class Command(BaseCommand):
                     task.due_date = timezone.make_aware(task.due_date) if timezone.is_naive(task.due_date) else task.due_date
                     task.save()
                     
+                    scheduled_tasks.add(task)
                     self.stdout.write(f'    ✓ {task.title[:50]}: {start_date} → {end_date}')
         
+        # Handle any remaining unscheduled tasks based on their column
+        for task in all_tasks_dict.values():
+            if task not in scheduled_tasks:
+                col_name = task.column.name
+                
+                # Assign default dates based on column
+                if col_name.lower() in ['done', 'closed', 'completed']:
+                    start_offset = -10
+                    duration = 2
+                elif col_name.lower() in ['review', 'testing']:
+                    start_offset = -5
+                    duration = 3
+                elif col_name.lower() in ['in progress', 'investigating']:
+                    start_offset = -3
+                    duration = 4
+                elif col_name.lower() in ['to do', 'new']:
+                    start_offset = 0
+                    duration = 3
+                else:  # Other
+                    start_offset = 2
+                    duration = 3
+                
+                start_date = base_date + timedelta(days=start_offset)
+                end_date = start_date + timedelta(days=duration)
+                
+                task.start_date = start_date
+                task.due_date = datetime.combine(end_date, datetime.max.time())
+                task.due_date = timezone.make_aware(task.due_date) if timezone.is_naive(task.due_date) else task.due_date
+                task.save()
+                
+                self.stdout.write(f'    ✓ {task.title[:50]} (auto): {start_date} → {end_date}')
+        
         # Create finish-to-start dependencies for bug tracking
-        # Some bugs might be related or depend on others being fixed first
+        # Bugs flow: Identify → Fix → Test → Close
+        # Some bugs are related (backend data issues affect other features)
         
         dependency_chains = [
-            # Data issues might need to be fixed before pagination works
+            # Backend data investigation must complete before pagination fix can be tested
             ('Fixed pagination on user list', ['Inconsistent data in reports']),
-            # Performance issue might be related to data issues
+            # Performance issues often stem from data problems
             ('Slow response time on search feature', ['Inconsistent data in reports']),
-            # UI issues don't necessarily depend on backend fixes
-            # Login bug is critical and should be independent
+            # Login bug is critical - no dependencies, needs immediate attention
+            # UI bugs are independent - can be fixed in parallel
         ]
         
         for task_title, dep_titles in dependency_chains:
