@@ -131,20 +131,27 @@ class Command(BaseCommand):
         self.stdout.write('\n  Creating bug workflow dependencies...\n')
         
         # Bug Resolution Flow:
-        # 1. Critical bugs get fixed first (no dependencies)
+        # 1. Critical bugs get fixed first and may enable other work
         # 2. Data issues must be investigated before related bugs can be fixed
         # 3. Backend fixes enable frontend fixes
         # 4. Testing follows fixes
+        
+        # Critical bug fixes enable investigation
+        # After fixing critical upload bug, can investigate data issues
+        add_dep('inconsistent data', 'error 500')
+        
+        # Typo fix shows system is stable for further investigation
+        add_dep('inconsistent data', 'typo')
         
         # Data investigation is foundational for other bugs
         # Pagination bug testing depends on data investigation being complete
         add_dep('pagination', 'inconsistent data')
         
+        # Button alignment can start after critical bugs are fixed
+        add_dep('button alignment', 'typo')
+        
         # Performance issue (slow response) likely stems from data problems
         add_dep('slow response', 'inconsistent data')
-        
-        # Button alignment could be independent work
-        # (removed conflicting dependency on pagination)
         
         # Login bug depends on data issues being resolved
         add_dep('login page', 'inconsistent data')
