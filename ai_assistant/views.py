@@ -113,7 +113,7 @@ def send_message(request):
         session_id = data.get('session_id')
         board_id = data.get('board_id')
         refresh_data = data.get('refresh_data', False)
-        history = data.get('history', [])
+        # Note: history is no longer used - each AI request is stateless to prevent token accumulation
         
         if not message_text:
             return JsonResponse({'error': 'Message cannot be empty'}, status=400)
@@ -139,10 +139,10 @@ def send_message(request):
         )
         
         # Get response from chatbot service
+        # Note: Using stateless mode - no history passed to prevent session persistence
         chatbot = TaskFlowChatbotService(user=request.user, board=board)
         response = chatbot.get_response(
             message_text,
-            history=history,
             use_cache=not refresh_data
         )
         

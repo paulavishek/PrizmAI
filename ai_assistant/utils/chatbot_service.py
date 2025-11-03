@@ -713,15 +713,16 @@ When analyzing project data, consider multiple factors like risk, resource avail
 Always ask clarifying questions if context is unclear.
 For suggestions, provide confidence levels and reasoning."""
     
-    def get_response(self, prompt, history=None, use_cache=True):
+    def get_response(self, prompt, use_cache=True):
         """
-        Get response from chatbot using Gemini
+        Get response from chatbot using Gemini in STATELESS mode.
+        Each request is completely independent to prevent token accumulation.
+        
         Intelligently routes to appropriate context builders based on query type
         
         Args:
             prompt (str): User message
-            history (list): Chat history
-            use_cache (bool): Use cached data
+            use_cache (bool): Use cached data for context building (NOT for AI responses)
             
         Returns:
             dict: Response with content, source, and metadata
@@ -810,8 +811,8 @@ For suggestions, provide confidence levels and reasoning."""
             if context_parts:
                 system_prompt += "\n\n**Available Context Data:**\n" + "\n".join(context_parts)
             
-            # Get response from Gemini
-            response = self.gemini_client.get_response(prompt, system_prompt, history)
+            # Get response from Gemini (STATELESS - no history maintained)
+            response = self.gemini_client.get_response(prompt, system_prompt)
             
             return {
                 'response': response['content'],

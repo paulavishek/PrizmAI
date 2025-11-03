@@ -334,7 +334,10 @@
 
 <script>
     const sessionId = {{ session.id|safe }};
-    let chatHistory = [];
+    
+    // Note: Chat history is NO LONGER maintained in memory or sent to the server.
+    // Each AI request is completely independent (stateless) to prevent token accumulation
+    // and unexpected cloud billing costs from persistent sessions.
     
     // Load sessions
     function loadSessions() {
@@ -428,7 +431,7 @@
                 message: message,
                 session_id: sessionId,
                 board_id: boardId,
-                history: chatHistory,
+                // Note: history removed - each request is stateless to prevent token accumulation
             })
         })
         .then(r => r.json())
@@ -437,8 +440,7 @@
             
             if (data.response) {
                 addMessageToUI('assistant', data.response, data.source);
-                chatHistory.push({role: 'user', content: message});
-                chatHistory.push({role: 'assistant', content: data.response});
+                // Note: No longer maintaining chatHistory to prevent session persistence
                 
                 // Show search badge if web search was used
                 if (data.used_web_search) {
