@@ -107,6 +107,25 @@
         background: #ef4444;
     }
 
+    /* Ensure dependency arrows are visible */
+    .gantt .arrow {
+        fill: none;
+        stroke: #666;
+        stroke-width: 1.4px;
+        opacity: 0.7;
+    }
+
+    .gantt .arrow:hover {
+        stroke: #333;
+        stroke-width: 2px;
+        opacity: 1;
+    }
+
+    .gantt .arrow-head {
+        fill: #666;
+        stroke: #666;
+    }
+
     .view-buttons {
         display: flex;
         gap: 8px;
@@ -417,6 +436,11 @@
     // Collect all task IDs for validation
     const allTaskIds = new Set([{% for task in tasks %}'{{ task.id }}'{% if not forloop.last %},{% endif %}{% endfor %}]);
     
+    console.log('===== GANTT CHART DEBUG =====');
+    console.log('Board: {{ board.name }}');
+    console.log('Total tasks:', {{ tasks.count }});
+    console.log('All task IDs:', Array.from(allTaskIds));
+    
     // Prepare task data for Gantt chart with validated dependencies
     const tasks = [
         {% for task in tasks %}
@@ -436,6 +460,8 @@
         {% endfor %}
     ];
     
+    console.log('Raw tasks data:', tasks);
+    
     // Validate and clean up dependencies
     tasks.forEach(task => {
         if (task.dependencies) {
@@ -446,6 +472,11 @@
                 return trimmedId && allTaskIds.has(trimmedId) && trimmedId !== task.id;
             });
             task.dependencies = depIds.join(',');
+            
+            // Debug logging
+            if (depIds.length > 0) {
+                console.log(`Task ${task.id} (${task.name}) depends on: ${task.dependencies}`);
+            }
         }
     });
 
@@ -458,6 +489,13 @@
         if (ganttChart) {
             ganttChart.change_view_mode(viewMode);
         } else {
+            // Debug: Log tasks with dependencies
+            console.log('Tasks with dependencies:', tasks.filter(t => t.dependencies).map(t => ({
+                id: t.id,
+                name: t.name,
+                dependencies: t.dependencies
+            })));
+            
             ganttChart = new Gantt('#gantt', tasks, {
                 view_mode: viewMode,
                 bar_height: 30,

@@ -252,8 +252,9 @@ class Command(BaseCommand):
             )
             self.stdout.write(f'Created board: {board.name}')
             
-            # Add all dev team members
+            # Add all dev team members including admin
             board.members.add(
+                self.users['admin'],
                 self.users['john_doe'],
                 self.users['jane_smith'],
                 self.users['robert_johnson'],
@@ -652,8 +653,9 @@ class Command(BaseCommand):
             )
             self.stdout.write(f'Created board: {board.name}')
             
-            # Add members (marketing team)
+            # Add members (marketing team + admin for oversight)
             board.members.add(
+                self.users['admin'],
                 self.users['carol_anderson'],
                 self.users['david_taylor']
             )
