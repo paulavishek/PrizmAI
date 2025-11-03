@@ -192,9 +192,6 @@
             <li><hr class="dropdown-divider"></li>            <li class="dropdown-item-text">
                 <small class="text-muted"><i class="fas fa-magic me-1"></i><strong>Advanced Features</strong></small>
             </li>
-            <li><a class="dropdown-item" href="{% url 'wiki:meeting_hub_upload_for_board' board.id %}">
-                <i class="fas fa-microphone-alt me-2 text-warning"></i>Meeting Transcript Analysis
-            </a></li>
             <li><a class="dropdown-item" href="#" onclick="toggleLeanSixSigmaFeatures()">
                 <i class="fas fa-industry me-2 text-secondary"></i>Lean Six Sigma Tools
             </a></li>
@@ -207,25 +204,7 @@
 </div>
 
 <!-- Advanced Features Notification -->
-<div class="alert alert-info alert-dismissible fade show" role="alert" id="advanced-features-alert">
-    <div class="d-flex align-items-center">
-        <i class="fas fa-magic fa-2x me-3 text-info"></i>
-        <div>
-            <h6 class="alert-heading mb-1">
-                <i class="fas fa-sparkles me-1"></i>Advanced AI Features Now Available!
-            </h6>
-            <p class="mb-2">
-                We've reorganized our AI-powered features into an <strong>Advanced Features</strong> section. 
-                Access them through the settings dropdown (<i class="fas fa-cog"></i>) to keep your main interface clean and focused.
-            </p>            <div class="d-flex flex-wrap gap-2">
-                <a href="{% url 'wiki:meeting_hub_upload_for_board' board.id %}" class="btn btn-sm btn-outline-warning">
-                    <i class="fas fa-microphone-alt me-1"></i>Meeting Analysis
-                </a>
-            </div>
-        </div>
-    </div>
-    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-</div>
+<!-- Removed: Meeting Transcript Analysis has been consolidated to the dedicated Meeting Hub accessible from the main navigation -->
 
 <!-- Search Panel -->
 <div class="search-panel">
