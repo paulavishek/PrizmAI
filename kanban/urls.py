@@ -51,12 +51,6 @@ urlpatterns = [
     path('api/suggest-task-breakdown/', api_views.suggest_task_breakdown_api, name='suggest_task_breakdown_api'),
     path('api/analyze-workflow-optimization/', api_views.analyze_workflow_optimization_api, name='analyze_workflow_optimization_api'),    path('api/create-subtasks/', api_views.create_subtasks_api, name='create_subtasks_api'),
     
-    # Meeting Transcript Extraction
-    path('boards/<int:board_id>/meeting-transcript/', views.meeting_transcript_extraction, name='meeting_transcript_extraction'),
-    path('api/extract-tasks-from-transcript/', api_views.extract_tasks_from_transcript_api, name='extract_tasks_from_transcript_api'),
-    path('api/create-tasks-from-extraction/', api_views.create_tasks_from_extraction_api, name='create_tasks_from_extraction_api'),
-    path('api/process-transcript-file/', api_views.process_transcript_file_api, name='process_transcript_file_api'),
-    
     # Risk Management API Endpoints
     path('api/kanban/calculate-task-risk/', api_views.calculate_task_risk_api, name='calculate_task_risk_api'),
     path('api/kanban/get-mitigation-suggestions/', api_views.get_mitigation_suggestions_api, name='get_mitigation_suggestions_api'),

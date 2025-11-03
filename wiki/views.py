@@ -550,3 +550,226 @@ def wiki_page_restore(request, slug, version_number):
 
 # Import User model
 from django.contrib.auth.models import User
+from django.utils import timezone
+import json
+
+
+# ============================================================================
+# MEETING HUB VIEWS - Unified Meeting Management
+# ============================================================================
+
+@login_required
+def meeting_hub_home(request):
+    """Main Meeting Hub dashboard"""
+    org = request.user.profile.organization if hasattr(request.user, 'profile') else None
+    if not org:
+        return redirect('home')
+    
+    # Get recent meetings
+    recent_meetings = MeetingNotes.objects.filter(organization=org).order_by('-date')[:10]
+    
+    # Get statistics
+    total_meetings = MeetingNotes.objects.filter(organization=org).count()
+    pending_meetings = MeetingNotes.objects.filter(
+        organization=org,
+        processing_status='pending'
+    ).count()
+    from django.db.models import Sum
+    total_tasks_created = MeetingNotes.objects.filter(
+        organization=org,
+        tasks_created_count__gt=0
+    ).aggregate(Sum('tasks_created_count'))['tasks_created_count__sum'] or 0
+    
+    # Get meetings by board
+    from django.db.models import Count
+    meetings_by_board = MeetingNotes.objects.filter(
+        organization=org,
+        related_board__isnull=False
+    ).values('related_board__name').annotate(count=Count('id'))
+    
+    return render(request, 'wiki/meeting_hub_home.html', {
+        'organization': org,
+        'recent_meetings': recent_meetings,
+        'total_meetings': total_meetings,
+        'pending_meetings': pending_meetings,
+        'total_tasks_created': total_tasks_created,
+        'meetings_by_board': meetings_by_board
+    })
+
+
+@login_required
+def meeting_hub_upload(request, board_id=None):
+    """Upload and analyze meeting transcript"""
+    org = request.user.profile.organization if hasattr(request.user, 'profile') else None
+    if not org:
+        return redirect('home')
+    
+    board = None
+    if board_id:
+        board = get_object_or_404(Board, id=board_id, organization=org)
+        # Check board access
+        if not (board.created_by == request.user or request.user in board.members.all()):
+            return redirect('home')
+    
+    if request.method == 'POST':
+        form = MeetingNotesForm(request.POST, request.FILES, organization=org)
+        if form.is_valid():
+            notes = form.save(commit=False)
+            notes.organization = org
+            notes.created_by = request.user
+            if board:
+                notes.related_board = board
+            notes.processing_status = 'processing'
+            notes.save()
+            
+            # Add attendees
+            attendee_usernames = request.POST.get('attendee_usernames', '').split(',')
+            for username in attendee_usernames:
+                try:
+                    user = User.objects.get(username=username.strip())
+                    notes.attendees.add(user)
+                except User.DoesNotExist:
+                    pass
+            
+            messages.success(request, 'Meeting notes created! Processing transcript...')
+            return redirect('wiki:meeting_notes_detail', pk=notes.pk)
+    else:
+        form = MeetingNotesForm(organization=org)
+    
+    # Get previous meetings from same board for context
+    previous_meetings = []
+    if board:
+        previous_meetings = MeetingNotes.objects.filter(
+            related_board=board,
+            organization=org
+        ).order_by('-date')[:5]
+    
+    return render(request, 'wiki/meeting_hub_upload.html', {
+        'form': form,
+        'organization': org,
+        'board': board,
+        'previous_meetings': previous_meetings
+    })
+
+
+@login_required
+def meeting_hub_list(request):
+    """List all meetings in the organization"""
+    org = request.user.profile.organization if hasattr(request.user, 'profile') else None
+    if not org:
+        return redirect('home')
+    
+    meetings = MeetingNotes.objects.filter(organization=org).prefetch_related(
+        'attendees', 'related_board'
+    ).order_by('-date')
+    
+    # Filtering
+    meeting_type = request.GET.get('type')
+    if meeting_type:
+        meetings = meetings.filter(meeting_type=meeting_type)
+    
+    board_id = request.GET.get('board_id')
+    if board_id:
+        meetings = meetings.filter(related_board_id=board_id)
+    
+    status = request.GET.get('status')
+    if status:
+        meetings = meetings.filter(processing_status=status)
+    
+    # Search
+    query = request.GET.get('q')
+    if query:
+        meetings = meetings.filter(
+            Q(title__icontains=query) |
+            Q(content__icontains=query)
+        )
+    
+    # Pagination
+    from django.core.paginator import Paginator
+    paginator = Paginator(meetings, 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    # Get available boards for filter
+    boards = Board.objects.filter(
+        organization=org,
+        meeting_notes__isnull=False
+    ).distinct()
+    
+    return render(request, 'wiki/meeting_hub_list.html', {
+        'page_obj': page_obj,
+        'meetings': page_obj.object_list,
+        'organization': org,
+        'boards': boards,
+        'meeting_types': MeetingNotes.MEETING_TYPE_CHOICES,
+        'current_type': meeting_type,
+        'current_board': board_id,
+        'current_status': status,
+        'query': query
+    })
+
+
+@login_required
+def meeting_hub_detail(request, pk):
+    """Display meeting notes with AI extraction results"""
+    org = request.user.profile.organization if hasattr(request.user, 'profile') else None
+    if not org:
+        return redirect('home')
+    
+    notes = get_object_or_404(MeetingNotes, pk=pk, organization=org)
+    
+    # Parse extraction results if available
+    extracted_tasks = []
+    if notes.extraction_results:
+        extracted_tasks = notes.extraction_results.get('extracted_tasks', [])
+    
+    return render(request, 'wiki/meeting_hub_detail.html', {
+        'notes': notes,
+        'organization': org,
+        'extracted_tasks': extracted_tasks,
+        'attendees': notes.attendees.all(),
+        'action_items': notes.action_items,
+        'decisions': notes.decisions
+    })
+
+
+@login_required
+def meeting_hub_analytics(request):
+    """Meeting Hub analytics and insights"""
+    org = request.user.profile.organization if hasattr(request.user, 'profile') else None
+    if not org:
+        return redirect('home')
+    
+    from django.db.models import Count, Sum, Avg
+    from datetime import timedelta
+    
+    # Time range filtering
+    days = int(request.GET.get('days', 30))
+    start_date = timezone.now() - timedelta(days=days)
+    
+    meetings = MeetingNotes.objects.filter(
+        organization=org,
+        date__gte=start_date
+    )
+    
+    # Analytics data
+    analytics = {
+        'total_meetings': meetings.count(),
+        'total_tasks_created': meetings.aggregate(Sum('tasks_created_count'))['tasks_created_count__sum'] or 0,
+        'avg_meeting_duration': meetings.aggregate(Avg('duration_minutes'))['duration_minutes__avg'] or 0,
+        'meetings_by_type': meetings.values('meeting_type').annotate(count=Count('id')),
+        'meetings_by_board': meetings.filter(related_board__isnull=False).values(
+            'related_board__name'
+        ).annotate(count=Count('id')),
+        'most_active_attendees': User.objects.filter(
+            meeting_notes_attended__organization=org,
+            meeting_notes_attended__date__gte=start_date
+        ).annotate(meeting_count=Count('meeting_notes_attended')).order_by('-meeting_count')[:10]
+    }
+    
+    return render(request, 'wiki/meeting_hub_analytics.html', {
+        'organization': org,
+        'analytics': analytics,
+        'days': days
+    })
+

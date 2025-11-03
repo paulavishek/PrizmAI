@@ -1439,41 +1439,6 @@ def edit_board(request, board_id):
     })
 
 @login_required
-def meeting_transcript_extraction(request, board_id):
-    """
-    View for extracting tasks from meeting transcripts using AI
-    """
-    try:
-        # Verify board access
-        board = get_object_or_404(Board, id=board_id)
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return HttpResponseForbidden("You don't have access to this board.")
-        
-        # Get previous meeting transcripts for this board (if model exists)
-        try:
-            from kanban.models import MeetingTranscript
-            previous_extractions = MeetingTranscript.objects.filter(
-                board=board,
-                created_by=request.user
-            ).order_by('-created_at')[:10]
-        except:
-            previous_extractions = []
-        
-        context = {
-            'board': board,
-            'today': timezone.now().date(),
-            'previous_extractions': previous_extractions,
-            'board_members': board.members.all(),
-        }
-        
-        return render(request, 'kanban/meeting_transcript.html', context)
-        
-    except Exception as e:
-        logger.error(f"Error in meeting transcript extraction view: {str(e)}")
-        messages.error(request, 'Error loading meeting transcript page. Please try again.')
-        return redirect('board_detail', board_id=board_id)
-
-# Getting Started Wizard Views
 @login_required
 def getting_started_wizard(request):
     """

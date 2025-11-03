@@ -1,9 +1,26 @@
 from django.urls import path
 from . import views
+from . import api_views
 
 app_name = 'wiki'
 
 urlpatterns = [
+    # Meeting Hub - Unified Meeting Management
+    path('meetings/', views.meeting_hub_home, name='meeting_hub_home'),
+    path('meetings/list/', views.meeting_hub_list, name='meeting_hub_list'),
+    path('meetings/upload/', views.meeting_hub_upload, name='meeting_hub_upload'),
+    path('meetings/upload/<int:board_id>/', views.meeting_hub_upload, name='meeting_hub_upload_for_board'),
+    path('meetings/<int:pk>/', views.meeting_hub_detail, name='meeting_hub_detail'),
+    path('meetings/analytics/', views.meeting_hub_analytics, name='meeting_hub_analytics'),
+    
+    # Meeting Hub API Endpoints
+    path('api/meetings/<int:meeting_id>/analyze/', api_views.analyze_meeting_transcript_api, 
+         name='api_analyze_transcript'),
+    path('api/meetings/<int:meeting_id>/details/', api_views.get_meeting_details_api,
+         name='api_meeting_details'),
+    path('api/meetings/create-tasks/', api_views.create_tasks_from_extraction_api,
+         name='api_create_tasks_from_extraction'),
+    
     # Category Management
     path('categories/', views.WikiCategoryListView.as_view(), name='category_list'),
     path('categories/create/', views.WikiCategoryCreateView.as_view(), name='category_create'),
@@ -27,7 +44,7 @@ urlpatterns = [
     # Search
     path('search/', views.wiki_search, name='search'),
     
-    # Meeting Notes
+    # Legacy Meeting Notes (kept for backward compatibility)
     path('meeting-notes/', views.meeting_notes_list, name='meeting_notes_list'),
     path('meeting-notes/create/', views.meeting_notes_create, name='meeting_notes_create'),
     path('meeting-notes/<int:pk>/', views.meeting_notes_detail, name='meeting_notes_detail'),

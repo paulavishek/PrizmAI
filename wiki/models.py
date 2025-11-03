@@ -154,17 +154,33 @@ class WikiLink(models.Model):
 
 
 class MeetingNotes(models.Model):
-    """Meeting notes storage and linking"""
+    """Meeting notes and transcript analysis - unified meeting hub"""
+    MEETING_TYPE_CHOICES = [
+        ('standup', 'Daily Standup'),
+        ('planning', 'Sprint Planning'),
+        ('review', 'Review Meeting'),
+        ('retrospective', 'Retrospective'),
+        ('general', 'General Meeting'),
+    ]
+    
+    PROCESSING_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+    
     title = models.CharField(max_length=255)
+    meeting_type = models.CharField(max_length=20, choices=MEETING_TYPE_CHOICES, default='general')
     date = models.DateTimeField()
-    content = models.TextField(help_text='Markdown supported')
+    content = models.TextField(help_text='Markdown supported - manual notes or AI-generated')
     
     # Organization and participants
     organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='meeting_notes')
     attendees = models.ManyToManyField(User, related_name='meeting_notes_attended')
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_meeting_notes')
     
-    # Linking
+    # Linking - optional board context
     related_board = models.ForeignKey(Board, on_delete=models.SET_NULL, null=True, blank=True,
                                      related_name='meeting_notes')
     related_wiki_page = models.ForeignKey(WikiPage, on_delete=models.SET_NULL, null=True, blank=True,
@@ -176,6 +192,23 @@ class MeetingNotes(models.Model):
                                    help_text='Action items: [{"task": "...", "assigned_to": "...", "due_date": "..."}]')
     decisions = models.JSONField(default=list, blank=True, help_text='Key decisions made')
     
+    # Transcript fields (for AI-powered meetings)
+    transcript_text = models.TextField(blank=True, help_text='Raw meeting transcript')
+    transcript_file = models.FileField(upload_to='meeting_transcripts/%Y/%m/%d/', blank=True, null=True,
+                                     help_text='Uploaded transcript file (txt, pdf, docx)')
+    
+    # AI extraction results
+    extraction_results = models.JSONField(default=dict, blank=True,
+                                        help_text='AI extraction results including tasks and metadata')
+    tasks_extracted_count = models.IntegerField(default=0)
+    tasks_created_count = models.IntegerField(default=0)
+    processing_status = models.CharField(max_length=20, choices=PROCESSING_STATUS_CHOICES, default='pending')
+    processed_at = models.DateTimeField(blank=True, null=True)
+    
+    # Meeting context
+    meeting_context = models.JSONField(default=dict, blank=True,
+                                     help_text='Additional meeting context and metadata')
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -184,6 +217,7 @@ class MeetingNotes(models.Model):
         indexes = [
             models.Index(fields=['organization', '-date']),
             models.Index(fields=['related_board']),
+            models.Index(fields=['processing_status']),
         ]
     
     def __str__(self):
