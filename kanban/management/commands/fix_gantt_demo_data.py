@@ -237,13 +237,21 @@ class Command(BaseCommand):
                                 dep_task = obj
                                 break
                     
-                    if dep_task and dep_task.start_date and dep_task.due_date:
-                        # Ensure dependency task ends before dependent task starts
+                    if dep_task and dep_task.start_date and dep_task.due_date and task.start_date:
+                        # Ensure dependency task ends BEFORE dependent task starts
                         if dep_task.due_date.date() <= task.start_date:
                             task.dependencies.add(dep_task)
                             self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}"')
                         else:
-                            self.stdout.write(f'    ⚠ Skipped invalid dependency: "{task.title[:40]}" -> "{dep_task.title[:40]}" (dates conflict)')
+                            # Auto-adjust task dates to start after dependency
+                            task.start_date = dep_task.due_date.date() + timedelta(days=1)
+                            original_duration = (task.due_date.date() - base_date).days if task.due_date else 7
+                            duration = max(3, min(original_duration, 10))  # Keep reasonable duration
+                            task.due_date = datetime.combine(task.start_date + timedelta(days=duration), datetime.max.time())
+                            task.due_date = timezone.make_aware(task.due_date) if timezone.is_naive(task.due_date) else task.due_date
+                            task.save()
+                            task.dependencies.add(dep_task)
+                            self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}" (dates auto-adjusted)')
 
     def fix_bug_tracking_board(self, board, columns_tasks):
         """Fix Bug Tracking board with bug resolution workflow"""
@@ -253,30 +261,30 @@ class Command(BaseCommand):
         base_date = timezone.now().date()
         
         # Define bug fix timeline - RELATIVE to current date
-        # Negative offset = days in the past, Positive offset = days in the future
         # Format: (task_title_pattern, start_offset_days, duration_days)
+        # We'll create a clear workflow: Bug1 -> Bug2 -> Bug3 in sequence
         task_schedule = {
             'Closed': [
                 # Fixed bugs (completed in the past) - sequential
-                ('Error 500 when uploading large files', -20, 4),  # Fixed 20 days ago
-                ('Typo on welcome screen', -14, 2),                 # Fixed 14 days ago
+                ('Error 500 when uploading large files', -30, 5),  # First bug fixed
+                ('Typo on welcome screen', -23, 3),                 # Fixed after first bug
             ],
             'Testing': [
                 # In testing phase (recent)
-                ('Fixed pagination on user list', -6, 5),          # Started testing 6 days ago
+                ('Fixed pagination on user list', -10, 6),          # In testing
             ],
             'In Progress': [
-                # Currently being fixed
-                ('Button alignment issue on mobile', -4, 6),       # Started fixing 4 days ago
+                # Currently being fixed - depends on testing results
+                ('Button alignment issue on mobile', -4, 8),       # Currently fixing
             ],
             'Investigating': [
-                # Under investigation
-                ('Inconsistent data in reports', -2, 7),           # Started investigating 2 days ago
+                # Under investigation - depends on in-progress bug
+                ('Inconsistent data in reports', 2, 6),           # Will start investigating
             ],
             'New': [
-                # Recently reported (near future)
-                ('Login page not working on Safari', 1, 4),        # Will be reported tomorrow
-                ('Slow response time on search feature', 6, 5),    # Will be reported in 6 days
+                # Recently reported (future) - will start after investigation
+                ('Login page not working on Safari', 10, 5),        # Future bug 1
+                ('Slow response time on search feature', 17, 6),    # Future bug 2
             ],
         }
         
@@ -314,25 +322,25 @@ class Command(BaseCommand):
                     self.stdout.write(f'    ✓ {task.title[:50]}: {start_date} → {end_date}')
         
         # Handle any remaining unscheduled tasks based on their column
-        offset_counter = 12  # Start future tasks
+        offset_counter = 25  # Start future tasks
         for task in all_tasks_dict.values():
             if task not in scheduled_tasks:
                 col_name = task.column.name
                 
                 # Assign default dates based on column
                 if col_name.lower() in ['done', 'closed', 'completed']:
-                    start_offset = -25 - (offset_counter % 5)
+                    start_offset = -35 - (offset_counter % 5)
                     duration = 3
                 elif col_name.lower() in ['review', 'testing']:
-                    start_offset = -8
+                    start_offset = -12
                     duration = 4
                 elif col_name.lower() in ['in progress', 'investigating']:
-                    start_offset = -5
+                    start_offset = -2
                     duration = 6
                 elif col_name.lower() in ['to do', 'new']:
                     start_offset = offset_counter
                     duration = 4
-                    offset_counter += 6  # Space out new bugs
+                    offset_counter += 8  # Space out new bugs
                 else:  # Other
                     start_offset = 2
                     duration = 3
@@ -348,16 +356,16 @@ class Command(BaseCommand):
                 self.stdout.write(f'    ✓ {task.title[:50]} (auto): {start_date} → {end_date}')
         
         # Create finish-to-start dependencies for bug tracking
-        # Bugs flow: Identify → Fix → Test → Close
-        # Some bugs are related (backend data issues affect other features)
+        # Clear dependency chain: Each bug depends on the previous one being resolved
         
         dependency_chains = [
-            # Backend data investigation must complete before pagination fix can be tested
-            ('Fixed pagination on user list', ['Inconsistent data in reports']),
-            # Performance issues often stem from data problems
-            ('Slow response time on search feature', ['Inconsistent data in reports']),
-            # Login bug is critical - no dependencies, needs immediate attention
-            # UI bugs are independent - can be fixed in parallel
+            # Sequential workflow: Fix bugs in priority order
+            ('Typo on welcome screen', ['Error 500 when uploading large files']),
+            ('Fixed pagination on user list', ['Typo on welcome screen']),
+            ('Button alignment issue on mobile', ['Fixed pagination on user list']),
+            ('Inconsistent data in reports', ['Button alignment issue on mobile']),
+            ('Login page not working on Safari', ['Inconsistent data in reports']),
+            ('Slow response time on search feature', ['Login page not working on Safari']),
         ]
         
         for task_title, dep_titles in dependency_chains:
@@ -377,13 +385,19 @@ class Command(BaseCommand):
                                 dep_task = obj
                                 break
                     
-                    if dep_task and dep_task.start_date and dep_task.due_date:
-                        # Ensure dependency task ends before dependent task starts
+                    if dep_task and dep_task.start_date and dep_task.due_date and task.start_date:
+                        # Ensure dependency task ends BEFORE dependent task starts
                         if dep_task.due_date.date() <= task.start_date:
                             task.dependencies.add(dep_task)
                             self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}"')
                         else:
-                            self.stdout.write(f'    ⚠ Skipped invalid dependency: "{task.title[:40]}" -> "{dep_task.title[:40]}" (dates conflict)')
+                            # Adjust task start date to be after dependency ends
+                            task.start_date = dep_task.due_date.date() + timedelta(days=1)
+                            task.due_date = datetime.combine(task.start_date + timedelta(days=5), datetime.max.time())
+                            task.due_date = timezone.make_aware(task.due_date) if timezone.is_naive(task.due_date) else task.due_date
+                            task.save()
+                            task.dependencies.add(dep_task)
+                            self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}" (dates adjusted)')
 
     def fix_marketing_campaign_board(self, board, columns_tasks):
         """Fix Marketing Campaign board with marketing workflow"""
