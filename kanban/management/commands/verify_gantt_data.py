@@ -13,7 +13,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('GANTT CHART DATA STATUS'))
         self.stdout.write(self.style.SUCCESS('='*70))
         
-        boards = Board.objects.filter(name__in=['Software Project', 'Bug Tracking'])
+        boards = Board.objects.filter(name__in=['Software Project', 'Bug Tracking', 'Marketing Campaign'])
         
         for board in boards:
             self.stdout.write(f'\n📊 {board.name.upper()}')

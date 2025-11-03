@@ -21,7 +21,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.NOTICE('='*70))
         
         # Process each board
-        boards = Board.objects.filter(name__in=['Software Project', 'Bug Tracking'])
+        boards = Board.objects.filter(name__in=['Software Project', 'Bug Tracking', 'Marketing Campaign'])
         
         if not boards.exists():
             self.stdout.write(self.style.ERROR('No demo boards found. Please run populate_test_data first.'))
@@ -70,6 +70,8 @@ class Command(BaseCommand):
             self.fix_software_project_board(board, columns_tasks)
         elif board.name == 'Bug Tracking':
             self.fix_bug_tracking_board(board, columns_tasks)
+        elif board.name == 'Marketing Campaign':
+            self.fix_marketing_campaign_board(board, columns_tasks)
         
         # Verify all tasks have proper dates
         tasks_without_dates = tasks.filter(start_date__isnull=True) | tasks.filter(due_date__isnull=True)
@@ -356,6 +358,154 @@ class Command(BaseCommand):
             ('Slow response time on search feature', ['Inconsistent data in reports']),
             # Login bug is critical - no dependencies, needs immediate attention
             # UI bugs are independent - can be fixed in parallel
+        ]
+        
+        for task_title, dep_titles in dependency_chains:
+            task = task_objects.get(task_title)
+            if not task:
+                for title, obj in all_tasks_dict.items():
+                    if task_title.lower() in title.lower():
+                        task = obj
+                        break
+            
+            if task:
+                for dep_title in dep_titles:
+                    dep_task = task_objects.get(dep_title)
+                    if not dep_task:
+                        for title, obj in all_tasks_dict.items():
+                            if dep_title.lower() in title.lower():
+                                dep_task = obj
+                                break
+                    
+                    if dep_task and dep_task.start_date and dep_task.due_date:
+                        # Ensure dependency task ends before dependent task starts
+                        if dep_task.due_date.date() <= task.start_date:
+                            task.dependencies.add(dep_task)
+                            self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}"')
+                        else:
+                            self.stdout.write(f'    ⚠ Skipped invalid dependency: "{task.title[:40]}" -> "{dep_task.title[:40]}" (dates conflict)')
+
+    def fix_marketing_campaign_board(self, board, columns_tasks):
+        """Fix Marketing Campaign board with marketing workflow"""
+        self.stdout.write('  Setting up Marketing Campaign workflow...')
+        
+        # Base date is always current date - keeps demo data fresh
+        base_date = timezone.now().date()
+        
+        # Define marketing campaign timeline - RELATIVE to current date
+        # Negative offset = days in the past, Positive offset = days in the future
+        # Format: (task_title_pattern, start_offset_days, duration_days)
+        task_schedule = {
+            'Completed': [
+                # Completed campaigns (in the past) - sequential completion
+                ('Summer campaign graphics', -30, 10),           # Completed 30 days ago
+                ('Competitor analysis report', -18, 6),          # Completed 18 days ago
+                ('Remove outdated content', -10, 3),             # Completed 10 days ago
+            ],
+            'Review': [
+                # In review phase (recent)
+                ('New product announcement email', -5, 7),       # Started review 5 days ago
+            ],
+            'In Progress': [
+                # Currently being worked on
+                ('Website redesign for Q4 launch', -12, 20),     # Started 12 days ago, ongoing
+                ('Monthly performance report', -4, 8),           # Started 4 days ago
+            ],
+            'Planning': [
+                # Planning phase (near future)
+                ('Q3 Email newsletter schedule', 2, 6),          # Will start planning in 2 days
+            ],
+            'Ideas': [
+                # Ideas/Backlog (future)
+                ('Holiday social campaign concept', 10, 8),      # Will start in 10 days
+                ('Video content strategy', 20, 10),              # Will start in 20 days
+            ],
+        }
+        
+        # Map tasks to schedule
+        all_tasks_dict = {}
+        for col_name, task_list in columns_tasks.items():
+            for task in task_list:
+                all_tasks_dict[task.title] = task
+        
+        # Track which tasks were scheduled
+        scheduled_tasks = set()
+        task_objects = {}  # Map title pattern to task object
+        
+        # Apply dates to tasks in the schedule
+        for col_name, schedule_items in task_schedule.items():
+            for title_pattern, start_offset, duration in schedule_items:
+                # Find matching task
+                task = None
+                for task_title, task_obj in all_tasks_dict.items():
+                    if title_pattern.lower() in task_title.lower() and task_obj not in scheduled_tasks:
+                        task = task_obj
+                        break
+                
+                if task:
+                    start_date = base_date + timedelta(days=start_offset)
+                    end_date = start_date + timedelta(days=duration)
+                    
+                    task.start_date = start_date
+                    task.due_date = datetime.combine(end_date, datetime.max.time())
+                    task.due_date = timezone.make_aware(task.due_date) if timezone.is_naive(task.due_date) else task.due_date
+                    task.save()
+                    
+                    scheduled_tasks.add(task)
+                    task_objects[title_pattern] = task
+                    self.stdout.write(f'    ✓ {task.title[:50]}: {start_date} → {end_date}')
+        
+        # Handle any remaining unscheduled tasks based on their column
+        offset_counter = 30  # Start future tasks
+        for task in all_tasks_dict.values():
+            if task not in scheduled_tasks:
+                col_name = task.column.name
+                
+                # Assign default dates based on column
+                if col_name.lower() in ['done', 'closed', 'completed']:
+                    start_offset = -35 - (offset_counter % 10)
+                    duration = 7
+                elif col_name.lower() in ['review', 'testing']:
+                    start_offset = -8
+                    duration = 5
+                elif col_name.lower() in ['in progress', 'working']:
+                    start_offset = -10
+                    duration = 12
+                elif col_name.lower() in ['planning', 'to do']:
+                    start_offset = 3
+                    duration = 6
+                else:  # Ideas or Backlog
+                    start_offset = offset_counter
+                    duration = 8
+                    offset_counter += 12  # Space out ideas
+                
+                start_date = base_date + timedelta(days=start_offset)
+                end_date = start_date + timedelta(days=duration)
+                
+                task.start_date = start_date
+                task.due_date = datetime.combine(end_date, datetime.max.time())
+                task.due_date = timezone.make_aware(task.due_date) if timezone.is_naive(task.due_date) else task.due_date
+                task.save()
+                
+                self.stdout.write(f'    ✓ {task.title[:50]} (auto): {start_date} → {end_date}')
+        
+        # Create finish-to-start dependencies for marketing campaign
+        # Marketing flow: Research → Planning → Execution → Review → Complete
+        
+        dependency_chains = [
+            # Phase 1: Analysis drives planning
+            ('Q3 Email newsletter schedule', ['Competitor analysis report']),
+            ('Holiday social campaign concept', ['Competitor analysis report']),
+            
+            # Phase 2: Planning leads to execution
+            ('Website redesign for Q4 launch', ['Q3 Email newsletter schedule']),
+            ('Monthly performance report', ['Summer campaign graphics']),
+            
+            # Phase 3: Review depends on execution
+            ('New product announcement email', ['Website redesign for Q4 launch']),
+            
+            # Phase 4: Future campaigns build on current work
+            ('Video content strategy', ['New product announcement email', 'Monthly performance report']),
         ]
         
         for task_title, dep_titles in dependency_chains:
