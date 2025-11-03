@@ -1,0 +1,184 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Meeting Hub - TaskFlow{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h1 class="h3 mb-1">
+                <i class="fas fa-video me-2"></i>Meeting Hub
+            </h1>
+            <p class="text-muted">Manage and analyze meeting transcripts across your organization</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{% url 'wiki:meeting_hub_upload' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>New Meeting
+            </a>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted small mb-1">Total Meetings</p>
+                            <h3 class="mb-0">{{ total_meetings }}</h3>
+                        </div>
+                        <div class="text-primary" style="font-size: 2rem;">
+                            <i class="fas fa-video"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted small mb-1">Processing</p>
+                            <h3 class="mb-0">{{ pending_meetings }}</h3>
+                        </div>
+                        <div class="text-warning" style="font-size: 2rem;">
+                            <i class="fas fa-spinner"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted small mb-1">Tasks Created</p>
+                            <h3 class="mb-0">{{ total_tasks_created }}</h3>
+                        </div>
+                        <div class="text-success" style="font-size: 2rem;">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <p class="text-muted small mb-1">View Analytics</p>
+                            <p class="mb-0">
+                                <a href="{% url 'wiki:meeting_hub_analytics' %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-chart-bar me-1"></i>Details
+                                </a>
+                            </p>
+                        </div>
+                        <div class="text-info" style="font-size: 2rem;">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Meetings -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Recent Meetings</h5>
+                    <a href="{% url 'wiki:meeting_hub_list' %}" class="btn btn-sm btn-outline-secondary">View All</a>
+                </div>
+                <div class="card-body">
+                    {% if recent_meetings %}
+                        <div class="list-group list-group-flush">
+                            {% for meeting in recent_meetings %}
+                                <a href="{% url 'wiki:meeting_hub_detail' meeting.id %}" class="list-group-item list-group-item-action py-3">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div class="flex-grow-1">
+                                            <h6 class="mb-1">{{ meeting.title }}</h6>
+                                            <small class="text-muted">
+                                                <i class="fas fa-calendar me-1"></i>{{ meeting.date|date:"M d, Y" }}
+                                                {% if meeting.meeting_type %}
+                                                    <span class="badge bg-light text-dark ms-2">{{ meeting.get_meeting_type_display }}</span>
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                        <div class="text-end">
+                                            {% if meeting.processing_status == 'processing' %}
+                                                <span class="badge bg-warning">Processing</span>
+                                            {% elif meeting.processing_status == 'completed' %}
+                                                <span class="badge bg-success">Ready</span>
+                                            {% elif meeting.processing_status == 'error' %}
+                                                <span class="badge bg-danger">Error</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    {% if meeting.related_board %}
+                                        <small class="text-muted d-block mt-2">
+                                            <i class="fas fa-project-diagram me-1"></i>{{ meeting.related_board.name }}
+                                        </small>
+                                    {% endif %}
+                                </a>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <div class="alert alert-info mb-0">
+                            <i class="fas fa-info-circle me-2"></i>
+                            No meetings yet. <a href="{% url 'wiki:meeting_hub_upload' %}">Create your first meeting</a>.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Meetings by Board -->
+        <div class="col-md-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-bottom">
+                    <h5 class="mb-0">Meetings by Board</h5>
+                </div>
+                <div class="card-body">
+                    {% if meetings_by_board %}
+                        <div class="list-group list-group-flush">
+                            {% for item in meetings_by_board %}
+                                <div class="list-group-item py-2 d-flex justify-content-between align-items-center">
+                                    <small>{{ item.related_board__name }}</small>
+                                    <span class="badge bg-primary rounded-pill">{{ item.count }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted small mb-0">No board-specific meetings yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="card border-0 shadow-sm mt-3">
+                <div class="card-header bg-white border-bottom">
+                    <h5 class="mb-0">Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <a href="{% url 'wiki:meeting_hub_upload' %}" class="btn btn-sm btn-primary w-100 mb-2">
+                        <i class="fas fa-upload me-2"></i>Upload Transcript
+                    </a>
+                    <a href="{% url 'wiki:meeting_hub_list' %}" class="btn btn-sm btn-outline-secondary w-100 mb-2">
+                        <i class="fas fa-list me-2"></i>Browse All Meetings
+                    </a>
+                    <a href="{% url 'wiki:meeting_hub_analytics' %}" class="btn btn-sm btn-outline-secondary w-100">
+                        <i class="fas fa-chart-bar me-2"></i>View Analytics
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

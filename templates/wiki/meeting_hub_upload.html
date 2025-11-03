@@ -1,0 +1,234 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Upload Meeting - Meeting Hub{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <h1 class="h3 mb-1">
+                <i class="fas fa-upload me-2"></i>New Meeting
+            </h1>
+            <p class="text-muted">
+                Upload a transcript or create meeting notes. Our AI will extract tasks and action items.
+            </p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <form method="post" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <!-- Meeting Title -->
+                        <div class="mb-3">
+                            <label for="id_title" class="form-label">Meeting Title *</label>
+                            {{ form.title }}
+                            {% if form.title.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.title.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Meeting Type -->
+                        <div class="mb-3">
+                            <label for="id_meeting_type" class="form-label">Meeting Type</label>
+                            {{ form.meeting_type }}
+                            <small class="text-muted d-block mt-1">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Select the type of meeting for better context analysis
+                            </small>
+                            {% if form.meeting_type.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.meeting_type.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Date -->
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="id_date" class="form-label">Date *</label>
+                                {{ form.date }}
+                                {% if form.date.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {{ form.date.errors }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="id_duration_minutes" class="form-label">Duration (minutes)</label>
+                                {{ form.duration_minutes }}
+                                {% if form.duration_minutes.errors %}
+                                    <div class="invalid-feedback d-block">
+                                        {{ form.duration_minutes.errors }}
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Content / Transcript -->
+                        <div class="mb-3">
+                            <label for="id_content" class="form-label">Meeting Notes or Transcript *</label>
+                            {{ form.content }}
+                            <small class="text-muted d-block mt-1">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Paste the transcript or summary of the meeting
+                            </small>
+                            {% if form.content.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.content.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Transcript File Upload -->
+                        <div class="mb-3">
+                            <label for="id_transcript_file" class="form-label">Upload Transcript File (Optional)</label>
+                            {{ form.transcript_file }}
+                            <small class="text-muted d-block mt-1">
+                                <i class="fas fa-file-alt me-1"></i>
+                                Supported: TXT, PDF, DOCX. Max 10MB
+                            </small>
+                            {% if form.transcript_file.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.transcript_file.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Action Items -->
+                        <div class="mb-3">
+                            <label for="id_action_items" class="form-label">Action Items</label>
+                            {{ form.action_items }}
+                            <small class="text-muted d-block mt-1">
+                                <i class="fas fa-info-circle me-1"></i>
+                                List any action items one per line
+                            </small>
+                            {% if form.action_items.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.action_items.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Decisions -->
+                        <div class="mb-3">
+                            <label for="id_decisions" class="form-label">Decisions Made</label>
+                            {{ form.decisions }}
+                            <small class="text-muted d-block mt-1">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Document key decisions made during the meeting
+                            </small>
+                            {% if form.decisions.errors %}
+                                <div class="invalid-feedback d-block">
+                                    {{ form.decisions.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Buttons -->
+                        <div class="d-flex gap-2 pt-3">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Save & Analyze
+                            </button>
+                            <a href="{% url 'wiki:meeting_hub_home' %}" class="btn btn-outline-secondary">
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-md-4">
+            <!-- Board Context -->
+            {% if board %}
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-light border-bottom">
+                        <h6 class="mb-0">
+                            <i class="fas fa-project-diagram me-2"></i>Board Context
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-0">
+                            <strong>{{ board.name }}</strong>
+                        </p>
+                        <small class="text-muted">
+                            {{ board.description }}
+                        </small>
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Previous Meetings -->
+            {% if previous_meetings %}
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-light border-bottom">
+                        <h6 class="mb-0">
+                            <i class="fas fa-history me-2"></i>Previous Meetings
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group list-group-flush">
+                            {% for prev_meeting in previous_meetings %}
+                                <a href="{% url 'wiki:meeting_hub_detail' prev_meeting.id %}" class="list-group-item list-group-item-action py-2 px-0 small">
+                                    <div class="d-flex justify-content-between">
+                                        <strong>{{ prev_meeting.title|truncatewords:5 }}</strong>
+                                        <small class="text-muted">{{ prev_meeting.date|date:"M d" }}</small>
+                                    </div>
+                                </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Help -->
+            <div class="card border-0 shadow-sm mt-3 bg-light">
+                <div class="card-header bg-transparent border-bottom">
+                    <h6 class="mb-0">
+                        <i class="fas fa-lightbulb me-2"></i>Tips
+                    </h6>
+                </div>
+                <div class="card-body small">
+                    <ul class="mb-0">
+                        <li>Be descriptive in meeting notes</li>
+                        <li>Include specific names and timings</li>
+                        <li>List action items clearly</li>
+                        <li>AI will extract tasks automatically</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    form textarea,
+    form input[type="text"],
+    form input[type="date"],
+    form input[type="number"],
+    form select,
+    form input[type="file"] {
+        display: block;
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        margin-top: 0.25rem;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+    }
+    
+    form textarea {
+        min-height: 150px;
+        font-family: monospace;
+        font-size: 0.85rem;
+    }
+</style>
+{% endblock %}

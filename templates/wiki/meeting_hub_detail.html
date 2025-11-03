@@ -1,0 +1,233 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ notes.title }} - Meeting Hub{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-9">
+            <h1 class="h3 mb-1">{{ notes.title }}</h1>
+            <p class="text-muted mb-3">
+                <i class="fas fa-calendar me-2"></i>{{ notes.date|date:"F d, Y" }}
+                {% if notes.meeting_type %}
+                    <span class="badge bg-light text-dark ms-2">{{ notes.get_meeting_type_display }}</span>
+                {% endif %}
+                {% if notes.processing_status == 'completed' %}
+                    <span class="badge bg-success ms-2">Processed</span>
+                {% elif notes.processing_status == 'processing' %}
+                    <span class="badge bg-warning ms-2">Processing...</span>
+                {% endif %}
+            </p>
+        </div>
+        <div class="col-md-3 text-end">
+            <a href="{% url 'wiki:meeting_hub_list' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back to List
+            </a>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Main Content -->
+        <div class="col-md-8">
+            <!-- Extracted Tasks -->
+            {% if extracted_tasks %}
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-success bg-opacity-10 border-bottom">
+                        <h5 class="mb-0 text-success">
+                            <i class="fas fa-tasks me-2"></i>Extracted Tasks ({{ extracted_tasks|length }})
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group list-group-flush">
+                            {% for task in extracted_tasks %}
+                                <div class="list-group-item py-3">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div class="flex-grow-1">
+                                            <h6 class="mb-1">{{ task.title }}</h6>
+                                            {% if task.description %}
+                                                <p class="text-muted small mb-2">{{ task.description }}</p>
+                                            {% endif %}
+                                            <small class="text-muted">
+                                                {% if task.assignee %}
+                                                    <i class="fas fa-user me-1"></i>{{ task.assignee }}
+                                                {% endif %}
+                                                {% if task.due_date %}
+                                                    <i class="fas fa-calendar ms-2 me-1"></i>{{ task.due_date }}
+                                                {% endif %}
+                                            </small>
+                                        </div>
+                                        <span class="badge bg-info">AI Extracted</span>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Meeting Content -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-header bg-white border-bottom">
+                    <h5 class="mb-0">
+                        <i class="fas fa-file-alt me-2"></i>Meeting Notes
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="meeting-content">
+                        {{ notes.content|linebreaks }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Items -->
+            {% if action_items %}
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-header bg-white border-bottom">
+                        <h5 class="mb-0">
+                            <i class="fas fa-check-circle me-2"></i>Action Items
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-unstyled">
+                            {% for item in action_items %}
+                                <li class="mb-2">
+                                    <i class="fas fa-circle-check text-success me-2"></i>{{ item }}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Decisions -->
+            {% if decisions %}
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white border-bottom">
+                        <h5 class="mb-0">
+                            <i class="fas fa-gavel me-2"></i>Decisions Made
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <ul class="list-unstyled">
+                            {% for decision in decisions %}
+                                <li class="mb-2">
+                                    <i class="fas fa-star text-warning me-2"></i>{{ decision }}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-md-4">
+            <!-- Meeting Info -->
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-header bg-light border-bottom">
+                    <h6 class="mb-0">Meeting Information</h6>
+                </div>
+                <div class="card-body">
+                    <dl class="row mb-0">
+                        <dt class="col-sm-5 text-muted small">Date:</dt>
+                        <dd class="col-sm-7 small">{{ notes.date|date:"M d, Y" }}</dd>
+
+                        <dt class="col-sm-5 text-muted small">Type:</dt>
+                        <dd class="col-sm-7 small">
+                            {% if notes.meeting_type %}
+                                {{ notes.get_meeting_type_display }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </dd>
+
+                        {% if notes.duration_minutes %}
+                            <dt class="col-sm-5 text-muted small">Duration:</dt>
+                            <dd class="col-sm-7 small">{{ notes.duration_minutes }} minutes</dd>
+                        {% endif %}
+
+                        <dt class="col-sm-5 text-muted small">Created by:</dt>
+                        <dd class="col-sm-7 small">{{ notes.created_by.get_full_name|default:notes.created_by.username }}</dd>
+
+                        {% if notes.related_board %}
+                            <dt class="col-sm-5 text-muted small">Board:</dt>
+                            <dd class="col-sm-7 small">
+                                <a href="{% url 'kanban:board_detail' notes.related_board.id %}">
+                                    {{ notes.related_board.name }}
+                                </a>
+                            </dd>
+                        {% endif %}
+
+                        {% if notes.processed_at %}
+                            <dt class="col-sm-5 text-muted small">Processed:</dt>
+                            <dd class="col-sm-7 small">{{ notes.processed_at|date:"M d, Y H:i" }}</dd>
+                        {% endif %}
+                    </dl>
+                </div>
+            </div>
+
+            <!-- Attendees -->
+            {% if attendees %}
+                <div class="card border-0 shadow-sm mb-3">
+                    <div class="card-header bg-light border-bottom">
+                        <h6 class="mb-0">
+                            <i class="fas fa-users me-2"></i>Attendees ({{ attendees|length }})
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="list-group list-group-flush">
+                            {% for attendee in attendees %}
+                                <div class="list-group-item py-2 px-0 d-flex align-items-center">
+                                    <i class="fas fa-user-circle me-2 text-primary"></i>
+                                    <span class="small">{{ attendee.get_full_name|default:attendee.username }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Statistics -->
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-header bg-light border-bottom">
+                    <h6 class="mb-0">Statistics</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6 mb-3">
+                            <div class="h4 text-primary mb-1">{{ notes.tasks_extracted_count|default:"0" }}</div>
+                            <small class="text-muted">Extracted Tasks</small>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <div class="h4 text-success mb-1">{{ notes.tasks_created_count|default:"0" }}</div>
+                            <small class="text-muted">Created Tasks</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <a href="{% url 'wiki:meeting_hub_home' %}" class="btn btn-sm btn-outline-secondary w-100">
+                        <i class="fas fa-arrow-left me-2"></i>Back to Hub
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .meeting-content {
+        line-height: 1.8;
+        color: #495057;
+    }
+    
+    .meeting-content p {
+        margin-bottom: 1rem;
+    }
+</style>
+{% endblock %}
