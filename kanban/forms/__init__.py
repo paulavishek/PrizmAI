@@ -32,7 +32,7 @@ class TaskForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = [
-            'title', 'description', 'start_date', 'due_date', 'assigned_to', 'labels', 'priority', 'progress'
+            'title', 'description', 'start_date', 'due_date', 'assigned_to', 'labels', 'priority', 'progress', 'dependencies'
         ]
         widgets = {
             'title': forms.TextInput(attrs={'class': 'form-control'}),
@@ -56,7 +56,13 @@ class TaskForm(forms.ModelForm):
                 'max': 100,
                 'title': 'Task completion progress (0-100%)'
             }),
+            'dependencies': forms.SelectMultiple(attrs={
+                'class': 'form-select',
+                'size': '5',
+                'title': 'Tasks that must be completed before this task can start (for Gantt chart dependencies)'
+            }),
         }
+        
     def __init__(self, *args, **kwargs):
         board = kwargs.pop('board', None)
         super().__init__(*args, **kwargs)
@@ -64,9 +70,26 @@ class TaskForm(forms.ModelForm):
         if board:
             self.fields['labels'].queryset = TaskLabel.objects.filter(board=board)
             self.fields['assigned_to'].queryset = board.members.all()
+            
+            # Filter dependencies to only show tasks from the same board with dates
+            self.fields['dependencies'].queryset = Task.objects.filter(
+                column__board=board,
+                start_date__isnull=False,
+                due_date__isnull=False
+            ).exclude(id=self.instance.id if self.instance.pk else None).order_by('start_date', 'title')
+            
+            # Set help text for dependencies
+            self.fields['dependencies'].help_text = 'Select tasks that must be completed before this task can start. Hold Ctrl/Cmd to select multiple tasks.'
+        else:
+            # If no board, show all tasks with dates
+            self.fields['dependencies'].queryset = Task.objects.filter(
+                start_date__isnull=False,
+                due_date__isnull=False
+            ).exclude(id=self.instance.id if self.instance.pk else None).order_by('start_date', 'title')
         
         # Add empty choice for assigned_to
         self.fields['assigned_to'].empty_label = "Not assigned"
+        self.fields['dependencies'].required = False
 
 class CommentForm(forms.ModelForm):
     class Meta:

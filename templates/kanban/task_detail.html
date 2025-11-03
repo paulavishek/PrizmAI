@@ -310,10 +310,49 @@
                 {% endif %}
 
                 <!-- 📋 Dependencies & Requirements Section -->
-                {% if task.parent_task or task.subtasks.all or task.related_tasks.all or task.required_skills %}
+                {% if task.parent_task or task.subtasks.all or task.related_tasks.all or task.dependencies.all or task.required_skills %}
                 <div class="mb-3">
                     <label class="text-muted">📋 Dependencies & Requirements</label>
                     <div class="p-2 bg-light rounded">
+                        {% if task.dependencies.all %}
+                        <div class="mb-2">
+                            <small class="text-muted"><i class="fas fa-link me-1"></i>Gantt Dependencies ({{ task.dependencies.count }}):</small>
+                            <small class="text-muted d-block mb-1">This task cannot start until these tasks are completed:</small>
+                            {% for dep in task.dependencies.all %}
+                            <div class="p-2 bg-white rounded border-start border-4 border-warning mb-1">
+                                <a href="{% url 'task_detail' dep.id %}" class="text-decoration-none">
+                                    <strong>{{ dep.title }}</strong>
+                                </a>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>{{ dep.start_date }} → {{ dep.due_date|date:"Y-m-d" }}
+                                    <span class="badge bg-{% if dep.progress == 100 %}success{% elif dep.progress > 0 %}primary{% else %}secondary{% endif %} ms-1">{{ dep.progress }}%</span>
+                                </small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        
+                        {% with blocking_tasks=task.dependent_tasks.all %}
+                        {% if blocking_tasks %}
+                        <div class="mb-2">
+                            <small class="text-muted"><i class="fas fa-lock me-1"></i>Blocking Tasks ({{ blocking_tasks.count }}):</small>
+                            <small class="text-muted d-block mb-1">These tasks cannot start until this task is completed:</small>
+                            {% for blocked in blocking_tasks %}
+                            <div class="p-2 bg-white rounded border-start border-4 border-danger mb-1">
+                                <a href="{% url 'task_detail' blocked.id %}" class="text-decoration-none">
+                                    <strong>{{ blocked.title }}</strong>
+                                </a>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar me-1"></i>{{ blocked.start_date }} → {{ blocked.due_date|date:"Y-m-d" }}
+                                </small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        {% endwith %}
+                        
                         {% if task.parent_task %}
                         <div class="mb-2">
                             <small class="text-muted">Parent Task:</small>
