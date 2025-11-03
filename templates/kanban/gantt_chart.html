@@ -165,18 +165,22 @@
         vertical-align: middle;
     }
 
-    /* Adaptive task labels */
+    /* Adaptive task labels - ALWAYS inside bars */
     .gantt .bar-label {
         font-size: 11px;
         font-weight: 500;
-        fill: white;
+        fill: white !important;
         text-shadow: 0 1px 2px rgba(0,0,0,0.3);
         pointer-events: none;
+        text-anchor: middle !important;  /* Center text horizontally */
+        dominant-baseline: middle !important;  /* Center text vertically */
     }
 
-    .gantt .bar-label.outside-left {
-        fill: #374151;
-        text-shadow: none;
+    /* Override any outside positioning */
+    .gantt .bar-label.outside-left,
+    .gantt .bar-label.outside-right {
+        fill: white !important;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.3) !important;
         font-weight: 500;
     }
 
@@ -323,7 +327,7 @@
         {% for task in tasks %}
         {
             id: '{{ task.id }}',
-            name: '{{ task.title|escapejs|truncatechars:30 }}',
+            name: '{{ task.title|escapejs }}',
             fullName: '{{ task.title|escapejs }}',
             start: '{{ task.start_date|date:"Y-m-d" }}',
             end: '{{ task.due_date|date:"Y-m-d" }}',
@@ -425,7 +429,7 @@
 
                 // Add tooltip functionality
                 addTooltipHandlers();
-            }, 100);
+            }, 300); // Increased timeout to ensure SVG is fully rendered
         }
     }
 
@@ -459,12 +463,14 @@
 
                 tooltip.innerHTML = tooltipContent;
                 tooltip.classList.add('show');
+                
+                // Position tooltip on first appearance
+                positionTooltip(e);
             });
 
-            // Add mousemove event to follow cursor
+            // Add mousemove event to follow cursor with smart positioning
             barWrapper.addEventListener('mousemove', function(e) {
-                tooltip.style.left = (e.pageX + 15) + 'px';
-                tooltip.style.top = (e.pageY + 15) + 'px';
+                positionTooltip(e);
             });
 
             // Add mouseleave event
@@ -472,9 +478,102 @@
                 tooltip.classList.remove('show');
             });
         });
+
+        // Hide tooltip when clicking anywhere
+        document.addEventListener('click', function(e) {
+            tooltip.classList.remove('show');
+        });
+
+        // Hide tooltip when scrolling
+        const ganttContainer = document.querySelector('.gantt-container');
+        if (ganttContainer) {
+            ganttContainer.addEventListener('scroll', function() {
+                tooltip.classList.remove('show');
+            });
+        }
+
+        // Hide tooltip when mouse moves outside the Gantt chart area
+        const ganttElement = document.getElementById('gantt');
+        if (ganttElement) {
+            ganttElement.addEventListener('mouseleave', function() {
+                // Small delay to allow moving between bars
+                setTimeout(function() {
+                    const stillHovering = document.querySelector('.bar-wrapper:hover');
+                    if (!stillHovering) {
+                        tooltip.classList.remove('show');
+                    }
+                }, 50);
+            });
+        }
+
+        // Smart tooltip positioning function - ensures tooltip is always visible
+        function positionTooltip(e) {
+            const tooltip = document.getElementById('gantt-tooltip');
+            if (!tooltip || !tooltip.classList.contains('show')) return;
+
+            // Get tooltip dimensions (need to make it visible first to measure)
+            const tooltipRect = tooltip.getBoundingClientRect();
+            const tooltipWidth = tooltipRect.width;
+            const tooltipHeight = tooltipRect.height;
+
+            // Get viewport dimensions
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            // Offset from cursor
+            const offsetX = 15;
+            const offsetY = 15;
+
+            // Determine best position: prioritize visibility
+            let left, top;
+            
+            // Calculate space available in each direction
+            const spaceRight = viewportWidth - e.clientX;
+            const spaceLeft = e.clientX;
+            const spaceBelow = viewportHeight - e.clientY;
+            const spaceAbove = e.clientY;
+
+            // Horizontal positioning: choose side with more space
+            if (spaceRight >= tooltipWidth + offsetX) {
+                // Enough space on the right
+                left = e.pageX + offsetX;
+            } else if (spaceLeft >= tooltipWidth + offsetX) {
+                // Not enough on right, try left
+                left = e.pageX - tooltipWidth - offsetX;
+            } else {
+                // Not enough on either side, center horizontally with margin
+                left = Math.max(10, Math.min(e.pageX - tooltipWidth / 2, viewportWidth - tooltipWidth - 10));
+            }
+
+            // Vertical positioning: choose top or bottom based on available space
+            if (spaceBelow >= tooltipHeight + offsetY) {
+                // Enough space below cursor
+                top = e.pageY + offsetY;
+            } else if (spaceAbove >= tooltipHeight + offsetY) {
+                // Not enough below, position above cursor
+                top = e.pageY - tooltipHeight - offsetY;
+            } else {
+                // Not enough space above or below, position near cursor
+                // Choose the side with more space
+                if (spaceBelow > spaceAbove) {
+                    // More space below, position at top of viewport
+                    top = Math.max(10, e.pageY - tooltipHeight / 2);
+                } else {
+                    // More space above, position accordingly
+                    top = Math.max(10, e.pageY - tooltipHeight + offsetY);
+                }
+            }
+
+            // Final boundary checks to ensure tooltip stays within viewport
+            left = Math.max(10, Math.min(left, viewportWidth - tooltipWidth - 10));
+            top = Math.max(10, Math.min(top, viewportHeight - tooltipHeight - 10));
+
+            tooltip.style.left = left + 'px';
+            tooltip.style.top = top + 'px';
+        }
     }
 
-    // Enhance bars with additional information and truncated names
+    // Enhance bars with task names only (no progress, no assignments)
     function enhanceBarsWithInfo() {
         tasks.forEach(task => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
@@ -485,65 +584,42 @@
 
             const barRect = bar.getBBox();
             const barWidth = barRect.width;
+            const barHeight = barRect.height;
 
-            // Find and modify the existing label to show truncated name
+            // Find and modify the existing label to show truncated name ONLY - INSIDE the bar
             const existingLabel = barWrapper.querySelector('.bar-label');
-            if (existingLabel && barWidth > 50) {
-                // Calculate how many characters can fit
-                const charWidth = 7; // Approximate width per character at font-size 11px
-                const availableWidth = barWidth - 10; // Padding
-                const maxChars = Math.floor(availableWidth / charWidth);
+            if (existingLabel) {
+                // Show labels for all bars wider than 30 pixels
+                if (barWidth > 30) {
+                    // Calculate how many characters can fit
+                    const charWidth = 6.5; // Approximate width per character at font-size 11px
+                    const availableWidth = barWidth - 12; // Less padding for smaller bars
+                    const maxChars = Math.floor(availableWidth / charWidth);
 
-                let displayName = task.fullName;
-                if (displayName.length > maxChars && maxChars > 3) {
-                    displayName = displayName.substring(0, maxChars - 3) + '...';
+                    let displayName = task.fullName;
+                    
+                    // For very small bars, show at least a few characters
+                    if (maxChars < 3) {
+                        displayName = task.fullName.substring(0, 1) + '...';
+                    } else if (displayName.length > maxChars) {
+                        displayName = displayName.substring(0, maxChars - 3) + '...';
+                    }
+
+                    // Update the label text and FORCE position inside bar (centered)
+                    existingLabel.textContent = displayName;
+                    existingLabel.setAttribute('x', barRect.x + barWidth / 2);
+                    existingLabel.setAttribute('y', barRect.y + barHeight / 2);
+                    existingLabel.setAttribute('text-anchor', 'middle');
+                    existingLabel.setAttribute('dominant-baseline', 'middle');
+                    existingLabel.style.display = 'block';
+                    
+                    // Remove any outside positioning classes
+                    existingLabel.classList.remove('outside-left', 'outside-right');
+                } else {
+                    // Only hide label if bar is extremely small (less than 30px)
+                    existingLabel.textContent = '';
+                    existingLabel.style.display = 'none';
                 }
-
-                existingLabel.textContent = displayName;
-            } else if (existingLabel) {
-                // Hide label if bar is too small
-                existingLabel.style.display = 'none';
-            }
-
-            // Calculate duration
-            const start = new Date(task.start);
-            const end = new Date(task.end);
-            const duration = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-
-            // Add info based on available space
-            if (barWidth > 120) {
-                // Wide bar: Add duration and progress info
-                const infoText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                infoText.setAttribute('class', 'bar-info-overlay');
-                infoText.setAttribute('x', barRect.x + barWidth - 5);
-                infoText.setAttribute('y', barRect.y + barRect.height - 5);
-                infoText.setAttribute('text-anchor', 'end');
-                infoText.textContent = `${duration}d • ${task.progress}%`;
-                barWrapper.appendChild(infoText);
-
-                // Add assignee initials if available
-                if (task.assigned_to && task.assigned_to !== 'Unassigned') {
-                    const initials = task.assigned_to.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
-                    const avatar = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    avatar.setAttribute('class', 'bar-info-overlay');
-                    avatar.setAttribute('x', barRect.x + 8);
-                    avatar.setAttribute('y', barRect.y + barRect.height / 2 + 4);
-                    avatar.setAttribute('text-anchor', 'start');
-                    avatar.setAttribute('font-weight', '600');
-                    avatar.setAttribute('font-size', '10');
-                    avatar.textContent = `👤 ${initials}`;
-                    barWrapper.appendChild(avatar);
-                }
-            } else if (barWidth > 60) {
-                // Medium bar: Just show progress
-                const progressText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                progressText.setAttribute('class', 'bar-info-overlay');
-                progressText.setAttribute('x', barRect.x + barWidth - 5);
-                progressText.setAttribute('y', barRect.y + barRect.height - 5);
-                progressText.setAttribute('text-anchor', 'end');
-                progressText.setAttribute('font-size', '10');
-                progressText.textContent = `${task.progress}%`;
-                barWrapper.appendChild(progressText);
             }
         });
     }
