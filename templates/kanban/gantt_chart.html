@@ -171,26 +171,13 @@
         font-weight: 500;
         fill: white;
         text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-        max-width: 150px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
+        pointer-events: none;
     }
 
     .gantt .bar-label.outside-left {
         fill: #374151;
         text-shadow: none;
         font-weight: 500;
-    }
-    
-    /* Hide labels on small bars to reduce clutter */
-    .gantt .bar-wrapper .bar-label {
-        display: none;
-    }
-    
-    /* Show labels only in tooltips instead */
-    .gantt .bar-wrapper:hover .bar-label {
-        display: none;
     }
 
     /* Task bar info overlay */
@@ -219,18 +206,23 @@
         transform: translateY(-50%);
     }
 
-    /* Today marker line */
-    .today-marker {
-        stroke: #ef4444;
-        stroke-width: 2;
-        stroke-dasharray: 5, 5;
-        opacity: 0.8;
+    /* Custom tooltip for task bars */
+    .gantt-tooltip {
+        position: fixed;
+        background: rgba(0, 0, 0, 0.9);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        pointer-events: none;
+        z-index: 1000;
+        white-space: nowrap;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        display: none;
     }
 
-    .today-label {
-        fill: #ef4444;
-        font-size: 11px;
-        font-weight: 600;
+    .gantt-tooltip.show {
+        display: block;
     }
 </style>
 {% endblock %}
@@ -276,6 +268,9 @@
 
         {% if tasks %}
             <svg id="gantt"></svg>
+            
+            <!-- Custom Tooltip -->
+            <div class="gantt-tooltip" id="gantt-tooltip"></div>
             
             <!-- Legend -->
             <div class="gantt-legend">
@@ -425,137 +420,61 @@
                     });
                 });
 
-                // Add today marker
-                addTodayMarker();
-
                 // Enhance bars with additional info
                 enhanceBarsWithInfo();
+
+                // Add tooltip functionality
+                addTooltipHandlers();
             }, 100);
         }
     }
 
-    // Add "Today" marker line
-    function addTodayMarker() {
-        // Wait a bit more for SVG to be fully rendered
-        setTimeout(() => {
-            const ganttSvg = document.querySelector('#gantt');
-            if (!ganttSvg) {
-                console.log('Gantt SVG not found');
-                return;
-            }
+    // Add tooltip functionality for task bars
+    function addTooltipHandlers() {
+        const tooltip = document.getElementById('gantt-tooltip');
+        if (!tooltip) return;
 
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
+        tasks.forEach(task => {
+            const barWrapper = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
+            if (!barWrapper) return;
 
-            console.log('Adding today marker for:', today.toDateString());
+            // Store full task name as data attribute
+            barWrapper.setAttribute('data-full-name', task.fullName);
+            barWrapper.setAttribute('data-priority', task.priority);
+            barWrapper.setAttribute('data-assigned-to', task.assigned_to);
+            barWrapper.setAttribute('data-progress', task.progress);
 
-            // Calculate date range from tasks
-            if (!tasks || tasks.length === 0) {
-                console.log('No tasks available');
-                return;
-            }
+            // Add mouseenter event
+            barWrapper.addEventListener('mouseenter', function(e) {
+                const fullName = this.getAttribute('data-full-name');
+                const priority = this.getAttribute('data-priority');
+                const assignedTo = this.getAttribute('data-assigned-to');
+                const progress = this.getAttribute('data-progress');
 
-            const startDate = new Date(Math.min(...tasks.map(t => new Date(t.start))));
-            const endDate = new Date(Math.max(...tasks.map(t => new Date(t.end))));
-            
-            startDate.setHours(0, 0, 0, 0);
-            endDate.setHours(0, 0, 0, 0);
+                // Build tooltip content
+                let tooltipContent = `<strong>${fullName}</strong><br>`;
+                tooltipContent += `Priority: ${priority.charAt(0).toUpperCase() + priority.slice(1)}<br>`;
+                tooltipContent += `Assigned: ${assignedTo}<br>`;
+                tooltipContent += `Progress: ${progress}%`;
 
-            console.log('Project date range:', startDate.toDateString(), 'to', endDate.toDateString());
+                tooltip.innerHTML = tooltipContent;
+                tooltip.classList.add('show');
+            });
 
-            // Only show marker if today is within the date range
-            if (today < startDate || today > endDate) {
-                console.log('Today is outside the project date range');
-                return;
-            }
+            // Add mousemove event to follow cursor
+            barWrapper.addEventListener('mousemove', function(e) {
+                tooltip.style.left = (e.pageX + 15) + 'px';
+                tooltip.style.top = (e.pageY + 15) + 'px';
+            });
 
-            // Get the layers container
-            const ganttLayers = ganttSvg.querySelector('.layers');
-            if (!ganttLayers) {
-                console.log('Layers container not found');
-                return;
-            }
-
-            // Remove existing today marker if any
-            const existingMarker = ganttSvg.querySelector('.today-marker-group');
-            if (existingMarker) {
-                existingMarker.remove();
-            }
-
-            // Get SVG dimensions
-            const svgHeight = parseFloat(ganttSvg.getAttribute('height')) || 500;
-
-            // Try to get actual grid header position for better accuracy
-            const gridHeader = ganttSvg.querySelector('.grid-header');
-            if (!gridHeader) {
-                console.log('Grid header not found');
-                return;
-            }
-
-            const headerBBox = gridHeader.getBBox();
-            const contentStartX = headerBBox.x;
-            const contentWidth = headerBBox.width;
-
-            console.log('Grid header:', {x: contentStartX, width: contentWidth});
-
-            // Calculate total days and position
-            const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
-            const daysFromStart = Math.ceil((today - startDate) / (1000 * 60 * 60 * 24));
-            
-            console.log('Days calculation:', {totalDays, daysFromStart});
-
-            // Calculate x position
-            const xPos = contentStartX + (daysFromStart / totalDays) * contentWidth;
-
-            console.log('Today marker position:', xPos);
-
-            // Create SVG group for today marker
-            const markerGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            markerGroup.setAttribute('class', 'today-marker-group');
-
-            // Create vertical line
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('class', 'today-marker');
-            line.setAttribute('x1', xPos);
-            line.setAttribute('y1', '0');
-            line.setAttribute('x2', xPos);
-            line.setAttribute('y2', svgHeight);
-            line.setAttribute('stroke', '#ef4444');
-            line.setAttribute('stroke-width', '2');
-            line.setAttribute('stroke-dasharray', '5,5');
-
-            // Create background for label
-            const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-            labelBg.setAttribute('x', xPos - 30);
-            labelBg.setAttribute('y', '2');
-            labelBg.setAttribute('width', '60');
-            labelBg.setAttribute('height', '20');
-            labelBg.setAttribute('fill', '#ef4444');
-            labelBg.setAttribute('rx', '4');
-
-            // Create label
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('class', 'today-label');
-            text.setAttribute('x', xPos);
-            text.setAttribute('y', '15');
-            text.setAttribute('text-anchor', 'middle');
-            text.setAttribute('fill', 'white');
-            text.setAttribute('font-weight', '700');
-            text.setAttribute('font-size', '12');
-            text.textContent = 'TODAY';
-
-            markerGroup.appendChild(line);
-            markerGroup.appendChild(labelBg);
-            markerGroup.appendChild(text);
-            
-            // Append to layers (will be on top)
-            ganttLayers.appendChild(markerGroup);
-
-            console.log('Today marker successfully added');
-        }, 300); // Increased delay to ensure SVG is fully rendered
+            // Add mouseleave event
+            barWrapper.addEventListener('mouseleave', function() {
+                tooltip.classList.remove('show');
+            });
+        });
     }
 
-    // Enhance bars with additional information
+    // Enhance bars with additional information and truncated names
     function enhanceBarsWithInfo() {
         tasks.forEach(task => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
@@ -566,6 +485,25 @@
 
             const barRect = bar.getBBox();
             const barWidth = barRect.width;
+
+            // Find and modify the existing label to show truncated name
+            const existingLabel = barWrapper.querySelector('.bar-label');
+            if (existingLabel && barWidth > 50) {
+                // Calculate how many characters can fit
+                const charWidth = 7; // Approximate width per character at font-size 11px
+                const availableWidth = barWidth - 10; // Padding
+                const maxChars = Math.floor(availableWidth / charWidth);
+
+                let displayName = task.fullName;
+                if (displayName.length > maxChars && maxChars > 3) {
+                    displayName = displayName.substring(0, maxChars - 3) + '...';
+                }
+
+                existingLabel.textContent = displayName;
+            } else if (existingLabel) {
+                // Hide label if bar is too small
+                existingLabel.style.display = 'none';
+            }
 
             // Calculate duration
             const start = new Date(task.start);
