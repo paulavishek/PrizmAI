@@ -29,84 +29,6 @@
         font-size: 1.5rem;
     }
 
-    /* Quick Stats Panel */
-    .quick-stats-panel {
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        background: white;
-        border: 2px solid #e5e7eb;
-        border-radius: 8px;
-        padding: 16px;
-        min-width: 240px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        z-index: 100;
-    }
-
-    .quick-stats-panel h6 {
-        margin: 0 0 12px 0;
-        font-weight: 600;
-        font-size: 14px;
-        color: #374151;
-        border-bottom: 2px solid #e5e7eb;
-        padding-bottom: 8px;
-    }
-
-    .stats-grid {
-        display: grid;
-        gap: 8px;
-    }
-
-    .stat-item {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 6px 8px;
-        border-radius: 4px;
-        background: #f9fafb;
-        transition: background 0.2s;
-    }
-
-    .stat-item:hover {
-        background: #f3f4f6;
-    }
-
-    .stat-label {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 13px;
-        color: #6b7280;
-    }
-
-    .stat-icon {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-    }
-
-    .stat-value {
-        font-weight: 600;
-        font-size: 16px;
-        color: #1f2937;
-    }
-
-    .stat-item.done .stat-icon {
-        background: #22c55e;
-    }
-
-    .stat-item.in-progress .stat-icon {
-        background: #4c9aff;
-    }
-
-    .stat-item.not-started .stat-icon {
-        background: #888;
-    }
-
-    .stat-item.overdue .stat-icon {
-        background: #ef4444;
-    }
-
     /* Ensure dependency arrows are visible */
     .gantt .arrow {
         fill: none;
@@ -150,30 +72,31 @@
         border-color: #0d6efd;
     }
 
-    /* Custom task colors based on status */
-    .gantt .bar-wrapper .bar[data-status="todo"] {
-        fill: #888 !important;
+    /* Custom task colors based on priority */
+    .gantt .bar-wrapper .bar[data-priority="low"] {
+        fill: #6c757d !important;
     }
 
-    .gantt .bar-wrapper .bar[data-status="in_progress"] {
+    .gantt .bar-wrapper .bar[data-priority="medium"] {
         fill: #4c9aff !important;
     }
 
-    .gantt .bar-wrapper .bar[data-status="done"] {
-        fill: #22c55e !important;
+    .gantt .bar-wrapper .bar[data-priority="high"] {
+        fill: #ff9500 !important;
     }
 
-    /* Priority colors - add border styling */
     .gantt .bar-wrapper .bar[data-priority="urgent"] {
-        stroke: #dc3545 !important;
-        stroke-width: 3 !important;
         fill: #ff5252 !important;
     }
 
-    .gantt .bar-wrapper .bar[data-priority="high"] {
-        stroke: #fd7e14 !important;
-        stroke-width: 2 !important;
-        fill: #ff9500 !important;
+    /* Hide progress overlay to prevent mixed colors */
+    .gantt .bar-wrapper .bar-progress {
+        display: none !important;
+    }
+
+    /* Ensure bars have uniform color */
+    .gantt .bar-wrapper .bar {
+        opacity: 1 !important;
     }
 
     /* Make bars clearly clickable */
@@ -342,43 +265,6 @@
     </ul>
 
     <div class="gantt-container" style="position: relative;">
-        <!-- Quick Stats Panel -->
-        <div class="quick-stats-panel">
-            <h6>
-                <i class="fas fa-heartbeat me-1"></i>Project Health
-            </h6>
-            <div class="stats-grid">
-                <div class="stat-item done">
-                    <div class="stat-label">
-                        <span class="stat-icon"></span>
-                        <span>✓ Done</span>
-                    </div>
-                    <div class="stat-value" id="stat-done">0</div>
-                </div>
-                <div class="stat-item in-progress">
-                    <div class="stat-label">
-                        <span class="stat-icon"></span>
-                        <span>⚡ In Progress</span>
-                    </div>
-                    <div class="stat-value" id="stat-in-progress">0</div>
-                </div>
-                <div class="stat-item not-started">
-                    <div class="stat-label">
-                        <span class="stat-icon"></span>
-                        <span>⏸ Not Started</span>
-                    </div>
-                    <div class="stat-value" id="stat-not-started">0</div>
-                </div>
-                <div class="stat-item overdue">
-                    <div class="stat-label">
-                        <span class="stat-icon"></span>
-                        <span>⚠ Overdue</span>
-                    </div>
-                    <div class="stat-value" id="stat-overdue">0</div>
-                </div>
-            </div>
-        </div>
-
         <div class="gantt-header">
             <h2>📊 Project Timeline</h2>
             <div class="view-buttons">
@@ -395,24 +281,20 @@
             <div class="gantt-legend">
                 <strong>Legend:</strong>
                 <div class="legend-item">
-                    <span class="legend-color" style="background: #888;"></span>
-                    <span>To Do</span>
+                    <span class="legend-color" style="background: #6c757d;"></span>
+                    <span>Low Priority</span>
                 </div>
                 <div class="legend-item">
                     <span class="legend-color" style="background: #4c9aff;"></span>
-                    <span>In Progress</span>
+                    <span>Medium Priority</span>
                 </div>
                 <div class="legend-item">
-                    <span class="legend-color" style="background: #22c55e;"></span>
-                    <span>Completed</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-color" style="background: #ff5252; border: 2px solid #dc3545;"></span>
-                    <span>Urgent Priority</span>
-                </div>
-                <div class="legend-item">
-                    <span class="legend-color" style="background: #ff9500; border: 2px solid #fd7e14;"></span>
+                    <span class="legend-color" style="background: #ff9500;"></span>
                     <span>High Priority</span>
+                </div>
+                <div class="legend-item">
+                    <span class="legend-color" style="background: #ff5252;"></span>
+                    <span>Urgent Priority</span>
                 </div>
             </div>
         {% else %}
@@ -527,15 +409,7 @@
                 tasks.forEach(task => {
                     const barElement = document.querySelector(`.bar-wrapper[data-id="${task.id}"] .bar`);
                     if (barElement) {
-                        // Determine actual status based on progress
-                        let actualStatus = task.status;
-                        if (task.progress >= 100) {
-                            actualStatus = 'done';
-                        } else if (task.progress > 0) {
-                            actualStatus = 'in_progress';
-                        }
-                        
-                        barElement.setAttribute('data-status', actualStatus);
+                        // Set priority attribute for color styling
                         barElement.setAttribute('data-priority', task.priority);
                     }
                 });
@@ -562,64 +436,123 @@
 
     // Add "Today" marker line
     function addTodayMarker() {
-        const ganttSvg = document.querySelector('#gantt');
-        if (!ganttSvg) return;
+        // Wait a bit more for SVG to be fully rendered
+        setTimeout(() => {
+            const ganttSvg = document.querySelector('#gantt');
+            if (!ganttSvg) {
+                console.log('Gantt SVG not found');
+                return;
+            }
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
 
-        // Find the grid elements to determine positioning
-        const gridRows = ganttSvg.querySelectorAll('.grid-row');
-        if (gridRows.length === 0) return;
+            console.log('Adding today marker for:', today.toDateString());
 
-        // Get the gantt chart instance to calculate position
-        const ganttRect = ganttSvg.getBoundingClientRect();
-        const ganttLayers = ganttSvg.querySelector('.layers');
-        
-        if (!ganttLayers) return;
+            // Calculate date range from tasks
+            if (!tasks || tasks.length === 0) {
+                console.log('No tasks available');
+                return;
+            }
 
-        // Calculate today's position based on the date range
-        const firstTask = tasks[0];
-        if (!firstTask) return;
+            const startDate = new Date(Math.min(...tasks.map(t => new Date(t.start))));
+            const endDate = new Date(Math.max(...tasks.map(t => new Date(t.end))));
+            
+            startDate.setHours(0, 0, 0, 0);
+            endDate.setHours(0, 0, 0, 0);
 
-        const startDate = new Date(Math.min(...tasks.map(t => new Date(t.start))));
-        const endDate = new Date(Math.max(...tasks.map(t => new Date(t.end))));
-        
-        // Only show marker if today is within the date range
-        if (today < startDate || today > endDate) return;
+            console.log('Project date range:', startDate.toDateString(), 'to', endDate.toDateString());
 
-        // Get the SVG grid to find x position
-        const gridHeader = ganttSvg.querySelector('.grid-header');
-        if (!gridHeader) return;
+            // Only show marker if today is within the date range
+            if (today < startDate || today > endDate) {
+                console.log('Today is outside the project date range');
+                return;
+            }
 
-        // Create SVG group for today marker
-        const markerGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        markerGroup.setAttribute('class', 'today-marker-group');
+            // Get the layers container
+            const ganttLayers = ganttSvg.querySelector('.layers');
+            if (!ganttLayers) {
+                console.log('Layers container not found');
+                return;
+            }
 
-        // Calculate approximate x position (this is a simplified calculation)
-        const totalDays = (endDate - startDate) / (1000 * 60 * 60 * 24);
-        const daysFromStart = (today - startDate) / (1000 * 60 * 60 * 24);
-        const svgWidth = parseFloat(ganttSvg.getAttribute('width')) || ganttRect.width;
-        const xPos = (daysFromStart / totalDays) * svgWidth;
+            // Remove existing today marker if any
+            const existingMarker = ganttSvg.querySelector('.today-marker-group');
+            if (existingMarker) {
+                existingMarker.remove();
+            }
 
-        // Create vertical line
-        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-        line.setAttribute('class', 'today-marker');
-        line.setAttribute('x1', xPos);
-        line.setAttribute('y1', '0');
-        line.setAttribute('x2', xPos);
-        line.setAttribute('y2', ganttSvg.getAttribute('height') || '500');
+            // Get SVG dimensions
+            const svgHeight = parseFloat(ganttSvg.getAttribute('height')) || 500;
 
-        // Create label
-        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        text.setAttribute('class', 'today-label');
-        text.setAttribute('x', xPos + 5);
-        text.setAttribute('y', '15');
-        text.textContent = 'Today';
+            // Try to get actual grid header position for better accuracy
+            const gridHeader = ganttSvg.querySelector('.grid-header');
+            if (!gridHeader) {
+                console.log('Grid header not found');
+                return;
+            }
 
-        markerGroup.appendChild(line);
-        markerGroup.appendChild(text);
-        ganttLayers.appendChild(markerGroup);
+            const headerBBox = gridHeader.getBBox();
+            const contentStartX = headerBBox.x;
+            const contentWidth = headerBBox.width;
+
+            console.log('Grid header:', {x: contentStartX, width: contentWidth});
+
+            // Calculate total days and position
+            const totalDays = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+            const daysFromStart = Math.ceil((today - startDate) / (1000 * 60 * 60 * 24));
+            
+            console.log('Days calculation:', {totalDays, daysFromStart});
+
+            // Calculate x position
+            const xPos = contentStartX + (daysFromStart / totalDays) * contentWidth;
+
+            console.log('Today marker position:', xPos);
+
+            // Create SVG group for today marker
+            const markerGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            markerGroup.setAttribute('class', 'today-marker-group');
+
+            // Create vertical line
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('class', 'today-marker');
+            line.setAttribute('x1', xPos);
+            line.setAttribute('y1', '0');
+            line.setAttribute('x2', xPos);
+            line.setAttribute('y2', svgHeight);
+            line.setAttribute('stroke', '#ef4444');
+            line.setAttribute('stroke-width', '2');
+            line.setAttribute('stroke-dasharray', '5,5');
+
+            // Create background for label
+            const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            labelBg.setAttribute('x', xPos - 30);
+            labelBg.setAttribute('y', '2');
+            labelBg.setAttribute('width', '60');
+            labelBg.setAttribute('height', '20');
+            labelBg.setAttribute('fill', '#ef4444');
+            labelBg.setAttribute('rx', '4');
+
+            // Create label
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('class', 'today-label');
+            text.setAttribute('x', xPos);
+            text.setAttribute('y', '15');
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('fill', 'white');
+            text.setAttribute('font-weight', '700');
+            text.setAttribute('font-size', '12');
+            text.textContent = 'TODAY';
+
+            markerGroup.appendChild(line);
+            markerGroup.appendChild(labelBg);
+            markerGroup.appendChild(text);
+            
+            // Append to layers (will be on top)
+            ganttLayers.appendChild(markerGroup);
+
+            console.log('Today marker successfully added');
+        }, 300); // Increased delay to ensure SVG is fully rendered
     }
 
     // Enhance bars with additional information
@@ -677,53 +610,9 @@
         });
     }
 
-    // Calculate and update project statistics
-    function updateProjectStats() {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        let doneCount = 0;
-        let inProgressCount = 0;
-        let notStartedCount = 0;
-        let overdueCount = 0;
-
-        tasks.forEach(task => {
-            const endDate = new Date(task.end);
-            endDate.setHours(0, 0, 0, 0);
-
-            // Use both status and progress to determine actual state
-            let actualStatus = task.status;
-            if (task.progress >= 100) {
-                actualStatus = 'done';
-            } else if (task.progress > 0) {
-                actualStatus = 'in_progress';
-            }
-
-            if (actualStatus === 'done') {
-                doneCount++;
-            } else if (actualStatus === 'in_progress') {
-                inProgressCount++;
-                if (endDate < today) {
-                    overdueCount++;
-                }
-            } else {
-                notStartedCount++;
-                if (endDate < today) {
-                    overdueCount++;
-                }
-            }
-        });
-
-        document.getElementById('stat-done').textContent = doneCount;
-        document.getElementById('stat-in-progress').textContent = inProgressCount;
-        document.getElementById('stat-not-started').textContent = notStartedCount;
-        document.getElementById('stat-overdue').textContent = overdueCount;
-    }
-
     // Initialize Gantt chart on page load
     document.addEventListener('DOMContentLoaded', function() {
         initGantt('Week');
-        updateProjectStats();
     });
 
     // Update task dates
@@ -744,7 +633,6 @@
         .then(data => {
             if (data.success) {
                 console.log('Task dates updated successfully');
-                updateProjectStats();
             } else {
                 console.error('Failed to update task dates:', data.error);
                 // Reload the page to revert changes
@@ -773,7 +661,6 @@
         .then(data => {
             if (data.success) {
                 console.log('Task progress updated successfully');
-                updateProjectStats();
             } else {
                 console.error('Failed to update task progress:', data.error);
             }
