@@ -178,9 +178,6 @@
                 <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=csv">Export as CSV</a></li>
             </ul>
         </div>
-        <button type="button" class="btn btn-outline-info" onclick="testScrollFeature()" title="Test Column Scroll Feature">
-            <i class="fas fa-scroll me-1"></i> Test Scroll
-        </button>
         <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
             <i class="fas fa-cog"></i>
         </button><ul class="dropdown-menu dropdown-menu-end">
@@ -738,72 +735,7 @@
             toggleLeanSixSigmaFeatures();
         }
     });
-      // Test function for column scroll feature
-    function testScrollFeature() {
-        console.log('=== Column Scroll Feature Debug ===');
-        
-        // Check if configuration exists
-        if (typeof COLUMN_SCROLL_CONFIG !== 'undefined') {
-            console.log('✅ COLUMN_SCROLL_CONFIG found:', COLUMN_SCROLL_CONFIG);
-        } else {
-            console.log('❌ COLUMN_SCROLL_CONFIG not found');
-        }
-        
-        // Check CSS custom properties
-        const rootStyles = getComputedStyle(document.documentElement);
-        const maxHeight = rootStyles.getPropertyValue('--column-scroll-max-height');
-        const minHeight = rootStyles.getPropertyValue('--column-scroll-min-height');
-        console.log('CSS Custom Properties:', { maxHeight, minHeight });
-        
-        // Check columns
-        const columns = document.querySelectorAll('.kanban-column-tasks');
-        console.log(`Found ${columns.length} columns`);
-        
-        columns.forEach((column, index) => {
-            const tasks = column.querySelectorAll('.kanban-task');
-            const taskCount = tasks.length;
-            const isScrollable = column.classList.contains('scrollable');
-            const computedStyles = getComputedStyle(column);
-            
-            console.log(`Column ${index + 1}:`, {
-                taskCount,
-                isScrollable,
-                hasScrollableClass: column.classList.contains('scrollable'),
-                classList: Array.from(column.classList),
-                maxHeight: computedStyles.maxHeight,
-                overflowY: computedStyles.overflowY,
-                scrollHeight: column.scrollHeight,
-                clientHeight: column.clientHeight
-            });
-            
-            if (taskCount > 4) {
-                console.log(`  → Should be scrollable (${taskCount} > 4)`);
-                if (!isScrollable) {
-                    console.log('  ⚠️ Missing scrollable class');
-                    // Manually add the class for testing
-                    column.classList.add('scrollable');
-                    console.log('  ✅ Added scrollable class manually');
-                }
-            } else {
-                console.log(`  → Should NOT be scrollable (${taskCount} <= 4)`);
-                if (isScrollable) {
-                    console.log('  ⚠️ Unnecessary scrollable class');
-                }
-            }
-        });
-        
-        // Test manual trigger
-        if (typeof window.kanbanUpdateColumnScrolling === 'function') {
-            console.log('✅ Global function available');
-            console.log('Triggering manual update...');
-            window.kanbanUpdateColumnScrolling();
-        } else {
-            console.log('❌ Global function not available');
-        }
-        
-        alert('Column scroll test completed! Check browser console for details.');
-    }
-</script>
+    </script>
 {% endblock %}
 
 {% endblock content %}

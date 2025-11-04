@@ -198,17 +198,12 @@ def board_list(request):
         profile = request.user.profile
         organization = profile.organization
         
-        # Superusers can see all boards across all organizations
-        if request.user.is_superuser:
-            boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            ).distinct().select_related('organization')
-        else:
-            # Regular users only see boards in their organization
-            boards = Board.objects.filter(
-                Q(organization=organization) & 
-                (Q(created_by=request.user) | Q(members=request.user))
-            ).distinct()
+        # All users (including superusers) should only see boards in their current organization
+        # to maintain consistency with the dashboard view
+        boards = Board.objects.filter(
+            Q(organization=organization) & 
+            (Q(created_by=request.user) | Q(members=request.user))
+        ).distinct()
         
         # For board_list, we only display boards, creation is handled by create_board view
         form = BoardForm()
