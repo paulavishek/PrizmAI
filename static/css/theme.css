@@ -1,0 +1,386 @@
+/* Theme CSS - Light/Dark Mode Variables and Styles */
+
+:root {
+    /* Light Mode Colors (Default) */
+    --bg-primary: #f8f9fa;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #e9ecef;
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --text-muted: #999999;
+    --border-color: #dee2e6;
+    --border-light: #e9ecef;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+    --shadow-dark: rgba(0, 0, 0, 0.2);
+    --link-color: #0d6efd;
+    --link-hover: #0b5ed7;
+    --navbar-bg: #0d6efd;
+    --navbar-text: #ffffff;
+    --input-bg: #ffffff;
+    --input-border: #dee2e6;
+    --input-text: #212529;
+    --btn-hover-bg: #dde2e6;
+    --card-bg: #ffffff;
+    --footer-bg: #f8f9fa;
+}
+
+/* Dark Mode Colors */
+body.dark-mode {
+    --bg-primary: #1a1a1a;
+    --bg-secondary: #2d2d2d;
+    --bg-tertiary: #3a3a3a;
+    --text-primary: #e8e8e8;
+    --text-secondary: #b0b0b0;
+    --text-muted: #808080;
+    --border-color: #444444;
+    --border-light: #3a3a3a;
+    --shadow-color: rgba(0, 0, 0, 0.3);
+    --shadow-dark: rgba(0, 0, 0, 0.5);
+    --link-color: #64b5f6;
+    --link-hover: #42a5f5;
+    --navbar-bg: #1e1e1e;
+    --navbar-text: #e8e8e8;
+    --input-bg: #2d2d2d;
+    --input-border: #444444;
+    --input-text: #e8e8e8;
+    --btn-hover-bg: #444444;
+    --card-bg: #2d2d2d;
+    --footer-bg: #1a1a1a;
+}
+
+/* General Theme Application */
+body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+main {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+}
+
+/* Navbar Theme */
+.navbar {
+    background-color: var(--navbar-bg) !important;
+    color: var(--navbar-text);
+    transition: background-color 0.3s ease;
+}
+
+.navbar-dark .navbar-brand {
+    color: var(--navbar-text);
+}
+
+.navbar-dark .nav-link {
+    color: var(--navbar-text) !important;
+}
+
+.navbar-dark .nav-link:hover {
+    opacity: 0.8;
+}
+
+/* Dropdown Menu Theme */
+.dropdown-menu {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+.dropdown-item {
+    color: var(--text-primary);
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.dropdown-divider {
+    border-color: var(--border-color);
+}
+
+/* Footer Theme */
+.footer {
+    background-color: var(--footer-bg) !important;
+    color: var(--text-secondary);
+    border-top: 1px solid var(--border-color);
+}
+
+/* Card and Container Theme */
+.card {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+.card-header {
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+.card-body {
+    background-color: var(--card-bg);
+    color: var(--text-primary);
+}
+
+/* Form Elements Theme */
+.form-control,
+.form-select,
+textarea {
+    background-color: var(--input-bg);
+    border-color: var(--input-border);
+    color: var(--input-text);
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+.form-control:focus,
+.form-select:focus,
+textarea:focus {
+    background-color: var(--input-bg);
+    border-color: var(--link-color);
+    color: var(--input-text);
+}
+
+.form-control::placeholder,
+textarea::placeholder {
+    color: var(--text-muted);
+}
+
+/* Button Theme */
+.btn-secondary {
+    background-color: var(--bg-tertiary);
+    border-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+.btn-secondary:hover {
+    background-color: var(--btn-hover-bg);
+    border-color: var(--btn-hover-bg);
+}
+
+.btn-light {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+.btn-light:hover {
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-color);
+}
+
+/* Alert Theme */
+.alert {
+    border-color: var(--border-color);
+}
+
+.alert-info {
+    background-color: rgba(13, 110, 253, 0.1);
+    border-color: #0d6efd;
+    color: var(--text-primary);
+}
+
+.alert-success {
+    background-color: rgba(25, 135, 84, 0.1);
+    border-color: #198754;
+    color: var(--text-primary);
+}
+
+.alert-warning {
+    background-color: rgba(255, 193, 7, 0.1);
+    border-color: #ffc107;
+    color: var(--text-primary);
+}
+
+.alert-danger {
+    background-color: rgba(220, 53, 69, 0.1);
+    border-color: #dc3545;
+    color: var(--text-primary);
+}
+
+/* Kanban Board Theme */
+.kanban-board {
+    background-color: var(--bg-primary);
+}
+
+.kanban-column {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-light);
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+.kanban-column:hover {
+    box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+.kanban-column.dragging {
+    box-shadow: 0 8px 16px var(--shadow-dark);
+}
+
+.kanban-column-header {
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+.kanban-column-header:hover {
+    background-color: var(--btn-hover-bg);
+}
+
+/* Task Card Theme */
+.task-card,
+.kanban-card {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+    box-shadow: 0 1px 4px var(--shadow-color);
+}
+
+.task-card:hover,
+.kanban-card:hover {
+    box-shadow: 0 2px 8px var(--shadow-color);
+}
+
+/* Table Theme */
+table {
+    color: var(--text-primary);
+}
+
+thead {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+tbody tr {
+    border-color: var(--border-color);
+}
+
+tbody tr:hover {
+    background-color: var(--bg-tertiary);
+}
+
+/* Link Theme */
+a {
+    color: var(--link-color);
+    text-decoration: none;
+}
+
+a:hover {
+    color: var(--link-hover);
+}
+
+/* Badge Theme */
+.badge {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+/* Theme Toggle Button */
+#theme-toggle {
+    padding: 0.5rem 0.75rem;
+    border-radius: 5px;
+    border: none;
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1.1rem;
+}
+
+#theme-toggle:hover {
+    background-color: var(--bg-tertiary);
+    transform: scale(1.1);
+}
+
+#theme-toggle:active {
+    transform: scale(0.95);
+}
+
+/* Text-muted and secondary text */
+.text-muted {
+    color: var(--text-secondary) !important;
+}
+
+.text-secondary {
+    color: var(--text-secondary) !important;
+}
+
+/* Modal Theme */
+.modal-content {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+.modal-header {
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-color);
+}
+
+.modal-footer {
+    background-color: var(--bg-secondary);
+    border-color: var(--border-color);
+}
+
+.btn-close {
+    filter: invert(1);
+}
+
+body.dark-mode .btn-close {
+    filter: invert(0.8);
+}
+
+/* Popover Theme */
+.popover {
+    background-color: var(--card-bg);
+    border-color: var(--border-color);
+}
+
+.popover-header {
+    background-color: var(--bg-tertiary);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+}
+
+.popover-body {
+    color: var(--text-primary);
+}
+
+/* Tooltip Theme */
+.tooltip-inner {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+/* Progress Bar Theme */
+.progress {
+    background-color: var(--bg-tertiary);
+}
+
+.progress-bar {
+    background-color: var(--link-color);
+}
+
+/* Scrollbar Theme (Webkit browsers) */
+body::-webkit-scrollbar {
+    width: 12px;
+}
+
+body::-webkit-scrollbar-track {
+    background: var(--bg-primary);
+}
+
+body::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+}
+
+body::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+/* Animation transitions for theme switching */
+* {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
