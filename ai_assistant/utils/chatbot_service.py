@@ -1527,10 +1527,85 @@ class TaskFlowChatbotService:
             logger.error(f"Error getting lean context: {e}")
             return None
     
+    def _get_full_dependency_chain(self, task, max_depth=10):
+        """
+        Recursively get the complete dependency chain for a task
+        Returns list of tasks from root to current task
+        """
+        chain = []
+        current = task
+        depth = 0
+        
+        # Travel up the dependency chain
+        while current and depth < max_depth:
+            chain.insert(0, current)  # Add to beginning to maintain order
+            current = current.parent_task if hasattr(current, 'parent_task') else None
+            depth += 1
+        
+        return chain
+    
+    def _identify_bottleneck_in_chain(self, chain):
+        """
+        Analyze dependency chain and identify the biggest bottleneck
+        Returns tuple of (bottleneck_task, reason)
+        """
+        if not chain:
+            return None, "No dependencies found"
+        
+        bottlenecks = []
+        
+        for task in chain:
+            bottleneck_score = 0
+            reasons = []
+            
+            # Check if task is not done
+            if task.column and 'done' not in task.column.name.lower() and 'closed' not in task.column.name.lower():
+                bottleneck_score += 3
+                reasons.append(f"Not completed (Status: {task.column.name})")
+            
+            # Check for high risk
+            if hasattr(task, 'risk_level') and task.risk_level in ['high', 'critical']:
+                bottleneck_score += 2
+                reasons.append(f"High risk ({task.risk_level})")
+            
+            # Check progress
+            if task.progress < 50:
+                bottleneck_score += 2
+                reasons.append(f"Low progress ({task.progress}%)")
+            
+            # Check if overdue
+            if hasattr(task, 'due_date') and task.due_date:
+                from django.utils import timezone
+                if task.due_date < timezone.now().date():
+                    bottleneck_score += 3
+                    reasons.append(f"Overdue by {(timezone.now().date() - task.due_date).days} days")
+            
+            # Check if blocked
+            if task.column and 'block' in task.column.name.lower():
+                bottleneck_score += 4
+                reasons.append("Currently blocked")
+            
+            # Check if unassigned
+            if not task.assigned_to:
+                bottleneck_score += 1
+                reasons.append("Unassigned")
+            
+            if bottleneck_score > 0:
+                bottlenecks.append((task, bottleneck_score, reasons))
+        
+        if bottlenecks:
+            # Sort by score descending
+            bottlenecks.sort(key=lambda x: x[1], reverse=True)
+            task, score, reasons = bottlenecks[0]
+            return task, reasons
+        
+        return None, "No significant bottlenecks identified"
+    
     def _get_dependency_context(self, prompt):
         """
         Get task dependency and relationship data
         Includes critical chains, blocked tasks, subtasks
+        Enhanced to show complete dependency chains and identify bottlenecks
         """
         try:
             if not self._is_dependency_query(prompt):
@@ -1541,11 +1616,78 @@ class TaskFlowChatbotService:
             if not user_boards.exists():
                 return None
             
+            context = "**Task Dependencies & Relationships:**\n\n"
+            
+            # Check if asking about a specific task
+            specific_task = None
+            for board in user_boards:
+                tasks = Task.objects.filter(column__board=board)
+                for task in tasks:
+                    if task.title.lower() in prompt.lower():
+                        specific_task = task
+                        break
+                if specific_task:
+                    break
+            
+            # If specific task mentioned, show its complete chain
+            if specific_task:
+                chain = self._get_full_dependency_chain(specific_task)
+                
+                context += f"**Complete Dependency Chain for '{specific_task.title}':**\n\n"
+                
+                if len(chain) == 1:
+                    context += f"✓ This task has no dependencies\n\n"
+                    context += f"**Task Details:**\n"
+                    context += f"  - Status: {specific_task.column.name if specific_task.column else 'Unknown'}\n"
+                    context += f"  - Assigned: {specific_task.assigned_to.get_full_name() or specific_task.assigned_to.username if specific_task.assigned_to else 'Unassigned'}\n"
+                    context += f"  - Progress: {specific_task.progress}%\n"
+                    if hasattr(specific_task, 'risk_level') and specific_task.risk_level:
+                        context += f"  - Risk Level: {specific_task.risk_level.upper()}\n"
+                else:
+                    context += f"**Dependency Chain ({len(chain)} tasks):**\n\n"
+                    for i, task in enumerate(chain):
+                        indent = "  " * i
+                        arrow = "└─> " if i > 0 else "• "
+                        context += f"{indent}{arrow}**{task.title}**\n"
+                        context += f"{indent}    - Status: {task.column.name if task.column else 'Unknown'}\n"
+                        context += f"{indent}    - Assigned: {task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else 'Unassigned'}\n"
+                        context += f"{indent}    - Progress: {task.progress}%\n"
+                        
+                        if hasattr(task, 'risk_level') and task.risk_level:
+                            context += f"{indent}    - Risk Level: {task.risk_level.upper()}\n"
+                        
+                        if hasattr(task, 'due_date') and task.due_date:
+                            from django.utils import timezone
+                            if task.due_date < timezone.now().date():
+                                days_overdue = (timezone.now().date() - task.due_date).days
+                                context += f"{indent}    - ⚠️ OVERDUE by {days_overdue} days\n"
+                            else:
+                                context += f"{indent}    - Due: {task.due_date}\n"
+                        
+                        context += "\n"
+                    
+                    # Identify bottleneck
+                    bottleneck_task, bottleneck_reasons = self._identify_bottleneck_in_chain(chain[:-1])  # Exclude the task itself
+                    
+                    if bottleneck_task:
+                        context += f"**🚨 Biggest Bottleneck Identified:**\n"
+                        context += f"  - **Task:** {bottleneck_task.title}\n"
+                        context += f"  - **Reasons:**\n"
+                        for reason in bottleneck_reasons:
+                            context += f"    • {reason}\n"
+                        context += f"\n  - **Recommendation:** Prioritize unblocking '{bottleneck_task.title}' to enable '{specific_task.title}'\n"
+                    else:
+                        context += f"**✓ No Critical Bottlenecks:**\n"
+                        context += f"  All dependency tasks are on track or completed.\n"
+                
+                context += "\n"
+            
+            # Get general dependency overview
             # Get tasks with dependencies
             tasks_with_parent = Task.objects.filter(
                 column__board__in=user_boards,
                 parent_task__isnull=False
-            ).select_related('parent_task', 'column')[:15]
+            ).select_related('parent_task', 'column', 'assigned_to')[:15]
             
             # Get tasks with child tasks (subtasks)
             tasks_with_children = Task.objects.filter(
@@ -1553,31 +1695,33 @@ class TaskFlowChatbotService:
                 subtasks__isnull=False
             ).select_related('column').distinct()[:10]
             
-            if not tasks_with_parent.exists() and not tasks_with_children.exists():
-                return None
+            if not specific_task and (tasks_with_parent.exists() or tasks_with_children.exists()):
+                if tasks_with_parent.exists():
+                    context += f"**Tasks with Dependencies ({len(tasks_with_parent)}):**\n"
+                    for task in tasks_with_parent:
+                        context += f"• **{task.title}**\n"
+                        context += f"  - Depends On: {task.parent_task.title}\n"
+                        context += f"  - Parent Status: {task.parent_task.column.name if task.parent_task.column else 'Unknown'}\n"
+                        if task.column:
+                            context += f"  - Task Status: {task.column.name}\n"
+                        
+                        # Check if parent is blocking
+                        parent_done = task.parent_task.column and ('done' in task.parent_task.column.name.lower() or 'closed' in task.parent_task.column.name.lower())
+                        if not parent_done:
+                            context += f"  - ⚠️ Blocked: Waiting for '{task.parent_task.title}' to complete\n"
+                        
+                        context += "\n"
+                
+                if tasks_with_children.exists():
+                    context += f"\n**Tasks with Subtasks ({len(tasks_with_children)}):**\n"
+                    for task in tasks_with_children:
+                        child_count = task.subtasks.count() if hasattr(task, 'subtasks') else 0
+                        context += f"• {task.title} ({child_count} subtasks)\n"
             
-            context = "**Task Dependencies & Relationships:**\n\n"
-            
-            if tasks_with_parent.exists():
-                context += f"**Tasks with Dependencies ({len(tasks_with_parent)}):**\n"
-                for task in tasks_with_parent:
-                    context += f"• {task.title}\n"
-                    context += f"  - Depends On: {task.parent_task.title}\n"
-                    context += f"  - Parent Status: {task.parent_task.column.name if task.parent_task.column else 'Unknown'}\n"
-                    if task.column:
-                        context += f"  - Status: {task.column.name}\n"
-                    context += "\n"
-            
-            if tasks_with_children.exists():
-                context += f"\n**Tasks with Subtasks ({len(tasks_with_children)}):**\n"
-                for task in tasks_with_children:
-                    child_count = task.subtasks.count() if hasattr(task, 'subtasks') else 0
-                    context += f"• {task.title} ({child_count} subtasks)\n"
-            
-            return context
+            return context if context != "**Task Dependencies & Relationships:**\n\n" else None
         
         except Exception as e:
-            logger.error(f"Error getting dependency context: {e}")
+            logger.error(f"Error getting dependency context: {e}", exc_info=True)
             return None
     
     def generate_system_prompt(self):

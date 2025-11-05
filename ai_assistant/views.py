@@ -317,6 +317,116 @@ def delete_session(request, session_id):
 
 @login_required(login_url='accounts:login')
 @require_POST
+def clear_session(request, session_id):
+    """Clear all messages in a chat session"""
+    try:
+        session = get_object_or_404(AIAssistantSession, id=session_id, user=request.user)
+        
+        # Delete all messages in the session
+        AIAssistantMessage.objects.filter(session=session).delete()
+        
+        # Reset session counters
+        session.message_count = 0
+        session.total_tokens_used = 0
+        session.save()
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': f'All messages cleared from session "{session.title}"'
+        })
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required(login_url='accounts:login')
+def export_session(request, session_id):
+    """Export chat session as JSON or Markdown"""
+    try:
+        session = get_object_or_404(AIAssistantSession, id=session_id, user=request.user)
+        export_format = request.GET.get('format', 'json')  # 'json' or 'markdown'
+        
+        messages = AIAssistantMessage.objects.filter(session=session).order_by('created_at')
+        
+        if export_format == 'markdown':
+            # Export as Markdown
+            from django.http import HttpResponse
+            
+            content = f"# {session.title}\n\n"
+            content += f"**Created:** {session.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            content += f"**Last Updated:** {session.updated_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            content += f"**Total Messages:** {session.message_count}\n"
+            if session.board:
+                content += f"**Board Context:** {session.board.name}\n"
+            content += f"\n---\n\n"
+            
+            for msg in messages:
+                role_icon = "👤" if msg.role == 'user' else "🤖"
+                content += f"## {role_icon} {msg.role.capitalize()}\n"
+                content += f"*{msg.created_at.strftime('%Y-%m-%d %H:%M:%S')}*\n\n"
+                content += f"{msg.content}\n\n"
+                
+                if msg.used_web_search:
+                    content += f"*🔍 Web search was used for this response*\n\n"
+                
+                content += "---\n\n"
+            
+            # Create response
+            response = HttpResponse(content, content_type='text/markdown')
+            response['Content-Disposition'] = f'attachment; filename="chat_session_{session.id}_{session.created_at.strftime("%Y%m%d")}.md"'
+            return response
+        
+        else:
+            # Export as JSON
+            from django.http import JsonResponse
+            
+            data = {
+                'session': {
+                    'id': session.id,
+                    'title': session.title,
+                    'description': session.description,
+                    'created_at': session.created_at.isoformat(),
+                    'updated_at': session.updated_at.isoformat(),
+                    'message_count': session.message_count,
+                    'total_tokens_used': session.total_tokens_used,
+                    'board': session.board.name if session.board else None,
+                },
+                'messages': [
+                    {
+                        'id': msg.id,
+                        'role': msg.role,
+                        'content': msg.content,
+                        'model': msg.model,
+                        'tokens_used': msg.tokens_used,
+                        'created_at': msg.created_at.isoformat(),
+                        'is_starred': msg.is_starred,
+                        'is_helpful': msg.is_helpful,
+                        'feedback': msg.feedback,
+                        'used_web_search': msg.used_web_search,
+                        'search_sources': msg.search_sources,
+                    }
+                    for msg in messages
+                ],
+                'export_date': timezone.now().isoformat(),
+            }
+            
+            # Create downloadable JSON response
+            from django.http import HttpResponse
+            import json
+            
+            response = HttpResponse(
+                json.dumps(data, indent=2),
+                content_type='application/json'
+            )
+            response['Content-Disposition'] = f'attachment; filename="chat_session_{session.id}_{session.created_at.strftime("%Y%m%d")}.json"'
+            return response
+    
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required(login_url='accounts:login')
+@require_POST
 def toggle_star_message(request, message_id):
     """Toggle star on a message"""
     try:

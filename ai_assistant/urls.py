@@ -15,6 +15,8 @@ urlpatterns = [
     path('api/session/<int:session_id>/messages/', views.get_session_messages, name='get_session_messages'),
     path('api/sessions/<int:session_id>/rename/', views.rename_session, name='rename_session'),
     path('api/sessions/<int:session_id>/delete/', views.delete_session, name='delete_session'),
+    path('api/sessions/<int:session_id>/clear/', views.clear_session, name='clear_session'),
+    path('api/sessions/<int:session_id>/export/', views.export_session, name='export_session'),
     
     # Message interactions
     path('api/message/<int:message_id>/star/', views.toggle_star_message, name='toggle_star'),

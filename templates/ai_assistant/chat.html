@@ -304,6 +304,23 @@
                     {% endfor %}
                 </select>
                 
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-secondary" id="export-chat-btn" title="Export chat">
+                        <i class="fas fa-download"></i> Export
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false">
+                        <span class="visually-hidden">Toggle Dropdown</span>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" onclick="exportChat('json')"><i class="fas fa-file-code"></i> Export as JSON</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="exportChat('markdown')"><i class="fas fa-file-alt"></i> Export as Markdown</a></li>
+                    </ul>
+                </div>
+                
+                <button class="btn btn-sm btn-outline-danger" id="clear-chat-btn" title="Clear all messages">
+                    <i class="fas fa-eraser"></i> Clear
+                </button>
+                
                 <button class="btn btn-sm btn-outline-secondary" title="Refresh data">
                     <i class="fas fa-sync"></i>
                 </button>
@@ -486,6 +503,56 @@
                 window.location.href = `/assistant/chat/?session=${data.session_id}`;
             }
         });
+    }
+    
+    // Clear chat session
+    document.getElementById('clear-chat-btn')?.addEventListener('click', function() {
+        if (!sessionId) {
+            alert('No session selected');
+            return;
+        }
+        
+        if (!confirm('Are you sure you want to clear all messages in this chat? This action cannot be undone.')) {
+            return;
+        }
+        
+        fetch(`/assistant/api/sessions/${sessionId}/clear/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Clear messages from UI
+                document.getElementById('chat-messages').innerHTML = `
+                    <div style="text-align: center; color: #999; margin: auto;">
+                        <div style="font-size: 40px; margin-bottom: 10px;">💬</div>
+                        <p>Chat cleared. Start a new conversation!</p>
+                    </div>
+                `;
+                alert(data.message);
+                loadSessions(); // Refresh session list
+            } else {
+                alert('Error clearing chat: ' + (data.error || 'Unknown error'));
+            }
+        })
+        .catch(err => {
+            alert('Error clearing chat: ' + err.message);
+        });
+    });
+    
+    // Export chat session
+    function exportChat(format) {
+        if (!sessionId) {
+            alert('No session selected');
+            return;
+        }
+        
+        // Download the export file
+        window.location.href = `/assistant/api/sessions/${sessionId}/export/?format=${format}`;
     }
     
     // Initialize
