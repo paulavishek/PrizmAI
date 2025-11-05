@@ -438,6 +438,525 @@ class TaskFlowChatbotService:
         ]
         return any(kw in prompt.lower() for kw in mitigation_keywords)
     
+    def _is_user_task_query(self, prompt):
+        """Detect if query is asking for tasks assigned to the current user"""
+        user_task_keywords = [
+            'my task', 'my tasks', 'assigned to me', 'tasks for me',
+            'what am i working on', 'my work', 'my assignments',
+            'tasks i have', 'tasks i need', 'my todo'
+        ]
+        return any(kw in prompt.lower() for kw in user_task_keywords)
+    
+    def _is_incomplete_task_query(self, prompt):
+        """Detect if query is asking for incomplete/in-progress tasks"""
+        incomplete_keywords = [
+            'incomplete', 'not done', 'in progress', 'not completed',
+            'not finished', 'pending', 'active', 'ongoing',
+            'show incomplete', 'list incomplete', 'incomplete task'
+        ]
+        return any(kw in prompt.lower() for kw in incomplete_keywords)
+    
+    def _is_board_comparison_query(self, prompt):
+        """Detect if query is asking for board comparisons"""
+        comparison_keywords = [
+            'compare board', 'compare project', 'comparison',
+            'boards by', 'compare by', 'which board', 'most task',
+            'most member', 'most active', 'least active', 'board stat'
+        ]
+        return any(kw in prompt.lower() for kw in comparison_keywords)
+    
+    def _is_task_distribution_query(self, prompt):
+        """Detect if query is asking for task distribution by assignee"""
+        distribution_keywords = [
+            'task distribution', 'distribution by', 'tasks per person',
+            'tasks per member', 'tasks per assignee', 'who has',
+            'workload distribution', 'tasks assigned', 'assignment distribution'
+        ]
+        return any(kw in prompt.lower() for kw in distribution_keywords)
+    
+    def _is_progress_query(self, prompt):
+        """Detect if query is asking for progress metrics"""
+        progress_keywords = [
+            'progress', 'completion', 'how complete', 'percentage',
+            'average progress', 'overall progress', 'completion rate',
+            'how far', 'status update'
+        ]
+        return any(kw in prompt.lower() for kw in progress_keywords)
+    
+    def _is_overdue_query(self, prompt):
+        """Detect if query is asking for overdue tasks"""
+        overdue_keywords = [
+            'overdue', 'late', 'past due', 'missed deadline',
+            'due soon', 'upcoming deadline', 'deadline', 'due date'
+        ]
+        return any(kw in prompt.lower() for kw in overdue_keywords)
+    
+    def _is_strategic_query(self, prompt):
+        """
+        Detect if query is asking for strategic advice, best practices, or how-to guidance
+        These queries benefit from RAG + project context
+        """
+        strategic_keywords = [
+            'how to', 'how can', 'how should', 'what should', 'best way to',
+            'best practice', 'best practices', 'advice', 'guidance', 'recommend',
+            'suggestion', 'tips', 'strategy', 'strategies', 'approach',
+            'tackle', 'handle', 'manage', 'deal with', 'solve', 'improve',
+            'optimize', 'enhance', 'better', 'effective', 'efficient',
+            'successful', 'proven method', 'industry standard', 'expert advice'
+        ]
+        return any(kw in prompt.lower() for kw in strategic_keywords)
+    
+    def _get_user_tasks_context(self, prompt):
+        """
+        Get tasks assigned to the current user
+        Handles questions like: "Show tasks assigned to me", "My tasks", etc.
+        
+        ALWAYS retrieves actual user tasks instead of asking for user identity
+        """
+        try:
+            if not self._is_user_task_query(prompt):
+                return None
+            
+            # Get user's boards
+            user_boards = self._get_user_boards()
+            if not user_boards.exists():
+                return "You don't have access to any boards yet."
+            
+            # Get tasks assigned to current user
+            user_tasks = Task.objects.filter(
+                column__board__in=user_boards,
+                assigned_to=self.user
+            ).select_related('column', 'column__board').order_by('column__name', '-priority')
+            
+            if not user_tasks.exists():
+                return f"No tasks currently assigned to you ({self.user.get_full_name() or self.user.username})."
+            
+            context = f"**Tasks Assigned to You ({self.user.get_full_name() or self.user.username}):**\n\n"
+            context += f"**Total Tasks:** {user_tasks.count()}\n\n"
+            
+            # Group by status
+            by_status = {}
+            for task in user_tasks:
+                status = task.column.name if task.column else 'Unknown'
+                if status not in by_status:
+                    by_status[status] = []
+                by_status[status].append(task)
+            
+            for status, tasks in by_status.items():
+                context += f"**{status} ({len(tasks)}):**\n"
+                for task in tasks[:10]:  # Limit to 10 per status
+                    context += f"  • {task.title}\n"
+                    context += f"    - Board: {task.column.board.name if task.column else 'Unknown'}\n"
+                    context += f"    - Priority: {task.get_priority_display()}\n"
+                    context += f"    - Progress: {task.progress}%\n"
+                    
+                    if hasattr(task, 'due_date') and task.due_date:
+                        from django.utils import timezone
+                        if task.due_date < timezone.now().date():
+                            context += f"    - Due: {task.due_date} ⚠️ OVERDUE\n"
+                        else:
+                            context += f"    - Due: {task.due_date}\n"
+                    
+                    context += "\n"
+            
+            return context
+        
+        except Exception as e:
+            logger.error(f"Error getting user tasks context: {e}", exc_info=True)
+            return f"Error retrieving your tasks: {str(e)}"
+    
+    def _get_incomplete_tasks_context(self, prompt):
+        """
+        Get incomplete tasks (not in Done/Closed status)
+        Handles questions like: "Show incomplete tasks", "What's not done?", etc.
+        
+        ALWAYS retrieves actual incomplete tasks
+        """
+        try:
+            if not self._is_incomplete_task_query(prompt):
+                return None
+            
+            # Get user's boards
+            user_boards = self._get_user_boards()
+            if not user_boards.exists():
+                return "You don't have access to any boards yet."
+            
+            # Get all incomplete tasks (exclude Done and Closed statuses)
+            incomplete_tasks = Task.objects.filter(
+                column__board__in=user_boards
+            ).exclude(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+            ).select_related('assigned_to', 'column', 'column__board').order_by(
+                'column__board__name', 'column__name', '-priority'
+            )
+            
+            if not incomplete_tasks.exists():
+                return "All tasks are completed! 🎉"
+            
+            # Count completed tasks for comparison
+            completed_tasks = Task.objects.filter(
+                column__board__in=user_boards
+            ).filter(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+            ).count()
+            
+            total_tasks = incomplete_tasks.count() + completed_tasks
+            
+            context = f"**Incomplete Tasks Analysis:**\n\n"
+            context += f"**Total Tasks:** {total_tasks}\n"
+            context += f"**Completed:** {completed_tasks} ({100*completed_tasks/total_tasks:.1f}%)\n"
+            context += f"**Incomplete:** {incomplete_tasks.count()} ({100*incomplete_tasks.count()/total_tasks:.1f}%)\n\n"
+            
+            # Group by board
+            by_board = {}
+            for task in incomplete_tasks:
+                board_name = task.column.board.name if task.column else 'Unknown'
+                if board_name not in by_board:
+                    by_board[board_name] = []
+                by_board[board_name].append(task)
+            
+            for board_name, tasks in by_board.items():
+                context += f"**{board_name} Board ({len(tasks)} incomplete):**\n"
+                
+                # Group by status
+                by_status = {}
+                for task in tasks:
+                    status = task.column.name if task.column else 'Unknown'
+                    if status not in by_status:
+                        by_status[status] = []
+                    by_status[status].append(task)
+                
+                for status, status_tasks in by_status.items():
+                    context += f"  {status}: {len(status_tasks)} tasks\n"
+                    for task in status_tasks[:5]:  # Show top 5 per status
+                        assignee = task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else 'Unassigned'
+                        context += f"    • {task.title} ({assignee}, {task.get_priority_display()})\n"
+                
+                context += "\n"
+            
+            return context
+        
+        except Exception as e:
+            logger.error(f"Error getting incomplete tasks context: {e}", exc_info=True)
+            return f"Error retrieving incomplete tasks: {str(e)}"
+    
+    def _get_board_comparison_context(self, prompt):
+        """
+        Get board comparison data
+        Handles questions like: "Compare boards", "Which board has most tasks?", etc.
+        
+        ALWAYS retrieves and compares actual board data
+        """
+        try:
+            if not self._is_board_comparison_query(prompt):
+                return None
+            
+            # Get user's boards
+            user_boards = self._get_user_boards()
+            if not user_boards.exists():
+                return "You don't have access to any boards yet."
+            
+            if user_boards.count() == 1:
+                return f"You only have access to one board: {user_boards.first().name}"
+            
+            context = f"**Board Comparison:**\n\n"
+            context += f"**Total Boards:** {user_boards.count()}\n\n"
+            
+            # Collect metrics for each board
+            board_stats = []
+            for board in user_boards:
+                tasks = Task.objects.filter(column__board=board)
+                task_count = tasks.count()
+                
+                # Count completed vs incomplete
+                completed = tasks.filter(
+                    Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+                ).count()
+                
+                # Count members
+                member_count = board.members.count()
+                
+                # Get last update
+                last_task_update = tasks.order_by('-updated_at').first()
+                last_update = last_task_update.updated_at if last_task_update else board.updated_at
+                
+                board_stats.append({
+                    'name': board.name,
+                    'tasks': task_count,
+                    'completed': completed,
+                    'incomplete': task_count - completed,
+                    'members': member_count,
+                    'last_update': last_update,
+                    'completion_rate': (100 * completed / task_count) if task_count > 0 else 0
+                })
+            
+            # Sort by task count (descending)
+            board_stats.sort(key=lambda x: x['tasks'], reverse=True)
+            
+            context += "**By Number of Tasks:**\n"
+            for i, board in enumerate(board_stats, 1):
+                context += f"{i}. **{board['name']}**: {board['tasks']} tasks "
+                context += f"({board['completed']} done, {board['incomplete']} incomplete, "
+                context += f"{board['completion_rate']:.1f}% complete)\n"
+            
+            context += "\n**By Team Size:**\n"
+            sorted_by_members = sorted(board_stats, key=lambda x: x['members'], reverse=True)
+            for i, board in enumerate(sorted_by_members, 1):
+                context += f"{i}. **{board['name']}**: {board['members']} members\n"
+            
+            context += "\n**By Recent Activity:**\n"
+            sorted_by_update = sorted(board_stats, key=lambda x: x['last_update'], reverse=True)
+            for i, board in enumerate(sorted_by_update, 1):
+                from django.utils import timezone
+                time_ago = timezone.now() - board['last_update']
+                days_ago = time_ago.days
+                if days_ago == 0:
+                    time_str = "Today"
+                elif days_ago == 1:
+                    time_str = "Yesterday"
+                else:
+                    time_str = f"{days_ago} days ago"
+                context += f"{i}. **{board['name']}**: Last updated {time_str}\n"
+            
+            return context
+        
+        except Exception as e:
+            logger.error(f"Error getting board comparison context: {e}", exc_info=True)
+            return f"Error comparing boards: {str(e)}"
+    
+    def _get_task_distribution_context(self, prompt):
+        """
+        Get task distribution by assignee
+        Handles questions like: "Show task distribution", "Who has most tasks?", etc.
+        
+        ALWAYS retrieves and calculates actual task distribution
+        """
+        try:
+            if not self._is_task_distribution_query(prompt):
+                return None
+            
+            # Get user's boards
+            user_boards = self._get_user_boards()
+            if not user_boards.exists():
+                return "You don't have access to any boards yet."
+            
+            # Get all tasks
+            all_tasks = Task.objects.filter(column__board__in=user_boards)
+            
+            if not all_tasks.exists():
+                return "No tasks found in your boards."
+            
+            # Count tasks by assignee
+            from django.db.models import Count
+            task_distribution = all_tasks.values(
+                'assigned_to__first_name',
+                'assigned_to__last_name',
+                'assigned_to__username'
+            ).annotate(
+                task_count=Count('id')
+            ).order_by('-task_count')
+            
+            # Count unassigned tasks
+            unassigned_count = all_tasks.filter(assigned_to__isnull=True).count()
+            
+            context = f"**Task Distribution by Assignee:**\n\n"
+            context += f"**Total Tasks:** {all_tasks.count()}\n"
+            context += f"**Assigned:** {all_tasks.count() - unassigned_count}\n"
+            context += f"**Unassigned:** {unassigned_count}\n\n"
+            
+            if task_distribution:
+                context += "**Tasks per Team Member:**\n"
+                for i, assignee in enumerate(task_distribution, 1):
+                    first_name = assignee['assigned_to__first_name'] or ''
+                    last_name = assignee['assigned_to__last_name'] or ''
+                    username = assignee['assigned_to__username']
+                    
+                    if first_name or last_name:
+                        name = f"{first_name} {last_name}".strip()
+                    else:
+                        name = username or 'Unassigned'
+                    
+                    task_count = assignee['task_count']
+                    percentage = 100 * task_count / all_tasks.count()
+                    
+                    context += f"{i}. **{name}**: {task_count} tasks ({percentage:.1f}%)\n"
+            
+            # Check for workload imbalance
+            if task_distribution:
+                max_tasks = task_distribution[0]['task_count']
+                min_tasks = task_distribution[len(task_distribution)-1]['task_count']
+                if max_tasks > 2 * min_tasks and len(task_distribution) > 1:
+                    context += "\n⚠️ **Workload Imbalance Detected:** "
+                    context += f"Highest workload ({max_tasks} tasks) is more than 2x the lowest ({min_tasks} tasks)\n"
+            
+            return context
+        
+        except Exception as e:
+            logger.error(f"Error getting task distribution context: {e}", exc_info=True)
+            return f"Error calculating task distribution: {str(e)}"
+    
+    def _get_progress_metrics_context(self, prompt):
+        """
+        Get progress metrics across tasks
+        Handles questions like: "What's the average progress?", "How complete are tasks?", etc.
+        
+        ALWAYS calculates and returns actual progress data
+        """
+        try:
+            if not self._is_progress_query(prompt):
+                return None
+            
+            # Get user's boards
+            user_boards = self._get_user_boards()
+            if not user_boards.exists():
+                return "You don't have access to any boards yet."
+            
+            # Get all tasks
+            all_tasks = Task.objects.filter(column__board__in=user_boards)
+            
+            if not all_tasks.exists():
+                return "No tasks found in your boards."
+            
+            # Calculate progress metrics
+            from django.db.models import Avg, Max, Min
+            avg_progress = all_tasks.aggregate(Avg('progress'))['progress__avg'] or 0
+            max_progress = all_tasks.aggregate(Max('progress'))['progress__max'] or 0
+            min_progress = all_tasks.aggregate(Min('progress'))['progress__min'] or 0
+            
+            # Count by completion status
+            completed = all_tasks.filter(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+            ).count()
+            in_progress = all_tasks.filter(progress__gt=0, progress__lt=100).exclude(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+            ).count()
+            not_started = all_tasks.filter(progress=0).count()
+            
+            total = all_tasks.count()
+            
+            context = f"**Progress Metrics:**\n\n"
+            context += f"**Overall Statistics:**\n"
+            context += f"  - Total Tasks: {total}\n"
+            context += f"  - Average Progress: {avg_progress:.1f}%\n"
+            context += f"  - Highest Progress: {max_progress}%\n"
+            context += f"  - Lowest Progress: {min_progress}%\n\n"
+            
+            context += f"**Task Status Distribution:**\n"
+            context += f"  - Completed: {completed} ({100*completed/total:.1f}%)\n"
+            context += f"  - In Progress: {in_progress} ({100*in_progress/total:.1f}%)\n"
+            context += f"  - Not Started: {not_started} ({100*not_started/total:.1f}%)\n\n"
+            
+            # Progress by board
+            context += f"**Progress by Board:**\n"
+            for board in user_boards:
+                board_tasks = all_tasks.filter(column__board=board)
+                if board_tasks.exists():
+                    board_avg = board_tasks.aggregate(Avg('progress'))['progress__avg'] or 0
+                    board_completed = board_tasks.filter(
+                        Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+                    ).count()
+                    board_total = board_tasks.count()
+                    context += f"  - **{board.name}**: {board_avg:.1f}% average "
+                    context += f"({board_completed}/{board_total} completed)\n"
+            
+            return context
+        
+        except Exception as e:
+            logger.error(f"Error getting progress metrics context: {e}", exc_info=True)
+            return f"Error calculating progress: {str(e)}"
+    
+    def _get_overdue_tasks_context(self, prompt):
+        """
+        Get overdue and upcoming deadline tasks
+        Handles questions like: "Show overdue tasks", "What's due soon?", etc.
+        
+        ALWAYS retrieves tasks with due dates and calculates overdue status
+        """
+        try:
+            if not self._is_overdue_query(prompt):
+                return None
+            
+            # Get user's boards
+            user_boards = self._get_user_boards()
+            if not user_boards.exists():
+                return "You don't have access to any boards yet."
+            
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            today = timezone.now().date()
+            week_from_now = today + timedelta(days=7)
+            
+            # Get all tasks with due dates
+            tasks_with_dates = Task.objects.filter(
+                column__board__in=user_boards,
+                due_date__isnull=False
+            ).select_related('assigned_to', 'column', 'column__board').order_by('due_date')
+            
+            if not tasks_with_dates.exists():
+                return "No tasks have due dates set."
+            
+            # Categorize tasks
+            overdue = tasks_with_dates.filter(due_date__lt=today).exclude(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+            )
+            due_today = tasks_with_dates.filter(due_date=today).exclude(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+            )
+            due_soon = tasks_with_dates.filter(
+                due_date__gt=today,
+                due_date__lte=week_from_now
+            ).exclude(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+            )
+            
+            context = f"**Task Deadlines Analysis:**\n\n"
+            
+            if overdue.exists():
+                context += f"⚠️ **OVERDUE TASKS ({overdue.count()}):**\n"
+                for task in overdue[:10]:
+                    days_overdue = (today - task.due_date).days
+                    assignee = task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else 'Unassigned'
+                    context += f"  • **{task.title}**\n"
+                    context += f"    - Due: {task.due_date} ({days_overdue} day{'s' if days_overdue != 1 else ''} overdue)\n"
+                    context += f"    - Assigned: {assignee}\n"
+                    context += f"    - Board: {task.column.board.name if task.column else 'Unknown'}\n"
+                    context += f"    - Status: {task.column.name if task.column else 'Unknown'}\n"
+                    context += f"    - Priority: {task.get_priority_display()}\n\n"
+            else:
+                context += "✓ **No Overdue Tasks**\n\n"
+            
+            if due_today.exists():
+                context += f"📅 **DUE TODAY ({due_today.count()}):**\n"
+                for task in due_today:
+                    assignee = task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else 'Unassigned'
+                    context += f"  • {task.title} ({assignee}, {task.get_priority_display()})\n"
+                context += "\n"
+            
+            if due_soon.exists():
+                context += f"📆 **DUE WITHIN 7 DAYS ({due_soon.count()}):**\n"
+                for task in due_soon[:10]:
+                    days_until = (task.due_date - today).days
+                    assignee = task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else 'Unassigned'
+                    context += f"  • {task.title}\n"
+                    context += f"    - Due: {task.due_date} (in {days_until} day{'s' if days_until != 1 else ''})\n"
+                    context += f"    - Assigned: {assignee}, Priority: {task.get_priority_display()}\n"
+                context += "\n"
+            
+            # Summary
+            total_with_dates = tasks_with_dates.count()
+            context += f"**Summary:**\n"
+            context += f"  - Total Tasks with Due Dates: {total_with_dates}\n"
+            context += f"  - Overdue: {overdue.count()}\n"
+            context += f"  - Due Today: {due_today.count()}\n"
+            context += f"  - Due Within 7 Days: {due_soon.count()}\n"
+            
+            return context
+        
+        except Exception as e:
+            logger.error(f"Error getting overdue tasks context: {e}", exc_info=True)
+            return f"Error retrieving deadline information: {str(e)}"
+    
     def _is_strategic_query(self, prompt):
         """
         Detect if query is asking for strategic advice, best practices, or how-to guidance
@@ -475,6 +994,8 @@ class TaskFlowChatbotService:
         """
         Get organization information for org-related queries
         Handles questions like: "How many organizations?", "List organizations", etc.
+        
+        ALWAYS retrieves and returns actual organization data instead of asking questions
         """
         try:
             if not self._is_organization_query(prompt):
@@ -485,51 +1006,72 @@ class TaskFlowChatbotService:
             
             context = "**Organization Information:**\n\n"
             
-            # If user has an organization, show details about it and related orgs
-            try:
-                user_org = self.user.profile.organization
-                orgs = Organization.objects.filter(
-                    Q(created_by=self.user) | Q(members=self.user)
-                ).distinct()
-                
-                if not orgs.exists():
-                    # Fallback: get user's primary organization
-                    orgs = Organization.objects.filter(id=user_org.id)
-                
-            except:
-                # If no profile or org, get all organizations accessible via boards
+            # Get ALL organizations the user has access to
+            # Priority order:
+            # 1. Organizations where user is member or creator
+            # 2. Organizations accessible through boards
+            # 3. User's primary organization from profile
+            
+            orgs = Organization.objects.filter(
+                Q(created_by=self.user) | Q(members=self.user)
+            ).distinct()
+            
+            # If no direct membership, try to get from boards
+            if not orgs.exists():
                 user_boards = self._get_user_boards()
-                orgs = Organization.objects.filter(boards__in=user_boards).distinct()
-                
-                if not orgs.exists():
-                    # Final fallback: show all orgs the user is related to
-                    orgs = Organization.objects.filter(
-                        created_by=self.user
-                    ) | Organization.objects.filter(
-                        members=self.user
-                    )
+                if user_boards.exists():
+                    orgs = Organization.objects.filter(boards__in=user_boards).distinct()
+            
+            # Final fallback: user's profile organization
+            if not orgs.exists():
+                try:
+                    if hasattr(self.user, 'profile') and self.user.profile.organization:
+                        orgs = Organization.objects.filter(id=self.user.profile.organization.id)
+                except:
+                    pass
             
             if not orgs.exists():
-                return "No organization information available."
+                context += "**You currently have no organizations.**\n"
+                context += "You can create a new organization or join an existing one.\n"
+                return context
             
+            # Build comprehensive organization data
             context += f"**Total Organizations:** {orgs.count()}\n\n"
             
             for org in orgs:
+                # Get detailed metrics
                 boards_count = Board.objects.filter(organization=org).count()
                 members_count = org.members.count()
                 
+                # Get user-accessible boards in this org
+                user_boards_in_org = Board.objects.filter(
+                    organization=org
+                ).filter(
+                    Q(created_by=self.user) | Q(members=self.user)
+                ).distinct()
+                
                 context += f"**{org.name}**\n"
-                context += f"  - Domain: {org.domain}\n"
-                context += f"  - Boards: {boards_count}\n"
+                if org.domain:
+                    context += f"  - Domain: {org.domain}\n"
+                context += f"  - Total Boards: {boards_count}\n"
+                if user_boards_in_org.count() != boards_count:
+                    context += f"  - Your Boards: {user_boards_in_org.count()}\n"
                 context += f"  - Members: {members_count}\n"
                 context += f"  - Created: {org.created_at.strftime('%Y-%m-%d')}\n"
-                context += f"  - Created by: {org.created_by.get_full_name() or org.created_by.username}\n\n"
+                context += f"  - Created by: {org.created_by.get_full_name() or org.created_by.username}\n"
+                
+                # List board names if manageable
+                if user_boards_in_org.count() > 0 and user_boards_in_org.count() <= 5:
+                    board_names = [b.name for b in user_boards_in_org]
+                    context += f"  - Board Names: {', '.join(board_names)}\n"
+                
+                context += "\n"
             
             return context
         
         except Exception as e:
-            logger.error(f"Error getting organization context: {e}")
-            return None
+            logger.error(f"Error getting organization context: {e}", exc_info=True)
+            return f"Error retrieving organization data: {str(e)}"
     
     def _get_critical_tasks_context(self, prompt):
         """
@@ -1050,19 +1592,36 @@ Your role is to help project managers and team members with:
 - Report generation and insights
 - Best practices and recommendations
 
-IMPORTANT INSTRUCTIONS:
-1. When provided with project data context, use it to give specific, data-driven answers
-2. When answering strategic questions (how to tackle issues, best practices, etc.), provide comprehensive guidance even if specific project data is limited
-3. For risk mitigation questions, provide both general best practices AND specific recommendations based on available data
-4. Always provide actionable advice - be specific and practical
-5. If you don't have enough project data for a specific answer, acknowledge it but still provide valuable strategic guidance based on project management best practices
-6. Use the web search results when provided to give current, industry-standard recommendations
-7. Structure responses clearly with sections, bullet points, and actionable steps
+CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
+1. **ALWAYS USE PROVIDED CONTEXT DATA**: When project data is provided in the "Available Context Data" section, you MUST use it to answer questions directly and specifically
+2. **NEVER ASK FOR INFORMATION YOU HAVE**: If context data contains the answer, provide it immediately without asking follow-up questions
+3. **BE SPECIFIC AND CONCRETE**: Use actual numbers, names, dates from the context data - not general statements
+4. **ANSWER DIRECTLY FIRST**: Start with the specific answer from the data, then provide additional insights or recommendations
+5. **NO UNNECESSARY QUESTIONS**: Don't ask "What is your name?" or "Which board?" if the context already identifies the user or scope
 
-Provide clear, actionable, and data-driven responses.
-When analyzing project data, consider multiple factors like risk, resource availability, dependencies, and timeline.
-Always ask clarifying questions if context is unclear.
-For suggestions, provide confidence levels and reasoning when possible."""
+RESPONSE STRUCTURE:
+- For data queries (counts, lists, status): Provide the specific data FIRST, then optionally add insights
+- For strategic questions (how-to, best practices): Combine web search results (if available) with project-specific recommendations
+- For risk/mitigation: Give both general best practices AND specific actions based on actual project data
+- Always be actionable - provide clear next steps
+
+EXAMPLES OF CORRECT BEHAVIOR:
+❌ WRONG: "To show your tasks, I need to know your username"
+✓ RIGHT: "You have 5 tasks assigned: [list from context data]"
+
+❌ WRONG: "How many organizations would you like to see?"
+✓ RIGHT: "You have 1 organization: Dev Team (2 boards, 6 members)"
+
+❌ WRONG: "I'm ready to help. What would you like to know?"
+✓ RIGHT: [Directly provide the requested data from context]
+
+Format responses clearly with:
+- Bullet points for lists
+- **Bold** for emphasis and headers
+- Specific numbers and metrics
+- Actionable recommendations
+
+When context data is limited, acknowledge it briefly but still provide valuable strategic guidance based on project management best practices."""
     
     def get_response(self, prompt, use_cache=True):
         """
@@ -1094,6 +1653,12 @@ For suggestions, provide confidence levels and reasoning when possible."""
             is_organization_query = self._is_organization_query(prompt)
             is_critical_task_query = self._is_critical_task_query(prompt)
             is_mitigation_query = self._is_mitigation_query(prompt)
+            is_user_task_query = self._is_user_task_query(prompt)
+            is_incomplete_task_query = self._is_incomplete_task_query(prompt)
+            is_board_comparison_query = self._is_board_comparison_query(prompt)
+            is_task_distribution_query = self._is_task_distribution_query(prompt)
+            is_progress_query = self._is_progress_query(prompt)
+            is_overdue_query = self._is_overdue_query(prompt)
             
             # Build context in priority order
             context_parts = []
@@ -1105,76 +1670,118 @@ For suggestions, provide confidence levels and reasoning when possible."""
                     context_parts.append(org_context)
                     logger.debug("Added organization context")
             
-            # 2. Mitigation context (high priority - directly answers mitigation questions)
+            # 2. User-specific tasks (high priority - user asking about their tasks)
+            if is_user_task_query:
+                user_tasks_context = self._get_user_tasks_context(prompt)
+                if user_tasks_context:
+                    context_parts.append(user_tasks_context)
+                    logger.debug("Added user tasks context")
+            
+            # 3. Incomplete tasks query
+            if is_incomplete_task_query:
+                incomplete_context = self._get_incomplete_tasks_context(prompt)
+                if incomplete_context:
+                    context_parts.append(incomplete_context)
+                    logger.debug("Added incomplete tasks context")
+            
+            # 4. Board comparison
+            if is_board_comparison_query:
+                comparison_context = self._get_board_comparison_context(prompt)
+                if comparison_context:
+                    context_parts.append(comparison_context)
+                    logger.debug("Added board comparison context")
+            
+            # 5. Task distribution
+            if is_task_distribution_query:
+                distribution_context = self._get_task_distribution_context(prompt)
+                if distribution_context:
+                    context_parts.append(distribution_context)
+                    logger.debug("Added task distribution context")
+            
+            # 6. Progress metrics
+            if is_progress_query:
+                progress_context = self._get_progress_metrics_context(prompt)
+                if progress_context:
+                    context_parts.append(progress_context)
+                    logger.debug("Added progress metrics context")
+            
+            # 7. Overdue tasks
+            if is_overdue_query:
+                overdue_context = self._get_overdue_tasks_context(prompt)
+                if overdue_context:
+                    context_parts.append(overdue_context)
+                    logger.debug("Added overdue tasks context")
+            
+            # 8. Mitigation context (high priority - directly answers mitigation questions)
             if is_mitigation_query:
                 mitigation_context = self._get_mitigation_context(prompt, board=self.board)
                 if mitigation_context:
                     context_parts.append(mitigation_context)
                     logger.debug("Added mitigation context")
             
-            # 3. Critical tasks context
+            # 9. Critical tasks context
             if (is_critical_task_query or is_risk_query) and not is_mitigation_query:
                 critical_context = self._get_critical_tasks_context(prompt)
                 if critical_context:
                     context_parts.append(critical_context)
                     logger.debug("Added critical tasks context")
             
-            # 4. Aggregate context (system-wide queries)
+            # 10. Aggregate context (system-wide queries)
             if is_aggregate_query:
                 aggregate_context = self._get_aggregate_context(prompt)
                 if aggregate_context:
                     context_parts.append(aggregate_context)
                     logger.debug("Added aggregate context")
             
-            # 5. Risk context
+            # 11. Risk context
             if is_risk_query and not is_critical_task_query and not is_mitigation_query:  # Avoid duplication
                 risk_context = self._get_risk_context(prompt)
                 if risk_context:
                     context_parts.append(risk_context)
                     logger.debug("Added risk context")
             
-            # 5. Stakeholder context
+            # 12. Stakeholder context
             if is_stakeholder_query:
                 stakeholder_context = self._get_stakeholder_context(prompt)
                 if stakeholder_context:
                     context_parts.append(stakeholder_context)
                     logger.debug("Added stakeholder context")
             
-            # 6. Resource context
+            # 13. Resource context
             if is_resource_query:
                 resource_context = self._get_resource_context(prompt)
                 if resource_context:
                     context_parts.append(resource_context)
                     logger.debug("Added resource context")
             
-            # 7. Lean context
+            # 14. Lean context
             if is_lean_query:
                 lean_context = self._get_lean_context(prompt)
                 if lean_context:
                     context_parts.append(lean_context)
                     logger.debug("Added lean context")
             
-            # 8. Dependency context
+            # 15. Dependency context
             if is_dependency_query:
                 dependency_context = self._get_dependency_context(prompt)
                 if dependency_context:
                     context_parts.append(dependency_context)
                     logger.debug("Added dependency context")
             
-            # 9. General project context (if not already covered by specialized contexts)
+            # 16. General project context (if not already covered by specialized contexts)
             if is_project_query and not context_parts:
                 taskflow_context = self.get_taskflow_context(use_cache)
                 if taskflow_context:
                     context_parts.append(taskflow_context)
                     logger.debug("Added general project context")
             
-            # 10. Knowledge base context
+            # 17. Knowledge base context
             kb_context = self.get_knowledge_base_context(prompt)
             if kb_context:
                 context_parts.append(kb_context)
                 logger.debug("Added KB context")
             
-            # 11. Web search context for research and strategic queries
+            # 18. Web search context for research and strategic queries
             search_context = ""
             used_web_search = False
             search_sources = []
@@ -1227,6 +1834,12 @@ For suggestions, provide confidence levels and reasoning when possible."""
                     'is_organization_query': is_organization_query,
                     'is_critical_task_query': is_critical_task_query,
                     'is_mitigation_query': is_mitigation_query,
+                    'is_user_task_query': is_user_task_query,
+                    'is_incomplete_task_query': is_incomplete_task_query,
+                    'is_board_comparison_query': is_board_comparison_query,
+                    'is_task_distribution_query': is_task_distribution_query,
+                    'is_progress_query': is_progress_query,
+                    'is_overdue_query': is_overdue_query,
                     'context_provided': bool(context_parts)
                 }
             }
