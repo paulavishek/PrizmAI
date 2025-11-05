@@ -59,10 +59,18 @@ def chat_interface(request, session_id=None):
                 title=f"Chat Session {timezone.now().strftime('%Y-%m-%d %H:%M')}"
             )
     
-    # Get user's boards for context selection
-    user_boards = Board.objects.filter(
-        Q(created_by=request.user) | Q(members=request.user)
-    ).distinct()
+    # Get user's organization
+    user_org = request.user.profile.organization if hasattr(request.user, 'profile') else None
+    
+    # Get user's boards for context selection - filtered by organization
+    if user_org:
+        user_boards = Board.objects.filter(
+            organization=user_org,
+        ).filter(
+            Q(created_by=request.user) | Q(members=request.user)
+        ).distinct()
+    else:
+        user_boards = Board.objects.none()
     
     context = {
         'session': session,

@@ -88,10 +88,24 @@ class GoogleSearchClient:
                             logger.warning(f"Rate limited, waiting {wait_time}s before retry")
                             time.sleep(wait_time)
                             continue
+                    elif response.status_code == 403:
+                        logger.error(f"Google Search API access forbidden (403). Please check:\n"
+                                   f"  1. API key is valid\n"
+                                   f"  2. Custom Search API is enabled in Google Cloud Console\n"
+                                   f"  3. Search Engine ID is correct\n"
+                                   f"  4. No IP/domain restrictions on the API key\n"
+                                   f"  Query: {query}")
+                        return []
+                    elif response.status_code == 400:
+                        logger.error(f"Google Search bad request (400). Invalid search engine ID or query. Query: {query}")
+                        return []
                     raise
         
-        except Exception as e:
+        except requests.exceptions.HTTPError as e:
             logger.error(f"Error performing Google Search: {e}")
+            return []
+        except Exception as e:
+            logger.error(f"Unexpected error performing Google Search: {e}")
             return []
     
     def get_search_context(self, query, max_results=3, use_cache=True):
@@ -104,12 +118,14 @@ class GoogleSearchClient:
             use_cache (bool): Whether to use cache
             
         Returns:
-            str: Formatted context with sources
+            str: Formatted context with sources (None if search failed)
         """
         results = self.search(query, max_results, use_cache)
         
         if not results:
-            return "No relevant web search results found."
+            # Return None instead of error message to allow fallback handling
+            logger.info(f"No web search results available for: {query}")
+            return None
         
         context = "**Recent Information from Web Search:**\n\n"
         

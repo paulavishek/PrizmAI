@@ -34,6 +34,7 @@ class TaskFlowChatbotService:
         self.board = board
         self.gemini_client = GeminiClient()
         self.search_client = GoogleSearchClient()
+        logger.debug(f"ChatbotService initialized for user: {user}, board: {board}")
     
     def get_taskflow_context(self, use_cache=True):
         """
@@ -50,32 +51,72 @@ class TaskFlowChatbotService:
             
             if self.board:
                 context += f"Board: {self.board.name}\n"
+                if self.board.description:
+                    context += f"Description: {self.board.description}\n"
                 
-                # Get tasks
-                tasks = Task.objects.filter(column__board=self.board)
+                # Get tasks with comprehensive information
+                tasks = Task.objects.filter(column__board=self.board).select_related(
+                    'assigned_to', 'created_by', 'column', 'parent_task'
+                ).prefetch_related('labels', 'subtasks', 'dependencies')
+                
                 if tasks.exists():
-                    context += f"\n**Tasks ({tasks.count()}):**\n"
-                    for task in tasks[:20]:  # Limit to first 20
+                    context += f"\n**Tasks Summary ({tasks.count()} total):**\n"
+                    
+                    # Group by status
+                    from django.db.models import Count
+                    status_counts = tasks.values('column__name').annotate(count=Count('id'))
+                    for status in status_counts:
+                        context += f"  - {status['column__name']}: {status['count']}\n"
+                    
+                    # Show sample tasks with key details
+                    context += f"\n**Key Tasks (sample):**\n"
+                    for task in tasks[:15]:  # Show top 15
                         status = task.column.name if task.column else 'Unknown'
                         priority = task.get_priority_display() if hasattr(task, 'get_priority_display') else task.priority
-                        assignee = task.assigned_to.username if task.assigned_to else 'Unassigned'
-                        context += f"- [{status}] {task.title} (Priority: {priority}, Assigned: {assignee})\n"
+                        assignee = task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else 'Unassigned'
+                        
+                        context += f"- [{status}] {task.title}\n"
+                        context += f"  • Priority: {priority}, Assigned: {assignee}, Progress: {task.progress}%\n"
+                        
+                        # Add risk info if available
+                        if task.risk_level or task.ai_risk_score:
+                            risk_info = f"Risk: {task.risk_level or 'Unknown'}"
+                            if task.ai_risk_score:
+                                risk_info += f" (Score: {task.ai_risk_score}/100)"
+                            context += f"  • {risk_info}\n"
+                        
+                        # Add dependency info
+                        if task.parent_task:
+                            context += f"  • Depends on: {task.parent_task.title}\n"
+                        if task.subtasks.exists():
+                            context += f"  • Has {task.subtasks.count()} subtask(s)\n"
                 
-                # Get team members
-                members = self.board.members.all()
+                # Get team members with skills
+                members = self.board.members.select_related('profile').all()
                 if members.exists():
-                    context += f"\n**Team Members:** {', '.join([m.get_full_name() or m.username for m in members])}\n"
+                    context += f"\n**Team Members ({members.count()}):**\n"
+                    for m in members[:10]:
+                        member_info = m.get_full_name() or m.username
+                        try:
+                            if hasattr(m, 'profile') and m.profile.skills:
+                                skills = [s.get('name', '') for s in m.profile.skills[:3]]
+                                if skills:
+                                    member_info += f" (Skills: {', '.join(skills)})"
+                        except:
+                            pass
+                        context += f"  - {member_info}\n"
             
             elif self.user:
-                # Get all user's boards and projects
+                # Get all user's boards and projects with aggregated stats
                 boards = Board.objects.filter(
                     Q(created_by=self.user) | Q(members=self.user)
                 ).distinct()[:5]
                 
                 if boards:
-                    context += f"**User's Boards ({boards.count()}):**\n"
+                    context += f"**User's Projects ({boards.count()} boards):**\n"
                     for board in boards:
-                        context += f"- {board.name}\n"
+                        task_count = Task.objects.filter(column__board=board).count()
+                        context += f"- {board.name} ({task_count} tasks)\n"
             
             return context
         
@@ -212,10 +253,16 @@ class TaskFlowChatbotService:
             bool: True if web search should be triggered
         """
         search_triggers = [
-            'latest', 'recent', 'current', 'new', 'today', '2025',
+            'latest', 'recent', 'current', 'new', 'today', '2025', '2024',
             'trend', 'news', 'update', 'web', 'online', 'internet',
-            'what is the', 'how do', 'tell me about', 'find',
-            'best practices', 'industry', 'methodology', 'tool', 'framework'
+            'what is the', 'how do', 'tell me about', 'find', 'search',
+            'best practices', 'industry', 'methodology', 'tool', 'framework',
+            'how to tackle', 'how to handle', 'how to manage', 'how to solve',
+            'strategy for', 'strategies for', 'approach to', 'way to',
+            'tips for', 'advice on', 'guidance on', 'recommendations for',
+            'help me', 'suggest', 'what should', 'how can I', 'how can we',
+            'industry standard', 'common practice', 'proven method', 
+            'effective way', 'efficient way', 'optimal approach'
         ]
         
         prompt_lower = prompt.lower()
@@ -364,6 +411,48 @@ class TaskFlowChatbotService:
         ]
         return any(kw in prompt.lower() for kw in dependency_keywords)
     
+    def _is_organization_query(self, prompt):
+        """Detect if query is about organizations"""
+        org_keywords = [
+            'organization', 'organizations', 'org', 'company', 'companies',
+            'client', 'clients', 'departments', 'teams', 'divisions'
+        ]
+        return any(kw in prompt.lower() for kw in org_keywords)
+    
+    def _is_critical_task_query(self, prompt):
+        """Detect if query is about critical or high-priority tasks"""
+        critical_keywords = [
+            'critical', 'urgent', 'blocker', 'blocked', 'high risk',
+            'high priority', 'emergency', 'ASAP', 'high-risk',
+            'must do', 'must have'
+        ]
+        return any(kw in prompt.lower() for kw in critical_keywords)
+    
+    def _is_mitigation_query(self, prompt):
+        """Detect if query is about risk mitigation strategies"""
+        mitigation_keywords = [
+            'mitigation', 'mitigate', 'mitigation strategy', 'mitigation plan',
+            'mitigation strategies', 'how to reduce', 'how to manage', 'reduce risk',
+            'manage risk', 'handle risk', 'prevent risk', 'strategy',
+            'action plan', 'solution', 'resolution', 'remediation'
+        ]
+        return any(kw in prompt.lower() for kw in mitigation_keywords)
+    
+    def _is_strategic_query(self, prompt):
+        """
+        Detect if query is asking for strategic advice, best practices, or how-to guidance
+        These queries benefit from RAG + project context
+        """
+        strategic_keywords = [
+            'how to', 'how can', 'how should', 'what should', 'best way to',
+            'best practice', 'best practices', 'advice', 'guidance', 'recommend',
+            'suggestion', 'tips', 'strategy', 'strategies', 'approach',
+            'tackle', 'handle', 'manage', 'deal with', 'solve', 'improve',
+            'optimize', 'enhance', 'better', 'effective', 'efficient',
+            'successful', 'proven method', 'industry standard', 'expert advice'
+        ]
+        return any(kw in prompt.lower() for kw in strategic_keywords)
+    
     def _get_user_boards(self, organization=None):
         """Helper to get user's boards with optional organization filter"""
         try:
@@ -381,6 +470,132 @@ class TaskFlowChatbotService:
             return Board.objects.filter(
                 Q(created_by=self.user) | Q(members=self.user)
             ).distinct()
+    
+    def _get_organization_context(self, prompt):
+        """
+        Get organization information for org-related queries
+        Handles questions like: "How many organizations?", "List organizations", etc.
+        """
+        try:
+            if not self._is_organization_query(prompt):
+                return None
+            
+            # Import Organization model
+            from accounts.models import Organization
+            
+            context = "**Organization Information:**\n\n"
+            
+            # If user has an organization, show details about it and related orgs
+            try:
+                user_org = self.user.profile.organization
+                orgs = Organization.objects.filter(
+                    Q(created_by=self.user) | Q(members=self.user)
+                ).distinct()
+                
+                if not orgs.exists():
+                    # Fallback: get user's primary organization
+                    orgs = Organization.objects.filter(id=user_org.id)
+                
+            except:
+                # If no profile or org, get all organizations accessible via boards
+                user_boards = self._get_user_boards()
+                orgs = Organization.objects.filter(boards__in=user_boards).distinct()
+                
+                if not orgs.exists():
+                    # Final fallback: show all orgs the user is related to
+                    orgs = Organization.objects.filter(
+                        created_by=self.user
+                    ) | Organization.objects.filter(
+                        members=self.user
+                    )
+            
+            if not orgs.exists():
+                return "No organization information available."
+            
+            context += f"**Total Organizations:** {orgs.count()}\n\n"
+            
+            for org in orgs:
+                boards_count = Board.objects.filter(organization=org).count()
+                members_count = org.members.count()
+                
+                context += f"**{org.name}**\n"
+                context += f"  - Domain: {org.domain}\n"
+                context += f"  - Boards: {boards_count}\n"
+                context += f"  - Members: {members_count}\n"
+                context += f"  - Created: {org.created_at.strftime('%Y-%m-%d')}\n"
+                context += f"  - Created by: {org.created_by.get_full_name() or org.created_by.username}\n\n"
+            
+            return context
+        
+        except Exception as e:
+            logger.error(f"Error getting organization context: {e}")
+            return None
+    
+    def _get_critical_tasks_context(self, prompt):
+        """
+        Get critical/high-risk/high-priority tasks
+        Handles questions like: "How many tasks are critical?", "Show critical tasks", etc.
+        """
+        try:
+            if not self._is_critical_task_query(prompt):
+                return None
+            
+            # Get user's boards
+            user_boards = self._get_user_boards()
+            if not user_boards.exists():
+                logger.warning(f"User {self.user} has no accessible boards")
+                return None
+            
+            # Query critical tasks by multiple criteria
+            critical_tasks = Task.objects.filter(
+                column__board__in=user_boards
+            ).filter(
+                Q(risk_level__in=['high', 'critical']) |  # Explicit risk level
+                Q(priority='urgent') |  # Urgent priority
+                Q(ai_risk_score__gte=80) |  # High AI risk score
+                Q(labels__name__icontains='critical') |  # Critical label
+                Q(labels__name__icontains='blocker')  # Blocker label
+            ).select_related('assigned_to', 'column', 'column__board').distinct().order_by('-ai_risk_score', '-priority')
+            
+            if not critical_tasks.exists():
+                logger.info(f"No critical tasks found for user {self.user}")
+                return "No critical tasks currently identified."
+            
+            context = f"**Critical Tasks Analysis:**\n\n"
+            context += f"**Total Critical Tasks:** {critical_tasks.count()}\n\n"
+            
+            # Group by severity
+            by_risk_level = {}
+            for task in critical_tasks:
+                risk_level = task.risk_level or 'Unknown'
+                if risk_level not in by_risk_level:
+                    by_risk_level[risk_level] = []
+                by_risk_level[risk_level].append(task)
+            
+            for level in ['critical', 'high', 'medium', 'low', 'Unknown']:
+                if level in by_risk_level:
+                    context += f"\n**{level.upper()} Risk ({len(by_risk_level[level])}):**\n"
+                    for task in by_risk_level[level][:5]:  # Show top 5 per level
+                        context += f"  • **{task.title}**\n"
+                        context += f"    - Board: {task.column.board.name if task.column else 'Unknown'}\n"
+                        context += f"    - Status: {task.column.name if task.column else 'Unknown'}\n"
+                        context += f"    - Assigned: {task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else 'Unassigned'}\n"
+                        context += f"    - Priority: {task.get_priority_display()}\n"
+                        
+                        if task.risk_level:
+                            context += f"    - Risk Level: {task.risk_level.upper()}\n"
+                        if task.ai_risk_score:
+                            context += f"    - AI Risk Score: {task.ai_risk_score}/100\n"
+                        if task.risk_score:
+                            context += f"    - Risk Score: {task.risk_score}/9\n"
+                        
+                        context += "\n"
+            
+            return context
+        
+        except Exception as e:
+            logger.error(f"Error getting critical tasks context: {e}")
+            return None
     
     def _get_risk_context(self, prompt):
         """
@@ -452,6 +667,133 @@ class TaskFlowChatbotService:
         
         except Exception as e:
             logger.error(f"Error getting risk context: {e}")
+            return None
+    
+    def _get_mitigation_context(self, prompt, board=None):
+        """
+        Get risk mitigation strategies and action plans
+        Handles questions like: "What are mitigation strategies?", "How to reduce risks?", etc.
+        Can optionally filter by board if specified in the prompt
+        """
+        try:
+            if not self._is_mitigation_query(prompt):
+                return None
+            
+            # Get user's boards
+            user_boards = self._get_user_boards()
+            if not user_boards.exists():
+                logger.debug(f"User {self.user} has no boards for mitigation context")
+                return None
+            
+            # Check if user is asking about a specific board
+            specific_board = None
+            if board:
+                specific_board = board
+            else:
+                # Try to extract board name from prompt
+                for user_board in user_boards:
+                    if user_board.name.lower() in prompt.lower():
+                        specific_board = user_board
+                        break
+            
+            # Get high-risk tasks that have mitigation suggestions
+            if specific_board:
+                risk_tasks = Task.objects.filter(
+                    column__board=specific_board,
+                    mitigation_suggestions__isnull=False
+                ).exclude(
+                    mitigation_suggestions__exact='[]'
+                ).filter(
+                    Q(risk_level__in=['high', 'critical']) |
+                    Q(ai_risk_score__gte=70) |
+                    Q(priority='urgent')
+                ).select_related('assigned_to', 'column', 'column__board').order_by('-ai_risk_score', '-risk_score')
+            else:
+                # Get across all user's boards
+                risk_tasks = Task.objects.filter(
+                    column__board__in=user_boards,
+                    mitigation_suggestions__isnull=False
+                ).exclude(
+                    mitigation_suggestions__exact='[]'
+                ).filter(
+                    Q(risk_level__in=['high', 'critical']) |
+                    Q(ai_risk_score__gte=70) |
+                    Q(priority='urgent')
+                ).select_related('assigned_to', 'column', 'column__board').order_by('-ai_risk_score', '-risk_score')
+            
+            if not risk_tasks.exists():
+                logger.debug(f"No tasks with mitigation strategies found for user {self.user}")
+                return None
+            
+            # Build comprehensive mitigation context
+            if specific_board:
+                context = f"**Risk Mitigation Strategies - {specific_board.name} Board:**\n\n"
+            else:
+                context = "**Risk Mitigation Strategies (All Projects):**\n\n"
+            
+            context += f"**Tasks with Mitigation Plans:** {len(risk_tasks)}\n\n"
+            
+            # Group by risk level
+            tasks_by_risk = {}
+            for task in risk_tasks:
+                risk_level = task.risk_level or 'Unknown'
+                if risk_level not in tasks_by_risk:
+                    tasks_by_risk[risk_level] = []
+                tasks_by_risk[risk_level].append(task)
+            
+            # Present mitigation strategies organized by risk level
+            for risk_level in ['critical', 'high', 'medium', 'low', 'Unknown']:
+                if risk_level in tasks_by_risk:
+                    risk_tasks_list = tasks_by_risk[risk_level]
+                    context += f"**{risk_level.upper()} RISK TASKS ({len(risk_tasks_list)}):**\n\n"
+                    
+                    for task in risk_tasks_list[:10]:  # Limit to 10 per risk level
+                        context += f"**Task:** {task.title}\n"
+                        context += f"  - Board: {task.column.board.name if task.column else 'Unknown'}\n"
+                        context += f"  - Status: {task.column.name if task.column else 'Unknown'}\n"
+                        context += f"  - Assigned To: {task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else 'Unassigned'}\n"
+                        
+                        if task.risk_level:
+                            context += f"  - Risk Level: {task.risk_level.upper()}\n"
+                        if task.ai_risk_score:
+                            context += f"  - AI Risk Score: {task.ai_risk_score}/100\n"
+                        if task.risk_score:
+                            context += f"  - Risk Score: {task.risk_score}/9\n"
+                        
+                        # Risk indicators/drivers
+                        if hasattr(task, 'risk_indicators') and task.risk_indicators:
+                            indicators = task.risk_indicators if isinstance(task.risk_indicators, list) else [task.risk_indicators]
+                            context += f"  - Risk Indicators: {', '.join(str(i) for i in indicators[:3])}\n"
+                        
+                        # Comprehensive mitigation strategies
+                        if hasattr(task, 'mitigation_suggestions') and task.mitigation_suggestions:
+                            mitigations = task.mitigation_suggestions if isinstance(task.mitigation_suggestions, list) else [task.mitigation_suggestions]
+                            context += f"  - Mitigation Strategies:\n"
+                            for i, mitigation in enumerate(mitigations[:5], 1):  # Show up to 5 strategies per task
+                                context += f"    {i}. {mitigation}\n"
+                        
+                        # Risk analysis details
+                        if hasattr(task, 'risk_analysis') and task.risk_analysis and isinstance(task.risk_analysis, dict):
+                            if 'analysis' in task.risk_analysis:
+                                context += f"  - Risk Analysis: {task.risk_analysis['analysis']}\n"
+                            if 'factors' in task.risk_analysis:
+                                factors = task.risk_analysis['factors']
+                                if isinstance(factors, list):
+                                    context += f"  - Contributing Factors: {', '.join(factors[:3])}\n"
+                        
+                        # Impact summary
+                        if hasattr(task, 'risk_impact') and task.risk_impact:
+                            context += f"  - Potential Impact: {dict([(1, 'Low'), (2, 'Medium'), (3, 'High')]).get(task.risk_impact, 'Unknown')}\n"
+                        
+                        if hasattr(task, 'risk_likelihood') and task.risk_likelihood:
+                            context += f"  - Likelihood: {dict([(1, 'Low'), (2, 'Medium'), (3, 'High')]).get(task.risk_likelihood, 'Unknown')}\n"
+                        
+                        context += "\n"
+            
+            return context
+        
+        except Exception as e:
+            logger.error(f"Error getting mitigation context: {e}", exc_info=True)
             return None
     
     def _get_stakeholder_context(self, prompt):
@@ -666,7 +1008,7 @@ class TaskFlowChatbotService:
             # Get tasks with child tasks (subtasks)
             tasks_with_children = Task.objects.filter(
                 column__board__in=user_boards,
-                child_tasks__isnull=False
+                subtasks__isnull=False
             ).select_related('column').distinct()[:10]
             
             if not tasks_with_parent.exists() and not tasks_with_children.exists():
@@ -687,7 +1029,7 @@ class TaskFlowChatbotService:
             if tasks_with_children.exists():
                 context += f"\n**Tasks with Subtasks ({len(tasks_with_children)}):**\n"
                 for task in tasks_with_children:
-                    child_count = task.child_tasks.count() if hasattr(task, 'child_tasks') else 0
+                    child_count = task.subtasks.count() if hasattr(task, 'subtasks') else 0
                     context += f"• {task.title} ({child_count} subtasks)\n"
             
             return context
@@ -708,10 +1050,19 @@ Your role is to help project managers and team members with:
 - Report generation and insights
 - Best practices and recommendations
 
+IMPORTANT INSTRUCTIONS:
+1. When provided with project data context, use it to give specific, data-driven answers
+2. When answering strategic questions (how to tackle issues, best practices, etc.), provide comprehensive guidance even if specific project data is limited
+3. For risk mitigation questions, provide both general best practices AND specific recommendations based on available data
+4. Always provide actionable advice - be specific and practical
+5. If you don't have enough project data for a specific answer, acknowledge it but still provide valuable strategic guidance based on project management best practices
+6. Use the web search results when provided to give current, industry-standard recommendations
+7. Structure responses clearly with sections, bullet points, and actionable steps
+
 Provide clear, actionable, and data-driven responses.
 When analyzing project data, consider multiple factors like risk, resource availability, dependencies, and timeline.
 Always ask clarifying questions if context is unclear.
-For suggestions, provide confidence levels and reasoning."""
+For suggestions, provide confidence levels and reasoning when possible."""
     
     def get_response(self, prompt, use_cache=True):
         """
@@ -728,8 +1079,11 @@ For suggestions, provide confidence levels and reasoning."""
             dict: Response with content, source, and metadata
         """
         try:
+            logger.debug(f"Processing prompt: {prompt[:100]}...")
+            
             # Detect query types
             is_search_query = self._is_search_query(prompt)
+            is_strategic_query = self._is_strategic_query(prompt)
             is_project_query = self._is_project_query(prompt)
             is_aggregate_query = self._is_aggregate_query(prompt)
             is_risk_query = self._is_risk_query(prompt)
@@ -737,79 +1091,118 @@ For suggestions, provide confidence levels and reasoning."""
             is_resource_query = self._is_resource_query(prompt)
             is_lean_query = self._is_lean_query(prompt)
             is_dependency_query = self._is_dependency_query(prompt)
+            is_organization_query = self._is_organization_query(prompt)
+            is_critical_task_query = self._is_critical_task_query(prompt)
+            is_mitigation_query = self._is_mitigation_query(prompt)
             
             # Build context in priority order
             context_parts = []
             
-            # 1. Aggregate context (system-wide queries)
+            # 1. Organization context (system-wide)
+            if is_organization_query:
+                org_context = self._get_organization_context(prompt)
+                if org_context:
+                    context_parts.append(org_context)
+                    logger.debug("Added organization context")
+            
+            # 2. Mitigation context (high priority - directly answers mitigation questions)
+            if is_mitigation_query:
+                mitigation_context = self._get_mitigation_context(prompt, board=self.board)
+                if mitigation_context:
+                    context_parts.append(mitigation_context)
+                    logger.debug("Added mitigation context")
+            
+            # 3. Critical tasks context
+            if (is_critical_task_query or is_risk_query) and not is_mitigation_query:
+                critical_context = self._get_critical_tasks_context(prompt)
+                if critical_context:
+                    context_parts.append(critical_context)
+                    logger.debug("Added critical tasks context")
+            
+            # 4. Aggregate context (system-wide queries)
             if is_aggregate_query:
                 aggregate_context = self._get_aggregate_context(prompt)
                 if aggregate_context:
                     context_parts.append(aggregate_context)
+                    logger.debug("Added aggregate context")
             
-            # 2. Risk context
-            if is_risk_query:
+            # 5. Risk context
+            if is_risk_query and not is_critical_task_query and not is_mitigation_query:  # Avoid duplication
                 risk_context = self._get_risk_context(prompt)
                 if risk_context:
                     context_parts.append(risk_context)
+                    logger.debug("Added risk context")
             
-            # 3. Stakeholder context
+            # 5. Stakeholder context
             if is_stakeholder_query:
                 stakeholder_context = self._get_stakeholder_context(prompt)
                 if stakeholder_context:
                     context_parts.append(stakeholder_context)
+                    logger.debug("Added stakeholder context")
             
-            # 4. Resource context
+            # 6. Resource context
             if is_resource_query:
                 resource_context = self._get_resource_context(prompt)
                 if resource_context:
                     context_parts.append(resource_context)
+                    logger.debug("Added resource context")
             
-            # 5. Lean context
+            # 7. Lean context
             if is_lean_query:
                 lean_context = self._get_lean_context(prompt)
                 if lean_context:
                     context_parts.append(lean_context)
+                    logger.debug("Added lean context")
             
-            # 6. Dependency context
+            # 8. Dependency context
             if is_dependency_query:
                 dependency_context = self._get_dependency_context(prompt)
                 if dependency_context:
                     context_parts.append(dependency_context)
+                    logger.debug("Added dependency context")
             
-            # 7. General project context (if not already covered by specialized contexts)
+            # 9. General project context (if not already covered by specialized contexts)
             if is_project_query and not context_parts:
                 taskflow_context = self.get_taskflow_context(use_cache)
                 if taskflow_context:
                     context_parts.append(taskflow_context)
+                    logger.debug("Added general project context")
             
-            # 8. Knowledge base context
+            # 10. Knowledge base context
             kb_context = self.get_knowledge_base_context(prompt)
             if kb_context:
                 context_parts.append(kb_context)
+                logger.debug("Added KB context")
             
-            # 9. Web search context for research queries
+            # 11. Web search context for research and strategic queries
             search_context = ""
             used_web_search = False
             search_sources = []
             
-            if is_search_query and getattr(settings, 'ENABLE_WEB_SEARCH', False):
+            # Trigger web search for search queries OR strategic queries (how-to, best practices, etc.)
+            if (is_search_query or is_strategic_query) and getattr(settings, 'ENABLE_WEB_SEARCH', False):
                 try:
                     search_context = self.search_client.get_search_context(prompt, max_results=3)
-                    if search_context and "No relevant" not in search_context:
+                    if search_context:  # Only add if we got results (None = failed)
                         context_parts.append(search_context)
                         used_web_search = True
                         # Extract sources
                         for line in search_context.split('\n'):
                             if 'Source' in line or 'URL:' in line:
                                 search_sources.append(line)
+                        logger.debug(f"Added web search context (triggered by: {'strategic query' if is_strategic_query else 'search query'})")
+                    else:
+                        logger.info(f"Web search failed or returned no results - AI will use project data and general knowledge")
                 except Exception as e:
-                    logger.warning(f"Web search failed: {e}")
+                    logger.warning(f"Web search failed: {e} - AI will provide answer using project data and general knowledge")
             
             # Build system prompt
             system_prompt = self.generate_system_prompt()
             if context_parts:
                 system_prompt += "\n\n**Available Context Data:**\n" + "\n".join(context_parts)
+                logger.debug(f"Built context with {len(context_parts)} parts")
+            else:
+                logger.debug("No specific context found for query")
             
             # Get response from Gemini (STATELESS - no history maintained)
             response = self.gemini_client.get_response(prompt, system_prompt)
@@ -824,18 +1217,22 @@ For suggestions, provide confidence levels and reasoning."""
                 'context': {
                     'is_project_query': is_project_query,
                     'is_search_query': is_search_query,
+                    'is_strategic_query': is_strategic_query,
                     'is_aggregate_query': is_aggregate_query,
                     'is_risk_query': is_risk_query,
                     'is_stakeholder_query': is_stakeholder_query,
                     'is_resource_query': is_resource_query,
                     'is_lean_query': is_lean_query,
                     'is_dependency_query': is_dependency_query,
+                    'is_organization_query': is_organization_query,
+                    'is_critical_task_query': is_critical_task_query,
+                    'is_mitigation_query': is_mitigation_query,
                     'context_provided': bool(context_parts)
                 }
             }
         
         except Exception as e:
-            logger.error(f"Error in chatbot service: {e}")
+            logger.error(f"Error in chatbot service: {e}", exc_info=True)
             return {
                 'response': f"I encountered an error: {str(e)}. Please try again.",
                 'source': 'error',
