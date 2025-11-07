@@ -139,9 +139,10 @@ class StakeholderTaskInvolvement(models.Model):
         ('owner', 'Task Owner'),
         ('contributor', 'Contributor'),
         ('reviewer', 'Reviewer'),
-        ('stakeholder', 'Stakeholder'),
+        ('approver', 'Approver/Decision Maker'),
+        ('observer', 'Observer/Monitor'),
         ('beneficiary', 'Beneficiary'),
-        ('impacted', 'Impacted'),
+        ('impacted', 'Impacted Party'),
     ]
     
     ENGAGEMENT_STATUS_CHOICES = [

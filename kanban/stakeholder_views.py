@@ -230,16 +230,21 @@ def task_stakeholder_involvement(request, board_id, task_id):
     
     task = get_object_or_404(Task, pk=task_id, column__board=board)
     
-    # Get all stakeholders for this board
-    stakeholders = ProjectStakeholder.objects.filter(board=board)
-    
     # Get current involvements
-    involvements = task.stakeholder_involvements.all()
+    involvements = task.stakeholder_involvements.select_related('stakeholder').all()
+    
+    # Get IDs of stakeholders already involved
+    involved_stakeholder_ids = [inv.stakeholder.id for inv in involvements]
+    
+    # Get all stakeholders for this board that are not yet involved
+    available_stakeholders = ProjectStakeholder.objects.filter(
+        board=board
+    ).exclude(id__in=involved_stakeholder_ids).order_by('name')
     
     context = {
         'board': board,
         'task': task,
-        'stakeholders': stakeholders,
+        'stakeholders': available_stakeholders,
         'involvements': involvements,
     }
     return render(request, 'kanban/task_stakeholder_involvement.html', context)
@@ -405,3 +410,54 @@ def stakeholder_api_data(request, board_id):
         data['engagement_dist'][eng] = data['engagement_dist'].get(eng, 0) + 1
     
     return JsonResponse(data)
+
+
+@login_required
+def edit_task_stakeholder(request, board_id, task_id, involvement_id):
+    """Edit stakeholder involvement in a task"""
+    board = check_board_access(request.user, board_id)
+    if not board:
+        messages.error(request, 'Access denied to this board')
+        return redirect('kanban:dashboard')
+    
+    task = get_object_or_404(Task, pk=task_id, column__board=board)
+    involvement = get_object_or_404(StakeholderTaskInvolvement, pk=involvement_id, task=task)
+    
+    if request.method == 'POST':
+        form = StakeholderTaskInvolvementForm(request.POST, instance=involvement)
+        if form.is_valid():
+            involvement = form.save(commit=False)
+            # Update last engagement timestamp
+            involvement.last_engagement = timezone.now()
+            involvement.engagement_count += 1
+            involvement.save()
+            messages.success(request, f'Updated involvement for {involvement.stakeholder.name}')
+            return redirect('stakeholder:task_stakeholder_involvement', board_id=board_id, task_id=task_id)
+    else:
+        form = StakeholderTaskInvolvementForm(instance=involvement)
+    
+    context = {
+        'board': board,
+        'task': task,
+        'involvement': involvement,
+        'form': form,
+    }
+    return render(request, 'kanban/edit_task_stakeholder.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def remove_task_stakeholder(request, board_id, task_id, involvement_id):
+    """Remove a stakeholder from a task"""
+    board = check_board_access(request.user, board_id)
+    if not board:
+        return JsonResponse({'error': 'Access denied'}, status=403)
+    
+    task = get_object_or_404(Task, pk=task_id, column__board=board)
+    involvement = get_object_or_404(StakeholderTaskInvolvement, pk=involvement_id, task=task)
+    
+    stakeholder_name = involvement.stakeholder.name
+    involvement.delete()
+    
+    messages.success(request, f'Removed {stakeholder_name} from this task')
+    return redirect('stakeholder:task_stakeholder_involvement', board_id=board_id, task_id=task_id)

@@ -218,6 +218,9 @@
         </button><ul class="dropdown-menu dropdown-menu-end">
             <li><a class="dropdown-item" href="{% url 'create_column' board.id %}">Add Column</a></li>
             <li><a class="dropdown-item" href="{% url 'create_label' board.id %}">Manage Labels</a></li>
+            <li><a class="dropdown-item" href="{% url 'stakeholder:stakeholder_list' board.id %}">
+                <i class="fas fa-users me-2 text-primary"></i>Manage Stakeholders
+            </a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}">Edit Board</a></li>
             <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#boardSettingsModal">Board Settings</a></li>
