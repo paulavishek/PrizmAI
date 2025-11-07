@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Delete Stakeholder - {{ stakeholder.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-6 mx-auto">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="m-0">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        Confirm Deletion
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-warning">
+                        <i class="bi bi-exclamation-circle"></i>
+                        <strong>Warning:</strong> This action cannot be undone.
+                    </div>
+                    
+                    <p class="lead">Are you sure you want to delete this stakeholder?</p>
+                    
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <h6 class="card-title"><strong>{{ stakeholder.name }}</strong></h6>
+                            <p class="card-text mb-1">
+                                <strong>Role:</strong> {{ stakeholder.role }}<br>
+                                {% if stakeholder.organization %}
+                                <strong>Organization:</strong> {{ stakeholder.organization }}<br>
+                                {% endif %}
+                                <strong>Influence:</strong> 
+                                <span class="badge {% if stakeholder.influence_level == 'high' %}bg-danger{% elif stakeholder.influence_level == 'medium' %}bg-warning{% else %}bg-info{% endif %}">
+                                    {{ stakeholder.get_influence_level_display }}
+                                </span>
+                                <strong>Interest:</strong>
+                                <span class="badge {% if stakeholder.interest_level == 'high' %}bg-success{% elif stakeholder.interest_level == 'medium' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                    {{ stakeholder.get_interest_level_display }}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <h6>This will also delete:</h6>
+                        <ul>
+                            <li>All engagement records for this stakeholder</li>
+                            <li>All task involvement records</li>
+                            <li>All associated metrics and data</li>
+                        </ul>
+                    </div>
+                    
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-danger">
+                                <i class="bi bi-trash-fill"></i>
+                                Yes, Delete Stakeholder
+                            </button>
+                            <a href="{% url 'stakeholder:stakeholder_list' board.id %}" class="btn btn-outline-secondary">
+                                <i class="bi bi-x-circle"></i>
+                                Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card.border-danger {
+        border-width: 2px;
+    }
+</style>
+{% endblock %}

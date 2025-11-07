@@ -58,12 +58,33 @@ def stakeholder_list(request, board_id):
     if engagement_filter:
         stakeholders = stakeholders.filter(current_engagement=engagement_filter)
     
+    # Calculate quadrant counts
+    manage_closely_count = 0
+    keep_satisfied_count = 0
+    keep_informed_count = 0
+    monitor_count = 0
+    
+    for stakeholder in stakeholders:
+        quadrant = stakeholder.get_quadrant()
+        if quadrant == 'Manage Closely':
+            manage_closely_count += 1
+        elif quadrant == 'Keep Satisfied':
+            keep_satisfied_count += 1
+        elif quadrant == 'Keep Informed':
+            keep_informed_count += 1
+        else:
+            monitor_count += 1
+    
     context = {
         'board': board,
         'stakeholders': stakeholders,
         'influence_choices': ProjectStakeholder.INFLUENCE_CHOICES,
         'interest_choices': ProjectStakeholder.INTEREST_CHOICES,
         'engagement_choices': ProjectStakeholder.ENGAGEMENT_STRATEGY_CHOICES,
+        'manage_closely_count': manage_closely_count,
+        'keep_satisfied_count': keep_satisfied_count,
+        'keep_informed_count': keep_informed_count,
+        'monitor_count': monitor_count,
     }
     return render(request, 'kanban/stakeholder_list.html', context)
 

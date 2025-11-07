@@ -165,14 +165,23 @@
                                         {% endwith %}
                                     </td>
                                     <td>
-                                        <a href="{% url 'stakeholder:stakeholder_detail' board.id stakeholder.id %}" class="btn btn-sm btn-outline-primary">
+                                        <a href="{% url 'stakeholder:stakeholder_detail' board.id stakeholder.id %}" 
+                                           class="btn btn-sm btn-outline-primary" 
+                                           title="View Details"
+                                           data-bs-toggle="tooltip">
                                             <i class="bi bi-eye"></i> View
                                         </a>
-                                        <a href="{% url 'stakeholder:stakeholder_update' board.id stakeholder.id %}" class="btn btn-sm btn-outline-secondary">
-                                            <i class="bi bi-pencil"></i>
+                                        <a href="{% url 'stakeholder:stakeholder_update' board.id stakeholder.id %}" 
+                                           class="btn btn-sm btn-outline-secondary" 
+                                           title="Edit Stakeholder"
+                                           data-bs-toggle="tooltip">
+                                            <i class="bi bi-pencil"></i> Edit
                                         </a>
-                                        <a href="{% url 'stakeholder:stakeholder_delete' board.id stakeholder.id %}" class="btn btn-sm btn-outline-danger">
-                                            <i class="bi bi-trash"></i>
+                                        <a href="{% url 'stakeholder:stakeholder_delete' board.id stakeholder.id %}" 
+                                           class="btn btn-sm btn-outline-danger" 
+                                           title="Delete Stakeholder"
+                                           data-bs-toggle="tooltip">
+                                            <i class="bi bi-trash"></i> Delete
                                         </a>
                                     </td>
                                 </tr>
@@ -194,7 +203,11 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    // Add any interactive features here
+    // Initialize Bootstrap tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
 });
 </script>
 {% endblock %}
