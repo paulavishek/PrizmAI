@@ -219,9 +219,9 @@
 
                                     <hr>
 
-                                    <!-- Gantt Chart Dependencies -->
+                                    <!-- Gantt Chart Dependencies & Task Hierarchy -->
                                     <div class="mb-4">
-                                        <h6><i class="fas fa-calendar-alt text-info"></i> Gantt Chart & Timeline</h6>
+                                        <h6><i class="fas fa-project-diagram text-info"></i> Task Relationships & Timeline</h6>
                                         <div class="row">
                                             <div class="col-md-6 mb-3">
                                                 <label for="{{ form.start_date.id_for_label }}" class="form-label">Start Date</label>
@@ -232,19 +232,55 @@
                                                 {% endif %}
                                             </div>
                                             <div class="col-md-6 mb-3">
-                                                <label for="{{ form.dependencies.id_for_label }}" class="form-label">Dependencies</label>
-                                                {{ form.dependencies }}
-                                                <small class="form-text text-muted">Tasks that must finish before this starts</small>
-                                                {% if form.dependencies.errors %}
-                                                    <div class="invalid-feedback d-block">{{ form.dependencies.errors }}</div>
+                                                <label for="{{ form.parent_task.id_for_label }}" class="form-label">
+                                                    Parent Task
+                                                    <i class="fas fa-question-circle text-muted" title="Select a parent task to create a subtask hierarchy"></i>
+                                                </label>
+                                                {{ form.parent_task }}
+                                                <small class="form-text text-muted">Make this a subtask of another task (optional)</small>
+                                                {% if form.parent_task.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.parent_task.errors }}</div>
                                                 {% endif %}
                                             </div>
                                         </div>
-                                        <div class="alert alert-warning mb-0">
+                                        <div class="mb-3">
+                                            <label for="{{ form.dependencies.id_for_label }}" class="form-label">
+                                                Timeline Dependencies (Gantt Chart)
+                                                <i class="fas fa-question-circle text-muted" title="Tasks that must be completed before this task can start"></i>
+                                            </label>
+                                            {{ form.dependencies }}
+                                            <small class="form-text text-muted">{{ form.dependencies.help_text }}</small>
+                                            {% if form.dependencies.errors %}
+                                                <div class="invalid-feedback d-block">{{ form.dependencies.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="alert alert-info mb-0">
                                             <small>
-                                                <i class="fas fa-exclamation-triangle"></i> 
-                                                <strong>Note:</strong> Both Start Date and Due Date are required for tasks to appear in the Gantt Chart view.
+                                                <i class="fas fa-info-circle"></i> 
+                                                <strong>Timeline vs Hierarchy:</strong> Dependencies block timeline progress (Gantt chart), while Parent Task creates an organizational hierarchy (subtasks).
                                             </small>
+                                        </div>
+                                    </div>
+
+                                    <hr>
+                                    
+                                    <!-- Complexity Score -->
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-chart-line text-warning"></i> Task Complexity</h6>
+                                        <div class="mb-3">
+                                            <label for="{{ form.complexity_score.id_for_label }}" class="form-label d-flex justify-content-between align-items-center">
+                                                <span>Complexity Score</span>
+                                                <output id="complexity-output" class="badge bg-secondary">5</output>
+                                            </label>
+                                            <div class="d-flex align-items-center gap-3">
+                                                <small class="text-muted">Simple (1)</small>
+                                                {{ form.complexity_score }}
+                                                <small class="text-muted">Complex (10)</small>
+                                            </div>
+                                            <small class="form-text text-muted">{{ form.complexity_score.help_text }}</small>
+                                            {% if form.complexity_score.errors %}
+                                                <div class="invalid-feedback d-block">{{ form.complexity_score.errors }}</div>
+                                            {% endif %}
                                         </div>
                                     </div>
 
@@ -259,7 +295,7 @@
                                     <!-- 📋 Additional Info -->
                                     <div class="alert alert-info mb-0">
                                         <h6><i class="fas fa-info-circle"></i> Additional Features</h6>
-                                        <p class="small mb-0">You can add subtasks, related tasks, and attach files after creating the task from the task detail page.</p>
+                                        <p class="small mb-0">You can add related tasks and attach files after creating the task from the task detail page.</p>
                                     </div>
                                 </div>
                             </div>
@@ -331,6 +367,50 @@
             </div>
         </div>    </div>
 </div>
+
+<script>
+    // Handle complexity score slider display
+    document.addEventListener('DOMContentLoaded', function() {
+        const complexitySlider = document.querySelector('input[name="complexity_score"]');
+        const complexityOutput = document.getElementById('complexity-output');
+        
+        if (complexitySlider && complexityOutput) {
+            // Set initial value from the input
+            const initialValue = complexitySlider.value || 5;
+            complexityOutput.value = initialValue;
+            complexityOutput.textContent = initialValue;
+            
+            // Update on change
+            complexitySlider.addEventListener('input', function() {
+                const value = this.value;
+                complexityOutput.value = value;
+                complexityOutput.textContent = value;
+                
+                // Update badge color based on complexity
+                complexityOutput.className = 'badge ';
+                if (value >= 8) {
+                    complexityOutput.className += 'bg-danger';
+                } else if (value >= 5) {
+                    complexityOutput.className += 'bg-warning';
+                } else {
+                    complexityOutput.className += 'bg-success';
+                }
+            });
+            
+            // Trigger initial update
+            complexitySlider.dispatchEvent(new Event('input'));
+        }
+        
+        // Debug: Log form submission
+        const taskForm = document.querySelector('.task-form');
+        if (taskForm) {
+            taskForm.addEventListener('submit', function(e) {
+                const complexityValue = document.querySelector('input[name="complexity_score"]')?.value;
+                console.log('Submitting complexity score:', complexityValue);
+            });
+        }
+    });
+</script>
 {% endblock %}
 
 {% block extra_js %}

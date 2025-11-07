@@ -55,7 +55,8 @@ class TaskForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = [
-            'title', 'description', 'start_date', 'due_date', 'assigned_to', 'labels', 'priority', 'progress', 'dependencies',
+            'title', 'description', 'start_date', 'due_date', 'assigned_to', 'labels', 'priority', 'progress', 
+            'dependencies', 'parent_task', 'complexity_score',
             'risk_likelihood', 'risk_impact', 'risk_level'
         ]
         widgets = {
@@ -84,6 +85,20 @@ class TaskForm(forms.ModelForm):
                 'class': 'form-select',
                 'size': '5',
                 'title': 'Tasks that must be completed before this task can start (for Gantt chart dependencies)'
+            }),
+            'parent_task': forms.Select(attrs={
+                'class': 'form-select',
+                'title': 'Select a parent task to create a subtask hierarchy'
+            }),
+            'complexity_score': forms.NumberInput(attrs={
+                'class': 'form-control form-range',
+                'type': 'range',
+                'min': 1,
+                'max': 10,
+                'step': 1,
+                'title': 'Task complexity from 1 (simple) to 10 (very complex)',
+                'value': 5,
+                'id': 'id_complexity_score'
             }),
             'risk_likelihood': forms.Select(attrs={
                 'class': 'form-select',
@@ -140,17 +155,42 @@ class TaskForm(forms.ModelForm):
             ).exclude(id=self.instance.id if self.instance.pk else None).order_by('start_date', 'title')
             
             # Set help text for dependencies
-            self.fields['dependencies'].help_text = 'Select tasks that must be completed before this task can start. Hold Ctrl/Cmd to select multiple tasks.'
+            self.fields['dependencies'].help_text = 'Select tasks that must be completed before this task can start. Only tasks with start and due dates are shown (required for Gantt chart). Hold Ctrl/Cmd to select multiple.'
+            
+            # Filter parent_task to only show tasks from the same board (exclude current task and its subtasks to prevent circular dependencies)
+            parent_queryset = Task.objects.filter(column__board=board).exclude(id=self.instance.id if self.instance.pk else None)
+            
+            # If editing existing task, exclude all its subtasks to prevent circular dependencies
+            if self.instance and self.instance.pk:
+                subtask_ids = [st.id for st in self.instance.get_all_subtasks()]
+                if subtask_ids:
+                    parent_queryset = parent_queryset.exclude(id__in=subtask_ids)
+            
+            self.fields['parent_task'].queryset = parent_queryset.order_by('title')
+            self.fields['parent_task'].help_text = 'Select a parent task to make this a subtask (creates hierarchical relationship).'
         else:
             # If no board, show all tasks with dates
             self.fields['dependencies'].queryset = Task.objects.filter(
                 start_date__isnull=False,
                 due_date__isnull=False
             ).exclude(id=self.instance.id if self.instance.pk else None).order_by('start_date', 'title')
+            
+            # Parent task queryset without board filter
+            self.fields['parent_task'].queryset = Task.objects.exclude(id=self.instance.id if self.instance.pk else None).order_by('title')
         
-        # Add empty choice for assigned_to
+        # Add empty choice for assigned_to and parent_task
         self.fields['assigned_to'].empty_label = "Not assigned"
+        self.fields['parent_task'].empty_label = "No parent (root task)"
         self.fields['dependencies'].required = False
+        self.fields['parent_task'].required = False
+        self.fields['complexity_score'].required = False
+        
+        # Set initial value for complexity score if editing existing task
+        if self.instance and self.instance.pk and self.instance.complexity_score:
+            self.fields['complexity_score'].initial = self.instance.complexity_score
+        
+        # Set help text for complexity score
+        self.fields['complexity_score'].help_text = 'Rate the task complexity from 1 (simple) to 10 (very complex). AI can suggest this value.'
         
         # Make risk fields optional
         self.fields['risk_likelihood'].required = False
@@ -168,11 +208,23 @@ class TaskForm(forms.ModelForm):
         self.fields['risk_level'].help_text = 'Overall risk classification (can be set manually or auto-calculated from likelihood × impact)'
     
     def clean(self):
-        """Calculate risk_score automatically if likelihood and impact are provided"""
+        """Calculate risk_score automatically if likelihood and impact are provided, and validate parent_task"""
         cleaned_data = super().clean()
         risk_likelihood = cleaned_data.get('risk_likelihood')
         risk_impact = cleaned_data.get('risk_impact')
         risk_level = cleaned_data.get('risk_level')
+        parent_task = cleaned_data.get('parent_task')
+        
+        # Validate parent_task to prevent circular dependencies
+        if parent_task and self.instance:
+            if parent_task == self.instance:
+                raise forms.ValidationError({'parent_task': 'A task cannot be its own parent.'})
+            
+            # Check if this would create a circular dependency
+            if hasattr(self.instance, 'has_circular_dependency') and self.instance.has_circular_dependency(parent_task):
+                raise forms.ValidationError({
+                    'parent_task': f'Cannot set "{parent_task.title}" as parent - this would create a circular dependency.'
+                })
         
         # Auto-calculate risk score if both likelihood and impact are provided
         if risk_likelihood is not None and risk_impact is not None:
@@ -255,6 +307,10 @@ class TaskForm(forms.ModelForm):
             instance.save()
             # Save many-to-many relationships
             self.save_m2m()
+            
+            # Update dependency chain if parent_task was changed
+            if 'parent_task' in self.cleaned_data:
+                instance.update_dependency_chain()
         
         return instance
 

@@ -17,9 +17,38 @@
                 </div>
             </div>
             <div class="card-body">
-                <form method="post">
+                <form method="post" class="task-form">
                     {% csrf_token %}
-                    {{ form|crispy }}
+                    
+                    <!-- Render most fields with crispy -->
+                    {% for field in form %}
+                        {% if field.name != 'complexity_score' %}
+                            {{ field|as_crispy_field }}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    <!-- Custom rendering for complexity score -->
+                    <div class="mb-3">
+                        <label for="{{ form.complexity_score.id_for_label }}" class="form-label d-flex justify-content-between align-items-center">
+                            <span>
+                                <i class="fas fa-chart-line text-warning me-1"></i> Complexity Score
+                            </span>
+                            <output id="complexity-output-detail" class="badge bg-secondary">{{ task.complexity_score|default:5 }}</output>
+                        </label>
+                        <div class="d-flex align-items-center gap-3">
+                            <small class="text-muted">Simple (1)</small>
+                            <input type="range" name="complexity_score" id="id_complexity_score" 
+                                   class="form-range" min="1" max="10" step="1" 
+                                   value="{{ task.complexity_score|default:5 }}"
+                                   title="Task complexity from 1 (simple) to 10 (very complex)">
+                            <small class="text-muted">Complex (10)</small>
+                        </div>
+                        <small class="form-text text-muted">Rate the task complexity from 1 (simple) to 10 (very complex). You can adjust this value anytime.</small>
+                        {% if form.complexity_score.errors %}
+                            <div class="invalid-feedback d-block">{{ form.complexity_score.errors }}</div>
+                        {% endif %}
+                    </div>
+                    
                     <div class="text-end mt-3">
                         <a href="{% url 'delete_task' task.id %}" class="btn btn-outline-danger me-2">Delete</a>
                         <button type="submit" class="btn btn-primary">Save Changes</button>
@@ -327,11 +356,19 @@
                 <!-- 📋 Dependencies & Requirements Section -->
                 {% if task.parent_task or task.subtasks.all or task.related_tasks.all or task.dependencies.all or task.required_skills %}
                 <div class="mb-3">
-                    <label class="text-muted">📋 Dependencies & Requirements</label>
-                    <div class="p-2 bg-light rounded">
+                    <label class="text-muted mb-2"><strong>📋 Dependencies & Requirements</strong></label>
+                    
+                    <!-- 📊 Timeline Dependencies (Gantt Chart) -->
+                    {% if task.dependencies.all or task.dependent_tasks.all %}
+                    <div class="p-2 bg-light rounded mb-2">
+                        <div class="mb-2">
+                            <small class="text-muted d-block mb-1"><strong><i class="fas fa-project-diagram me-1"></i>Timeline Dependencies (Gantt Chart)</strong></small>
+                            <small class="text-muted fst-italic">Tasks linked for timeline scheduling and blocking relationships</small>
+                        </div>
+                        
                         {% if task.dependencies.all %}
                         <div class="mb-2">
-                            <small class="text-muted"><i class="fas fa-link me-1"></i>Gantt Dependencies ({{ task.dependencies.count }}):</small>
+                            <small class="text-muted"><i class="fas fa-arrow-right me-1"></i>Dependencies ({{ task.dependencies.count }}):</small>
                             <small class="text-muted d-block mb-1">This task cannot start until these tasks are completed:</small>
                             {% for dep in task.dependencies.all %}
                             <div class="p-2 bg-white rounded border-start border-4 border-warning mb-1">
@@ -351,7 +388,7 @@
                         {% with blocking_tasks=task.dependent_tasks.all %}
                         {% if blocking_tasks %}
                         <div class="mb-2">
-                            <small class="text-muted"><i class="fas fa-lock me-1"></i>Blocking Tasks ({{ blocking_tasks.count }}):</small>
+                            <small class="text-muted"><i class="fas fa-lock me-1"></i>Blocking ({{ blocking_tasks.count }}):</small>
                             <small class="text-muted d-block mb-1">These tasks cannot start until this task is completed:</small>
                             {% for blocked in blocking_tasks %}
                             <div class="p-2 bg-white rounded border-start border-4 border-danger mb-1">
@@ -367,12 +404,22 @@
                         </div>
                         {% endif %}
                         {% endwith %}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- 🔗 Task Hierarchy -->
+                    {% if task.parent_task or task.subtasks.all %}
+                    <div class="p-2 bg-light rounded mb-2">
+                        <div class="mb-2">
+                            <small class="text-muted d-block mb-1"><strong><i class="fas fa-sitemap me-1"></i>Task Hierarchy</strong></small>
+                            <small class="text-muted fst-italic">Parent-child relationships for task organization</small>
+                        </div>
                         
                         {% if task.parent_task %}
                         <div class="mb-2">
                             <small class="text-muted">Parent Task:</small>
-                            <div class="p-1 bg-white rounded border-start border-3 border-primary">
-                                <a href="#" class="text-decoration-none"><strong>{{ task.parent_task.title }}</strong></a>
+                            <div class="p-2 bg-white rounded border-start border-3 border-primary">
+                                <a href="{% url 'task_detail' task.parent_task.id %}" class="text-decoration-none"><strong>{{ task.parent_task.title }}</strong></a>
                             </div>
                         </div>
                         {% endif %}
@@ -381,24 +428,35 @@
                         <div class="mb-2">
                             <small class="text-muted">Subtasks ({{ task.subtasks.count }}):</small>
                             {% for subtask in task.subtasks.all %}
-                            <div class="p-1 bg-white rounded border-start border-3 border-success ms-2 mb-1">
-                                <a href="#" class="text-decoration-none text-muted"><small>{{ subtask.title }}</small></a>
+                            <div class="p-2 bg-white rounded border-start border-3 border-success ms-2 mb-1">
+                                <a href="{% url 'task_detail' subtask.id %}" class="text-decoration-none"><small>{{ subtask.title }}</small></a>
                             </div>
                             {% endfor %}
                         </div>
                         {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <!-- 📎 Additional Information -->
+                    {% if task.related_tasks.all or task.required_skills or task.complexity_score %}
+                    <div class="p-2 bg-light rounded">
+                        <div class="mb-2">
+                            <small class="text-muted d-block mb-1"><strong><i class="fas fa-info-circle me-1"></i>Additional Information</strong></small>
+                        </div>
                         
                         {% if task.related_tasks.all %}
                         <div class="mb-2">
                             <small class="text-muted">Related Tasks ({{ task.related_tasks.count }}):</small>
-                            {% for related in task.related_tasks.all %}
-                            <span class="badge bg-secondary me-1">{{ related.title|truncatewords:3 }}</span>
-                            {% endfor %}
+                            <div class="mt-1">
+                                {% for related in task.related_tasks.all %}
+                                <a href="{% url 'task_detail' related.id %}" class="badge bg-secondary me-1 text-decoration-none">{{ related.title|truncatewords:3 }}</a>
+                                {% endfor %}
+                            </div>
                         </div>
                         {% endif %}
                         
                         {% if task.required_skills %}
-                        <div>
+                        <div class="mb-2">
                             <small class="text-muted">Required Skills:</small>
                             <div>
                                 {% for skill in task.required_skills %}
@@ -410,14 +468,19 @@
                         
                         {% if task.complexity_score %}
                         <div class="mt-2">
-                            <small class="text-muted">Complexity: </small>
+                            <small class="text-muted d-block mb-1">Complexity Score:</small>
                             <div class="progress" style="height: 10px;">
-                                <div class="progress-bar bg-danger" role="progressbar" style="width: 70%;"></div>
+                                <div class="progress-bar {% if task.complexity_score >= 8 %}bg-danger{% elif task.complexity_score >= 5 %}bg-warning{% else %}bg-success{% endif %}" 
+                                     role="progressbar" 
+                                     style="width: {{ task.complexity_score }}0%;"></div>
                             </div>
-                            <small class="text-muted">{{ task.complexity_score }}/10</small>
+                            <small class="text-muted">{{ task.complexity_score }}/10 
+                                {% if task.complexity_score >= 8 %}(Very Complex){% elif task.complexity_score >= 5 %}(Moderate){% else %}(Simple){% endif %}
+                            </small>
                         </div>
                         {% endif %}
                     </div>
+                    {% endif %}
                 </div>
                 {% endif %}
 
@@ -832,6 +895,41 @@
             .catch(error => console.error('Error:', error));
         }
     }
+    
+    // Handle complexity score slider in task detail page
+    document.addEventListener('DOMContentLoaded', function() {
+        const complexitySlider = document.querySelector('#id_complexity_score');
+        const complexityOutput = document.getElementById('complexity-output-detail');
+        
+        if (complexitySlider && complexityOutput) {
+            // Set initial value from the slider
+            const initialValue = complexitySlider.value || 5;
+            complexityOutput.value = initialValue;
+            complexityOutput.textContent = initialValue;
+            
+            // Update display color based on initial value
+            updateComplexityBadge(initialValue, complexityOutput);
+            
+            // Update on slider change
+            complexitySlider.addEventListener('input', function() {
+                const value = this.value;
+                complexityOutput.value = value;
+                complexityOutput.textContent = value;
+                updateComplexityBadge(value, complexityOutput);
+            });
+        }
+        
+        function updateComplexityBadge(value, badge) {
+            badge.className = 'badge ';
+            if (value >= 8) {
+                badge.className += 'bg-danger';
+            } else if (value >= 5) {
+                badge.className += 'bg-warning';
+            } else {
+                badge.className += 'bg-success';
+            }
+        }
+    });
 </script>
 
 {% load static %}
