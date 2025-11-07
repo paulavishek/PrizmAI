@@ -40,7 +40,7 @@ def stakeholder_list(request, board_id):
     board = check_board_access(request.user, board_id)
     if not board:
         messages.error(request, 'Access denied to this board')
-        return redirect('kanban:dashboard')
+        return redirect('dashboard')
     
     stakeholders = ProjectStakeholder.objects.filter(board=board).prefetch_related(
         'task_involvements', 'engagement_records'
@@ -74,7 +74,7 @@ def stakeholder_create(request, board_id):
     board = check_board_access(request.user, board_id)
     if not board:
         messages.error(request, 'Access denied to this board')
-        return redirect('kanban:dashboard')
+        return redirect('dashboard')
     
     if request.method == 'POST':
         form = ProjectStakeholderForm(request.POST)
@@ -84,7 +84,7 @@ def stakeholder_create(request, board_id):
             stakeholder.created_by = request.user
             stakeholder.save()
             messages.success(request, f'Stakeholder {stakeholder.name} created successfully!')
-            return redirect('kanban:stakeholder_detail', board_id=board_id, pk=stakeholder.pk)
+            return redirect('stakeholder:stakeholder_detail', board_id=board_id, pk=stakeholder.pk)
     else:
         form = ProjectStakeholderForm()
     
@@ -102,7 +102,7 @@ def stakeholder_detail(request, board_id, pk):
     board = check_board_access(request.user, board_id)
     if not board:
         messages.error(request, 'Access denied to this board')
-        return redirect('kanban:dashboard')
+        return redirect('dashboard')
     
     stakeholder = get_object_or_404(ProjectStakeholder, pk=pk, board=board)
     
@@ -141,7 +141,7 @@ def stakeholder_update(request, board_id, pk):
     board = check_board_access(request.user, board_id)
     if not board:
         messages.error(request, 'Access denied to this board')
-        return redirect('kanban:dashboard')
+        return redirect('dashboard')
     
     stakeholder = get_object_or_404(ProjectStakeholder, pk=pk, board=board)
     
@@ -150,7 +150,7 @@ def stakeholder_update(request, board_id, pk):
         if form.is_valid():
             form.save()
             messages.success(request, 'Stakeholder updated successfully!')
-            return redirect('kanban:stakeholder_detail', board_id=board_id, pk=stakeholder.pk)
+            return redirect('stakeholder:stakeholder_detail', board_id=board_id, pk=stakeholder.pk)
     else:
         form = ProjectStakeholderForm(instance=stakeholder)
     
@@ -169,7 +169,7 @@ def stakeholder_delete(request, board_id, pk):
     board = check_board_access(request.user, board_id)
     if not board:
         messages.error(request, 'Access denied to this board')
-        return redirect('kanban:dashboard')
+        return redirect('dashboard')
     
     stakeholder = get_object_or_404(ProjectStakeholder, pk=pk, board=board)
     
@@ -177,7 +177,7 @@ def stakeholder_delete(request, board_id, pk):
         name = stakeholder.name
         stakeholder.delete()
         messages.success(request, f'Stakeholder {name} deleted successfully!')
-        return redirect('kanban:stakeholder_list', board_id=board_id)
+        return redirect('stakeholder:stakeholder_list', board_id=board_id)
     
     context = {
         'board': board,
@@ -192,7 +192,7 @@ def engagement_record_create(request, board_id, stakeholder_id):
     board = check_board_access(request.user, board_id)
     if not board:
         messages.error(request, 'Access denied to this board')
-        return redirect('kanban:dashboard')
+        return redirect('dashboard')
     
     stakeholder = get_object_or_404(ProjectStakeholder, pk=stakeholder_id, board=board)
     
@@ -208,7 +208,7 @@ def engagement_record_create(request, board_id, stakeholder_id):
             stakeholder.task_involvements.all().update(last_engagement=timezone.now())
             
             messages.success(request, 'Engagement recorded successfully!')
-            return redirect('kanban:stakeholder_detail', board_id=board_id, pk=stakeholder_id)
+            return redirect('stakeholder:stakeholder_detail', board_id=board_id, pk=stakeholder_id)
     else:
         form = StakeholderEngagementRecordForm()
     
@@ -226,7 +226,7 @@ def task_stakeholder_involvement(request, board_id, task_id):
     board = check_board_access(request.user, board_id)
     if not board:
         messages.error(request, 'Access denied to this board')
-        return redirect('kanban:dashboard')
+        return redirect('dashboard')
     
     task = get_object_or_404(Task, pk=task_id, column__board=board)
     
@@ -275,7 +275,7 @@ def add_task_stakeholder(request, board_id, task_id):
     else:
         messages.info(request, f'{stakeholder.name} is already involved in this task')
     
-    return redirect('kanban:task_stakeholder_involvement', board_id=board_id, task_id=task_id)
+    return redirect('stakeholder:task_stakeholder_involvement', board_id=board_id, task_id=task_id)
 
 
 @login_required
@@ -284,7 +284,7 @@ def engagement_metrics_dashboard(request, board_id):
     board = check_board_access(request.user, board_id)
     if not board:
         messages.error(request, 'Access denied to this board')
-        return redirect('kanban:dashboard')
+        return redirect('dashboard')
     
     stakeholders = ProjectStakeholder.objects.filter(board=board)
     
@@ -341,7 +341,7 @@ def engagement_analytics(request, board_id):
     board = check_board_access(request.user, board_id)
     if not board:
         messages.error(request, 'Access denied to this board')
-        return redirect('kanban:dashboard')
+        return redirect('dashboard')
     
     # Period selection (default to last 30 days)
     days = int(request.GET.get('days', 30))
@@ -418,7 +418,7 @@ def edit_task_stakeholder(request, board_id, task_id, involvement_id):
     board = check_board_access(request.user, board_id)
     if not board:
         messages.error(request, 'Access denied to this board')
-        return redirect('kanban:dashboard')
+        return redirect('dashboard')
     
     task = get_object_or_404(Task, pk=task_id, column__board=board)
     involvement = get_object_or_404(StakeholderTaskInvolvement, pk=involvement_id, task=task)
