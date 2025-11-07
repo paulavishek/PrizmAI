@@ -1,8 +1,8 @@
-# ✅ TaskFlow Real-Time Communication - COMPLETE!
+﻿# ✅ PrizmAI Real-Time Communication - COMPLETE!
 
 ## What Was Delivered
 
-Your TaskFlow application now has **full real-time communication** capabilities with a complete startup solution, just like CollabBook!
+Your PrizmAI application now has **full real-time communication** capabilities with a complete startup solution, just like CollabBook!
 
 ### 🎯 Core Features Implemented
 
@@ -46,7 +46,7 @@ TaskCommentConsumer    # Real-time task comments
 
 **New Files Created:**
 
-1. **`start_taskflow.bat`** - Start all 4 components at once
+1. **`start_PrizmAI.bat`** - Start all 4 components at once
    ```batch
    Double-click to start:
    ✅ Redis Server (port 6379)
@@ -55,7 +55,7 @@ TaskCommentConsumer    # Real-time task comments
    ✅ Celery Beat (scheduled tasks)
    ```
 
-2. **`stop_taskflow.bat`** - Stop all components cleanly
+2. **`stop_PrizmAI.bat`** - Stop all components cleanly
    ```batch
    Double-click to stop all services
    ```
@@ -126,7 +126,7 @@ TaskCommentConsumer    # Real-time task comments
 ### 📦 Project Structure
 
 ```
-TaskFlow/
+PrizmAI/
 ├── messaging/                          # NEW APP
 │   ├── migrations/
 │   │   └── 0001_initial.py            # Database schema
@@ -142,8 +142,8 @@ TaskFlow/
 │   ├── settings.py                     # ✏️ Modified
 │   ├── asgi.py                         # ✏️ Modified
 │   └── urls.py                         # ✏️ Modified
-├── start_taskflow.bat                  # NEW - Start all services
-├── stop_taskflow.bat                   # NEW - Stop all services
+├── start_PrizmAI.bat                  # NEW - Start all services
+├── stop_PrizmAI.bat                   # NEW - Stop all services
 ├── db.sqlite3                          # ✏️ Updated with new schema
 ├── requirements.txt                    # ✏️ Modified
 ├── REALTIME_COMMUNICATION_GUIDE.md     # NEW
@@ -158,11 +158,11 @@ TaskFlow/
 
 #### Quick Start (Recommended)
 ```batch
-:: 1. Navigate to TaskFlow folder
-cd C:\Users\Avishek Paul\TaskFlow
+:: 1. Navigate to PrizmAI folder
+cd C:\Users\Avishek Paul\PrizmAI
 
-:: 2. Double-click start_taskflow.bat
-start_taskflow.bat
+:: 2. Double-click start_PrizmAI.bat
+start_PrizmAI.bat
 
 :: 3. Wait 5 seconds for all components to start
 :: 4. Open http://localhost:8000/ in browser
@@ -182,17 +182,17 @@ start_taskflow.bat
 redis-server.exe
 
 # Terminal 2
-cd "C:\Users\Avishek Paul\TaskFlow"
+cd "C:\Users\Avishek Paul\PrizmAI"
 venv\Scripts\activate
 daphne -b 0.0.0.0 -p 8000 kanban_board.asgi:application
 
 # Terminal 3
-cd "C:\Users\Avishek Paul\TaskFlow"
+cd "C:\Users\Avishek Paul\PrizmAI"
 venv\Scripts\activate
 celery -A kanban_board worker --pool=solo -l info
 
 # Terminal 4
-cd "C:\Users\Avishek Paul\TaskFlow"
+cd "C:\Users\Avishek Paul\PrizmAI"
 venv\Scripts\activate
 celery -A kanban_board beat -l info
 ```
@@ -298,7 +298,7 @@ UserTypingStatus
 ### 📝 Configuration Options
 
 #### Change Port
-Edit `start_taskflow.bat`, line 22:
+Edit `start_PrizmAI.bat`, line 22:
 ```batch
 daphne -b 0.0.0.0 -p 8001 kanban_board.asgi:application
 ```
@@ -429,7 +429,7 @@ SQLite/PostgreSQL
 
 ### 📊 Comparison with CollabBook
 
-| Feature | CollabBook | TaskFlow |
+| Feature | CollabBook | PrizmAI |
 |---------|-----------|----------|
 | Batch Script | ✅ Yes | ✅ Yes (New!) |
 | Real-Time Chat | ✅ Yes | ✅ Yes |
@@ -456,7 +456,7 @@ You now have:
 - ✅ Database migrations applied
 
 **Next Steps**:
-1. Test by running `start_taskflow.bat`
+1. Test by running `start_PrizmAI.bat`
 2. Open http://localhost:8000/
 3. Create a chat room and test messaging
 4. Create templates and JavaScript when ready

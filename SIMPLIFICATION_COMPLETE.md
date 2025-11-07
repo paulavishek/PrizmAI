@@ -1,6 +1,6 @@
-# ✅ Simplification Complete - OpenAI Removed
+﻿# ✅ Simplification Complete - OpenAI Removed
 
-Your TaskFlow AI Project Assistant has been **simplified to use only Google Gemini-2.5-Flash**.
+Your PrizmAI AI Project Assistant has been **simplified to use only Google Gemini-2.5-Flash**.
 
 ---
 
@@ -64,10 +64,10 @@ Your TaskFlow AI Project Assistant has been **simplified to use only Google Gemi
 ```
 User Question
     ↓
-TaskFlowChatbotService
+PrizmAIChatbotService
     ├─ Detects: Is this a project query?
     ├─ Detects: Should we search the web?
-    ├─ Builds context from TaskFlow data
+    ├─ Builds context from PrizmAI data
     ├─ Builds context from Knowledge Base
     └─ Builds context from Web Search (optional)
     ↓

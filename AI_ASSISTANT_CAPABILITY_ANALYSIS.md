@@ -1,4 +1,4 @@
-# AI Assistant Capability Analysis Report
+﻿# AI Assistant Capability Analysis Report
 
 ## Issue Summary
 The AI assistant couldn't answer "how many total tasks are in all the boards?" - a reasonable question about aggregated project data. The Gemini response said it needs more specific information and can't access available context.
@@ -54,7 +54,7 @@ The AI assistant couldn't answer "how many total tasks are in all the boards?" -
 
 ### Current Implementation
 ```python
-# In chatbot_service.py - get_taskflow_context()
+# In chatbot_service.py - get_PrizmAI_context()
 
 if self.board:
     # ✅ WORKS: Gets context for ONE board
@@ -92,9 +92,9 @@ User asks: "How many total tasks?"
     ↓
 send_message() receives board_id = None or undefined
     ↓
-TaskFlowChatbotService(user=request.user, board=None)
+PrizmAIChatbotService(user=request.user, board=None)
     ↓
-get_taskflow_context() runs with self.board = None
+get_PrizmAI_context() runs with self.board = None
     ↓
 Falls to: "Get all user's boards and projects" branch
     ↓
@@ -113,7 +113,7 @@ Response: "I only see board names, not task counts"
 
 ### For Single Board (board_id provided):
 ```
-**TaskFlow Project Context:**
+**PrizmAI Project Context:**
 
 Board: Software Project
 
@@ -128,7 +128,7 @@ Board: Software Project
 
 ### For All Projects (NO board_id):
 ```
-**TaskFlow Project Context:**
+**PrizmAI Project Context:**
 
 **User's Boards (5):**
 - Board 1
@@ -273,7 +273,7 @@ def get_response(self, prompt, history=None, use_cache=True):
 
 ### Enable Aggregate Query Support
 
-**File:** `c:\Users\Avishek Paul\TaskFlow\ai_assistant\utils\chatbot_service.py`
+**File:** `c:\Users\Avishek Paul\PrizmAI\ai_assistant\utils\chatbot_service.py`
 
 Add this method:
 

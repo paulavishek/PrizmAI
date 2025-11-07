@@ -1,8 +1,8 @@
-# Real-Time Communication Integration - Summary
+﻿# Real-Time Communication Integration - Summary
 
 ## What Was Integrated
 
-I've successfully integrated real-time communication into TaskFlow, inspired by CollabBook's architecture. This enables seamless team collaboration with minimal overhead.
+I've successfully integrated real-time communication into PrizmAI, inspired by CollabBook's architecture. This enables seamless team collaboration with minimal overhead.
 
 ## Key Features Implemented
 
@@ -104,7 +104,7 @@ messaging/
    daphne -b 0.0.0.0 -p 8000 kanban_board.asgi:application
    ```
 
-3. **Access TaskFlow**
+3. **Access PrizmAI**
    ```
    http://localhost:8000
    ```

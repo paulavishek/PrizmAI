@@ -1,4 +1,4 @@
-# Messaging Feature Fix - Complete Test Guide
+﻿# Messaging Feature Fix - Complete Test Guide
 
 ## Overview
 
@@ -247,7 +247,7 @@ if not room.members.filter(id=user.id).exists():
 **Likely Cause**: Notification system not integrated or async tasks not running
 
 **Fix**:
-1. Check Celery is running: `celery -A taskflow worker -l info`
+1. Check Celery is running: `celery -A PrizmAI worker -l info`
 2. Verify notification model has `is_read=False` by default
 3. Check user notification center at `/notifications/`
 

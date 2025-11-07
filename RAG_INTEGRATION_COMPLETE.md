@@ -1,8 +1,8 @@
-# RAG Integration Complete - Summary
+﻿# RAG Integration Complete - Summary
 
 ## Overview
 
-Your TaskFlow AI Assistant now has **complete RAG (Retrieval Augmented Generation)** capabilities fully implemented and ready to use!
+Your PrizmAI AI Assistant now has **complete RAG (Retrieval Augmented Generation)** capabilities fully implemented and ready to use!
 
 ---
 
@@ -74,7 +74,7 @@ Query Classifier
 └─ Mixed? (combine both)
     ↓
 Data Retrieval
-├─ Project Data (TaskFlow DB)
+├─ Project Data (PrizmAI DB)
 ├─ Knowledge Base (KB DB)
 ├─ Web Search (Google API) - if enabled
     ↓
@@ -139,7 +139,7 @@ Sources:
 - Formats results for AI consumption
 
 **`ai_assistant/utils/chatbot_service.py`** (250+ lines)
-- `TaskFlowChatbotService` class
+- `PrizmAIChatbotService` class
 - Query type detection
 - Context assembly
 - Multi-source retrieval
@@ -215,7 +215,7 @@ Response includes:
 - "what is", "how do", "tell me about"
 - "best practices", "industry", "standards"
 
-### Project Query Triggers (uses TaskFlow data)
+### Project Query Triggers (uses PrizmAI data)
 - "task", "project", "team", "deadline"
 - "assigned", "priority", "status", "board"
 - "sprint", "release", "milestone", "capacity"
@@ -435,8 +435,8 @@ print(settings.ENABLE_WEB_SEARCH)  # Should be True
 
 ```bash
 python manage.py shell
-from ai_assistant.utils.chatbot_service import TaskFlowChatbotService
-service = TaskFlowChatbotService()
+from ai_assistant.utils.chatbot_service import PrizmAIChatbotService
+service = PrizmAIChatbotService()
 response = service.get_response("What are the latest AI trends?")
 print(response)
 ```

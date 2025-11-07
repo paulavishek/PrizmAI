@@ -1,6 +1,6 @@
-# TaskFlow Setup Guide
+﻿# PrizmAI Setup Guide
 
-This guide will help you set up TaskFlow locally for development or deployment.
+This guide will help you set up PrizmAI locally for development or deployment.
 
 ## Prerequisites
 
@@ -14,8 +14,8 @@ This guide will help you set up TaskFlow locally for development or deployment.
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/avishekpaul1310/TaskFlow.git
-cd TaskFlow
+git clone https://github.com/avishekpaul1310/PrizmAI.git
+cd PrizmAI
 ```
 
 ### 2. Create Virtual Environment
@@ -155,7 +155,7 @@ GEMINI_API_KEY=your-production-gemini-key
 ## Project Structure
 
 ```
-TaskFlow/
+PrizmAI/
 ├── accounts/           # User authentication and profiles
 ├── kanban/             # Main Kanban board functionality
 ├── kanban_board/       # Django project settings
@@ -187,7 +187,7 @@ TaskFlow/
 
 ### Getting Help
 
-- Check the [GitHub Issues](https://github.com/avishekpaul1310/TaskFlow/issues)
+- Check the [GitHub Issues](https://github.com/avishekpaul1310/PrizmAI/issues)
 - Review the [README.md](README.md) for more details
 - Check Django logs for detailed error messages
 

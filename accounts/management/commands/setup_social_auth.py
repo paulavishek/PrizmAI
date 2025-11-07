@@ -1,4 +1,4 @@
-from django.core.management.base import BaseCommand
+﻿from django.core.management.base import BaseCommand
 from django.contrib.sites.models import Site
 from allauth.socialaccount.models import SocialApp
 import os
@@ -27,7 +27,7 @@ class Command(BaseCommand):
         # Get the default site
         site = Site.objects.get_or_create(
             id=1,
-            defaults={'domain': 'localhost:8000', 'name': 'TaskFlow'}
+            defaults={'domain': 'localhost:8000', 'name': 'PrizmAI'}
         )[0]
 
         # Create or update Google SocialApp

@@ -1,8 +1,8 @@
-# 🚀 TaskFlow Demo - Quick Start Guide
+﻿# 🚀 PrizmAI Demo - Quick Start Guide
 
 ## What's New in Demo Data?
 
-Your TaskFlow kanban board now includes **complete demo data for all advanced features**:
+Your PrizmAI kanban board now includes **complete demo data for all advanced features**:
 
 ✅ **Risk Management** - Task risk assessments with mitigation strategies  
 ✅ **Resource Management** - Team workload forecasts and capacity alerts  
@@ -285,4 +285,4 @@ For deeper dives into each feature:
 **Last Updated**: October 2025  
 **Status**: ✅ Ready to Explore!
 
-🎉 **Enjoy exploring the full-featured TaskFlow kanban board with comprehensive demo data!**
+🎉 **Enjoy exploring the full-featured PrizmAI kanban board with comprehensive demo data!**

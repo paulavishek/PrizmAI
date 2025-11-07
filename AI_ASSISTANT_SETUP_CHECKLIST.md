@@ -1,8 +1,8 @@
-# AI Assistant Implementation - Complete Checklist ✅
+﻿# AI Assistant Implementation - Complete Checklist ✅
 
 ## 🎉 IMPLEMENTATION COMPLETE
 
-Your TaskFlow AI Project Assistant is fully built and ready to deploy!
+Your PrizmAI AI Project Assistant is fully built and ready to deploy!
 
 ---
 
@@ -53,7 +53,7 @@ Your TaskFlow AI Project Assistant is fully built and ready to deploy!
 **Google Gemini (FREE - Recommended)**
 1. Visit https://ai.google.dev
 2. Click "Get API Key"
-3. Create a new API key for TaskFlow
+3. Create a new API key for PrizmAI
 4. Copy the key to `.env`:
    ```
    GEMINI_API_KEY=paste_your_key_here
@@ -82,7 +82,7 @@ Your TaskFlow AI Project Assistant is fully built and ready to deploy!
 
 #### Step 2: Create/Update `.env` File (2 minutes)
 
-In your project root (`c:\Users\Avishek Paul\TaskFlow\.env`):
+In your project root (`c:\Users\Avishek Paul\PrizmAI\.env`):
 
 ```env
 # REQUIRED - Get from https://ai.google.dev
@@ -108,7 +108,7 @@ AI_RESPONSE_TIMEOUT=30
 
 ```bash
 # Navigate to project directory
-cd c:\Users\Avishek Paul\TaskFlow
+cd c:\Users\Avishek Paul\PrizmAI
 
 # Create migration files
 python manage.py makemigrations ai_assistant
@@ -150,7 +150,7 @@ python manage.py runserver
 
 #### Step 6: Test with Project Data (15 minutes)
 
-1. Create a sample board in TaskFlow (if you don't have one)
+1. Create a sample board in PrizmAI (if you don't have one)
 2. Add a few tasks with different statuses
 3. Go back to assistant and select the board
 4. Try queries like:

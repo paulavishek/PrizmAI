@@ -16,12 +16,13 @@ def create_wiki_page_access(sender, instance, created, **kwargs):
         )
         
         # Grant view access to all organization members
-        org_members = instance.organization.members.all()
-        for member in org_members:
-            if member != instance.created_by:
+        # Note: members is a related_name from UserProfile, so we need to get the user from each profile
+        org_member_profiles = instance.organization.members.all()
+        for profile in org_member_profiles:
+            if profile.user != instance.created_by:
                 WikiPageAccess.objects.get_or_create(
                     page=instance,
-                    user=member,
+                    user=profile.user,
                     defaults={'access_level': 'view', 'granted_by': instance.created_by}
                 )
 

@@ -1,4 +1,4 @@
-# TaskFlow AI Assistant - Complete Implementation Index
+﻿# PrizmAI AI Assistant - Complete Implementation Index
 
 ## 📚 Documentation Map
 
@@ -33,7 +33,7 @@ This document serves as your master guide to all AI Assistant documentation and 
 ## 📁 File Structure
 
 ```
-TaskFlow/
+PrizmAI/
 ├── ai_assistant/                          # Main Django App
 │   ├── __init__.py
 │   ├── apps.py                           # App config
@@ -373,7 +373,7 @@ Or: `SETUP_AI_ASSISTANT.md` → "Troubleshooting"
 
 ```bash
 # 1. Navigate to project
-cd c:\Users\Avishek Paul\TaskFlow
+cd c:\Users\Avishek Paul\PrizmAI
 
 # 2. Get API key (5 min at https://ai.google.dev)
 

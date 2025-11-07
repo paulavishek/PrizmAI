@@ -1,4 +1,4 @@
-# Real-Time Communication - Quick Start
+﻿# Real-Time Communication - Quick Start
 
 ## 30-Second Setup
 
@@ -63,7 +63,7 @@ http://localhost:8000
 
 ```
 ┌─────────────────────────────────────────┐
-│         TaskFlow Dashboard              │
+│         PrizmAI Dashboard              │
 │  ┌─────────────────────────────────┐   │
 │  │  Chat Rooms | Task Comments     │   │
 │  └─────────────────────────────────┘   │
@@ -180,15 +180,15 @@ DEBUG=True
 ## Production Deployment
 
 ### Using Systemd (Linux)
-Create `/etc/systemd/system/taskflow-daphne.service`:
+Create `/etc/systemd/system/PrizmAI-daphne.service`:
 ```ini
 [Unit]
-Description=TaskFlow Daphne Server
+Description=PrizmAI Daphne Server
 After=network.target
 
 [Service]
 User=www-data
-WorkingDirectory=/var/www/taskflow
+WorkingDirectory=/var/www/PrizmAI
 ExecStart=/usr/bin/daphne -b 0.0.0.0 -p 8000 kanban_board.asgi:application
 Restart=always
 

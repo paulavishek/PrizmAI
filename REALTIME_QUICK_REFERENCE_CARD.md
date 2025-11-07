@@ -1,4 +1,4 @@
-# Real-Time Communication - Quick Reference Card 📱
+﻿# Real-Time Communication - Quick Reference Card 📱
 
 ## 🎯 TL;DR - What Changed?
 
@@ -10,7 +10,7 @@
 
 ## 🚀 Quick Start (2 minutes)
 
-1. **Start everything**: `start_taskflow.bat`
+1. **Start everything**: `start_PrizmAI.bat`
 2. **Login**: `http://localhost:8000/`
 3. **Click**: "Messages" in top navigation
 4. **Create**: New chat room
@@ -99,7 +99,7 @@ John gets notification instantly!
 | **Daphne** | 8000 | WebSocket + HTTP | 4th |
 | **Django** | 8000 | Web app | 4th (same) |
 
-**All start with**: `start_taskflow.bat`
+**All start with**: `start_PrizmAI.bat`
 
 ---
 
@@ -171,6 +171,6 @@ Everything is configured and ready to go.
 **Where**: Click "Messages" in top navigation  
 **How**: Create rooms, send messages, mention people  
 **Speed**: Instant (< 100ms)  
-**Cost**: Already included in your TaskFlow!  
+**Cost**: Already included in your PrizmAI!  
 
-**Start Now**: `start_taskflow.bat` then explore! 💬
+**Start Now**: `start_PrizmAI.bat` then explore! 💬

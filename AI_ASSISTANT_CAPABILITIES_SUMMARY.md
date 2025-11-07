@@ -1,8 +1,8 @@
-# AI Assistant - Capabilities Summary
+﻿# AI Assistant - Capabilities Summary
 
 ## Overview
 
-Your TaskFlow AI Assistant is a conversational AI that helps with project management. Here's what it can and cannot do.
+Your PrizmAI AI Assistant is a conversational AI that helps with project management. Here's what it can and cannot do.
 
 ---
 
@@ -105,7 +105,7 @@ These now work after today's fix:
 
 **Why:** AI Assistant is conversational, not event-driven
 
-**Workaround:** Use TaskFlow's notification system directly
+**Workaround:** Use PrizmAI's notification system directly
 
 ---
 
@@ -129,7 +129,7 @@ These now work after today's fix:
 ❌ "Confidential company information"
 ```
 
-**Why:** Not available in TaskFlow database
+**Why:** Not available in PrizmAI database
 
 ---
 
@@ -211,7 +211,7 @@ Show to user
 
 ## 📊 Data AI Can Access
 
-### What TaskFlow Data is Visible to AI
+### What PrizmAI Data is Visible to AI
 
 ✅ **Visible:**
 - Board names

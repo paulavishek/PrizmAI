@@ -1,7 +1,7 @@
-# ✅ NOTIFICATION BADGE IMPLEMENTATION COMPLETE
+﻿# ✅ NOTIFICATION BADGE IMPLEMENTATION COMPLETE
 
 ## 🎉 Feature Summary
-Successfully implemented a real-time notification badge for the TaskFlow messaging system that displays the count of unread messages in the navigation bar.
+Successfully implemented a real-time notification badge for the PrizmAI messaging system that displays the count of unread messages in the navigation bar.
 
 ---
 
@@ -71,7 +71,7 @@ Response: {"unread_count": 5}
 ## 🧪 Testing Guide
 
 ### Quick Verification (2 minutes)
-1. Start TaskFlow
+1. Start PrizmAI
 2. Log in as User A
 3. Create chat room with User B
 4. In separate window, log in as User B

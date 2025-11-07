@@ -1,21 +1,21 @@
-# TaskFlow Batch Scripts - Ready to Use! 🚀
+﻿# PrizmAI Batch Scripts - Ready to Use! 🚀
 
 ## What Was Created
 
-I've created batch scripts for TaskFlow based on CollabBook's approach. You now have:
+I've created batch scripts for PrizmAI based on CollabBook's approach. You now have:
 
 ### Files Created:
-1. **`start_taskflow.bat`** - Starts all 4 components with one click
-2. **`stop_taskflow.bat`** - Stops all components gracefully
+1. **`start_PrizmAI.bat`** - Starts all 4 components with one click
+2. **`stop_PrizmAI.bat`** - Stops all components gracefully
 3. **`STARTUP_SCRIPTS_GUIDE.md`** - Complete usage documentation
 
 ## How to Use
 
-### Starting TaskFlow (Easiest Way!)
+### Starting PrizmAI (Easiest Way!)
 
-Simply navigate to your TaskFlow folder and **double-click**:
+Simply navigate to your PrizmAI folder and **double-click**:
 ```
-C:\Users\Avishek Paul\TaskFlow\start_taskflow.bat
+C:\Users\Avishek Paul\PrizmAI\start_PrizmAI.bat
 ```
 
 This will automatically start:
@@ -26,19 +26,19 @@ This will automatically start:
 
 Each runs in its own window for easy monitoring!
 
-### Stopping TaskFlow
+### Stopping PrizmAI
 
 Double-click:
 ```
-C:\Users\Avishek Paul\TaskFlow\stop_taskflow.bat
+C:\Users\Avishek Paul\PrizmAI\stop_PrizmAI.bat
 ```
 
 Or simply close each command window.
 
-## What Happens When You Click start_taskflow.bat
+## What Happens When You Click start_PrizmAI.bat
 
 ```
-Starting TaskFlow Components...
+Starting PrizmAI Components...
 
 [1/4] Starting Redis Server...         → Port 6379
       ✅ Redis server started
@@ -53,7 +53,7 @@ Starting TaskFlow Components...
       ✅ Daphne server started
 
 ============================================
-All TaskFlow components started successfully!
+All PrizmAI components started successfully!
 ============================================
 
 Access your application at:
@@ -66,7 +66,7 @@ Real-time Messaging at:
   http://localhost:8000/messaging/
 
 To stop all services, run:
-  stop_taskflow.bat
+  stop_PrizmAI.bat
 ```
 
 ## Requirements
@@ -78,7 +78,7 @@ Before using the scripts, make sure you have:
    - Download from: https://github.com/tporadowski/redis/releases
 
 2. **Python Virtual Environment** at:
-   - `C:\Users\Avishek Paul\TaskFlow\venv\`
+   - `C:\Users\Avishek Paul\PrizmAI\venv\`
 
 3. **All dependencies installed**:
    ```bash
@@ -90,7 +90,7 @@ Before using the scripts, make sure you have:
 If your Redis or project paths are different, edit the batch files:
 
 ### For Different Redis Path:
-Edit `start_taskflow.bat`, line 6:
+Edit `start_PrizmAI.bat`, line 6:
 ```bat
 cd /d C:\path\to\your\redis
 ```
@@ -98,11 +98,11 @@ cd /d C:\path\to\your\redis
 ### For Different Project Path:
 Edit both batch files, find and replace:
 ```
-"C:\Users\Avishek Paul\TaskFlow"
+"C:\Users\Avishek Paul\PrizmAI"
 ```
 
 ### For Different Port:
-Edit `start_taskflow.bat`, line 22:
+Edit `start_PrizmAI.bat`, line 22:
 ```bat
 daphne -b 0.0.0.0 -p 8001 kanban_board.asgi:application
 ```
@@ -114,7 +114,7 @@ daphne -b 0.0.0.0 -p 8001 kanban_board.asgi:application
 1. Check the error in the command window
 2. Run the component manually to see the error:
    ```bash
-   cd "C:\Users\Avishek Paul\TaskFlow"
+   cd "C:\Users\Avishek Paul\PrizmAI"
    venv\Scripts\activate
    daphne -b 0.0.0.0 -p 8000 kanban_board.asgi:application
    ```
@@ -132,22 +132,22 @@ daphne -b 0.0.0.0 -p 8001 kanban_board.asgi:application
 ## Next Steps
 
 1. ✅ **Verify Redis is installed** at `C:\redis\Redis-x64-5.0.14.1\`
-2. ✅ **Run start_taskflow.bat** by double-clicking it
+2. ✅ **Run start_PrizmAI.bat** by double-clicking it
 3. ✅ **Wait 5-10 seconds** for all components to start
 4. ✅ **Open http://localhost:8000/** in your browser
 5. ✅ **Test real-time messaging** by creating a chat room
 
 ## What Changed vs. CollabBook
 
-| Feature | CollabBook | TaskFlow |
+| Feature | CollabBook | PrizmAI |
 |---------|-----------|----------|
-| Project Name | CollabBook | TaskFlow |
+| Project Name | CollabBook | PrizmAI |
 | ASGI Module | collabhub | kanban_board |
 | Virtual Env | venv_new | venv |
-| User Path | Collabbook | TaskFlow |
+| User Path | Collabbook | PrizmAI |
 | Default Port | 8000 | 8000 |
 
-The batch scripts are 99% identical - just adapted for TaskFlow's folder structure!
+The batch scripts are 99% identical - just adapted for PrizmAI's folder structure!
 
 ## Advanced: Running Manually (if needed)
 
@@ -160,21 +160,21 @@ redis-server.exe
 
 **Terminal 2:**
 ```bash
-cd "C:\Users\Avishek Paul\TaskFlow"
+cd "C:\Users\Avishek Paul\PrizmAI"
 venv\Scripts\activate
 daphne -b 0.0.0.0 -p 8000 kanban_board.asgi:application
 ```
 
 **Terminal 3:**
 ```bash
-cd "C:\Users\Avishek Paul\TaskFlow"
+cd "C:\Users\Avishek Paul\PrizmAI"
 venv\Scripts\activate
 celery -A kanban_board worker --pool=solo -l info
 ```
 
 **Terminal 4:**
 ```bash
-cd "C:\Users\Avishek Paul\TaskFlow"
+cd "C:\Users\Avishek Paul\PrizmAI"
 venv\Scripts\activate
 celery -A kanban_board beat -l info
 ```
@@ -183,9 +183,9 @@ celery -A kanban_board beat -l info
 
 All three files are located at:
 ```
-C:\Users\Avishek Paul\TaskFlow\
-├── start_taskflow.bat
-├── stop_taskflow.bat
+C:\Users\Avishek Paul\PrizmAI\
+├── start_PrizmAI.bat
+├── stop_PrizmAI.bat
 └── STARTUP_SCRIPTS_GUIDE.md
 ```
 
@@ -193,16 +193,16 @@ C:\Users\Avishek Paul\TaskFlow\
 
 Want an even faster way? You can also start from command line:
 ```bash
-cd C:\Users\Avishek Paul\TaskFlow && start_taskflow.bat
+cd C:\Users\Avishek Paul\PrizmAI && start_PrizmAI.bat
 ```
 
-Or create a Windows shortcut to `start_taskflow.bat` on your desktop!
+Or create a Windows shortcut to `start_PrizmAI.bat` on your desktop!
 
 ---
 
 ✅ **Status**: Ready to use!
 📝 **Documentation**: See `STARTUP_SCRIPTS_GUIDE.md` for detailed info
-🚀 **Quick Start**: Double-click `start_taskflow.bat` to begin!
+🚀 **Quick Start**: Double-click `start_PrizmAI.bat` to begin!
 
 **Created**: October 30, 2025
 **Based On**: CollabBook startup scripts

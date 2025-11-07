@@ -1,8 +1,8 @@
-# AI Assistant: Comprehensive Feature Coverage
+﻿# AI Assistant: Comprehensive Feature Coverage
 
 ## Overview
 
-The AI Assistant has been enhanced with **comprehensive support for ALL TaskFlow features**. It now intelligently detects query types and provides specialized context for:
+The AI Assistant has been enhanced with **comprehensive support for ALL PrizmAI features**. It now intelligently detects query types and provides specialized context for:
 
 1. **Risk Management** - Risk analysis and mitigation
 2. **Stakeholder Management** - Engagement and involvement tracking
@@ -315,7 +315,7 @@ User Query
 4. Check if Resource Query → _get_resource_context()
 5. Check if Lean Query → _get_lean_context()
 6. Check if Dependency Query → _get_dependency_context()
-7. Check if Project Query → get_taskflow_context()
+7. Check if Project Query → get_PrizmAI_context()
 8. Add Knowledge Base Context
 9. Add Web Search (if enabled)
     ↓
@@ -478,4 +478,4 @@ The AI Assistant now provides **comprehensive, intelligent support** for:
 
 **Last Updated:** January 2025
 **Status:** Production Ready
-**Coverage:** 100% of TaskFlow Features
+**Coverage:** 100% of PrizmAI Features

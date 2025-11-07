@@ -1,4 +1,4 @@
-# AI Assistant Comprehensive Testing Guide
+﻿# AI Assistant Comprehensive Testing Guide
 
 **Date**: November 5, 2025  
 **Purpose**: Test data retrieval capabilities and RAG (Retrieval-Augmented Generation) abilities  
@@ -18,7 +18,7 @@ The questions are organized by category and complexity level.
 
 ## PART 1: DATA RETRIEVAL QUESTIONS
 
-These questions test the AI assistant's ability to fetch and report data from your TaskFlow project database (organizations, boards, tasks, teams, etc.).
+These questions test the AI assistant's ability to fetch and report data from your PrizmAI project database (organizations, boards, tasks, teams, etc.).
 
 ### Category 1A: Organization Data Retrieval
 
@@ -653,7 +653,7 @@ To provide strategic advice grounded in both general best practices AND your spe
 
 ### Step 1: Setup
 1. Ensure AI assistant is running
-2. Have demo data loaded in your TaskFlow instance
+2. Have demo data loaded in your PrizmAI instance
 3. Open the chat interface
 
 ### Step 2: Test Sequence

@@ -1,11 +1,11 @@
-# RAG Integration - Quick Setup Summary
+﻿# RAG Integration - Quick Setup Summary
 
 ## Current Status
 
 ✅ **RAG is already fully integrated in your code!**
 
 Your chatbot has three retrieval sources:
-1. **Project Data** - Tasks, team, boards from TaskFlow
+1. **Project Data** - Tasks, team, boards from PrizmAI
 2. **Knowledge Base** - Documented insights
 3. **Web Search** - Latest information via Google Custom Search (needs API key)
 

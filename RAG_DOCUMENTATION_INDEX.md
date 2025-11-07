@@ -1,6 +1,6 @@
-# RAG Documentation Index
+﻿# RAG Documentation Index
 
-Complete guide for Retrieval Augmented Generation (RAG) integration in TaskFlow AI Assistant.
+Complete guide for Retrieval Augmented Generation (RAG) integration in PrizmAI AI Assistant.
 
 ---
 
@@ -138,7 +138,7 @@ Chatbot automatically detects:
 | Component | Status | Notes |
 |-----------|--------|-------|
 | Code Implementation | ✅ Complete | All files exist |
-| Project Data Retrieval | ✅ Ready | Pulls from TaskFlow DB |
+| Project Data Retrieval | ✅ Ready | Pulls from PrizmAI DB |
 | Knowledge Base | ✅ Ready | Searches KB entries |
 | Query Detection | ✅ Ready | Auto-classifies queries |
 | Google Search Client | ✅ Ready | Code complete |
@@ -172,7 +172,7 @@ Chatbot automatically detects:
 ## File Structure
 
 ```
-TaskFlow/
+PrizmAI/
 ├─ ai_assistant/
 │  ├─ utils/
 │  │  ├─ google_search.py ✅ (RAG web search)
@@ -261,7 +261,7 @@ ENABLE_WEB_SEARCH
 ```python
 GeminiClient()  # Handles Gemini AI
 GoogleSearchClient()  # Handles Google Search
-TaskFlowChatbotService()  # Orchestrates RAG
+PrizmAIChatbotService()  # Orchestrates RAG
 ```
 
 ### Chat Endpoint

@@ -1,5 +1,5 @@
-/**
- * Risk Management Module for TaskFlow Kanban Board
+﻿/**
+ * Risk Management Module for PrizmAI Kanban Board
  * 
  * This module provides AI-powered risk scoring, assessment, and mitigation features
  * Integrated with Google Gemini API for intelligent analysis

@@ -1,4 +1,4 @@
-# Code Changes - Complete Diff
+﻿# Code Changes - Complete Diff
 
 ## File Modified
 `ai_assistant/utils/chatbot_service.py`
@@ -171,11 +171,11 @@ def get_response(self, prompt, history=None, use_cache=True):
         # Build context
         context_parts = []
         
-        # Add TaskFlow project context
+        # Add PrizmAI project context
         if is_project_query:
-            taskflow_context = self.get_taskflow_context(use_cache)
-            if taskflow_context:
-                context_parts.append(taskflow_context)
+            PrizmAI_context = self.get_PrizmAI_context(use_cache)
+            if PrizmAI_context:
+                context_parts.append(PrizmAI_context)
         
         # ... rest of method ...
 ```
@@ -199,11 +199,11 @@ def get_response(self, prompt, history=None, use_cache=True):
                 context_parts.append(aggregate_context)
                 is_project_query = True
         
-        # Add TaskFlow project context (for single board or if no aggregate context)
+        # Add PrizmAI project context (for single board or if no aggregate context)
         if is_project_query and not context_parts:  # MODIFIED CONDITION
-            taskflow_context = self.get_taskflow_context(use_cache)
-            if taskflow_context:
-                context_parts.append(taskflow_context)
+            PrizmAI_context = self.get_PrizmAI_context(use_cache)
+            if PrizmAI_context:
+                context_parts.append(PrizmAI_context)
         
         # ... rest of method unchanged ...
         
@@ -297,11 +297,11 @@ Pass to AI → Get Response
 ### Quick Test
 ```python
 # In Django shell:
-from ai_assistant.utils.chatbot_service import TaskFlowChatbotService
+from ai_assistant.utils.chatbot_service import PrizmAIChatbotService
 from django.contrib.auth.models import User
 
 user = User.objects.first()
-service = TaskFlowChatbotService(user=user)
+service = PrizmAIChatbotService(user=user)
 
 # Test 1: Aggregate query detection
 print(service._is_aggregate_query("How many total tasks?"))  # Should print: True

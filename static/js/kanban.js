@@ -16,6 +16,188 @@ if (typeof COLUMN_SCROLL_CONFIG === 'undefined') {
     };
 }
 
+// ==========================================
+// COLUMN DRAG AND DROP SYSTEM (ISOLATED)
+// ==========================================
+// Global variables for COLUMN dragging (separate from task dragging)
+if (typeof draggedColumn === 'undefined') {
+    var draggedColumn = null;
+    var draggedColumnStartX = 0;
+    var columnDragPlaceholder = null;
+}
+
+// Column drag-drop handlers - COMPLETELY SEPARATE from task dragging
+function initColumnDragDrop() {
+    console.log('[Column DnD] Initializing column drag-and-drop...');
+    const columns = document.querySelectorAll('.kanban-column');
+    
+    columns.forEach((column, index) => {
+        // Store reference for later use
+        column.dataset.columnIndex = index;
+        
+        // Add visual cue to header
+        const header = column.querySelector('.kanban-column-header');
+        if (header) {
+            header.style.cursor = 'grab';
+            header.classList.add('column-draggable-header');
+        }
+        
+        // Attach column drag listeners directly to the COLUMN ELEMENT
+        // (since draggable="true" is on the column, not the header)
+        column.addEventListener('dragstart', columnDragStart);
+        column.addEventListener('dragend', columnDragEnd);
+        column.addEventListener('dragover', columnDragOver);
+        column.addEventListener('dragenter', columnDragEnter);
+        column.addEventListener('dragleave', columnDragLeave);
+        column.addEventListener('drop', columnDrop);
+    });
+    
+    console.log('[Column DnD] Column drag-and-drop initialized for', columns.length, 'columns');
+}
+
+function columnDragStart(e) {
+    // Prevent event from bubbling to task drag handlers
+    e.stopPropagation();
+    
+    // Only allow dragging from the header area to avoid interfering with tasks
+    const header = e.target.closest('.kanban-column-header');
+    if (!header) {
+        // If not clicking on header, check if clicking on task area
+        const taskArea = e.target.closest('.kanban-column-tasks');
+        if (taskArea) {
+            // Don't start column drag if clicking on tasks
+            return;
+        }
+    }
+    
+    // Get the column
+    draggedColumn = e.target.closest('.kanban-column');
+    if (!draggedColumn) return;
+    
+    draggedColumnStartX = e.clientX;
+    
+    console.log('[Column DnD] Column drag started:', draggedColumn.id);
+    
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/html', draggedColumn.innerHTML);
+    
+    // Set custom drag image (semi-transparent column thumbnail)
+    const dragImage = draggedColumn.cloneNode(true);
+    dragImage.style.opacity = '0.7';
+    dragImage.style.position = 'absolute';
+    dragImage.style.top = '-9999px';
+    document.body.appendChild(dragImage);
+    e.dataTransfer.setDragImage(dragImage, 0, 0);
+    setTimeout(() => dragImage.remove(), 0);
+    
+    // Visual feedback
+    draggedColumn.classList.add('column-dragging');
+    const columnHeader = draggedColumn.querySelector('.kanban-column-header');
+    if (columnHeader) columnHeader.style.cursor = 'grabbing';
+    draggedColumn.style.opacity = '0.6';
+}
+
+function columnDragEnd(e) {
+    e.stopPropagation();
+    
+    console.log('[Column DnD] Column drag ended');
+    
+    if (draggedColumn) {
+        draggedColumn.classList.remove('column-dragging');
+        draggedColumn.style.opacity = '1';
+        const header = draggedColumn.querySelector('.kanban-column-header');
+        if (header) header.style.cursor = 'grab';
+    }
+    
+    // Remove placeholder
+    if (columnDragPlaceholder) {
+        columnDragPlaceholder.remove();
+        columnDragPlaceholder = null;
+    }
+    
+    draggedColumn = null;
+}
+
+function columnDragOver(e) {
+    // CRITICAL: Only handle if a column is being dragged
+    if (!draggedColumn) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'move';
+}
+
+function columnDragEnter(e) {
+    if (!draggedColumn) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const targetColumn = e.target.closest('.kanban-column');
+    if (!targetColumn || targetColumn === draggedColumn) return;
+    
+    targetColumn.classList.add('column-drag-over');
+    console.log('[Column DnD] Dragging over column:', targetColumn.id);
+}
+
+function columnDragLeave(e) {
+    if (!draggedColumn) return;
+    
+    e.stopPropagation();
+    
+    const targetColumn = e.target.closest('.kanban-column');
+    if (!targetColumn) return;
+    
+    // Only remove class if actually leaving the column
+    if (!targetColumn.contains(e.relatedTarget)) {
+        targetColumn.classList.remove('column-drag-over');
+        console.log('[Column DnD] Left column:', targetColumn.id);
+    }
+}
+
+function columnDrop(e) {
+    if (!draggedColumn) return;
+    
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const targetColumn = e.target.closest('.kanban-column');
+    if (!targetColumn || targetColumn === draggedColumn) return;
+    
+    targetColumn.classList.remove('column-drag-over');
+    
+    console.log('[Column DnD] Dropping column:', draggedColumn.id, 'onto:', targetColumn.id);
+    
+    // Get the board container
+    const board = document.getElementById('kanban-board');
+    if (!board) return;
+    
+    // Get all columns (excluding add button)
+    const allColumns = Array.from(board.querySelectorAll('.kanban-column')).filter(col => col.id);
+    
+    // Find indices
+    const draggedIndex = allColumns.indexOf(draggedColumn);
+    const targetIndex = allColumns.indexOf(targetColumn);
+    
+    if (draggedIndex === -1 || targetIndex === -1) return;
+    
+    console.log('[Column DnD] Reordering from index', draggedIndex, 'to', targetIndex);
+    
+    // Perform DOM reordering
+    if (draggedIndex < targetIndex) {
+        targetColumn.parentNode.insertBefore(draggedColumn, targetColumn.nextSibling);
+    } else {
+        targetColumn.parentNode.insertBefore(draggedColumn, targetColumn);
+    }
+    
+    // Update backend
+    updateColumnPositionsOnServer(allColumns);
+}
+
+// ==========================================
+// END COLUMN DRAG AND DROP SYSTEM
+// ==========================================
+
 // Check if event listeners are already attached
 if (typeof kanbanInitialized === 'undefined') {
     var kanbanInitialized = false;
@@ -34,6 +216,7 @@ if (typeof kanbanInitialized === 'undefined') {
                 
                 initKanbanBoard();
                 initColumnOrdering();
+                initColumnDragDrop();  // NEW: Initialize column drag-and-drop
                 setupTaskProgress();
                 // Add keyboard support for accessibility
                 addKeyboardSupport();
@@ -84,11 +267,77 @@ function initKanbanBoard() {
 // Initialize column ordering functionality
 function initColumnOrdering() {
     const refreshButton = document.getElementById('refresh-columns-btn');
+    const resetButton = document.getElementById('reset-columns-btn');
+    const togglePanelButton = document.getElementById('toggle-column-panel');
+    const columnOrderingContent = document.getElementById('column-ordering-content');
+    const toggleIcon = document.getElementById('toggle-column-icon');
+    
     if (!refreshButton) return;
+    
+    // Check column count and show helpful notification
+    const columnCount = document.querySelectorAll('.kanban-column').length;
+    if (columnCount > 6) {
+        setTimeout(() => {
+            showNotification(
+                `💡 Tip: With ${columnCount} columns, you can use the "Quick Column Reorder" panel below for easier rearrangement!`, 
+                'info'
+            );
+        }, 2000);
+    }
     
     // Add event listener to the refresh button
     refreshButton.addEventListener('click', function() {
         rearrangeColumns();
+    });
+    
+    // Add event listener to reset button
+    if (resetButton) {
+        resetButton.addEventListener('click', function() {
+            resetColumnPositions();
+        });
+    }
+    
+    // Toggle panel collapse/expand
+    if (togglePanelButton) {
+        togglePanelButton.addEventListener('click', function() {
+            if (columnOrderingContent.classList.contains('d-none')) {
+                columnOrderingContent.classList.remove('d-none');
+                toggleIcon.classList.remove('fa-chevron-down');
+                toggleIcon.classList.add('fa-chevron-up');
+                document.getElementById('column-ordering-panel').classList.remove('collapsed');
+            } else {
+                columnOrderingContent.classList.add('d-none');
+                toggleIcon.classList.remove('fa-chevron-up');
+                toggleIcon.classList.add('fa-chevron-down');
+                document.getElementById('column-ordering-panel').classList.add('collapsed');
+            }
+        });
+        
+        // Start collapsed if many columns
+        if (columnCount > 6) {
+            columnOrderingContent.classList.add('d-none');
+            toggleIcon.classList.remove('fa-chevron-up');
+            toggleIcon.classList.add('fa-chevron-down');
+            document.getElementById('column-ordering-panel').classList.add('collapsed');
+        }
+    }
+    
+    // Keyboard shortcut: Alt+R to focus first input
+    document.addEventListener('keydown', function(e) {
+        if (e.altKey && e.key.toLowerCase() === 'r') {
+            e.preventDefault();
+            // Expand panel if collapsed
+            if (columnOrderingContent.classList.contains('d-none')) {
+                togglePanelButton.click();
+            }
+            // Focus first input
+            const firstInput = document.querySelector('.column-position-input');
+            if (firstInput) {
+                firstInput.focus();
+                firstInput.select();
+                showNotification('Quick Column Reorder panel activated!', 'info');
+            }
+        }
     });
     
     // Validate input to ensure only numbers between min and max are entered
@@ -106,6 +355,15 @@ function initColumnOrdering() {
             }
         });
     });
+}
+
+// Reset column positions to default sequential order
+function resetColumnPositions() {
+    const positionInputs = document.querySelectorAll('.column-position-input');
+    positionInputs.forEach((input, index) => {
+        input.value = index + 1;
+    });
+    showNotification('Column positions reset to default order', 'success');
 }
 
 // Rearrange columns based on position inputs
@@ -132,7 +390,7 @@ function rearrangeColumns() {
     const hasDuplicates = positions.some((pos, index) => positions.indexOf(pos) !== index);
     
     if (hasDuplicates) {
-        alert('Error: Each column must have a unique position number.');
+        showNotification('Error: Each column must have a unique position number.', 'error');
         return;
     }
     
@@ -213,10 +471,29 @@ function saveColumnPositions(columnPositions, boardId) {
 // Update the position badges on columns after reordering
 function updateColumnPositionBadges() {
     const columns = document.querySelectorAll('.kanban-column');
+    const orderingBadgesContainer = document.getElementById('column-ordering-badges');
+    
     columns.forEach((column, index) => {
         const badge = column.querySelector('.column-position-badge');
         if (badge) {
             badge.textContent = index + 1;
+        }
+        
+        // Also update the corresponding input in the Quick Column Reorder panel
+        const columnId = column.dataset.columnId;
+        if (columnId) {
+            const input = document.querySelector(`.column-position-input[data-column-id="${columnId}"]`);
+            if (input) {
+                input.value = index + 1;
+                
+                // Reorder the input badge to match column order
+                if (orderingBadgesContainer) {
+                    const inputBadge = input.closest('.column-ordering-badge');
+                    if (inputBadge) {
+                        orderingBadgesContainer.appendChild(inputBadge);
+                    }
+                }
+            }
         }
     });
 }
@@ -245,6 +522,53 @@ function showNotification(message, type = 'info') {
             notification.remove();
         }, 150);
     }, 3000);
+}
+
+// NEW: Update column positions on server after drag-and-drop reordering
+function updateColumnPositionsOnServer(columnsInOrder) {
+    console.log('[Column DnD] Saving new column order to server...');
+    
+    const positionData = columnsInOrder.map((column, index) => {
+        return {
+            columnId: column.id.replace('column-', ''), // Extract column ID from element ID
+            position: index
+        };
+    });
+    
+    const boardId = window.location.pathname.split('/').filter(Boolean)[1];
+    
+    fetch('/columns/reorder-multiple/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: JSON.stringify({
+            columns: positionData,
+            boardId: boardId
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            console.log('[Column DnD] Column positions saved successfully');
+            updateColumnPositionBadges();
+            showNotification('Column reordered successfully', 'success');
+        } else {
+            console.error('[Column DnD] Error:', data.error);
+            showNotification('Error reordering column', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('[Column DnD] Error:', error);
+        showNotification('Error reordering column', 'error');
+    });
 }
 
 // Task Drag and Drop Handlers

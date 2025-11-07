@@ -1,4 +1,4 @@
-# AI Assistant - Quick Reference Card
+﻿# AI Assistant - Quick Reference Card
 
 **For: Marketing, Product Managers, Stakeholders**  
 **Created: October 29, 2025**
@@ -182,7 +182,7 @@ We:  Focused, integrated, affordable ✅
 
 ## COMPARISON TO ALTERNATIVES
 
-| Feature | TaskFlow AI | ChatGPT | Manual PM | BI Tool |
+| Feature | PrizmAI AI | ChatGPT | Manual PM | BI Tool |
 |---------|-----------|---------|-----------|---------|
 | Knows your data | ✅ | ❌ | ✅ | ✅ |
 | Conversational | ✅ | ✅ | ❌ | ❌ |

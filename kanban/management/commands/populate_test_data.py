@@ -1,4 +1,4 @@
-import random
+﻿import random
 from datetime import datetime, timedelta
 from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
@@ -13,6 +13,7 @@ from kanban.stakeholder_models import (
     StakeholderEngagementRecord, EngagementMetrics, StakeholderTag
 )
 from messaging.models import ChatRoom, ChatMessage
+from wiki.models import WikiCategory, WikiPage, WikiAttachment, MeetingNotes
 
 class Command(BaseCommand):
     help = 'Populate the database with test data'
@@ -37,6 +38,12 @@ class Command(BaseCommand):
         
         # Create chat room demo data
         self.create_chat_rooms_demo_data()
+        
+        # Create wiki and knowledge base demo data
+        self.create_wiki_demo_data()
+        
+        # Create meeting transcript demo data
+        self.create_meeting_transcript_demo_data()
         
         # Fix Gantt chart data with dynamic dates relative to current date
         self.stdout.write(self.style.NOTICE('\nFixing Gantt chart demo data with dynamic dates...'))
@@ -1406,3 +1413,647 @@ class Command(BaseCommand):
             
             self.stdout.write(f'    Created message from {author.username} in {chat_room.name}')
 
+    def create_wiki_demo_data(self):
+        """Create demo data for wiki and knowledge base features"""
+        self.stdout.write(self.style.NOTICE('Creating Wiki & Knowledge Base demo data...'))
+        
+        # Create wiki categories for each organization
+        for org_key, org in self.organizations.items():
+            self.stdout.write(f'  Creating wiki categories for {org.name}...')
+            
+            # Define categories based on organization type
+            if org_key == 'dev':
+                categories_data = [
+                    {
+                        'name': 'Technical Documentation',
+                        'description': 'API docs, architecture guides, and technical specifications',
+                        'icon': 'code',
+                        'color': '#3498db',
+                        'position': 1
+                    },
+                    {
+                        'name': 'Best Practices',
+                        'description': 'Coding standards, design patterns, and development guidelines',
+                        'icon': 'star',
+                        'color': '#f39c12',
+                        'position': 2
+                    },
+                    {
+                        'name': 'Onboarding',
+                        'description': 'Getting started guides for new team members',
+                        'icon': 'user-plus',
+                        'color': '#2ecc71',
+                        'position': 3
+                    },
+                    {
+                        'name': 'Meeting Notes',
+                        'description': 'Sprint planning, retrospectives, and standup notes',
+                        'icon': 'calendar',
+                        'color': '#9b59b6',
+                        'position': 4
+                    }
+                ]
+            else:  # marketing
+                categories_data = [
+                    {
+                        'name': 'Campaign Planning',
+                        'description': 'Marketing campaign strategies and plans',
+                        'icon': 'bullhorn',
+                        'color': '#e74c3c',
+                        'position': 1
+                    },
+                    {
+                        'name': 'Brand Guidelines',
+                        'description': 'Logo usage, color palettes, and brand voice',
+                        'icon': 'palette',
+                        'color': '#1abc9c',
+                        'position': 2
+                    },
+                    {
+                        'name': 'Meeting Notes',
+                        'description': 'Campaign reviews and planning sessions',
+                        'icon': 'calendar',
+                        'color': '#9b59b6',
+                        'position': 3
+                    }
+                ]
+            
+            # Create categories
+            categories = {}
+            for cat_data in categories_data:
+                category, created = WikiCategory.objects.get_or_create(
+                    organization=org,
+                    name=cat_data['name'],
+                    defaults={
+                        'description': cat_data['description'],
+                        'icon': cat_data['icon'],
+                        'color': cat_data['color'],
+                        'position': cat_data['position']
+                    }
+                )
+                categories[cat_data['name']] = category
+                if created:
+                    self.stdout.write(f'    Created category: {category.name}')
+                else:
+                    self.stdout.write(f'    Category {category.name} already exists')
+            
+            # Create wiki pages for each category
+            self.stdout.write(f'  Creating wiki pages for {org.name}...')
+            
+            if org_key == 'dev':
+                # Technical Documentation pages
+                pages_data = [
+                    {
+                        'category': 'Technical Documentation',
+                        'title': 'API Reference Guide',
+                        'content': '''# API Reference Guide
+
+## Overview
+This document provides comprehensive API documentation for our PrizmAI application.
+
+## Authentication
+All API requests require authentication using JWT tokens.
+
+```python
+headers = {
+    'Authorization': 'Bearer YOUR_TOKEN_HERE'
+}
+```
+
+## Endpoints
+
+### Tasks API
+- `GET /api/tasks/` - List all tasks
+- `POST /api/tasks/` - Create a new task
+- `GET /api/tasks/{id}/` - Get task details
+- `PUT /api/tasks/{id}/` - Update a task
+- `DELETE /api/tasks/{id}/` - Delete a task
+
+### Boards API
+- `GET /api/boards/` - List all boards
+- `POST /api/boards/` - Create a new board
+
+## Rate Limiting
+API requests are limited to 100 requests per minute per user.
+
+## Error Handling
+All errors return a JSON response with an error message and status code.
+''',
+                        'tags': ['api', 'documentation', 'reference'],
+                        'is_pinned': True
+                    },
+                    {
+                        'category': 'Technical Documentation',
+                        'title': 'Database Schema Documentation',
+                        'content': '''# Database Schema
+
+## Core Models
+
+### Task Model
+- `id` (Primary Key)
+- `title` (CharField)
+- `description` (TextField)
+- `column` (ForeignKey to Column)
+- `assigned_to` (ForeignKey to User)
+- `due_date` (DateTimeField)
+- `priority` (CharField with choices)
+
+### Board Model
+- `id` (Primary Key)
+- `name` (CharField)
+- `organization` (ForeignKey to Organization)
+- `created_by` (ForeignKey to User)
+
+## Relationships
+- One Board has many Columns
+- One Column has many Tasks
+- Tasks can be assigned to Users
+- Tasks belong to Organizations through Boards
+''',
+                        'tags': ['database', 'schema', 'models'],
+                        'is_pinned': False
+                    },
+                    {
+                        'category': 'Best Practices',
+                        'title': 'Python Code Style Guide',
+                        'content': '''# Python Code Style Guide
+
+## General Guidelines
+- Follow PEP 8 style guide
+- Use meaningful variable names
+- Keep functions small and focused
+- Write docstrings for all functions and classes
+
+## Code Examples
+
+### Good Example
+```python
+def calculate_task_priority(task, risk_score, deadline):
+    """
+    Calculate task priority based on risk and deadline.
+    
+    Args:
+        task: Task object
+        risk_score: Integer (0-100)
+        deadline: datetime object
+    
+    Returns:
+        str: Priority level ('low', 'medium', 'high', 'urgent')
+    """
+    if risk_score > 80 or is_deadline_near(deadline):
+        return 'urgent'
+    elif risk_score > 50:
+        return 'high'
+    else:
+        return 'medium'
+```
+
+## Testing
+- Write unit tests for all business logic
+- Use pytest for testing
+- Aim for >80% code coverage
+''',
+                        'tags': ['python', 'coding-standards', 'best-practices'],
+                        'is_pinned': True
+                    },
+                    {
+                        'category': 'Onboarding',
+                        'title': 'Developer Onboarding Checklist',
+                        'content': '''# Developer Onboarding Checklist
+
+## Week 1: Setup & Introduction
+- [ ] Get access to GitHub repository
+- [ ] Set up local development environment
+- [ ] Install required tools (Python, PostgreSQL, Redis)
+- [ ] Run the application locally
+- [ ] Meet the team members
+- [ ] Review codebase structure
+
+## Week 2: First Tasks
+- [ ] Fix your first bug
+- [ ] Submit your first pull request
+- [ ] Attend sprint planning
+- [ ] Read all technical documentation
+- [ ] Set up your IDE with project settings
+
+## Week 3: Integration
+- [ ] Take on a feature task
+- [ ] Participate in code reviews
+- [ ] Join team standups
+- [ ] Learn about deployment process
+
+## Resources
+- [API Documentation](/wiki/api-reference-guide/)
+- [Code Style Guide](/wiki/python-code-style-guide/)
+- [Database Schema](/wiki/database-schema-documentation/)
+''',
+                        'tags': ['onboarding', 'new-hire', 'checklist'],
+                        'is_pinned': True
+                    },
+                    {
+                        'category': 'Meeting Notes',
+                        'title': 'Sprint Planning - November 2025',
+                        'content': '''# Sprint Planning Meeting
+**Date:** November 1, 2025  
+**Duration:** 2 hours  
+**Attendees:** John, Jane, Robert, Alice, Bob
+
+## Sprint Goals
+1. Complete risk management feature enhancements
+2. Implement real-time chat notifications
+3. Fix critical bugs in Gantt chart view
+
+## Tasks Committed
+- **John:** Implement chat notifications (Story Points: 8)
+- **Jane:** Risk management UI improvements (Story Points: 5)
+- **Robert:** Gantt chart bug fixes (Story Points: 3)
+- **Alice:** API endpoint optimization (Story Points: 5)
+- **Bob:** Write unit tests for new features (Story Points: 3)
+
+## Total Story Points: 24
+
+## Notes
+- Need to schedule technical design review for chat feature
+- Database migration required for new notification system
+- QA testing window: November 10-12
+
+## Action Items
+- [ ] John to create technical design doc by Nov 3
+- [ ] Jane to update Figma designs by Nov 2
+- [ ] Robert to investigate Gantt performance issues
+''',
+                        'tags': ['sprint-planning', 'meeting-notes', 'november'],
+                        'is_pinned': False
+                    }
+                ]
+            else:  # marketing
+                pages_data = [
+                    {
+                        'category': 'Campaign Planning',
+                        'title': 'Q4 2025 Campaign Strategy',
+                        'content': '''# Q4 2025 Marketing Campaign Strategy
+
+## Campaign Overview
+Launch a comprehensive marketing campaign to increase user acquisition by 30%.
+
+## Target Audience
+- Small to medium-sized tech companies
+- Project managers and team leads
+- Age range: 25-45
+- Tech-savvy professionals
+
+## Campaign Channels
+1. **Social Media** (Budget: $10,000)
+   - LinkedIn ads targeting project managers
+   - Twitter engagement campaign
+   - Instagram visual storytelling
+
+2. **Content Marketing** (Budget: $5,000)
+   - Blog posts about project management
+   - Case studies from existing customers
+   - Video tutorials and demos
+
+3. **Email Marketing** (Budget: $3,000)
+   - Newsletter campaigns
+   - Drip campaigns for leads
+   - Re-engagement campaigns
+
+## Timeline
+- November: Campaign launch
+- December: Optimization phase
+- January: Analysis and reporting
+
+## Success Metrics
+- 10,000 new website visits
+- 500 new trial sign-ups
+- 30% increase in social media engagement
+''',
+                        'tags': ['campaign', 'strategy', 'q4-2025'],
+                        'is_pinned': True
+                    },
+                    {
+                        'category': 'Brand Guidelines',
+                        'title': 'PrizmAI Brand Style Guide',
+                        'content': '''# PrizmAI Brand Style Guide
+
+## Logo Usage
+Always use the full-color logo on white backgrounds.
+Use the white logo on dark backgrounds.
+
+### Logo Specifications
+- Minimum size: 120px width
+- Clear space: 20px on all sides
+- File formats: SVG (preferred), PNG
+
+## Color Palette
+
+### Primary Colors
+- **Blue:** #3498db - Primary brand color
+- **Dark Blue:** #2980b9 - Text and accents
+
+### Secondary Colors
+- **Green:** #2ecc71 - Success states
+- **Orange:** #f39c12 - Warnings
+- **Red:** #e74c3c - Errors
+- **Purple:** #9b59b6 - Highlights
+
+## Typography
+- **Headings:** Inter Bold
+- **Body Text:** Inter Regular
+- **Code:** Source Code Pro
+
+## Voice & Tone
+- Professional but friendly
+- Clear and concise
+- Action-oriented
+- Helpful and supportive
+
+## Examples
+✅ "Complete your task in minutes"
+❌ "Our advanced task completion functionality enables rapid workflow optimization"
+''',
+                        'tags': ['brand', 'style-guide', 'design'],
+                        'is_pinned': True
+                    },
+                    {
+                        'category': 'Meeting Notes',
+                        'title': 'Marketing Team Sync - November 2025',
+                        'content': '''# Marketing Team Weekly Sync
+**Date:** November 4, 2025  
+**Attendees:** Carol (Manager), David
+
+## Updates
+- **Carol:** Q4 campaign is live, initial metrics looking good
+- **David:** Completed social media content calendar for November
+
+## Discussion Points
+1. Social media engagement up 15% this week
+2. Need to create more video content
+3. Planning webinar series for December
+
+## Action Items
+- [ ] Carol: Review campaign analytics by end of week
+- [ ] David: Create 3 new video scripts by Friday
+- [ ] Both: Brainstorm webinar topics for next meeting
+
+## Next Meeting
+November 11, 2025 at 2:00 PM
+''',
+                        'tags': ['meeting-notes', 'marketing', 'weekly-sync'],
+                        'is_pinned': False
+                    }
+                ]
+            
+            # Create wiki pages
+            for page_data in pages_data:
+                category = categories[page_data['category']]
+                page, created = WikiPage.objects.get_or_create(
+                    organization=org,
+                    title=page_data['title'],
+                    defaults={
+                        'category': category,
+                        'content': page_data['content'],
+                        'tags': page_data.get('tags', []),
+                        'is_pinned': page_data.get('is_pinned', False),
+                        'is_published': True,
+                        'created_by': self.users['admin'],
+                        'updated_by': self.users['admin'],
+                        'view_count': random.randint(5, 50)
+                    }
+                )
+                if created:
+                    self.stdout.write(f'    Created wiki page: {page.title}')
+                else:
+                    self.stdout.write(f'    Wiki page {page.title} already exists')
+        
+        self.stdout.write(self.style.SUCCESS('  ✓ Wiki & Knowledge Base demo data created!'))
+
+    def create_meeting_transcript_demo_data(self):
+        """Create demo data for meeting transcripts"""
+        self.stdout.write(self.style.NOTICE('Creating Meeting Transcript demo data...'))
+        
+        # Get boards for creating meeting transcripts
+        for org_key, org in self.organizations.items():
+            boards = org.boards.all()
+            
+            for board in boards:
+                self.stdout.write(f'  Creating meeting transcripts for {board.name}...')
+                
+                # Define meeting transcripts based on board type
+                if 'Software' in board.name or 'Bug' in board.name:
+                    meetings_data = [
+                        {
+                            'title': 'Sprint Planning - November Sprint',
+                            'meeting_type': 'planning',
+                            'transcript_text': '''Team: John, Jane, Robert, Alice, Bob
+Duration: 90 minutes
+
+John: Let's kick off sprint planning. We have 24 story points capacity this sprint.
+
+Jane: I'd like to take the risk management UI improvements. That's about 5 points.
+
+Robert: I can handle the Gantt chart bugs. Should be around 3 points.
+
+Alice: I'll work on API optimization. Estimate 5 points.
+
+Bob: I'll focus on writing tests for the new features - 3 points.
+
+John: That leaves me with the chat notifications feature at 8 points. Total is 24.
+
+Jane: Sounds good. When's the technical review?
+
+John: I'll schedule it for Wednesday. Any blockers?
+
+Robert: Need access to production logs for debugging.
+
+Alice: I'll get you access by end of day.
+
+John: Great! Let's make this a successful sprint.
+''',
+                            'participants': ['john_doe', 'jane_smith', 'robert_johnson', 'alice_williams', 'bob_martinez'],
+                            'tasks_count': 3
+                        },
+                        {
+                            'title': 'Daily Standup - November 5',
+                            'meeting_type': 'standup',
+                            'transcript_text': '''Daily Standup - 15 minutes
+
+John: Yesterday I completed the authentication flow for chat. Today working on notifications. No blockers.
+
+Jane: Finished the risk UI mockups. Today implementing the frontend components. Need design review.
+
+Robert: Fixed two critical Gantt bugs yesterday. Today investigating the performance issue. Blocked by production logs access.
+
+Alice: Completed API endpoint refactoring. Today starting on optimization. No blockers.
+
+Bob: Wrote unit tests for authentication module. Today continuing with chat tests. No blockers.
+
+Action items:
+- Jane schedules design review with team
+- Robert gets production logs access from Alice
+- Team to review pull requests by end of day
+''',
+                            'participants': ['john_doe', 'jane_smith', 'robert_johnson', 'alice_williams', 'bob_martinez'],
+                            'tasks_count': 2
+                        },
+                        {
+                            'title': 'Technical Design Review - Chat Notifications',
+                            'meeting_type': 'review',
+                            'transcript_text': '''Technical Design Review
+Topic: Real-time Chat Notifications
+Duration: 60 minutes
+
+John: Presenting the technical design for chat notifications using WebSockets.
+
+Architecture:
+- Django Channels for WebSocket support
+- Redis as message broker
+- Celery for background tasks
+- Push notifications via Firebase
+
+Jane: How do we handle offline users?
+
+John: Messages are queued and sent when user reconnects. We also store notification history.
+
+Robert: What about scalability?
+
+John: Redis pub/sub can handle thousands of concurrent connections. We can horizontally scale the channels workers.
+
+Alice: Security concerns?
+
+John: All WebSocket connections are authenticated with JWT tokens. Messages are encrypted in transit.
+
+Bob: Testing strategy?
+
+John: Unit tests for message handlers, integration tests for WebSocket connections, load testing with 1000 concurrent users.
+
+Approved: Team approved the design with minor modifications to error handling.
+''',
+                            'participants': ['john_doe', 'jane_smith', 'robert_johnson', 'alice_williams', 'bob_martinez'],
+                            'tasks_count': 1
+                        }
+                    ]
+                elif 'Marketing' in board.name:
+                    meetings_data = [
+                        {
+                            'title': 'Q4 Campaign Planning Meeting',
+                            'meeting_type': 'planning',
+                            'transcript_text': '''Marketing Campaign Planning
+Attendees: Carol, David
+Duration: 60 minutes
+
+Carol: Let's plan our Q4 marketing campaign. Goal is 30% user growth.
+
+David: I've prepared a content calendar. We're focusing on LinkedIn and Twitter.
+
+Carol: Great. What's the budget breakdown?
+
+David: Social media ads $10k, content creation $5k, email campaigns $3k.
+
+Carol: Approved. What about content themes?
+
+David: Week 1-2: Product features
+Week 3-4: Customer success stories
+Week 5-6: Industry trends
+Week 7-8: Year-end promotions
+
+Carol: I like it. Let's also do a webinar series.
+
+David: Good idea. I'll draft topics for next week.
+
+Carol: Timeline?
+
+David: Campaign launches November 15. First webinar December 1.
+
+Action items:
+- David creates detailed content calendar
+- Carol approves social media creatives
+- Both brainstorm webinar topics
+''',
+                            'participants': ['carol_anderson', 'david_taylor'],
+                            'tasks_count': 2
+                        },
+                        {
+                            'title': 'Weekly Marketing Sync',
+                            'meeting_type': 'general',
+                            'transcript_text': '''Weekly Marketing Team Sync
+Date: November 4, 2025
+
+Carol: Let's review this week's metrics.
+
+David: Social media engagement up 15%. LinkedIn performing best.
+
+Carol: Excellent! How about email campaigns?
+
+David: Open rate 22%, click rate 4.5%. Above industry average.
+
+Carol: What's working?
+
+David: Personalized subject lines and customer testimonials.
+
+Carol: Keep that up. Any challenges?
+
+David: Video content creation is taking longer than expected.
+
+Carol: Let's allocate more budget for freelance videographers.
+
+David: That would help. I'll get quotes.
+
+Carol: Next week priorities?
+
+David: Finish November content, start December planning.
+
+Carol: Sounds good. Great work this week!
+''',
+                            'participants': ['carol_anderson', 'david_taylor'],
+                            'tasks_count': 1
+                        }
+                    ]
+                else:
+                    continue
+                
+                # Create meeting notes
+                for meeting_data in meetings_data:
+                    # Calculate meeting date (within last 2 weeks)
+                    meeting_date = timezone.now() - timedelta(days=random.randint(1, 14))
+                    
+                    # Get participants as User objects
+                    participants = [self.users[username] for username in meeting_data['participants'] if username in self.users]
+                    
+                    meeting, created = MeetingNotes.objects.get_or_create(
+                        organization=org,
+                        title=meeting_data['title'],
+                        date=meeting_date,
+                        defaults={
+                            'meeting_type': meeting_data['meeting_type'],
+                            'content': f"# {meeting_data['title']}\n\n{meeting_data['transcript_text']}",
+                            'transcript_text': meeting_data['transcript_text'],
+                            'created_by': participants[0] if participants else self.users['admin'],
+                            'related_board': board,
+                            'duration_minutes': random.randint(15, 120),
+                            'processing_status': 'completed',
+                            'processed_at': timezone.now(),
+                            'tasks_extracted_count': meeting_data['tasks_count'],
+                            'tasks_created_count': random.randint(0, meeting_data['tasks_count']),
+                            'action_items': [
+                                {'task': 'Complete assigned tasks', 'assigned_to': p.username, 'status': 'pending'} 
+                                for p in participants[:meeting_data['tasks_count']]
+                            ],
+                            'decisions': ['Approved technical design', 'Set sprint goals', 'Allocated resources'],
+                            'extraction_results': {
+                                'summary': f"Meeting about {meeting_data['title']}",
+                                'action_items': meeting_data['tasks_count'],
+                                'key_decisions': ['Approved technical design', 'Set sprint goals'],
+                                'next_steps': ['Complete assigned tasks', 'Review progress next meeting']
+                            }
+                        }
+                    )
+                    
+                    # Add attendees
+                    if created:
+                        meeting.attendees.set(participants)
+                        self.stdout.write(f'    Created meeting notes: {meeting.title}')
+                    else:
+                        self.stdout.write(f'    Meeting notes {meeting.title} already exists')
+        
+        self.stdout.write(self.style.SUCCESS('  ✓ Meeting notes demo data created!'))

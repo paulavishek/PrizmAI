@@ -1,4 +1,4 @@
-# 🎊 EVERYTHING IS READY! HERE'S YOUR NEXT 3 STEPS
+﻿# 🎊 EVERYTHING IS READY! HERE'S YOUR NEXT 3 STEPS
 
 ## Step 1: Get Your Free API Key (5 minutes)
 
@@ -18,7 +18,7 @@ That's it. You have your free Google Gemini API key. Keep it safe!
 ## Step 2: Update Your `.env` File (2 minutes)
 
 ### Open or Create: `.env` 
-Location: `c:\Users\Avishek Paul\TaskFlow\.env`
+Location: `c:\Users\Avishek Paul\PrizmAI\.env`
 
 ### Add This One Line:
 ```
@@ -40,7 +40,7 @@ Save the file.
 
 ### Open Terminal/PowerShell and Navigate:
 ```
-cd c:\Users\Avishek Paul\TaskFlow
+cd c:\Users\Avishek Paul\PrizmAI
 ```
 
 ### Run Migrations:
@@ -161,7 +161,7 @@ Pick one based on what you need!
 
 ## 🌟 You Now Have
 
-✅ Complete AI chatbot integrated into TaskFlow
+✅ Complete AI chatbot integrated into PrizmAI
 ✅ Beautiful responsive UI ready to use
 ✅ Free Google Gemini AI (no credit card needed)
 ✅ Optional web search capability
@@ -255,7 +255,7 @@ After you get it running:
 A: No! Google Gemini is free. You only pay if you add extra features.
 
 **Q: Is my data private?**
-A: Yes! Your project data stays in TaskFlow. The AI only sees questions you ask.
+A: Yes! Your project data stays in PrizmAI. The AI only sees questions you ask.
 
 **Q: What if the AI is wrong?**
 A: Always verify important info. The AI is helpful but not perfect. You're the expert.
@@ -266,7 +266,7 @@ A: Yes! OpenAI is pre-integrated as fallback. See INTEGRATION_GUIDE.md for detai
 **Q: Can I customize the prompts?**
 A: Yes! See the customization section in INTEGRATION_GUIDE.md.
 
-**Q: Will it slow down TaskFlow?**
+**Q: Will it slow down PrizmAI?**
 A: No! It runs separately and doesn't affect other features.
 
 **Q: Can multiple people use it?**
@@ -324,7 +324,7 @@ Copy-paste these in PowerShell (one at a time):
 
 ```powershell
 # Navigate to your project
-cd c:\Users\Avishek Paul\TaskFlow
+cd c:\Users\Avishek Paul\PrizmAI
 
 # Create/update .env with your API key
 # (Do this manually or with your editor)
@@ -352,7 +352,7 @@ A complete AI Project Assistant with:
 - 6 beautiful templates
 - 8 comprehensive guides
 - Free Google Gemini integration
-- Full TaskFlow integration
+- Full PrizmAI integration
 - Production-ready quality
 
 All in one implementation!

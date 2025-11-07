@@ -1,6 +1,6 @@
-# RAG Setup Visual Guide
+﻿# RAG Setup Visual Guide
 
-## Your TaskFlow RAG Journey
+## Your PrizmAI RAG Journey
 
 ```
 Today (You are here)
@@ -112,7 +112,7 @@ START
 
 ```
 ┌─────────────────────────────────────────────────┐
-│          TASKFLOW AI CHATBOT                    │
+│          PrizmAI AI CHATBOT                    │
 ├─────────────────────────────────────────────────┤
 │                                                 │
 │  ┌────────────────────────────────────────┐   │

@@ -121,70 +121,71 @@ class WikiLinkForm(forms.ModelForm):
         return cleaned_data
 
 
-class MeetingNotesForm(forms.ModelForm):
-    attendee_usernames = forms.CharField(
-        required=False,
-        widget=forms.TextInput(attrs={
-            'class': 'form-control',
-            'placeholder': 'Attendee usernames separated by commas',
-            'data-role': 'tagsinput'
-        }),
-        help_text='Enter usernames separated by commas'
-    )
-    
-    class Meta:
-        model = MeetingNotes
-        fields = ['title', 'meeting_type', 'date', 'content', 'transcript_text', 'transcript_file', 
-                  'related_board', 'duration_minutes', 'decisions']
-        widgets = {
-            'title': forms.TextInput(attrs={
-                'class': 'form-control form-control-lg',
-                'placeholder': 'Meeting title'
-            }),
-            'meeting_type': forms.Select(attrs={'class': 'form-control'}),
-            'date': forms.DateTimeInput(attrs={
-                'class': 'form-control',
-                'type': 'datetime-local'
-            }),
-            'content': forms.Textarea(attrs={
-                'class': 'form-control markdown-editor',
-                'rows': 10,
-                'placeholder': 'Enter meeting notes (Markdown supported)'
-            }),
-            'transcript_text': forms.Textarea(attrs={
-                'class': 'form-control',
-                'rows': 8,
-                'placeholder': 'Paste meeting transcript here for AI analysis'
-            }),
-            'transcript_file': forms.FileInput(attrs={
-                'class': 'form-control',
-                'accept': '.txt,.pdf,.docx'
-            }),
-            'related_board': forms.Select(attrs={'class': 'form-control'}),
-            'duration_minutes': forms.NumberInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Duration in minutes'
-            }),
-            'decisions': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Decisions separated by commas',
-                'data-role': 'tagsinput'
-            }),
-        }
-    
-    def __init__(self, *args, organization=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        if organization:
-            from kanban.models import Board
-            self.fields['related_board'].queryset = Board.objects.filter(organization=organization)
-    
-    def clean_decisions(self):
-        """Convert comma-separated decisions to list"""
-        decisions_str = self.cleaned_data.get('decisions', '')
-        if isinstance(decisions_str, str):
-            decisions = [d.strip() for d in decisions_str.split(',') if d.strip()]
-            return decisions
-        return decisions_str
+# MEETING FEATURE DISABLED - MeetingNotesForm commented out
+# class MeetingNotesForm(forms.ModelForm):
+#     attendee_usernames = forms.CharField(
+#         required=False,
+#         widget=forms.TextInput(attrs={
+#             'class': 'form-control',
+#             'placeholder': 'Attendee usernames separated by commas',
+#             'data-role': 'tagsinput'
+#         }),
+#         help_text='Enter usernames separated by commas'
+#     )
+#     
+#     class Meta:
+#         model = MeetingNotes
+#         fields = ['title', 'meeting_type', 'date', 'content', 'transcript_text', 'transcript_file', 
+#                   'related_board', 'duration_minutes', 'decisions']
+#         widgets = {
+#             'title': forms.TextInput(attrs={
+#                 'class': 'form-control form-control-lg',
+#                 'placeholder': 'Meeting title'
+#             }),
+#             'meeting_type': forms.Select(attrs={'class': 'form-control'}),
+#             'date': forms.DateTimeInput(attrs={
+#                 'class': 'form-control',
+#                 'type': 'datetime-local'
+#             }),
+#             'content': forms.Textarea(attrs={
+#                 'class': 'form-control markdown-editor',
+#                 'rows': 10,
+#                 'placeholder': 'Enter meeting notes (Markdown supported)'
+#             }),
+#             'transcript_text': forms.Textarea(attrs={
+#                 'class': 'form-control',
+#                 'rows': 8,
+#                 'placeholder': 'Paste meeting transcript here for AI analysis'
+#             }),
+#             'transcript_file': forms.FileInput(attrs={
+#                 'class': 'form-control',
+#                 'accept': '.txt,.pdf,.docx'
+#             }),
+#             'related_board': forms.Select(attrs={'class': 'form-control'}),
+#             'duration_minutes': forms.NumberInput(attrs={
+#                 'class': 'form-control',
+#                 'placeholder': 'Duration in minutes'
+#             }),
+#             'decisions': forms.TextInput(attrs={
+#                 'class': 'form-control',
+#                 'placeholder': 'Decisions separated by commas',
+#                 'data-role': 'tagsinput'
+#             }),
+#         }
+#     
+#     def __init__(self, *args, organization=None, **kwargs):
+#         super().__init__(*args, **kwargs)
+#         if organization:
+#             from kanban.models import Board
+#             self.fields['related_board'].queryset = Board.objects.filter(organization=organization)
+#     
+#     def clean_decisions(self):
+#         """Convert comma-separated decisions to list"""
+#         decisions_str = self.cleaned_data.get('decisions', '')
+#         if isinstance(decisions_str, str):
+#             decisions = [d.strip() for d in decisions_str.split(',') if d.strip()]
+#             return decisions
+#         return decisions_str
 
 
 class WikiPageSearchForm(forms.Form):

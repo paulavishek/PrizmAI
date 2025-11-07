@@ -1,4 +1,4 @@
-# AI Assistant: Quick Capability Checklist
+﻿# AI Assistant: Quick Capability Checklist
 
 **TL;DR Version - Copy this for marketing/presentations**
 
@@ -145,7 +145,7 @@
 > "Get AI-powered insights about your projects. Ask about tasks, team workload, risks, and blockers. Receive intelligent recommendations to improve your workflow."
 
 ### Long Version
-> "TaskFlow AI Assistant is your personal project management advisor. Ask it anything about your boards, tasks, and team. Get instant answers about project status, identify risks and blockers, understand team workload, and receive intelligent recommendations for better planning. The AI learns your project structure and provides context-aware suggestions to help you make better decisions."
+> "PrizmAI AI Assistant is your personal project management advisor. Ask it anything about your boards, tasks, and team. Get instant answers about project status, identify risks and blockers, understand team workload, and receive intelligent recommendations for better planning. The AI learns your project structure and provides context-aware suggestions to help you make better decisions."
 
 ---
 

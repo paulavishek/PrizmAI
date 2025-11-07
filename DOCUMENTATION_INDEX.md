@@ -1,4 +1,4 @@
-# AI Assistant Fix - Complete Documentation Index
+﻿# AI Assistant Fix - Complete Documentation Index
 
 ## 📋 Quick Reference
 
@@ -322,7 +322,7 @@ AI_ASSISTANT_CAPABILITY_ANALYSIS.md
 
 All documents are in the root directory:
 ```
-c:\Users\Avishek Paul\TaskFlow\
+c:\Users\Avishek Paul\PrizmAI\
 ├── QUICK_ISSUE_SUMMARY.txt
 ├── AI_ASSISTANT_TEST_GUIDE.md
 ├── AI_ASSISTANT_CAPABILITIES_SUMMARY.md

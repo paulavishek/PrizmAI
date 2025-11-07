@@ -1,6 +1,6 @@
----
+﻿---
 name: Feature request
-about: Suggest an idea for TaskFlow
+about: Suggest an idea for PrizmAI
 title: '[FEATURE] '
 labels: 'enhancement'
 assignees: ''

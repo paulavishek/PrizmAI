@@ -1,4 +1,4 @@
-# Issue Resolution Summary - AI Assistant Aggregate Query Support
+﻿# Issue Resolution Summary - AI Assistant Aggregate Query Support
 
 ## 📋 Issue Reported
 User asked the AI Assistant: **"How many total tasks are in all the boards?"**
@@ -21,7 +21,7 @@ The AI Assistant implementation was **by design** limited to single-board contex
 
 The `chatbot_service.py` had two methods that needed enhancement:
 
-1. **`get_taskflow_context()`** - Only fetched full data for single boards
+1. **`get_PrizmAI_context()`** - Only fetched full data for single boards
 2. **`get_response()`** - Didn't check for aggregate queries
 
 ---

@@ -1,4 +1,4 @@
-# AI Assistant Testing - Master Index & Implementation Guide
+﻿# AI Assistant Testing - Master Index & Implementation Guide
 
 **Created**: November 5, 2025  
 **Purpose**: Comprehensive guide to testing your AI Assistant's capabilities
@@ -392,7 +392,7 @@ Plan and implement fixes
 
 ### Running the AI Assistant
 ```bash
-# From TaskFlow directory
+# From PrizmAI directory
 python manage.py runserver
 
 # Open browser to
@@ -412,8 +412,8 @@ tail -f logs/chatbot.log
 ### Running Tests Programmatically
 ```bash
 python manage.py shell
-from ai_assistant.utils.chatbot_service import TaskFlowChatbotService
-service = TaskFlowChatbotService(user=request.user)
+from ai_assistant.utils.chatbot_service import PrizmAIChatbotService
+service = PrizmAIChatbotService(user=request.user)
 response = service.get_response("Your test question")
 print(response)
 ```

@@ -1,8 +1,8 @@
-# TaskFlow Dependency Management Integration Guide
+﻿# PrizmAI Dependency Management Integration Guide
 
 ## Overview
 
-This guide explains how to use the new Task Dependency Management features integrated from the ReqManager project into TaskFlow. These features enable you to:
+This guide explains how to use the new Task Dependency Management features integrated from the ReqManager project into PrizmAI. These features enable you to:
 
 1. **Create parent-child task relationships** - Organize tasks hierarchically
 2. **Build visual dependency trees** - Visualize task dependencies and relationships

@@ -1,4 +1,4 @@
-# 🔧 Gantt Chart Quick Fix Guide
+﻿# 🔧 Gantt Chart Quick Fix Guide
 
 ## What Was Fixed
 
@@ -20,7 +20,7 @@
 
 1. **Start the server** (if not running):
    ```bash
-   .\start_taskflow.bat
+   .\start_PrizmAI.bat
    ```
 
 2. **Login**:

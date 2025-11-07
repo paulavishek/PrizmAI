@@ -1,4 +1,4 @@
-from django.db import models
+﻿from django.db import models
 from django.contrib.auth.models import User
 from colorfield.fields import ColorField
 from accounts.models import Organization
@@ -358,7 +358,7 @@ class MeetingTranscript(models.Model):
 class ResourceDemandForecast(models.Model):
     """
     Store predictive analytics for team member demand and workload
-    Adapted from ResourcePro for TaskFlow's kanban board
+    Adapted from ResourcePro for PrizmAI's kanban board
     """
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='forecasts')
     forecast_date = models.DateField(auto_now_add=True, help_text="Date when forecast was generated")

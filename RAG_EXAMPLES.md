@@ -1,4 +1,4 @@
-# RAG Examples - Chatbot Query Patterns
+﻿# RAG Examples - Chatbot Query Patterns
 
 Your AI chatbot automatically uses RAG (Retrieval Augmented Generation) to combine multiple data sources. Here are real examples:
 
@@ -147,8 +147,8 @@ Top Project Management Tool Stacks for 2025 (Distributed Teams):
 - Industry adoption: 35% of enterprises
 
 **For Your Context (based on KB):**
-TaskFlow is strong for kanban boards. Consider:
-- TaskFlow (you have this!) + Slack integration
+PrizmAI is strong for kanban boards. Consider:
+- PrizmAI (you have this!) + Slack integration
 - Add: Google Docs for documentation
 - Add: GitHub for code integration
 
@@ -210,7 +210,7 @@ These queries use Google Search + RAG:
 - Anything mentioning current year or "2025"
 
 ### 📊 Project Data Triggers
-These queries use TaskFlow data + KB:
+These queries use PrizmAI data + KB:
 - "What tasks..."
 - "Which team members..."
 - "What's the status..."

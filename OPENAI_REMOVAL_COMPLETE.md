@@ -1,6 +1,6 @@
-# ✅ OpenAI Removal Complete - Summary
+﻿# ✅ OpenAI Removal Complete - Summary
 
-Your TaskFlow AI Project Assistant has been successfully **simplified to use only Google Gemini 2.5-Flash**.
+Your PrizmAI AI Project Assistant has been successfully **simplified to use only Google Gemini 2.5-Flash**.
 
 ---
 
@@ -82,7 +82,7 @@ The only thing that changed is **OpenAI support was removed** (they won't see a 
 
 ### 1. Run Migrations
 ```bash
-cd c:\Users\Avishek Paul\TaskFlow
+cd c:\Users\Avishek Paul\PrizmAI
 python manage.py makemigrations ai_assistant
 python manage.py migrate
 ```

@@ -1,8 +1,8 @@
-# Message Read Feature - Complete Implementation Summary
+﻿# Message Read Feature - Complete Implementation Summary
 
 ## ✅ Feature Implementation Complete
 
-The **Message Read** feature has been successfully implemented for the TaskFlow messaging system. This feature allows users to mark messages as read and automatically tracks notification counts based on actual unread messages.
+The **Message Read** feature has been successfully implemented for the PrizmAI messaging system. This feature allows users to mark messages as read and automatically tracks notification counts based on actual unread messages.
 
 ## Problem Solved
 

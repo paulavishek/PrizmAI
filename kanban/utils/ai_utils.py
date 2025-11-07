@@ -1,8 +1,8 @@
-"""
+﻿"""
 Utility module for integrating with Google Generative AI (Gemini) API.
 
 This module provides helper functions to call the Gemini API for various
-AI-powered features in the TaskFlow application.
+AI-powered features in the PrizmAI application.
 """
 import os
 import logging

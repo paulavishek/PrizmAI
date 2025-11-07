@@ -1,4 +1,4 @@
-# TaskFlow AI Project Assistant - Quick Reference
+﻿# PrizmAI AI Project Assistant - Quick Reference
 
 ## 🚀 What You Just Got
 
@@ -6,7 +6,7 @@ A fully integrated AI-powered project management assistant with:
 
 ✅ **Dual AI Models** - Google Gemini + OpenAI GPT-4  
 ✅ **Web Intelligence** - Google Search integration (RAG)  
-✅ **Project Context** - Direct access to TaskFlow data  
+✅ **Project Context** - Direct access to PrizmAI data  
 ✅ **Chat Sessions** - Persistent conversation storage  
 ✅ **Analytics** - Usage tracking and insights  
 ✅ **Smart Recommendations** - Task and resource optimization  
@@ -91,7 +91,7 @@ python manage.py runserver
 User: "What's blocking the payments project?"
          ↓
 ChatbotService analyzes:
-  • Board data (TaskFlow)
+  • Board data (PrizmAI)
   • Task dependencies
   • Team assignments
   • Risk factors
@@ -277,7 +277,7 @@ For issues:
 - ✅ Chat history
 
 ### Intelligence
-- ✅ TaskFlow data integration
+- ✅ PrizmAI data integration
 - ✅ Web search (RAG)
 - ✅ Knowledge base indexing
 - ✅ Smart context building

@@ -1,4 +1,4 @@
-# Messaging Notification Badge Feature Guide
+﻿# Messaging Notification Badge Feature Guide
 
 ## Overview
 A real-time notification badge has been added to the navigation bar that displays the count of unread messages. This helps users quickly see if they have new messages without needing to open the messaging tab.
@@ -66,7 +66,7 @@ A real-time notification badge has been added to the navigation bar that display
 ## How to Test
 
 ### Test 1: Basic Badge Display
-1. Start the TaskFlow application
+1. Start the PrizmAI application
 2. Log in as a user
 3. Create a chat room and add multiple team members
 4. Have another user send messages to that room

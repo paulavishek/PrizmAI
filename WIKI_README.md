@@ -1,8 +1,8 @@
-# Wiki & Knowledge Base Feature - README
+﻿# Wiki & Knowledge Base Feature - README
 
 ## 🎯 Quick Overview
 
-This is a complete, production-ready Wiki & Knowledge Base system for TaskFlow that provides:
+This is a complete, production-ready Wiki & Knowledge Base system for PrizmAI that provides:
 
 1. **Project-level documentation pages** - Create and organize wiki pages
 2. **Link wiki pages to tasks/boards** - Connect documentation to work

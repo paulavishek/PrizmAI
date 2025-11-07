@@ -1,4 +1,4 @@
-# TaskFlow Messaging Feature - Fix Complete ✅
+﻿# PrizmAI Messaging Feature - Fix Complete ✅
 
 ## What Just Happened
 

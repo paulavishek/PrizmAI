@@ -1,4 +1,4 @@
-# Wiki & Knowledge Base - Implementation Summary
+﻿# Wiki & Knowledge Base - Implementation Summary
 
 **Status**: ✅ **COMPLETE AND READY FOR USE**
 
@@ -44,7 +44,7 @@
 ## 🗂️ Project Structure
 
 ```
-TaskFlow/
+PrizmAI/
 ├── wiki/
 │   ├── migrations/              # Database migrations
 │   ├── management/

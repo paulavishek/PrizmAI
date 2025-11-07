@@ -1,8 +1,8 @@
-# AI Assistant Quick Reference - All Features
+﻿# AI Assistant Quick Reference - All Features
 
 ## One-Minute Overview
 
-The AI Assistant now handles **ALL TaskFlow features**. Just ask naturally:
+The AI Assistant now handles **ALL PrizmAI features**. Just ask naturally:
 
 ---
 

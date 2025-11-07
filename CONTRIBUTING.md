@@ -1,6 +1,6 @@
-# Contributing to Digital Kanban Board
+﻿# Contributing to PrizmAI
 
-Thank you for your interest in contributing to the Digital Kanban Board project! We value all contributions, whether it's fixing bugs, improving documentation, or suggesting new features. This document outlines the process for contributing to make it as smooth as possible.
+Thank you for your interest in contributing to the PrizmAI project! We value all contributions, whether it's fixing bugs, improving documentation, or suggesting new features. This document outlines the process for contributing to make it as smooth as possible.
 
 ## Table of Contents
 
@@ -165,4 +165,4 @@ Join our community discussions:
 
 ---
 
-Thank you for contributing to Digital Kanban Board! Your efforts help make this project better for everyone.
+Thank you for contributing to PrizmAI! Your efforts help make this project better for everyone.

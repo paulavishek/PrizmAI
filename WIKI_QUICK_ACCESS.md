@@ -1,11 +1,11 @@
-# WIKI LOCATION & ACCESS SUMMARY
+﻿# WIKI LOCATION & ACCESS SUMMARY
 
 ## ✅ WHERE TO FIND THE WIKI
 
 ### 🌐 In Your Browser:
 
 ```
-YOUR TASKFLOW APP
+YOUR PrizmAI APP
 │
 ├─ Top Navigation Bar (Dark Blue)
 │  │
@@ -55,7 +55,7 @@ python manage.py runserver
 ### Main Wiki Page (`/wiki/`)
 ```
 ┌─────────────────────────────────────────┐
-│  Digital Kanban > WIKI (breadcrumb)     │
+│  PrizmAI > WIKI (breadcrumb)     │
 ├─────────────────────────────────────────┤
 │                                         │
 │  📚 Wiki Pages                          │
@@ -162,7 +162,7 @@ Login → Dashboard
 ## 🔐 USER REQUIREMENTS
 
 To access the wiki, you need:
-- ✅ Valid TaskFlow login
+- ✅ Valid PrizmAI login
 - ✅ Member of an organization
 - ✅ Permission to access wiki (default enabled)
 

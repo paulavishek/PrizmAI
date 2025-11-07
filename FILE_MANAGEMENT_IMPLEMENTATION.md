@@ -1,7 +1,7 @@
-# File Management Implementation - Complete Guide
+﻿# File Management Implementation - Complete Guide
 
 ## Overview
-TaskFlow now includes comprehensive file management features for both chat rooms and task management, allowing users to upload, download, and manage documents in a centralized location.
+PrizmAI now includes comprehensive file management features for both chat rooms and task management, allowing users to upload, download, and manage documents in a centralized location.
 
 ## Features Implemented
 

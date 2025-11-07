@@ -1,7 +1,7 @@
-# 🗑️ Message Deletion Feature - Implementation Guide
+﻿# 🗑️ Message Deletion Feature - Implementation Guide
 
 ## Overview
-Added comprehensive message deletion capabilities to TaskFlow messaging system:
+Added comprehensive message deletion capabilities to PrizmAI messaging system:
 1. **Delete Individual Messages**: Delete button on each message (hover to reveal)
 2. **Clear All Messages**: One-click clear all messages in a chat room
 

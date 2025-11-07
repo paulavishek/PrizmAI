@@ -1,4 +1,4 @@
-# Quick Test Guide - AI Assistant Aggregate Query Fix
+﻿# Quick Test Guide - AI Assistant Aggregate Query Fix
 
 ## 🎯 What Was Fixed?
 
@@ -13,7 +13,7 @@ The AI Assistant can now answer system-wide questions like:
 
 ### Step 1: Ensure Server is Running
 ```powershell
-cd c:\Users\Avishek Paul\TaskFlow
+cd c:\Users\Avishek Paul\PrizmAI
 
 # If server is not running:
 python manage.py runserver

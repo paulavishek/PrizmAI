@@ -1,11 +1,11 @@
-# WIKI - EXACTLY WHERE TO FIND IT
+﻿# WIKI - EXACTLY WHERE TO FIND IT
 
 ## The Answer: In the Top Navigation Bar! 📖
 
-When you're logged into TaskFlow, look at the top blue bar:
+When you're logged into PrizmAI, look at the top blue bar:
 
 ```
-[Digital Kanban] [Dashboard] [Boards] [AI Assistant] [WIKI] ← CLICK HERE [Messages] [Your Name ▼]
+[PrizmAI] [Dashboard] [Boards] [AI Assistant] [WIKI] ← CLICK HERE [Messages] [Your Name ▼]
 ```
 
 ---

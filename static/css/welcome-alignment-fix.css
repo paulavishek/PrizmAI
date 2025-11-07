@@ -1,4 +1,4 @@
-/* Direct alignment fixes for the welcome page */
+﻿/* Direct alignment fixes for the welcome page */
 
 /* ===== LEAN SIX SIGMA SECTION FIXES ===== */
 
@@ -64,9 +64,9 @@
     flex: 1 !important;
 }
 
-/* ===== WHY TASKFLOW EXISTS SECTION FIXES ===== */
+/* ===== WHY PrizmAI EXISTS SECTION FIXES ===== */
 
-/* Complete replacement for Why TaskFlow section */
+/* Complete replacement for Why PrizmAI section */
 .why-taskflow-section .feature-card {
     text-align: center !important;
     padding: 30px 15px !important;

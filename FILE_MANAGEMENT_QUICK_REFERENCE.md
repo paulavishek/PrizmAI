@@ -1,8 +1,8 @@
-# File Management Quick Reference
+﻿# File Management Quick Reference
 
 ## What's New ✨
 
-TaskFlow now supports file uploads and downloads in both **Chat Rooms** and **Tasks**!
+PrizmAI now supports file uploads and downloads in both **Chat Rooms** and **Tasks**!
 
 ### Chat Room Files
 Upload documents to share with your team in real-time conversations.

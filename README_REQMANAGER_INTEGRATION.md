@@ -1,8 +1,8 @@
-# ReqManager Features Successfully Integrated into TaskFlow
+﻿# ReqManager Features Successfully Integrated into PrizmAI
 
 ## 🎉 Integration Complete!
 
-Three powerful features from the ReqManager project have been successfully integrated into TaskFlow:
+Three powerful features from the ReqManager project have been successfully integrated into PrizmAI:
 
 ### ✅ Feature 1: Parent-Child Task Relationships
 Create hierarchical task structures with unlimited nesting levels. Automatically prevents circular dependencies.
@@ -365,7 +365,7 @@ Integrated from **ReqManager** project:
 - Traceability concepts
 - AI linking logic
 
-Adapted for TaskFlow's kanban board architecture.
+Adapted for PrizmAI's kanban board architecture.
 
 ---
 

@@ -1,7 +1,7 @@
-# ReqManager Features Integration Summary
+﻿# ReqManager Features Integration Summary
 
 ## Overview
-Successfully integrated three key features from the ReqManager project into TaskFlow:
+Successfully integrated three key features from the ReqManager project into PrizmAI:
 1. **Parent-Child Task Relationships**
 2. **Visual Dependency Tree**
 3. **AI-Suggested Task Dependencies**
@@ -181,7 +181,7 @@ board_dependency_graph()   # Display board graph
 
 ## Integration Points
 
-### With Existing TaskFlow Features
+### With Existing PrizmAI Features
 
 **Risk Management**:
 - Dependencies considered in risk scoring
@@ -388,7 +388,7 @@ python manage.py migrate kanban 0008_task_last_risk_assessment_and_more
 - **Parent-Child Relationships**: ReqManager Requirement model (https://github.com/avishekpaul1310/Requirement_Manager)
 - **Traceability Concepts**: ReqManager traceability matrix design
 - **AI Analysis**: Adapted from ReqManager requirement linking logic
-- **Kanban Adaptation**: Custom implementation for TaskFlow's board structure
+- **Kanban Adaptation**: Custom implementation for PrizmAI's board structure
 
 ---
 

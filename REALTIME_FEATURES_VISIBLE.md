@@ -1,4 +1,4 @@
-# Real-Time Communication Features - Now Visible! ✅
+﻿# Real-Time Communication Features - Now Visible! ✅
 
 ## What Was Fixed
 
@@ -72,8 +72,8 @@ The real-time communication features were **fully implemented but hidden** from 
 
 ### 1. **Start All Services**
 ```batch
-cd C:\Users\Avishek Paul\TaskFlow
-start_taskflow.bat
+cd C:\Users\Avishek Paul\PrizmAI
+start_PrizmAI.bat
 ```
 
 This starts:
@@ -195,9 +195,9 @@ This starts:
 
 For issues or questions:
 1. Check the Daphne/Celery/Redis logs in separate terminal windows
-2. Verify all services are running (check start_taskflow.bat output)
+2. Verify all services are running (check start_PrizmAI.bat output)
 3. Clear browser cache and refresh
-4. Restart all services with stop_taskflow.bat then start_taskflow.bat
+4. Restart all services with stop_PrizmAI.bat then start_PrizmAI.bat
 
 ---
 

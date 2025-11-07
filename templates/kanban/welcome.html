@@ -1,7 +1,7 @@
-{% extends 'base.html' %}
+﻿{% extends 'base.html' %}
 {% load static %}
 
-{% block title %}TaskFlow - Modern Kanban Board with Lean Six Sigma{% endblock %}
+{% block title %}Pri<em>z</em>mAI - AI-Powered Project Intelligence Platform{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{% static 'css/lean-six-sigma.css' %}">
@@ -12,6 +12,18 @@
     body {
         background-color: #f8f9fa;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+    
+    /* Fix navigation alignment - prevent stylish-z from breaking layout */
+    .navbar-nav .nav-link {
+        display: flex;
+        align-items: center;
+        height: 100%;
+    }
+    
+    .navbar-nav .nav-link .stylish-z {
+        vertical-align: middle;
+        line-height: 1;
     }
     
     .hero-section {
@@ -156,8 +168,8 @@
 {% block navigation %}
 <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
     <div class="container">
-        <a class="navbar-brand" href="{% url 'welcome' %}">
-            <i class="fas fa-tasks me-2" style="filter: brightness(1.2); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);"></i>TaskFlow
+        <a class="navbar-brand" href="{% url 'welcome' %}" style="font-size: 1.3rem; font-weight: 600;">
+            <i class="fas fa-brain me-2" style="filter: brightness(1.2); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);"></i>Pri<span class="stylish-z">z</span>mAI
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" 
                 aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -171,7 +183,7 @@
                 <li class="nav-item">
                     <a class="nav-link" href="#lean-six-sigma">Lean Six Sigma</a>
                 </li>                <li class="nav-item">
-                    <a class="nav-link" href="#why-taskflow">Why TaskFlow</a>
+                    <a class="nav-link" href="#why-PrizmAI">Why Pri<span class="stylish-z">z</span>mAI</a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link btn btn-light text-primary ms-2 px-3" href="{% url 'login' %}">Login</a>
@@ -190,14 +202,14 @@
     <div class="container">
         <div class="row align-items-center">
             <div class="col-md-6 hero-content">
-                <h1 class="hero-title">Streamline Your Workflow with TaskFlow</h1>
-                <p class="hero-subtitle">A modern Kanban board with powerful Lean Six Sigma features to optimize your processes and eliminate waste.</p>
+                <h1 class="hero-title">Streamline Your Workflow with <span style="white-space: nowrap;">Pri<span class="stylish-z">z</span>mAI</span></h1>
+                <p class="hero-subtitle">An AI-powered project intelligence platform combining Kanban methodology with advanced AI features to optimize your processes and drive results.</p>
                 <div class="d-flex flex-wrap">
                     <a href="{% url 'register' %}" class="btn btn-light btn-hero me-3 mb-3">Get Started <i class="fas fa-arrow-right ms-2"></i></a>
                     <a href="{% url 'login' %}" class="btn btn-outline-light btn-hero mb-3">Sign In</a>
                 </div>
             </div>            <div class="col-md-6 d-none d-md-block">
-                <img src="{% static 'img/hero-dashboard.svg' %}" alt="TaskFlow Kanban Board" class="img-fluid" 
+                <img src="{% static 'img/hero-dashboard.svg' %}" alt="PrizmAI Kanban Board" class="img-fluid" 
                      onerror="this.src='https://via.placeholder.com/600x400/8f94fb/FFFFFF?text=Kanban+Board';this.onerror='';">
             </div>
         </div>
@@ -329,11 +341,11 @@
     </div>
 </section>
 
-<!-- Why TaskFlow Exists Section -->
-<section class="why-taskflow-section" id="why-taskflow">
+<!-- Why PrizmAI Exists Section -->
+<section class="why-PrizmAI-section" id="why-PrizmAI">
     <div class="container">
         <div class="text-center mb-5">
-            <h2 class="fw-bold">Why TaskFlow Exists</h2>
+            <h2 class="fw-bold">Why Pri<span class="stylish-z">z</span>mAI Exists</h2>
             <p class="text-muted">Bridging the gap between task management and process improvement</p>
         </div>
           <div class="row g-4">            <div class="col-md-4">                <div class="card feature-card p-4 h-100">
@@ -352,7 +364,7 @@
                         </div>
                     </div>
                     <h5 class="mt-3 mb-3">The Solution</h5>
-                    <p class="mb-0">TaskFlow is a digital Kanban board designed to bridge this gap. It combines intuitive project management with a powerful analytics layer based on Lean Six Sigma principles, helping teams to organize tasks, collaborate effectively, and continuously improve their workflows.</p>
+                    <p class="mb-0">Pri<span class="stylish-z">z</span>mAI is a Pri<span class="stylish-z">z</span>mAI designed to bridge this gap. It combines intuitive project management with a powerful analytics layer based on Lean Six Sigma principles, helping teams to organize tasks, collaborate effectively, and continuously improve their workflows.</p>
                 </div>
             </div>              <div class="col-md-4">                <div class="card feature-card p-4 h-100">
                     <div class="d-flex">
@@ -361,7 +373,7 @@
                         </div>
                     </div>
                     <h5 class="mt-3 mb-3">The Impact</h5>
-                    <p class="mb-0">With TaskFlow, teams gain deeper insights into their processes, enabling data-driven decisions that reduce waste and increase value-adding activities. The result is improved efficiency, better resource utilization, and higher quality deliverables that truly matter to stakeholders.</p>
+                    <p class="mb-0">With Pri<span class="stylish-z">z</span>mAI, teams gain deeper insights into their processes, enabling data-driven decisions that reduce waste and increase value-adding activities. The result is improved efficiency, better resource utilization, and higher quality deliverables that truly matter to stakeholders.</p>
                 </div>
             </div>
         </div>
@@ -372,7 +384,7 @@
 <section class="cta-section">
     <div class="container text-center">
         <h2 class="fw-bold mb-4">Ready to Optimize Your Workflow?</h2>
-        <p class="lead mb-4">Join TaskFlow today and start transforming how your team manages tasks and processes.</p>
+        <p class="lead mb-4">Join Pri<span class="stylish-z">z</span>mAI today and start transforming how your team manages tasks and processes.</p>
         <div class="d-flex justify-content-center flex-wrap">
             <a href="{% url 'register' %}" class="btn btn-light btn-hero me-md-3 mb-3 mb-md-0">Create Free Account</a>
             <a href="#features" class="btn btn-outline-light btn-hero">Learn More</a>
@@ -384,7 +396,7 @@
 <footer class="footer">
     <div class="container">
         <div class="row">
-            <div class="col-md-4">                <h4 class="mb-3">TaskFlow</h4>
+            <div class="col-md-4">                <h4 class="mb-3">Pri<span class="stylish-z">z</span>mAI</h4>
                 <p class="mb-3">A modern Kanban board with Lean Six Sigma features for optimized workflow management.</p>
                 <div class="footer-links">
                     <a href="https://github.com" target="_blank" rel="noopener" aria-label="GitHub"><i class="fab fa-github"></i></a>
@@ -397,7 +409,7 @@
                         <ul class="list-unstyled">
                             <li><a href="#features" class="footer-nav-link"><i class="fas fa-star me-1"></i>Features</a></li>
                             <li><a href="#lean-six-sigma" class="footer-nav-link"><i class="fas fa-chart-line me-1"></i>Lean Six Sigma</a></li>
-                            <li><a href="#why-taskflow" class="footer-nav-link"><i class="fas fa-lightbulb me-1"></i>Why TaskFlow</a></li>
+                            <li><a href="#why-PrizmAI" class="footer-nav-link"><i class="fas fa-lightbulb me-1"></i>Why Pri<span class="stylish-z">z</span>mAI</a></li>
                         </ul>
                     </div>
                     <div class="col-6">
@@ -422,7 +434,7 @@
         </div>        <hr class="mt-4 mb-3 border-secondary">
         <div class="row">
             <div class="col-12 text-center">
-                <p class="small text-light opacity-75 mb-0">© 2025 TaskFlow. All rights reserved.</p>
+                <p class="small text-light opacity-75 mb-0">© 2025 Pri<span class="stylish-z">z</span>mAI. All rights reserved.</p>
             </div>
         </div>    </div>
 </footer>

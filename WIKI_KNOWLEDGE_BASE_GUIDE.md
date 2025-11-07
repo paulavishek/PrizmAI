@@ -1,8 +1,8 @@
-# Wiki & Knowledge Base Integration Guide
+﻿# Wiki & Knowledge Base Integration Guide
 
 ## Overview
 
-The Wiki & Knowledge Base feature has been successfully integrated into TaskFlow. This comprehensive system enables project-level documentation, linking to tasks/boards, and meeting notes storage.
+The Wiki & Knowledge Base feature has been successfully integrated into PrizmAI. This comprehensive system enables project-level documentation, linking to tasks/boards, and meeting notes storage.
 
 ## Features
 

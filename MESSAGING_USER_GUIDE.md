@@ -1,9 +1,9 @@
-# Real-Time Messaging - User Guide 📱
+﻿# Real-Time Messaging - User Guide 📱
 
 ## Getting Started with Messaging
 
 ### Step 1: Access Messaging Hub
-1. Log in to TaskFlow
+1. Log in to PrizmAI
 2. Click **"Messages"** in the top navigation bar
 3. You'll see the **Messaging Hub** with all your boards
 

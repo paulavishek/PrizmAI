@@ -1,6 +1,6 @@
----
+﻿---
 name: Bug report
-about: Create a report to help us improve TaskFlow
+about: Create a report to help us improve PrizmAI
 title: '[BUG] '
 labels: 'bug'
 assignees: ''

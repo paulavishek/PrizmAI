@@ -1,4 +1,4 @@
-# 🎯 Gantt Chart Enhancements - Executive Summary
+﻿# 🎯 Gantt Chart Enhancements - Executive Summary
 
 ## ✅ Implementation Status: COMPLETE
 
@@ -69,7 +69,7 @@ All 6 requested enhancements have been successfully implemented and are ready fo
 
 ### Start Testing:
 ```powershell
-.\start_taskflow.bat
+.\start_PrizmAI.bat
 ```
 
 ### Access:
@@ -254,7 +254,7 @@ The modular implementation makes these additions straightforward.
 ## 📞 Next Steps
 
 ### Immediate Actions:
-1. Start the server: `.\start_taskflow.bat`
+1. Start the server: `.\start_PrizmAI.bat`
 2. Open Gantt chart on any board
 3. Verify all enhancements are visible
 4. Test with real project data

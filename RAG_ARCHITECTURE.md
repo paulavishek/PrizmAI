@@ -1,10 +1,10 @@
-# RAG Architecture & Data Flow
+﻿# RAG Architecture & Data Flow
 
 ## System Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                      TaskFlow AI Assistant                       │
+│                      PrizmAI AI Assistant                       │
 │                    (Powered by RAG + Gemini)                    │
 └─────────────────────────────────────────────────────────────────┘
 
@@ -22,7 +22,7 @@
         │               │  │            │          │
         ▼               ▼  ▼            ▼          ▼
     ┌─────────┐  ┌─────────────┐  ┌──────────┐  ┌─────────┐
-    │ Google  │  │TaskFlow DB  │  │Knowledge │  │Combined │
+    │ Google  │  │PrizmAI DB  │  │Knowledge │  │Combined │
     │ Search  │  │ (Tasks,     │  │Base      │  │Sources  │
     │ (RAG)   │  │ Team,       │  │(KB)      │  │         │
     │         │  │ Boards)     │  │          │  │         │
@@ -100,7 +100,7 @@
    │     ]
    │
    ├─ Path B: PROJECT DATA
-   │  ├─ Query TaskFlow DB for "project management"
+   │  ├─ Query PrizmAI DB for "project management"
    │  ├─ Get team members, board info
    │  └─ Current context: Board "API Dev", 8 tasks, 3 members
    │
@@ -113,7 +113,7 @@
    │
    └─ Build augmented prompt:
       """
-      System prompt: You are TaskFlow AI Project Assistant...
+      System prompt: You are PrizmAI AI Project Assistant...
       
       Context available:
       
@@ -402,7 +402,7 @@ Settings (kanban_board/settings.py)
 
 Runtime (utils/google_search.py, chatbot_service.py)
 ├─ GoogleSearchClient()
-├─ TaskFlowChatbotService()
+├─ PrizmAIChatbotService()
 └─ GeminiClient()
 ```
 

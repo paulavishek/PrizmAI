@@ -1,8 +1,8 @@
-# 🎉 TaskFlow - New Demo Data & User Guide
+﻿# 🎉 PrizmAI - New Demo Data & User Guide
 
 ## 📋 Overview
 
-The TaskFlow demo has been completely refreshed with comprehensive test data to help you explore and test all features of the platform. This guide provides all the information you need to get started.
+The PrizmAI demo has been completely refreshed with comprehensive test data to help you explore and test all features of the platform. This guide provides all the information you need to get started.
 
 ---
 
@@ -12,7 +12,7 @@ The TaskFlow demo has been completely refreshed with comprehensive test data to 
 ```
 Username: admin
 Password: admin123
-Email: admin@taskflow.com
+Email: admin@PrizmAI.com
 Role: Superuser/Administrator
 Organization: Dev Team
 ```
@@ -38,7 +38,7 @@ Organization: Dev Team
 
 ### Step 1: Start the Development Server
 ```bash
-cd /path/to/TaskFlow
+cd /path/to/PrizmAI
 python manage.py runserver
 ```
 
@@ -496,7 +496,7 @@ python manage.py populate_test_data
 
 ## 🎉 You're All Set!
 
-Your TaskFlow demo is ready to explore. Start by logging in as any user and navigating to the boards. Each section of the application has comprehensive sample data to test all features.
+Your PrizmAI demo is ready to explore. Start by logging in as any user and navigating to the boards. Each section of the application has comprehensive sample data to test all features.
 
 **Happy testing!** 🚀
 

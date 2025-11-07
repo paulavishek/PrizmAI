@@ -1,11 +1,11 @@
-# TaskFlow Startup Scripts - Quick Guide
+﻿# PrizmAI Startup Scripts - Quick Guide
 
 ## Overview
 
-Two batch files make it easy to start and stop all TaskFlow components with a single command:
+Two batch files make it easy to start and stop all PrizmAI components with a single command:
 
-- **`start_taskflow.bat`** - Starts all required services
-- **`stop_taskflow.bat`** - Stops all running services
+- **`start_PrizmAI.bat`** - Starts all required services
+- **`stop_PrizmAI.bat`** - Stops all running services
 
 ## Requirements
 
@@ -13,31 +13,31 @@ Before using these scripts, ensure you have:
 
 1. **Redis Server** installed at: `C:\redis\Redis-x64-5.0.14.1\`
    - Download from: https://github.com/tporadowski/redis/releases
-   - Extract to the path above (update in `start_taskflow.bat` if different)
+   - Extract to the path above (update in `start_PrizmAI.bat` if different)
 
 2. **Python Virtual Environment** activated
-   - Located at: `C:\Users\Avishek Paul\TaskFlow\venv\`
+   - Located at: `C:\Users\Avishek Paul\PrizmAI\venv\`
    - Created with: `python -m venv venv`
 
 3. **Dependencies installed**
    - Run: `pip install -r requirements.txt`
 
-## Starting TaskFlow
+## Starting PrizmAI
 
 ### Option 1: Double-Click (Easiest)
-1. Navigate to `C:\Users\Avishek Paul\TaskFlow\`
-2. Double-click `start_taskflow.bat`
+1. Navigate to `C:\Users\Avishek Paul\PrizmAI\`
+2. Double-click `start_PrizmAI.bat`
 3. Wait for all 4 components to start (about 5 seconds)
 
 ### Option 2: Command Line
 ```bash
-cd "C:\Users\Avishek Paul\TaskFlow"
-start_taskflow.bat
+cd "C:\Users\Avishek Paul\PrizmAI"
+start_PrizmAI.bat
 ```
 
 ### What Gets Started
 
-When you run `start_taskflow.bat`, it automatically starts:
+When you run `start_PrizmAI.bat`, it automatically starts:
 
 | Component | Port | Purpose | Window Title |
 |-----------|------|---------|--------------|
@@ -48,7 +48,7 @@ When you run `start_taskflow.bat`, it automatically starts:
 
 Each component runs in its own command window for easy monitoring.
 
-## Accessing TaskFlow
+## Accessing PrizmAI
 
 Once all components have started, access the application:
 
@@ -59,17 +59,17 @@ Once all components have started, access the application:
 | Messaging Module | http://localhost:8000/messaging/ |
 | Django Shell | `python manage.py shell` |
 
-## Stopping TaskFlow
+## Stopping PrizmAI
 
 ### Option 1: Double-Click (Easiest)
-1. Navigate to `C:\Users\Avishek Paul\TaskFlow\`
-2. Double-click `stop_taskflow.bat`
+1. Navigate to `C:\Users\Avishek Paul\PrizmAI\`
+2. Double-click `stop_PrizmAI.bat`
 3. All components will be stopped gracefully
 
 ### Option 2: Command Line
 ```bash
-cd "C:\Users\Avishek Paul\TaskFlow"
-stop_taskflow.bat
+cd "C:\Users\Avishek Paul\PrizmAI"
+stop_PrizmAI.bat
 ```
 
 ### Option 3: Manually Close Windows
@@ -84,7 +84,7 @@ stop_taskflow.bat
 Solution:
 1. Check if Redis is already running: tasklist | find "redis-server.exe"
 2. Kill existing Redis: taskkill /F /IM redis-server.exe
-3. Verify Redis path in start_taskflow.bat is correct
+3. Verify Redis path in start_PrizmAI.bat is correct
 ```
 
 ### Daphne Server Won't Start
@@ -94,7 +94,7 @@ Solution 1 - Kill existing process:
   taskkill /F /IM python.exe /FI "COMMANDLINE eq *daphne*"
 
 Solution 2 - Use different port:
-  Edit start_taskflow.bat, change:
+  Edit start_PrizmAI.bat, change:
     daphne -b 0.0.0.0 -p 8000 ...
   To:
     daphne -b 0.0.0.0 -p 8001 ...
@@ -104,7 +104,7 @@ Solution 2 - Use different port:
 **Problem**: "Virtual environment not activated"
 ```
 Solution:
-1. Verify venv folder exists at: C:\Users\Avishek Paul\TaskFlow\venv\
+1. Verify venv folder exists at: C:\Users\Avishek Paul\PrizmAI\venv\
 2. Run pip install from workspace: pip install -r requirements.txt
 3. Check Windows PATH includes Python
 ```
@@ -114,7 +114,7 @@ Solution:
 ```
 Solution:
 1. Open Command Prompt
-2. Navigate to: cd "C:\Users\Avishek Paul\TaskFlow"
+2. Navigate to: cd "C:\Users\Avishek Paul\PrizmAI"
 3. Activate venv: venv\Scripts\activate
 4. Check for errors: python manage.py check
 5. Run specific component manually to see error:
@@ -124,7 +124,7 @@ Solution:
 ## Customizing the Scripts
 
 ### Change Redis Path
-Edit `start_taskflow.bat`, line 6:
+Edit `start_PrizmAI.bat`, line 6:
 ```bat
 :: Default:
 cd /d C:\redis\Redis-x64-5.0.14.1
@@ -136,11 +136,11 @@ cd /d "C:\path\to\your\redis"
 ### Change Project Path
 Edit both batch files, update all instances of:
 ```bat
-cd /d "C:\Users\Avishek Paul\TaskFlow"
+cd /d "C:\Users\Avishek Paul\PrizmAI"
 ```
 
 ### Change Port Number
-Edit `start_taskflow.bat`, line 22:
+Edit `start_PrizmAI.bat`, line 22:
 ```bat
 :: Default (port 8000):
 daphne -b 0.0.0.0 -p 8000 kanban_board.asgi:application
@@ -150,7 +150,7 @@ daphne -b 0.0.0.0 -p 8001 kanban_board.asgi:application
 ```
 
 ### Change Celery Log Level
-Edit `start_taskflow.bat`:
+Edit `start_PrizmAI.bat`:
 - Line 12: `celery -A kanban_board worker --pool=solo -l info`
 - Line 16: `celery -A kanban_board beat -l info`
 
@@ -158,7 +158,7 @@ Log levels: `debug`, `info`, `warning`, `error`, `critical`
 
 ## Environment Variables
 
-To set environment variables before starting, add to `start_taskflow.bat`:
+To set environment variables before starting, add to `start_PrizmAI.bat`:
 
 ```bat
 :: Add after @echo off, before first start command:
@@ -169,14 +169,14 @@ set DJANGO_SETTINGS_MODULE=kanban_board.settings
 
 ## Performance Tips
 
-1. **Close Unnecessary Applications**: Frees up RAM for TaskFlow
+1. **Close Unnecessary Applications**: Frees up RAM for PrizmAI
 2. **Monitor Resource Usage**: Open Windows Task Manager to watch CPU/Memory
 3. **Check Redis Memory**: `redis-cli info memory` in Redis window
 4. **Increase Virtual Memory**: If RAM is limited, increase page file size
 
 ## Testing the Setup
 
-After starting with `start_taskflow.bat`:
+After starting with `start_PrizmAI.bat`:
 
 1. **Test Redis**:
    ```bash
@@ -209,7 +209,7 @@ After starting with `start_taskflow.bat`:
 redis-server.exe
 
 :: Terminal 2
-cd "C:\Users\Avishek Paul\TaskFlow"
+cd "C:\Users\Avishek Paul\PrizmAI"
 venv\Scripts\activate
 daphne -b 0.0.0.0 -p 8000 -v 2 kanban_board.asgi:application
 
@@ -221,7 +221,7 @@ celery -A kanban_board beat -l debug
 ```
 
 ### Monitor Resource Usage
-While TaskFlow is running:
+While PrizmAI is running:
 ```bash
 :: Check Redis memory
 redis-cli info memory
@@ -235,11 +235,11 @@ tasklist /V
 
 ## Uninstall/Reset
 
-To completely reset TaskFlow:
+To completely reset PrizmAI:
 
 ```bash
 :: 1. Stop all components
-stop_taskflow.bat
+stop_PrizmAI.bat
 
 :: 2. Delete database (optional)
 del db.sqlite3
@@ -294,7 +294,7 @@ If you encounter issues:
 
 ## Next Steps
 
-After successfully starting TaskFlow:
+After successfully starting PrizmAI:
 
 1. ✅ **Verify Setup** - Open http://localhost:8000/ in browser
 2. 📝 **Create Admin User** - If not already created

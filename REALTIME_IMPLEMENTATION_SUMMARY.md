@@ -1,4 +1,4 @@
-# Real-Time Communication Features - Complete Analysis ✅
+﻿# Real-Time Communication Features - Complete Analysis ✅
 
 ## Problem Discovered
 
@@ -113,7 +113,7 @@ Ensures full Python 3.13 support and fixes `ImportError: cannot import name 'DEF
 
 ### 🔧 Backend Services
 
-All running via `start_taskflow.bat`:
+All running via `start_PrizmAI.bat`:
 
 ```
 Terminal 1: Redis Server (port 6379)
@@ -211,8 +211,8 @@ requirements.txt (updated package versions)
 
 ### 1. Start Services
 ```batch
-cd "C:\Users\Avishek Paul\TaskFlow"
-start_taskflow.bat
+cd "C:\Users\Avishek Paul\PrizmAI"
+start_PrizmAI.bat
 ```
 
 ### 2. Access Chat Rooms

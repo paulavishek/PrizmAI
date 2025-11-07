@@ -1,8 +1,8 @@
-# Gantt Chart Implementation - Complete Guide
+﻿# Gantt Chart Implementation - Complete Guide
 
 ## 📊 Overview
 
-A fully functional Gantt chart has been successfully implemented in TaskFlow, allowing you to visualize project timelines, track dependencies, and manage task schedules visually.
+A fully functional Gantt chart has been successfully implemented in PrizmAI, allowing you to visualize project timelines, track dependencies, and manage task schedules visually.
 
 ## ✨ Features Implemented
 
@@ -131,7 +131,7 @@ To show which tasks depend on others:
 To quickly test the Gantt chart with sample data:
 
 ```bash
-cd "c:\Users\Avishek Paul\TaskFlow"
+cd "c:\Users\Avishek Paul\PrizmAI"
 Get-Content add_gantt_sample_data.py | python manage.py shell
 ```
 
@@ -281,7 +281,7 @@ These features from the plan are **not currently implemented** but could be adde
 
 - **Frappe Gantt Documentation**: https://frappe.io/gantt
 - **GitHub Repo**: https://github.com/frappe/gantt
-- **TaskFlow Gantt URL**: `/boards/{board_id}/gantt/`
+- **PrizmAI Gantt URL**: `/boards/{board_id}/gantt/`
 
 ## ✅ Quick Reference
 

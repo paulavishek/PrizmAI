@@ -1,4 +1,4 @@
-# AI Project Assistant Setup & Configuration
+﻿# AI Project Assistant Setup & Configuration
 
 ## Environment Variables Required
 
@@ -216,7 +216,7 @@ curl http://localhost:8000/assistant/api/sessions/ \
 
 All logs are saved to:
 ```
-TaskFlow/logs/ai_assistant.log
+PrizmAI/logs/ai_assistant.log
 ```
 
 View in real-time:

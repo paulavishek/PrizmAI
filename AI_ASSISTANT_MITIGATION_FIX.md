@@ -1,4 +1,4 @@
-# AI Assistant Risk Mitigation Fix - Complete Implementation
+﻿# AI Assistant Risk Mitigation Fix - Complete Implementation
 
 **Date**: November 5, 2025
 **Status**: ✅ COMPLETE
@@ -99,7 +99,7 @@ Task.objects.filter(
 ## Code Changes
 
 ### File Modified
-`c:\Users\Avishek Paul\TaskFlow\ai_assistant\utils\chatbot_service.py`
+`c:\Users\Avishek Paul\PrizmAI\ai_assistant\utils\chatbot_service.py`
 
 ### New Methods Added
 

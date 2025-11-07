@@ -1,8 +1,8 @@
-# Stakeholder Engagement Tracking Integration Guide
+﻿# Stakeholder Engagement Tracking Integration Guide
 
 ## Overview
 
-This document describes the integration of **Stakeholder Engagement Tracking** features into TaskFlow, adapted from the Stakeholder Management project. The integration provides simple yet powerful stakeholder tagging, involvement tracking, and engagement metrics.
+This document describes the integration of **Stakeholder Engagement Tracking** features into PrizmAI, adapted from the Stakeholder Management project. The integration provides simple yet powerful stakeholder tagging, involvement tracking, and engagement metrics.
 
 ## Features
 

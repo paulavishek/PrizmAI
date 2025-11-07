@@ -1,4 +1,4 @@
-import json
+﻿import json
 import logging
 from django.conf import settings
 from django.db.models import Q, Count, Avg, Max
@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 class TaskFlowChatbotService:
     """
-    Chatbot service for TaskFlow project assistant
-    Adapted from Nexus 360 for TaskFlow's project management data
+    Chatbot service for PrizmAI project assistant
+    Adapted from Nexus 360 for PrizmAI's project management data
     """
     
     def __init__(self, user=None, board=None):
@@ -38,7 +38,7 @@ class TaskFlowChatbotService:
     
     def get_taskflow_context(self, use_cache=True):
         """
-        Get context from TaskFlow project data
+        Get context from PrizmAI project data
         
         Args:
             use_cache (bool): Whether to use cached context
@@ -47,7 +47,7 @@ class TaskFlowChatbotService:
             str: Formatted project context
         """
         try:
-            context = "**TaskFlow Project Context:**\n\n"
+            context = "**PrizmAI Project Context:**\n\n"
             
             if self.board:
                 context += f"Board: {self.board.name}\n"
@@ -121,7 +121,7 @@ class TaskFlowChatbotService:
             return context
         
         except Exception as e:
-            logger.error(f"Error getting TaskFlow context: {e}")
+            logger.error(f"Error getting PrizmAI context: {e}")
             return "Project context unavailable."
     
     def get_risk_analysis_context(self, prompt):
@@ -1601,6 +1601,234 @@ class TaskFlowChatbotService:
         
         return None, "No significant bottlenecks identified"
     
+    def _is_wiki_query(self, prompt):
+        """Detect if query is about wiki/documentation"""
+        wiki_keywords = [
+            'wiki', 'documentation', 'docs', 'guide', 'reference',
+            'article', 'page', 'knowledge base', 'kb', 'documentation',
+            'how to', 'tutorial', 'best practice', 'guidelines',
+            'onboarding', 'style guide', 'standards', 'architecture'
+        ]
+        prompt_lower = prompt.lower()
+        return any(kw in prompt_lower for kw in wiki_keywords)
+    
+    def _is_meeting_query(self, prompt):
+        """Detect if query is about meetings/discussions"""
+        meeting_keywords = [
+            'meeting', 'standup', 'sync', 'discussion', 'talked about',
+            'discussed', 'action item', 'minutes', 'notes', 'transcript',
+            'agenda', 'retrospective', 'planning meeting', 'sprint planning',
+            'review meeting', 'what did we discuss', 'what was decided'
+        ]
+        prompt_lower = prompt.lower()
+        return any(kw in prompt_lower for kw in meeting_keywords)
+    
+    def _get_wiki_context(self, prompt):
+        """
+        Get context from wiki pages and knowledge base
+        
+        Returns relevant wiki pages based on query content
+        """
+        try:
+            from wiki.models import WikiPage, WikiCategory
+            
+            if not self.user:
+                return None
+            
+            # Get user's organization
+            org = None
+            if hasattr(self.user, 'profile') and self.user.profile.organization:
+                org = self.user.profile.organization
+            else:
+                return None
+            
+            context = "**📚 Wiki & Documentation Context:**\n\n"
+            
+            # Search wiki pages by title and content
+            prompt_words = prompt.lower().split()
+            wiki_pages = WikiPage.objects.filter(
+                organization=org,
+                is_published=True
+            ).select_related('category', 'created_by')
+            
+            # Search in title, content, and tags
+            matching_pages = []
+            for page in wiki_pages:
+                relevance_score = 0
+                page_text = f"{page.title} {page.content}".lower()
+                
+                # Check for word matches
+                for word in prompt_words:
+                    if len(word) > 3:  # Skip short words
+                        if word in page.title.lower():
+                            relevance_score += 3  # Title matches are more important
+                        elif word in page.content.lower():
+                            relevance_score += 1
+                        if page.tags and word in str(page.tags).lower():
+                            relevance_score += 2
+                
+                if relevance_score > 0:
+                    matching_pages.append((page, relevance_score))
+            
+            # Sort by relevance
+            matching_pages.sort(key=lambda x: x[1], reverse=True)
+            
+            if matching_pages:
+                context += f"Found {len(matching_pages)} relevant wiki page(s):\n\n"
+                
+                # Show top 5 most relevant pages
+                for page, score in matching_pages[:5]:
+                    context += f"**📄 {page.title}**\n"
+                    context += f"  • Category: {page.category.name}\n"
+                    context += f"  • Created by: {page.created_by.get_full_name() or page.created_by.username}\n"
+                    context += f"  • Last updated: {page.updated_at.strftime('%Y-%m-%d')}\n"
+                    if page.tags:
+                        context += f"  • Tags: {', '.join(page.tags)}\n"
+                    
+                    # Include content excerpt (first 500 chars)
+                    content_preview = page.content[:500]
+                    if len(page.content) > 500:
+                        content_preview += "..."
+                    context += f"  • Content:\n{content_preview}\n\n"
+                
+                return context
+            else:
+                # No matches found - list all available wiki pages
+                all_pages = wiki_pages[:10]
+                if all_pages.exists():
+                    context += "No direct matches found. Available wiki pages:\n\n"
+                    for page in all_pages:
+                        context += f"• {page.title} ({page.category.name})\n"
+                    context += "\n"
+                    return context
+                
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting wiki context: {e}", exc_info=True)
+            return None
+    
+    def _get_meeting_context(self, prompt):
+        """
+        Get context from meeting notes and transcripts
+        
+        Returns relevant meetings based on query content
+        """
+        try:
+            from wiki.models import MeetingNotes
+            
+            if not self.user:
+                return None
+            
+            # Get user's organization
+            org = None
+            if hasattr(self.user, 'profile') and self.user.profile.organization:
+                org = self.user.profile.organization
+            else:
+                return None
+            
+            context = "**🎤 Meeting & Discussion Context:**\n\n"
+            
+            # Get meetings user attended or created
+            meetings = MeetingNotes.objects.filter(
+                organization=org
+            ).filter(
+                Q(created_by=self.user) | Q(attendees=self.user)
+            ).select_related('created_by', 'related_board').prefetch_related('attendees').order_by('-date')
+            
+            # If board is specified, prioritize board-related meetings
+            if self.board:
+                meetings = meetings.filter(
+                    Q(related_board=self.board) | Q(related_board__isnull=True)
+                )
+            
+            # Search for relevant meetings
+            prompt_words = prompt.lower().split()
+            matching_meetings = []
+            
+            for meeting in meetings[:20]:  # Check last 20 meetings
+                relevance_score = 0
+                meeting_text = f"{meeting.title} {meeting.content}".lower()
+                
+                # Check transcript if available
+                if meeting.transcript_text:
+                    meeting_text += f" {meeting.transcript_text.lower()}"
+                
+                # Check for word matches
+                for word in prompt_words:
+                    if len(word) > 3:  # Skip short words
+                        if word in meeting.title.lower():
+                            relevance_score += 3
+                        elif word in meeting_text:
+                            relevance_score += 1
+                
+                if relevance_score > 0:
+                    matching_meetings.append((meeting, relevance_score))
+            
+            # Sort by relevance, then by date
+            matching_meetings.sort(key=lambda x: (x[1], x[0].date), reverse=True)
+            
+            if matching_meetings:
+                context += f"Found {len(matching_meetings)} relevant meeting(s):\n\n"
+                
+                # Show top 5 most relevant meetings
+                for meeting, score in matching_meetings[:5]:
+                    context += f"**🎤 {meeting.title}**\n"
+                    context += f"  • Type: {meeting.get_meeting_type_display()}\n"
+                    context += f"  • Date: {meeting.date.strftime('%Y-%m-%d %H:%M')}\n"
+                    
+                    attendee_names = [att.get_full_name() or att.username for att in meeting.attendees.all()]
+                    context += f"  • Attendees: {', '.join(attendee_names)}\n"
+                    
+                    if meeting.related_board:
+                        context += f"  • Related Board: {meeting.related_board.name}\n"
+                    
+                    if meeting.duration_minutes:
+                        context += f"  • Duration: {meeting.duration_minutes} minutes\n"
+                    
+                    # Include action items if available
+                    if meeting.action_items:
+                        context += f"  • Action Items: {len(meeting.action_items)}\n"
+                        for item in meeting.action_items[:3]:  # Show first 3
+                            if isinstance(item, dict):
+                                context += f"    - {item.get('task', item.get('description', str(item)))}\n"
+                    
+                    # Include decisions if available
+                    if meeting.decisions:
+                        context += f"  • Key Decisions: {len(meeting.decisions)}\n"
+                        for decision in meeting.decisions[:3]:  # Show first 3
+                            if isinstance(decision, dict):
+                                context += f"    - {decision.get('decision', str(decision))}\n"
+                    
+                    # Include extraction summary if available
+                    if meeting.extraction_results and isinstance(meeting.extraction_results, dict):
+                        summary = meeting.extraction_results.get('extraction_summary', {})
+                        if summary.get('meeting_summary'):
+                            context += f"  • Summary: {summary['meeting_summary']}\n"
+                    
+                    # Include content/notes excerpt
+                    content_preview = meeting.content[:300]
+                    if len(meeting.content) > 300:
+                        content_preview += "..."
+                    context += f"  • Notes:\n{content_preview}\n\n"
+                
+                return context
+            else:
+                # No matches - show recent meetings
+                recent_meetings = meetings[:5]
+                if recent_meetings.exists():
+                    context += "No direct matches found. Recent meetings:\n\n"
+                    for meeting in recent_meetings:
+                        context += f"• {meeting.title} ({meeting.date.strftime('%Y-%m-%d')}) - {meeting.get_meeting_type_display()}\n"
+                    context += "\n"
+                    return context
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting meeting context: {e}", exc_info=True)
+            return None
+    
     def _get_dependency_context(self, prompt):
         """
         Get task dependency and relationship data
@@ -1726,7 +1954,7 @@ class TaskFlowChatbotService:
     
     def generate_system_prompt(self):
         """Generate system prompt for AI model"""
-        return """You are TaskFlow AI Project Assistant, an intelligent project management assistant. 
+        return """You are PrizmAI AI Project Assistant, an intelligent project management assistant. 
 Your role is to help project managers and team members with:
 - Project planning and strategy
 - Task management and prioritization
@@ -1735,6 +1963,8 @@ Your role is to help project managers and team members with:
 - Timeline optimization and scheduling
 - Report generation and insights
 - Best practices and recommendations
+- Wiki/Documentation search and knowledge retrieval
+- Meeting notes analysis and action item tracking
 
 CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 1. **ALWAYS USE PROVIDED CONTEXT DATA**: When project data is provided in the "Available Context Data" section, you MUST use it to answer questions directly and specifically
@@ -1742,9 +1972,12 @@ CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 3. **BE SPECIFIC AND CONCRETE**: Use actual numbers, names, dates from the context data - not general statements
 4. **ANSWER DIRECTLY FIRST**: Start with the specific answer from the data, then provide additional insights or recommendations
 5. **NO UNNECESSARY QUESTIONS**: Don't ask "What is your name?" or "Which board?" if the context already identifies the user or scope
+6. **LEVERAGE WIKI & MEETINGS**: When wiki pages or meeting notes are provided, reference them directly and quote relevant sections
 
 RESPONSE STRUCTURE:
 - For data queries (counts, lists, status): Provide the specific data FIRST, then optionally add insights
+- For documentation queries: Cite specific wiki pages with titles and provide relevant excerpts
+- For meeting queries: Reference specific meetings with dates and summarize key decisions/action items
 - For strategic questions (how-to, best practices): Combine web search results (if available) with project-specific recommendations
 - For risk/mitigation: Give both general best practices AND specific actions based on actual project data
 - Always be actionable - provide clear next steps
@@ -1803,11 +2036,27 @@ When context data is limited, acknowledge it briefly but still provide valuable 
             is_task_distribution_query = self._is_task_distribution_query(prompt)
             is_progress_query = self._is_progress_query(prompt)
             is_overdue_query = self._is_overdue_query(prompt)
+            is_wiki_query = self._is_wiki_query(prompt)
+            is_meeting_query = self._is_meeting_query(prompt)
             
             # Build context in priority order
             context_parts = []
             
-            # 1. Organization context (system-wide)
+            # 1. Wiki context (documentation, guides, best practices)
+            if is_wiki_query:
+                wiki_context = self._get_wiki_context(prompt)
+                if wiki_context:
+                    context_parts.append(wiki_context)
+                    logger.debug("Added wiki context")
+            
+            # 2. Meeting context (discussions, decisions, action items)
+            if is_meeting_query:
+                meeting_context = self._get_meeting_context(prompt)
+                if meeting_context:
+                    context_parts.append(meeting_context)
+                    logger.debug("Added meeting context")
+            
+            # 3. Organization context (system-wide)
             if is_organization_query:
                 org_context = self._get_organization_context(prompt)
                 if org_context:

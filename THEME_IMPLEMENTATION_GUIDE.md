@@ -1,7 +1,7 @@
-# Light/Dark Theme Toggle Implementation
+﻿# Light/Dark Theme Toggle Implementation
 
 ## Overview
-A fully functional light/dark mode toggle system has been implemented for the TaskFlow application. The system includes:
+A fully functional light/dark mode toggle system has been implemented for the PrizmAI application. The system includes:
 
 - **Toggle Button**: Located in the top navigation bar
 - **Persistent Storage**: User's theme preference is saved in localStorage

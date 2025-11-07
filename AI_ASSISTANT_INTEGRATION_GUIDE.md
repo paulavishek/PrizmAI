@@ -1,13 +1,13 @@
-# TaskFlow AI Project Assistant Integration Guide
+﻿# PrizmAI AI Project Assistant Integration Guide
 
 ## Overview
 
-TaskFlow AI Project Assistant is an intelligent conversational chatbot integrated into your TaskFlow project management system. It enables natural language interactions for project insights, task management, resource optimization, and risk analysis.
+PrizmAI AI Project Assistant is an intelligent conversational chatbot integrated into your PrizmAI project management system. It enables natural language interactions for project insights, task management, resource optimization, and risk analysis.
 
 Built on proven technologies from the Nexus 360 chatbot project, this integration combines:
 - **Dual AI Models**: Google Gemini and OpenAI GPT-4
 - **RAG (Retrieval Augmented Generation)**: Google Search integration for current information
-- **Project Context**: Direct access to TaskFlow data (boards, tasks, teams, etc.)
+- **Project Context**: Direct access to PrizmAI data (boards, tasks, teams, etc.)
 - **Smart Analytics**: Usage tracking and performance insights
 
 ## Features
@@ -222,7 +222,7 @@ User Input
 Views.py (API endpoint)
     ↓
 ChatbotService.get_response()
-    ├─→ TaskFlow Context (boards, tasks, team)
+    ├─→ PrizmAI Context (boards, tasks, team)
     ├─→ Knowledge Base (indexed project data)
     ├─→ Web Search (if RAG-enabled)
     └─→ AI Model (Gemini or OpenAI)
@@ -418,7 +418,7 @@ python manage.py refresh_kb
 
 Add custom context to queries:
 ```python
-service = TaskFlowChatbotService(user=request.user, board=board)
+service = PrizmAIChatbotService(user=request.user, board=board)
 # Service automatically includes board context
 ```
 
@@ -478,7 +478,7 @@ Potential additions:
 
 ## License
 
-Same as TaskFlow project.
+Same as PrizmAI project.
 
 ## Changelog
 

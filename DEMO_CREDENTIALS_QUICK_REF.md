@@ -1,4 +1,4 @@
-# 🚀 TaskFlow Demo - Quick Reference Card
+﻿# 🚀 PrizmAI Demo - Quick Reference Card
 
 ## 👥 TEST USER CREDENTIALS
 

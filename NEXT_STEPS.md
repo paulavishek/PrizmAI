@@ -1,4 +1,4 @@
-# NEXT STEPS - ReqManager Integration
+﻿# NEXT STEPS - ReqManager Integration
 
 ## You Have Successfully Integrated 3 ReqManager Features
 
@@ -13,7 +13,7 @@
 
 ### Step 1: Apply the Database Migration
 ```bash
-cd "c:\Users\Avishek Paul\TaskFlow"
+cd "c:\Users\Avishek Paul\PrizmAI"
 python manage.py migrate kanban
 ```
 

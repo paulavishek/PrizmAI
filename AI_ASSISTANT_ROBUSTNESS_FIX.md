@@ -1,4 +1,4 @@
-# AI Assistant Robustness Improvements - Comprehensive Fix
+﻿# AI Assistant Robustness Improvements - Comprehensive Fix
 
 ## Problem Statement
 
@@ -16,15 +16,15 @@ This caused the AI assistant to appear uninformed and unable to answer basic sys
 ### Issue 1: Organization Data Not Accessible
 
 **Root Causes:**
-- The `TaskFlowChatbotService` had no dedicated method to retrieve organization data
-- The `get_taskflow_context()` method only showed board-level information
+- The `PrizmAIChatbotService` had no dedicated method to retrieve organization data
+- The `get_PrizmAI_context()` method only showed board-level information
 - No organization-specific query detection existed in the prompt routing logic
 - Organization data wasn't included in the context building pipeline
 
 **Evidence:**
 ```python
 # Old code had no way to answer org questions
-def get_taskflow_context(self, use_cache=True):
+def get_PrizmAI_context(self, use_cache=True):
     """Only handled board context, NOT organization context"""
     if self.board:
         context += f"Board: {self.board.name}\n"
@@ -202,7 +202,7 @@ else:
 ## Technical Details
 
 ### Files Modified
-- `c:\Users\Avishek Paul\TaskFlow\ai_assistant\utils\chatbot_service.py`
+- `c:\Users\Avishek Paul\PrizmAI\ai_assistant\utils\chatbot_service.py`
 
 ### Code Changes Summary
 

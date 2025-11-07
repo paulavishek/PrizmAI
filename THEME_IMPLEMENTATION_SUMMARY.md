@@ -1,8 +1,8 @@
-# 🌙 Light/Dark Theme Toggle - Implementation Summary
+﻿# 🌙 Light/Dark Theme Toggle - Implementation Summary
 
 ## ✅ Completed Implementation
 
-A production-ready light/dark mode toggle has been successfully implemented for the TaskFlow application.
+A production-ready light/dark mode toggle has been successfully implemented for the PrizmAI application.
 
 ## 📦 What You Get
 

@@ -1,4 +1,4 @@
-# AI Assistant Aggregate Query Fix - Visual Summary
+﻿# AI Assistant Aggregate Query Fix - Visual Summary
 
 ## The Issue
 
@@ -322,7 +322,7 @@ RESPONSE:                "Here are recommendations..."
 
 **What:** AI Assistant now answers aggregate queries  
 **When:** Available now after code deployment  
-**Where:** TaskFlow chat interface  
+**Where:** PrizmAI chat interface  
 **Why:** Users asked for system-wide task visibility  
 **How:** Added smart query detection + data aggregation  
 **Status:** ✅ Ready to use  

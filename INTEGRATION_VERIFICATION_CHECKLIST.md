@@ -1,4 +1,4 @@
-# Integration Verification Checklist
+﻿# Integration Verification Checklist
 
 ## ✅ All Features Successfully Integrated
 
@@ -385,7 +385,7 @@ rm templates/kanban/dependency_tree.html
 ## Files Location Reference
 
 ```
-TaskFlow/
+PrizmAI/
 ├── kanban/
 │   ├── models.py                    ✅ Modified
 │   ├── admin.py                     ✅ Modified

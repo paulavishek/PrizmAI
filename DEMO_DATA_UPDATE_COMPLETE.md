@@ -1,8 +1,8 @@
-# ✅ Demo Data Update Complete - Summary
+﻿# ✅ Demo Data Update Complete - Summary
 
 ## What Was Done
 
-I've successfully **updated the demo data** for your TaskFlow kanban board to include all new advanced features. Users can now start the demo and explore all new capabilities!
+I've successfully **updated the demo data** for your PrizmAI kanban board to include all new advanced features. Users can now start the demo and explore all new capabilities!
 
 ---
 
@@ -315,7 +315,7 @@ When you run `python verify_demo_data.py`, you'll see:
 
 ## 🎉 Summary
 
-The TaskFlow demo data has been **completely updated** to showcase all advanced features:
+The PrizmAI demo data has been **completely updated** to showcase all advanced features:
 
 ✅ **Risk Management** - 12 tasks with full risk assessments  
 ✅ **Resource Management** - 6 forecasts with capacity tracking  

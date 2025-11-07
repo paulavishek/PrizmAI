@@ -1,4 +1,4 @@
-# ✅ Complete Feature Integration - Summary & Status
+﻿# ✅ Complete Feature Integration - Summary & Status
 
 **Date:** November 2024  
 **Status:** 🟢 COMPLETE - All demo data created, UI integrated, ready for testing  
@@ -85,7 +85,7 @@
 
 ### Step 1: Start Django Server
 ```bash
-cd c:\Users\Avishek Paul\TaskFlow
+cd c:\Users\Avishek Paul\PrizmAI
 python manage.py runserver
 ```
 
@@ -315,7 +315,7 @@ python manage.py shell
 ## 💡 Key Files to Explore
 
 ```
-TaskFlow/
+PrizmAI/
 ├── kanban/
 │   ├── management/commands/
 │   │   └── populate_test_data.py ← Run this with: python manage.py populate_test_data

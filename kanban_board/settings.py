@@ -202,7 +202,7 @@ else:
     EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 
 # Default from email for system emails
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@taskflow.com')
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@prizmAI.com')
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 # Django Sites Framework (required for allauth)

@@ -1,8 +1,8 @@
-# ReqManager Features Integration - Quick Start
+﻿# ReqManager Features Integration - Quick Start
 
 ## What Was Added
 
-This document summarizes the three ReqManager features now integrated into TaskFlow:
+This document summarizes the three ReqManager features now integrated into PrizmAI:
 
 ### 1. Parent-Child Task Relationships ✅
 - Create hierarchical task structures
@@ -84,7 +84,7 @@ curl http://localhost:8000/kanban/api/board/1/dependency-graph/
 
 ## Key Improvements Over ReqManager
 
-1. **Adapted for Kanban Boards**: Works with TaskFlow's column-based task organization
+1. **Adapted for Kanban Boards**: Works with PrizmAI's column-based task organization
 2. **Integrated Risk Management**: Dependencies feed into risk assessment
 3. **Resource Forecasting Ready**: Dependency data improves workload predictions
 4. **AI-Enhanced**: Uses existing AI infrastructure for better suggestions

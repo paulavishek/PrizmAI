@@ -1,4 +1,4 @@
-# 📖 Notification Badge Documentation Index
+﻿# 📖 Notification Badge Documentation Index
 
 **Feature**: Real-time unread message counter in navigation bar
 **Status**: ✅ Complete and Ready for Production
@@ -241,10 +241,10 @@ For testing guidance, see: **NOTIFICATION_BADGE_VISUAL_GUIDE.md**
 
 ## 🔗 Quick Navigation
 
-All files are in the root directory: `/TaskFlow/`
+All files are in the root directory: `/PrizmAI/`
 
 ```
-TaskFlow/
+PrizmAI/
 ├── NOTIFICATION_BADGE_QUICK_REFERENCE.md
 ├── NOTIFICATION_BADGE_STATUS_REPORT.md
 ├── NOTIFICATION_BADGE_VISUAL_GUIDE.md

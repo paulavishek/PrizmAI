@@ -148,6 +148,18 @@
 
         <!-- Sidebar -->
         <div class="col-md-4">
+            <!-- Meeting Assistant Quick Link -->
+            <div class="card border-0 shadow-sm mb-3">
+                <div class="card-body">
+                    <a href="{% url 'ai_assistant:chat' %}" class="btn btn-outline-primary w-100">
+                        <i class="fas fa-robot me-2"></i>Meeting Assistant
+                    </a>
+                    <small class="text-muted d-block mt-2">
+                        Get help analyzing meeting notes and extracting action items
+                    </small>
+                </div>
+            </div>
+
             <!-- Board Context -->
             {% if board %}
                 <div class="card border-0 shadow-sm mb-3">

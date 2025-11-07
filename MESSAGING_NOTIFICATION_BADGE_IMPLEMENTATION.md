@@ -1,7 +1,7 @@
-# Messaging Notification Badge - Implementation Complete ✅
+﻿# Messaging Notification Badge - Implementation Complete ✅
 
 ## Summary
-A notification badge feature has been successfully implemented for the TaskFlow messaging system. Users will now see a red badge with the count of unread messages next to the "Messages" link in the navigation bar.
+A notification badge feature has been successfully implemented for the PrizmAI messaging system. Users will now see a red badge with the count of unread messages next to the "Messages" link in the navigation bar.
 
 ## What's New
 
@@ -79,7 +79,7 @@ A notification badge feature has been successfully implemented for the TaskFlow 
 ## Testing Instructions
 
 ### Quick Test
-1. Start TaskFlow application
+1. Start PrizmAI application
 2. Log in as User A
 3. Create a chat room (add User B as member)
 4. Log in as User B in another window

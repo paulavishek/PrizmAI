@@ -1,10 +1,10 @@
-# Notification Badge - Quick Visual Guide
+﻿# Notification Badge - Quick Visual Guide
 
 ## Navigation Bar Layout
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ Digital Kanban  | Dashboard | Boards | AI Assistant | Messages [5]  ▼ User│
+│ PrizmAI  | Dashboard | Boards | AI Assistant | Messages [5]  ▼ User│
 └─────────────────────────────────────────────────────────────────────────────┘
                                                               ↑
                                                         RED BADGE

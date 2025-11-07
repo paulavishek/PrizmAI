@@ -1,8 +1,8 @@
-# 🛡️ AI-Powered Risk Management Integration for TaskFlow Kanban Board
+﻿# 🛡️ AI-Powered Risk Management Integration for PrizmAI Kanban Board
 
 ## Overview
 
-This integration adds sophisticated AI-powered risk management capabilities to your TaskFlow Kanban board, adapting methodologies from your Risk Management System. The feature set includes:
+This integration adds sophisticated AI-powered risk management capabilities to your PrizmAI Kanban board, adapting methodologies from your Risk Management System. The feature set includes:
 
 1. **AI-Powered Likelihood & Impact Scoring** - Uses Google Gemini API to intelligently assess task risks
 2. **Simple Risk Indicators** - Color-coded risk levels (Low/Medium/High/Critical) displayed on each task

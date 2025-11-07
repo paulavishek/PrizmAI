@@ -1,12 +1,12 @@
-# TaskFlow - Gemini-Powered Digital Kanban Board
+﻿# PrizmAI - AI-Powered Project Intelligence Platform
 
-🤖 **The Intelligent Project Management Solution** - A revolutionary web application that combines traditional Kanban methodology with **Google's Gemini AI** to supercharge your team's productivity and workflow optimization.
+🤖 **See Your Projects with Intelligence** - A revolutionary project management platform that combines traditional Kanban methodology with **Google's Gemini AI** to deliver unprecedented project visibility, intelligence, and automation.
 
-![TaskFlow Logo](static/img/favicon.ico)
+![PrizmAI Logo](static/img/favicon.ico)
 
-## 🚀 Why TaskFlow is Different
+## 🚀 Why PrizmAI is Different
 
-TaskFlow isn't just another project management tool - it's your **Gemini-powered productivity partner** that understands your workflow and helps optimize it automatically. Powered by Google's advanced Gemini 2.5 Flash Lite model, TaskFlow provides genuine AI intelligence that learns from your project details to deliver human-like recommendations and automation.
+PrizmAI isn't just another project management tool - it's an **AI-powered intelligence platform** that transforms how teams understand and execute their work. Powered by Google's advanced Gemini 2.5 Flash Lite model, PrizmAI provides genuine AI intelligence across every aspect of project management - from planning to execution to analysis.
 
 ### ✨ Features at a Glance
 
@@ -39,11 +39,11 @@ TaskFlow isn't just another project management tool - it's your **Gemini-powered
 - CSRF and XSS protection
 - Privacy-focused AI processing with Gemini API
 
-### 🌟 How TaskFlow Complements Traditional PM Tools
+### 🌟 How PrizmAI Complements Traditional PM Tools
 
-TaskFlow is an open-source project inspired by the powerful Kanban functionalities of industry-leading tools like Trello, Asana, and Jira. It is designed to explore how next-generation generative AI, specifically Google's Gemini, can be deeply integrated to create novel, intelligent features that complement traditional project management workflows.
+PrizmAI is an open-source project inspired by the powerful Kanban functionalities of industry-leading tools like Trello, Asana, and Jira. It is designed to explore how next-generation generative AI, specifically Google's Gemini, can be deeply integrated to create novel, intelligent features that complement traditional project management workflows.
 
-| Feature | TaskFlow | Trello | Asana | Jira | Monday.com |
+| Feature | PrizmAI | Trello | Asana | Jira | Monday.com |
 |---------|----------|--------|-------|------|------------|
 | **Gemini AI Column Recommendations** | ✅ Smart suggestions | ➖ Traditional setup | ➖ Traditional setup | ➖ Traditional setup | ➖ Traditional setup |
 | **Gemini AI Task Generation** | ✅ Full descriptions | ➖ Manual creation | ➖ Manual creation | ➖ Manual creation | ➖ Manual creation |
@@ -61,7 +61,7 @@ TaskFlow is an open-source project inspired by the powerful Kanban functionaliti
 | **Self-Hosted Option** | ✅ Complete control | ➖ Cloud only | ➖ Cloud only | ✅ Enterprise | ➖ Cloud only |
 | **Privacy Control** | ✅ Your infrastructure | ➖ Vendor controlled | ➖ Vendor controlled | ✅ Enterprise | ➖ Vendor controlled |
 
-**🚀 TaskFlow's Innovation Focus:**
+**🚀 PrizmAI's Innovation Focus:**
 
 - **Deep Gemini Integration Experiment** - Exploring how Google's advanced language model can transform project workflows
 - **Comprehensive Management Suite** - Combining AI-powered risk, resource, requirements, and stakeholder management with Kanban methodology
@@ -70,7 +70,7 @@ TaskFlow is an open-source project inspired by the powerful Kanban functionaliti
 - **Privacy-Conscious AI** - Demonstrating how to leverage cloud AI while maintaining data control
 - **Educational Platform** - Perfect for learning modern AI integration patterns and Django development
 
-*Note: While major PM tools are rapidly evolving and integrating their own AI capabilities, TaskFlow is unique in its deep, open-source integration of Google's Gemini model across the entire project lifecycle—from initial board setup to final analytics. This project serves as an exploration of what's possible when AI is thoughtfully integrated into every aspect of project management, complemented by sophisticated risk, resource, requirements, and stakeholder management systems.*
+*Note: While major PM tools are rapidly evolving and integrating their own AI capabilities, PrizmAI is unique in its deep, open-source integration of Google's Gemini model across the entire project lifecycle—from initial board setup to final analytics. This project serves as an exploration of what's possible when AI is thoughtfully integrated into every aspect of project management, complemented by sophisticated risk, resource, requirements, and stakeholder management systems.*
 
 ## Table of Contents
 
@@ -96,7 +96,7 @@ TaskFlow is an open-source project inspired by the powerful Kanban functionaliti
 
 ## 🤖 AI-Powered Features
 
-TaskFlow leverages advanced AI to make project management smarter, faster, and more efficient:
+PrizmAI leverages advanced AI to make project management smarter, faster, and more efficient:
 
 ### 💬 **AI Project Assistant** *(Powered by Gemini with RAG)*
 
@@ -184,7 +184,7 @@ Gemini AI Result: Creates columns like:
 
 ### 🧠 **Intelligent Task Assistant** *(Powered by Gemini)*
 
-**What it does:** Using Google's Gemini model, TaskFlow transforms simple task titles into comprehensive, actionable task descriptions with detailed checklists.
+**What it does:** Using Google's Gemini model, PrizmAI transforms simple task titles into comprehensive, actionable task descriptions with detailed checklists.
 
 **How to use it:**
 1. Enter a descriptive task title (the more specific, the better!)
@@ -250,7 +250,7 @@ Gemini Output: Detailed description with checklist including:
 
 ## ⚠️ Advanced Management Features
 
-TaskFlow now includes sophisticated management systems for risks, resources, requirements, and stakeholders—essential for enterprise-grade project management.
+PrizmAI now includes sophisticated management systems for risks, resources, requirements, and stakeholders—essential for enterprise-grade project management.
 
 ### 🛡️ Risk Management
 
@@ -520,17 +520,17 @@ Stakeholders:
 #### Step 1: Clone and Setup
 ```bash
 # Clone the repository
-git clone https://github.com/avishekpaul1310/TaskFlow.git
-cd TaskFlow
+git clone https://github.com/avishekpaul1310/PrizmAI.git
+cd PrizmAI
 
 # Create virtual environment
-python -m venv taskflow_env
+python -m venv PrizmAI_env
 
 # Activate virtual environment
 # On Windows:
-taskflow_env\Scripts\activate
+PrizmAI_env\Scripts\activate
 # On macOS/Linux:
-source taskflow_env/bin/activate
+source PrizmAI_env/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
@@ -560,7 +560,7 @@ python manage.py createsuperuser
 python manage.py collectstatic --noinput
 ```
 
-#### Step 4: Launch TaskFlow
+#### Step 4: Launch PrizmAI
 ```bash
 # Start the development server
 python manage.py runserver
@@ -626,7 +626,7 @@ python manage.py runserver
 #### Quick Sign-Up with Google
 1. Navigate to the application login page
 2. Click the "Sign in with Google" button for instant access
-3. Authorize TaskFlow to access your Google account
+3. Authorize PrizmAI to access your Google account
 4. You'll be automatically assigned to an organization based on your email domain
 
 #### Traditional Registration
@@ -674,11 +674,11 @@ The more specific your board title, the better AI can understand your project an
 
 ### 🎬 Demo & Examples
 
-Want to see TaskFlow's AI features in action? Try our interactive demo!
+Want to see PrizmAI's AI features in action? Try our interactive demo!
 
 #### 🚀 Run the AI Features Demo
 ```bash
-# From the TaskFlow directory, run:
+# From the PrizmAI directory, run:
 python demo_ai_features.py
 
 # This will create sample boards showcasing:
@@ -785,7 +785,7 @@ AI Result: Advanced 7 columns:
 
 ### 🏠 **Personal Dashboard with "My Tasks"**
 
-**What it does:** TaskFlow includes a personalized "My Tasks" section that shows you exactly what you need to work on right now, across all your boards.
+**What it does:** PrizmAI includes a personalized "My Tasks" section that shows you exactly what you need to work on right now, across all your boards.
 
 **Key Features:**
 
@@ -810,7 +810,7 @@ AI Result: Advanced 7 columns:
 - Project managers tracking their assigned responsibilities
 - Anyone wanting quick access to their most important work
 
-This feature eliminates the need to browse through multiple boards to find your assigned tasks, making TaskFlow perfect for both team collaboration and individual productivity.
+This feature eliminates the need to browse through multiple boards to find your assigned tasks, making PrizmAI perfect for both team collaboration and individual productivity.
 
 ### 📋 Traditional Kanban Features
 
@@ -962,7 +962,7 @@ Filter tasks intelligently by:
    - Copy the key
 
 2. **Add to Your App**:
-   - In your TaskFlow installation, find the `.env` file
+   - In your PrizmAI installation, find the `.env` file
    - Add: `GEMINI_API_KEY=your_copied_key_here`
    - Restart the application
 
@@ -976,7 +976,7 @@ Filter tasks intelligently by:
 #### Quick Google Sign-In (Recommended)
 1. Navigate to login page
 2. Click "Sign in with Google" 
-3. Authorize TaskFlow access
+3. Authorize PrizmAI access
 4. Automatic organization assignment based on email domain
 
 #### Traditional Registration  
@@ -1005,13 +1005,13 @@ Filter tasks intelligently by:
 
 ## 📊 Productivity Tracking
 
-TaskFlow's AI-enhanced productivity tracking goes beyond simple metrics to provide intelligent insights about your team's performance and workflow optimization opportunities.
+PrizmAI's AI-enhanced productivity tracking goes beyond simple metrics to provide intelligent insights about your team's performance and workflow optimization opportunities.
 
 ### 🤖 AI-Powered Productivity Analysis
 
-**What Makes TaskFlow Different:**
+**What Makes PrizmAI Different:**
 - Traditional tools show you *what* happened
-- TaskFlow's AI tells you *why* it happened and *how* to improve
+- PrizmAI's AI tells you *why* it happened and *how* to improve
 
 ### 📈 Smart Metrics & AI Insights
 
@@ -1118,7 +1118,7 @@ includes 3 high-risk tasks that may cause delays if not prioritized."
 
 ## 🛠️ Technical Information
 
-TaskFlow combines proven web technologies with cutting-edge AI capabilities:
+PrizmAI combines proven web technologies with cutting-edge AI capabilities:
 
 ### Core Technologies
 
@@ -1151,7 +1151,7 @@ TaskFlow combines proven web technologies with cutting-edge AI capabilities:
 
 ## 🔒 Security & Privacy
 
-TaskFlow prioritizes the security of your team's data and AI-powered insights.
+PrizmAI prioritizes the security of your team's data and AI-powered insights.
 
 ### 🛡️ Authentication & Access Control
 - **Multi-Factor Authentication**: Support for Google OAuth and traditional password authentication
@@ -1249,7 +1249,7 @@ TaskFlow prioritizes the security of your team's data and AI-powered insights.
 
 **📋 Before Reporting Issues:**
 1. Check this troubleshooting section
-2. Search existing [GitHub Issues](https://github.com/avishekpaul1310/TaskFlow/issues)
+2. Search existing [GitHub Issues](https://github.com/avishekpaul1310/PrizmAI/issues)
 3. Try the suggested solutions above
 4. Test with a fresh installation if possible
 
@@ -1267,7 +1267,7 @@ TaskFlow prioritizes the security of your team's data and AI-powered insights.
 
 ## 🤝 Contributing
 
-We welcome contributions to TaskFlow! Whether you're interested in improving AI features, enhancing the user interface, or fixing bugs, your help is appreciated.
+We welcome contributions to PrizmAI! Whether you're interested in improving AI features, enhancing the user interface, or fixing bugs, your help is appreciated.
 
 ### 🌟 Ways to Contribute
 
@@ -1297,7 +1297,7 @@ We welcome contributions to TaskFlow! Whether you're interested in improving AI 
 
 ### 🚀 Getting Started
 
-1. **Fork the Repository**: Create your own copy of TaskFlow
+1. **Fork the Repository**: Create your own copy of PrizmAI
 2. **Set Up Development Environment**: Follow the installation guide
 3. **Find an Issue**: Check the Issues tab for beginner-friendly tasks
 4. **Make Your Changes**: Implement improvements or fixes
@@ -1339,38 +1339,38 @@ For detailed contribution guidelines, please see [CONTRIBUTING.md](CONTRIBUTING.
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ### 🎯 What This Means
-- ✅ **Free to Use**: Use TaskFlow for personal or commercial projects
+- ✅ **Free to Use**: Use PrizmAI for personal or commercial projects
 - ✅ **Modify Freely**: Customize AI features and functionality for your needs
-- ✅ **Share & Distribute**: Deploy TaskFlow for your team or organization
+- ✅ **Share & Distribute**: Deploy PrizmAI for your team or organization
 - ✅ **No Warranties**: Software provided "as-is" without guarantees
 
 ---
 
 ## 🙏 Acknowledgments
 
-- **Google Gemini AI**: For providing the advanced language model that powers TaskFlow's intelligent features
-- **Django Community**: For the excellent web framework that forms TaskFlow's foundation
-- **Bootstrap Team**: For responsive design components that make TaskFlow beautiful and accessible
+- **Google Gemini AI**: For providing the advanced language model that powers PrizmAI's intelligent features
+- **Django Community**: For the excellent web framework that forms PrizmAI's foundation
+- **Bootstrap Team**: For responsive design components that make PrizmAI beautiful and accessible
 - **Google Cloud Platform**: For enterprise-grade infrastructure supporting Gemini API integration
-- **Contributors**: Everyone who has helped improve TaskFlow and make it more intelligent
+- **Contributors**: Everyone who has helped improve PrizmAI and make it more intelligent
 
 ---
 
 **Ready to supercharge your team's productivity with Gemini-powered project management?**
 
-[Get Started with TaskFlow Today!](#-quick-start-3-minutes-to-ai-powered-productivity) | [Explore Gemini Features](#-gemini-powered-features) | [Join the Community](#-contributing)
+[Get Started with PrizmAI Today!](#-quick-start-3-minutes-to-ai-powered-productivity) | [Explore Gemini Features](#-gemini-powered-features) | [Join the Community](#-contributing)
 
 ---
 
-© 2025 TaskFlow - Gemini-Powered Digital Kanban Board. All rights reserved.
+© 2025 PrizmAI - Gemini-Powered PrizmAI. All rights reserved.
 
 ## 🤖 Gemini-Powered Features
 
-TaskFlow leverages Google's advanced Gemini 2.5 Flash Lite model to make project management smarter, faster, and more efficient:
+PrizmAI leverages Google's advanced Gemini 2.5 Flash Lite model to make project management smarter, faster, and more efficient:
 
 ### 🧠 How Our Gemini AI Works
 
-Our intelligent features are not based on simple rules or templates. **TaskFlow uses Google's Gemini, a powerful large language model, to provide genuine creativity and analysis.** When you request a recommendation or summary, your project's context (like a board title or comment thread) is securely sent to the Gemini API. The model then generates insightful, human-like responses that understand your specific business context.
+Our intelligent features are not based on simple rules or templates. **PrizmAI uses Google's Gemini, a powerful large language model, to provide genuine creativity and analysis.** When you request a recommendation or summary, your project's context (like a board title or comment thread) is securely sent to the Gemini API. The model then generates insightful, human-like responses that understand your specific business context.
 
 **🔒 Privacy & Security:**
 - Your sensitive project data is processed securely through Google's enterprise-grade APIs
@@ -1384,4 +1384,4 @@ Our intelligent features are not based on simple rules or templates. **TaskFlow 
 - **Continuous Learning**: Benefits from Google's ongoing AI improvements
 - **Proven Reliability**: Enterprise-grade infrastructure you can trust
 
-This API-driven approach allows TaskFlow to leverage cutting-edge AI without requiring you to manage any training data or complex infrastructure.
+This API-driven approach allows PrizmAI to leverage cutting-edge AI without requiring you to manage any training data or complex infrastructure.

@@ -1,8 +1,8 @@
-# Real-Time Communication Integration for TaskFlow
+﻿# Real-Time Communication Integration for PrizmAI
 
 ## Overview
 
-This integration adds real-time communication capabilities to TaskFlow, enabling teams to collaborate effectively on tasks and boards. It includes:
+This integration adds real-time communication capabilities to PrizmAI, enabling teams to collaborate effectively on tasks and boards. It includes:
 
 1. **Task-Level Comments** - Add @mentions and real-time comments to individual tasks
 2. **Board-Level Chat Rooms** - Create quick discussion channels for board-wide coordination

@@ -1,8 +1,8 @@
-# ✅ TaskFlow Demo Setup - COMPLETE
+﻿# ✅ PrizmAI Demo Setup - COMPLETE
 
 ## 🎉 Setup Status: ✅ READY FOR TESTING
 
-Your TaskFlow project is now fully configured with fresh, comprehensive demo data covering all features.
+Your PrizmAI project is now fully configured with fresh, comprehensive demo data covering all features.
 
 ---
 
@@ -159,7 +159,7 @@ Features:
 
 ### Step 1: Start the Server
 ```bash
-cd c:\Users\Avishek Paul\TaskFlow
+cd c:\Users\Avishek Paul\PrizmAI
 python manage.py runserver
 ```
 
@@ -354,7 +354,7 @@ python verify_demo_data.py
 
 ## 🎉 You're Ready!
 
-The TaskFlow project is now fully prepared for testing with:
+The PrizmAI project is now fully prepared for testing with:
 - ✅ Fresh, clean database
 - ✅ 8 test users with unique passwords
 - ✅ Comprehensive demo data for all features

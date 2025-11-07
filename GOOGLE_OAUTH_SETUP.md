@@ -1,4 +1,4 @@
-# Google OAuth Integration - Configuration Complete ✅
+﻿# Google OAuth Integration - Configuration Complete ✅
 
 ## Summary of Changes
 
@@ -38,7 +38,7 @@ Django-allauth requires OAuth providers to be registered as `SocialApp` objects 
 3. **Test the flow**:
    - Click "Sign in with Google" button
    - You'll be redirected to Google's login
-   - Upon successful authentication, you'll be logged into TaskFlow
+   - Upon successful authentication, you'll be logged into PrizmAI
 
 ## If Google Button Still Doesn't Show
 
@@ -63,7 +63,7 @@ python manage.py shell
 >>> from django.contrib.sites.models import Site
 >>> site = Site.objects.get_current()
 >>> site.domain = 'localhost:8000'
->>> site.name = 'TaskFlow'
+>>> site.name = 'PrizmAI'
 >>> site.save()
 ```
 

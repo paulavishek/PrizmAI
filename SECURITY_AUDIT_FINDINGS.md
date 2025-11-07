@@ -1,4 +1,4 @@
-# Security Audit Report - API Key Exposure
+﻿# Security Audit Report - API Key Exposure
 
 **Date**: October 29, 2025  
 **Audit Type**: API Key Exposure Scan  
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-A comprehensive security audit was performed on the TaskFlow project to identify exposed API keys and credentials. **Four sensitive items** were found in the `.env` file. All have been **remediated**.
+A comprehensive security audit was performed on the PrizmAI project to identify exposed API keys and credentials. **Four sensitive items** were found in the `.env` file. All have been **remediated**.
 
 ---
 

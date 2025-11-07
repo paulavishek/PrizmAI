@@ -1,4 +1,4 @@
-# 📊 Gantt Chart - Quick Start Guide
+﻿# 📊 Gantt Chart - Quick Start Guide
 
 ## What Was Implemented
 
@@ -13,7 +13,7 @@ A fully functional Gantt chart with interactive features based on your friend's 
 
 ### Step 1: Add Sample Data (Optional)
 ```powershell
-cd "c:\Users\Avishek Paul\TaskFlow"
+cd "c:\Users\Avishek Paul\PrizmAI"
 Get-Content add_gantt_sample_data.py | python manage.py shell
 ```
 

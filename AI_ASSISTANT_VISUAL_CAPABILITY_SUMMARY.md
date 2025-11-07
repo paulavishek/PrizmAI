@@ -1,4 +1,4 @@
-# AI Assistant Capability Analysis - Visual Summary
+﻿# AI Assistant Capability Analysis - Visual Summary
 
 Created: October 29, 2025
 
@@ -99,7 +99,7 @@ User Question
      ↓
 ┌─────────────────────────────────────────┐
 │  Context Builder                        │
-│  ├─ Taskflow data                      │
+│  ├─ PrizmAI data                      │
 │  ├─ Risk analysis                      │
 │  ├─ Stakeholder data                   │
 │  ├─ Resource forecasts                 │

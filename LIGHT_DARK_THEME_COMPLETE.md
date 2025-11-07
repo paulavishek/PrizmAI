@@ -1,8 +1,8 @@
-# 🎨 Light/Dark Theme Toggle - Complete Implementation ✅
+﻿# 🎨 Light/Dark Theme Toggle - Complete Implementation ✅
 
 ## 🎯 Project Complete
 
-A fully functional **light/dark mode toggle system** has been successfully implemented for the TaskFlow application.
+A fully functional **light/dark mode toggle system** has been successfully implemented for the PrizmAI application.
 
 ---
 

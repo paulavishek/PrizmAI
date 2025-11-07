@@ -1,8 +1,8 @@
-# TaskFlow Demo Data Guide
+﻿# PrizmAI Demo Data Guide
 
 ## Overview
 
-The updated demo data script (`kanban/management/commands/populate_test_data.py`) now includes comprehensive sample data for all advanced features in TaskFlow including risk management, resource management, stakeholder engagement, and requirements management.
+The updated demo data script (`kanban/management/commands/populate_test_data.py`) now includes comprehensive sample data for all advanced features in PrizmAI including risk management, resource management, stakeholder engagement, and requirements management.
 
 ## Running the Demo Data Setup
 

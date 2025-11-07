@@ -1,7 +1,7 @@
-{% extends 'base.html' %}
+﻿{% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Getting Started - TaskFlow{% endblock %}
+{% block title %}Getting Started - PrizmAI{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -225,7 +225,7 @@ function skipTutorial() {
                     <i class="fas fa-hand-wave"></i>
                     {% if is_repeat_visitor %}
                         <h1 class="display-4 mb-3">Welcome back, {{ user.first_name|default:user.username }}!</h1>
-                        <p class="lead text-muted">Let's refresh your knowledge and explore TaskFlow's features again.</p>
+                        <p class="lead text-muted">Let's refresh your knowledge and explore Pri<span class="stylish-z">z</span>mAI's features again.</p>
                     {% else %}
                         <h1 class="display-4 mb-3">Welcome, {{ user.first_name|default:user.username }}!</h1>
                         <p class="lead text-muted">Let's get your first project set up in under 60 seconds.</p>
@@ -402,7 +402,7 @@ function skipTutorial() {
                 <div class="success-animation">
                     <i class="fas fa-trophy"></i>
                     <h1 class="display-4 mt-3">You're All Set!</h1>
-                    <p class="lead text-muted">That's it! You're ready to start managing your projects with TaskFlow.</p>
+                    <p class="lead text-muted">That's it! You're ready to start managing your projects with Pri<span class="stylish-z">z</span>mAI.</p>
                 </div>                <div class="row mt-4">
                     <div class="col-md-6 mb-3">
                         <div class="card border-primary h-100">

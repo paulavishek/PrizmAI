@@ -1,4 +1,4 @@
-# RAG Integration - Executive Summary
+﻿# RAG Integration - Executive Summary
 
 ## What You Asked For
 **"I just realized there are no required keys regarding google search. What we need to integrate RAG capability here?"**
@@ -56,7 +56,7 @@ System Detects Type:
 └─ "Compare to industry?" → BOTH
 
 Retrieves Data From:
-├─ TaskFlow Database (Project data)
+├─ PrizmAI Database (Project data)
 ├─ Knowledge Base (Your insights)
 └─ Google Search (Web info) [needs keys]
 
@@ -102,7 +102,7 @@ Gemini Generates:
    - Handles API calls, caching, rate limiting
 
 ✅ ai_assistant/utils/chatbot_service.py (250+ lines)
-   - TaskFlowChatbotService class
+   - PrizmAIChatbotService class
    - Query detection, context assembly, RAG orchestration
 
 ✅ ai_assistant/utils/ai_clients.py (60 lines)

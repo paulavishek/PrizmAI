@@ -1,14 +1,14 @@
-# TaskFlow - Batch Scripts Implementation Complete ✅
+﻿# PrizmAI - Batch Scripts Implementation Complete ✅
 
 ## 📋 What You Got
 
-You now have **CollabBook-style batch scripts** for TaskFlow!
+You now have **CollabBook-style batch scripts** for PrizmAI!
 
 ### Files Created
 
 ```
-✅ start_taskflow.bat              - One-click startup
-✅ stop_taskflow.bat               - One-click shutdown
+✅ start_PrizmAI.bat              - One-click startup
+✅ stop_PrizmAI.bat               - One-click shutdown
 ✅ BATCH_SCRIPTS_README.md         - Quick reference
 ✅ STARTUP_SCRIPTS_GUIDE.md        - Complete guide
 ✅ COMPLETION_SUMMARY.md           - Everything summary
@@ -20,11 +20,11 @@ You now have **CollabBook-style batch scripts** for TaskFlow!
 
 ### Step 1: Verify Prerequisites
 - ✅ Redis installed at: `C:\redis\Redis-x64-5.0.14.1\`
-- ✅ Python venv exists at: `C:\Users\Avishek Paul\TaskFlow\venv\`
+- ✅ Python venv exists at: `C:\Users\Avishek Paul\PrizmAI\venv\`
 - ✅ Packages installed: `pip install -r requirements.txt`
 
 ### Step 2: Run the Batch File
-**Double-click**: `C:\Users\Avishek Paul\TaskFlow\start_taskflow.bat`
+**Double-click**: `C:\Users\Avishek Paul\PrizmAI\start_PrizmAI.bat`
 
 ### Step 3: Wait 5 Seconds
 Watch 4 command windows open:
@@ -40,7 +40,7 @@ Visit: **http://localhost:8000/**
 
 ## 🎯 What Each Batch Script Does
 
-### start_taskflow.bat
+### start_PrizmAI.bat
 ```
 Starts 4 components in 4 separate windows:
 
@@ -54,7 +54,7 @@ Then displays:
    Access: http://localhost:8000/
 ```
 
-### stop_taskflow.bat
+### stop_PrizmAI.bat
 ```
 Stops all running components:
 
@@ -62,7 +62,7 @@ Stops all running components:
 ✅ Stops Celery Worker by process name
 ✅ Stops Celery Beat by process name
 ✅ Stops Daphne by process name
-✅ Shows: All TaskFlow components stopped!
+✅ Shows: All PrizmAI components stopped!
 ```
 
 ---
@@ -70,7 +70,7 @@ Stops all running components:
 ## 🔧 Configuration
 
 ### Change Redis Path
-Edit `start_taskflow.bat`, line 6:
+Edit `start_PrizmAI.bat`, line 6:
 ```batch
 :: Default
 cd /d C:\redis\Redis-x64-5.0.14.1
@@ -82,11 +82,11 @@ cd /d "C:\your\redis\path"
 ### Change Project Path
 Edit both files, update:
 ```batch
-cd /d "C:\Users\Avishek Paul\TaskFlow"
+cd /d "C:\Users\Avishek Paul\PrizmAI"
 ```
 
 ### Change Port Number
-Edit `start_taskflow.bat`, line 22:
+Edit `start_PrizmAI.bat`, line 22:
 ```batch
 :: From
 daphne -b 0.0.0.0 -p 8000 kanban_board.asgi:application
@@ -99,12 +99,12 @@ daphne -b 0.0.0.0 -p 8001 kanban_board.asgi:application
 
 ## 🧪 Testing
 
-After running `start_taskflow.bat`:
+After running `start_PrizmAI.bat`:
 
 ### Test 1: Browser Access
 ```
 Open: http://localhost:8000/
-Expected: TaskFlow dashboard loads ✅
+Expected: PrizmAI dashboard loads ✅
 ```
 
 ### Test 2: Admin Access
@@ -145,7 +145,7 @@ Solution 1: Kill existing process
   taskkill /F /FI "IMAGENAME eq python.exe"
 
 Solution 2: Use different port
-  Edit start_taskflow.bat, change -p 8000 to -p 8001
+  Edit start_PrizmAI.bat, change -p 8000 to -p 8001
 ```
 
 ### Issue: Redis Won't Start
@@ -155,7 +155,7 @@ Solution 1: Check if already running
 
 Solution 2: Kill and restart
   taskkill /F /IM redis-server.exe
-  Then run start_taskflow.bat again
+  Then run start_PrizmAI.bat again
 
 Solution 3: Verify installation path
   Check: C:\redis\Redis-x64-5.0.14.1\redis-server.exe exists
@@ -168,7 +168,7 @@ Solution 1: Check virtual environment
   pip install celery==5.3.4
 
 Solution 2: Change worker pool
-  Edit start_taskflow.bat:
+  Edit start_PrizmAI.bat:
   FROM: celery -A kanban_board worker --pool=solo -l info
   TO:   celery -A kanban_board worker --pool=threads -l info
 ```
@@ -189,7 +189,7 @@ Checklist:
 
 ```
 Your Computer
-├─ start_taskflow.bat (Click once!)
+├─ start_PrizmAI.bat (Click once!)
 │  ├─→ Redis Server (Window 1)
 │  │   └─ Handles: Message broker, caching
 │  │
@@ -214,13 +214,13 @@ Your Computer
 
 ## 📝 File Details
 
-### start_taskflow.bat (49 lines)
+### start_PrizmAI.bat (49 lines)
 - Starts 4 services in parallel
 - Each in separate command window
 - Includes 3-second delay between starts
 - Displays success message with URLs
 
-### stop_taskflow.bat (30 lines)
+### stop_PrizmAI.bat (30 lines)
 - Gracefully stops all services
 - Uses multiple methods for reliability
 - Displays confirmation
@@ -269,10 +269,10 @@ Your Computer
 **Commands to Know:**
 ```bash
 # Start everything
-start_taskflow.bat
+start_PrizmAI.bat
 
 # Stop everything
-stop_taskflow.bat
+stop_PrizmAI.bat
 
 # Manually test Redis
 redis-cli ping
@@ -291,7 +291,7 @@ taskkill /F /PID 12345
 ## 🚀 Next Steps
 
 1. **Test the Setup**
-   - Run: `start_taskflow.bat`
+   - Run: `start_PrizmAI.bat`
    - Open: http://localhost:8000/
    - Create a board
    - Test real-time messaging
@@ -313,7 +313,7 @@ taskkill /F /PID 12345
 
 ```
 Quick Start:
-└── start_taskflow.bat (Double-click to begin!)
+└── start_PrizmAI.bat (Double-click to begin!)
 
 Getting Started:
 ├── BATCH_SCRIPTS_README.md (This file's sibling)
@@ -335,7 +335,7 @@ Implementation Status:
 
 ## 🎉 You're All Set!
 
-Your TaskFlow now has:
+Your PrizmAI now has:
 - ✅ Real-time messaging backend
 - ✅ WebSocket support
 - ✅ One-click startup
@@ -343,7 +343,7 @@ Your TaskFlow now has:
 - ✅ Production-ready code
 
 **Ready to test?** 
-Double-click: `start_taskflow.bat`
+Double-click: `start_PrizmAI.bat`
 
 **Have questions?**
 Check: `STARTUP_SCRIPTS_GUIDE.md`

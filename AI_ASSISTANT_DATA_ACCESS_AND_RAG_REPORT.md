@@ -1,4 +1,4 @@
-# AI Assistant Data Access & RAG Integration - Comprehensive Report
+﻿# AI Assistant Data Access & RAG Integration - Comprehensive Report
 
 **Date**: November 5, 2025  
 **Status**: ✅ ALL ISSUES RESOLVED
@@ -315,7 +315,7 @@ The AI Assistant uses specialized context builders to retrieve relevant data:
 
 ### 4. Enriched Project Context
 **File**: `ai_assistant/utils/chatbot_service.py`
-**Change**: `get_taskflow_context()` now includes:
+**Change**: `get_PrizmAI_context()` now includes:
 - Task counts by status
 - Risk information
 - Dependencies
@@ -332,7 +332,7 @@ The AI Assistant uses specialized context builders to retrieve relevant data:
 ## Verification Steps for You
 
 ### Test Data Retrieval
-1. Start TaskFlow: `.\start_taskflow.bat`
+1. Start PrizmAI: `.\start_PrizmAI.bat`
 2. Go to AI Assistant
 3. Ask: "How many total tasks do I have across all boards?"
    - **Expected**: Should give exact count with breakdown

@@ -1,4 +1,4 @@
-# 🎯 Feature Integration - Quick Reference Card
+﻿# 🎯 Feature Integration - Quick Reference Card
 
 ## ✅ What's Complete
 
@@ -17,7 +17,7 @@
 
 ```powershell
 # Navigate to project
-cd "c:\Users\Avishek Paul\TaskFlow"
+cd "c:\Users\Avishek Paul\PrizmAI"
 
 # Start Django server
 python manage.py runserver

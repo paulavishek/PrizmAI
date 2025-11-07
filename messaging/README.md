@@ -1,8 +1,8 @@
-# Messaging Module - Real-Time Communication for TaskFlow
+﻿# Messaging Module - Real-Time Communication for PrizmAI
 
 ## Overview
 
-The `messaging` Django app provides real-time communication capabilities for TaskFlow, enabling teams to collaborate efficiently through task-level comments and board-level chat rooms.
+The `messaging` Django app provides real-time communication capabilities for PrizmAI, enabling teams to collaborate efficiently through task-level comments and board-level chat rooms.
 
 ## Features
 
@@ -457,7 +457,7 @@ celery==5.3.4
 
 ## License
 
-Same as TaskFlow project
+Same as PrizmAI project
 
 ## Support
 
@@ -469,4 +469,4 @@ Same as TaskFlow project
 
 **Module Status**: ✅ Production Ready
 **Last Updated**: October 30, 2025
-**Maintainer**: TaskFlow Team
+**Maintainer**: PrizmAI Team

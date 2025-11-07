@@ -1,8 +1,8 @@
-# ✅ MESSAGE DELETION FEATURE - IMPLEMENTATION COMPLETE
+﻿# ✅ MESSAGE DELETION FEATURE - IMPLEMENTATION COMPLETE
 
 ## 🎉 What's New
 
-TaskFlow messaging now includes **two powerful message deletion features**:
+PrizmAI messaging now includes **two powerful message deletion features**:
 
 ### Feature 1: Delete Individual Messages
 - **Who**: Authors, room creators, and staff

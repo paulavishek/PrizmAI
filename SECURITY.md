@@ -1,8 +1,8 @@
-# Security Policy
+﻿# Security Policy
 
 ## Supported Versions
 
-We actively support the following versions of TaskFlow:
+We actively support the following versions of PrizmAI:
 
 | Version | Supported          |
 | ------- | ------------------ |
@@ -11,7 +11,7 @@ We actively support the following versions of TaskFlow:
 
 ## Reporting a Vulnerability
 
-If you discover a security vulnerability in TaskFlow, please report it responsibly:
+If you discover a security vulnerability in PrizmAI, please report it responsibly:
 
 ### How to Report
 

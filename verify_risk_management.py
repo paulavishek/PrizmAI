@@ -1,9 +1,9 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
 Risk Management Integration Verification Script
 
 This script verifies that all risk management features are properly installed
-and configured in your TaskFlow application.
+and configured in your PrizmAI application.
 """
 
 import os
@@ -246,7 +246,7 @@ def generate_summary(results):
 
 def main():
     """Main verification routine"""
-    print(f"\n{Colors.BLUE}🛡️  TaskFlow Risk Management Integration Verification{Colors.END}\n")
+    print(f"\n{Colors.BLUE}🛡️  PrizmAI Risk Management Integration Verification{Colors.END}\n")
     
     results = {
         'model_fields': verify_model_fields(),

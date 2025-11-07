@@ -205,13 +205,15 @@
             <div class="card-body">
                 <p class="text-muted mb-3">
                     Access our powerful AI-driven features for advanced project management and optimization.
-                </p>                <div class="row">
-                    <div class="col-md-4 mb-2">
-                        <a href="{% url 'wiki:meeting_hub_upload_for_board' board.id %}" class="btn btn-outline-warning btn-block">
-                            <i class="fas fa-microphone-alt me-2"></i>Meeting Analysis
+                </p>
+                <div class="row">
+                    <!-- Meeting Analysis feature removed -->
+                    <div class="col-md-6 mb-2">
+                        <a href="{% url 'wiki:knowledge_hub_home' %}" class="btn btn-outline-primary btn-block">
+                            <i class="fas fa-book me-2"></i>Wiki Documentation
                         </a>
                     </div>
-                    <div class="col-md-4 mb-2">
+                    <div class="col-md-6 mb-2">
                         <button class="btn btn-outline-secondary btn-block" onclick="toggleLeanSixSigmaFeatures()">
                             <i class="fas fa-industry me-2"></i>Lean Six Sigma
                         </button>

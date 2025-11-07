@@ -1,4 +1,4 @@
-# AI Assistant Testing - Quick Summary & Reference
+﻿# AI Assistant Testing - Quick Summary & Reference
 
 **Created**: November 5, 2025  
 **For**: Comprehensive AI capability testing - data retrieval and RAG ability
@@ -106,7 +106,7 @@ A comprehensive testing guide containing **83 test questions** organized in two 
 ### Step 1: Prepare
 ```
 ✅ Start AI assistant
-✅ Load demo data into TaskFlow
+✅ Load demo data into PrizmAI
 ✅ Log in with a test user
 ✅ Open the chat interface
 ```
@@ -121,7 +121,7 @@ For each question:
 4. Note response time
 5. Note if specific data was referenced
 
-**Expected**: AI should accurately fetch and report data from your TaskFlow database
+**Expected**: AI should accurately fetch and report data from your PrizmAI database
 
 ### Step 3: Test RAG Capability
 **Do this second** - Questions 45-83

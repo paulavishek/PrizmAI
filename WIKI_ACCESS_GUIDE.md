@@ -1,4 +1,4 @@
-# 📚 How to Access the Wiki in TaskFlow
+﻿# 📚 How to Access the Wiki in PrizmAI
 
 ## ✅ Wiki is Now Live!
 
@@ -9,7 +9,7 @@ Your wiki feature is **fully integrated** and ready to use. Here's exactly where
 ## 🌐 Access Methods
 
 ### Method 1: Main Navigation Bar (Easiest)
-1. **Log in to TaskFlow**
+1. **Log in to PrizmAI**
 2. **Look at the top navigation bar** (dark blue)
 3. **Click the "Wiki" link** with the book icon 📖
    - It's located between "AI Assistant" and "Messages"
@@ -127,7 +127,7 @@ Wiki Homepage (http://localhost:8000/wiki/)
 
 ## 🌟 Getting Started Checklist
 
-- [ ] Log in to TaskFlow
+- [ ] Log in to PrizmAI
 - [ ] Click "Wiki" in navigation bar
 - [ ] You should see a page listing (probably empty initially)
 - [ ] Click "Create New Page" button

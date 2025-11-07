@@ -1,4 +1,4 @@
-# 🎯 Where to Find the New Features in TaskFlow UI
+﻿# 🎯 Where to Find the New Features in PrizmAI UI
 
 ## Overview
 The demo data now has comprehensive sample data for all advanced features. Here's exactly where to see them:

@@ -1,4 +1,4 @@
-# Real-Time Communication - Feature Guide
+﻿# Real-Time Communication - Feature Guide
 
 ## 🎯 Quick Access Points
 
@@ -116,7 +116,7 @@ Board Page
 
 ### All Start with
 ```batch
-start_taskflow.bat
+start_PrizmAI.bat
 ```
 
 ## 📈 Data Flow
@@ -196,4 +196,4 @@ ws://localhost:8000/ws/task-comments/<id>/ - Task WebSocket
 
 ---
 
-**Everything is ready to use!** Start with `start_taskflow.bat` and explore the "Messages" menu.
+**Everything is ready to use!** Start with `start_PrizmAI.bat` and explore the "Messages" menu.

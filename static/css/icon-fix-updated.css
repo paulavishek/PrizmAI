@@ -1,4 +1,4 @@
-/* Icon visibility and alignment fixes */
+﻿/* Icon visibility and alignment fixes */
 .feature-icon {
     color: white !important; /* Ensure text is white for better contrast */
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); /* Add subtle text shadow for better readability */
@@ -27,7 +27,7 @@
     margin-top: 0;
 }
 
-/* Align the Why TaskFlow Exists section icons to match */
+/* Align the Why PrizmAI Exists section icons to match */
 .why-taskflow-section .feature-icon {
     width: 46px;
     height: 46px;

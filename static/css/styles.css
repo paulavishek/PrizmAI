@@ -1,4 +1,4 @@
-/* General Styles */
+﻿/* General Styles */
 body {
     background-color: var(--bg-primary);
     color: var(--text-primary);
@@ -10,6 +10,47 @@ body {
 .footer {
     margin-top: auto;
 }
+
+/* ======================================== */
+/* PRIZMAI BRAND STYLING                   */
+/* ======================================== */
+
+/* Stylish PrizmAI branding with distinctive 'z' */
+.brand-prizmai .stylish-z,
+.navbar-brand .stylish-z,
+.stylish-z {
+    display: inline-block;
+    font-style: italic;
+    font-weight: 900;
+    font-size: 1.4em;
+    transform: rotate(-15deg) scaleX(1.1);
+    transform-origin: center;
+    letter-spacing: 0;
+    margin: 0 0.08em;
+    padding: 0 0.02em;
+    color: inherit;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+    vertical-align: baseline;
+    line-height: 1;
+}
+
+/* Add a glow effect on hover */
+.brand-prizmai .stylish-z:hover,
+.navbar-brand .stylish-z:hover,
+.stylish-z:hover {
+    transform: rotate(-18deg) scaleX(1.15) scaleY(1.05);
+    text-shadow: 0 0 12px rgba(255, 255, 255, 0.8), 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Prevent stylish-z from breaking navigation alignment */
+.nav-link .stylish-z {
+    vertical-align: middle;
+}
+
+/* ======================================== */
+/* END PRIZMAI BRAND STYLING               */
+/* ======================================== */
 
 /* Kanban Board Styles */
 :root {
@@ -339,6 +380,59 @@ body {
 .kanban-task:active {
     cursor: grabbing;
 }
+
+/* ======================================== */
+/* COLUMN DRAG AND DROP STYLES (ISOLATED) */
+/* ======================================== */
+
+.column-draggable-header {
+    user-select: none;
+    transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.column-draggable-header:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+/* When a column is being dragged */
+.kanban-column.column-dragging {
+    opacity: 0.6;
+    z-index: 1000;
+    box-shadow: 0 8px 20px rgba(0, 123, 255, 0.3);
+    transform: scale(1.02);
+}
+
+.kanban-column.column-dragging .kanban-column-header {
+    cursor: grabbing;
+    background-color: rgba(0, 123, 255, 0.15);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Visual feedback when hovering over a column during drag */
+.kanban-column.column-drag-over {
+    border: 3px solid #007bff;
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.25);
+    background-color: rgba(0, 123, 255, 0.02);
+}
+
+.kanban-column.column-drag-over .kanban-column-header {
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+/* Column drag placeholder */
+.column-drag-placeholder {
+    border: 3px dashed #007bff;
+    background-color: rgba(0, 123, 255, 0.05);
+    margin: 0 5px;
+    border-radius: 8px;
+    flex: 0 0 320px;
+    opacity: 0.5;
+    transition: all 0.2s ease;
+}
+
+/* ======================================== */
+/* END COLUMN DRAG AND DROP STYLES        */
+/* ======================================== */
 
 .task-title {
     font-weight: bold;
@@ -705,7 +799,7 @@ body {
     line-height: 1;
 }
 
-/* Feature card styles for Why TaskFlow Exists section */
+/* Feature card styles for Why PrizmAI Exists section */
 .feature-card {
     transition: transform 0.3s ease, box-shadow 0.3s ease;
     border: none;

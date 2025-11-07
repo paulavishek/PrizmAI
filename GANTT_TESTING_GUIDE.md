@@ -1,10 +1,10 @@
-# 🧪 Gantt Chart Enhancements - Testing Guide
+﻿# 🧪 Gantt Chart Enhancements - Testing Guide
 
 ## 🚀 Quick Start Testing
 
 ### 1. Start the Server
 ```powershell
-.\start_taskflow.bat
+.\start_PrizmAI.bat
 ```
 
 Wait for the message: `Starting development server at http://127.0.0.1:8000/`
