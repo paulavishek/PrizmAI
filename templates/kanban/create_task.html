@@ -159,11 +159,96 @@
                             </div>
                             <div id="advancedFeaturesSection" class="collapse">
                                 <div class="card-body">
-                                    <!-- 🛡️ Risk Assessment Info -->
-                                    <div class="alert alert-info mb-3">
-                                        <h6><i class="fas fa-shield-alt"></i> Risk & Resources</h6>
-                                        <p class="small mb-0">The system will automatically analyze this task for risks, complexity, and resource requirements. These will be displayed once the task is created.</p>
+                                    <!-- 🛡️ Risk Assessment Section -->
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-shield-alt text-warning"></i> Risk Assessment</h6>
+                                        <p class="small text-muted mb-3">Assess potential risks for this task. Risk score will be automatically calculated from likelihood × impact.</p>
+                                        
+                                        <div class="row">
+                                            <div class="col-md-4 mb-3">
+                                                <label for="{{ form.risk_likelihood.id_for_label }}" class="form-label">Risk Likelihood</label>
+                                                {{ form.risk_likelihood }}
+                                                <small class="form-text text-muted">How likely is the risk to occur?</small>
+                                                {% if form.risk_likelihood.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.risk_likelihood.errors }}</div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="col-md-4 mb-3">
+                                                <label for="{{ form.risk_impact.id_for_label }}" class="form-label">Risk Impact</label>
+                                                {{ form.risk_impact }}
+                                                <small class="form-text text-muted">What's the severity if it occurs?</small>
+                                                {% if form.risk_impact.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.risk_impact.errors }}</div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="col-md-4 mb-3">
+                                                <label for="{{ form.risk_level.id_for_label }}" class="form-label">Risk Level</label>
+                                                {{ form.risk_level }}
+                                                <small class="form-text text-muted">Overall risk classification</small>
+                                                {% if form.risk_level.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.risk_level.errors }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="{{ form.risk_indicators_text.id_for_label }}" class="form-label">{{ form.risk_indicators_text.label }}</label>
+                                            {{ form.risk_indicators_text }}
+                                            <small class="form-text text-muted">{{ form.risk_indicators_text.help_text }}</small>
+                                            {% if form.risk_indicators_text.errors %}
+                                                <div class="invalid-feedback d-block">{{ form.risk_indicators_text.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="{{ form.mitigation_strategies_text.id_for_label }}" class="form-label">{{ form.mitigation_strategies_text.label }}</label>
+                                            {{ form.mitigation_strategies_text }}
+                                            <small class="form-text text-muted">{{ form.mitigation_strategies_text.help_text }}</small>
+                                            {% if form.mitigation_strategies_text.errors %}
+                                                <div class="invalid-feedback d-block">{{ form.mitigation_strategies_text.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <div class="alert alert-info mb-0">
+                                            <small>
+                                                <i class="fas fa-info-circle"></i> 
+                                                <strong>Tip:</strong> If you set Likelihood and Impact, the Risk Score (1-9) will be automatically calculated. The Risk Level can be manually set or will be auto-suggested based on the score.
+                                            </small>
+                                        </div>
                                     </div>
+
+                                    <hr>
+
+                                    <!-- Gantt Chart Dependencies -->
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-calendar-alt text-info"></i> Gantt Chart & Timeline</h6>
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label for="{{ form.start_date.id_for_label }}" class="form-label">Start Date</label>
+                                                {{ form.start_date }}
+                                                <small class="form-text text-muted">When this task should start</small>
+                                                {% if form.start_date.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.start_date.errors }}</div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label for="{{ form.dependencies.id_for_label }}" class="form-label">Dependencies</label>
+                                                {{ form.dependencies }}
+                                                <small class="form-text text-muted">Tasks that must finish before this starts</small>
+                                                {% if form.dependencies.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.dependencies.errors }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="alert alert-warning mb-0">
+                                            <small>
+                                                <i class="fas fa-exclamation-triangle"></i> 
+                                                <strong>Note:</strong> Both Start Date and Due Date are required for tasks to appear in the Gantt Chart view.
+                                            </small>
+                                        </div>
+                                    </div>
+
+                                    <hr>
 
                                     <!-- 👥 Stakeholder Involvement Info -->
                                     <div class="alert alert-info mb-3">
@@ -171,10 +256,10 @@
                                         <p class="small mb-0">After creating the task, you can add stakeholders to track their involvement and engagement with this task.</p>
                                     </div>
 
-                                    <!-- 📋 Task Dependencies Info -->
+                                    <!-- 📋 Additional Info -->
                                     <div class="alert alert-info mb-0">
-                                        <h6><i class="fas fa-link"></i> Task Dependencies</h6>
-                                        <p class="small mb-0">You can set parent tasks, subtasks, and related tasks to track dependencies. Configure these after creating the task.</p>
+                                        <h6><i class="fas fa-info-circle"></i> Additional Features</h6>
+                                        <p class="small mb-0">You can add subtasks, related tasks, and attach files after creating the task from the task detail page.</p>
                                     </div>
                                 </div>
                             </div>

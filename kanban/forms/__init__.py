@@ -29,10 +29,34 @@ class TaskLabelForm(forms.ModelForm):
         }
 
 class TaskForm(forms.ModelForm):
+    # Add custom text fields for risk management
+    risk_indicators_text = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': 'Enter risk indicators to monitor, one per line (e.g., "Monitor task progress weekly", "Track team member availability")'
+        }),
+        help_text='Key indicators to monitor for this task (one per line)',
+        label='Risk Indicators to Monitor'
+    )
+    
+    mitigation_strategies_text = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': 'Enter mitigation strategies, one per line (e.g., "Allocate additional resources if needed", "Conduct technical review early")'
+        }),
+        help_text='Strategies to mitigate identified risks (one per line)',
+        label='Mitigation Strategies'
+    )
+    
     class Meta:
         model = Task
         fields = [
-            'title', 'description', 'start_date', 'due_date', 'assigned_to', 'labels', 'priority', 'progress', 'dependencies'
+            'title', 'description', 'start_date', 'due_date', 'assigned_to', 'labels', 'priority', 'progress', 'dependencies',
+            'risk_likelihood', 'risk_impact', 'risk_level'
         ]
         widgets = {
             'title': forms.TextInput(attrs={'class': 'form-control'}),
@@ -61,11 +85,48 @@ class TaskForm(forms.ModelForm):
                 'size': '5',
                 'title': 'Tasks that must be completed before this task can start (for Gantt chart dependencies)'
             }),
+            'risk_likelihood': forms.Select(attrs={
+                'class': 'form-select',
+                'title': 'How likely is this risk to occur? (1=Low, 2=Medium, 3=High)'
+            }),
+            'risk_impact': forms.Select(attrs={
+                'class': 'form-select',
+                'title': 'What would be the impact if this risk occurs? (1=Low, 2=Medium, 3=High)'
+            }),
+            'risk_level': forms.Select(attrs={
+                'class': 'form-select',
+                'title': 'Overall risk classification for this task'
+            }),
         }
         
     def __init__(self, *args, **kwargs):
         board = kwargs.pop('board', None)
         super().__init__(*args, **kwargs)
+        
+        # Initialize risk indicators and mitigation strategies from JSON fields
+        if self.instance and self.instance.pk:
+            if self.instance.risk_indicators:
+                self.fields['risk_indicators_text'].initial = '\n'.join(self.instance.risk_indicators)
+            
+            if self.instance.mitigation_suggestions:
+                # Handle both list of strings and list of dicts
+                mitigation_lines = []
+                for item in self.instance.mitigation_suggestions:
+                    if isinstance(item, dict):
+                        # Format: "Strategy: Description (Timeline)"
+                        strategy = item.get('strategy', '')
+                        description = item.get('description', '')
+                        timeline = item.get('timeline', '')
+                        if strategy and description:
+                            line = f"{strategy}: {description}"
+                            if timeline:
+                                line += f" ({timeline})"
+                            mitigation_lines.append(line)
+                    else:
+                        mitigation_lines.append(str(item))
+                
+                if mitigation_lines:
+                    self.fields['mitigation_strategies_text'].initial = '\n'.join(mitigation_lines)
         
         if board:
             self.fields['labels'].queryset = TaskLabel.objects.filter(board=board)
@@ -90,6 +151,112 @@ class TaskForm(forms.ModelForm):
         # Add empty choice for assigned_to
         self.fields['assigned_to'].empty_label = "Not assigned"
         self.fields['dependencies'].required = False
+        
+        # Make risk fields optional
+        self.fields['risk_likelihood'].required = False
+        self.fields['risk_impact'].required = False
+        self.fields['risk_level'].required = False
+        
+        # Add empty labels
+        self.fields['risk_likelihood'].empty_label = "Not assessed"
+        self.fields['risk_impact'].empty_label = "Not assessed"
+        self.fields['risk_level'].empty_label = "Not assessed"
+        
+        # Add help text for risk fields
+        self.fields['risk_likelihood'].help_text = 'Probability of risk occurring (optional - will auto-calculate risk score)'
+        self.fields['risk_impact'].help_text = 'Severity if risk occurs (optional - will auto-calculate risk score)'
+        self.fields['risk_level'].help_text = 'Overall risk classification (can be set manually or auto-calculated from likelihood × impact)'
+    
+    def clean(self):
+        """Calculate risk_score automatically if likelihood and impact are provided"""
+        cleaned_data = super().clean()
+        risk_likelihood = cleaned_data.get('risk_likelihood')
+        risk_impact = cleaned_data.get('risk_impact')
+        risk_level = cleaned_data.get('risk_level')
+        
+        # Auto-calculate risk score if both likelihood and impact are provided
+        if risk_likelihood is not None and risk_impact is not None:
+            risk_score = risk_likelihood * risk_impact
+            cleaned_data['risk_score'] = risk_score
+            
+            # Auto-suggest risk level if not manually set
+            if not risk_level:
+                if risk_score >= 6:
+                    cleaned_data['risk_level'] = 'critical'
+                elif risk_score >= 4:
+                    cleaned_data['risk_level'] = 'high'
+                elif risk_score >= 2:
+                    cleaned_data['risk_level'] = 'medium'
+                else:
+                    cleaned_data['risk_level'] = 'low'
+        
+        return cleaned_data
+    
+    def save(self, commit=True):
+        """Save the task with calculated risk_score and processed risk fields"""
+        instance = super().save(commit=False)
+        
+        # Set risk_score from cleaned data if available
+        if hasattr(self, 'cleaned_data') and 'risk_score' in self.cleaned_data:
+            instance.risk_score = self.cleaned_data['risk_score']
+        
+        # Process risk indicators from text field
+        risk_indicators_text = self.cleaned_data.get('risk_indicators_text', '').strip()
+        if risk_indicators_text:
+            # Split by newlines and filter out empty lines
+            indicators = [line.strip() for line in risk_indicators_text.split('\n') if line.strip()]
+            instance.risk_indicators = indicators
+        elif not instance.risk_indicators:
+            # Set to empty list if nothing provided and field is empty
+            instance.risk_indicators = []
+        
+        # Process mitigation strategies from text field
+        mitigation_text = self.cleaned_data.get('mitigation_strategies_text', '').strip()
+        if mitigation_text:
+            # Split by newlines and filter out empty lines
+            mitigation_lines = [line.strip() for line in mitigation_text.split('\n') if line.strip()]
+            
+            # Try to parse structured format "Strategy: Description (Timeline)"
+            mitigation_suggestions = []
+            for line in mitigation_lines:
+                # Try to parse structured format
+                if ':' in line:
+                    parts = line.split(':', 1)
+                    strategy = parts[0].strip()
+                    rest = parts[1].strip()
+                    
+                    # Extract timeline if present (text in parentheses at end)
+                    timeline = ''
+                    description = rest
+                    if '(' in rest and rest.endswith(')'):
+                        last_paren = rest.rfind('(')
+                        timeline = rest[last_paren+1:-1].strip()
+                        description = rest[:last_paren].strip()
+                    
+                    mitigation_suggestions.append({
+                        'strategy': strategy,
+                        'description': description,
+                        'timeline': timeline
+                    })
+                else:
+                    # If no colon, treat entire line as a simple mitigation
+                    mitigation_suggestions.append({
+                        'strategy': 'Mitigate',
+                        'description': line,
+                        'timeline': ''
+                    })
+            
+            instance.mitigation_suggestions = mitigation_suggestions
+        elif not instance.mitigation_suggestions:
+            # Set to empty list if nothing provided and field is empty
+            instance.mitigation_suggestions = []
+        
+        if commit:
+            instance.save()
+            # Save many-to-many relationships
+            self.save_m2m()
+        
+        return instance
 
 class CommentForm(forms.ModelForm):
     class Meta:
