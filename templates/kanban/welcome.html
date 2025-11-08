@@ -10,8 +10,9 @@
 <style>
     /* Welcome page specific styling */
     body {
-        background-color: #f8f9fa;
+        background: linear-gradient(180deg, #f8f9ff 0%, #f0f4ff 50%, #e8f0ff 100%);
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        min-height: 100vh;
     }
     
     /* Fix navigation alignment - prevent stylish-z from breaking layout */
@@ -26,12 +27,42 @@
         line-height: 1;
     }
     
+    /* Animated gradient background */
+    @keyframes gradientShift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    
     .hero-section {
-        background: linear-gradient(120deg, #4e54c8, #8f94fb);
+        background: linear-gradient(-45deg, #4e54c8, #8f94fb, #667eea, #764ba2);
+        background-size: 400% 400%;
+        animation: gradientShift 15s ease infinite;
         color: white;
         padding: 80px 0 100px;
         position: relative;
         overflow: hidden;
+    }
+    
+    /* Floating particles effect */
+    .hero-section::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image: 
+            radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+            radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
+            radial-gradient(circle at 40% 20%, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
+        background-size: 50px 50px, 80px 80px, 100px 100px;
+        animation: floatParticles 20s linear infinite;
+    }
+    
+    @keyframes floatParticles {
+        0% { transform: translateY(0); }
+        100% { transform: translateY(-100px); }
     }
     
     .hero-pattern {
@@ -77,8 +108,15 @@
     
     .feature-section {
         padding: 80px 0;
-        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        background: transparent;
         position: relative;
+    }
+    
+    /* Glassmorphism effect for feature cards */
+    .feature-card {
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.18);
     }
     
     .feature-section h2 {
@@ -102,11 +140,13 @@
         border-radius: 15px;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         height: 100%;
-        background: linear-gradient(135deg, #ffffff 0%, #f9fbff 100%);
+        background: rgba(255, 255, 255, 0.9);
         position: relative;
         overflow: hidden;
+        box-shadow: 0 4px 15px rgba(78, 84, 200, 0.08);
     }
     
+    /* Shimmer effect on hover */
     .feature-card::before {
         content: '';
         position: absolute;
@@ -114,8 +154,8 @@
         left: -100%;
         width: 100%;
         height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-        transition: left 0.5s;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+        transition: left 0.6s;
     }
     
     .feature-card:hover::before {
@@ -123,9 +163,10 @@
     }
     
     .feature-card:hover {
-        transform: translateY(-12px);
-        box-shadow: 0 20px 40px rgba(0,0,0,0.12);
-        border: 1px solid rgba(200, 200, 200, 0.2);
+        transform: translateY(-12px) scale(1.02);
+        box-shadow: 0 25px 50px rgba(78, 84, 200, 0.25);
+        border: 1px solid rgba(143, 148, 251, 0.4);
+        background: rgba(255, 255, 255, 0.95);
     }
     
     .hover-lift {
@@ -137,19 +178,27 @@
         box-shadow: 0 25px 50px rgba(0,0,0,0.15);
     }
     
+    /* Prevent icon distortion on card hover */
+    .feature-card:hover .feature-icon,
+    .hover-lift:hover .feature-icon {
+        transform: scale(1) rotate(0deg);
+    }
+    
     .feature-icon {
         font-size: 40px;
         margin-bottom: 20px;
-        transition: transform 0.3s ease;
+        transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
         display: flex;
         align-items: center;
         justify-content: center;
         width: 70px;
         height: 70px;
+        flex-shrink: 0;
     }
     
-    .feature-card:hover .feature-icon {
-        transform: scale(1.15) rotate(5deg);
+    /* Only animate icon on direct hover, not parent card hover */
+    .feature-icon:hover {
+        transform: scale(1.2) rotate(10deg);
     }
     
     .feature-title {
@@ -174,14 +223,116 @@
     }
     
     .lean-six-sigma-section {
-        background: linear-gradient(45deg, #f8f9fa 0%, #e9ecef 100%);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 80px 0;
         border-radius: 0;
+        position: relative;
+        overflow: hidden;
     }
+    
+    .lean-six-sigma-section::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 500px;
+        height: 500px;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    
+    .lean-six-sigma-section::after {
+        content: '';
+        position: absolute;
+        bottom: -30%;
+        left: -5%;
+        width: 400px;
+        height: 400px;
+        background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+    
+    .lean-six-sigma-section h2,
+    .lean-six-sigma-section .lead,
+    .lean-six-sigma-section h5,
+    .lean-six-sigma-section p {
+        color: white !important;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .lean-six-sigma-section .d-flex {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        transition: all 0.3s ease;
+    }
+    
+    .lean-six-sigma-section .d-flex:hover {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.4);
+        transform: translateX(10px);
+    }
+    
+    .lean-six-sigma-section .feature-icon {
+        background: rgba(255, 255, 255, 0.2) !important;
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        flex-shrink: 0;
+    }
+    
+    /* AI Brain Animation */
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.05); opacity: 0.9; }
+    }
+    
+    .ai-brain-circle {
+        animation: pulse 3s ease-in-out infinite;
+    }
+    
+    @keyframes orbit {
+        0% { transform: rotate(0deg) translateX(150px) rotate(0deg); }
+        100% { transform: rotate(360deg) translateX(150px) rotate(-360deg); }
+    }
+    
+    /* Smooth fade-in on scroll */
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .feature-card {
+        animation: fadeInUp 0.6s ease-out;
+    }
+    
+    .feature-card:nth-child(1) { animation-delay: 0.1s; }
+    .feature-card:nth-child(2) { animation-delay: 0.2s; }
+    .feature-card:nth-child(3) { animation-delay: 0.3s; }
+    .feature-card:nth-child(4) { animation-delay: 0.4s; }
+    .feature-card:nth-child(5) { animation-delay: 0.5s; }
+    .feature-card:nth-child(6) { animation-delay: 0.6s; }
+    .feature-card:nth-child(7) { animation-delay: 0.7s; }
+    .feature-card:nth-child(8) { animation-delay: 0.8s; }
+    .feature-card:nth-child(9) { animation-delay: 0.9s; }
     
     .testimonial-section {
         padding: 80px 0;
-        background-color: #ffffff;
+        background: transparent;
+    }
+    
+    .why-PrizmAI-section {
+        padding: 80px 0;
+        background: transparent;
+        position: relative;
     }
     
     .testimonial-card {
@@ -198,9 +349,25 @@
     }
     
     .cta-section {
-        background: linear-gradient(120deg, #8f94fb, #4e54c8);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
         padding: 60px 0;
+        position: relative;
+    }
+    
+    .cta-section::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    }
+    
+    .cta-section .container {
+        position: relative;
+        z-index: 1;
     }
     
     .footer {
@@ -361,14 +528,15 @@
                         <li><a class="dropdown-item" href="#"><i class="fas fa-file-audio me-2" style="color: #e83e8c;"></i>Meeting Transcript Analysis</a></li>
                         <li><a class="dropdown-item" href="#"><i class="fas fa-check me-2" style="color: #28a745;"></i>Lean Six Sigma Classification</a></li>
                         <li><hr class="dropdown-divider"></li>
-                        <li><strong class="dropdown-item-text ps-3">Knowledge & Communication</strong></li>
+                        <li><strong class="dropdown-item-text ps-3">Stakeholder & Communication</strong></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-handshake me-2" style="color: #198754;"></i>Stakeholder Management</a></li>
                         <li><a class="dropdown-item" href="#"><i class="fas fa-book me-2" style="color: #fd7e14;"></i>Wiki & Knowledge Base</a></li>
                         <li><a class="dropdown-item" href="#"><i class="fas fa-comments me-2" style="color: #20c997;"></i>Team Messaging & Chat</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-clipboard-list me-2" style="color: #e83e8c;"></i>Meeting Notes & Hub</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-paperclip me-2" style="color: #e83e8c;"></i>File Management</a></li>
                     </ul>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#why-PrizmAI">Why Pri<span class="stylish-z">z</span>mAI</a>
+                    <a class="nav-link" href="#ai-intelligence">AI Intelligence</a>
                 </li>
             </ul>
         </div>
@@ -382,7 +550,7 @@
         <div class="row align-items-center">
             <div class="col-md-6 hero-content">
                 <h1 class="hero-title">Streamline Your Workflow with <span style="white-space: nowrap;">Pri<span class="stylish-z">z</span>mAI</span></h1>
-                <p class="hero-subtitle">An AI-powered project intelligence platform combining Kanban methodology with advanced AI features to optimize your processes and drive results.</p>
+                <p class="hero-subtitle">An AI-powered project intelligence platform combining advanced Kanban methodology with predictive analytics, real-time collaboration, and automated insights to transform how teams work.</p>
                 <div class="d-flex flex-wrap">
                     <a href="{% url 'register' %}" class="btn btn-light btn-hero me-3 mb-3">Get Started <i class="fas fa-arrow-right ms-2"></i></a>
                     <a href="{% url 'login' %}" class="btn btn-outline-light btn-hero mb-3">Sign In</a>
@@ -400,8 +568,8 @@
 <section class="feature-section" id="features">
     <div class="container">
         <div class="text-center mb-5">
-            <h2 class="fw-bold">🚀 Powerful Features</h2>
-            <p class="text-muted fs-5">AI-Powered Project Intelligence Platform</p>
+            <h2 class="fw-bold">🚀 Comprehensive Project Intelligence</h2>
+            <p class="text-muted fs-5">Everything Your Team Needs in One Unified Platform</p>
         </div>
         
         <div class="row g-4">
@@ -412,79 +580,121 @@
                         <i class="fas fa-robot text-dark" style="font-size: 1.8rem;"></i>
                     </div>
                     <h3 class="feature-title fw-bold">🤖 AI Project Assistant</h3>
-                    <p class="text-muted">Conversational AI with RAG technology, web search integration, and context-aware recommendations powered by Google's Gemini.</p>
+                    <p class="text-muted">Conversational AI with RAG technology, real-time web search, and context-aware project insights powered by Google Gemini.</p>
                     <div class="mt-auto">
                         <span class="badge bg-warning text-dark">AI-Powered</span>
                     </div>
                 </div>
             </div>
             
-            <!-- 2. Risk Management -->
-            <div class="col-md-6 col-lg-4">
-                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
-                    <div class="feature-icon bg-danger rounded-circle p-3 mx-auto mb-3">
-                        <i class="fas fa-shield-alt text-white" style="font-size: 1.8rem;"></i>
-                    </div>
-                    <h3 class="feature-title fw-bold">🛡️ Risk Management</h3>
-                    <p class="text-muted">AI-powered risk assessment with intelligent scoring (1-9 scale), smart indicators, and AI-generated mitigation strategies.</p>
-                    <div class="mt-auto">
-                        <span class="badge bg-danger">Enterprise</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- 3. Intelligent Kanban Boards -->
+            <!-- 2. Intelligent Kanban + Gantt -->
             <div class="col-md-6 col-lg-4">
                 <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
                     <div class="feature-icon bg-primary rounded-circle p-3 mx-auto mb-3">
-                        <i class="fas fa-columns text-white" style="font-size: 1.8rem;"></i>
+                        <i class="fas fa-project-diagram text-white" style="font-size: 1.8rem;"></i>
                     </div>
-                    <h3 class="feature-title fw-bold">📊 Intelligent Kanban</h3>
-                    <p class="text-muted">AI-enhanced Kanban boards with smart column recommendations, Gantt chart visualization, and real-time team collaboration.</p>
+                    <h3 class="feature-title fw-bold">� Dual View Planning</h3>
+                    <p class="text-muted">Interactive Kanban boards with Gantt chart timelines, drag-and-drop scheduling, and AI-suggested dependencies.</p>
                     <div class="mt-auto">
                         <span class="badge bg-primary">Core Feature</span>
                     </div>
                 </div>
             </div>
             
-            <!-- 4. Resource Forecasting -->
+            <!-- 3. Real-Time Collaboration -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
+                    <div class="feature-icon bg-success rounded-circle p-3 mx-auto mb-3">
+                        <i class="fas fa-comments text-white" style="font-size: 1.8rem;"></i>
+                    </div>
+                    <h3 class="feature-title fw-bold">� Real-Time Messaging</h3>
+                    <p class="text-muted">Built-in chat rooms, task comments, @mentions, typing indicators, and instant notifications via WebSocket.</p>
+                    <div class="mt-auto">
+                        <span class="badge bg-success">Collaboration</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 4. Risk Management -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
+                    <div class="feature-icon bg-danger rounded-circle p-3 mx-auto mb-3">
+                        <i class="fas fa-shield-alt text-white" style="font-size: 1.8rem;"></i>
+                    </div>
+                    <h3 class="feature-title fw-bold">🛡️ Smart Risk Management</h3>
+                    <p class="text-muted">AI-powered risk assessment with intelligent scoring, predictive indicators, and automated mitigation strategies.</p>
+                    <div class="mt-auto">
+                        <span class="badge bg-danger">Enterprise</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 5. Predictive Resource Management -->
             <div class="col-md-6 col-lg-4">
                 <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
                     <div class="feature-icon bg-info rounded-circle p-3 mx-auto mb-3">
-                        <i class="fas fa-people-arrows text-white" style="font-size: 1.8rem;"></i>
+                        <i class="fas fa-chart-line text-white" style="font-size: 1.8rem;"></i>
                     </div>
-                    <h3 class="feature-title fw-bold">👨‍💼 Resource Forecasting</h3>
-                    <p class="text-muted">Predict team capacity 2-3 weeks ahead with skill-based task matching, utilization alerts, and intelligent burnout prevention.</p>
+                    <h3 class="feature-title fw-bold">� Predictive Analytics</h3>
+                    <p class="text-muted">Forecast team capacity 2-3 weeks ahead with AI-powered workload alerts and intelligent task assignment recommendations.</p>
                     <div class="mt-auto">
                         <span class="badge bg-info text-dark">Predictive</span>
                     </div>
                 </div>
             </div>
             
-            <!-- 5. Knowledge Hub -->
+            <!-- 6. Knowledge Hub -->
             <div class="col-md-6 col-lg-4">
                 <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
-                    <div class="feature-icon bg-success rounded-circle p-3 mx-auto mb-3">
-                        <i class="fas fa-brain text-white" style="font-size: 1.8rem;"></i>
+                    <div class="feature-icon bg-secondary rounded-circle p-3 mx-auto mb-3">
+                        <i class="fas fa-book text-white" style="font-size: 1.8rem;"></i>
                     </div>
-                    <h3 class="feature-title fw-bold">🧠 Knowledge Hub</h3>
-                    <p class="text-muted">Unified wiki documentation, meeting notes, and AI-powered search across all your project knowledge and insights.</p>
+                    <h3 class="feature-title fw-bold">📚 Knowledge Management</h3>
+                    <p class="text-muted">Integrated wiki documentation, meeting transcript analysis, version control, and AI-powered search across all content.</p>
                     <div class="mt-auto">
-                        <span class="badge bg-success">Comprehensive</span>
+                        <span class="badge bg-secondary">Documentation</span>
                     </div>
                 </div>
             </div>
             
-            <!-- 6. Analytics & Optimization -->
+            <!-- 7. Stakeholder Tracking -->
             <div class="col-md-6 col-lg-4">
                 <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
-                    <div class="feature-icon bg-secondary rounded-circle p-3 mx-auto mb-3">
-                        <i class="fas fa-chart-line text-white" style="font-size: 1.8rem;"></i>
+                    <div class="feature-icon rounded-circle p-3 mx-auto mb-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <i class="fas fa-handshake text-white" style="font-size: 1.8rem;"></i>
                     </div>
-                    <h3 class="feature-title fw-bold">📈 Analytics & Optimization</h3>
-                    <p class="text-muted">AI-driven analytics with Lean Six Sigma integration, process optimization insights, and continuous improvement recommendations.</p>
+                    <h3 class="feature-title fw-bold">🤝 Stakeholder Management</h3>
+                    <p class="text-muted">Power/Interest matrix analysis, engagement tracking, satisfaction ratings, and comprehensive communication history.</p>
                     <div class="mt-auto">
-                        <span class="badge bg-secondary">Data-Driven</span>
+                        <span class="badge" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">Enterprise</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 8. File Management -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
+                    <div class="feature-icon rounded-circle p-3 mx-auto mb-3" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <i class="fas fa-paperclip text-white" style="font-size: 1.8rem;"></i>
+                    </div>
+                    <h3 class="feature-title fw-bold">📎 File Management</h3>
+                    <p class="text-muted">Attach files to tasks and chat rooms with support for documents, images, and presentations up to 10MB.</p>
+                    <div class="mt-auto">
+                        <span class="badge" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">Storage</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 9. Analytics & Insights -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
+                    <div class="feature-icon rounded-circle p-3 mx-auto mb-3" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <i class="fas fa-chart-pie text-white" style="font-size: 1.8rem;"></i>
+                    </div>
+                    <h3 class="feature-title fw-bold">� Advanced Analytics</h3>
+                    <p class="text-muted">Comprehensive dashboards with process optimization insights, efficiency metrics, and Lean Six Sigma classification.</p>
+                    <div class="mt-auto">
+                        <span class="badge" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">Data-Driven</span>
                     </div>
                 </div>
             </div>
@@ -492,53 +702,81 @@
     </div>
 </section>
 
-<!-- Lean Six Sigma Section -->
-<section class="lean-six-sigma-section py-5" id="lean-six-sigma">
+<!-- AI-Powered Intelligence Section -->
+<section class="lean-six-sigma-section py-5" id="ai-intelligence">
     <div class="container">
         <div class="row align-items-center">
             <div class="col-md-6">
-                <h2 class="fw-bold mb-4">Enhanced with Lean Six Sigma</h2>
-                <p class="lead">Identify and eliminate waste in your processes with integrated Lean Six Sigma features.</p>                  <div class="d-flex mt-4">
-                    <div class="bg-success rounded text-white feature-icon">
-                        <i class="fas fa-check"></i>
+                <h2 class="fw-bold mb-4 text-white">AI-Powered Intelligence & Automation</h2>
+                <p class="lead text-white">Leverage cutting-edge AI to automate insights, predict challenges, and optimize your team's workflow in real-time.</p>
+                
+                <div class="d-flex mt-4">
+                    <div class="rounded text-white feature-icon">
+                        <i class="fas fa-brain"></i>
                     </div>
                     <div>
-                        <h5>Value-Added (VA) Tagging</h5>
-                        <p class="text-muted">Identify activities that directly contribute to customer value.</p>
+                        <h5 class="text-white">Conversational AI Assistant</h5>
+                        <p class="text-white opacity-90">Ask questions about your projects in natural language. Get instant insights with RAG-powered web search integration.</p>
                     </div>
                 </div>
                 
                 <div class="d-flex mt-4">
-                    <div class="bg-warning rounded text-dark feature-icon">
-                        <i class="fas fa-exclamation"></i>
+                    <div class="rounded text-white feature-icon">
+                        <i class="fas fa-magic"></i>
                     </div>
                     <div>
-                        <h5>Necessary Non-Value-Added (NNVA)</h5>                        <p class="text-muted">Track necessary activities that don't directly add customer value.</p>
-                    </div>
-                </div>
-                  <div class="d-flex mt-4">
-                    <div class="bg-danger rounded text-white feature-icon">
-                        <i class="fas fa-times"></i>
-                    </div>
-                    <div>
-                        <h5>Waste Identification</h5>
-                        <p class="text-muted">Highlight waste activities for elimination or reduction.</p>
+                        <h5 class="text-white">Intelligent Task Generation</h5>
+                        <p class="text-white opacity-90">AI-powered task description generator, meeting transcript analysis, and automated task extraction from discussions.</p>
                     </div>
                 </div>
                 
                 <div class="d-flex mt-4">
-                    <div class="bg-info rounded text-white feature-icon">
-                        <i class="fas fa-chart-pie"></i>
+                    <div class="rounded text-white feature-icon">
+                        <i class="fas fa-chart-bar"></i>
                     </div>
                     <div>
-                        <h5>Process Efficiency Metrics</h5>
-                        <p class="text-muted">Track value-added percentage and other key process metrics.</p>
-                    </div>                </div>
+                        <h5 class="text-white">Predictive Analytics</h5>
+                        <p class="text-white opacity-90">Forecast resource demands, predict bottlenecks, and receive AI-generated recommendations before issues arise.</p>
+                    </div>
+                </div>
+                
+                <div class="d-flex mt-4">
+                    <div class="rounded text-white feature-icon">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div>
+                        <h5 class="text-white">Smart Automation</h5>
+                        <p class="text-white opacity-90">Automated risk scoring, dependency detection, optimal assignee suggestions, and workload distribution recommendations.</p>
+                    </div>
+                </div>
             </div>
-            <div class="col-md-6 mt-4 mt-md-0">
-                <div class="six-sigma-image-container">
-                    <img src="{% static 'img/lean-six-sigma-simple-graphic.svg' %}?v={{ cache_buster }}" alt="Lean Six Sigma Features" class="img-fluid rounded shadow-lg"
-                         onerror="this.src='https://via.placeholder.com/600x400/f8f9fa/4e54c8?text=Lean+Six+Sigma+Features';">
+            <div class="col-md-6 mt-4 mt-md-0 text-center">
+                <div class="ai-visual-container position-relative">
+                    <!-- AI Brain Visualization -->
+                    <div class="position-relative d-inline-block">
+                        <div class="ai-brain-circle" style="width: 300px; height: 300px; background: rgba(255,255,255,0.15); backdrop-filter: blur(20px); border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; margin: 0 auto; position: relative; overflow: hidden;">
+                            <i class="fas fa-brain" style="font-size: 120px; color: rgba(255,255,255,0.9);"></i>
+                            
+                            <!-- Orbiting icons -->
+                            <div style="position: absolute; top: 10%; left: 50%; transform: translateX(-50%);">
+                                <i class="fas fa-lightbulb" style="font-size: 24px; color: #ffd700;"></i>
+                            </div>
+                            <div style="position: absolute; top: 50%; right: 10%; transform: translateY(-50%);">
+                                <i class="fas fa-chart-line" style="font-size: 24px; color: #4facfe;"></i>
+                            </div>
+                            <div style="position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%);">
+                                <i class="fas fa-shield-alt" style="font-size: 24px; color: #ff6b6b;"></i>
+                            </div>
+                            <div style="position: absolute; top: 50%; left: 10%; transform: translateY(-50%);">
+                                <i class="fas fa-users" style="font-size: 24px; color: #51cf66;"></i>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-4">
+                            <h5 class="text-white fw-bold">Powered by Google Gemini</h5>
+                            <p class="text-white opacity-75 small">State-of-the-art language models for intelligent project management</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -550,34 +788,73 @@
     <div class="container">
         <div class="text-center mb-5">
             <h2 class="fw-bold">Why Pri<span class="stylish-z">z</span>mAI Exists</h2>
-            <p class="text-muted">Bridging the gap between task management and process improvement</p>
+            <p class="text-muted">The All-in-One Platform That Eliminates Tool Sprawl</p>
         </div>
-          <div class="row g-4">            <div class="col-md-4">                <div class="card feature-card p-4 h-100">
+          <div class="row g-4">
+            <div class="col-md-4">
+                <div class="card feature-card p-4 h-100">
                     <div class="d-flex">
                         <div class="feature-icon bg-danger text-white">
                             <i class="fas fa-exclamation-triangle"></i>
                         </div>
                     </div>
                     <h5 class="mt-3 mb-3">The Problem</h5>
-                    <p class="mb-0">Standard task managers often lack integrated, data-driven tools for process improvement. Teams need better visibility into not just what they are doing, but how effectively they are doing it.</p>
+                    <p class="mb-0">Modern teams juggle multiple tools: project boards, chat apps, documentation wikis, risk registers, resource planners, and meeting note systems. This fragmentation leads to context switching, data silos, and inefficiency.</p>
                 </div>
-            </div>              <div class="col-md-4">                <div class="card feature-card p-4 h-100">
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card feature-card p-4 h-100">
                     <div class="d-flex">
                         <div class="feature-icon bg-primary text-white">
                             <i class="fas fa-lightbulb"></i>
                         </div>
                     </div>
                     <h5 class="mt-3 mb-3">The Solution</h5>
-                    <p class="mb-0">Pri<span class="stylish-z">z</span>mAI is a Pri<span class="stylish-z">z</span>mAI designed to bridge this gap. It combines intuitive project management with a powerful analytics layer based on Lean Six Sigma principles, helping teams to organize tasks, collaborate effectively, and continuously improve their workflows.</p>
+                    <p class="mb-0">Pri<span class="stylish-z">z</span>mAI unifies everything into one intelligent platform: Kanban + Gantt + Chat + Wiki + AI Assistant + Risk Management + Resource Forecasting + Analytics. All your data in one place, enhanced by AI that learns from your entire project context.</p>
                 </div>
-            </div>              <div class="col-md-4">                <div class="card feature-card p-4 h-100">
+            </div>
+            
+            <div class="col-md-4">
+                <div class="card feature-card p-4 h-100">
                     <div class="d-flex">
                         <div class="feature-icon bg-success text-white">
-                            <i class="fas fa-chart-line"></i>
+                            <i class="fas fa-rocket"></i>
                         </div>
                     </div>
                     <h5 class="mt-3 mb-3">The Impact</h5>
-                    <p class="mb-0">With Pri<span class="stylish-z">z</span>mAI, teams gain deeper insights into their processes, enabling data-driven decisions that reduce waste and increase value-adding activities. The result is improved efficiency, better resource utilization, and higher quality deliverables that truly matter to stakeholders.</p>
+                    <p class="mb-0">Teams move faster with AI-powered insights, predictive analytics that prevent bottlenecks before they happen, and seamless collaboration without switching apps. Real-time intelligence means better decisions, reduced risk, and projects that consistently deliver on time.</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Key Differentiators -->
+        <div class="row mt-5">
+            <div class="col-12">
+                <div class="card feature-card p-4" style="background: linear-gradient(135deg, rgba(78, 84, 200, 0.05) 0%, rgba(143, 148, 251, 0.05) 100%);">
+                    <h4 class="text-center mb-4 fw-bold">What Makes Pri<span class="stylish-z">z</span>mAI Different</h4>
+                    <div class="row g-3">
+                        <div class="col-md-3 text-center">
+                            <i class="fas fa-brain fa-2x mb-2" style="color: #667eea;"></i>
+                            <h6 class="fw-bold">AI-First</h6>
+                            <small class="text-muted">Not bolted-on, but built-in intelligence</small>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <i class="fas fa-link fa-2x mb-2" style="color: #764ba2;"></i>
+                            <h6 class="fw-bold">Unified Platform</h6>
+                            <small class="text-muted">Replace 5+ tools with one</small>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <i class="fas fa-crystal-ball fa-2x mb-2" style="color: #4facfe;"></i>
+                            <h6 class="fw-bold">Predictive</h6>
+                            <small class="text-muted">See problems before they happen</small>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <i class="fas fa-bolt fa-2x mb-2" style="color: #f5576c;"></i>
+                            <h6 class="fw-bold">Real-Time</h6>
+                            <small class="text-muted">Instant updates, zero lag</small>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -587,11 +864,11 @@
 <!-- Call to Action Section -->
 <section class="cta-section">
     <div class="container text-center">
-        <h2 class="fw-bold mb-4">Ready to Optimize Your Workflow?</h2>
-        <p class="lead mb-4">Join Pri<span class="stylish-z">z</span>mAI today and start transforming how your team manages tasks and processes.</p>
+        <h2 class="fw-bold mb-4">Ready to Transform Your Project Management?</h2>
+        <p class="lead mb-4">Join Pri<span class="stylish-z">z</span>mAI today and experience the power of AI-driven project intelligence with everything your team needs in one unified platform.</p>
         <div class="d-flex justify-content-center flex-wrap">
             <a href="{% url 'register' %}" class="btn btn-light btn-hero me-md-3 mb-3 mb-md-0">Create Free Account</a>
-            <a href="#features" class="btn btn-outline-light btn-hero">Learn More</a>
+            <a href="#features" class="btn btn-outline-light btn-hero">Explore Features</a>
         </div>
     </div>
 </section>
@@ -601,7 +878,7 @@
     <div class="container">
         <div class="row">
             <div class="col-md-4">                <h4 class="mb-3">Pri<span class="stylish-z">z</span>mAI</h4>
-                <p class="mb-3">A modern Kanban board with Lean Six Sigma features for optimized workflow management.</p>
+                <p class="mb-3">AI-powered project intelligence platform that unifies Kanban, Gantt, Chat, Wiki, and Analytics into one seamless experience.</p>
                 <div class="footer-links">
                     <a href="https://github.com" target="_blank" rel="noopener" aria-label="GitHub"><i class="fab fa-github"></i></a>
                     <a href="https://linkedin.com" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
@@ -612,7 +889,7 @@
                     <div class="col-6">
                         <ul class="list-unstyled">
                             <li><a href="#features" class="footer-nav-link"><i class="fas fa-star me-1"></i>Features</a></li>
-                            <li><a href="#lean-six-sigma" class="footer-nav-link"><i class="fas fa-chart-line me-1"></i>Lean Six Sigma</a></li>
+                            <li><a href="#ai-intelligence" class="footer-nav-link"><i class="fas fa-brain me-1"></i>AI Intelligence</a></li>
                             <li><a href="#why-PrizmAI" class="footer-nav-link"><i class="fas fa-lightbulb me-1"></i>Why Pri<span class="stylish-z">z</span>mAI</a></li>
                         </ul>
                     </div>
@@ -629,10 +906,11 @@
                 <h6 class="mb-3"><i class="fas fa-code me-2"></i>Built With</h6>
                 <div class="d-flex flex-wrap tech-stack">
                     <span class="badge bg-light text-dark me-2 mb-2">Django</span>
-                    <span class="badge bg-light text-dark me-2 mb-2">JavaScript</span>
-                    <span class="badge bg-light text-dark me-2 mb-2">Chart.js</span>
-                    <span class="badge bg-light text-dark me-2 mb-2">SQLite</span>
                     <span class="badge bg-light text-dark me-2 mb-2">Python</span>
+                    <span class="badge bg-light text-dark me-2 mb-2">JavaScript</span>
+                    <span class="badge bg-light text-dark me-2 mb-2">WebSocket</span>
+                    <span class="badge bg-light text-dark me-2 mb-2">Google Gemini</span>
+                    <span class="badge bg-light text-dark me-2 mb-2">SQLite</span>
                 </div>
             </div>
         </div>        <hr class="mt-4 mb-3 border-secondary">
