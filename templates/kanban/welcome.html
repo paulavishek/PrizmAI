@@ -1,1127 +1,1103 @@
-﻿{% extends 'base.html' %}
-{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PrizmAI - AI-Powered Project Intelligence Platform</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-{% block title %}Pri<em>z</em>mAI - AI-Powered Project Intelligence Platform{% endblock %}
-
-{% block extra_css %}
-<link rel="stylesheet" href="{% static 'css/lean-six-sigma.css' %}">
-<link rel="stylesheet" href="{% static 'css/lean-six-sigma-animations.css' %}">
-<link rel="stylesheet" href="{% static 'css/welcome-alignment-fix.css' %}">
 <style>
-    /* Welcome page specific styling */
+    /* Modern Color Palette */
+    :root {
+        --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        --secondary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        --accent-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        --success-gradient: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        --warning-gradient: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+        --dark-bg: #0f0c29;
+        --text-light: #ffffff;
+    }
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
     body {
-        background: linear-gradient(135deg, #ffffff 0%, #e0e7ff 50%, #c7d2fe 100%);
-        background-attachment: fixed;
-        background-size: cover;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        min-height: 100vh;
-        color: #1e293b;
+        font-family: 'Inter', 'Segoe UI', -apple-system, sans-serif;
+        overflow-x: hidden;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     }
-    
-    /* Fix navigation alignment - prevent stylish-z from breaking layout */
-    .navbar-nav .nav-link {
-        display: flex;
-        align-items: center;
-        height: 100%;
+
+    /* Navigation Bar */
+    .navbar {
+        background: rgba(15, 12, 41, 0.95) !important;
+        backdrop-filter: blur(20px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 1.2rem 0;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     }
-    
-    .navbar-nav .nav-link .stylish-z {
-        vertical-align: middle;
-        line-height: 1;
+
+    .navbar-brand {
+        font-size: 1.8rem;
+        font-weight: 800;
+        color: var(--text-light) !important;
+        letter-spacing: -0.5px;
     }
-    
-    /* Animated gradient background */
-    @keyframes gradientShift {
-        0% { background-position: 0% 50%; }
-        50% { background-position: 100% 50%; }
-        100% { background-position: 0% 50%; }
-    }
-    
-    .hero-section {
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
-        background-size: 200% 200%;
-        animation: gradientShift 15s ease infinite;
-        color: white;
-        padding: 80px 0 100px;
-        position: relative;
-        overflow: hidden;
-    }
-    
-    /* Floating particles effect */
-    .hero-section::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-image: 
-            radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
-            radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 1px, transparent 1px),
-            radial-gradient(circle at 40% 20%, rgba(255, 255, 255, 0.1) 1px, transparent 1px);
-        background-size: 50px 50px, 80px 80px, 100px 100px;
-        animation: floatParticles 20s linear infinite;
-    }
-    
-    @keyframes floatParticles {
-        0% { transform: translateY(0); }
-        100% { transform: translateY(-100px); }
-    }
-    
-    .hero-pattern {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 100%;
-        height: 70px;
-        background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'%3E%3Cpath fill='%23ffffff' fill-opacity='1' d='M0,224L80,213.3C160,203,320,181,480,181.3C640,181,800,203,960,197.3C1120,192,1280,160,1360,144L1440,128L1440,320L1360,320C1280,320,1120,320,960,320C800,320,640,320,480,320C320,320,160,320,80,320L0,320Z'%3E%3C/path%3E%3C/svg%3E");
-        background-size: cover;
-    }
-    
-    .hero-content {
-        max-width: 600px;
-    }
-    
-    .hero-title {
-        font-weight: 700;
-        font-size: 3.2rem;
-        margin-bottom: 20px;
-    }
-    
-    .hero-subtitle {
-        font-size: 1.3rem;
-        opacity: 0.95;
-        margin-bottom: 30px;
-        line-height: 1.6;
-        font-weight: 500;
-    }
-    
-    .btn-hero {
-        padding: 12px 30px;
-        font-size: 1.1rem;
-        font-weight: 600;
-        border-radius: 30px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        transition: all 0.3s ease;
-    }
-    
-    .btn-hero:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 6px 15px rgba(0,0,0,0.2);
-    }
-    
-    .feature-section {
-        padding: 80px 0;
-        background: transparent;
-        position: relative;
-    }
-    
-    /* Glassmorphism effect for feature cards */
-    .feature-card {
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.18);
-    }
-    
-    .feature-section h2 {
-        font-size: 2.5rem;
-        background: linear-gradient(120deg, #6366f1 0%, #8b5cf6 100%);
+
+    .navbar-brand i {
+        background: var(--accent-gradient);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         background-clip: text;
-        margin-bottom: 10px;
-        font-weight: 800;
-        color: #6366f1;
     }
-    
-    .feature-section > .container > .text-center .fs-5 {
-        font-size: 1.1rem !important;
-        color: #475569 !important;
+
+    .nav-link {
+        color: rgba(255, 255, 255, 0.85) !important;
         font-weight: 600;
-        letter-spacing: 0.5px;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        padding: 0.5rem 1rem !important;
+        border-radius: 8px;
     }
-    
-    /* Dark mode adjustments for text */
-    @media (prefers-color-scheme: dark) {
-        .feature-section h2 {
-            background: linear-gradient(120deg, #a8acff 0%, #d0d3ff 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .feature-section > .container > .text-center .fs-5 {
-            color: #b8c5d6 !important;
-        }
+
+    .nav-link:hover {
+        color: var(--text-light) !important;
+        background: rgba(255, 255, 255, 0.1);
+        transform: translateY(-2px);
     }
-    
-    .feature-card {
-        border: none;
-        border-radius: 15px;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Hero Section */
+    .hero-section {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        position: relative;
+        padding: 100px 0;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        overflow: hidden;
+    }
+
+    /* Animated Background Particles */
+    .hero-section::before {
+        content: '';
+        position: absolute;
+        width: 100%;
         height: 100%;
-        background: rgba(255, 255, 255, 0.95);
+        background-image: 
+            radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.15) 2px, transparent 2px),
+            radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.15) 2px, transparent 2px),
+            radial-gradient(circle at 40% 20%, rgba(255, 255, 255, 0.15) 2px, transparent 2px);
+        background-size: 80px 80px, 120px 120px, 100px 100px;
+        animation: float 30s linear infinite;
+        opacity: 0.6;
+    }
+
+    @keyframes float {
+        0% { transform: translateY(0) translateX(0); }
+        50% { transform: translateY(-50px) translateX(30px); }
+        100% { transform: translateY(0) translateX(0); }
+    }
+
+    .hero-content {
+        position: relative;
+        z-index: 2;
+    }
+
+    .hero-title {
+        font-size: 4rem;
+        font-weight: 900;
+        color: var(--text-light);
+        margin-bottom: 1.5rem;
+        line-height: 1.1;
+        text-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .hero-subtitle {
+        font-size: 1.5rem;
+        color: rgba(255, 255, 255, 0.95);
+        margin-bottom: 2.5rem;
+        line-height: 1.6;
+        font-weight: 400;
+    }
+
+    .hero-buttons {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .btn-hero {
+        padding: 1rem 2.5rem;
+        font-size: 1.1rem;
+        font-weight: 700;
+        border-radius: 50px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        text-decoration: none;
+        display: inline-block;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    .btn-primary-hero {
+        background: linear-gradient(135deg, #ffffff 0%, #f0f0f0 100%);
+        color: #667eea;
+    }
+
+    .btn-primary-hero:hover {
+        transform: translateY(-5px) scale(1.05);
+        box-shadow: 0 15px 40px rgba(255, 255, 255, 0.4);
+    }
+
+    .btn-outline-hero {
+        background: transparent;
+        color: var(--text-light);
+        border: 2px solid rgba(255, 255, 255, 0.6);
+    }
+
+    .btn-outline-hero:hover {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: var(--text-light);
+        transform: translateY(-5px);
+        box-shadow: 0 15px 40px rgba(255, 255, 255, 0.2);
+    }
+
+    /* Hero Illustration */
+    .hero-illustration {
+        position: relative;
+        animation: floatIllustration 6s ease-in-out infinite;
+    }
+
+    @keyframes floatIllustration {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-20px); }
+    }
+
+    .hero-graphic {
+        width: 100%;
+        max-width: 550px;
+        height: auto;
+        filter: drop-shadow(0 20px 60px rgba(0, 0, 0, 0.4));
+    }
+
+    /* Hero Brain Visualization */
+    .hero-brain-circle {
+        width: 500px;
+        height: 500px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(168, 85, 247, 0.2) 100%);
+        backdrop-filter: blur(30px);
+        border: 3px solid rgba(168, 85, 247, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        animation: heroPulse 4s ease-in-out infinite;
+        box-shadow: 0 0 80px rgba(168, 85, 247, 0.5), inset 0 0 80px rgba(168, 85, 247, 0.2);
+        margin: 0 auto;
+    }
+
+    @keyframes heroPulse {
+        0%, 100% { 
+            transform: scale(1);
+            box-shadow: 0 0 80px rgba(168, 85, 247, 0.5), inset 0 0 80px rgba(168, 85, 247, 0.2);
+        }
+        50% { 
+            transform: scale(1.05);
+            box-shadow: 0 0 100px rgba(168, 85, 247, 0.7), inset 0 0 100px rgba(168, 85, 247, 0.3);
+        }
+    }
+
+    /* Tech Brain - Brain with Circuit Overlay */
+    .tech-brain-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .hero-brain-circle .tech-brain-icon {
+        font-size: 200px;
+        background: linear-gradient(135deg, #00f5ff 0%, #0099ff 50%, #0066ff 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        filter: drop-shadow(0 0 40px rgba(0, 245, 255, 0.8));
+        position: relative;
+        z-index: 2;
+    }
+
+    /* Circuit board pattern overlay */
+    .circuit-overlay {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        top: 0;
+        left: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1;
+    }
+
+    .circuit-icon {
+        position: absolute;
+        color: #f97316;
+        opacity: 0.4;
+        animation: circuitPulse 3s ease-in-out infinite;
+    }
+
+    .circuit-icon:nth-child(1) {
+        font-size: 50px;
+        top: 10%;
+        left: 15%;
+        animation-delay: 0s;
+    }
+
+    .circuit-icon:nth-child(2) {
+        font-size: 40px;
+        top: 15%;
+        right: 20%;
+        animation-delay: 0.5s;
+    }
+
+    .circuit-icon:nth-child(3) {
+        font-size: 45px;
+        bottom: 20%;
+        left: 18%;
+        animation-delay: 1s;
+    }
+
+    .circuit-icon:nth-child(4) {
+        font-size: 38px;
+        bottom: 15%;
+        right: 22%;
+        animation-delay: 1.5s;
+    }
+
+    .circuit-icon:nth-child(5) {
+        font-size: 35px;
+        top: 50%;
+        left: 8%;
+        animation-delay: 0.8s;
+    }
+
+    .circuit-icon:nth-child(6) {
+        font-size: 42px;
+        top: 50%;
+        right: 10%;
+        animation-delay: 1.2s;
+    }
+
+    @keyframes circuitPulse {
+        0%, 100% {
+            opacity: 0.2;
+            transform: scale(0.95);
+        }
+        50% {
+            opacity: 0.6;
+            transform: scale(1.05);
+        }
+    }
+
+    /* Digital grid lines */
+    .hero-brain-circle::after {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        background-image: 
+            linear-gradient(0deg, transparent 24%, rgba(249, 115, 22, 0.1) 25%, rgba(249, 115, 22, 0.1) 26%, transparent 27%, transparent 74%, rgba(249, 115, 22, 0.1) 75%, rgba(249, 115, 22, 0.1) 76%, transparent 77%, transparent),
+            linear-gradient(90deg, transparent 24%, rgba(249, 115, 22, 0.1) 25%, rgba(249, 115, 22, 0.1) 26%, transparent 27%, transparent 74%, rgba(249, 115, 22, 0.1) 75%, rgba(249, 115, 22, 0.1) 76%, transparent 77%, transparent);
+        background-size: 50px 50px;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+    }
+
+    /* Features Section */
+    .features-section {
+        padding: 120px 0;
+        background: linear-gradient(180deg, #f8f9ff 0%, #ffffff 100%);
+        position: relative;
+    }
+
+    .section-title {
+        font-size: 3rem;
+        font-weight: 900;
+        text-align: center;
+        margin-bottom: 1rem;
+        background: var(--primary-gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .section-subtitle {
+        text-align: center;
+        font-size: 1.3rem;
+        color: #6b7280;
+        margin-bottom: 4rem;
+        font-weight: 500;
+    }
+
+    .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 2.5rem;
+        margin-top: 3rem;
+    }
+
+    .feature-card {
+        background: white;
+        border-radius: 20px;
+        padding: 2.5rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.08);
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        border: 1px solid rgba(102, 126, 234, 0.1);
         position: relative;
         overflow: hidden;
-        box-shadow: 0 4px 20px rgba(99, 102, 241, 0.15);
-        border: 1px solid rgba(99, 102, 241, 0.1);
     }
-    
-    /* Dark mode support for feature cards */
-    @media (prefers-color-scheme: dark) {
-        body {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #334155 100%);
-            background-attachment: fixed;
-            background-size: cover;
-            color: #f1f5f9;
-        }
-        
-        .hero-section {
-            background: linear-gradient(135deg, #1e293b 0%, #334155 50%, #475569 100%);
-            background-size: 200% 200%;
-        }
-        
-        .hero-pattern {
-            background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'%3E%3Cpath fill='%230f172a' fill-opacity='1' d='M0,224L80,213.3C160,203,320,181,480,181.3C640,181,800,203,960,197.3C1120,192,1280,160,1360,144L1440,128L1440,320L1360,320C1280,320,1120,320,960,320C800,320,640,320,480,320C320,320,160,320,80,320L0,320Z'%3E%3C/path%3E%3C/svg%3E");
-        }
-        
-        .feature-card {
-            background: rgba(30, 41, 59, 0.8);
-            border: 1px solid rgba(148, 163, 184, 0.2);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-        }
-        
-        .feature-card:hover {
-            background: rgba(51, 65, 85, 0.9);
-            border-color: rgba(139, 92, 246, 0.5);
-            box-shadow: 0 12px 40px rgba(139, 92, 246, 0.3);
-        }
-        
-        .feature-card p,
-        .feature-card h3,
-        .feature-card h5,
-        .feature-card .text-muted {
-            color: #e2e8f0 !important;
-        }
-        
-        .feature-section h2 {
-            background: linear-gradient(120deg, #a78bfa 0%, #c4b5fd 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-        
-        .feature-section .text-muted {
-            color: #cbd5e1 !important;
-        }
-        
-        .why-PrizmAI-section h2,
-        .why-PrizmAI-section h5 {
-            color: #e0e7ff !important;
-        }
-        
-        .why-PrizmAI-section .text-muted,
-        .why-PrizmAI-section p {
-            color: #cbd5e1 !important;
-        }
-    }
-    
-    /* Shimmer effect on hover */
+
     .feature-card::before {
         content: '';
         position: absolute;
         top: 0;
-        left: -100%;
+        left: 0;
         width: 100%;
-        height: 100%;
-        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-        transition: left 0.6s;
+        height: 4px;
+        background: var(--primary-gradient);
+        transform: scaleX(0);
+        transition: transform 0.4s ease;
     }
-    
-    .feature-card:hover::before {
-        left: 100%;
-    }
-    
+
     .feature-card:hover {
-        transform: translateY(-12px) scale(1.02);
-        box-shadow: 0 20px 40px rgba(99, 102, 241, 0.25);
-        border: 1px solid rgba(99, 102, 241, 0.3);
-        background: rgba(255, 255, 255, 1);
+        transform: translateY(-15px);
+        box-shadow: 0 20px 60px rgba(102, 126, 234, 0.2);
     }
-    
-    .hover-lift {
-        position: relative;
+
+    .feature-card:hover::before {
+        transform: scaleX(1);
     }
-    
-    .hover-lift:hover {
-        transform: translateY(-15px) scale(1.02);
-        box-shadow: 0 25px 50px rgba(102, 126, 234, 0.2);
-    }
-    
-    /* Prevent icon distortion on card hover */
-    .feature-card:hover .feature-icon,
-    .hover-lift:hover .feature-icon {
-        transform: scale(1) rotate(0deg);
-    }
-    
+
     .feature-icon {
-        font-size: 40px;
-        margin-bottom: 20px;
-        transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        width: 80px;
+        height: 80px;
+        border-radius: 20px;
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 70px;
-        height: 70px;
+        margin-bottom: 1.5rem;
+        font-size: 2.5rem;
+        background: var(--primary-gradient);
+        color: white;
+        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        transition: all 0.4s ease;
         flex-shrink: 0;
     }
-    
-    /* Only animate icon on direct hover, not parent card hover */
-    .feature-icon:hover {
-        transform: scale(1.2) rotate(10deg);
+
+    .feature-card:hover .feature-icon {
+        /* Remove transform to prevent icon distortion */
+        box-shadow: 0 15px 40px rgba(102, 126, 234, 0.4);
     }
-    
+
+    .feature-card.ai .feature-icon { background: var(--warning-gradient); }
+    .feature-card.collaboration .feature-icon { background: var(--success-gradient); }
+    .feature-card.analytics .feature-icon { background: var(--accent-gradient); }
+    .feature-card.risk .feature-icon { background: var(--secondary-gradient); }
+
     .feature-title {
+        font-size: 1.5rem;
         font-weight: 700;
-        margin-bottom: 15px;
-        font-size: 1.15rem;
-        color: #1e293b;
+        margin-bottom: 1rem;
+        color: #1f2937;
     }
-    
-    .feature-card p {
-        font-size: 0.95rem;
-        line-height: 1.6;
-        color: #475569;
-        min-height: 60px;
+
+    .feature-description {
+        font-size: 1.05rem;
+        color: #6b7280;
+        line-height: 1.7;
+        margin-bottom: 1.5rem;
     }
-    
-    .feature-card .badge {
-        font-size: 0.75rem;
-        padding: 0.4rem 0.8rem;
-        font-weight: 600;
+
+    .feature-badge {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border-radius: 50px;
+        font-size: 0.85rem;
+        font-weight: 700;
+        text-transform: uppercase;
         letter-spacing: 0.5px;
     }
-    
-    .lean-six-sigma-section {
-        background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #a855f7 100%);
-        padding: 80px 0;
-        border-radius: 0;
+
+    .badge-ai { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: #000; }
+    .badge-core { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
+    .badge-collab { background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); color: #000; }
+    .badge-analytics { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: #fff; }
+    .badge-enterprise { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: #fff; }
+
+    /* AI Intelligence Section */
+    .ai-section {
+        padding: 120px 0;
+        background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 50%, #4c1d95 100%);
+        color: white;
         position: relative;
         overflow: hidden;
     }
-    
-    .lean-six-sigma-section::before {
+
+    .ai-section::before {
         content: '';
         position: absolute;
         top: -50%;
-        right: -10%;
-        width: 500px;
-        height: 500px;
-        background: radial-gradient(circle, rgba(255,255,255,0.15) 0%, transparent 70%);
+        right: -20%;
+        width: 600px;
+        height: 600px;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, transparent 70%);
         border-radius: 50%;
     }
-    
-    .lean-six-sigma-section::after {
-        content: '';
-        position: absolute;
-        bottom: -30%;
-        left: -5%;
-        width: 400px;
-        height: 400px;
-        background: radial-gradient(circle, rgba(255,255,255,0.12) 0%, transparent 70%);
-        border-radius: 50%;
-    }
-    
-    .lean-six-sigma-section h2,
-    .lean-six-sigma-section .lead,
-    .lean-six-sigma-section h5,
-    .lean-six-sigma-section p {
-        color: white !important;
+
+    .ai-content {
         position: relative;
-        z-index: 1;
+        z-index: 2;
     }
-    
-    .lean-six-sigma-section .d-flex {
+
+    .ai-feature-item {
         background: rgba(255, 255, 255, 0.15);
-        backdrop-filter: blur(10px);
-        padding: 20px;
-        border-radius: 12px;
+        backdrop-filter: blur(20px);
+        border-radius: 15px;
+        padding: 2rem;
+        margin-bottom: 2rem;
         border: 1px solid rgba(255, 255, 255, 0.3);
         transition: all 0.3s ease;
     }
-    
-    .lean-six-sigma-section .d-flex:hover {
+
+    .ai-feature-item:hover {
         background: rgba(255, 255, 255, 0.2);
-        border-color: rgba(255, 255, 255, 0.5);
         transform: translateX(10px);
+        border-color: rgba(255, 255, 255, 0.4);
     }
-    
-    .lean-six-sigma-section .feature-icon {
-        background: rgba(255, 255, 255, 0.25) !important;
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.4);
-        flex-shrink: 0;
-    }
-    
-    /* AI Brain Animation */
-    @keyframes pulse {
-        0%, 100% { transform: scale(1); opacity: 1; }
-        50% { transform: scale(1.05); opacity: 0.9; }
-    }
-    
-    .ai-brain-circle {
-        animation: pulse 3s ease-in-out infinite;
-    }
-    
-    @keyframes orbit {
-        0% { transform: rotate(0deg) translateX(150px) rotate(0deg); }
-        100% { transform: rotate(360deg) translateX(150px) rotate(-360deg); }
-    }
-    
-    /* Smooth fade-in on scroll */
-    @keyframes fadeInUp {
-        from {
-            opacity: 0;
-            transform: translateY(30px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-    
-    .feature-card {
-        animation: fadeInUp 0.6s ease-out;
-    }
-    
-    .feature-card:nth-child(1) { animation-delay: 0.1s; }
-    .feature-card:nth-child(2) { animation-delay: 0.2s; }
-    .feature-card:nth-child(3) { animation-delay: 0.3s; }
-    .feature-card:nth-child(4) { animation-delay: 0.4s; }
-    .feature-card:nth-child(5) { animation-delay: 0.5s; }
-    .feature-card:nth-child(6) { animation-delay: 0.6s; }
-    .feature-card:nth-child(7) { animation-delay: 0.7s; }
-    .feature-card:nth-child(8) { animation-delay: 0.8s; }
-    .feature-card:nth-child(9) { animation-delay: 0.9s; }
-    
-    /* Comprehensive dark mode support */
-    @media (prefers-color-scheme: dark) {
-        .navbar {
-            background: rgba(15, 23, 42, 0.95) !important;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-        }
-        
-        .lean-six-sigma-section {
-            background: linear-gradient(135deg, #1e3a8a 0%, #5b21b6 50%, #7e22ce 100%);
-        }
-        
-        .cta-section {
-            background: linear-gradient(135deg, #1e3a8a 0%, #5b21b6 50%, #7e22ce 100%);
-        }
-        
-        .footer {
-            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;
-        }
-        
-        .footer-links a {
-            color: rgba(226, 232, 240, 0.8) !important;
-        }
-        
-        .footer-links a:hover {
-            color: #a78bfa !important;
-        }
-        
-        .footer .tech-stack .badge {
-            background: rgba(139, 92, 246, 0.3) !important;
-            color: #c4b5fd !important;
-        }
-    }
-    
-    .testimonial-section {
-        padding: 80px 0;
-        background: transparent;
-    }
-    
-    .why-PrizmAI-section {
-        padding: 80px 0;
-        background: transparent;
-        position: relative;
-    }
-    
-    .why-PrizmAI-section h2 {
-        color: #1e293b;
-        font-weight: 800;
-        font-size: 2.5rem;
-    }
-    
-    .why-PrizmAI-section .text-muted {
-        color: #475569 !important;
-        font-weight: 500;
-        font-size: 1.1rem;
-    }
-    
-    .why-PrizmAI-section h5 {
-        color: #1e293b !important;
-        font-weight: 700;
-    }
-    
-    .why-PrizmAI-section p {
-        color: #475569 !important;
-        line-height: 1.7;
-    }
-    
-    .testimonial-card {
-        border-radius: 12px;
-        border: none;
-        box-shadow: 0 8px 24px rgba(102, 126, 234, 0.12);
-    }
-    
-    .testimonial-img {
+
+    .ai-icon {
         width: 60px;
         height: 60px;
-        border-radius: 50%;
-        object-fit: cover;
+        border-radius: 15px;
+        background: rgba(255, 255, 255, 0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        margin-bottom: 1rem;
     }
-    
-    .cta-section {
-        background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #a855f7 100%);
-        color: white;
-        padding: 60px 0;
-        position: relative;
-    }
-    
-    .cta-section::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-    }
-    
-    .cta-section .container {
-        position: relative;
-        z-index: 1;
-    }
-    
-    .footer {
-        background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        color: white;
-        padding: 40px 0 20px;
-    }
-    
-    .footer-links a {
-        color: rgba(226, 232, 240, 0.8);
-        text-decoration: none;
-        margin-right: 15px;
-        transition: color 0.2s;
-    }
-    
-    .footer-links a:hover {
-        color: #a78bfa;
-    }
-    
-    .navbar {
-        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.15);
-    }
-    
-    /* Features dropdown styling */
-    .navbar .dropdown-menu {
-        min-width: 300px;
-        border: none;
-        box-shadow: 0 12px 32px rgba(102, 126, 234, 0.2);
-        border-radius: 8px;
-        animation: slideDown 0.2s ease-out;
-    }
-    
-    @keyframes slideDown {
-        from {
-            opacity: 0;
-            transform: translateY(-10px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
-    }
-    
-    .navbar .dropdown-menu .dropdown-item {
-        padding: 10px 15px;
-        color: #2d3748;
-        transition: all 0.2s ease;
-        border-radius: 4px;
-        margin: 2px 8px;
-    }
-    
-    .navbar .dropdown-menu .dropdown-item-text {
-        font-size: 0.85rem;
+
+    .ai-title {
+        font-size: 1.5rem;
         font-weight: 700;
-        color: #718096;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        padding: 12px 15px 8px;
-        margin: 5px 0;
-        display: block;
+        margin-bottom: 0.8rem;
+        color: #ffffff;
     }
-    
-    .navbar .dropdown-menu .dropdown-item:hover {
-        background-color: rgba(102, 126, 234, 0.1);
-        color: #667eea;
-        padding-left: 20px;
+
+    .ai-description {
+        font-size: 1.05rem;
+        opacity: 1;
+        line-height: 1.6;
+        color: rgba(255, 255, 255, 0.95);
     }
-    
-    .navbar .dropdown-menu .dropdown-item i {
-        min-width: 20px;
+
+    /* AI Brain Visualization */
+    .ai-brain-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
     }
-    
-    .navbar .dropdown-menu .dropdown-divider {
-        margin: 8px 0;
-        opacity: 0.2;
+
+    .ai-brain-circle {
+        width: 550px;
+        height: 550px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(168, 85, 247, 0.2) 100%);
+        backdrop-filter: blur(30px);
+        border: 3px solid rgba(168, 85, 247, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        animation: pulse 4s ease-in-out infinite;
+        box-shadow: 0 0 60px rgba(168, 85, 247, 0.4), inset 0 0 60px rgba(168, 85, 247, 0.2);
+        margin: 0 auto;
     }
-    
-    .navbar .dropdown-toggle::after {
-        border: none;
-        content: '\f078';
-        font-family: 'Font Awesome 6 Free';
+
+    @keyframes pulse {
+        0%, 100% { 
+            transform: scale(1);
+            box-shadow: 0 0 60px rgba(168, 85, 247, 0.4), inset 0 0 60px rgba(168, 85, 247, 0.2);
+        }
+        50% { 
+            transform: scale(1.05);
+            box-shadow: 0 0 80px rgba(168, 85, 247, 0.6), inset 0 0 80px rgba(168, 85, 247, 0.3);
+        }
+    }
+
+    .ai-brain-circle .brain-icon {
+        font-size: 220px;
+        background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 50%, #e9d5ff 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        filter: drop-shadow(0 0 20px rgba(167, 139, 250, 0.6));
+    }
+
+    .orbit-icon {
+        position: absolute;
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.4) 0%, rgba(168, 85, 247, 0.3) 100%);
+        backdrop-filter: blur(10px);
+        border: 2px solid rgba(168, 85, 247, 0.6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        animation: orbit 8s linear infinite;
+        box-shadow: 0 4px 20px rgba(139, 92, 246, 0.5);
+    }
+
+    .orbit-icon:nth-child(2) { 
+        animation-delay: 0s; 
+        top: 10%; 
+        left: 50%; 
+        transform: translate(-50%, -50%);
+    }
+    .orbit-icon:nth-child(3) { 
+        animation-delay: 2s; 
+        right: 10%; 
+        top: 50%; 
+        transform: translate(50%, -50%);
+    }
+    .orbit-icon:nth-child(4) { 
+        animation-delay: 4s; 
+        bottom: 10%; 
+        left: 50%; 
+        transform: translate(-50%, 50%);
+    }
+    .orbit-icon:nth-child(5) { 
+        animation-delay: 6s; 
+        left: 10%; 
+        top: 50%; 
+        transform: translate(-50%, -50%);
+    }
+
+    /* Create separate keyframes for each icon position */
+    .orbit-icon:nth-child(2) { animation-name: orbitTop; }
+    .orbit-icon:nth-child(3) { animation-name: orbitRight; }
+    .orbit-icon:nth-child(4) { animation-name: orbitBottom; }
+    .orbit-icon:nth-child(5) { animation-name: orbitLeft; }
+
+    @keyframes orbitTop {
+        0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        50% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.9; }
+        100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    }
+
+    @keyframes orbitRight {
+        0% { transform: translate(50%, -50%) scale(1); opacity: 1; }
+        50% { transform: translate(50%, -50%) scale(1.15); opacity: 0.9; }
+        100% { transform: translate(50%, -50%) scale(1); opacity: 1; }
+    }
+
+    @keyframes orbitBottom {
+        0% { transform: translate(-50%, 50%) scale(1); opacity: 1; }
+        50% { transform: translate(-50%, 50%) scale(1.15); opacity: 0.9; }
+        100% { transform: translate(-50%, 50%) scale(1); opacity: 1; }
+    }
+
+    @keyframes orbitLeft {
+        0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        50% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.9; }
+        100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+    }
+
+    /* CTA Section */
+    .cta-section {
+        padding: 100px 0;
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        text-align: center;
+    }
+
+    .cta-title {
+        font-size: 3rem;
         font-weight: 900;
-        font-size: 0.65rem;
-        margin-left: 0.5rem;
-        transition: transform 0.3s ease;
+        margin-bottom: 1.5rem;
     }
-    
-    .navbar .dropdown-toggle[aria-expanded="true"]::after {
-        transform: rotate(180deg);
+
+    .cta-subtitle {
+        font-size: 1.4rem;
+        margin-bottom: 3rem;
+        opacity: 0.95;
     }
-    
+
+    /* Footer */
+    .footer {
+        background: linear-gradient(135deg, #0f0c29 0%, #302b63 100%);
+        color: white;
+        padding: 60px 0 30px;
+    }
+
+    .footer-title {
+        font-size: 1.8rem;
+        font-weight: 800;
+        margin-bottom: 1rem;
+    }
+
+    .footer-links a {
+        color: rgba(255, 255, 255, 0.8);
+        text-decoration: none;
+        transition: all 0.3s ease;
+        display: block;
+        padding: 0.5rem 0;
+        font-weight: 500;
+    }
+
+    .footer-links a:hover {
+        color: white;
+        padding-left: 10px;
+    }
+
+    .tech-badge {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 20px;
+        margin: 0.3rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+    }
+
+    .social-icon {
+        width: 45px;
+        height: 45px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.1);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 0.5rem;
+        transition: all 0.3s ease;
+        color: white;
+        text-decoration: none;
+    }
+
+    .social-icon:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: translateY(-5px);
+        color: white;
+    }
+
+    /* Responsive Design */
     @media (max-width: 768px) {
-        .navbar .dropdown-menu {
-            min-width: 100%;
-            position: static;
-            float: none;
-            width: 100%;
-            margin-top: 10px;
-            box-shadow: none;
-            border-top: 1px solid #e9ecef;
-        }
+        .hero-title { font-size: 2.5rem; }
+        .hero-subtitle { font-size: 1.2rem; }
+        .section-title { font-size: 2rem; }
+        .feature-grid { grid-template-columns: 1fr; }
+        .hero-brain-circle { width: 350px; height: 350px; }
+        .hero-brain-circle .tech-brain-icon { font-size: 150px; }
+        .circuit-icon { font-size: 25px !important; }
+        .ai-brain-circle { width: 350px; height: 350px; }
+        .ai-brain-circle .brain-icon { font-size: 140px; }
+        .orbit-icon { width: 50px; height: 50px; font-size: 1.3rem; }
     }
-    
-    @media (max-width: 768px) {
-        .hero-title {
-            font-size: 2.5rem;
-        }
-        .hero-subtitle {
-            font-size: 1.1rem;
-        }
-    }
-    
-    /* Light Mode - Improved Readability */
-    @media (prefers-color-scheme: light) {
-        /* Enhanced text contrast for light mode */
-        .why-PrizmAI-section h2,
-        .feature-section h2 {
-            color: #1e293b;
-        }
-        
-        /* Override feature cards to be white in light mode */
-        .feature-card {
-            background: rgba(255, 255, 255, 0.95) !important;
-            border: 1px solid rgba(99, 102, 241, 0.15) !important;
-            box-shadow: 0 4px 20px rgba(99, 102, 241, 0.12);
-        }
-        
-        .feature-card:hover {
-            box-shadow: 0 20px 40px rgba(99, 102, 241, 0.2);
-            border-color: rgba(99, 102, 241, 0.3) !important;
-        }
-        
-        .feature-card .feature-icon {
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
-        }
-        
-        /* Override Bootstrap's dark bg classes for cards */
-        .feature-card .bg-danger,
-        .feature-card .bg-primary,
-        .feature-card .bg-success,
-        .feature-card .bg-info,
-        .feature-card .bg-warning,
-        .feature-card .bg-secondary {
-            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important;
-        }
-        
-        /* Footer improvements */
-        .footer {
-            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        }
-        
-        .footer h4,
-        .footer h6 {
-            color: #ffffff;
-            font-weight: 700;
-        }
-        
-        .footer p {
-            color: #cbd5e1;
-        }
-        
-        .footer-nav-link {
-            color: #cbd5e1 !important;
-        }
-        
-        .footer-nav-link:hover {
-            color: #a78bfa !important;
-        }
-        
-        /* Navigation for light mode */
-        .navbar {
-            background: rgba(255, 255, 255, 0.96) !important;
-            box-shadow: 0 4px 16px rgba(99, 102, 241, 0.12);
-            backdrop-filter: blur(8px);
-        }
-        
-        .navbar-brand {
-            color: #6366f1 !important;
-            font-weight: 700;
-        }
-        
-        .navbar .nav-link {
-            color: #1e293b !important;
-            font-weight: 500;
-        }
-        
-        .navbar .nav-link:hover {
-            color: #6366f1 !important;
-        }
-        
-        /* Dropdown improvements */
-        .navbar .dropdown-menu {
-            background: rgba(255, 255, 255, 0.98);
-            border: 1px solid rgba(99, 102, 241, 0.15);
-            box-shadow: 0 12px 32px rgba(99, 102, 241, 0.18);
-        }
-        
-        .navbar .dropdown-menu .dropdown-item {
-            color: #1e293b;
-        }
-        
-        .navbar .dropdown-menu .dropdown-item:hover {
-            background-color: rgba(99, 102, 241, 0.1);
-            color: #6366f1;
-        }
-        
-        /* Enhanced section backgrounds for better contrast */
-        .feature-section {
-            background: rgba(255, 255, 255, 0.5);
-        }
-        
-        .why-PrizmAI-section {
-            background: rgba(255, 255, 255, 0.45);
-        }
-        
-        .testimonial-section {
-            background: rgba(255, 255, 255, 0.48);
-        }
-        
-        /* Better text contrast in sections */
-        .feature-section .text-muted {
-            color: #475569 !important;
-        }
-        
-        .why-PrizmAI-section p {
-            color: #1e293b !important;
-        }
+
+    /* Smooth Scroll */
+    html {
+        scroll-behavior: smooth;
     }
 </style>
-{% endblock %}
+</head>
+<body>
 
-{% block content %}
-<!-- Override the navigation for the welcome page -->
-{% block navigation %}
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+<!-- Navigation -->
+<nav class="navbar navbar-expand-lg fixed-top">
     <div class="container">
-        <a class="navbar-brand" href="{% url 'welcome' %}" style="font-size: 1.3rem; font-weight: 600;">
-            <i class="fas fa-brain me-2" style="filter: brightness(1.2); text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);"></i>Pri<span class="stylish-z">z</span>mAI
+        <a class="navbar-brand" href="{% url 'welcome' %}">
+            <i class="fas fa-brain"></i> PrizmAI
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" 
-                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
             <span class="navbar-toggler-icon"></span>
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav ms-auto">
-                <li class="nav-item dropdown" id="featuresDropdown">
-                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        Features
-                    </a>
-                    <ul class="dropdown-menu dropdown-menu-end" id="featuresDropdownMenu">
-                        <li><a class="dropdown-item fw-bold" href="#features"><i class="fas fa-star me-2"></i>View All Features</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><strong class="dropdown-item-text ps-3">Core Features</strong></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-columns me-2"></i>Flexible Kanban Boards</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-chart-line me-2"></i>Analytics Dashboard</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-users me-2"></i>Team Collaboration</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-tags me-2"></i>Smart Labeling System</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-clock me-2"></i>Progress Tracking</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-file-export me-2"></i>Import/Export</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><strong class="dropdown-item-text ps-3">Advanced Management</strong></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-shield-alt me-2" style="color: #dc3545;"></i>Risk Management</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-chart-bar me-2" style="color: #ffc107;"></i>Resource Management</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-network-wired me-2" style="color: #0d6efd;"></i>Task Dependencies</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-handshake me-2" style="color: #198754;"></i>Stakeholder Management</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><strong class="dropdown-item-text ps-3">AI-Powered Features</strong></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-robot me-2" style="color: #6f42c1;"></i>AI Project Assistant with RAG</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-lightbulb me-2" style="color: #ffc107;"></i>Smart Column Recommendations</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-pen-fancy me-2" style="color: #20c997;"></i>Intelligent Task Description Generator</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-chart-pie me-2" style="color: #17a2b8;"></i>AI Analytics & Insights</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-comment-dots me-2" style="color: #6c757d;"></i>Smart Comment Summarization</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-shield-alt me-2" style="color: #dc3545;"></i>AI Risk Assessment & Mitigation</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-link me-2" style="color: #0d6efd;"></i>AI-Suggested Dependencies</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-file-audio me-2" style="color: #e83e8c;"></i>Meeting Transcript Analysis</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-check me-2" style="color: #28a745;"></i>Lean Six Sigma Classification</a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><strong class="dropdown-item-text ps-3">Stakeholder & Communication</strong></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-handshake me-2" style="color: #198754;"></i>Stakeholder Management</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-book me-2" style="color: #fd7e14;"></i>Wiki & Knowledge Base</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-comments me-2" style="color: #20c997;"></i>Team Messaging & Chat</a></li>
-                        <li><a class="dropdown-item" href="#"><i class="fas fa-paperclip me-2" style="color: #e83e8c;"></i>File Management</a></li>
-                    </ul>
+                <li class="nav-item">
+                    <a class="nav-link" href="#features">Features</a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link" href="#ai-intelligence">AI Intelligence</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'login' %}">Sign In</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'register' %}" style="background: var(--accent-gradient); border-radius: 25px; padding: 0.5rem 1.5rem !important; color: white !important;">Get Started</a>
                 </li>
             </ul>
         </div>
     </div>
 </nav>
-{% endblock %}
 
 <!-- Hero Section -->
 <section class="hero-section">
     <div class="container">
         <div class="row align-items-center">
-            <div class="col-md-6 hero-content">
-                <h1 class="hero-title">Streamline Your Workflow with <span style="white-space: nowrap;">Pri<span class="stylish-z">z</span>mAI</span></h1>
-                <p class="hero-subtitle">An AI-powered project intelligence platform combining advanced Kanban methodology with predictive analytics, real-time collaboration, and automated insights to transform how teams work.</p>
-                <div class="d-flex flex-wrap">
-                    <a href="{% url 'register' %}" class="btn btn-light btn-hero me-3 mb-3">Get Started <i class="fas fa-arrow-right ms-2"></i></a>
-                    <a href="{% url 'login' %}" class="btn btn-outline-light btn-hero mb-3">Sign In</a>
+            <div class="col-lg-6 hero-content">
+                <h1 class="hero-title">Transform Your Projects with AI-Powered Intelligence</h1>
+                <p class="hero-subtitle">The ultimate platform that combines Kanban boards, Gantt charts, real-time collaboration, and AI-driven insights—all in one seamless experience.</p>
+                <div class="hero-buttons">
+                    <a href="{% url 'register' %}" class="btn-hero btn-primary-hero">
+                        Start Free Trial <i class="fas fa-arrow-right ms-2"></i>
+                    </a>
+                    <a href="#features" class="btn-hero btn-outline-hero">
+                        Explore Features
+                    </a>
                 </div>
-            </div>            <div class="col-md-6 d-none d-md-block">
-                <img src="{% static 'img/hero-dashboard.svg' %}" alt="PrizmAI Kanban Board" class="img-fluid" 
-                     onerror="this.src='https://via.placeholder.com/600x400/8f94fb/FFFFFF?text=Kanban+Board';this.onerror='';">
+            </div>
+            <div class="col-lg-6 hero-illustration d-none d-lg-block">
+                <div class="hero-brain-container">
+                    <div class="hero-brain-circle">
+                        <div class="tech-brain-container">
+                            <i class="fas fa-brain tech-brain-icon"></i>
+                            <div class="circuit-overlay">
+                                <i class="fas fa-lightbulb circuit-icon" style="color: #fbbf24;"></i>
+                                <i class="fas fa-chart-line circuit-icon" style="color: #f97316;"></i>
+                                <i class="fas fa-shield-alt circuit-icon" style="color: #f9fafb;"></i>
+                                <i class="fas fa-users circuit-icon" style="color: #fb923c;"></i>
+                                <i class="fas fa-cog circuit-icon" style="color: #f3f4f6;"></i>
+                                <i class="fas fa-rocket circuit-icon" style="color: #fed7aa;"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg" class="hero-graphic" style="position: absolute; top: 60%; left: 50%; transform: translateX(-50%); width: 90%; z-index: 1;">
+                    <defs>
+                        <linearGradient id="boardGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.95" />
+                            <stop offset="100%" style="stop-color:#f8f9ff;stop-opacity:0.95" />
+                        </linearGradient>
+                        <linearGradient id="cardGradient1" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:#fbbf24;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#f59e0b;stop-opacity:1" />
+                        </linearGradient>
+                        <linearGradient id="cardGradient2" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:#60a5fa;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:1" />
+                        </linearGradient>
+                        <linearGradient id="cardGradient3" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color:#4ade80;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#22c55e;stop-opacity:1" />
+                        </linearGradient>
+                        <filter id="glow">
+                            <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+                            <feMerge>
+                                <feMergeNode in="coloredBlur"/>
+                                <feMergeNode in="SourceGraphic"/>
+                            </feMerge>
+                        </filter>
+                        <filter id="shadow">
+                            <feDropShadow dx="0" dy="4" stdDeviation="6" flood-opacity="0.3"/>
+                        </filter>
+                    </defs>
+                    
+                    <!-- Kanban Board Below Brain -->
+                    <g id="kanbanBoard" transform="translate(130, 50)">
+                        <!-- Board Background -->
+                        <rect x="0" y="0" width="240" height="160" rx="12" 
+                              fill="url(#boardGradient)" 
+                              stroke="#667eea" stroke-width="2.5" 
+                              filter="url(#shadow)"/>
+                        
+                        <!-- Board Title -->
+                        <text x="120" y="25" text-anchor="middle" fill="#667eea" font-weight="bold" font-size="14">
+                            AI Project Board
+                        </text>
+                        
+                        <!-- Column 1: To Do -->
+                        <g id="column1">
+                            <rect x="12" y="35" width="65" height="110" rx="6" fill="rgba(102, 126, 234, 0.08)" stroke="#667eea" stroke-width="1"/>
+                            <text x="44.5" y="50" text-anchor="middle" fill="#667eea" font-weight="600" font-size="9">TODO</text>
+                            
+                            <!-- Cards in To Do -->
+                            <rect x="17" y="58" width="55" height="22" rx="4" fill="url(#cardGradient1)" filter="url(#shadow)"/>
+                            <line x1="20" y1="63" x2="38" y2="63" stroke="rgba(0,0,0,0.3)" stroke-width="1.5" stroke-linecap="round"/>
+                            <line x1="20" y1="68" x2="50" y2="68" stroke="rgba(0,0,0,0.3)" stroke-width="1.5" stroke-linecap="round"/>
+                            <line x1="20" y1="73" x2="45" y2="73" stroke="rgba(0,0,0,0.3)" stroke-width="1.5" stroke-linecap="round"/>
+                            
+                            <rect x="17" y="87" width="55" height="22" rx="4" fill="url(#cardGradient1)" filter="url(#shadow)"/>
+                            <line x1="20" y1="92" x2="35" y2="92" stroke="rgba(0,0,0,0.3)" stroke-width="1.5" stroke-linecap="round"/>
+                            <line x1="20" y1="97" x2="52" y2="97" stroke="rgba(0,0,0,0.3)" stroke-width="1.5" stroke-linecap="round"/>
+                            <line x1="20" y1="102" x2="48" y2="102" stroke="rgba(0,0,0,0.3)" stroke-width="1.5" stroke-linecap="round"/>
+                        </g>
+                        
+                        <!-- Column 2: In Progress -->
+                        <g id="column2">
+                            <rect x="87" y="35" width="65" height="110" rx="6" fill="rgba(59, 130, 246, 0.08)" stroke="#3b82f6" stroke-width="1"/>
+                            <text x="119.5" y="50" text-anchor="middle" fill="#3b82f6" font-weight="600" font-size="9">PROGRESS</text>
+                            
+                            <!-- Cards in Progress -->
+                            <rect x="92" y="58" width="55" height="22" rx="4" fill="url(#cardGradient2)" filter="url(#shadow)"/>
+                            <line x1="95" y1="63" x2="113" y2="63" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round"/>
+                            <line x1="95" y1="68" x2="125" y2="68" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round"/>
+                            <line x1="95" y1="73" x2="120" y2="73" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round"/>
+                            
+                            <rect x="92" y="87" width="55" height="22" rx="4" fill="url(#cardGradient2)" filter="url(#shadow)"/>
+                            <line x1="95" y1="92" x2="110" y2="92" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round"/>
+                            <line x1="95" y1="97" x2="127" y2="97" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round"/>
+                            <line x1="95" y1="102" x2="123" y2="102" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round"/>
+                            
+                            <rect x="92" y="116" width="55" height="22" rx="4" fill="url(#cardGradient2)" filter="url(#shadow)"/>
+                            <line x1="95" y1="121" x2="115" y2="121" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round"/>
+                            <line x1="95" y1="126" x2="125" y2="126" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round"/>
+                            <line x1="95" y1="131" x2="118" y2="131" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round"/>
+                        </g>
+                        
+                        <!-- Column 3: Done -->
+                        <g id="column3">
+                            <rect x="162" y="35" width="65" height="110" rx="6" fill="rgba(34, 197, 94, 0.08)" stroke="#22c55e" stroke-width="1"/>
+                            <text x="194.5" y="50" text-anchor="middle" fill="#22c55e" font-weight="600" font-size="9">DONE</text>
+                            
+                            <!-- Cards in Done -->
+                            <rect x="167" y="58" width="55" height="22" rx="4" fill="url(#cardGradient3)" filter="url(#shadow)"/>
+                            <line x1="170" y1="63" x2="188" y2="63" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round"/>
+                            <line x1="170" y1="68" x2="200" y2="68" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round"/>
+                            <circle cx="174" cy="73" r="2.5" fill="rgba(255,255,255,0.9)"/>
+                            <path d="M 173 73 L 175 75 L 179 71" stroke="rgba(34, 197, 94, 1)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                            
+                            <rect x="167" y="87" width="55" height="22" rx="4" fill="url(#cardGradient3)" filter="url(#shadow)"/>
+                            <line x1="170" y1="92" x2="185" y2="92" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round"/>
+                            <line x1="170" y1="97" x2="202" y2="97" stroke="rgba(255,255,255,0.9)" stroke-width="1.5" stroke-linecap="round"/>
+                            <circle cx="174" cy="102" r="2.5" fill="rgba(255,255,255,0.9)"/>
+                            <path d="M 173 102 L 175 104 L 179 100" stroke="rgba(34, 197, 94, 1)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                        </g>
+                    </g>
+                    
+                    <!-- AI Sparkle Icons around the board -->
+                    <g id="aiSparkles">
+                        <g transform="translate(100, 140)">
+                            <path d="M 0,-8 L 2,-2 L 8,0 L 2,2 L 0,8 L -2,2 L -8,0 L -2,-2 Z" fill="#fbbf24" opacity="0.9" filter="url(#glow)">
+                                <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="4s" repeatCount="indefinite"/>
+                            </path>
+                        </g>
+                        <g transform="translate(400, 160)">
+                            <path d="M 0,-6 L 1.5,-1.5 L 6,0 L 1.5,1.5 L 0,6 L -1.5,1.5 L -6,0 L -1.5,-1.5 Z" fill="#60a5fa" opacity="0.9" filter="url(#glow)">
+                                <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="-360 0 0" dur="5s" repeatCount="indefinite"/>
+                            </path>
+                        </g>
+                        <g transform="translate(380, 80)">
+                            <path d="M 0,-7 L 1.8,-1.8 L 7,0 L 1.8,1.8 L 0,7 L -1.8,1.8 L -7,0 L -1.8,-1.8 Z" fill="#a78bfa" opacity="0.9" filter="url(#glow)">
+                                <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="4.5s" repeatCount="indefinite"/>
+                            </path>
+                        </g>
+                    </g>
+                </svg>
+            </div>
             </div>
         </div>
     </div>
-    <div class="hero-pattern"></div>
 </section>
 
 <!-- Features Section -->
-<section class="feature-section" id="features">
+<section class="features-section" id="features">
     <div class="container">
-        <div class="text-center mb-5">
-            <h2 class="fw-bold">🚀 Comprehensive Project Intelligence</h2>
-            <p class="text-muted fs-5">Everything Your Team Needs in One Unified Platform</p>
-        </div>
+        <h2 class="section-title">Powerful Features for Modern Teams</h2>
+        <p class="section-subtitle">Everything you need to manage projects efficiently, all in one place</p>
         
-        <div class="row g-4">
-            <!-- 1. AI Project Assistant -->
-            <div class="col-md-6 col-lg-4">
-                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
-                    <div class="feature-icon bg-warning rounded-circle p-3 mx-auto mb-3">
-                        <i class="fas fa-robot text-dark" style="font-size: 1.8rem;"></i>
-                    </div>
-                    <h3 class="feature-title fw-bold">🤖 AI Project Assistant</h3>
-                    <p class="text-muted">Conversational AI with RAG technology, real-time web search, and context-aware project insights powered by Google Gemini.</p>
-                    <div class="mt-auto">
-                        <span class="badge bg-warning text-dark">AI-Powered</span>
-                    </div>
+        <div class="feature-grid">
+            <!-- AI Assistant -->
+            <div class="feature-card ai">
+                <div class="feature-icon">
+                    <i class="fas fa-robot"></i>
                 </div>
+                <h3 class="feature-title">🤖 AI Project Assistant</h3>
+                <p class="feature-description">Conversational AI powered by Google Gemini with RAG technology, real-time web search, and intelligent project insights at your fingertips.</p>
+                <span class="feature-badge badge-ai">AI-Powered</span>
             </div>
-            
-            <!-- 2. Intelligent Kanban + Gantt -->
-            <div class="col-md-6 col-lg-4">
-                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
-                    <div class="feature-icon bg-primary rounded-circle p-3 mx-auto mb-3">
-                        <i class="fas fa-project-diagram text-white" style="font-size: 1.8rem;"></i>
-                    </div>
-                    <h3 class="feature-title fw-bold">� Dual View Planning</h3>
-                    <p class="text-muted">Interactive Kanban boards with Gantt chart timelines, drag-and-drop scheduling, and AI-suggested dependencies.</p>
-                    <div class="mt-auto">
-                        <span class="badge bg-primary">Core Feature</span>
-                    </div>
+
+            <!-- Dual View Planning -->
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-project-diagram"></i>
                 </div>
+                <h3 class="feature-title">📊 Dual View Planning</h3>
+                <p class="feature-description">Interactive Kanban boards seamlessly integrated with Gantt chart timelines. Drag-and-drop scheduling with AI-suggested dependencies.</p>
+                <span class="feature-badge badge-core">Core Feature</span>
             </div>
-            
-            <!-- 3. Real-Time Collaboration -->
-            <div class="col-md-6 col-lg-4">
-                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
-                    <div class="feature-icon bg-success rounded-circle p-3 mx-auto mb-3">
-                        <i class="fas fa-comments text-white" style="font-size: 1.8rem;"></i>
-                    </div>
-                    <h3 class="feature-title fw-bold">� Real-Time Messaging</h3>
-                    <p class="text-muted">Built-in chat rooms, task comments, @mentions, typing indicators, and instant notifications via WebSocket.</p>
-                    <div class="mt-auto">
-                        <span class="badge bg-success">Collaboration</span>
-                    </div>
+
+            <!-- Real-Time Collaboration -->
+            <div class="feature-card collaboration">
+                <div class="feature-icon">
+                    <i class="fas fa-comments"></i>
                 </div>
+                <h3 class="feature-title">💬 Real-Time Messaging</h3>
+                <p class="feature-description">Built-in chat rooms, task comments, @mentions, typing indicators, and instant notifications via WebSocket technology.</p>
+                <span class="feature-badge badge-collab">Collaboration</span>
             </div>
-            
-            <!-- 4. Risk Management -->
-            <div class="col-md-6 col-lg-4">
-                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
-                    <div class="feature-icon bg-danger rounded-circle p-3 mx-auto mb-3">
-                        <i class="fas fa-shield-alt text-white" style="font-size: 1.8rem;"></i>
-                    </div>
-                    <h3 class="feature-title fw-bold">🛡️ Smart Risk Management</h3>
-                    <p class="text-muted">AI-powered risk assessment with intelligent scoring, predictive indicators, and automated mitigation strategies.</p>
-                    <div class="mt-auto">
-                        <span class="badge bg-danger">Enterprise</span>
-                    </div>
+
+            <!-- Risk Management -->
+            <div class="feature-card risk">
+                <div class="feature-icon">
+                    <i class="fas fa-shield-alt"></i>
                 </div>
+                <h3 class="feature-title">🛡️ Smart Risk Management</h3>
+                <p class="feature-description">AI-powered risk assessment with intelligent scoring, predictive indicators, and automated mitigation strategies.</p>
+                <span class="feature-badge badge-enterprise">Enterprise</span>
             </div>
-            
-            <!-- 5. Predictive Resource Management -->
-            <div class="col-md-6 col-lg-4">
-                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
-                    <div class="feature-icon bg-info rounded-circle p-3 mx-auto mb-3">
-                        <i class="fas fa-chart-line text-white" style="font-size: 1.8rem;"></i>
-                    </div>
-                    <h3 class="feature-title fw-bold">� Predictive Analytics</h3>
-                    <p class="text-muted">Forecast team capacity 2-3 weeks ahead with AI-powered workload alerts and intelligent task assignment recommendations.</p>
-                    <div class="mt-auto">
-                        <span class="badge bg-info text-dark">Predictive</span>
-                    </div>
+
+            <!-- Predictive Analytics -->
+            <div class="feature-card analytics">
+                <div class="feature-icon">
+                    <i class="fas fa-chart-line"></i>
                 </div>
+                <h3 class="feature-title">📈 Predictive Analytics</h3>
+                <p class="feature-description">Forecast team capacity 2-3 weeks ahead with AI-powered workload alerts and intelligent task assignment recommendations.</p>
+                <span class="feature-badge badge-analytics">Predictive</span>
             </div>
-            
-            <!-- 6. Knowledge Hub -->
-            <div class="col-md-6 col-lg-4">
-                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
-                    <div class="feature-icon bg-secondary rounded-circle p-3 mx-auto mb-3">
-                        <i class="fas fa-book text-white" style="font-size: 1.8rem;"></i>
-                    </div>
-                    <h3 class="feature-title fw-bold">📚 Knowledge Management</h3>
-                    <p class="text-muted">Integrated wiki documentation, meeting transcript analysis, version control, and AI-powered search across all content.</p>
-                    <div class="mt-auto">
-                        <span class="badge bg-secondary">Documentation</span>
-                    </div>
+
+            <!-- Knowledge Hub -->
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-book"></i>
                 </div>
+                <h3 class="feature-title">📚 Knowledge Management</h3>
+                <p class="feature-description">Integrated wiki documentation, meeting transcript analysis, version control, and AI-powered search across all content.</p>
+                <span class="feature-badge badge-core">Documentation</span>
             </div>
-            
-            <!-- 7. Stakeholder Tracking -->
-            <div class="col-md-6 col-lg-4">
-                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
-                    <div class="feature-icon rounded-circle p-3 mx-auto mb-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                        <i class="fas fa-handshake text-white" style="font-size: 1.8rem;"></i>
-                    </div>
-                    <h3 class="feature-title fw-bold">🤝 Stakeholder Management</h3>
-                    <p class="text-muted">Power/Interest matrix analysis, engagement tracking, satisfaction ratings, and comprehensive communication history.</p>
-                    <div class="mt-auto">
-                        <span class="badge" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">Enterprise</span>
-                    </div>
+
+            <!-- Stakeholder Tracking -->
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-handshake"></i>
                 </div>
+                <h3 class="feature-title">🤝 Stakeholder Management</h3>
+                <p class="feature-description">Power/Interest matrix analysis, engagement tracking, satisfaction ratings, and comprehensive communication history.</p>
+                <span class="feature-badge badge-enterprise">Enterprise</span>
             </div>
-            
-            <!-- 8. File Management -->
-            <div class="col-md-6 col-lg-4">
-                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
-                    <div class="feature-icon rounded-circle p-3 mx-auto mb-3" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-                        <i class="fas fa-paperclip text-white" style="font-size: 1.8rem;"></i>
-                    </div>
-                    <h3 class="feature-title fw-bold">📎 File Management</h3>
-                    <p class="text-muted">Attach files to tasks and chat rooms with support for documents, images, and presentations up to 10MB.</p>
-                    <div class="mt-auto">
-                        <span class="badge" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">Storage</span>
-                    </div>
+
+            <!-- File Management -->
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-paperclip"></i>
                 </div>
+                <h3 class="feature-title">📎 File Management</h3>
+                <p class="feature-description">Attach files to tasks and chat rooms with support for documents, images, and presentations up to 10MB.</p>
+                <span class="feature-badge badge-core">Storage</span>
             </div>
-            
-            <!-- 9. Analytics & Insights -->
-            <div class="col-md-6 col-lg-4">
-                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
-                    <div class="feature-icon rounded-circle p-3 mx-auto mb-3" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
-                        <i class="fas fa-chart-pie text-white" style="font-size: 1.8rem;"></i>
-                    </div>
-                    <h3 class="feature-title fw-bold">� Advanced Analytics</h3>
-                    <p class="text-muted">Comprehensive dashboards with process optimization insights, efficiency metrics, and Lean Six Sigma classification.</p>
-                    <div class="mt-auto">
-                        <span class="badge" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">Data-Driven</span>
-                    </div>
+
+            <!-- Advanced Analytics -->
+            <div class="feature-card analytics">
+                <div class="feature-icon">
+                    <i class="fas fa-chart-pie"></i>
                 </div>
+                <h3 class="feature-title">📊 Advanced Analytics</h3>
+                <p class="feature-description">Comprehensive dashboards with process optimization insights, efficiency metrics, and Lean Six Sigma classification.</p>
+                <span class="feature-badge badge-analytics">Data-Driven</span>
             </div>
         </div>
     </div>
 </section>
 
-<!-- AI-Powered Intelligence Section -->
-<section class="lean-six-sigma-section py-5" id="ai-intelligence">
+<!-- AI Intelligence Section -->
+<section class="ai-section" id="ai-intelligence">
     <div class="container">
         <div class="row align-items-center">
-            <div class="col-md-6">
-                <h2 class="fw-bold mb-4 text-white">AI-Powered Intelligence & Automation</h2>
-                <p class="lead text-white">Leverage cutting-edge AI to automate insights, predict challenges, and optimize your team's workflow in real-time.</p>
+            <div class="col-lg-6 ai-content">
+                <h2 class="section-title text-white mb-4">AI-Powered Intelligence & Automation</h2>
+                <p class="lead mb-5" style="color: rgba(255,255,255,0.95); font-size: 1.3rem;">Leverage cutting-edge AI to automate insights, predict challenges, and optimize your team's workflow in real-time.</p>
                 
-                <div class="d-flex mt-4">
-                    <div class="rounded text-white feature-icon">
+                <div class="ai-feature-item">
+                    <div class="ai-icon">
                         <i class="fas fa-brain"></i>
                     </div>
-                    <div>
-                        <h5 class="text-white">Conversational AI Assistant</h5>
-                        <p class="text-white opacity-90">Ask questions about your projects in natural language. Get instant insights with RAG-powered web search integration.</p>
-                    </div>
+                    <h4 class="ai-title">Conversational AI Assistant</h4>
+                    <p class="ai-description">Ask questions about your projects in natural language. Get instant insights with RAG-powered web search integration.</p>
                 </div>
-                
-                <div class="d-flex mt-4">
-                    <div class="rounded text-white feature-icon">
+
+                <div class="ai-feature-item">
+                    <div class="ai-icon">
                         <i class="fas fa-magic"></i>
                     </div>
-                    <div>
-                        <h5 class="text-white">Intelligent Task Generation</h5>
-                        <p class="text-white opacity-90">AI-powered task description generator, meeting transcript analysis, and automated task extraction from discussions.</p>
-                    </div>
+                    <h4 class="ai-title">Intelligent Task Generation</h4>
+                    <p class="ai-description">AI-powered task description generator, meeting transcript analysis, and automated task extraction from discussions.</p>
                 </div>
-                
-                <div class="d-flex mt-4">
-                    <div class="rounded text-white feature-icon">
+
+                <div class="ai-feature-item">
+                    <div class="ai-icon">
                         <i class="fas fa-chart-bar"></i>
                     </div>
-                    <div>
-                        <h5 class="text-white">Predictive Analytics</h5>
-                        <p class="text-white opacity-90">Forecast resource demands, predict bottlenecks, and receive AI-generated recommendations before issues arise.</p>
-                    </div>
+                    <h4 class="ai-title">Predictive Analytics</h4>
+                    <p class="ai-description">Forecast resource demands, predict bottlenecks, and receive AI-generated recommendations before issues arise.</p>
                 </div>
-                
-                <div class="d-flex mt-4">
-                    <div class="rounded text-white feature-icon">
+
+                <div class="ai-feature-item">
+                    <div class="ai-icon">
                         <i class="fas fa-robot"></i>
                     </div>
-                    <div>
-                        <h5 class="text-white">Smart Automation</h5>
-                        <p class="text-white opacity-90">Automated risk scoring, dependency detection, optimal assignee suggestions, and workload distribution recommendations.</p>
-                    </div>
+                    <h4 class="ai-title">Smart Automation</h4>
+                    <p class="ai-description">Automated risk scoring, dependency detection, optimal assignee suggestions, and workload distribution recommendations.</p>
                 </div>
             </div>
-            <div class="col-md-6 mt-4 mt-md-0 text-center">
-                <div class="ai-visual-container position-relative">
-                    <!-- AI Brain Visualization -->
-                    <div class="position-relative d-inline-block">
-                        <div class="ai-brain-circle" style="width: 300px; height: 300px; background: rgba(255,255,255,0.15); backdrop-filter: blur(20px); border-radius: 50%; border: 2px solid rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; margin: 0 auto; position: relative; overflow: hidden;">
-                            <i class="fas fa-brain" style="font-size: 120px; color: rgba(255,255,255,0.9);"></i>
-                            
-                            <!-- Orbiting icons -->
-                            <div style="position: absolute; top: 10%; left: 50%; transform: translateX(-50%);">
-                                <i class="fas fa-lightbulb" style="font-size: 24px; color: #ffd700;"></i>
-                            </div>
-                            <div style="position: absolute; top: 50%; right: 10%; transform: translateY(-50%);">
-                                <i class="fas fa-chart-line" style="font-size: 24px; color: #4facfe;"></i>
-                            </div>
-                            <div style="position: absolute; bottom: 15%; left: 50%; transform: translateX(-50%);">
-                                <i class="fas fa-shield-alt" style="font-size: 24px; color: #ff6b6b;"></i>
-                            </div>
-                            <div style="position: absolute; top: 50%; left: 10%; transform: translateY(-50%);">
-                                <i class="fas fa-users" style="font-size: 24px; color: #51cf66;"></i>
-                            </div>
+
+            <div class="col-lg-6 d-none d-lg-block">
+                <div class="ai-brain-container">
+                    <div class="ai-brain-circle">
+                        <i class="fas fa-brain brain-icon"></i>
+                        <div class="orbit-icon" style="top: 10%; left: 50%;">
+                            <i class="fas fa-lightbulb" style="color: #fbbf24;"></i>
                         </div>
-                        
-                        <div class="mt-4">
-                            <h5 class="text-white fw-bold">Powered by Google Gemini</h5>
-                            <p class="text-white opacity-75 small">State-of-the-art language models for intelligent project management</p>
+                        <div class="orbit-icon" style="right: 10%; top: 50%;">
+                            <i class="fas fa-chart-line" style="color: #60a5fa;"></i>
+                        </div>
+                        <div class="orbit-icon" style="bottom: 10%; left: 50%;">
+                            <i class="fas fa-shield-alt" style="color: #f87171;"></i>
+                        </div>
+                        <div class="orbit-icon" style="left: 10%; top: 50%;">
+                            <i class="fas fa-users" style="color: #4ade80;"></i>
                         </div>
                     </div>
+                </div>
+                <div class="text-center mt-5">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 1rem;">
+                        <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 100%); border-radius: 15px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(167, 139, 250, 0.4);">
+                            <i class="fas fa-robot" style="font-size: 2rem; color: white;"></i>
+                        </div>
+                        <h5 class="text-white fw-bold mb-0" style="font-size: 1.4rem;">Powered by Google Gemini</h5>
+                    </div>
+                    <p class="text-white" style="opacity: 0.95; font-size: 1.05rem;">State-of-the-art language models for intelligent project management</p>
                 </div>
             </div>
         </div>
     </div>
 </section>
 
-<!-- Why PrizmAI Exists Section -->
-<section class="why-PrizmAI-section" id="why-PrizmAI">
-    <div class="container">
-        <div class="text-center mb-5">
-            <h2 class="fw-bold">Why Pri<span class="stylish-z">z</span>mAI Exists</h2>
-            <p class="text-muted">The All-in-One Platform That Eliminates Tool Sprawl</p>
-        </div>
-          <div class="row g-4">
-            <div class="col-md-4">
-                <div class="card feature-card p-4 h-100">
-                    <div class="d-flex">
-                        <div class="feature-icon bg-danger text-white">
-                            <i class="fas fa-exclamation-triangle"></i>
-                        </div>
-                    </div>
-                    <h5 class="mt-3 mb-3">The Problem</h5>
-                    <p class="mb-0">Modern teams juggle multiple tools: project boards, chat apps, documentation wikis, risk registers, resource planners, and meeting note systems. This fragmentation leads to context switching, data silos, and inefficiency.</p>
-                </div>
-            </div>
-            
-            <div class="col-md-4">
-                <div class="card feature-card p-4 h-100">
-                    <div class="d-flex">
-                        <div class="feature-icon bg-primary text-white">
-                            <i class="fas fa-lightbulb"></i>
-                        </div>
-                    </div>
-                    <h5 class="mt-3 mb-3">The Solution</h5>
-                    <p class="mb-0">Pri<span class="stylish-z">z</span>mAI unifies everything into one intelligent platform: Kanban + Gantt + Chat + Wiki + AI Assistant + Risk Management + Resource Forecasting + Analytics. All your data in one place, enhanced by AI that learns from your entire project context.</p>
-                </div>
-            </div>
-            
-            <div class="col-md-4">
-                <div class="card feature-card p-4 h-100">
-                    <div class="d-flex">
-                        <div class="feature-icon bg-success text-white">
-                            <i class="fas fa-rocket"></i>
-                        </div>
-                    </div>
-                    <h5 class="mt-3 mb-3">The Impact</h5>
-                    <p class="mb-0">Teams move faster with AI-powered insights, predictive analytics that prevent bottlenecks before they happen, and seamless collaboration without switching apps. Real-time intelligence means better decisions, reduced risk, and projects that consistently deliver on time.</p>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Key Differentiators -->
-        <div class="row mt-5">
-            <div class="col-12">
-                <div class="card feature-card p-4" style="background: linear-gradient(135deg, rgba(78, 84, 200, 0.05) 0%, rgba(143, 148, 251, 0.05) 100%);">
-                    <h4 class="text-center mb-4 fw-bold">What Makes Pri<span class="stylish-z">z</span>mAI Different</h4>
-                    <div class="row g-3">
-                        <div class="col-md-3 text-center">
-                            <i class="fas fa-brain fa-2x mb-2" style="color: #667eea;"></i>
-                            <h6 class="fw-bold">AI-First</h6>
-                            <small class="text-muted">Not bolted-on, but built-in intelligence</small>
-                        </div>
-                        <div class="col-md-3 text-center">
-                            <i class="fas fa-link fa-2x mb-2" style="color: #764ba2;"></i>
-                            <h6 class="fw-bold">Unified Platform</h6>
-                            <small class="text-muted">Replace 5+ tools with one</small>
-                        </div>
-                        <div class="col-md-3 text-center">
-                            <i class="fas fa-crystal-ball fa-2x mb-2" style="color: #4facfe;"></i>
-                            <h6 class="fw-bold">Predictive</h6>
-                            <small class="text-muted">See problems before they happen</small>
-                        </div>
-                        <div class="col-md-3 text-center">
-                            <i class="fas fa-bolt fa-2x mb-2" style="color: #f5576c;"></i>
-                            <h6 class="fw-bold">Real-Time</h6>
-                            <small class="text-muted">Instant updates, zero lag</small>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</section>
-
-<!-- Call to Action Section -->
+<!-- CTA Section -->
 <section class="cta-section">
-    <div class="container text-center">
-        <h2 class="fw-bold mb-4">Ready to Transform Your Project Management?</h2>
-        <p class="lead mb-4">Join Pri<span class="stylish-z">z</span>mAI today and experience the power of AI-driven project intelligence with everything your team needs in one unified platform.</p>
-        <div class="d-flex justify-content-center flex-wrap">
-            <a href="{% url 'register' %}" class="btn btn-light btn-hero me-md-3 mb-3 mb-md-0">Create Free Account</a>
-            <a href="#features" class="btn btn-outline-light btn-hero">Explore Features</a>
+    <div class="container">
+        <h2 class="cta-title">Ready to Transform Your Project Management?</h2>
+        <p class="cta-subtitle">Join PrizmAI today and experience the power of AI-driven project intelligence</p>
+        <div class="hero-buttons" style="justify-content: center;">
+            <a href="{% url 'register' %}" class="btn-hero btn-primary-hero">
+                Create Free Account <i class="fas fa-rocket ms-2"></i>
+            </a>
+            <a href="#features" class="btn-hero btn-outline-hero">
+                Explore All Features
+            </a>
         </div>
     </div>
 </section>
@@ -1130,51 +1106,82 @@
 <footer class="footer">
     <div class="container">
         <div class="row">
-            <div class="col-md-4">                <h4 class="mb-3">Pri<span class="stylish-z">z</span>mAI</h4>
-                <p class="mb-3">AI-powered project intelligence platform that unifies Kanban, Gantt, Chat, Wiki, and Analytics into one seamless experience.</p>
+            <div class="col-md-4 mb-4">
+                <h4 class="footer-title">PrizmAI</h4>
+                <p style="color: rgba(255,255,255,0.8); line-height: 1.7;">AI-powered project intelligence platform that unifies Kanban, Gantt, Chat, Wiki, and Analytics into one seamless experience.</p>
+                <div class="mt-4">
+                    <a href="https://github.com" class="social-icon" target="_blank" rel="noopener">
+                        <i class="fab fa-github"></i>
+                    </a>
+                    <a href="https://linkedin.com" class="social-icon" target="_blank" rel="noopener">
+                        <i class="fab fa-linkedin-in"></i>
+                    </a>
+                    <a href="https://twitter.com" class="social-icon" target="_blank" rel="noopener">
+                        <i class="fab fa-twitter"></i>
+                    </a>
+                </div>
+            </div>
+
+            <div class="col-md-4 mb-4">
+                <h5 class="mb-4" style="font-weight: 700; font-size: 1.2rem;">Quick Links</h5>
                 <div class="footer-links">
-                    <a href="https://github.com" target="_blank" rel="noopener" aria-label="GitHub"><i class="fab fa-github"></i></a>
-                    <a href="https://linkedin.com" target="_blank" rel="noopener" aria-label="LinkedIn"><i class="fab fa-linkedin-in"></i></a>
-                </div>
-            </div>            <div class="col-md-4">
-                <h6 class="mb-3"><i class="fas fa-sitemap me-2"></i>Project Navigation</h6>
-                <div class="row">
-                    <div class="col-6">
-                        <ul class="list-unstyled">
-                            <li><a href="#features" class="footer-nav-link"><i class="fas fa-star me-1"></i>Features</a></li>
-                            <li><a href="#ai-intelligence" class="footer-nav-link"><i class="fas fa-brain me-1"></i>AI Intelligence</a></li>
-                            <li><a href="#why-PrizmAI" class="footer-nav-link"><i class="fas fa-lightbulb me-1"></i>Why Pri<span class="stylish-z">z</span>mAI</a></li>
-                        </ul>
-                    </div>
-                    <div class="col-6">
-                        <ul class="list-unstyled">
-                            <li><a href="{% url 'login' %}" class="footer-nav-link"><i class="fas fa-sign-in-alt me-1"></i>Login</a></li>
-                            <li><a href="{% url 'register' %}" class="footer-nav-link"><i class="fas fa-user-plus me-1"></i>Register</a></li>
-                            <li><a href="#top" class="footer-nav-link"><i class="fas fa-arrow-up me-1"></i>Back to Top</a></li>
-                        </ul>
-                    </div>
+                    <a href="#features"><i class="fas fa-star me-2"></i>Features</a>
+                    <a href="#ai-intelligence"><i class="fas fa-brain me-2"></i>AI Intelligence</a>
+                    <a href="{% url 'login' %}"><i class="fas fa-sign-in-alt me-2"></i>Sign In</a>
+                    <a href="{% url 'register' %}"><i class="fas fa-user-plus me-2"></i>Register</a>
                 </div>
             </div>
-            <div class="col-md-4">
-                <h6 class="mb-3"><i class="fas fa-code me-2"></i>Built With</h6>
-                <div class="d-flex flex-wrap tech-stack">
-                    <span class="badge bg-light text-dark me-2 mb-2">Django</span>
-                    <span class="badge bg-light text-dark me-2 mb-2">Python</span>
-                    <span class="badge bg-light text-dark me-2 mb-2">JavaScript</span>
-                    <span class="badge bg-light text-dark me-2 mb-2">WebSocket</span>
-                    <span class="badge bg-light text-dark me-2 mb-2">Google Gemini</span>
-                    <span class="badge bg-light text-dark me-2 mb-2">SQLite</span>
+
+            <div class="col-md-4 mb-4">
+                <h5 class="mb-4" style="font-weight: 700; font-size: 1.2rem;">Built With</h5>
+                <div>
+                    <span class="tech-badge">Django</span>
+                    <span class="tech-badge">Python</span>
+                    <span class="tech-badge">JavaScript</span>
+                    <span class="tech-badge">WebSocket</span>
+                    <span class="tech-badge">Google Gemini</span>
+                    <span class="tech-badge">SQLite</span>
+                    <span class="tech-badge">Bootstrap</span>
                 </div>
             </div>
-        </div>        <hr class="mt-4 mb-3 border-secondary">
-        <div class="row">
-            <div class="col-12 text-center">
-                <p class="small text-light opacity-75 mb-0">© 2025 Pri<span class="stylish-z">z</span>mAI. All rights reserved.</p>
-            </div>
-        </div>    </div>
+        </div>
+
+        <hr style="border-color: rgba(255,255,255,0.2); margin: 2rem 0;">
+        
+        <div class="text-center">
+            <p style="color: rgba(255,255,255,0.7); margin: 0;">© 2025 PrizmAI. All rights reserved.</p>
+        </div>
+    </div>
 </footer>
 
-{% block extra_js %}
-<script src="{% static 'js/lean-six-sigma.js' %}"></script>
-{% endblock %}
-{% endblock %}
+<script>
+    // Smooth scroll for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function (e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start'
+                });
+            }
+        });
+    });
+
+    // Navbar background change on scroll
+    window.addEventListener('scroll', function() {
+        const navbar = document.querySelector('.navbar');
+        if (window.scrollY > 50) {
+            navbar.style.background = 'rgba(15, 12, 41, 0.98)';
+        } else {
+            navbar.style.background = 'rgba(15, 12, 41, 0.95)';
+        }
+    });
+</script>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+</body>
+</html>
