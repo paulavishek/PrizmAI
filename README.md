@@ -361,7 +361,7 @@ Create a living document of your project knowledge:
 - ✅ Scope-based permissions
 - ✅ Comprehensive API documentation
 - ✅ Ready for Slack, MS Teams, Jira integrations
-- ✅ Webhook support (coming soon)
+- ✅ Webhook system with event-driven architecture
 - ✅ Third-party app support
 
 ---
@@ -608,6 +608,222 @@ python manage.py runserver
 - Webhook infrastructure (coming soon)
 
 See documentation files for complete technical setup.
+
+---
+
+## 🪝 Webhook Integration & Event-Driven Architecture
+
+### What Are Webhooks?
+
+Webhooks allow PrizmAI to **automatically notify external apps** when important events happen in your projects. Think of it as "push notifications for your integrations."
+
+**Instead of constantly polling:** "Is there anything new?"
+**Webhooks push updates:** "Hey! A task was just assigned!"
+
+### How Webhooks Work
+
+1. **You create a webhook** - Provide a URL where PrizmAI should send notifications
+2. **You select events** - Choose which events trigger the webhook (task created, updated, assigned, etc.)
+3. **Events happen** - When someone creates/updates a task, PrizmAI sends data to your URL
+4. **External app receives data** - Your app processes the JSON payload
+5. **External app takes action** - Post to Slack, update a spreadsheet, trigger automation, etc.
+
+### Supported Events
+
+PrizmAI webhooks fire for these events:
+
+**Task Events:**
+- ✅ `task.created` - New task added to board
+- ✅ `task.updated` - Task details changed (title, description, etc.)
+- ✅ `task.completed` - Task moved to done/completed column
+- ✅ `task.assigned` - Task assigned to a team member
+- ✅ `task.moved` - Task moved to different column
+- ✅ `task.deleted` - Task deleted from board
+
+**Comment Events:**
+- ✅ `comment.added` - New comment on a task
+
+**Board Events:**
+- ✅ `board.updated` - Board settings changed
+
+### Webhook Payload Example
+
+When an event fires, you receive a JSON payload like this:
+
+```json
+{
+  "event": "task.created",
+  "timestamp": "2025-01-15T10:30:00Z",
+  "board_id": 42,
+  "data": {
+    "id": 123,
+    "title": "Design homepage mockup",
+    "description": "Create responsive design for homepage",
+    "priority": "high",
+    "assigned_to": {
+      "id": 5,
+      "username": "alice",
+      "email": "alice@company.com"
+    },
+    "due_date": "2025-01-20",
+    "column": "In Progress"
+  }
+}
+```
+
+### Real-World Integration Examples
+
+#### Example 1: Slack Notifications
+
+```
+When: Task assigned to you
+PrizmAI sends: Webhook to Slack
+Slack shows: 
+  "📋 Alice assigned 'Design Homepage' to you (Due: Jan 20)"
+  [View Task] [Mark Complete]
+```
+
+#### Example 2: Email Alert
+
+```
+When: High-priority task created
+PrizmAI sends: Webhook to your notification service
+You receive: Email with task details and link to view in PrizmAI
+```
+
+#### Example 3: Automated Reporting
+
+```
+When: Task completed
+PrizmAI sends: Webhook to analytics service
+Service updates: Weekly progress report automatically
+```
+
+### Setting Up a Webhook
+
+**From the Board:**
+
+1. Click the **⚙️ Settings** button
+2. Select **"Webhooks & Integrations"**
+3. Click **"Add Webhook"**
+4. **Fill in:**
+   - **Name:** "Slack Notifications" (for reference)
+   - **URL:** Your external app's URL (e.g., `https://hooks.slack.com/services/...`)
+   - **Events:** Check which events trigger this webhook
+   - **Advanced (optional):** Timeout, retry count, custom headers
+5. Click **"Create"**
+6. Click **"Test"** to verify it works
+7. Done! Now events will be sent automatically
+
+### Webhook Management UI
+
+View and manage all webhooks for your board:
+
+**Webhook List:**
+
+- 📊 See all configured webhooks
+- ✅/❌ Active/inactive status
+- 📈 Delivery statistics (success rate, failures)
+- 🔧 Edit or delete webhooks
+
+**Delivery Logs:**
+
+- 📝 View recent webhook deliveries
+- 🕐 Timestamps of each delivery
+- 📄 Request/response payloads
+- ✅ Success or failure status
+
+**Reliability Features:**
+
+- 🔄 Automatic retries with exponential backoff
+- 📊 Track delivery success rates
+- 🏥 Health monitoring (auto-disable failing webhooks)
+- 🔐 HMAC signature verification for security
+
+### Webhook Security
+
+**HMAC Signatures:**
+
+- Each webhook delivery includes an `X-PrizmAI-Signature` header
+- Verify this signature to confirm the webhook came from PrizmAI
+- Prevents malicious actors from impersonating PrizmAI
+
+```python
+# Example: Verify webhook signature (Python)
+import hmac
+import hashlib
+
+webhook_secret = "your-webhook-secret"
+signature = request.headers.get('X-PrizmAI-Signature')
+payload_body = request.body
+
+expected_signature = hmac.new(
+    webhook_secret.encode(),
+    payload_body,
+    hashlib.sha256
+).hexdigest()
+
+if signature != expected_signature:
+    raise ValueError("Invalid signature - not from PrizmAI!")
+```
+
+### Integration Use Cases
+
+**📱 Slack Integration:**
+
+```
+Task Created → Webhook → Slack Bot → Post in #projects channel
+"New task: 'API Development' assigned to @bob (Due: Friday)"
+```
+
+**📊 Google Sheets / Airtable:**
+
+```
+Task Updated → Webhook → Zapier → Google Sheets
+Spreadsheet automatically updates with latest task status
+```
+
+**📧 Email Alerts:**
+
+```
+High Priority Task Created → Webhook → Email Service
+Your inbox: "ALERT: Critical bug reported"
+```
+
+**🤖 Custom Automation:**
+
+```
+Task Completed → Webhook → Your App → Multiple Actions:
+  - Update billing system
+  - Send customer notification
+  - Trigger next workflow step
+  - Log to analytics
+```
+
+**🔗 Jira / Azure DevOps Sync:**
+
+```
+Task Assigned → Webhook → Connector App → Jira
+Creates or updates corresponding Jira ticket with same details
+```
+
+### Webhook Testing & Debugging
+
+**Test a Webhook:**
+
+1. Go to webhook detail page
+2. Click **"Test Webhook"** button
+3. PrizmAI sends a test payload
+4. View response and status
+5. Check your logs to verify receipt
+
+**Debug Delivery Issues:**
+
+1. Check **Delivery Logs** tab
+2. Click on failed delivery
+3. See request payload sent
+4. See response received from your endpoint
+5. Adjust your endpoint based on response
 
 ---
 

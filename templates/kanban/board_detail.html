@@ -213,9 +213,11 @@
                 <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=csv">Export as CSV</a></li>
             </ul>
         </div>
-        <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-            <i class="fas fa-cog"></i>
-        </button><ul class="dropdown-menu dropdown-menu-end">
+        <div class="btn-group">
+            <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <i class="fas fa-cog"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
             <li><a class="dropdown-item" href="{% url 'create_column' board.id %}">Add Column</a></li>
             <li><a class="dropdown-item" href="{% url 'create_label' board.id %}">Manage Labels</a></li>
             <li><a class="dropdown-item" href="{% url 'stakeholder:stakeholder_list' board.id %}">
@@ -224,6 +226,9 @@
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}">Edit Board</a></li>
             <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#boardSettingsModal">Board Settings</a></li>
+            <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}">
+                <i class="fas fa-plug me-2 text-info"></i>Webhooks & Integrations
+            </a></li>
             <li><hr class="dropdown-divider"></li>            <li class="dropdown-item-text">
                 <small class="text-muted"><i class="fas fa-magic me-1"></i><strong>Advanced Features</strong></small>
             </li>
@@ -235,6 +240,7 @@
             <li><a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#deleteBoardModal">Delete Board</a></li>
             {% endif %}
         </ul>
+        </div>
     </div>
 </div>
 
