@@ -93,6 +93,8 @@ class Task(models.Model):
             ('critical', 'Critical Impact'),
         ],
         default='medium',
+        blank=True,
+        null=True,
         help_text="Impact on assignee's workload"
     )
     resource_conflicts = models.JSONField(

@@ -57,7 +57,7 @@ class TaskForm(forms.ModelForm):
         fields = [
             'title', 'description', 'start_date', 'due_date', 'assigned_to', 'labels', 'priority', 'progress', 
             'dependencies', 'parent_task', 'complexity_score',
-            'risk_likelihood', 'risk_impact', 'risk_level'
+            'risk_likelihood', 'risk_impact', 'risk_level', 'workload_impact'
         ]
         widgets = {
             'title': forms.TextInput(attrs={'class': 'form-control'}),
@@ -111,6 +111,10 @@ class TaskForm(forms.ModelForm):
             'risk_level': forms.Select(attrs={
                 'class': 'form-select',
                 'title': 'Overall risk classification for this task'
+            }),
+            'workload_impact': forms.Select(attrs={
+                'class': 'form-select',
+                'title': 'Estimated impact on assignee\'s workload'
             }),
         }
         
@@ -202,10 +206,14 @@ class TaskForm(forms.ModelForm):
         self.fields['risk_impact'].empty_label = "Not assessed"
         self.fields['risk_level'].empty_label = "Not assessed"
         
+        # Make workload impact optional
+        self.fields['workload_impact'].required = False
+        
         # Add help text for risk fields
         self.fields['risk_likelihood'].help_text = 'Probability of risk occurring (optional - will auto-calculate risk score)'
         self.fields['risk_impact'].help_text = 'Severity if risk occurs (optional - will auto-calculate risk score)'
         self.fields['risk_level'].help_text = 'Overall risk classification (can be set manually or auto-calculated from likelihood × impact)'
+        self.fields['workload_impact'].help_text = 'Estimated impact on the assignee\'s workload (Low, Medium, High, or Critical)'
     
     def clean(self):
         """Calculate risk_score automatically if likelihood and impact are provided, and validate parent_task"""
