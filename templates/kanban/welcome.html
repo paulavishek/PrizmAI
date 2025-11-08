@@ -77,28 +77,100 @@
     
     .feature-section {
         padding: 80px 0;
+        background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+        position: relative;
+    }
+    
+    .feature-section h2 {
+        font-size: 2.5rem;
+        background: linear-gradient(120deg, #4e54c8 0%, #8f94fb 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        margin-bottom: 10px;
+    }
+    
+    .feature-section > .container > .text-center .fs-5 {
+        font-size: 1.1rem !important;
+        color: #666;
+        font-weight: 500;
+        letter-spacing: 0.5px;
     }
     
     .feature-card {
         border: none;
-        border-radius: 12px;
-        transition: all 0.3s ease;
+        border-radius: 15px;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         height: 100%;
+        background: linear-gradient(135deg, #ffffff 0%, #f9fbff 100%);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .feature-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+        transition: left 0.5s;
+    }
+    
+    .feature-card:hover::before {
+        left: 100%;
     }
     
     .feature-card:hover {
-        transform: translateY(-10px);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        transform: translateY(-12px);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.12);
+        border: 1px solid rgba(200, 200, 200, 0.2);
+    }
+    
+    .hover-lift {
+        position: relative;
+    }
+    
+    .hover-lift:hover {
+        transform: translateY(-15px) scale(1.02);
+        box-shadow: 0 25px 50px rgba(0,0,0,0.15);
     }
     
     .feature-icon {
         font-size: 40px;
         margin-bottom: 20px;
+        transition: transform 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 70px;
+        height: 70px;
+    }
+    
+    .feature-card:hover .feature-icon {
+        transform: scale(1.15) rotate(5deg);
     }
     
     .feature-title {
-        font-weight: 600;
+        font-weight: 700;
         margin-bottom: 15px;
+        font-size: 1.15rem;
+        color: #1a1a1a;
+    }
+    
+    .feature-card p {
+        font-size: 0.95rem;
+        line-height: 1.6;
+        color: #666;
+        min-height: 60px;
+    }
+    
+    .feature-card .badge {
+        font-size: 0.75rem;
+        padding: 0.4rem 0.8rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
     }
     
     .lean-six-sigma-section {
@@ -328,67 +400,92 @@
 <section class="feature-section" id="features">
     <div class="container">
         <div class="text-center mb-5">
-            <h2 class="fw-bold">Powerful Features</h2>
-            <p class="text-muted">Everything you need to manage projects efficiently</p>
+            <h2 class="fw-bold">🚀 Powerful Features</h2>
+            <p class="text-muted fs-5">AI-Powered Project Intelligence Platform</p>
         </div>
         
-        <div class="row g-4">            <div class="col-md-4">
-                <div class="card feature-card p-4 text-center">
-                    <div class="feature-icon bg-primary rounded-circle p-3 mx-auto">
-                        <i class="fas fa-columns text-white"></i>
+        <div class="row g-4">
+            <!-- 1. AI Project Assistant -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
+                    <div class="feature-icon bg-warning rounded-circle p-3 mx-auto mb-3">
+                        <i class="fas fa-robot text-dark" style="font-size: 1.8rem;"></i>
                     </div>
-                    <h3 class="feature-title">Flexible Kanban Boards</h3>
-                    <p>Create customizable boards with drag-and-drop functionality to visualize your workflow.</p>
+                    <h3 class="feature-title fw-bold">🤖 AI Project Assistant</h3>
+                    <p class="text-muted">Conversational AI with RAG technology, web search integration, and context-aware recommendations powered by Google's Gemini.</p>
+                    <div class="mt-auto">
+                        <span class="badge bg-warning text-dark">AI-Powered</span>
+                    </div>
                 </div>
             </div>
             
-            <div class="col-md-4">
-                <div class="card feature-card p-4 text-center">
-                    <div class="feature-icon bg-success rounded-circle p-3 mx-auto">
-                        <i class="fas fa-chart-line text-white"></i>
+            <!-- 2. Risk Management -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
+                    <div class="feature-icon bg-danger rounded-circle p-3 mx-auto mb-3">
+                        <i class="fas fa-shield-alt text-white" style="font-size: 1.8rem;"></i>
                     </div>
-                    <h3 class="feature-title">Analytics Dashboard</h3>
-                    <p>Track performance metrics and gain insights with detailed analytics and visual reports.</p>
+                    <h3 class="feature-title fw-bold">🛡️ Risk Management</h3>
+                    <p class="text-muted">AI-powered risk assessment with intelligent scoring (1-9 scale), smart indicators, and AI-generated mitigation strategies.</p>
+                    <div class="mt-auto">
+                        <span class="badge bg-danger">Enterprise</span>
+                    </div>
                 </div>
             </div>
             
-            <div class="col-md-4">
-                <div class="card feature-card p-4 text-center">
-                    <div class="feature-icon bg-info rounded-circle p-3 mx-auto">
-                        <i class="fas fa-users text-white"></i>
+            <!-- 3. Intelligent Kanban Boards -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
+                    <div class="feature-icon bg-primary rounded-circle p-3 mx-auto mb-3">
+                        <i class="fas fa-columns text-white" style="font-size: 1.8rem;"></i>
                     </div>
-                    <h3 class="feature-title">Team Collaboration</h3>
-                    <p>Seamlessly collaborate with team members and assign tasks within your organization.</p>
+                    <h3 class="feature-title fw-bold">📊 Intelligent Kanban</h3>
+                    <p class="text-muted">AI-enhanced Kanban boards with smart column recommendations, Gantt chart visualization, and real-time team collaboration.</p>
+                    <div class="mt-auto">
+                        <span class="badge bg-primary">Core Feature</span>
+                    </div>
                 </div>
             </div>
             
-            <div class="col-md-4">
-                <div class="card feature-card p-4 text-center">
-                    <div class="feature-icon bg-warning rounded-circle p-3 mx-auto">
-                        <i class="fas fa-tags text-dark"></i>
+            <!-- 4. Resource Forecasting -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
+                    <div class="feature-icon bg-info rounded-circle p-3 mx-auto mb-3">
+                        <i class="fas fa-people-arrows text-white" style="font-size: 1.8rem;"></i>
                     </div>
-                    <h3 class="feature-title">Smart Labeling System</h3>
-                    <p>Organize tasks with color-coded labels and custom categories for effective filtration.</p>
+                    <h3 class="feature-title fw-bold">👨‍💼 Resource Forecasting</h3>
+                    <p class="text-muted">Predict team capacity 2-3 weeks ahead with skill-based task matching, utilization alerts, and intelligent burnout prevention.</p>
+                    <div class="mt-auto">
+                        <span class="badge bg-info text-dark">Predictive</span>
+                    </div>
                 </div>
             </div>
             
-            <div class="col-md-4">
-                <div class="card feature-card p-4 text-center">
-                    <div class="feature-icon bg-danger rounded-circle p-3 mx-auto">
-                        <i class="fas fa-clock text-white"></i>
+            <!-- 5. Knowledge Hub -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
+                    <div class="feature-icon bg-success rounded-circle p-3 mx-auto mb-3">
+                        <i class="fas fa-brain text-white" style="font-size: 1.8rem;"></i>
                     </div>
-                    <h3 class="feature-title">Progress Tracking</h3>
-                    <p>Monitor task progress with visual indicators and completion percentages.</p>
+                    <h3 class="feature-title fw-bold">🧠 Knowledge Hub</h3>
+                    <p class="text-muted">Unified wiki documentation, meeting notes, and AI-powered search across all your project knowledge and insights.</p>
+                    <div class="mt-auto">
+                        <span class="badge bg-success">Comprehensive</span>
+                    </div>
                 </div>
             </div>
             
-            <div class="col-md-4">
-                <div class="card feature-card p-4 text-center">
-                    <div class="feature-icon bg-secondary rounded-circle p-3 mx-auto">
-                        <i class="fas fa-file-export text-white"></i>
+            <!-- 6. Analytics & Optimization -->
+            <div class="col-md-6 col-lg-4">
+                <div class="card feature-card p-4 text-center h-100 shadow-sm hover-lift">
+                    <div class="feature-icon bg-secondary rounded-circle p-3 mx-auto mb-3">
+                        <i class="fas fa-chart-line text-white" style="font-size: 1.8rem;"></i>
                     </div>
-                    <h3 class="feature-title">Import/Export</h3>
-                    <p>Easily import and export boards for data portability and sharing.</p>
+                    <h3 class="feature-title fw-bold">📈 Analytics & Optimization</h3>
+                    <p class="text-muted">AI-driven analytics with Lean Six Sigma integration, process optimization insights, and continuous improvement recommendations.</p>
+                    <div class="mt-auto">
+                        <span class="badge bg-secondary">Data-Driven</span>
+                    </div>
                 </div>
             </div>
         </div>
