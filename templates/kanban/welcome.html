@@ -152,6 +152,86 @@
         box-shadow: 0 2px 10px rgba(0,0,0,0.1);
     }
     
+    /* Features dropdown styling */
+    .navbar .dropdown-menu {
+        min-width: 300px;
+        border: none;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        border-radius: 8px;
+        animation: slideDown 0.2s ease-out;
+    }
+    
+    @keyframes slideDown {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .navbar .dropdown-menu .dropdown-item {
+        padding: 10px 15px;
+        color: #333;
+        transition: all 0.2s ease;
+        border-radius: 4px;
+        margin: 2px 8px;
+    }
+    
+    .navbar .dropdown-menu .dropdown-item-text {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 12px 15px 8px;
+        margin: 5px 0;
+        display: block;
+    }
+    
+    .navbar .dropdown-menu .dropdown-item:hover {
+        background-color: #f0f0f0;
+        color: #4e54c8;
+        padding-left: 20px;
+    }
+    
+    .navbar .dropdown-menu .dropdown-item i {
+        min-width: 20px;
+    }
+    
+    .navbar .dropdown-menu .dropdown-divider {
+        margin: 8px 0;
+        opacity: 0.2;
+    }
+    
+    .navbar .dropdown-toggle::after {
+        border: none;
+        content: '\f078';
+        font-family: 'Font Awesome 6 Free';
+        font-weight: 900;
+        font-size: 0.65rem;
+        margin-left: 0.5rem;
+        transition: transform 0.3s ease;
+    }
+    
+    .navbar .dropdown-toggle[aria-expanded="true"]::after {
+        transform: rotate(180deg);
+    }
+    
+    @media (max-width: 768px) {
+        .navbar .dropdown-menu {
+            min-width: 100%;
+            position: static;
+            float: none;
+            width: 100%;
+            margin-top: 10px;
+            box-shadow: none;
+            border-top: 1px solid #e9ecef;
+        }
+    }
+    
     @media (max-width: 768px) {
         .hero-title {
             font-size: 2.5rem;
@@ -177,19 +257,46 @@
         </button>
         <div class="collapse navbar-collapse" id="navbarNav">
             <ul class="navbar-nav ms-auto">
-                <li class="nav-item">
-                    <a class="nav-link" href="#features">Features</a>
+                <li class="nav-item dropdown" id="featuresDropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Features
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end" id="featuresDropdownMenu">
+                        <li><a class="dropdown-item fw-bold" href="#features"><i class="fas fa-star me-2"></i>View All Features</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><strong class="dropdown-item-text ps-3">Core Features</strong></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-columns me-2"></i>Flexible Kanban Boards</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-chart-line me-2"></i>Analytics Dashboard</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-users me-2"></i>Team Collaboration</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-tags me-2"></i>Smart Labeling System</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-clock me-2"></i>Progress Tracking</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-file-export me-2"></i>Import/Export</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><strong class="dropdown-item-text ps-3">Advanced Management</strong></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-shield-alt me-2" style="color: #dc3545;"></i>Risk Management</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-chart-bar me-2" style="color: #ffc107;"></i>Resource Management</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-network-wired me-2" style="color: #0d6efd;"></i>Task Dependencies</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-handshake me-2" style="color: #198754;"></i>Stakeholder Management</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><strong class="dropdown-item-text ps-3">AI-Powered Features</strong></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-robot me-2" style="color: #6f42c1;"></i>AI Project Assistant with RAG</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-lightbulb me-2" style="color: #ffc107;"></i>Smart Column Recommendations</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-pen-fancy me-2" style="color: #20c997;"></i>Intelligent Task Description Generator</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-chart-pie me-2" style="color: #17a2b8;"></i>AI Analytics & Insights</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-comment-dots me-2" style="color: #6c757d;"></i>Smart Comment Summarization</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-shield-alt me-2" style="color: #dc3545;"></i>AI Risk Assessment & Mitigation</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-link me-2" style="color: #0d6efd;"></i>AI-Suggested Dependencies</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-file-audio me-2" style="color: #e83e8c;"></i>Meeting Transcript Analysis</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-check me-2" style="color: #28a745;"></i>Lean Six Sigma Classification</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><strong class="dropdown-item-text ps-3">Knowledge & Communication</strong></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-book me-2" style="color: #fd7e14;"></i>Wiki & Knowledge Base</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-comments me-2" style="color: #20c997;"></i>Team Messaging & Chat</a></li>
+                        <li><a class="dropdown-item" href="#"><i class="fas fa-clipboard-list me-2" style="color: #e83e8c;"></i>Meeting Notes & Hub</a></li>
+                    </ul>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="#lean-six-sigma">Lean Six Sigma</a>
-                </li>                <li class="nav-item">
                     <a class="nav-link" href="#why-PrizmAI">Why Pri<span class="stylish-z">z</span>mAI</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link btn btn-light text-primary ms-2 px-3" href="{% url 'login' %}">Login</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link btn btn-outline-light ms-2 px-3" href="{% url 'register' %}">Register</a>
                 </li>
             </ul>
         </div>
