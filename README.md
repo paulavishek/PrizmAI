@@ -354,9 +354,86 @@ Create a living document of your project knowledge:
 - ✅ Knowledge base & wiki
 - ✅ Real-time team chat
 
+**External Integrations & API (NEW!)**
+- ✅ RESTful API (v1) with 20+ endpoints
+- ✅ Token-based authentication & authorization
+- ✅ Rate limiting (1000 requests/hour)
+- ✅ Scope-based permissions
+- ✅ Comprehensive API documentation
+- ✅ Ready for Slack, MS Teams, Jira integrations
+- ✅ Webhook support (coming soon)
+- ✅ Third-party app support
+
 ---
 
-## 🚀 Why Teams Choose PrizmAI
+## � RESTful API & External Integrations
+
+### What's the API For?
+
+PrizmAI now includes a **professional-grade RESTful API** that lets external apps and services connect to your project management data. This enables:
+
+**🔗 Integration with Other Tools:**
+- Connect Slack to get task notifications in your channels
+- Sync with MS Teams for collaborative updates
+- Bridge with Jira for cross-platform task management
+- Automate workflows with Zapier or custom scripts
+- Build custom dashboards and reporting tools
+
+**🤖 Automation & Scripting:**
+- Create tasks automatically from emails or forms
+- Generate daily/weekly reports programmatically
+- Bulk update tasks via scripts
+- Integrate with CI/CD pipelines
+- Build custom mobile or desktop apps
+
+### API Features
+
+- ✅ **20+ RESTful Endpoints** - Full CRUD operations for boards, tasks, and comments
+- ✅ **Token Authentication** - Secure API tokens with scope-based permissions
+- ✅ **Rate Limiting** - 1000 requests/hour per token (configurable)
+- ✅ **Pagination & Filtering** - Efficient data retrieval for large datasets
+- ✅ **Comprehensive Documentation** - Full API docs with examples
+- ✅ **Versioned API** - `/api/v1/` structure for future compatibility
+
+### Quick API Example
+
+```bash
+# Create an API token
+python manage.py create_api_token your_username "My Integration" --scopes "*"
+
+# List all boards
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  http://localhost:8000/api/v1/boards/
+
+# Create a new task
+curl -X POST http://localhost:8000/api/v1/tasks/ \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Fix login bug",
+    "column": 1,
+    "priority": "high",
+    "assigned_to": 2
+  }'
+```
+
+### Available Scopes
+
+Control what each API token can access:
+- `boards.read` / `boards.write` - Board access
+- `tasks.read` / `tasks.write` - Task management
+- `comments.read` / `comments.write` - Comment access
+- `*` - Full access (all permissions)
+
+### API Documentation
+
+For complete API documentation, including all endpoints, request/response formats, and integration examples, see:
+
+📖 **[API_DOCUMENTATION.md](API_DOCUMENTATION.md)** - Comprehensive API guide
+
+---
+
+## �🚀 Why Teams Choose PrizmAI
 
 ### vs. Trello
 - ✅ Trello + AI intelligence
@@ -439,6 +516,7 @@ Free. Seriously.
 - **Team Collaboration** - How to work together
 - **Advanced Features** - Risk management, dependencies, forecasting
 - **Knowledge Base** - Create project documentation
+- **API Documentation** - [API_DOCUMENTATION.md](API_DOCUMENTATION.md) - Complete REST API guide
 - **Video Tutorials** - Visual walkthroughs (coming soon)
 
 ---
@@ -477,6 +555,7 @@ That's it.
 - Frontend: HTML5, CSS3, JavaScript with Bootstrap
 - Database: SQLite (dev) or PostgreSQL (production)
 - Real-time: WebSocket support for live updates
+- API: Django REST Framework with token authentication
 - Hosting: Self-hosted or cloud-deployed
 
 ### Installation
@@ -519,6 +598,14 @@ python manage.py runserver
 - PostgreSQL production database
 - Redis support for caching
 - Celery task queue for async operations
+
+**API Integration:**
+- RESTful API with 20+ endpoints
+- Token-based authentication
+- Rate limiting and request logging
+- Scope-based permission system
+- Ready for Slack, MS Teams, Jira connectors
+- Webhook infrastructure (coming soon)
 
 See documentation files for complete technical setup.
 

@@ -28,6 +28,8 @@ urlpatterns = [
     path('assistant/', include('ai_assistant.urls')),  # AI Project Assistant URLs
     path('messaging/', include('messaging.urls')),  # Real-time messaging URLs
     path('wiki/', include('wiki.urls')),  # Wiki and Knowledge Base URLs
+    path('api/v1/', include('api.v1.urls')),  # RESTful API v1
+    path('webhooks/', include('webhooks.urls')),  # Webhook management
 ]
 
 if settings.DEBUG:

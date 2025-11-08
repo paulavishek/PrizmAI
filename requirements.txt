@@ -2,6 +2,9 @@
 Django==5.2.3
 django-allauth==65.9.0
 
+# RESTful API Framework (for external integrations)
+djangorestframework==3.15.2
+
 # Security and Cryptography
 cryptography==46.0.3
 cffi==2.0.0

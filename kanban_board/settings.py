@@ -65,6 +65,7 @@ INSTALLED_APPS = [
     'colorfield',
     'widget_tweaks',
     'channels',  # Django Channels for WebSockets
+    'rest_framework',  # Django REST Framework for API
     
     # Django Allauth
     'allauth',
@@ -78,6 +79,8 @@ INSTALLED_APPS = [
     'ai_assistant',
     'messaging',
     'wiki',
+    'api',  # RESTful API for external integrations
+    'webhooks',  # Webhook system for event-driven integrations
 ]
 
 MIDDLEWARE = [
@@ -352,4 +355,34 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+
+# ============================================
+# REST FRAMEWORK CONFIGURATION
+# ============================================
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'api.v1.authentication.APITokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    'PAGE_SIZE': 50,
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle'
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',
+        'user': '1000/hour'
+    },
+    'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
+    'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.openapi.AutoSchema',
+}
 

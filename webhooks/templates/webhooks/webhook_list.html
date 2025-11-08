@@ -1,0 +1,125 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Webhooks - {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2>Webhooks</h2>
+            <p class="text-muted">Board: {{ board.name }}</p>
+        </div>
+        <div>
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Back to Board
+            </a>
+            <a href="{% url 'webhooks:webhook_create' board.id %}" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Add Webhook
+            </a>
+        </div>
+    </div>
+
+    {% if webhooks %}
+    <div class="row">
+        {% for webhook in webhooks %}
+        <div class="col-md-6 mb-3">
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <h5 class="card-title">
+                                {{ webhook.name }}
+                                {% if webhook.is_active %}
+                                <span class="badge bg-success">Active</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                                {% if webhook.status == 'failed' %}
+                                <span class="badge bg-danger">Failed</span>
+                                {% endif %}
+                            </h5>
+                            <p class="card-text small text-muted">{{ webhook.url|truncatechars:50 }}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong>Events:</strong>
+                        <div class="mt-1">
+                            {% for event in webhook.events %}
+                            <span class="badge bg-info me-1">{{ event }}</span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    
+                    <div class="row text-center mb-3">
+                        <div class="col-4">
+                            <small class="text-muted">Total</small>
+                            <div class="h5">{{ webhook.total_deliveries }}</div>
+                        </div>
+                        <div class="col-4">
+                            <small class="text-muted">Success</small>
+                            <div class="h5 text-success">{{ webhook.successful_deliveries }}</div>
+                        </div>
+                        <div class="col-4">
+                            <small class="text-muted">Failed</small>
+                            <div class="h5 text-danger">{{ webhook.failed_deliveries }}</div>
+                        </div>
+                    </div>
+                    
+                    <div class="progress mb-3" style="height: 5px;">
+                        <div class="progress-bar bg-success" 
+                             style="width: {{ webhook.success_rate }}%"
+                             title="{{ webhook.success_rate }}% success rate"></div>
+                    </div>
+                    
+                    <div class="btn-group w-100">
+                        <a href="{% url 'webhooks:webhook_detail' webhook.id %}" class="btn btn-sm btn-outline-primary">
+                            Details
+                        </a>
+                        <a href="{% url 'webhooks:webhook_edit' webhook.id %}" class="btn btn-sm btn-outline-secondary">
+                            Edit
+                        </a>
+                        <button type="button" class="btn btn-sm btn-outline-info" onclick="testWebhook({{ webhook.id }})">
+                            Test
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <h4><i class="bi bi-info-circle"></i> No webhooks configured</h4>
+        <p>Webhooks allow external services like Slack, MS Teams, or custom integrations to receive real-time notifications when events occur on this board.</p>
+        <a href="{% url 'webhooks:webhook_create' board.id %}" class="btn btn-primary">Create Your First Webhook</a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function testWebhook(webhookId) {
+    if (!confirm('Send a test webhook?')) return;
+    
+    fetch(`/webhooks/webhooks/${webhookId}/test/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Test webhook sent! Check your endpoint for the delivery.');
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        alert('Error sending test webhook: ' + error);
+    });
+}
+</script>
+{% endblock %}

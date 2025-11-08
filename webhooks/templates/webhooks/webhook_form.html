@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load widget_tweaks %}
+
+{% block title %}{% if webhook %}Edit{% else %}Create{% endif %} Webhook - {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h3>{% if webhook %}Edit{% else %}Create{% endif %} Webhook</h3>
+                    <p class="text-muted mb-0">Board: {{ board.name }}</p>
+                </div>
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        {% if form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {{ form.non_field_errors }}
+                        </div>
+                        {% endif %}
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.name.id_for_label }}" class="form-label">
+                                Webhook Name <span class="text-danger">*</span>
+                            </label>
+                            {{ form.name|add_class:"form-control" }}
+                            {% if form.name.errors %}
+                            <div class="text-danger">{{ form.name.errors }}</div>
+                            {% endif %}
+                            <small class="form-text text-muted">{{ form.name.help_text }}</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.url.id_for_label }}" class="form-label">
+                                Webhook URL <span class="text-danger">*</span>
+                            </label>
+                            {{ form.url|add_class:"form-control" }}
+                            {% if form.url.errors %}
+                            <div class="text-danger">{{ form.url.errors }}</div>
+                            {% endif %}
+                            <small class="form-text text-muted">{{ form.url.help_text }}</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">
+                                Events to Trigger <span class="text-danger">*</span>
+                            </label>
+                            {{ form.events }}
+                            {% if form.events.errors %}
+                            <div class="text-danger">{{ form.events.errors }}</div>
+                            {% endif %}
+                            <small class="form-text text-muted">{{ form.events.help_text }}</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                {{ form.is_active }}
+                                <label class="form-check-label" for="{{ form.is_active.id_for_label }}">
+                                    Active (webhook will receive events)
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        <h5>Advanced Settings</h5>
+                        
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label for="{{ form.timeout_seconds.id_for_label }}" class="form-label">
+                                    Timeout (seconds)
+                                </label>
+                                {{ form.timeout_seconds|add_class:"form-control" }}
+                                {% if form.timeout_seconds.errors %}
+                                <div class="text-danger">{{ form.timeout_seconds.errors }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">{{ form.timeout_seconds.help_text }}</small>
+                            </div>
+                            
+                            <div class="col-md-4 mb-3">
+                                <label for="{{ form.max_retries.id_for_label }}" class="form-label">
+                                    Max Retries
+                                </label>
+                                {{ form.max_retries|add_class:"form-control" }}
+                                {% if form.max_retries.errors %}
+                                <div class="text-danger">{{ form.max_retries.errors }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">{{ form.max_retries.help_text }}</small>
+                            </div>
+                            
+                            <div class="col-md-4 mb-3">
+                                <label for="{{ form.retry_delay_seconds.id_for_label }}" class="form-label">
+                                    Retry Delay (seconds)
+                                </label>
+                                {{ form.retry_delay_seconds|add_class:"form-control" }}
+                                {% if form.retry_delay_seconds.errors %}
+                                <div class="text-danger">{{ form.retry_delay_seconds.errors }}</div>
+                                {% endif %}
+                                <small class="form-text text-muted">{{ form.retry_delay_seconds.help_text }}</small>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.secret.id_for_label }}" class="form-label">
+                                Secret Key (Optional)
+                            </label>
+                            {{ form.secret|add_class:"form-control" }}
+                            {% if form.secret.errors %}
+                            <div class="text-danger">{{ form.secret.errors }}</div>
+                            {% endif %}
+                            <small class="form-text text-muted">{{ form.secret.help_text }}</small>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'webhooks:webhook_list' board.id %}" class="btn btn-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary">{% if webhook %}Update{% else %}Create{% endif %} Webhook</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            
+            <div class="card mt-3">
+                <div class="card-header">
+                    <h5><i class="bi bi-info-circle"></i> About Webhooks</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>What are webhooks?</strong></p>
+                    <p>Webhooks allow external services to receive real-time notifications when events occur on your board.</p>
+                    
+                    <p><strong>Common uses:</strong></p>
+                    <ul>
+                        <li>Send notifications to Slack channels</li>
+                        <li>Update MS Teams with task changes</li>
+                        <li>Sync with external project management tools</li>
+                        <li>Trigger custom automation workflows</li>
+                    </ul>
+                    
+                    <p><strong>Payload format:</strong></p>
+                    <pre class="bg-light p-2"><code>{
+  "event": "task.created",
+  "timestamp": "2025-11-08T12:00:00Z",
+  "delivery_id": 123,
+  "data": {
+    "id": 42,
+    "title": "Task title",
+    "board": {...},
+    ...
+  }
+}</code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
