@@ -503,9 +503,29 @@ def quick_link_wiki(request, content_type, object_id):
                 }
             )
         
-        return JsonResponse({'success': True, 'message': 'Wiki pages linked successfully!'})
+        # Check if this is an AJAX request
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': True, 'message': 'Wiki pages linked successfully!'})
+        
+        # Regular form submission - redirect back
+        if content_type == 'task':
+            messages.success(request, 'Wiki pages linked to task successfully!')
+            return redirect('task_detail', task_id=object_id)
+        elif content_type == 'board':
+            messages.success(request, 'Wiki pages linked to board successfully!')
+            return redirect('board_detail', board_id=object_id)
     
-    return JsonResponse({'error': form.errors}, status=400)
+    # If AJAX request with errors, return JSON
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'error': form.errors}, status=400)
+    
+    # Regular form submission with errors - re-render template
+    return render(request, 'wiki/quick_link_modal.html', {
+        'form': form,
+        'content_type': content_type,
+        'object_id': object_id,
+        'item': item
+    })
 
 
 @login_required

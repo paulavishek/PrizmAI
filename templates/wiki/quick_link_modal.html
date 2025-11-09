@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+{% load widget_tweaks %}
+
+{% block title %}Link Wiki to {{ content_type|title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .wiki-selection-card {
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .wiki-selection-card:hover {
+        border-color: #0d6efd;
+        background-color: #f8f9ff;
+    }
+    
+    .wiki-selection-card.selected {
+        border-color: #0d6efd;
+        background-color: #e7f1ff;
+    }
+    
+    .wiki-selection-card input[type="checkbox"] {
+        margin-right: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-lg-10 mx-auto">
+            <div class="card shadow">
+                <div class="card-header py-3 bg-primary text-white">
+                    <h5 class="m-0">
+                        <i class="fas fa-link me-2"></i>
+                        Link Wiki Pages to {{ content_type|title|capfirst }}
+                    </h5>
+                </div>
+                
+                <div class="card-body">
+                    {% if item %}
+                    <div class="alert alert-info mb-4">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>{{ content_type|title }}:</strong> 
+                        {% if content_type == 'task' %}
+                            {{ item.title }}
+                        {% elif content_type == 'board' %}
+                            {{ item.name }}
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    
+                    <form method="post" id="wiki-link-form">
+                        {% csrf_token %}
+                        
+                        <!-- Wiki Pages Selection -->
+                        <div class="mb-4">
+                            <label class="form-label fw-bold mb-3">
+                                <i class="fas fa-book me-2"></i>Select Wiki Pages to Link
+                            </label>
+                            
+                            <div id="wiki-pages-container">
+                                {% if form.wiki_pages %}
+                                    {% for checkbox in form.wiki_pages %}
+                                        <div class="wiki-selection-card" onclick="toggleCheckbox(this)">
+                                            {{ checkbox.tag }}
+                                            <strong>{{ checkbox.choice_label }}</strong>
+                                        </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="alert alert-warning">
+                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                        No wiki pages available in your organization
+                                    </div>
+                                {% endif %}
+                            </div>
+                            
+                            {% if form.wiki_pages.errors %}
+                                <div class="alert alert-danger mt-2">
+                                    {{ form.wiki_pages.errors }}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Link Description -->
+                        <div class="mb-4">
+                            {{ form.link_description.label_tag }}
+                            {{ form.link_description|add_class:"form-control" }}
+                            <small class="text-muted d-block mt-2">
+                                (Optional) Describe why these wiki pages are relevant to this {{ content_type|lower }}
+                            </small>
+                            {% if form.link_description.errors %}
+                                <div class="invalid-feedback d-block">{{ form.link_description.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Action Buttons -->
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-check me-2"></i> Create Links
+                            </button>
+                            <a href="javascript:history.back()" class="btn btn-outline-secondary btn-lg">
+                                <i class="fas fa-times me-2"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleCheckbox(card) {
+        const checkbox = card.querySelector('input[type="checkbox"]');
+        checkbox.checked = !checkbox.checked;
+        
+        if (checkbox.checked) {
+            card.classList.add('selected');
+        } else {
+            card.classList.remove('selected');
+        }
+    }
+    
+    // Initialize card states based on checkbox status
+    document.addEventListener('DOMContentLoaded', function() {
+        const cards = document.querySelectorAll('.wiki-selection-card');
+        cards.forEach(card => {
+            const checkbox = card.querySelector('input[type="checkbox"]');
+            if (checkbox && checkbox.checked) {
+                card.classList.add('selected');
+            }
+        });
+    });
+</script>
+{% endblock %}

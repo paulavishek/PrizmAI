@@ -29,6 +29,15 @@
             </div>
         {% endif %}
         
+        {% if form.non_field_errors %}
+            <div class="alert alert-danger">
+                <h5>Form Errors:</h5>
+                {% for error in form.non_field_errors %}
+                    <p class="mb-0">{{ error }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+        
         <form method="post" class="link-form-section">
             {% csrf_token %}
             
@@ -39,17 +48,40 @@
             </div>
             
             <div class="mb-3">
-                <label class="form-label">Select Item to Link</label>
+                <label class="form-label fw-bold">Select Item to Link</label>
+                <small class="d-block text-muted mb-2">Choose either a task or a board, not both</small>
                 <div class="row">
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Task</label>
-                        {{ form.task|add_class:"form-control" }}
-                        {{ form.task.errors }}
+                        <label class="form-label">
+                            <i class="fas fa-tasks me-1"></i>Task
+                        </label>
+                        {% if form.task.field.queryset.exists %}
+                            {{ form.task|add_class:"form-control" }}
+                        {% else %}
+                            <select class="form-control" disabled>
+                                <option>No tasks available</option>
+                            </select>
+                            <small class="text-muted d-block mt-1">Create tasks on a board first</small>
+                        {% endif %}
+                        {% if form.task.errors %}
+                            <div class="invalid-feedback d-block">{{ form.task.errors }}</div>
+                        {% endif %}
                     </div>
                     <div class="col-md-6 mb-3">
-                        <label class="form-label">Board</label>
-                        {{ form.board|add_class:"form-control" }}
-                        {{ form.board.errors }}
+                        <label class="form-label">
+                            <i class="fas fa-columns me-1"></i>Board
+                        </label>
+                        {% if form.board.field.queryset.exists %}
+                            {{ form.board|add_class:"form-control" }}
+                        {% else %}
+                            <select class="form-control" disabled>
+                                <option>No boards available</option>
+                            </select>
+                            <small class="text-muted d-block mt-1">Create a board first</small>
+                        {% endif %}
+                        {% if form.board.errors %}
+                            <div class="invalid-feedback d-block">{{ form.board.errors }}</div>
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -62,9 +94,19 @@
             </div>
             
             <div class="d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-lg">
-                    <i class="fas fa-check"></i> Create Link
-                </button>
+                {% if form.task.field.queryset.exists or form.board.field.queryset.exists %}
+                    <button type="submit" class="btn btn-primary btn-lg">
+                        <i class="fas fa-check"></i> Create Link
+                    </button>
+                {% else %}
+                    <button type="submit" class="btn btn-primary btn-lg" disabled title="No tasks or boards available">
+                        <i class="fas fa-check"></i> Create Link
+                    </button>
+                    <div class="alert alert-warning mb-0" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>No tasks or boards available.</strong> Please create a board and add tasks first.
+                    </div>
+                {% endif %}
                 <a href="{% url 'wiki:page_detail' page.slug %}" class="btn btn-outline-secondary btn-lg">
                     Cancel
                 </a>
