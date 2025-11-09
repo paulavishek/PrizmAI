@@ -1642,10 +1642,11 @@ def calculate_task_priority(task, risk_score, deadline):
 - [ ] Join team standups
 - [ ] Learn about deployment process
 
-## Resources
-- [API Documentation](/wiki/api-reference-guide/)
-- [Code Style Guide](/wiki/python-code-style-guide/)
-- [Database Schema](/wiki/database-schema-documentation/)
+## Key Information
+- Complete source code is available in the GitHub repository
+- Technical documentation is maintained in the team wiki
+- Database schemas are documented in our internal documentation
+- Our code follows PEP 8 style guidelines
 ''',
                         'tags': ['onboarding', 'new-hire', 'checklist'],
                         'is_pinned': True
