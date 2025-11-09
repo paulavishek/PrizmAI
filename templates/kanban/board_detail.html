@@ -170,23 +170,7 @@
         font-size: 0.9rem;
     }
     
-    .hide-lean-features .task-label[data-category="lean"] {
-        display: none !important;
-    }
-    .hide-lean-features .lean-sigma-element {
-        display: none !important;
-    }
-    .advanced-features-header {
-        background-color: #f8f9fa;
-        font-weight: 600;
-        color: #6c757d;
-    }
-    .advanced-features-item {
-        padding-left: 2rem;
-    }
-    .advanced-features-item:hover {
-        background-color: #f8f9fa;
-    }
+    
 </style>
 {% endblock %}
 
@@ -228,12 +212,6 @@
             <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#boardSettingsModal">Board Settings</a></li>
             <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}">
                 <i class="fas fa-plug me-2 text-info"></i>Webhooks & Integrations
-            </a></li>
-            <li><hr class="dropdown-divider"></li>            <li class="dropdown-item-text">
-                <small class="text-muted"><i class="fas fa-magic me-1"></i><strong>Advanced Features</strong></small>
-            </li>
-            <li><a class="dropdown-item" href="#" onclick="toggleLeanSixSigmaFeatures()">
-                <i class="fas fa-industry me-2 text-secondary"></i>Lean Six Sigma Tools
             </a></li>
             <li><hr class="dropdown-divider"></li>
             {% if board.created_by == request.user or request.user.profile.is_admin or request.user == board.organization.created_by %}
@@ -782,42 +760,6 @@
         }
     };
     
-    // Lean Six Sigma Tools Toggle Function
-    function toggleLeanSixSigmaFeatures() {
-        // Show/hide Lean Six Sigma related elements
-        const leanElements = document.querySelectorAll('.lean-sigma-element, .task-label[data-category="lean"]');
-        const isHidden = document.body.classList.contains('hide-lean-features');
-        
-        if (isHidden) {
-            document.body.classList.remove('hide-lean-features');
-            leanElements.forEach(el => el.style.display = '');
-            localStorage.setItem('leanSigmaVisible', 'true');
-        } else {
-            document.body.classList.add('hide-lean-features');
-            leanElements.forEach(el => el.style.display = 'none');
-            localStorage.setItem('leanSigmaVisible', 'false');
-        }
-        
-        // Update button text or icon if needed
-        const toggleBtn = document.querySelector('[onclick="toggleLeanSixSigmaFeatures()"]');
-        if (toggleBtn) {
-            const icon = toggleBtn.querySelector('i');
-            if (isHidden) {
-                icon.className = 'fas fa-industry me-2 text-secondary';
-                toggleBtn.innerHTML = '<i class="fas fa-industry me-2 text-secondary"></i>Hide Lean Six Sigma Tools';
-            } else {
-                icon.className = 'fas fa-eye-slash me-2 text-secondary';
-                toggleBtn.innerHTML = '<i class="fas fa-eye-slash me-2 text-secondary"></i>Show Lean Six Sigma Tools';
-            }
-        }
-    }
-    
-    // Initialize Lean Six Sigma visibility on page load
-    document.addEventListener('DOMContentLoaded', function() {
-        const leanSigmaVisible = localStorage.getItem('leanSigmaVisible');        if (leanSigmaVisible === 'false') {
-            toggleLeanSixSigmaFeatures();
-        }
-    });
     </script>
 {% endblock %}
 
