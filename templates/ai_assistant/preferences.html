@@ -16,17 +16,6 @@
                     <form method="post" class="needs-validation">
                         {% csrf_token %}
                         
-                        <!-- Model Selection -->
-                        <h5 class="mb-3"><i class="fas fa-robot me-2"></i> Preferred AI Model</h5>
-                        <div class="mb-3">
-                            {{ form.preferred_model }}
-                            <small class="form-text text-muted d-block mt-2">
-                                Choose which AI model to use by default: Gemini (faster) or OpenAI (more capable)
-                            </small>
-                        </div>
-                        
-                        <hr>
-                        
                         <!-- Feature Preferences -->
                         <h5 class="mb-3"><i class="fas fa-sliders-h me-2"></i> Feature Preferences</h5>
                         
@@ -115,14 +104,6 @@
                         <!-- Display Preferences -->
                         <h5 class="mb-3"><i class="fas fa-palette me-2"></i> Display Preferences</h5>
                         
-                        <div class="mb-3">
-                            <label class="form-label">Theme</label>
-                            {{ form.theme }}
-                            <small class="form-text text-muted d-block mt-2">
-                                Choose how the interface appears
-                            </small>
-                        </div>
-                        
                         <div class="mb-4">
                             <label class="form-label" for="{{ form.messages_per_page.id_for_label }}">
                                 Messages per Page
@@ -157,4 +138,6 @@
     {% endfor %}
 </div>
 {% endif %}
+
+
 {% endblock %}

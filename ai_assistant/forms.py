@@ -38,13 +38,9 @@ class UserPreferenceForm(forms.ModelForm):
             'notify_on_risk',
             'notify_on_overload',
             'notify_on_dependency_issues',
-            'theme',
             'messages_per_page',
         ]
         widgets = {
-            'theme': forms.RadioSelect(attrs={
-                'class': 'form-check-input',
-            }),
             'enable_web_search': forms.CheckboxInput(attrs={
                 'class': 'form-check-input',
             }),

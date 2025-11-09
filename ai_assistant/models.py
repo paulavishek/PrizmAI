@@ -228,11 +228,6 @@ class UserPreference(models.Model):
     notify_on_dependency_issues = models.BooleanField(default=False)
     
     # Display preferences
-    theme = models.CharField(max_length=20, default='light', choices=[
-        ('light', 'Light'),
-        ('dark', 'Dark'),
-        ('auto', 'Auto'),
-    ])
     messages_per_page = models.IntegerField(default=20)
     
     created_at = models.DateTimeField(auto_now_add=True)

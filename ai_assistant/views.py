@@ -241,9 +241,12 @@ def get_session_messages(request, session_id):
     try:
         session = get_object_or_404(AIAssistantSession, id=session_id, user=request.user)
         
+        # Get user preferences for messages per page
+        user_pref, _ = UserPreference.objects.get_or_create(user=request.user)
+        
         # Get pagination parameters
         page = int(request.GET.get('page', 1))
-        per_page = int(request.GET.get('per_page', 20))
+        per_page = int(request.GET.get('per_page', user_pref.messages_per_page))
         
         messages_qs = AIAssistantMessage.objects.filter(session=session).order_by('created_at')
         
@@ -490,32 +493,46 @@ def analytics_dashboard(request):
     total_tokens = analytics_qs.aggregate(Sum('total_tokens_used'))['total_tokens_used__sum'] or 0
     web_searches = analytics_qs.aggregate(Sum('web_searches_performed'))['web_searches_performed__sum'] or 0
     kb_queries = analytics_qs.aggregate(Sum('knowledge_base_queries'))['knowledge_base_queries__sum'] or 0
-    helpful_responses = analytics_qs.aggregate(Sum('helpful_responses'))['helpful_responses__sum'] or 0
-    unhelpful_responses = analytics_qs.aggregate(Sum('unhelpful_responses'))['unhelpful_responses__sum'] or 0
+    gemini_requests = analytics_qs.aggregate(Sum('gemini_requests'))['gemini_requests__sum'] or 0
     
-    # Calculate response quality percentage
-    total_feedback = helpful_responses + unhelpful_responses
-    response_quality = round((helpful_responses / total_feedback * 100), 1) if total_feedback > 0 else 0
+    # Calculate RAG usage rate (KB queries / total requests)
+    rag_usage_rate = round((kb_queries / gemini_requests * 100), 1) if gemini_requests > 0 else 0
     
-    # Get active sessions count
+    # Calculate context-aware response rate (KB or Web Search used)
+    context_aware_requests = kb_queries + web_searches
+    context_aware_rate = round((context_aware_requests / gemini_requests * 100), 1) if gemini_requests > 0 else 0
+    
+    # Get active sessions count and multi-turn conversations
     active_sessions = AIAssistantSession.objects.filter(
         user=request.user,
         updated_at__gte=timezone.now() - timedelta(days=30)
     ).count()
     
+    # Count multi-turn conversations (sessions with 3+ messages)
+    multi_turn_sessions = AIAssistantSession.objects.filter(
+        user=request.user,
+        updated_at__gte=timezone.now() - timedelta(days=30),
+        message_count__gte=3
+    ).count()
+    
     # Calculate average response time
     avg_response_time = analytics_qs.aggregate(Avg('avg_response_time_ms'))['avg_response_time_ms__avg'] or 0
+    
+    # Calculate average tokens per message (efficiency metric)
+    avg_tokens_per_message = round(total_tokens / total_messages, 1) if total_messages > 0 else 0
     
     context = {
         'total_messages': total_messages,
         'total_tokens': total_tokens,
         'web_searches': web_searches,
         'kb_queries': kb_queries,
-        'helpful_responses': helpful_responses,
-        'unhelpful_responses': unhelpful_responses,
-        'response_quality': response_quality,
+        'gemini_requests': gemini_requests,
+        'rag_usage_rate': rag_usage_rate,
+        'context_aware_rate': context_aware_rate,
         'active_sessions': active_sessions,
+        'multi_turn_sessions': multi_turn_sessions,
         'avg_response_time': round(avg_response_time / 1000, 2) if avg_response_time else 0,  # Convert to seconds
+        'avg_tokens_per_message': avg_tokens_per_message,
         'user_preferences': user_pref,
     }
     return render(request, 'ai_assistant/analytics.html', context)
@@ -544,8 +561,6 @@ def get_analytics_data(request):
         'tokens': [],
         'web_searches': [],
         'kb_queries': [],
-        'helpful': [],
-        'unhelpful': [],
     }
     
     for analytics in analytics_qs:
@@ -554,8 +569,6 @@ def get_analytics_data(request):
         data['tokens'].append(analytics.total_tokens_used)
         data['web_searches'].append(analytics.web_searches_performed)
         data['kb_queries'].append(analytics.knowledge_base_queries)
-        data['helpful'].append(analytics.helpful_responses)
-        data['unhelpful'].append(analytics.unhelpful_responses)
     
     return JsonResponse(data)
 
@@ -646,8 +659,6 @@ def save_preferences(request):
         data = json.loads(request.body)
         
         # Update preferences
-        if 'theme' in data:
-            user_pref.theme = data['theme']
         if 'enable_web_search' in data:
             user_pref.enable_web_search = data['enable_web_search']
         if 'enable_task_insights' in data:

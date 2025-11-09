@@ -4,10 +4,23 @@
 
     // Initialize theme on page load
     function initializeTheme() {
-        // Check for saved theme preference or default to system preference
+        // Check for saved theme preference from database (passed from template)
+        const dbTheme = document.body.getAttribute('data-user-theme');
+        // Check localStorage or default to system preference
         const savedTheme = localStorage.getItem('theme');
         const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+        
+        // Priority: database preference > localStorage > system preference
+        let theme;
+        if (dbTheme && dbTheme !== 'auto') {
+            theme = dbTheme;
+        } else if (dbTheme === 'auto') {
+            theme = prefersDark ? 'dark' : 'light';
+        } else if (savedTheme) {
+            theme = savedTheme;
+        } else {
+            theme = prefersDark ? 'dark' : 'light';
+        }
 
         applyTheme(theme);
     }
@@ -42,14 +55,46 @@
         const currentTheme = localStorage.getItem('theme') || 'light';
         const newTheme = currentTheme === 'light' ? 'dark' : 'light';
         applyTheme(newTheme);
+        
+        // Sync with database if user is authenticated
+        syncThemeToDatabase(newTheme);
+    }
+    
+    // Sync theme preference to database
+    function syncThemeToDatabase(theme) {
+        fetch('/assistant/api/preferences/save/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: JSON.stringify({ theme: theme })
+        }).catch(error => console.error('Error syncing theme:', error));
+    }
+    
+    // Get CSRF token from cookies
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
     }
 
     // Listen for system theme changes
     function listenForSystemThemeChanges() {
         const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
         mediaQuery.addEventListener('change', (e) => {
-            // Only apply system preference if user hasn't set a preference
-            if (!localStorage.getItem('theme')) {
+            // Only apply system preference if user has "auto" theme
+            const dbTheme = document.body.getAttribute('data-user-theme');
+            if (dbTheme === 'auto') {
                 applyTheme(e.matches ? 'dark' : 'light');
             }
         });

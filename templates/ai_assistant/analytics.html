@@ -94,10 +94,10 @@
         </div>
         
         <div class="stat-card">
-            <div class="stat-icon">✅</div>
+            <div class="stat-icon">🧠</div>
             <div class="stat-info">
-                <h3>Response Quality</h3>
-                <div class="stat-value">{{ response_quality }}%</div>
+                <h3>RAG Usage Rate</h3>
+                <div class="stat-value">{{ rag_usage_rate }}%</div>
             </div>
         </div>
         
@@ -110,18 +110,18 @@
         </div>
         
         <div class="stat-card">
-            <div class="stat-icon">🌐</div>
+            <div class="stat-icon">�</div>
             <div class="stat-info">
-                <h3>Web Searches</h3>
-                <div class="stat-value">{{ web_searches }}</div>
+                <h3>Context-Aware Responses</h3>
+                <div class="stat-value">{{ context_aware_rate }}%</div>
             </div>
         </div>
         
         <div class="stat-card">
-            <div class="stat-icon">💬</div>
+            <div class="stat-icon">�</div>
             <div class="stat-info">
-                <h3>Active Sessions</h3>
-                <div class="stat-value">{{ active_sessions }}</div>
+                <h3>Multi-Turn Conversations</h3>
+                <div class="stat-value">{{ multi_turn_sessions }}</div>
             </div>
         </div>
         
@@ -142,13 +142,13 @@
         </div>
         
         <div class="chart-card">
-            <div class="chart-title">AI Feature Usage</div>
+            <div class="chart-title">AI Feature Usage (RAG vs Web Search)</div>
             <canvas id="featureChart"></canvas>
         </div>
         
         <div class="chart-card">
-            <div class="chart-title">Response Quality Distribution</div>
-            <canvas id="qualityChart"></canvas>
+            <div class="chart-title">Token Efficiency Trend</div>
+            <canvas id="tokenChart"></canvas>
         </div>
     </div>
 </div>
@@ -178,6 +178,11 @@
                     responsive: true,
                     plugins: {
                         legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
                     }
                 }
             });
@@ -190,41 +195,49 @@
             new Chart(featureCtx, {
                 type: 'bar',
                 data: {
-                    labels: ['Web Search', 'Knowledge Base'],
+                    labels: ['Knowledge Base (RAG)', 'Web Search'],
                     datasets: [{
                         label: 'Usage Count',
-                        data: [totalWebSearches, totalKbQueries],
-                        backgroundColor: ['#4285f4', '#34a853'],
+                        data: [totalKbQueries, totalWebSearches],
+                        backgroundColor: ['#34a853', '#4285f4'],
                     }]
                 },
                 options: {
                     responsive: true,
                     plugins: {
                         legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
                     }
                 }
             });
             
-            // Quality chart - Doughnut showing helpful vs unhelpful
-            const totalHelpful = data.helpful.reduce((a, b) => a + b, 0);
-            const totalUnhelpful = data.unhelpful.reduce((a, b) => a + b, 0);
-            
-            const qualityCtx = document.getElementById('qualityChart').getContext('2d');
-            new Chart(qualityCtx, {
-                type: 'doughnut',
+            // Token efficiency chart - Line showing tokens over time
+            const tokenCtx = document.getElementById('tokenChart').getContext('2d');
+            new Chart(tokenCtx, {
+                type: 'line',
                 data: {
-                    labels: ['Helpful', 'Unhelpful'],
+                    labels: data.dates,
                     datasets: [{
-                        data: [totalHelpful, totalUnhelpful],
-                        backgroundColor: ['#34a853', '#ea4335'],
+                        label: 'Tokens Used',
+                        data: data.tokens,
+                        borderColor: '#fbbc04',
+                        backgroundColor: 'rgba(251, 188, 4, 0.1)',
+                        tension: 0.3,
+                        fill: true,
                     }]
                 },
                 options: {
                     responsive: true,
                     plugins: {
-                        legend: { 
-                            display: true,
-                            position: 'bottom'
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true
                         }
                     }
                 }
