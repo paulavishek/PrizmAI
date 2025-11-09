@@ -246,8 +246,8 @@
 <script>
     // Show success/error messages with auto-dismiss
     document.addEventListener('DOMContentLoaded', function() {
-        // Auto-hide alerts after 5 seconds
-        const alerts = document.querySelectorAll('.alert');
+        // Auto-hide only success/error/warning alerts after 5 seconds (not info alerts)
+        const alerts = document.querySelectorAll('.alert-success, .alert-danger, .alert-warning');
         alerts.forEach(alert => {
             setTimeout(() => {
                 alert.classList.add('fade');

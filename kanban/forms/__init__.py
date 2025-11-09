@@ -56,8 +56,9 @@ class TaskForm(forms.ModelForm):
         model = Task
         fields = [
             'title', 'description', 'start_date', 'due_date', 'assigned_to', 'labels', 'priority', 'progress', 
-            'dependencies', 'parent_task', 'complexity_score',
-            'risk_likelihood', 'risk_impact', 'risk_level', 'workload_impact'
+            'dependencies', 'parent_task', 'complexity_score', 'required_skills', 'skill_match_score',
+            'collaboration_required', 'workload_impact', 'related_tasks',
+            'risk_likelihood', 'risk_impact', 'risk_level'
         ]
         widgets = {
             'title': forms.TextInput(attrs={'class': 'form-control'}),
@@ -99,6 +100,28 @@ class TaskForm(forms.ModelForm):
                 'title': 'Task complexity from 1 (simple) to 10 (very complex)',
                 'value': 5,
                 'id': 'id_complexity_score'
+            }),
+            'required_skills': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Enter required skills as JSON list (e.g., [{"name": "Python", "level": "Advanced"}, {"name": "Django", "level": "Intermediate"}])',
+                'title': 'List of required skills for this task'
+            }),
+            'skill_match_score': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': 0,
+                'max': 100,
+                'step': 1,
+                'title': 'Skill match score for the assigned user (0-100%)'
+            }),
+            'collaboration_required': forms.CheckboxInput(attrs={
+                'class': 'form-check-input',
+                'title': 'Check if this task requires collaboration with other team members'
+            }),
+            'related_tasks': forms.SelectMultiple(attrs={
+                'class': 'form-select',
+                'size': '4',
+                'title': 'Select tasks that are related to this task (but not dependencies or parent-child)'
             }),
             'risk_likelihood': forms.Select(attrs={
                 'class': 'form-select',
@@ -161,6 +184,12 @@ class TaskForm(forms.ModelForm):
             # Set help text for dependencies
             self.fields['dependencies'].help_text = 'Select tasks that must be completed before this task can start. Only tasks with start and due dates are shown (required for Gantt chart). Hold Ctrl/Cmd to select multiple.'
             
+            # Filter related_tasks to only show tasks from the same board (exclude current task)
+            self.fields['related_tasks'].queryset = Task.objects.filter(
+                column__board=board
+            ).exclude(id=self.instance.id if self.instance.pk else None).order_by('title')
+            self.fields['related_tasks'].help_text = 'Select tasks that are related but not in a parent-child or dependency relationship. Hold Ctrl/Cmd to select multiple.'
+            
             # Filter parent_task to only show tasks from the same board (exclude current task and its subtasks to prevent circular dependencies)
             parent_queryset = Task.objects.filter(column__board=board).exclude(id=self.instance.id if self.instance.pk else None)
             
@@ -179,6 +208,9 @@ class TaskForm(forms.ModelForm):
                 due_date__isnull=False
             ).exclude(id=self.instance.id if self.instance.pk else None).order_by('start_date', 'title')
             
+            # related_tasks without board filter
+            self.fields['related_tasks'].queryset = Task.objects.exclude(id=self.instance.id if self.instance.pk else None).order_by('title')
+            
             # Parent task queryset without board filter
             self.fields['parent_task'].queryset = Task.objects.exclude(id=self.instance.id if self.instance.pk else None).order_by('title')
         
@@ -186,6 +218,7 @@ class TaskForm(forms.ModelForm):
         self.fields['assigned_to'].empty_label = "Not assigned"
         self.fields['parent_task'].empty_label = "No parent (root task)"
         self.fields['dependencies'].required = False
+        self.fields['related_tasks'].required = False
         self.fields['parent_task'].required = False
         self.fields['complexity_score'].required = False
         
@@ -195,6 +228,25 @@ class TaskForm(forms.ModelForm):
         
         # Set help text for complexity score
         self.fields['complexity_score'].help_text = 'Rate the task complexity from 1 (simple) to 10 (very complex). AI can suggest this value.'
+        
+        # Set help text for collaboration_required
+        self.fields['collaboration_required'].help_text = 'Check this if the task requires collaboration with other team members'
+        self.fields['collaboration_required'].required = False
+        
+        # Add help text and initialization for skill fields
+        self.fields['required_skills'].required = False
+        self.fields['required_skills'].help_text = 'Enter required skills as a JSON list. Format: [{"name": "Skill Name", "level": "Level"}]'
+        
+        self.fields['skill_match_score'].required = False
+        self.fields['skill_match_score'].help_text = 'Percentage match of assignee skills to required skills (0-100%)'
+        
+        # Initialize required_skills field with JSON representation if editing
+        if self.instance and self.instance.pk and self.instance.required_skills:
+            import json
+            try:
+                self.fields['required_skills'].initial = json.dumps(self.instance.required_skills, indent=2)
+            except:
+                self.fields['required_skills'].initial = str(self.instance.required_skills)
         
         # Make risk fields optional
         self.fields['risk_likelihood'].required = False
@@ -259,6 +311,23 @@ class TaskForm(forms.ModelForm):
         # Set risk_score from cleaned data if available
         if hasattr(self, 'cleaned_data') and 'risk_score' in self.cleaned_data:
             instance.risk_score = self.cleaned_data['risk_score']
+        
+        # Process required_skills JSON field
+        required_skills_input = self.cleaned_data.get('required_skills', '').strip()
+        if required_skills_input:
+            import json
+            try:
+                # Try to parse as JSON
+                instance.required_skills = json.loads(required_skills_input)
+            except json.JSONDecodeError:
+                # If parsing fails, try to evaluate as Python list
+                try:
+                    instance.required_skills = eval(required_skills_input)
+                except:
+                    # If all else fails, keep it as is or set to empty list
+                    instance.required_skills = []
+        elif not instance.required_skills:
+            instance.required_skills = []
         
         # Process risk indicators from text field
         risk_indicators_text = self.cleaned_data.get('risk_indicators_text', '').strip()

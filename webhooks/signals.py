@@ -34,9 +34,11 @@ def trigger_webhooks(event_type, board, object_id, data, triggered_by=None):
     webhooks = Webhook.objects.filter(
         board=board,
         is_active=True,
-        status='active',
-        events__contains=[event_type]
+        status='active'
     )
+    
+    # Filter by event type (workaround for SQLite not supporting contains on JSONField)
+    webhooks = [w for w in webhooks if event_type in w.events]
     
     triggered_count = 0
     for webhook in webhooks:
