@@ -94,10 +94,18 @@
         </div>
         
         <div class="stat-card">
-            <div class="stat-icon">🤖</div>
+            <div class="stat-icon">✅</div>
             <div class="stat-info">
-                <h3>Model Usage</h3>
-                <div class="stat-value">{{ gemini_requests }}g / {{ openai_requests }}o</div>
+                <h3>Response Quality</h3>
+                <div class="stat-value">{{ response_quality }}%</div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-icon">📚</div>
+            <div class="stat-info">
+                <h3>Knowledge Base Queries</h3>
+                <div class="stat-value">{{ kb_queries }}</div>
             </div>
         </div>
         
@@ -110,10 +118,18 @@
         </div>
         
         <div class="stat-card">
+            <div class="stat-icon">💬</div>
+            <div class="stat-info">
+                <h3>Active Sessions</h3>
+                <div class="stat-value">{{ active_sessions }}</div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
             <div class="stat-icon">⚡</div>
             <div class="stat-info">
-                <h3>Tokens Used</h3>
-                <div class="stat-value">{{ total_tokens|default:"0" }}</div>
+                <h3>Avg Response Time</h3>
+                <div class="stat-value">{{ avg_response_time }}s</div>
             </div>
         </div>
     </div>
@@ -126,8 +142,13 @@
         </div>
         
         <div class="chart-card">
-            <div class="chart-title">Model Distribution</div>
-            <canvas id="modelChart"></canvas>
+            <div class="chart-title">AI Feature Usage</div>
+            <canvas id="featureChart"></canvas>
+        </div>
+        
+        <div class="chart-card">
+            <div class="chart-title">Response Quality Distribution</div>
+            <canvas id="qualityChart"></canvas>
         </div>
     </div>
 </div>
@@ -138,7 +159,7 @@
     fetch('{% url "ai_assistant:analytics_data" %}')
         .then(r => r.json())
         .then(data => {
-            // Messages chart
+            // Messages chart - Line chart showing messages over time
             const messagesCtx = document.getElementById('messagesChart').getContext('2d');
             new Chart(messagesCtx, {
                 type: 'line',
@@ -161,19 +182,51 @@
                 }
             });
             
-            // Model chart
-            const modelCtx = document.getElementById('modelChart').getContext('2d');
-            new Chart(modelCtx, {
-                type: 'doughnut',
+            // Feature usage chart - Bar chart showing Web Search vs KB Queries
+            const totalWebSearches = data.web_searches.reduce((a, b) => a + b, 0);
+            const totalKbQueries = data.kb_queries.reduce((a, b) => a + b, 0);
+            
+            const featureCtx = document.getElementById('featureChart').getContext('2d');
+            new Chart(featureCtx, {
+                type: 'bar',
                 data: {
-                    labels: ['Gemini'],
+                    labels: ['Web Search', 'Knowledge Base'],
                     datasets: [{
-                        data: [{{ gemini_requests|default:0 }}],
-                        backgroundColor: ['#4285f4'],
+                        label: 'Usage Count',
+                        data: [totalWebSearches, totalKbQueries],
+                        backgroundColor: ['#4285f4', '#34a853'],
                     }]
                 },
                 options: {
                     responsive: true,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+            
+            // Quality chart - Doughnut showing helpful vs unhelpful
+            const totalHelpful = data.helpful.reduce((a, b) => a + b, 0);
+            const totalUnhelpful = data.unhelpful.reduce((a, b) => a + b, 0);
+            
+            const qualityCtx = document.getElementById('qualityChart').getContext('2d');
+            new Chart(qualityCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Helpful', 'Unhelpful'],
+                    datasets: [{
+                        data: [totalHelpful, totalUnhelpful],
+                        backgroundColor: ['#34a853', '#ea4335'],
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { 
+                            display: true,
+                            position: 'bottom'
+                        }
+                    }
                 }
             });
         });

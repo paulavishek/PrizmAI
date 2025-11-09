@@ -4,7 +4,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
-from django.db.models import Count, Sum, Q
+from django.db.models import Count, Sum, Q, Avg
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 import json
 from datetime import timedelta
@@ -485,16 +485,37 @@ def analytics_dashboard(request):
     if board_id:
         analytics_qs = analytics_qs.filter(board_id=board_id)
     
+    # Aggregate metrics
     total_messages = analytics_qs.aggregate(Sum('messages_sent'))['messages_sent__sum'] or 0
     total_tokens = analytics_qs.aggregate(Sum('total_tokens_used'))['total_tokens_used__sum'] or 0
-    gemini_requests = analytics_qs.aggregate(Sum('gemini_requests'))['gemini_requests__sum'] or 0
     web_searches = analytics_qs.aggregate(Sum('web_searches_performed'))['web_searches_performed__sum'] or 0
+    kb_queries = analytics_qs.aggregate(Sum('knowledge_base_queries'))['knowledge_base_queries__sum'] or 0
+    helpful_responses = analytics_qs.aggregate(Sum('helpful_responses'))['helpful_responses__sum'] or 0
+    unhelpful_responses = analytics_qs.aggregate(Sum('unhelpful_responses'))['unhelpful_responses__sum'] or 0
+    
+    # Calculate response quality percentage
+    total_feedback = helpful_responses + unhelpful_responses
+    response_quality = round((helpful_responses / total_feedback * 100), 1) if total_feedback > 0 else 0
+    
+    # Get active sessions count
+    active_sessions = AIAssistantSession.objects.filter(
+        user=request.user,
+        updated_at__gte=timezone.now() - timedelta(days=30)
+    ).count()
+    
+    # Calculate average response time
+    avg_response_time = analytics_qs.aggregate(Avg('avg_response_time_ms'))['avg_response_time_ms__avg'] or 0
     
     context = {
         'total_messages': total_messages,
         'total_tokens': total_tokens,
-        'gemini_requests': gemini_requests,
         'web_searches': web_searches,
+        'kb_queries': kb_queries,
+        'helpful_responses': helpful_responses,
+        'unhelpful_responses': unhelpful_responses,
+        'response_quality': response_quality,
+        'active_sessions': active_sessions,
+        'avg_response_time': round(avg_response_time / 1000, 2) if avg_response_time else 0,  # Convert to seconds
         'user_preferences': user_pref,
     }
     return render(request, 'ai_assistant/analytics.html', context)
@@ -521,14 +542,20 @@ def get_analytics_data(request):
         'dates': [],
         'messages': [],
         'tokens': [],
-        'gemini': [],
+        'web_searches': [],
+        'kb_queries': [],
+        'helpful': [],
+        'unhelpful': [],
     }
     
     for analytics in analytics_qs:
         data['dates'].append(analytics.date.isoformat())
         data['messages'].append(analytics.messages_sent)
         data['tokens'].append(analytics.total_tokens_used)
-        data['gemini'].append(analytics.gemini_requests)
+        data['web_searches'].append(analytics.web_searches_performed)
+        data['kb_queries'].append(analytics.knowledge_base_queries)
+        data['helpful'].append(analytics.helpful_responses)
+        data['unhelpful'].append(analytics.unhelpful_responses)
     
     return JsonResponse(data)
 
