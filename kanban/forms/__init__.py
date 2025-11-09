@@ -313,21 +313,27 @@ class TaskForm(forms.ModelForm):
             instance.risk_score = self.cleaned_data['risk_score']
         
         # Process required_skills JSON field
-        required_skills_input = self.cleaned_data.get('required_skills', '').strip()
-        if required_skills_input:
-            import json
-            try:
-                # Try to parse as JSON
-                instance.required_skills = json.loads(required_skills_input)
-            except json.JSONDecodeError:
-                # If parsing fails, try to evaluate as Python list
+        required_skills_input = self.cleaned_data.get('required_skills', '')
+        
+        # Handle if it's already a list (from form submission)
+        if isinstance(required_skills_input, list):
+            instance.required_skills = required_skills_input
+        else:
+            required_skills_input = required_skills_input.strip() if isinstance(required_skills_input, str) else ''
+            if required_skills_input:
+                import json
                 try:
-                    instance.required_skills = eval(required_skills_input)
-                except:
-                    # If all else fails, keep it as is or set to empty list
-                    instance.required_skills = []
-        elif not instance.required_skills:
-            instance.required_skills = []
+                    # Try to parse as JSON
+                    instance.required_skills = json.loads(required_skills_input)
+                except json.JSONDecodeError:
+                    # If parsing fails, try to evaluate as Python list
+                    try:
+                        instance.required_skills = eval(required_skills_input)
+                    except:
+                        # If all else fails, keep it as is or set to empty list
+                        instance.required_skills = []
+            elif not instance.required_skills:
+                instance.required_skills = []
         
         # Process risk indicators from text field
         risk_indicators_text = self.cleaned_data.get('risk_indicators_text', '').strip()

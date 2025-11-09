@@ -29,6 +29,7 @@ from kanban.utils.ai_utils import (
     recommend_board_columns,
     suggest_task_breakdown,
     analyze_workflow_optimization,
+    summarize_task_details,
     analyze_critical_path,
     predict_task_completion,
     generate_project_timeline,
@@ -1300,4 +1301,106 @@ def update_task_dates_api(request):
         logger.error(f"Error in update_task_dates_api: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 
+
+@login_required
+@require_http_methods(["GET"])
+def summarize_task_details_api(request, task_id):
+    """
+    API endpoint to generate a comprehensive AI-powered summary of a task's details.
+    
+    This analyzes all aspects of the task including:
+    - Risk management and mitigation strategies
+    - Stakeholder involvement and feedback
+    - Resource requirements and skill matching
+    - Task dependencies and hierarchy
+    - Complexity and effort estimates
+    - Lean Six Sigma classification
+    """
+    try:
+        # Get the task and verify user access
+        task = get_object_or_404(Task, id=task_id)
+        board = task.column.board
+        
+        # Check if user has access to this board
+        if not (board.created_by == request.user or request.user in board.members.all()):
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # Import StakeholderTaskInvolvement here to avoid circular import
+        from kanban.stakeholder_models import StakeholderTaskInvolvement
+        
+        # Gather comprehensive task data
+        task_data = {
+            'title': task.title,
+            'description': task.description or 'No description provided',
+            'status': task.column.name,
+            'priority': task.get_priority_display(),
+            'progress': task.progress if task.progress is not None else 0,
+            'due_date': task.due_date.strftime('%B %d, %Y at %H:%M') if task.due_date else 'No due date set',
+            'assigned_to': task.assigned_to.username if task.assigned_to else 'Unassigned',
+            'created_by': task.created_by.username,
+            'created_at': task.created_at.strftime('%B %d, %Y'),
+            
+            # Risk management
+            'risk_level': task.risk_level,
+            'risk_score': task.risk_score,
+            'risk_likelihood': task.risk_likelihood,
+            'risk_impact': task.risk_impact,
+            'risk_indicators': task.risk_indicators if task.risk_indicators else [],
+            'mitigation_suggestions': task.mitigation_suggestions if task.mitigation_suggestions else [],
+            
+            # Stakeholders
+            'stakeholders': [
+                {
+                    'name': involvement.stakeholder.name,
+                    'involvement_type': involvement.get_involvement_type_display(),
+                    'engagement_status': involvement.get_engagement_status_display(),
+                    'satisfaction_rating': involvement.satisfaction_rating,
+                    'feedback': involvement.feedback
+                }
+                for involvement in StakeholderTaskInvolvement.objects.filter(task=task).select_related('stakeholder')
+            ],
+            
+            # Resource management
+            'required_skills': task.required_skills if task.required_skills else [],
+            'skill_match_score': task.skill_match_score,
+            'workload_impact': task.get_workload_impact_display() if task.workload_impact else None,
+            'collaboration_required': task.collaboration_required,
+            'complexity_score': task.complexity_score,
+            
+            # Dependencies and hierarchy
+            'parent_task': task.parent_task.title if task.parent_task else None,
+            'subtasks': [subtask.title for subtask in task.subtasks.all()],
+            'dependencies': [
+                f"{dep.title} ({dep.progress}% complete, Due: {dep.due_date.strftime('%Y-%m-%d') if dep.due_date else 'No date'})"
+                for dep in task.dependencies.all()
+            ],
+            'dependent_tasks': [
+                f"{blocked.title} (Waiting on this task)"
+                for blocked in task.dependent_tasks.all()
+            ],
+            'related_tasks': [rel.title for rel in task.related_tasks.all()],
+            
+            # Labels
+            'labels': [
+                {
+                    'name': label.name,
+                    'category': label.category
+                }
+                for label in task.labels.all()
+            ],
+            
+            # Additional context
+            'comments_count': task.comments.count()
+        }
+        
+        # Generate comprehensive summary
+        summary = summarize_task_details(task_data)
+        
+        if not summary:
+            return JsonResponse({'error': 'Failed to generate task summary'}, status=500)
+            
+        return JsonResponse({'summary': summary})
+    except Exception as e:
+        logger.error(f"Error in summarize_task_details_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
 

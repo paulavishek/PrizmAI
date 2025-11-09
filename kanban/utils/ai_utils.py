@@ -1711,3 +1711,219 @@ def assess_task_dependencies_and_risks(task_title: str, tasks_data: List[Dict]) 
         logger.error(f"Error assessing task dependencies: {str(e)}")
         return None
 
+
+def summarize_task_details(task_data: Dict) -> Optional[str]:
+    """
+    Generate a comprehensive AI-powered summary of a task including all its important aspects.
+    
+    This function analyzes:
+    - Basic task information (title, description, status, priority, progress)
+    - Risk management details (risk level, indicators, mitigation strategies)
+    - Stakeholder involvement and feedback
+    - Resource management (skill requirements, workload impact, collaboration needs)
+    - Task dependencies (parent, subtasks, blocking relationships)
+    - Complexity and effort estimates
+    - Labels and Lean Six Sigma classification
+    
+    Args:
+        task_data: A dictionary containing comprehensive task information
+        
+    Returns:
+        A detailed AI-generated summary highlighting key insights and concerns
+    """
+    try:
+        # Extract all task information
+        title = task_data.get('title', 'Untitled Task')
+        description = task_data.get('description', 'No description provided')
+        status = task_data.get('status', 'Unknown')
+        priority = task_data.get('priority', 'medium')
+        progress = task_data.get('progress', 0)
+        due_date = task_data.get('due_date', 'No due date')
+        assigned_to = task_data.get('assigned_to', 'Unassigned')
+        created_by = task_data.get('created_by', 'Unknown')
+        created_at = task_data.get('created_at', 'Unknown')
+        
+        # Risk management
+        risk_level = task_data.get('risk_level')
+        risk_score = task_data.get('risk_score')
+        risk_likelihood = task_data.get('risk_likelihood')
+        risk_impact = task_data.get('risk_impact')
+        risk_indicators = task_data.get('risk_indicators', [])
+        mitigation_suggestions = task_data.get('mitigation_suggestions', [])
+        
+        # Stakeholders
+        stakeholders = task_data.get('stakeholders', [])
+        
+        # Resource management
+        required_skills = task_data.get('required_skills', [])
+        skill_match_score = task_data.get('skill_match_score')
+        workload_impact = task_data.get('workload_impact')
+        collaboration_required = task_data.get('collaboration_required', False)
+        complexity_score = task_data.get('complexity_score')
+        
+        # Dependencies
+        parent_task = task_data.get('parent_task')
+        subtasks = task_data.get('subtasks', [])
+        dependencies = task_data.get('dependencies', [])  # Blocking tasks
+        dependent_tasks = task_data.get('dependent_tasks', [])  # Tasks blocked by this
+        related_tasks = task_data.get('related_tasks', [])
+        
+        # Labels
+        labels = task_data.get('labels', [])
+        lean_labels = [l for l in labels if l.get('category') == 'lean']
+        
+        # Comments count
+        comments_count = task_data.get('comments_count', 0)
+        
+        # Build comprehensive prompt
+        prompt = f"""
+        You are an expert project manager analyzing a task in detail. Provide a comprehensive, insightful summary 
+        that addresses ALL important aspects of this task. Focus on actionable insights, risks, and recommendations.
+
+        ## TASK OVERVIEW:
+        **Title:** {title}
+        **Description:** {description}
+        **Status:** {status} | **Priority:** {priority} | **Progress:** {progress}%
+        **Assigned To:** {assigned_to} | **Created By:** {created_by}
+        **Due Date:** {due_date}
+        **Created:** {created_at}
+
+        ## RISK MANAGEMENT:
+        """
+        
+        if risk_level:
+            prompt += f"""
+        **Risk Level:** {risk_level} (Score: {risk_score}/9, Likelihood: {risk_likelihood}/3, Impact: {risk_impact}/3)
+        **Risk Indicators to Monitor:**
+        {chr(10).join(['- ' + str(indicator) for indicator in risk_indicators]) if risk_indicators else '- None specified'}
+        
+        **Mitigation Strategies:**
+        """
+            if mitigation_suggestions:
+                for mit in mitigation_suggestions:
+                    if isinstance(mit, dict):
+                        prompt += f"\n- {mit.get('strategy', 'N/A')}: {mit.get('description', 'N/A')} (Timeline: {mit.get('timeline', 'N/A')})"
+                    else:
+                        prompt += f"\n- {mit}"
+        else:
+            prompt += "\n**Risk Assessment:** Not yet performed for this task."
+        
+        prompt += "\n\n## STAKEHOLDER INVOLVEMENT:\n"
+        if stakeholders:
+            for sh in stakeholders:
+                prompt += f"""
+        - **{sh.get('name', 'Unknown')}**: {sh.get('involvement_type', 'N/A')} | Status: {sh.get('engagement_status', 'N/A')}
+          Satisfaction: {sh.get('satisfaction_rating', 'N/A')}/5 | Feedback: {sh.get('feedback', 'None')}
+        """
+        else:
+            prompt += "- No stakeholders assigned to this task yet.\n"
+        
+        prompt += "\n## RESOURCE MANAGEMENT:\n"
+        if required_skills:
+            prompt += "**Required Skills:**\n"
+            for skill in required_skills:
+                if isinstance(skill, dict):
+                    prompt += f"- {skill.get('name', 'Unknown')}: {skill.get('level', 'Unknown')} level\n"
+                else:
+                    prompt += f"- {skill}\n"
+        
+        if skill_match_score:
+            prompt += f"**Skill Match Score:** {skill_match_score}% (assigned user's skill alignment)\n"
+        
+        if workload_impact:
+            prompt += f"**Workload Impact:** {workload_impact}\n"
+        
+        if collaboration_required:
+            prompt += "**Collaboration Required:** Yes - This task needs team coordination\n"
+        
+        if complexity_score:
+            complexity_label = "Very Complex" if complexity_score >= 8 else "Moderate" if complexity_score >= 5 else "Simple"
+            prompt += f"**Complexity Score:** {complexity_score}/10 ({complexity_label})\n"
+        
+        prompt += "\n## TASK DEPENDENCIES & HIERARCHY:\n"
+        
+        if parent_task:
+            prompt += f"**Parent Task:** {parent_task}\n"
+        
+        if subtasks:
+            prompt += f"**Subtasks ({len(subtasks)}):**\n"
+            for sub in subtasks:
+                prompt += f"- {sub}\n"
+        
+        if dependencies:
+            prompt += f"**Dependencies ({len(dependencies)}) - Tasks that must complete BEFORE this task can start:**\n"
+            for dep in dependencies:
+                prompt += f"- {dep}\n"
+        
+        if dependent_tasks:
+            prompt += f"**Blocking ({len(dependent_tasks)}) - Tasks that CANNOT start until this task completes:**\n"
+            for blocked in dependent_tasks:
+                prompt += f"- {blocked}\n"
+        
+        if related_tasks:
+            prompt += f"**Related Tasks ({len(related_tasks)}):** {', '.join(related_tasks)}\n"
+        
+        prompt += "\n## LEAN SIX SIGMA CLASSIFICATION:\n"
+        if lean_labels:
+            for label in lean_labels:
+                prompt += f"- **{label.get('name', 'Unknown')}**\n"
+        else:
+            prompt += "- Not yet classified for Lean Six Sigma analysis.\n"
+        
+        prompt += f"\n## ADDITIONAL CONTEXT:\n"
+        prompt += f"- **Comments/Discussions:** {comments_count} comments on this task\n"
+        if labels:
+            regular_labels = [l.get('name') for l in labels if l.get('category') != 'lean']
+            if regular_labels:
+                prompt += f"- **Labels:** {', '.join(regular_labels)}\n"
+        
+        prompt += """
+
+        ## REQUIRED ANALYSIS SECTIONS:
+
+        Provide a comprehensive summary addressing these critical areas:
+
+        1. **Executive Summary** (2-3 sentences)
+           - Overall task health and status
+           - Most critical concern or highlight
+
+        2. **Risk & Blockers Analysis**
+           - Current risk assessment and validity
+           - Dependency blockers and timeline impact
+           - Recommended immediate actions
+
+        3. **Resource & Capacity Assessment**
+           - Assignee skill alignment and capacity
+           - Collaboration needs and team requirements
+           - Resource allocation recommendations
+
+        4. **Stakeholder Management**
+           - Stakeholder engagement status
+           - Satisfaction levels and feedback themes
+           - Communication recommendations
+
+        5. **Timeline & Priority Evaluation**
+           - Due date feasibility given dependencies and complexity
+           - Priority alignment with risk and impact
+           - Schedule optimization suggestions
+
+        6. **Process Efficiency (Lean Perspective)**
+           - Value-add classification appropriateness
+           - Waste identification opportunities
+           - Process improvement suggestions
+
+        7. **Key Action Items** (prioritized list)
+           - Top 3-5 immediate actions needed
+           - Owner assignments (if clear from context)
+           - Urgency indicators
+
+        Keep the summary concise but comprehensive. Use clear headings and bullet points. 
+        Highlight risks in **bold** and urgent items with ⚠️ emoji.
+        Focus on actionable insights rather than restating data.
+        """
+        
+        return generate_ai_content(prompt)
+    except Exception as e:
+        logger.error(f"Error summarizing task details: {str(e)}")
+        return None
+

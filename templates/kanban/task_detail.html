@@ -6,6 +6,31 @@
 {% block content %}
 <div class="row">
     <div class="col-md-8">
+        <!-- AI Task Summary Card -->
+        <div class="card shadow mb-4 border-left-info">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%); border-bottom: 3px solid #0a58ca;">
+                <h6 class="m-0 font-weight-bold text-white d-flex align-items-center">
+                    <i class="fas fa-brain me-2" style="font-size: 1.2rem;"></i><span style="font-size: 1.1rem;">AI Task Analysis & Summary</span>
+                </h6>
+                <button id="generate-task-summary" class="btn btn-sm btn-light" data-task-id="{{ task.id }}">
+                    <span id="task-summary-spinner" class="spinner-border spinner-border-sm d-none me-1" role="status"></span>
+                    <i class="fas fa-brain me-1"></i> Generate Comprehensive Summary
+                </button>
+            </div>
+            <div class="card-body">
+                <div id="task-summary-container" class="d-none">
+                    <div class="task-summary-content">
+                        <div id="task-summary-text"></div>
+                    </div>
+                </div>
+                <div id="task-summary-placeholder" class="text-center py-4">
+                    <i class="fas fa-brain fa-3x text-info mb-3"></i>
+                    <p class="text-muted mb-0"><strong>Get AI-Powered Task Insights</strong></p>
+                    <small class="text-muted">Comprehensive analysis covering risk, stakeholders, resources, dependencies, and more</small>
+                </div>
+            </div>
+        </div>
+
         <!-- Task Detail Card -->
         <div class="card shadow mb-4">
             <div class="card-header py-3 d-flex justify-content-between align-items-center">
@@ -941,6 +966,77 @@
         if (confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
             document.getElementById('deleteTaskForm').submit();
         }
+    }
+    
+    // Handle comprehensive task summary generation
+    document.getElementById('generate-task-summary')?.addEventListener('click', function() {
+        const taskId = this.getAttribute('data-task-id');
+        const btn = this;
+        const spinner = document.getElementById('task-summary-spinner');
+        const container = document.getElementById('task-summary-container');
+        const placeholder = document.getElementById('task-summary-placeholder');
+        const textElement = document.getElementById('task-summary-text');
+        
+        // Show loading state
+        btn.disabled = true;
+        spinner.classList.remove('d-none');
+        
+        fetch(`/api/summarize-task-details/${taskId}/`, {
+            method: 'GET',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                throw new Error(data.error);
+            }
+            
+            // Hide placeholder and show content
+            placeholder.classList.add('d-none');
+            container.classList.remove('d-none');
+            
+            // Format the summary with proper markdown-style rendering
+            const formattedSummary = formatTaskSummary(data.summary);
+            textElement.innerHTML = formattedSummary;
+        })
+        .catch(error => {
+            console.error('Error generating task summary:', error);
+            textElement.innerHTML = '<div class="alert alert-danger">Failed to generate AI summary. Please try again.</div>';
+            placeholder.classList.add('d-none');
+            container.classList.remove('d-none');
+        })
+        .finally(() => {
+            // Hide loading state
+            btn.disabled = false;
+            spinner.classList.add('d-none');
+        });
+    });
+    
+    // Format task summary with proper styling
+    function formatTaskSummary(text) {
+        if (!text) return '';
+        
+        // Convert markdown-style headings to HTML
+        let formatted = text
+            .replace(/## (.*?)$/gm, '<h5 class="text-primary mt-3 mb-2"><strong>$1</strong></h5>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+            .replace(/^- (.*?)$/gm, '<li class="mb-1">$1</li>')
+            .replace(/^(\d+)\. (.*?)$/gm, '<li class="mb-1">$2</li>')
+            .replace(/⚠️/g, '<span class="text-danger">⚠️</span>');
+        
+        // Wrap consecutive list items in ul/ol tags
+        formatted = formatted.replace(/(<li class="mb-1">.*?<\/li>\n?)+/gs, function(match) {
+            return '<ul class="ps-3 mb-2">' + match + '</ul>';
+        });
+        
+        // Add line breaks for paragraphs
+        formatted = formatted.replace(/\n\n/g, '<br><br>');
+        
+        return '<div class="ai-summary-formatted">' + formatted + '</div>';
     }
 </script>
 
