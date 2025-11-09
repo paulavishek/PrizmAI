@@ -321,8 +321,8 @@
                     <i class="fas fa-eraser"></i> Clear
                 </button>
                 
-                <button class="btn btn-sm btn-outline-secondary" title="Refresh data">
-                    <i class="fas fa-sync"></i>
+                <button class="btn btn-sm btn-outline-secondary" id="refresh-btn" title="Refresh knowledge base and clear cache">
+                    <i class="fas fa-sync"></i> Refresh
                 </button>
             </div>
         </div>
@@ -541,6 +541,47 @@
         })
         .catch(err => {
             alert('Error clearing chat: ' + err.message);
+        });
+    });
+    
+    // Refresh button - refreshes knowledge base and clears cache
+    document.getElementById('refresh-btn')?.addEventListener('click', function() {
+        const btn = this;
+        const originalHTML = btn.innerHTML;
+        
+        // Show loading state
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Refreshing...';
+        
+        fetch(`{% url "ai_assistant:refresh_kb" %}?board_id=${document.getElementById('board-selector').value || ''}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Show success feedback
+                btn.innerHTML = '<i class="fas fa-check me-2"></i> Refreshed!';
+                setTimeout(() => {
+                    btn.innerHTML = originalHTML;
+                    btn.disabled = false;
+                }, 2000);
+                
+                // Reload messages to show updated content
+                loadMessages();
+            } else {
+                alert('Error refreshing knowledge base: ' + (data.error || 'Unknown error'));
+                btn.innerHTML = originalHTML;
+                btn.disabled = false;
+            }
+        })
+        .catch(err => {
+            alert('Error refreshing knowledge base: ' + err.message);
+            btn.innerHTML = originalHTML;
+            btn.disabled = false;
         });
     });
     
