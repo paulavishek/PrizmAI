@@ -94,6 +94,11 @@ class WikiPage(models.Model):
             breadcrumb.insert(0, page)
             page = page.parent_page
         return breadcrumb
+    
+    def get_absolute_url(self):
+        """Get absolute URL for the wiki page"""
+        from django.urls import reverse
+        return reverse('wiki:page_detail', kwargs={'slug': self.slug})
 
 
 class WikiAttachment(models.Model):

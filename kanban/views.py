@@ -360,6 +360,10 @@ def board_detail(request, board_id):
     except UserProfile.DoesNotExist:
         organization_members = []
     
+    # Get linked wiki pages for this board
+    from wiki.models import WikiLink
+    wiki_links = WikiLink.objects.filter(board=board).select_related('wiki_page')
+    
     return render(request, 'kanban/board_detail.html', {
         'board': board,
         'columns': columns,
@@ -369,6 +373,7 @@ def board_detail(request, board_id):
         'now': timezone.now(),  # Used for due date comparison
         'search_form': search_form,  # Add the search form to the context
         'any_filter_active': any_filter_active,  # Add the flag for active filters
+        'wiki_links': wiki_links,  # Add linked wiki pages
     })
 
 @login_required
@@ -427,6 +432,10 @@ def task_detail(request, task_id):
     # Get stakeholders involved in this task
     stakeholders = StakeholderTaskInvolvement.objects.filter(task=task)
     
+    # Get linked wiki pages for this task
+    from wiki.models import WikiLink
+    wiki_links = WikiLink.objects.filter(task=task).select_related('wiki_page')
+    
     return render(request, 'kanban/task_detail.html', {
         'task': task,
         'board': board,
@@ -435,6 +444,7 @@ def task_detail(request, task_id):
         'comments': comments,
         'activities': activities,
         'stakeholders': stakeholders,
+        'wiki_links': wiki_links,
     })
 
 @login_required
