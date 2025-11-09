@@ -1601,6 +1601,48 @@ class TaskFlowChatbotService:
         
         return None, "No significant bottlenecks identified"
     
+    def _find_similar_items(self, query_text, items, get_name_func, threshold=0.6):
+        """
+        Find items with similar names using fuzzy matching
+        
+        Args:
+            query_text: Text to match against
+            items: List of items to search
+            get_name_func: Function to extract name from item
+            threshold: Minimum similarity score (0-1)
+            
+        Returns:
+            List of (item, similarity_score) tuples, sorted by similarity
+        """
+        from difflib import SequenceMatcher
+        
+        similar = []
+        query_lower = query_text.lower()
+        
+        for item in items:
+            item_name = get_name_func(item).lower()
+            similarity = SequenceMatcher(None, query_lower, item_name).ratio()
+            
+            if similarity >= threshold:
+                similar.append((item, similarity))
+        
+        return sorted(similar, key=lambda x: x[1], reverse=True)
+    
+    def _is_temporal_meeting_query(self, prompt):
+        """Detect queries about recent/last/latest meetings"""
+        temporal_keywords = [
+            'last meeting', 'recent meeting', 'latest meeting',
+            'most recent', 'yesterday', 'today', 'this week',
+            'last week', 'previous meeting', 'latest discussion'
+        ]
+        prompt_lower = prompt.lower()
+        return any(kw in prompt_lower for kw in temporal_keywords)
+    
+    def _is_template_query(self, prompt):
+        """Detect if query contains placeholder brackets like [topic] or [something]"""
+        import re
+        return bool(re.search(r'\[[\w\s\-]+\]', prompt))
+    
     def _is_wiki_query(self, prompt):
         """Detect if query is about wiki/documentation"""
         wiki_keywords = [
@@ -1633,6 +1675,7 @@ class TaskFlowChatbotService:
             from wiki.models import WikiPage, WikiCategory
             
             if not self.user:
+                logger.warning("Wiki query failed: No user context")
                 return None
             
             # Get user's organization
@@ -1640,9 +1683,51 @@ class TaskFlowChatbotService:
             if hasattr(self.user, 'profile') and self.user.profile.organization:
                 org = self.user.profile.organization
             else:
+                logger.warning(f"Wiki query failed: User {self.user.username} has no organization")
                 return None
             
             context = "**📚 Wiki & Documentation Context:**\n\n"
+            
+            logger.info(f"Wiki query by {self.user.username} in org '{org.name}'")
+            
+            # Check if this is a template query like "Find documentation about [topic]"
+            if self._is_template_query(prompt):
+                logger.info("Template/placeholder query detected - showing all documentation topics")
+                
+                # Show available documentation organized by category
+                categories = WikiCategory.objects.filter(organization=org)
+                
+                if categories.exists():
+                    context += "**USER ASKED ABOUT DOCUMENTATION USING A PLACEHOLDER [topic].**\n"
+                    context += "**DO NOT ask them to clarify. Instead, show this list of all available documentation:**\n\n"
+                    context += "**Available Documentation Topics:**\n\n"
+                    
+                    for category in categories:
+                        pages = WikiPage.objects.filter(
+                            category=category,
+                            organization=org,
+                            is_published=True
+                        )[:10]
+                        
+                        if pages.exists():
+                            context += f"**{category.name}** ({pages.count()} pages):\n"
+                            for page in pages:
+                                context += f"  • {page.title}"
+                                if page.tags:
+                                    context += f" [Tags: {', '.join(page.tags[:3])}]"
+                                context += "\n"
+                            context += "\n"
+                    
+                    context += "💡 **Tell the user they can ask about any specific topic above, like:**\n"
+                    context += '  - "Show me the API documentation"\n'
+                    context += '  - "What are our coding standards?"\n'
+                    context += '  - "Find the deployment guide"\n'
+                    context += "\n**IMPORTANT: Present this as the answer. Do not ask them to clarify what topic they want.**\n"
+                    
+                    return context
+                else:
+                    context += "No wiki pages found. You can create documentation from the Knowledge Hub.\n"
+                    return context
             
             # Search wiki pages by title and content
             prompt_words = prompt.lower().split()
@@ -1650,6 +1735,9 @@ class TaskFlowChatbotService:
                 organization=org,
                 is_published=True
             ).select_related('category', 'created_by')
+            
+            logger.info(f"Total wiki pages in org: {wiki_pages.count()}")
+            logger.info(f"Search words (>3 chars): {[w for w in prompt_words if len(w) > 3]}")
             
             # Search in title, content, and tags
             matching_pages = []
@@ -1670,10 +1758,13 @@ class TaskFlowChatbotService:
                 if relevance_score > 0:
                     matching_pages.append((page, relevance_score))
             
+            logger.info(f"Found {len(matching_pages)} pages with relevance > 0")
+            
             # Sort by relevance
             matching_pages.sort(key=lambda x: x[1], reverse=True)
             
             if matching_pages:
+                logger.info(f"Returning top {min(5, len(matching_pages))} wiki pages")
                 context += f"Found {len(matching_pages)} relevant wiki page(s):\n\n"
                 
                 # Show top 5 most relevant pages
@@ -1718,6 +1809,7 @@ class TaskFlowChatbotService:
             from wiki.models import MeetingNotes
             
             if not self.user:
+                logger.warning("Meeting query failed: No user context")
                 return None
             
             # Get user's organization
@@ -1725,22 +1817,79 @@ class TaskFlowChatbotService:
             if hasattr(self.user, 'profile') and self.user.profile.organization:
                 org = self.user.profile.organization
             else:
+                logger.warning(f"Meeting query failed: User {self.user.username} has no organization")
                 return None
             
             context = "**🎤 Meeting & Discussion Context:**\n\n"
             
-            # Get meetings user attended or created
+            # Get all organization meetings (knowledge should be shared across org)
+            # More permissive than filtering by user - shows all org meetings
             meetings = MeetingNotes.objects.filter(
                 organization=org
-            ).filter(
-                Q(created_by=self.user) | Q(attendees=self.user)
             ).select_related('created_by', 'related_board').prefetch_related('attendees').order_by('-date')
+            
+            logger.info(f"Meeting query by {self.user.username} in org '{org.name}'")
+            logger.info(f"Total meetings available: {meetings.count()}")
             
             # If board is specified, prioritize board-related meetings
             if self.board:
                 meetings = meetings.filter(
                     Q(related_board=self.board) | Q(related_board__isnull=True)
                 )
+                logger.info(f"Filtered to board '{self.board.name}': {meetings.count()} meetings")
+            
+            # Check for temporal queries (last meeting, recent, etc.)
+            if self._is_temporal_meeting_query(prompt):
+                logger.info("Temporal meeting query detected")
+                latest = meetings.first()
+                if latest:
+                    context += "**Most Recent Meeting:**\n\n"
+                    context += f"**🎤 {latest.title}**\n"
+                    context += f"  • Type: {latest.get_meeting_type_display()}\n"
+                    context += f"  • Date: {latest.date.strftime('%Y-%m-%d %H:%M')}\n"
+                    
+                    attendee_names = [att.get_full_name() or att.username for att in latest.attendees.all()]
+                    if attendee_names:
+                        context += f"  • Attendees: {', '.join(attendee_names)}\n"
+                    
+                    if latest.related_board:
+                        context += f"  • Related Board: {latest.related_board.name}\n"
+                    
+                    if latest.duration_minutes:
+                        context += f"  • Duration: {latest.duration_minutes} minutes\n"
+                    
+                    # Include action items
+                    if latest.action_items:
+                        context += f"\n**Action Items ({len(latest.action_items)}):**\n"
+                        for item in latest.action_items:
+                            if isinstance(item, dict):
+                                task_desc = item.get('task', item.get('description', str(item)))
+                                context += f"  - {task_desc}"
+                                if item.get('assigned_to'):
+                                    context += f" (Assigned: {item['assigned_to']})"
+                                if item.get('due_date'):
+                                    context += f" (Due: {item['due_date']})"
+                                context += "\n"
+                            else:
+                                context += f"  - {item}\n"
+                    
+                    # Include decisions
+                    if latest.decisions:
+                        context += f"\n**Key Decisions ({len(latest.decisions)}):**\n"
+                        for decision in latest.decisions:
+                            if isinstance(decision, dict):
+                                context += f"  - {decision.get('decision', str(decision))}\n"
+                            else:
+                                context += f"  - {decision}\n"
+                    
+                    # Include notes excerpt
+                    if latest.content:
+                        content_preview = latest.content[:400]
+                        if len(latest.content) > 400:
+                            content_preview += "..."
+                        context += f"\n**Notes:**\n{content_preview}\n"
+                    
+                    return context
             
             # Search for relevant meetings
             prompt_words = prompt.lower().split()
@@ -1814,13 +1963,68 @@ class TaskFlowChatbotService:
                 
                 return context
             else:
-                # No matches - show recent meetings
+                # No matches found - provide helpful fallback
+                logger.info(f"No meetings matched query: {prompt[:50]}")
+                
+                # Try fuzzy matching to find similar meeting names
+                all_org_meetings = MeetingNotes.objects.filter(organization=org)[:30]
+                similar_meetings = self._find_similar_items(
+                    prompt, 
+                    all_org_meetings, 
+                    lambda m: m.title,
+                    threshold=0.5  # Lower threshold for meeting names
+                )
+                
+                if similar_meetings:
+                    logger.info(f"Found {len(similar_meetings)} similar meetings via fuzzy matching")
+                    context += "**No exact match found, but did you mean one of these meetings?**\n\n"
+                    
+                    for meeting, similarity in similar_meetings[:5]:
+                        context += f"• **{meeting.title}** ({similarity:.0%} match)\n"
+                        context += f"  - Date: {meeting.date.strftime('%Y-%m-%d %H:%M')}\n"
+                        context += f"  - Type: {meeting.get_meeting_type_display()}\n"
+                        
+                        if meeting.action_items:
+                            context += f"  - {len(meeting.action_items)} action items\n"
+                        if meeting.decisions:
+                            context += f"  - {len(meeting.decisions)} decisions\n"
+                        context += "\n"
+                    
+                    context += "Please ask about a specific meeting from the list above.\n"
+                    return context
+                
+                # Check if ANY meetings exist in the organization
+                all_meetings_count = MeetingNotes.objects.filter(organization=org).count()
+                
+                if all_meetings_count == 0:
+                    context += "**No meetings found in the knowledge base.**\n\n"
+                    context += "Meeting notes can be created from the Knowledge Hub. "
+                    context += "Once meetings are documented, I'll be able to help you find decisions, action items, and discussions.\n"
+                    return context
+                
+                # Show recent meetings as suggestions
                 recent_meetings = meetings[:5]
                 if recent_meetings.exists():
-                    context += "No direct matches found. Recent meetings:\n\n"
+                    context += f"**No meetings directly matching your query found.**\n\n"
+                    context += f"Here are the {recent_meetings.count()} most recent meetings that may be relevant:\n\n"
                     for meeting in recent_meetings:
-                        context += f"• {meeting.title} ({meeting.date.strftime('%Y-%m-%d')}) - {meeting.get_meeting_type_display()}\n"
-                    context += "\n"
+                        context += f"• **{meeting.title}**\n"
+                        context += f"  - Date: {meeting.date.strftime('%Y-%m-%d %H:%M')}\n"
+                        context += f"  - Type: {meeting.get_meeting_type_display()}\n"
+                        if meeting.related_board:
+                            context += f"  - Board: {meeting.related_board.name}\n"
+                        
+                        # Show action items count if available
+                        if meeting.action_items:
+                            context += f"  - Action Items: {len(meeting.action_items)}\n"
+                        if meeting.decisions:
+                            context += f"  - Decisions: {len(meeting.decisions)}\n"
+                        context += "\n"
+                    
+                    context += "Please specify which meeting you're interested in, or try a different search term.\n"
+                    return context
+                else:
+                    context += "**No meetings found** matching your criteria. Please check the meeting name or try a broader search.\n"
                     return context
             
             return None
