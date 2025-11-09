@@ -875,6 +875,40 @@ def add_board_member(request, board_id):
     return redirect('board_detail', board_id=board.id)
 
 @login_required
+def remove_board_member(request, board_id, user_id):
+    board = get_object_or_404(Board, id=board_id)
+    user_to_remove = get_object_or_404(User, id=user_id)
+    
+    # Check if user has permission to remove members
+    # Only board creator, org admins, and org creator can remove members
+    user_profile = getattr(request.user, 'profile', None)
+    has_permission = (
+        board.created_by == request.user or  # Board creator
+        (user_profile and user_profile.is_admin) or  # Organization admin
+        (user_profile and request.user == board.organization.created_by)  # Organization creator
+    )
+    
+    if not has_permission:
+        messages.error(request, "You don't have permission to remove members from this board.")
+        return redirect('board_detail', board_id=board.id)
+    
+    # Don't allow removing the board creator
+    if user_to_remove == board.created_by:
+        messages.error(request, "You cannot remove the board creator.")
+        return redirect('board_detail', board_id=board.id)
+    
+    # Check if user is actually a member of the board
+    if user_to_remove not in board.members.all():
+        messages.error(request, "This user is not a member of the board.")
+        return redirect('board_detail', board_id=board.id)
+    
+    # Remove the member
+    board.members.remove(user_to_remove)
+    messages.success(request, f'{user_to_remove.username} has been removed from the board.')
+    
+    return redirect('board_detail', board_id=board.id)
+
+@login_required
 def delete_board(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     

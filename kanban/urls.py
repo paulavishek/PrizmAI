@@ -23,6 +23,7 @@ urlpatterns = [
     path('boards/<int:board_id>/create-column/', views.create_column, name='create_column'),
     path('boards/<int:board_id>/create-label/', views.create_label, name='create_label'),
     path('boards/<int:board_id>/add-member/', views.add_board_member, name='add_board_member'),
+    path('boards/<int:board_id>/members/<int:user_id>/remove/', views.remove_board_member, name='remove_board_member'),
     path('boards/<int:board_id>/delete/', views.delete_board, name='delete_board'),
     path('boards/<int:board_id>/join/', views.join_board, name='join_board'),
     path('boards/<int:board_id>/export/', views.export_board, name='export_board'),
