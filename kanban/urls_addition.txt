@@ -1,6 +1,0 @@
-# Add these lines to kanban/urls.py after line 76 (after get_board_dependency_graph_api line)
-
-    # Task Dependency Management Views
-    path('task/<int:task_id>/dependency-tree/', views.view_dependency_tree, name='view_dependency_tree'),
-    path('board/<int:board_id>/dependency-graph-view/', views.board_dependency_graph, name='board_dependency_graph'),
-]
