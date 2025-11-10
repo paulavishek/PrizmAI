@@ -603,6 +603,38 @@ def upload_chat_room_file(request, room_id):
                         text=f'{request.user.username} uploaded {file_obj.filename} in {chat_room.name}'
                     )
             
+            # Broadcast file upload to all room members via WebSocket
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            
+            channel_layer = get_channel_layer()
+            room_group_name = f'chat_room_{chat_room.id}'
+            
+            if channel_layer:
+                async_to_sync(channel_layer.group_send)(
+                    room_group_name,
+                    {
+                        'type': 'file_uploaded',
+                        'file_id': file_obj.id,
+                        'filename': file_obj.filename,
+                        'file_type': file_obj.file_type,
+                        'file_size': file_obj.file_size,
+                        'uploaded_by': request.user.username,
+                        'uploaded_at': file_obj.uploaded_at.isoformat(),
+                        'description': file_obj.description or '',
+                        'uploader_id': request.user.id
+                    }
+                )
+                
+                # Also trigger notification count update
+                async_to_sync(channel_layer.group_send)(
+                    room_group_name,
+                    {
+                        'type': 'notification_count_update',
+                        'trigger': 'file_upload'
+                    }
+                )
+            
             django_messages.success(request, f'File "{file_obj.filename}" uploaded successfully!')
             
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':

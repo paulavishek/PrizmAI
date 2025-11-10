@@ -119,6 +119,15 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
         if message_obj['mentioned_users']:
             await self.notify_mentioned_users_async(message_obj)
         
+        # Broadcast notification count update to all members (new message creates notifications)
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'notification_count_update',
+                'trigger': 'new_message'
+            }
+        )
+        
         # Remove typing status after sending
         await self.remove_typing_status()
     
@@ -171,6 +180,15 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
                     'read_count': result['read_count'],
                     'total_members': result['total_members'],
                     'all_read': result['all_read']
+                }
+            )
+            
+            # Broadcast notification count update to all members
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'notification_count_update',
+                    'trigger': 'message_read'
                 }
             )
     
@@ -239,6 +257,27 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
             'read_count': event['read_count'],
             'total_members': event['total_members'],
             'all_read': event['all_read']
+        }))
+    
+    async def notification_count_update(self, event):
+        """Send notification to update the unread message count badge"""
+        await self.send(text_data=json.dumps({
+            'type': 'notification_count_update',
+            'trigger': event.get('trigger', 'unknown')
+        }))
+    
+    async def file_uploaded(self, event):
+        """Send file upload notification to all room members"""
+        await self.send(text_data=json.dumps({
+            'type': 'file_uploaded',
+            'file_id': event['file_id'],
+            'filename': event['filename'],
+            'file_type': event['file_type'],
+            'file_size': event['file_size'],
+            'uploaded_by': event['uploaded_by'],
+            'uploaded_at': event['uploaded_at'],
+            'description': event.get('description', ''),
+            'uploader_id': event['uploader_id']
         }))
     
     async def notify_mentioned_users_async(self, message_obj):

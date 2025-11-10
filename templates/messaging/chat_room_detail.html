@@ -277,6 +277,18 @@
                 }
             }
         }
+        else if (data.type === 'notification_count_update') {
+            // Update notification badge immediately
+            console.log('Notification count update triggered by:', data.trigger);
+            if (typeof updateUnreadMessageCount === 'function') {
+                updateUnreadMessageCount();
+            }
+        }
+        else if (data.type === 'file_uploaded') {
+            // Add new file to the files list
+            console.log('File uploaded:', data.filename);
+            addFileToList(data);
+        }
         else if (data.type === 'user_typing') {
             console.log(data.username + ' is typing...');
         }
@@ -327,6 +339,92 @@
             chatSocket.close();
         }
     });
+    
+    // Function to add file to the files list dynamically
+    function addFileToList(fileData) {
+        const filesList = document.getElementById('filesList');
+        const noFilesMsg = filesList.querySelector('p.text-muted');
+        
+        // Remove "no files" message if it exists
+        if (noFilesMsg) {
+            noFilesMsg.remove();
+        }
+        
+        // Create or get the file list
+        let ul = filesList.querySelector('ul');
+        if (!ul) {
+            ul = document.createElement('ul');
+            ul.className = 'list-unstyled';
+            filesList.appendChild(ul);
+        }
+        
+        // Create file item
+        const li = document.createElement('li');
+        li.className = 'mb-2 p-2 bg-light rounded';
+        
+        // Determine file icon based on file type
+        let icon = 'fa-file';
+        if (fileData.file_type) {
+            if (fileData.file_type.startsWith('image/')) {
+                icon = 'fa-file-image';
+            } else if (fileData.file_type.includes('pdf')) {
+                icon = 'fa-file-pdf';
+            } else if (fileData.file_type.includes('word') || fileData.file_type.includes('document')) {
+                icon = 'fa-file-word';
+            } else if (fileData.file_type.includes('excel') || fileData.file_type.includes('spreadsheet')) {
+                icon = 'fa-file-excel';
+            } else if (fileData.file_type.includes('powerpoint') || fileData.file_type.includes('presentation')) {
+                icon = 'fa-file-powerpoint';
+            }
+        }
+        
+        // Format file size
+        let fileSize = fileData.file_size;
+        let fileSizeStr = fileSize + ' B';
+        if (fileSize >= 1024 * 1024) {
+            fileSizeStr = (fileSize / (1024 * 1024)).toFixed(2) + ' MB';
+        } else if (fileSize >= 1024) {
+            fileSizeStr = (fileSize / 1024).toFixed(2) + ' KB';
+        }
+        
+        // Check if current user can delete (uploader or room creator)
+        const canDelete = fileData.uploader_id === currentUserId || {{ user.id }} === {{ chat_room.created_by.id }};
+        
+        li.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <div>
+                        <i class="fas ${icon} me-1"></i>
+                        <a href="/messaging/file/${fileData.file_id}/download/" target="_blank" class="text-decoration-none">
+                            ${fileData.filename}
+                        </a>
+                        <span class="badge bg-success ms-2">NEW</span>
+                    </div>
+                    <small class="text-muted d-block">
+                        By ${fileData.uploaded_by} • ${fileSizeStr}
+                    </small>
+                    ${fileData.description ? '<small class="text-muted">' + fileData.description + '</small>' : ''}
+                </div>
+                ${canDelete ? `<button type="button" class="btn btn-sm btn-link text-danger" onclick="deleteFile(${fileData.file_id}, '${fileData.filename}')">
+                    <i class="fas fa-trash"></i>
+                </button>` : ''}
+            </div>
+        `;
+        
+        ul.insertBefore(li, ul.firstChild);
+        
+        // Remove NEW badge after 5 seconds
+        setTimeout(() => {
+            const badge = li.querySelector('.badge.bg-success');
+            if (badge) {
+                badge.remove();
+            }
+        }, 5000);
+        
+        // Show notification
+        console.log('New file added:', fileData.filename);
+    }
+
 </script>
 {% endblock %}
 
@@ -747,10 +845,11 @@
                 // Auto-hide after 3 seconds
                 setTimeout(() => {
                     toggleFileUpload();
+                    successAlert.remove();
                 }, 2000);
                 
-                // Refresh files list
-                setTimeout(() => location.reload(), 3000);
+                // Don't reload - WebSocket will update the file list
+                // setTimeout(() => location.reload(), 3000);
             } else {
                 alert('Upload failed: ' + JSON.stringify(data.errors));
                 uploadBtn.disabled = false;
