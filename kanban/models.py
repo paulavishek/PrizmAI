@@ -553,3 +553,8 @@ class TaskFile(models.Model):
         """Validate file type"""
         ext = filename.split('.')[-1].lower()
         return ext in TaskFile.ALLOWED_FILE_TYPES
+
+
+# Import security and permission models to register them with Django
+from .audit_models import SystemAuditLog, SecurityEvent, DataAccessLog
+from .permission_models import Role, BoardMembership, PermissionOverride, ColumnPermission

@@ -217,6 +217,9 @@ def board_list(request):
 
 @login_required
 def create_board(request):
+    from kanban.audit_utils import log_model_change
+    from kanban.permission_utils import assign_default_role_to_user
+    
     try:
         profile = request.user.profile
         organization = profile.organization
@@ -229,6 +232,27 @@ def create_board(request):
                 board.created_by = request.user
                 board.save()
                 board.members.add(request.user)
+                
+                # Assign creator as Admin in RBAC system
+                try:
+                    from kanban.permission_models import Role, BoardMembership
+                    admin_role = Role.objects.filter(
+                        organization=organization,
+                        name='Admin'
+                    ).first()
+                    if admin_role:
+                        BoardMembership.objects.create(
+                            board=board,
+                            user=request.user,
+                            role=admin_role,
+                            added_by=request.user
+                        )
+                except Exception as e:
+                    # Continue even if RBAC setup fails
+                    pass
+                
+                # Log board creation
+                log_model_change('board.created', board, request.user, request)
                   # Check if there are recommended columns to create
                 recommended_columns_json = request.POST.get('recommended_columns')
                 if recommended_columns_json:
@@ -269,11 +293,20 @@ def create_board(request):
 
 @login_required
 def board_detail(request, board_id):
+    from kanban.permission_utils import user_has_board_permission
+    from kanban.audit_utils import log_audit
+    
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board.")
+    # Check permission using RBAC
+    if not user_has_board_permission(request.user, board, 'board.view'):
+        return HttpResponseForbidden("You don't have permission to view this board.")
+    
+    # Log board view
+    log_audit('board.viewed', user=request.user, request=request,
+              object_type='board', object_id=board.id, object_repr=board.name,
+              board_id=board.id)
+    
     columns = Column.objects.filter(board=board).order_by('position')
     
     # Create default columns if none exist (only for boards created without AI recommendations)
@@ -378,17 +411,27 @@ def board_detail(request, board_id):
 
 @login_required
 def task_detail(request, task_id):
+    from kanban.permission_utils import user_has_task_permission
+    from kanban.audit_utils import log_model_change, AuditLogContext
+    
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
-    # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this task.")
+    # Check permission using RBAC
+    if not user_has_task_permission(request.user, task, 'task.view'):
+        return HttpResponseForbidden("You don't have permission to view this task.")
     
     if request.method == 'POST':
+        # Check edit permission
+        if not user_has_task_permission(request.user, task, 'task.edit'):
+            return HttpResponseForbidden("You don't have permission to edit this task.")
+        
         form = TaskForm(request.POST, instance=task, board=board)
         if form.is_valid():
-            task = form.save()
+            # Track changes automatically
+            with AuditLogContext(task, request.user, request, 'task.updated'):
+                task = form.save()
+            
             # Record activity
             TaskActivity.objects.create(
                 task=task,
@@ -403,12 +446,19 @@ def task_detail(request, task_id):
     
     # Handle comments
     if request.method == 'POST' and 'content' in request.POST:
+        # Check comment permission
+        if not user_has_task_permission(request.user, task, 'comment.create'):
+            return HttpResponseForbidden("You don't have permission to add comments.")
+        
         comment_form = CommentForm(request.POST)
         if comment_form.is_valid():
             comment = comment_form.save(commit=False)
             comment.task = task
             comment.user = request.user
             comment.save()
+            
+            # Log comment creation
+            log_model_change('comment.created', comment, request.user, request)
             
             # Record activity
             TaskActivity.objects.create(
@@ -449,11 +499,14 @@ def task_detail(request, task_id):
 
 @login_required
 def create_task(request, board_id, column_id=None):
+    from kanban.permission_utils import user_has_board_permission
+    from kanban.audit_utils import log_model_change
+    
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board.")
+    # Check permission using RBAC
+    if not user_has_board_permission(request.user, board, 'task.create'):
+        return HttpResponseForbidden("You don't have permission to create tasks on this board.")
     if column_id:
         column = get_object_or_404(Column, id=column_id, board=board)
     else:
@@ -493,6 +546,9 @@ def create_task(request, board_id, column_id=None):
                 description=f"Created task '{task.title}'"
             )
             
+            # Log to audit trail
+            log_model_change('task.created', task, request.user, request)
+            
             messages.success(request, 'Task created successfully!')
             return redirect('board_detail', board_id=board.id)
     else:
@@ -506,15 +562,26 @@ def create_task(request, board_id, column_id=None):
 
 @login_required
 def delete_task(request, task_id):
+    from kanban.permission_utils import user_has_task_permission
+    from kanban.audit_utils import log_audit
+    
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
-    # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this task.")
+    # Check permission using RBAC
+    if not user_has_task_permission(request.user, task, 'task.delete'):
+        return HttpResponseForbidden("You don't have permission to delete this task.")
     
     if request.method == 'POST':
         board_id = task.column.board.id
+        task_title = task.title
+        task_id = task.id
+        
+        # Log before deletion
+        log_audit('task.deleted', user=request.user, request=request,
+                  object_type='task', object_id=task_id, object_repr=task_title,
+                  board_id=board_id)
+        
         task.delete()
         messages.success(request, 'Task deleted successfully!')
         return redirect('board_detail', board_id=board_id)
@@ -523,11 +590,14 @@ def delete_task(request, task_id):
 
 @login_required
 def create_column(request, board_id):
+    from kanban.permission_utils import user_has_board_permission
+    from kanban.audit_utils import log_model_change
+    
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board.")
+    # Check permission using RBAC
+    if not user_has_board_permission(request.user, board, 'column.create'):
+        return HttpResponseForbidden("You don't have permission to create columns on this board.")
     
     if request.method == 'POST':
         form = ColumnForm(request.POST)
@@ -538,6 +608,10 @@ def create_column(request, board_id):
             last_position = Column.objects.filter(board=board).order_by('-position').first()
             column.position = (last_position.position + 1) if last_position else 0
             column.save()
+            
+            # Log to audit trail
+            log_model_change('column.created', column, request.user, request)
+            
             messages.success(request, 'Column created successfully!')
             return redirect('board_detail', board_id=board.id)
     else:
@@ -774,11 +848,13 @@ def board_analytics(request, board_id):
 @login_required
 def gantt_chart(request, board_id):
     """Display Gantt chart view for a board"""
+    from kanban.permission_utils import user_has_board_permission
+    
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board.")
+    # Check permission using RBAC
+    if not user_has_board_permission(request.user, board, 'board.view'):
+        return HttpResponseForbidden("You don't have permission to view this board.")
     
     # Get all tasks for this board with dates, ordered by start_date for proper display
     tasks = Task.objects.filter(
@@ -796,6 +872,9 @@ def gantt_chart(request, board_id):
 
 @login_required
 def move_task(request):
+    from kanban.permission_utils import user_has_task_permission
+    from kanban.audit_utils import log_audit
+    
     if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         data = json.loads(request.body)
         task_id = data.get('taskId')
@@ -805,10 +884,9 @@ def move_task(request):
         task = get_object_or_404(Task, id=task_id)
         new_column = get_object_or_404(Column, id=column_id)
         
-        # Check if user has access to this board
-        board = new_column.board
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'error': "You don't have access to this board."}, status=403)
+        # Check permission using RBAC
+        if not user_has_task_permission(request.user, task, 'task.move'):
+            return JsonResponse({'error': "You don't have permission to move this task."}, status=403)
         
         old_column = task.column
         task.column = new_column
@@ -827,6 +905,12 @@ def move_task(request):
             activity_type='moved',
             description=f"Moved task '{task.title}' from '{old_column.name}' to '{new_column.name}'"
         )
+        
+        # Log to audit trail
+        log_audit('task.moved', user=request.user, request=request,
+                  object_type='task', object_id=task.id, object_repr=task.title,
+                  board_id=new_column.board.id,
+                  changes={'column': {'old': old_column.name, 'new': new_column.name}})
         
         # If progress was set to 100% automatically, record that too
         if new_column.name.lower().find('done') >= 0 and task.progress == 100:
