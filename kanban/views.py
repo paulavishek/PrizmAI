@@ -1866,9 +1866,7 @@ def upload_task_file(request, task_id):
             file_obj = form.save(commit=False)
             file_obj.task = task
             file_obj.uploaded_by = request.user
-            file_obj.filename = request.FILES['file'].name
-            file_obj.file_size = request.FILES['file'].size
-            file_obj.file_type = request.FILES['file'].name.split('.')[-1].lower()
+            # Filename, size, and type are now set by form.save() with proper sanitization
             file_obj.save()
             
             messages.success(request, f'File "{file_obj.filename}" uploaded successfully!')

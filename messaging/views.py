@@ -565,9 +565,7 @@ def upload_chat_room_file(request, room_id):
             file_obj = form.save(commit=False)
             file_obj.chat_room = chat_room
             file_obj.uploaded_by = request.user
-            file_obj.filename = request.FILES['file'].name
-            file_obj.file_size = request.FILES['file'].size
-            file_obj.file_type = request.FILES['file'].name.split('.')[-1].lower()
+            # Filename, size, and type are now set by form.save() with proper sanitization
             file_obj.save()
             
             # Create a system message to notify about file upload

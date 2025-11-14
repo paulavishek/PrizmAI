@@ -78,8 +78,58 @@ class WikiPage(models.Model):
         super().save(*args, **kwargs)
     
     def get_html_content(self):
-        """Convert markdown content to HTML"""
-        return mark_safe(markdown.markdown(self.content))
+        """Convert markdown content to HTML and sanitize to prevent XSS"""
+        import bleach
+        
+        # Convert markdown to HTML
+        html = markdown.markdown(
+            self.content,
+            extensions=[
+                'markdown.extensions.fenced_code',
+                'markdown.extensions.tables',
+                'markdown.extensions.nl2br',
+            ]
+        )
+        
+        # Define allowed HTML tags and attributes (security whitelist)
+        allowed_tags = [
+            'p', 'br', 'strong', 'em', 'u', 's', 'del', 'ins',
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'ul', 'ol', 'li',
+            'a', 'code', 'pre', 'blockquote',
+            'table', 'thead', 'tbody', 'tr', 'th', 'td',
+            'hr', 'img', 'div', 'span'
+        ]
+        
+        allowed_attributes = {
+            'a': ['href', 'title', 'rel'],
+            'img': ['src', 'alt', 'title', 'width', 'height'],
+            'code': ['class'],  # For syntax highlighting
+            'pre': ['class'],
+            'div': ['class'],
+            'span': ['class'],
+        }
+        
+        # Allowed protocols for links (prevent javascript: and data: URLs)
+        allowed_protocols = ['http', 'https', 'mailto']
+        
+        # Sanitize HTML to prevent XSS attacks
+        clean_html = bleach.clean(
+            html,
+            tags=allowed_tags,
+            attributes=allowed_attributes,
+            protocols=allowed_protocols,
+            strip=True
+        )
+        
+        # Linkify URLs (optional - converts plain URLs to clickable links)
+        clean_html = bleach.linkify(
+            clean_html,
+            parse_email=True,
+            skip_tags=['pre', 'code']
+        )
+        
+        return mark_safe(clean_html)
     
     def increment_view_count(self):
         """Increment view count for analytics"""
@@ -229,8 +279,58 @@ class MeetingNotes(models.Model):
         return f"{self.title} - {self.date.strftime('%Y-%m-%d %H:%M')}"
     
     def get_html_content(self):
-        """Convert markdown content to HTML"""
-        return mark_safe(markdown.markdown(self.content))
+        """Convert markdown content to HTML and sanitize to prevent XSS"""
+        import bleach
+        
+        # Convert markdown to HTML
+        html = markdown.markdown(
+            self.content,
+            extensions=[
+                'markdown.extensions.fenced_code',
+                'markdown.extensions.tables',
+                'markdown.extensions.nl2br',
+            ]
+        )
+        
+        # Define allowed HTML tags and attributes (security whitelist)
+        allowed_tags = [
+            'p', 'br', 'strong', 'em', 'u', 's', 'del', 'ins',
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'ul', 'ol', 'li',
+            'a', 'code', 'pre', 'blockquote',
+            'table', 'thead', 'tbody', 'tr', 'th', 'td',
+            'hr', 'img', 'div', 'span'
+        ]
+        
+        allowed_attributes = {
+            'a': ['href', 'title', 'rel'],
+            'img': ['src', 'alt', 'title', 'width', 'height'],
+            'code': ['class'],
+            'pre': ['class'],
+            'div': ['class'],
+            'span': ['class'],
+        }
+        
+        # Allowed protocols for links (prevent javascript: and data: URLs)
+        allowed_protocols = ['http', 'https', 'mailto']
+        
+        # Sanitize HTML to prevent XSS attacks
+        clean_html = bleach.clean(
+            html,
+            tags=allowed_tags,
+            attributes=allowed_attributes,
+            protocols=allowed_protocols,
+            strip=True
+        )
+        
+        # Linkify URLs
+        clean_html = bleach.linkify(
+            clean_html,
+            parse_email=True,
+            skip_tags=['pre', 'code']
+        )
+        
+        return mark_safe(clean_html)
 
 
 class WikiPageVersion(models.Model):

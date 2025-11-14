@@ -29,8 +29,7 @@ whitenoise==6.9.0
 # AI Integration - Google Gemini
 google-generativeai==0.8.5
 grpcio==1.76.0
-pydantic==2.12.3
-pydantic-core==2.41.4
+# pydantic versions managed by google-generativeai dependencies
 
 # Document Processing
 python-docx==1.2.0
@@ -48,6 +47,16 @@ daphne==4.1.2
 # Asynchronous Task Processing
 celery==5.3.4
 redis==5.0.1
+
+# Security Enhancements
+bleach==6.1.0
+python-magic-bin==0.4.14
+django-csp==3.8
+django-axes==8.0.0
+
+# Security Tools
+bandit==1.7.5
+safety==3.0.1
 
 # Development and Testing Dependencies
 # (Optional - for development environment)

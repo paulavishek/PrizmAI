@@ -28,7 +28,24 @@ GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', '')
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'yhj1u7b0_^(b-%5t#n^p!8pzy&%nabpd0*=$7xvfwby&_5_4@c')
+# SECRET_KEY must be set in environment variables for security
+import sys
+
+SECRET_KEY = os.getenv('SECRET_KEY')
+
+# In production, fail if SECRET_KEY not set
+if not SECRET_KEY:
+    if not os.getenv('DEBUG', 'False').lower() == 'true':
+        print("=" * 70)
+        print("SECURITY ERROR: SECRET_KEY environment variable not set!")
+        print("Please set SECRET_KEY in your .env file before running in production.")
+        print("Generate a new key with: python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'")
+        print("=" * 70)
+        sys.exit(1)
+    else:
+        # Only use default in development with warning
+        print("⚠️  WARNING: Using default SECRET_KEY (development only - NEVER use in production)")
+        SECRET_KEY = 'dev-secret-key-change-in-production-' + 'yhj1u7b0_^(b-%5t#n^p!8pzy&%nabpd0*=$7xvfwby&_5_4@c'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
@@ -66,6 +83,8 @@ INSTALLED_APPS = [
     'widget_tweaks',
     'channels',  # Django Channels for WebSockets
     'rest_framework',  # Django REST Framework for API
+    'axes',  # django-axes for brute force protection
+    'csp',  # django-csp for Content Security Policy
     
     # Django Allauth
     'allauth',
@@ -92,11 +111,13 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'csp.middleware.CSPMiddleware',  # Content Security Policy
     'allauth.account.middleware.AccountMiddleware',  # Required for django-allauth
     # Security and audit logging middleware
     'kanban.audit_middleware.AuditLoggingMiddleware',
     'kanban.audit_middleware.APIRequestLoggingMiddleware',
     'kanban.audit_middleware.SecurityMonitoringMiddleware',
+    'axes.middleware.AxesMiddleware',  # Brute force protection
 ]
 
 ROOT_URLCONF = 'kanban_board.urls'
@@ -390,4 +411,52 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.openapi.AutoSchema',
 }
+
+# ============================================
+# CONTENT SECURITY POLICY (CSP) CONFIGURATION
+# ============================================
+
+# CSP settings to prevent XSS and other injection attacks
+CSP_DEFAULT_SRC = ("'self'",)
+CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://code.jquery.com")
+CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://fonts.googleapis.com")
+CSP_IMG_SRC = ("'self'", "data:", "https:", "http:")
+CSP_FONT_SRC = ("'self'", "data:", "https://cdn.jsdelivr.net", "https://fonts.gstatic.com")
+CSP_CONNECT_SRC = ("'self'", "wss:", "ws:")
+CSP_FRAME_ANCESTORS = ("'none'",)  # Prevent clickjacking
+CSP_BASE_URI = ("'self'",)
+CSP_FORM_ACTION = ("'self'",)
+CSP_UPGRADE_INSECURE_REQUESTS = not DEBUG  # Upgrade HTTP to HTTPS in production
+
+# Enable CSP reporting (optional - can be configured to send reports)
+CSP_REPORT_ONLY = False  # Set to True for testing without enforcement
+
+# ============================================
+# DJANGO-AXES CONFIGURATION (Brute Force Protection)
+# ============================================
+
+# Add django.contrib.auth.backends.ModelBackend to AUTHENTICATION_BACKENDS
+AUTHENTICATION_BACKENDS = (
+    'axes.backends.AxesStandaloneBackend',  # AxesStandaloneBackend should be first
+    'django.contrib.auth.backends.ModelBackend',
+    'allauth.account.auth_backends.AuthenticationBackend',
+)
+
+# Axes Configuration
+AXES_FAILURE_LIMIT = 5  # Number of failed login attempts before lockout
+AXES_COOLOFF_TIME = 1  # Hours to wait before allowing login again after lockout
+AXES_LOCK_OUT_AT_FAILURE = True  # Lock out after failure limit
+AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]  # Lock by username and IP (replaces deprecated AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP)
+AXES_RESET_ON_SUCCESS = True  # Reset failed attempts on successful login
+AXES_ENABLE_ADMIN = True  # Enable axes in admin
+AXES_VERBOSE = True  # Verbose logging
+AXES_LOCKOUT_TEMPLATE = None  # Use default lockout handling
+AXES_LOCKOUT_URL = None  # Redirect URL after lockout (None = stay on same page)
+
+# Use cache for tracking attempts (faster than database)
+AXES_CACHE = 'default'
+
+# Additional rate limiting
+AXES_RESET_COOL_OFF = True  # Automatically reset after cooloff period
+
 

@@ -312,26 +312,33 @@ class TaskForm(forms.ModelForm):
         if hasattr(self, 'cleaned_data') and 'risk_score' in self.cleaned_data:
             instance.risk_score = self.cleaned_data['risk_score']
         
-        # Process required_skills JSON field
+        # Process required_skills JSON field - SECURITY: Only use safe JSON parsing, NO eval()
         required_skills_input = self.cleaned_data.get('required_skills', '')
         
         # Handle if it's already a list (from form submission)
         if isinstance(required_skills_input, list):
-            instance.required_skills = required_skills_input
+            # Validate and limit list items
+            instance.required_skills = [str(skill)[:100] for skill in required_skills_input[:50]]
         else:
             required_skills_input = required_skills_input.strip() if isinstance(required_skills_input, str) else ''
             if required_skills_input:
                 import json
                 try:
-                    # Try to parse as JSON
-                    instance.required_skills = json.loads(required_skills_input)
-                except json.JSONDecodeError:
-                    # If parsing fails, try to evaluate as Python list
-                    try:
-                        instance.required_skills = eval(required_skills_input)
-                    except:
-                        # If all else fails, keep it as is or set to empty list
+                    # SECURITY: Only use JSON parsing - NEVER eval() for security
+                    parsed_skills = json.loads(required_skills_input)
+                    
+                    # Validate it's a list
+                    if isinstance(parsed_skills, list):
+                        # Validate all items are strings and limit length
+                        instance.required_skills = [
+                            str(skill)[:100] for skill in parsed_skills 
+                            if isinstance(skill, (str, int, float))
+                        ][:50]  # Limit to 50 items
+                    else:
                         instance.required_skills = []
+                except (json.JSONDecodeError, ValueError, TypeError):
+                    # If parsing fails, set to empty list (secure default)
+                    instance.required_skills = []
             elif not instance.required_skills:
                 instance.required_skills = []
         
@@ -464,8 +471,10 @@ class TaskSearchForm(forms.Form):
             self.fields['assignee'].queryset = board.members.all()
 
 
+
+
 class TaskFileForm(forms.ModelForm):
-    """Form for uploading files to tasks"""
+    """Form for uploading files to tasks with comprehensive security validation"""
     
     class Meta:
         model = TaskFile
@@ -485,62 +494,37 @@ class TaskFileForm(forms.ModelForm):
         }
     
     def clean_file(self):
-        """Validate file type and size"""
+        """Validate file with comprehensive security checks"""
+        from kanban.utils.file_validators import FileValidator
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        
         file = self.cleaned_data.get('file')
         
-        if file:
-            # Check file size
-            if file.size > TaskFile.MAX_FILE_SIZE:
-                raise forms.ValidationError(
-                    f'File size exceeds {TaskFile.MAX_FILE_SIZE / (1024*1024):.0f}MB limit'
-                )
-            
-            # Check file type
-            if not TaskFile.is_valid_file_type(file.name):
-                allowed = ', '.join(TaskFile.ALLOWED_FILE_TYPES)
-                raise forms.ValidationError(
-                    f'Invalid file type. Allowed types: {allowed}'
-                )
+        if not file:
+            raise forms.ValidationError('No file provided')
+        
+        # Comprehensive security validation
+        try:
+            FileValidator.validate_file(file)
+        except DjangoValidationError as e:
+            raise forms.ValidationError(str(e))
         
         return file
-
-
-class TaskFileForm(forms.ModelForm):
-    """Form for uploading files to tasks"""
     
-    class Meta:
-        model = TaskFile
-        fields = ['file', 'description']
-        widgets = {
-            'file': forms.FileInput(attrs={
-                'class': 'form-control',
-                'accept': '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png',
-                'id': 'task-file-input'
-            }),
-            'description': forms.Textarea(attrs={
-                'class': 'form-control',
-                'rows': 2,
-                'placeholder': 'Optional: Add a description for this file',
-                'maxlength': '500'
-            })
-        }
-    
-    def clean_file(self):
-        """Validate file type and size"""
-        file = self.cleaned_data.get('file')
+    def save(self, commit=True):
+        from kanban.utils.file_validators import FileValidator
         
-        if file:
-            # Check file size
-            if file.size > TaskFile.MAX_FILE_SIZE:
-                raise forms.ValidationError(
-                    f'File size exceeds {TaskFile.MAX_FILE_SIZE / (1024*1024):.0f}MB limit'
-                )
+        instance = super().save(commit=False)
+        
+        if self.cleaned_data.get('file'):
+            file = self.cleaned_data['file']
             
-            # Check file type
-            if not TaskFile.is_valid_file_type(file.name):
-                allowed = ', '.join(TaskFile.ALLOWED_FILE_TYPES)
-                raise forms.ValidationError(
-                    f'Invalid file type. Allowed types: {allowed}'
-                )
+            # Sanitize filename for security
+            instance.filename = FileValidator.sanitize_filename(file.name)
+            instance.file_size = file.size
+            instance.file_type = FileValidator._get_extension(file.name)
         
-        return file
+        if commit:
+            instance.save()
+        
+        return instance

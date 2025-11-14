@@ -87,7 +87,7 @@ class MentionForm(forms.Form):
 
 
 class ChatRoomFileForm(forms.ModelForm):
-    """Form for uploading files to chat rooms"""
+    """Form for uploading files to chat rooms with comprehensive security validation"""
     
     class Meta:
         model = FileAttachment
@@ -107,21 +107,37 @@ class ChatRoomFileForm(forms.ModelForm):
         }
     
     def clean_file(self):
-        """Validate file type and size"""
+        """Validate file with comprehensive security checks"""
+        from kanban.utils.file_validators import FileValidator
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        
         file = self.cleaned_data.get('file')
         
-        if file:
-            # Check file size
-            if file.size > FileAttachment.MAX_FILE_SIZE:
-                raise forms.ValidationError(
-                    f'File size exceeds {FileAttachment.MAX_FILE_SIZE / (1024*1024):.0f}MB limit'
-                )
-            
-            # Check file type
-            if not FileAttachment.is_valid_file_type(file.name):
-                allowed = ', '.join(FileAttachment.ALLOWED_FILE_TYPES)
-                raise forms.ValidationError(
-                    f'Invalid file type. Allowed types: {allowed}'
-                )
+        if not file:
+            raise forms.ValidationError('No file provided')
+        
+        # Comprehensive security validation
+        try:
+            FileValidator.validate_file(file)
+        except DjangoValidationError as e:
+            raise forms.ValidationError(str(e))
         
         return file
+    
+    def save(self, commit=True):
+        from kanban.utils.file_validators import FileValidator
+        
+        instance = super().save(commit=False)
+        
+        if self.cleaned_data.get('file'):
+            file = self.cleaned_data['file']
+            
+            # Sanitize filename for security
+            instance.filename = FileValidator.sanitize_filename(file.name)
+            instance.file_size = file.size
+            instance.file_type = FileValidator._get_extension(file.name)
+        
+        if commit:
+            instance.save()
+        
+        return instance
