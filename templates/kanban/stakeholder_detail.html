@@ -11,14 +11,17 @@
             <p class="text-muted">{{ stakeholder.role }} {% if stakeholder.organization %}- {{ stakeholder.organization }}{% endif %}</p>
         </div>
         <div class="col-md-4 text-end">
+            <button onclick="goBack()" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Back
+            </button>
             <a href="{% url 'stakeholder:stakeholder_update' board.id stakeholder.id %}" class="btn btn-outline-primary me-2">
                 <i class="bi bi-pencil"></i> Edit
             </a>
             <a href="{% url 'stakeholder:engagement_record_create' board.id stakeholder.id %}" class="btn btn-success me-2">
                 <i class="bi bi-plus-lg"></i> Record Engagement
             </a>
-            <a href="{% url 'stakeholder:stakeholder_list' board.id %}" class="btn btn-outline-secondary">
-                <i class="bi bi-arrow-left"></i> Back
+            <a href="{% url 'stakeholder:stakeholder_list' board.id %}" class="btn btn-outline-primary">
+                <i class="bi bi-list"></i> All Stakeholders
             </a>
         </div>
     </div>
@@ -335,4 +338,17 @@
         background-color: #f8f9fa;
     }
 </style>
+
+<script>
+// Handle back navigation to previous page
+function goBack() {
+    // Check if there's a previous page in history
+    if (document.referrer && document.referrer !== window.location.href) {
+        window.history.back();
+    } else {
+        // Fallback to stakeholder list if no history
+        window.location.href = '{% url "stakeholder:stakeholder_list" board.id %}';
+    }
+}
+</script>
 {% endblock %}

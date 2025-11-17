@@ -380,6 +380,7 @@
             📅 {{ period_start|date:"M d, Y" }} - {{ period_end|date:"M d, Y" }} (3 weeks)
         </div>
         <div class="action-buttons">
+            <button class="btn-action" onclick="goBack()" style="background: #95a5a6; color: white;">⬅️ Back</button>
             <button class="btn-action btn-refresh" onclick="location.reload();">🔄 Refresh</button>
             <a href="{% url 'workload_recommendations' board.id %}" class="btn-action btn-recommendations">💡 View All Recommendations</a>
         </div>

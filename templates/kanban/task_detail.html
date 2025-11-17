@@ -36,8 +36,11 @@
             <div class="card-header py-3 d-flex justify-content-between align-items-center">
                 <h6 class="m-0 font-weight-bold text-primary">Task Details</h6>
                 <div>
-                    <a href="{% url 'board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-secondary">
-                        <i class="fas fa-arrow-left me-1"></i> Back to Board
+                    <button onclick="goBack()" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i> Back
+                    </button>
+                    <a href="{% url 'board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-columns me-1"></i> View Board
                     </a>
                 </div>
             </div>
@@ -1076,6 +1079,17 @@
         formatted = formatted.replace(/\n\n/g, '<br><br>');
         
         return '<div class="ai-summary-formatted">' + formatted + '</div>';
+    }
+    
+    // Handle back navigation to previous page
+    function goBack() {
+        // Check if there's a previous page in history
+        if (document.referrer && document.referrer !== window.location.href) {
+            window.history.back();
+        } else {
+            // Fallback to board detail if no history
+            window.location.href = '{% url "board_detail" task.column.board.id %}';
+        }
     }
 </script>
 

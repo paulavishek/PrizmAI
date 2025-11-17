@@ -239,6 +239,11 @@
                 <i class="fas fa-project-diagram me-2"></i>{{ board.name }}
             </h1>
         </div>
+        <div class="col-auto">
+            <button onclick="goBack()" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-arrow-left me-1"></i> Back
+            </button>
+        </div>
     </div>
 
     <!-- Board Navigation Tabs -->
@@ -722,5 +727,16 @@
         });
     });
     {% endif %}
+    
+    // Handle back navigation to previous page
+    function goBack() {
+        // Check if there's a previous page in history
+        if (document.referrer && document.referrer !== window.location.href) {
+            window.history.back();
+        } else {
+            // Fallback to board detail if no history
+            window.location.href = '{% url "board_detail" board.id %}';
+        }
+    }
 </script>
 {% endblock %}

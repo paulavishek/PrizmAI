@@ -439,10 +439,17 @@
 
         <div class="chat-container">
             <div class="chat-header">
-                <h2><i class="fas fa-comments me-2"></i>{{ chat_room.name }}</h2>
-                {% if chat_room.description %}
-                    <p class="mb-0 text-light">{{ chat_room.description }}</p>
-                {% endif %}
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h2 class="mb-0"><i class="fas fa-comments me-2"></i>{{ chat_room.name }}</h2>
+                        {% if chat_room.description %}
+                            <p class="mb-0 text-light">{{ chat_room.description }}</p>
+                        {% endif %}
+                    </div>
+                    <button onclick="goBack()" class="btn btn-light btn-sm">
+                        <i class="fas fa-arrow-left me-1"></i> Back
+                    </button>
+                </div>
             </div>
 
             {% if user == chat_room.created_by or user.is_staff %}

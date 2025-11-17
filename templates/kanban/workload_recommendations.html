@@ -348,7 +348,10 @@
 <div class="recommendations-container">
     <div class="rec-header">
         <div class="rec-title">💡 Workload Distribution Recommendations</div>
-        <a href="{% url 'forecast_dashboard' board.id %}" class="btn-action" style="padding: 8px 16px; background: #3498db; color: white; text-decoration: none; border-radius: 4px;">← Back to Forecast</a>
+        <div>
+            <button onclick="goBack()" class="btn-action" style="padding: 8px 16px; background: #95a5a6; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 8px;">⬅️ Back</button>
+            <a href="{% url 'forecast_dashboard' board.id %}" class="btn-action" style="padding: 8px 16px; background: #3498db; color: white; text-decoration: none; border-radius: 4px;">📊 View Forecast</a>
+        </div>
     </div>
 
     {% if summary %}
@@ -457,4 +460,17 @@
     {% endif %}
 
 </div>
+
+<script>
+// Handle back navigation to previous page
+function goBack() {
+    // Check if there's a previous page in history
+    if (document.referrer && document.referrer !== window.location.href) {
+        window.history.back();
+    } else {
+        // Fallback to board detail if no history
+        window.location.href = '/kanban/boards/{{ board.id }}/';
+    }
+}
+</script>
 {% endblock %}
