@@ -367,13 +367,19 @@
     });
 
     let ganttChart = null;
+    let currentViewMode = 'Week';
 
     // Initialize Gantt chart
     function initGantt(viewMode = 'Week') {
         const ganttElement = document.getElementById('gantt');
+        currentViewMode = viewMode;
         
         if (ganttChart) {
             ganttChart.change_view_mode(viewMode);
+            // After changing view mode, reapply custom attributes and enhancements
+            setTimeout(() => {
+                applyCustomStyling();
+            }, 300);
         } else {
             // Debug: Log tasks with dependencies
             console.log('Tasks with dependencies:', tasks.filter(t => t.dependencies).map(t => ({
@@ -408,34 +414,44 @@
                 }
             });
 
-            // Add custom attributes for styling
+            // Apply custom styling for the first time
             setTimeout(() => {
-                tasks.forEach(task => {
-                    const barElement = document.querySelector(`.bar-wrapper[data-id="${task.id}"] .bar`);
-                    if (barElement) {
-                        // Set priority attribute for color styling
-                        barElement.setAttribute('data-priority', task.priority);
-                    }
-                });
-
-                // Add manual click handlers to all bars for better compatibility
-                document.querySelectorAll('.bar-wrapper').forEach(barWrapper => {
-                    barWrapper.style.cursor = 'pointer';
-                    barWrapper.addEventListener('click', function(e) {
-                        const taskId = this.getAttribute('data-id');
-                        if (taskId) {
-                            window.location.href = `/tasks/${taskId}/`;
-                        }
-                    });
-                });
-
-                // Enhance bars with additional info
-                enhanceBarsWithInfo();
-
-                // Add tooltip functionality
-                addTooltipHandlers();
-            }, 300); // Increased timeout to ensure SVG is fully rendered
+                applyCustomStyling();
+            }, 300);
         }
+    }
+
+    // Apply all custom styling, attributes, and enhancements
+    function applyCustomStyling() {
+        // Add custom attributes for styling
+        tasks.forEach(task => {
+            const barElement = document.querySelector(`.bar-wrapper[data-id="${task.id}"] .bar`);
+            if (barElement) {
+                // Set priority attribute for color styling
+                barElement.setAttribute('data-priority', task.priority);
+            }
+        });
+
+        // Add manual click handlers to all bars for better compatibility
+        document.querySelectorAll('.bar-wrapper').forEach(barWrapper => {
+            barWrapper.style.cursor = 'pointer';
+            // Remove old listeners by cloning the node
+            const newBarWrapper = barWrapper.cloneNode(true);
+            barWrapper.parentNode.replaceChild(newBarWrapper, barWrapper);
+            
+            newBarWrapper.addEventListener('click', function(e) {
+                const taskId = this.getAttribute('data-id');
+                if (taskId) {
+                    window.location.href = `/tasks/${taskId}/`;
+                }
+            });
+        });
+
+        // Enhance bars with additional info
+        enhanceBarsWithInfo();
+
+        // Add tooltip functionality
+        addTooltipHandlers();
     }
 
     // Add tooltip functionality for task bars
@@ -594,18 +610,46 @@
             // Find and modify the existing label to show truncated name ONLY - INSIDE the bar
             const existingLabel = barWrapper.querySelector('.bar-label');
             if (existingLabel) {
-                // Show labels for all bars wider than 30 pixels
-                if (barWidth > 30) {
+                // Adjust minimum width threshold based on view mode
+                let minWidth = 30;
+                if (currentViewMode === 'Month') {
+                    minWidth = 15; // More aggressive showing in month view
+                } else if (currentViewMode === 'Day') {
+                    minWidth = 50; // Day view has larger bars
+                }
+
+                // Show labels for bars wider than minimum width
+                if (barWidth > minWidth) {
                     // Calculate how many characters can fit
-                    const charWidth = 6.5; // Approximate width per character at font-size 11px
-                    const availableWidth = barWidth - 12; // Less padding for smaller bars
+                    let charWidth = 6.5; // Approximate width per character at font-size 11px
+                    let fontSize = 11;
+                    
+                    // Adjust font size and char width based on view mode
+                    if (currentViewMode === 'Month') {
+                        fontSize = 10; // Slightly smaller font for month view
+                        charWidth = 6;
+                        existingLabel.style.fontSize = fontSize + 'px';
+                    } else if (currentViewMode === 'Day') {
+                        fontSize = 11;
+                        charWidth = 6.5;
+                        existingLabel.style.fontSize = fontSize + 'px';
+                    } else {
+                        // Week view
+                        fontSize = 11;
+                        charWidth = 6.5;
+                        existingLabel.style.fontSize = fontSize + 'px';
+                    }
+                    
+                    const availableWidth = barWidth - 8; // Minimal padding
                     const maxChars = Math.floor(availableWidth / charWidth);
 
                     let displayName = task.fullName;
                     
-                    // For very small bars, show at least a few characters
-                    if (maxChars < 3) {
-                        displayName = task.fullName.substring(0, 1) + '...';
+                    // For very small bars, show at least initial
+                    if (maxChars < 2) {
+                        displayName = task.fullName.substring(0, 1);
+                    } else if (maxChars < 4) {
+                        displayName = task.fullName.substring(0, maxChars);
                     } else if (displayName.length > maxChars) {
                         displayName = displayName.substring(0, maxChars - 3) + '...';
                     }
@@ -621,7 +665,7 @@
                     // Remove any outside positioning classes
                     existingLabel.classList.remove('outside-left', 'outside-right');
                 } else {
-                    // Only hide label if bar is extremely small (less than 30px)
+                    // Only hide label if bar is extremely small
                     existingLabel.textContent = '';
                     existingLabel.style.display = 'none';
                 }
