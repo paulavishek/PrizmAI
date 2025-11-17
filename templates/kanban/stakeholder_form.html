@@ -8,11 +8,14 @@
     <div class="row">
         <div class="col-md-8 mx-auto">
             <div class="card">
-                <div class="card-header bg-light">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
                     <h5 class="m-0">
                         <i class="bi bi-person-plus"></i>
                         {% if action == 'Create' %}Add New Stakeholder{% else %}Edit Stakeholder{% endif %}
                     </h5>
+                    <button onclick="goBack()" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Back
+                    </button>
                 </div>
                 <div class="card-body">
                     <form method="post" class="needs-validation" novalidate>
@@ -218,5 +221,16 @@ document.addEventListener('DOMContentLoaded', function() {
         }, false);
     });
 });
+
+// Handle back navigation to previous page
+function goBack() {
+    // Check if there's a previous page in history
+    if (document.referrer && document.referrer !== window.location.href) {
+        window.history.back();
+    } else {
+        // Fallback to stakeholder list if no history
+        window.location.href = '{% url "stakeholder:stakeholder_list" board.id %}';
+    }
+}
 </script>
 {% endblock %}
