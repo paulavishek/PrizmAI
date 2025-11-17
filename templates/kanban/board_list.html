@@ -9,6 +9,9 @@
         <div class="d-sm-flex align-items-center justify-content-between mb-4">
             <h1 class="h3 mb-0 text-gray-800">Your Boards</h1>
             <div>
+                <button onclick="goBack()" class="btn btn-outline-secondary shadow-sm me-2">
+                    <i class="fas fa-arrow-left fa-sm me-1"></i> Back
+                </button>
                 <button class="btn btn-outline-success shadow-sm me-2" data-bs-toggle="modal" data-bs-target="#importBoardModal">
                     <i class="fas fa-file-import fa-sm me-1"></i> Import Board
                 </button>
@@ -195,4 +198,16 @@
 {% block extra_js %}
 {% load static %}
 <script src="{% static 'js/ai_features.js' %}?v={{ STATIC_VERSION|default:'2' }}"></script>
+<script>
+// Handle back navigation to previous page
+function goBack() {
+    // Check if there's a previous page in history
+    if (document.referrer && document.referrer !== window.location.href) {
+        window.history.back();
+    } else {
+        // Fallback to dashboard if no history
+        window.location.href = '{% url "dashboard" %}';
+    }
+}
+</script>
 {% endblock %}
