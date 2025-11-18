@@ -409,18 +409,44 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         
         IMPORTANT: Predict the number of DAYS from today that this task should be completed, not absolute dates.
         
-        Format your response as JSON:
+        Format your response as JSON WITH EXPLAINABILITY:
         {{
             "estimated_days_from_today": number (integer representing days from today),
             "estimated_effort_days": number (actual work days needed),
             "confidence_level": "high|medium|low",
+            "confidence_score": 0.XX,
             "reasoning": "2-3 sentences explaining the timeline prediction",
             "risk_factors": ["up to 3 potential delays or risks"],
             "recommendations": ["up to 3 suggestions to meet the deadline"],
             "alternative_scenarios": {{
                 "optimistic_days": number,
                 "pessimistic_days": number
-            }}
+            }},
+            "calculation_breakdown": {{
+                "base_estimate_days": number,
+                "complexity_factor": 0.XX,
+                "workload_adjustment": 0.XX,
+                "priority_adjustment": 0.XX,
+                "buffer_days": number
+            }},
+            "velocity_analysis": {{
+                "current_velocity": "X hours/day",
+                "expected_velocity": "X hours/day",
+                "velocity_trend": "accelerating|steady|declining",
+                "remaining_effort_hours": number
+            }},
+            "assumptions": [
+                "Key assumption 1",
+                "Key assumption 2",
+                "Key assumption 3"
+            ],
+            "contributing_factors": [
+                {{
+                    "factor": "Factor name",
+                    "contribution_percentage": XX,
+                    "description": "How this impacts the deadline"
+                }}
+            ]
         }}
         """
         
@@ -1487,33 +1513,60 @@ def calculate_task_risk_score(task_title: str, task_description: str,
         4. Suggest specific mitigation actions
         5. Provide confidence level for assessment
         
-        FORMAT YOUR RESPONSE AS JSON:
+        FORMAT YOUR RESPONSE AS JSON WITH DETAILED EXPLAINABILITY:
         {{
           "likelihood": {{
             "score": 1-3,
             "percentage_range": "XX-XX%",
             "reasoning": "2-3 sentence explanation",
-            "key_factors": ["factor1", "factor2", "factor3"]
+            "key_factors": ["factor1", "factor2", "factor3"],
+            "factor_weights": {{
+              "factor1": 0.XX,
+              "factor2": 0.XX
+            }},
+            "confidence": 0.XX
           }},
           "impact": {{
             "score": 1-3,
             "severity_level": "Low/Medium/High",
             "reasoning": "2-3 sentence explanation",
-            "affected_areas": ["area1", "area2"]
+            "affected_areas": ["area1", "area2"],
+            "impact_breakdown": {{
+              "timeline": 0.XX,
+              "resources": 0.XX,
+              "quality": 0.XX,
+              "stakeholders": 0.XX
+            }},
+            "confidence": 0.XX
           }},
           "risk_assessment": {{
             "risk_score": 1-9,
             "risk_level": "Low/Medium/High/Critical",
             "priority_ranking": "routine|important|critical",
-            "summary": "Brief overall assessment"
+            "summary": "Brief overall assessment",
+            "calculation_method": "Likelihood (X) × Impact (Y) = Z",
+            "contributing_factors": [
+              {{
+                "factor": "Factor name",
+                "contribution_percentage": XX,
+                "weight": 0.XX,
+                "description": "Why this matters"
+              }}
+            ]
           }},
           "risk_indicators": [
             {{"indicator": "What to monitor", "frequency": "When/how often", "threshold": "Alert level"}}
           ],
           "mitigation_suggestions": [
-            {{"action": "Specific action", "timeline": "When", "priority": "high/medium/low"}}
+            {{"action": "Specific action", "timeline": "When", "priority": "high/medium/low", "expected_impact": "Reduces risk by X%"}}
           ],
-          "confidence_level": "high|medium|low"
+          "confidence_level": "high|medium|low",
+          "confidence_score": 0.XX,
+          "explainability": {{
+            "model_assumptions": ["assumption1", "assumption2"],
+            "data_limitations": ["limitation1"],
+            "alternative_interpretations": ["interpretation1"]
+          }}
         }}
         """
         

@@ -216,7 +216,7 @@ const RiskManagement = (() => {
     }
 
     /**
-     * Render risk analysis content HTML
+     * Render risk analysis content HTML with enhanced explainability
      */
     function renderRiskAnalysisContent(riskAnalysis) {
         const likelihood = riskAnalysis.likelihood || {};
@@ -224,110 +224,198 @@ const RiskManagement = (() => {
         const assessment = riskAnalysis.risk_assessment || {};
         const indicators = riskAnalysis.risk_indicators || [];
 
-        return `
-            <div class="container-fluid">
+        // Use AIExplainability module for enhanced visualization
+        let html = `<div class="container-fluid">`;
+
+        // Add AI Confidence Meter at the top
+        if (riskAnalysis.confidence_score !== undefined) {
+            html += `
                 <div class="row mb-4">
-                    <div class="col-md-4">
-                        <div class="card border-warning">
-                            <div class="card-body text-center">
-                                <h6 class="text-muted">Likelihood</h6>
-                                <div class="display-5 text-warning">${likelihood.score || '-'}</div>
-                                <small class="text-muted">${likelihood.percentage_range || '-'}</small>
-                            </div>
-                        </div>
+                    <div class="col-12">
+                        ${AIExplainability.renderConfidenceMeter(
+                            riskAnalysis.confidence_score, 
+                            'AI Analysis Confidence'
+                        )}
                     </div>
-                    <div class="col-md-4">
-                        <div class="card border-danger">
-                            <div class="card-body text-center">
-                                <h6 class="text-muted">Impact</h6>
-                                <div class="display-5 text-danger">${impact.score || '-'}</div>
-                                <small class="text-muted">${impact.severity_level || '-'}</small>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="card border-info">
-                            <div class="card-body text-center">
-                                <h6 class="text-muted">Overall Risk</h6>
-                                <div class="display-5 text-info">${assessment.risk_score || '-'}/9</div>
-                                <small class="text-muted">${assessment.risk_level || '-'}</small>
-                            </div>
+                </div>
+            `;
+        }
+
+        // Risk Scores Overview
+        html += `
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card border-warning">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted">Likelihood</h6>
+                            <div class="display-5 text-warning">${likelihood.score || '-'}</div>
+                            <small class="text-muted">${likelihood.percentage_range || '-'}</small>
+                            ${likelihood.confidence ? `
+                                <div class="mt-2">
+                                    <small class="text-muted">Confidence: ${Math.round(likelihood.confidence * 100)}%</small>
+                                </div>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
-
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header bg-light">
-                                <h6 class="mb-0"><i class="bi bi-graph-up"></i> Likelihood Analysis</h6>
-                            </div>
-                            <div class="card-body">
-                                <p><strong>Reasoning:</strong></p>
-                                <p>${likelihood.reasoning || 'N/A'}</p>
-                                <p><strong>Key Factors:</strong></p>
-                                <ul>
-                                    ${(likelihood.key_factors || []).map(f => `<li>${f}</li>`).join('')}
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-header bg-light">
-                                <h6 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Impact Analysis</h6>
-                            </div>
-                            <div class="card-body">
-                                <p><strong>Reasoning:</strong></p>
-                                <p>${impact.reasoning || 'N/A'}</p>
-                                <p><strong>Affected Areas:</strong></p>
-                                <ul>
-                                    ${(impact.affected_areas || []).map(a => `<li>${a}</li>`).join('')}
-                                </ul>
-                            </div>
+                <div class="col-md-4">
+                    <div class="card border-danger">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted">Impact</h6>
+                            <div class="display-5 text-danger">${impact.score || '-'}</div>
+                            <small class="text-muted">${impact.severity_level || '-'}</small>
+                            ${impact.confidence ? `
+                                <div class="mt-2">
+                                    <small class="text-muted">Confidence: ${Math.round(impact.confidence * 100)}%</small>
+                                </div>
+                            ` : ''}
                         </div>
                     </div>
                 </div>
-
-                ${indicators.length > 0 ? `
-                    <div class="row mb-4">
-                        <div class="col-12">
-                            <div class="card">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0"><i class="bi bi-clipboard-check"></i> Risk Indicators to Monitor</h6>
-                                </div>
-                                <div class="card-body">
-                                    <div class="table-responsive">
-                                        <table class="table table-sm">
-                                            <thead>
-                                                <tr>
-                                                    <th>Indicator</th>
-                                                    <th>Frequency</th>
-                                                    <th>Alert Threshold</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                ${indicators.map(ind => `
-                                                    <tr>
-                                                        <td>${ind.indicator || '-'}</td>
-                                                        <td><small class="badge bg-info">${ind.frequency || '-'}</small></td>
-                                                        <td><small class="badge bg-warning">${ind.threshold || '-'}</small></td>
-                                                    </tr>
-                                                `).join('')}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
+                <div class="col-md-4">
+                    <div class="card border-info">
+                        <div class="card-body text-center">
+                            <h6 class="text-muted">Overall Risk</h6>
+                            <div class="display-5 text-info">${assessment.risk_score || '-'}/9</div>
+                            <small class="text-muted">${assessment.risk_level || '-'}</small>
                         </div>
                     </div>
-                ` : ''}
-
-                <div class="alert alert-info">
-                    <strong>Confidence Level:</strong> ${riskAnalysis.confidence_level || 'N/A'}
                 </div>
             </div>
         `;
+
+        // Calculation Explanation
+        if (assessment) {
+            html += `
+                <div class="row mb-4">
+                    <div class="col-12">
+                        ${AIExplainability.renderCalculationExplanation({
+                            ...assessment,
+                            likelihood: likelihood.score,
+                            impact: impact.score
+                        })}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Contributing Factors Breakdown
+        if (assessment.contributing_factors && assessment.contributing_factors.length > 0) {
+            html += `
+                <div class="row mb-4">
+                    <div class="col-12">
+                        ${AIExplainability.renderFactorBreakdown(assessment.contributing_factors)}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Impact Breakdown
+        if (impact.impact_breakdown) {
+            html += `
+                <div class="row mb-4">
+                    <div class="col-12">
+                        ${AIExplainability.renderImpactBreakdown(impact.impact_breakdown)}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Detailed Analysis Cards
+        html += `
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0"><i class="bi bi-graph-up"></i> Likelihood Analysis</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Reasoning:</strong></p>
+                            <p>${likelihood.reasoning || 'N/A'}</p>
+                            <p><strong>Key Factors:</strong></p>
+                            <ul>
+                                ${(likelihood.key_factors || []).map(f => `<li>${AIExplainability.escapeHtml(f)}</li>`).join('')}
+                            </ul>
+                            ${likelihood.factor_weights ? `
+                                <p><strong>Factor Weights:</strong></p>
+                                <ul class="small">
+                                    ${Object.entries(likelihood.factor_weights).map(([k, v]) => 
+                                        `<li>${AIExplainability.escapeHtml(k)}: ${(v * 100).toFixed(0)}%</li>`
+                                    ).join('')}
+                                </ul>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Impact Analysis</h6>
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Reasoning:</strong></p>
+                            <p>${impact.reasoning || 'N/A'}</p>
+                            <p><strong>Affected Areas:</strong></p>
+                            <ul>
+                                ${(impact.affected_areas || []).map(a => `<li>${AIExplainability.escapeHtml(a)}</li>`).join('')}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Risk Indicators
+        if (indicators.length > 0) {
+            html += `
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0"><i class="bi bi-clipboard-check"></i> Risk Indicators to Monitor</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Indicator</th>
+                                                <th>Frequency</th>
+                                                <th>Alert Threshold</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            ${indicators.map(ind => `
+                                                <tr>
+                                                    <td>${AIExplainability.escapeHtml(ind.indicator || '-')}</td>
+                                                    <td><small class="badge bg-info">${AIExplainability.escapeHtml(ind.frequency || '-')}</small></td>
+                                                    <td><small class="badge bg-warning">${AIExplainability.escapeHtml(ind.threshold || '-')}</small></td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Model Assumptions and Limitations
+        if (riskAnalysis.explainability) {
+            html += `
+                <div class="row mb-4">
+                    <div class="col-12">
+                        ${AIExplainability.renderAssumptionsAndLimitations(riskAnalysis.explainability)}
+                    </div>
+                </div>
+            `;
+        }
+
+        html += '</div>';
+        return html;
+    }
     }
 
     /**

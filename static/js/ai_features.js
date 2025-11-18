@@ -702,43 +702,189 @@ function initDeadlinePrediction() {
 }
 
 /**
- * Display deadline prediction results
+ * Display deadline prediction results with explainability
  */
 function displayDeadlinePrediction(data) {
     const resultDiv = document.getElementById('deadline-prediction-result');
     if (!resultDiv) return;
     
+    // Use AIExplainability module for enhanced visualization
     let html = `
-        <div class="alert alert-success">
-            <h6><i class="fas fa-calendar-alt"></i> AI Deadline Prediction</h6>
-            <p><strong>Recommended Deadline:</strong> ${formatDate(data.recommended_deadline)}</p>
-            <p><strong>Estimated Effort:</strong> ${data.estimated_effort_days} days</p>
-            <p><strong>Confidence:</strong> ${data.confidence_level}</p>
-            <p><strong>Reasoning:</strong> ${data.reasoning}</p>
-    `;
-    
-    if (data.risk_factors && data.risk_factors.length > 0) {
-        html += '<p><strong>Risk Factors:</strong></p><ul>';
-        data.risk_factors.forEach(risk => {
-            html += `<li class="text-warning">${risk}</li>`;
-        });
-        html += '</ul>';
-    }
-    
-    if (data.recommendations && data.recommendations.length > 0) {
-        html += '<p><strong>Recommendations:</strong></p><ul>';
-        data.recommendations.forEach(rec => {
-            html += `<li>${rec}</li>`;
-        });
-        html += '</ul>';
-    }
-    
-    html += `
-            <button type="button" class="btn btn-sm btn-primary" onclick="applyDeadlinePrediction('${data.recommended_deadline}')">
-                Apply Deadline
-            </button>
+        <div class="alert alert-success mb-3">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="mb-1"><i class="fas fa-calendar-alt"></i> AI Deadline Prediction</h6>
+                    <div class="deadline-display">
+                        <strong>Recommended Deadline:</strong> 
+                        <span class="badge bg-primary fs-6">${formatDate(data.recommended_deadline)}</span>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-sm btn-primary" onclick="applyDeadlinePrediction('${data.recommended_deadline}')">
+                    <i class="fas fa-check"></i> Apply Deadline
+                </button>
+            </div>
         </div>
     `;
+    
+    // Add confidence meter
+    if (data.confidence_score !== undefined) {
+        html += AIExplainability.renderConfidenceMeter(data.confidence_score, 'Prediction Confidence');
+    }
+    
+    // Add detailed explanation
+    html += `
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h6 class="mb-0"><i class="bi bi-info-circle"></i> Why This Deadline?</h6>
+            </div>
+            <div class="card-body">
+                <div class="reasoning-section mb-3">
+                    <h6 class="small fw-bold text-muted">REASONING</h6>
+                    <p>${data.reasoning}</p>
+                </div>
+    `;
+    
+    // Velocity analysis
+    if (data.velocity_analysis) {
+        const velocity = data.velocity_analysis;
+        html += `
+            <div class="velocity-section mb-3">
+                <h6 class="small fw-bold text-muted">VELOCITY ANALYSIS</h6>
+                <div class="row text-center">
+                    <div class="col-3">
+                        <div class="metric-box">
+                            <div class="small text-muted">Current</div>
+                            <div class="fw-bold">${velocity.current_velocity}</div>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="metric-box">
+                            <div class="small text-muted">Expected</div>
+                            <div class="fw-bold">${velocity.expected_velocity}</div>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="metric-box">
+                            <div class="small text-muted">Trend</div>
+                            <div class="fw-bold">${velocity.velocity_trend}</div>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="metric-box">
+                            <div class="small text-muted">Remaining</div>
+                            <div class="fw-bold">${velocity.remaining_effort_hours}h</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Calculation breakdown
+    if (data.calculation_breakdown) {
+        const calc = data.calculation_breakdown;
+        html += `
+            <div class="calculation-breakdown mb-3">
+                <h6 class="small fw-bold text-muted">CALCULATION BREAKDOWN</h6>
+                <table class="table table-sm">
+                    <tbody>
+                        <tr>
+                            <td>Base Estimate</td>
+                            <td class="text-end fw-bold">${calc.base_estimate_days} days</td>
+                        </tr>
+                        <tr>
+                            <td>Complexity Factor</td>
+                            <td class="text-end">×${calc.complexity_factor}</td>
+                        </tr>
+                        <tr>
+                            <td>Workload Adjustment</td>
+                            <td class="text-end">×${calc.workload_adjustment}</td>
+                        </tr>
+                        <tr>
+                            <td>Priority Adjustment</td>
+                            <td class="text-end">×${calc.priority_adjustment}</td>
+                        </tr>
+                        <tr class="table-active">
+                            <td><strong>Buffer Time</strong></td>
+                            <td class="text-end fw-bold">+${calc.buffer_days} days</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+    
+    // Contributing factors
+    if (data.contributing_factors && data.contributing_factors.length > 0) {
+        html += AIExplainability.renderFactorBreakdown(data.contributing_factors);
+    }
+    
+    // Alternative scenarios
+    if (data.alternative_scenarios) {
+        html += `
+            <div class="scenarios-section mb-3">
+                <h6 class="small fw-bold text-muted">ALTERNATIVE SCENARIOS</h6>
+                <div class="row">
+                    <div class="col-4 text-center">
+                        <div class="scenario-box optimistic">
+                            <div class="small text-success">Optimistic</div>
+                            <div class="fw-bold">${formatDate(data.alternative_scenarios.optimistic)}</div>
+                        </div>
+                    </div>
+                    <div class="col-4 text-center">
+                        <div class="scenario-box realistic">
+                            <div class="small text-primary">Realistic</div>
+                            <div class="fw-bold">${formatDate(data.recommended_deadline)}</div>
+                        </div>
+                    </div>
+                    <div class="col-4 text-center">
+                        <div class="scenario-box pessimistic">
+                            <div class="small text-danger">Pessimistic</div>
+                            <div class="fw-bold">${formatDate(data.alternative_scenarios.pessimistic)}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Assumptions
+    if (data.assumptions && data.assumptions.length > 0) {
+        html += `
+            <div class="assumptions-section mb-3">
+                <h6 class="small fw-bold text-muted">KEY ASSUMPTIONS</h6>
+                <ul class="small mb-0">
+                    ${data.assumptions.map(a => `<li>${a}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+    
+    html += '</div></div>';
+    
+    // Risk factors
+    if (data.risk_factors && data.risk_factors.length > 0) {
+        html += `
+            <div class="alert alert-warning">
+                <h6 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Risk Factors</h6>
+                <ul class="mb-0">
+                    ${data.risk_factors.map(risk => `<li>${risk}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+    
+    // Recommendations
+    if (data.recommendations && data.recommendations.length > 0) {
+        html += `
+            <div class="alert alert-info">
+                <h6 class="alert-heading"><i class="bi bi-lightbulb"></i> Recommendations</h6>
+                <ul class="mb-0">
+                    ${data.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
     
     resultDiv.innerHTML = html;
     resultDiv.classList.remove('d-none');

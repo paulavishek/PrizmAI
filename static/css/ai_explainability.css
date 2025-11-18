@@ -1,0 +1,399 @@
+/**
+ * AI Explainability Styles
+ * Styling for explainable AI components and visualizations
+ */
+
+/* ==================== Confidence Meters ==================== */
+.confidence-meter {
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.confidence-meter .progress {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.confidence-meter .progress-bar {
+    transition: width 0.6s ease, background-color 0.3s ease;
+}
+
+/* ==================== Factor Breakdown ==================== */
+.factor-breakdown {
+    padding: 1rem;
+    background: #ffffff;
+    border-radius: 8px;
+}
+
+.factor-item {
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 4px solid #6c757d;
+    transition: all 0.3s ease;
+}
+
+.factor-item:hover {
+    background: #e9ecef;
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.factor-name {
+    font-size: 0.95rem;
+    color: #2c3e50;
+}
+
+.factor-contribution {
+    font-size: 1.1rem;
+    min-width: 60px;
+    text-align: right;
+}
+
+.factor-description {
+    font-size: 0.85rem;
+    line-height: 1.4;
+    margin-top: 0.25rem;
+    color: #6c757d;
+}
+
+.factor-item .progress {
+    height: 6px;
+    border-radius: 3px;
+    background-color: #e9ecef;
+}
+
+.factor-item .progress-bar {
+    transition: width 0.8s ease;
+    border-radius: 3px;
+}
+
+/* ==================== Calculation Explanation ==================== */
+.calculation-explanation {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.calculation-explanation .card-title {
+    color: #495057;
+    font-size: 1rem;
+}
+
+.calculation-formula {
+    font-family: 'Courier New', monospace;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #495057;
+    text-align: center;
+    padding: 0.5rem;
+    background: #ffffff;
+    border-radius: 6px;
+    margin: 0.5rem 0;
+    border: 1px dashed #adb5bd;
+}
+
+.metric-box {
+    padding: 1rem;
+    background: #ffffff;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease;
+}
+
+.metric-box:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.metric-label {
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+}
+
+.metric-value {
+    font-weight: 700;
+    color: #2c3e50;
+    line-height: 1;
+}
+
+/* ==================== Impact Breakdown ==================== */
+.impact-breakdown {
+    padding: 1rem;
+    background: #ffffff;
+    border-radius: 8px;
+}
+
+.impact-item {
+    padding: 0.5rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    transition: background-color 0.2s ease;
+}
+
+.impact-item:hover {
+    background: #e9ecef;
+}
+
+.impact-item .progress {
+    height: 6px;
+    border-radius: 3px;
+    background-color: #dee2e6;
+}
+
+.impact-item i {
+    color: #6c757d;
+    font-size: 1rem;
+}
+
+/* ==================== Assumptions & Limitations ==================== */
+.explainability-panel .accordion-item {
+    border: 1px solid #dee2e6;
+    margin-bottom: 0.5rem;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.explainability-panel .accordion-button {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #495057;
+    background-color: #f8f9fa;
+    padding: 0.75rem 1rem;
+}
+
+.explainability-panel .accordion-button:not(.collapsed) {
+    background-color: #e7f1ff;
+    color: #0056b3;
+}
+
+.explainability-panel .accordion-button:focus {
+    box-shadow: none;
+    border-color: #dee2e6;
+}
+
+.explainability-panel .accordion-body {
+    font-size: 0.9rem;
+    padding: 1rem;
+}
+
+.explainability-panel .accordion-body ul {
+    padding-left: 1.5rem;
+}
+
+.explainability-panel .accordion-body li {
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+}
+
+/* ==================== Skill Match Explanation ==================== */
+.skill-match-explanation {
+    padding: 1rem;
+    background: #ffffff;
+    border-radius: 8px;
+}
+
+.skill-comparison table {
+    font-size: 0.9rem;
+}
+
+.skill-comparison thead th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: #495057;
+    border-bottom: 2px solid #dee2e6;
+    padding: 0.75rem 0.5rem;
+}
+
+.skill-comparison tbody td {
+    padding: 0.6rem 0.5rem;
+    vertical-align: middle;
+}
+
+.skill-comparison .bi-check-circle {
+    font-size: 1.2rem;
+}
+
+.skill-comparison .bi-x-circle {
+    font-size: 1.2rem;
+}
+
+/* ==================== Deadline Prediction Explanation ==================== */
+.deadline-prediction-explanation {
+    padding: 1rem;
+    background: #ffffff;
+    border-radius: 8px;
+}
+
+.reasoning-section,
+.velocity-section,
+.assumptions-section,
+.risk-factors-section {
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    border-left: 4px solid #6c757d;
+}
+
+.reasoning-section {
+    border-left-color: #0d6efd;
+}
+
+.velocity-section {
+    border-left-color: #198754;
+}
+
+.assumptions-section {
+    border-left-color: #ffc107;
+}
+
+.risk-factors-section {
+    border-left-color: #dc3545;
+    background: #fff3cd;
+}
+
+/* ==================== Explainability Panel ==================== */
+.explainability-panel {
+    padding: 1.5rem;
+    background: #ffffff;
+    border-radius: 8px;
+}
+
+.explainability-panel h6 {
+    color: #2c3e50;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.explainability-panel .card {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: box-shadow 0.2s ease;
+}
+
+.explainability-panel .card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* ==================== Tooltips & Info Icons ==================== */
+.explainability-info-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    background-color: #0d6efd;
+    color: #ffffff;
+    border-radius: 50%;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: help;
+    margin-left: 0.25rem;
+    transition: transform 0.2s ease;
+}
+
+.explainability-info-icon:hover {
+    transform: scale(1.2);
+    background-color: #0b5ed7;
+}
+
+/* ==================== Animations ==================== */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.explainability-panel > * {
+    animation: fadeInUp 0.4s ease-out;
+}
+
+.factor-item:nth-child(1) { animation-delay: 0.1s; }
+.factor-item:nth-child(2) { animation-delay: 0.15s; }
+.factor-item:nth-child(3) { animation-delay: 0.2s; }
+.factor-item:nth-child(4) { animation-delay: 0.25s; }
+.factor-item:nth-child(5) { animation-delay: 0.3s; }
+
+/* ==================== Responsive Design ==================== */
+@media (max-width: 768px) {
+    .calculation-breakdown .row {
+        flex-direction: column;
+    }
+    
+    .calculation-breakdown .col-4 {
+        margin-bottom: 1rem;
+    }
+    
+    .factor-contribution {
+        font-size: 1rem;
+    }
+    
+    .metric-value {
+        font-size: 2rem !important;
+    }
+}
+
+/* ==================== Dark Mode Support ==================== */
+@media (prefers-color-scheme: dark) {
+    .confidence-meter,
+    .factor-breakdown,
+    .impact-breakdown,
+    .explainability-panel {
+        background: #1e1e1e;
+        color: #e0e0e0;
+    }
+    
+    .factor-item,
+    .impact-item {
+        background: #2a2a2a;
+    }
+    
+    .factor-item:hover,
+    .impact-item:hover {
+        background: #333333;
+    }
+    
+    .calculation-explanation {
+        background: linear-gradient(135deg, #2a2a2a 0%, #1e1e1e 100%);
+    }
+    
+    .metric-box {
+        background: #2a2a2a;
+        color: #e0e0e0;
+    }
+    
+    .metric-value {
+        color: #ffffff;
+    }
+}
+
+/* ==================== Print Styles ==================== */
+@media print {
+    .explainability-panel {
+        page-break-inside: avoid;
+    }
+    
+    .factor-item,
+    .metric-box {
+        page-break-inside: avoid;
+    }
+    
+    .accordion-button {
+        display: none;
+    }
+    
+    .accordion-collapse {
+        display: block !important;
+    }
+}

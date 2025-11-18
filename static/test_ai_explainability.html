@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Explainability Test - PrizmAI</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="ai_explainability.css">
+    
+    <style>
+        body {
+            background: #f5f7fa;
+            padding: 2rem 0;
+        }
+        .demo-section {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .section-title {
+            color: #2c3e50;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid #0d6efd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="text-center mb-5">
+            <h1 class="display-4 fw-bold text-primary">
+                <i class="bi bi-lightbulb"></i> AI Explainability Demo
+            </h1>
+            <p class="lead text-muted">Interactive examples of explainable AI features</p>
+        </div>
+
+        <!-- Section 1: Confidence Meters -->
+        <div class="demo-section">
+            <h2 class="section-title">1. Confidence Meters</h2>
+            <div class="row">
+                <div class="col-md-4">
+                    <div id="confidence-high"></div>
+                </div>
+                <div class="col-md-4">
+                    <div id="confidence-medium"></div>
+                </div>
+                <div class="col-md-4">
+                    <div id="confidence-low"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 2: Factor Breakdown -->
+        <div class="demo-section">
+            <h2 class="section-title">2. Contributing Factors Breakdown</h2>
+            <div id="factors-demo"></div>
+        </div>
+
+        <!-- Section 3: Calculation Explanation -->
+        <div class="demo-section">
+            <h2 class="section-title">3. Calculation Explanation</h2>
+            <div id="calculation-demo"></div>
+        </div>
+
+        <!-- Section 4: Impact Breakdown -->
+        <div class="demo-section">
+            <h2 class="section-title">4. Impact Breakdown</h2>
+            <div id="impact-demo"></div>
+        </div>
+
+        <!-- Section 5: Skill Match Explanation -->
+        <div class="demo-section">
+            <h2 class="section-title">5. Skill Match Explanation</h2>
+            <div id="skill-match-demo"></div>
+        </div>
+
+        <!-- Section 6: Deadline Prediction -->
+        <div class="demo-section">
+            <h2 class="section-title">6. Deadline Prediction Explanation</h2>
+            <div id="deadline-demo"></div>
+        </div>
+
+        <!-- Section 7: Full Explainability Panel -->
+        <div class="demo-section">
+            <h2 class="section-title">7. Complete Explainability Panel</h2>
+            <div id="full-panel-demo"></div>
+        </div>
+
+        <!-- Section 8: Assumptions & Limitations -->
+        <div class="demo-section">
+            <h2 class="section-title">8. Model Assumptions & Limitations</h2>
+            <div id="assumptions-demo"></div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- AI Explainability Module -->
+    <script src="ai_explainability.js"></script>
+    
+    <!-- Demo Script -->
+    <script>
+        // Demo data
+        const demoData = {
+            riskAnalysis: {
+                confidence_score: 0.85,
+                likelihood: {
+                    score: 2,
+                    percentage_range: "34-66%",
+                    reasoning: "Based on task complexity and historical data, there's a moderate likelihood of delays or issues arising during implementation.",
+                    key_factors: [
+                        "Complex OAuth integration with multiple API endpoints",
+                        "Limited assignee experience with OAuth 2.0",
+                        "External dependency on Google API approval"
+                    ],
+                    factor_weights: {
+                        "complexity": 0.40,
+                        "assignee_experience": 0.35,
+                        "external_dependency": 0.25
+                    },
+                    confidence: 0.82
+                },
+                impact: {
+                    score: 3,
+                    severity_level: "High",
+                    reasoning: "If issues occur, they will significantly affect the project timeline, require additional resources, and may impact dependent features.",
+                    affected_areas: [
+                        "User authentication system",
+                        "API integration roadmap",
+                        "Q4 release schedule",
+                        "Mobile app development"
+                    ],
+                    impact_breakdown: {
+                        timeline: 0.40,
+                        resources: 0.30,
+                        quality: 0.20,
+                        stakeholders: 0.10
+                    },
+                    confidence: 0.78
+                },
+                risk_assessment: {
+                    risk_score: 6,
+                    risk_level: "High",
+                    priority_ranking: "critical",
+                    summary: "This task presents a high risk due to complexity and external dependencies. Close monitoring and risk mitigation strategies are recommended.",
+                    calculation_method: "Likelihood (2) × Impact (3) = 6",
+                    contributing_factors: [
+                        {
+                            factor: "OAuth Integration Complexity",
+                            contribution_percentage: 35,
+                            weight: 0.35,
+                            description: "Multiple API endpoints and authentication flows increase implementation complexity and error potential"
+                        },
+                        {
+                            factor: "External API Dependency",
+                            contribution_percentage: 30,
+                            weight: 0.30,
+                            description: "Waiting on Google API approval creates timeline uncertainty and potential delays"
+                        },
+                        {
+                            factor: "Assignee Skill Gap",
+                            contribution_percentage: 20,
+                            weight: 0.20,
+                            description: "Current assignee has intermediate OAuth experience, but task requires expert-level knowledge"
+                        },
+                        {
+                            factor: "Timeline Pressure",
+                            contribution_percentage: 15,
+                            weight: 0.15,
+                            description: "Task is due in 3 days, but typical OAuth implementations take 5-7 days"
+                        }
+                    ]
+                },
+                risk_indicators: [
+                    {
+                        indicator: "API response time > 2 seconds",
+                        frequency: "Daily monitoring",
+                        threshold: "3+ consecutive slow responses"
+                    },
+                    {
+                        indicator: "Integration test failure rate",
+                        frequency: "After each commit",
+                        threshold: ">20% test failures"
+                    }
+                ],
+                explainability: {
+                    model_assumptions: [
+                        "Assignee can dedicate 6 hours/day to this task",
+                        "Google API approval will be received within 48 hours",
+                        "No major architectural changes will be needed",
+                        "Code review process takes 1 business day"
+                    ],
+                    data_limitations: [
+                        "Limited historical data for OAuth tasks in this project",
+                        "No direct experience data from current assignee on OAuth",
+                        "External API approval timeline is estimated, not guaranteed"
+                    ],
+                    alternative_interpretations: [
+                        "Risk could be Medium if we use pre-built OAuth library instead of custom implementation",
+                        "Impact could be lower if authentication is isolated from other features",
+                        "Timeline pressure could be reduced by negotiating deadline extension"
+                    ]
+                }
+            },
+            skillMatch: {
+                score: 85,
+                required_skills: [
+                    { name: "Python", level: "Expert" },
+                    { name: "OAuth 2.0", level: "Intermediate" },
+                    { name: "API Design", level: "Intermediate" },
+                    { name: "Unit Testing", level: "Beginner" }
+                ],
+                user_skills: [
+                    { name: "Python", level: "Expert" },
+                    { name: "OAuth 2.0", level: "Advanced" },
+                    { name: "API Design", level: "Intermediate" },
+                    { name: "Unit Testing", level: "Advanced" }
+                ],
+                match_breakdown: [
+                    { match: true, score: 100 },
+                    { match: true, score: 95 },
+                    { match: true, score: 100 },
+                    { match: true, score: 100 }
+                ]
+            },
+            deadlinePrediction: {
+                recommended_deadline: "2025-11-25",
+                confidence_level: "medium",
+                confidence_score: 0.75,
+                reasoning: "Based on historical data and current team velocity, this task requires 5-6 days of focused work. The assignee's current workload and task complexity are primary factors.",
+                assumptions: [
+                    "Assignee can dedicate 6 hours/day to this task",
+                    "No major blockers or external dependencies will arise",
+                    "Code review and testing will take 1 day",
+                    "Similar tasks in the past took an average of 5.2 days"
+                ],
+                velocity_data: {
+                    current_velocity: "4.5 h/day",
+                    expected_velocity: "5.0 h/day",
+                    velocity_trend: "declining",
+                    remaining_hours: 32
+                },
+                risk_factors: [
+                    "External API dependency may cause delays",
+                    "Assignee has limited OAuth experience, may need guidance",
+                    "Timeline is tight for this level of complexity"
+                ],
+                alternative_scenarios: {
+                    optimistic: "2025-11-23",
+                    pessimistic: "2025-11-28"
+                }
+            }
+        };
+
+        // Render all demos
+        document.addEventListener('DOMContentLoaded', function() {
+            // 1. Confidence Meters
+            document.getElementById('confidence-high').innerHTML = 
+                AIExplainability.renderConfidenceMeter(0.92, 'High Confidence');
+            document.getElementById('confidence-medium').innerHTML = 
+                AIExplainability.renderConfidenceMeter(0.65, 'Medium Confidence');
+            document.getElementById('confidence-low').innerHTML = 
+                AIExplainability.renderConfidenceMeter(0.38, 'Low Confidence');
+
+            // 2. Factor Breakdown
+            document.getElementById('factors-demo').innerHTML = 
+                AIExplainability.renderFactorBreakdown(demoData.riskAnalysis.risk_assessment.contributing_factors);
+
+            // 3. Calculation Explanation
+            document.getElementById('calculation-demo').innerHTML = 
+                AIExplainability.renderCalculationExplanation({
+                    ...demoData.riskAnalysis.risk_assessment,
+                    likelihood: demoData.riskAnalysis.likelihood.score,
+                    impact: demoData.riskAnalysis.impact.score
+                });
+
+            // 4. Impact Breakdown
+            document.getElementById('impact-demo').innerHTML = 
+                AIExplainability.renderImpactBreakdown(demoData.riskAnalysis.impact.impact_breakdown);
+
+            // 5. Skill Match
+            document.getElementById('skill-match-demo').innerHTML = 
+                AIExplainability.renderSkillMatchExplanation(demoData.skillMatch);
+
+            // 6. Deadline Prediction
+            document.getElementById('deadline-demo').innerHTML = 
+                AIExplainability.renderDeadlinePredictionExplanation(demoData.deadlinePrediction);
+
+            // 7. Full Panel
+            document.getElementById('full-panel-demo').innerHTML = 
+                AIExplainability.renderExplainabilityPanel(demoData.riskAnalysis);
+
+            // 8. Assumptions
+            document.getElementById('assumptions-demo').innerHTML = 
+                AIExplainability.renderAssumptionsAndLimitations(demoData.riskAnalysis.explainability);
+        });
+    </script>
+</body>
+</html>

@@ -15,8 +15,12 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'css/ai_explainability.css' %}">
     
     {% block extra_css %}{% endblock %}
 </head>
@@ -179,6 +183,9 @@
         setInterval(updateUnreadMessageCount, 30000);
         {% endif %}
     </script>
+    
+    <!-- AI Explainability JS -->
+    <script src="{% static 'js/ai_explainability.js' %}"></script>
     
     <!-- Custom JS -->
     {% block extra_js %}{% endblock %}
