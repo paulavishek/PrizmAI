@@ -80,6 +80,10 @@ urlpatterns = [
     # Gantt Chart API Endpoints
     path('api/tasks/update-dates/', api_views.update_task_dates_api, name='update_task_dates_api'),
     
+    # Task Prediction API Endpoints
+    path('api/task/<int:task_id>/prediction/', api_views.get_task_prediction_api, name='get_task_prediction_api'),
+    path('api/board/<int:board_id>/update-predictions/', api_views.bulk_update_predictions_api, name='bulk_update_predictions_api'),
+    
     # File Management for Tasks
     path('tasks/<int:task_id>/files/upload/', views.upload_task_file, name='upload_task_file'),
     path('tasks/<int:task_id>/files/list/', views.list_task_files, name='list_task_files'),

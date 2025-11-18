@@ -1404,3 +1404,128 @@ def summarize_task_details_api(request, task_id):
         logger.error(f"Error in summarize_task_details_api: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def get_task_prediction_api(request, task_id):
+    """
+    API endpoint to get or update task completion prediction
+    GET: Returns current prediction
+    POST: Triggers new prediction calculation
+    """
+    try:
+        task = get_object_or_404(Task, pk=task_id)
+        
+        # Check user has access to this task's board
+        if request.user not in task.column.board.members.all():
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # For POST, force recalculation
+        if request.method == 'POST':
+            from kanban.utils.task_prediction import update_task_prediction
+            prediction = update_task_prediction(task)
+            
+            if not prediction:
+                return JsonResponse({
+                    'message': 'Task is completed or cannot be predicted',
+                    'has_prediction': False
+                })
+            
+            # Format similar_tasks for JSON serialization
+            similar_tasks_formatted = []
+            if prediction.get('similar_tasks'):
+                for task_data in prediction['similar_tasks']:
+                    # completed_at is already a string (isoformat) from task_prediction.py
+                    formatted_task = {
+                        'id': task_data['id'],
+                        'title': task_data['title'],
+                        'actual_duration_days': task_data['actual_duration_days'],
+                        'complexity_score': task_data['complexity_score'],
+                        'priority': task_data['priority'],
+                        'completed_at': task_data.get('completed_at')  # Already a string
+                    }
+                    similar_tasks_formatted.append(formatted_task)
+            
+            return JsonResponse({
+                'success': True,
+                'prediction': {
+                    'predicted_date': prediction['predicted_date'].isoformat(),
+                    'predicted_date_formatted': prediction['predicted_date'].strftime('%B %d, %Y'),
+                    'confidence': prediction['confidence'],
+                    'confidence_percentage': int(prediction['confidence'] * 100),
+                    'confidence_interval_days': prediction['confidence_interval_days'],
+                    'based_on_tasks': prediction['based_on_tasks'],
+                    'similar_tasks': similar_tasks_formatted,
+                    'early_date': prediction['early_date'].isoformat(),
+                    'early_date_formatted': prediction['early_date'].strftime('%b %d'),
+                    'late_date': prediction['late_date'].isoformat(),
+                    'late_date_formatted': prediction['late_date'].strftime('%b %d'),
+                    'prediction_method': prediction['prediction_method'],
+                    'factors': prediction['factors'],
+                    'is_likely_late': prediction['predicted_date'] > task.due_date if task.due_date else False
+                },
+                'has_prediction': True
+            })
+        
+        # For GET, return existing prediction
+        if task.predicted_completion_date and task.prediction_confidence:
+            is_likely_late = False
+            if task.due_date:
+                is_likely_late = task.predicted_completion_date > task.due_date
+            
+            return JsonResponse({
+                'has_prediction': True,
+                'prediction': {
+                    'predicted_date': task.predicted_completion_date.isoformat(),
+                    'predicted_date_formatted': task.predicted_completion_date.strftime('%B %d, %Y'),
+                    'confidence': task.prediction_confidence,
+                    'confidence_percentage': int(task.prediction_confidence * 100),
+                    'confidence_interval_days': task.prediction_metadata.get('confidence_interval_days', 0),
+                    'based_on_tasks': task.prediction_metadata.get('based_on_tasks', 0),
+                    'similar_tasks': task.prediction_metadata.get('similar_tasks', []),
+                    'early_date': task.prediction_metadata.get('early_date', ''),
+                    'late_date': task.prediction_metadata.get('late_date', ''),
+                    'prediction_method': task.prediction_metadata.get('prediction_method', 'unknown'),
+                    'factors': task.prediction_metadata.get('factors', {}),
+                    'is_likely_late': is_likely_late,
+                    'last_updated': task.last_prediction_update.isoformat() if task.last_prediction_update else None
+                }
+            })
+        else:
+            return JsonResponse({
+                'has_prediction': False,
+                'message': 'No prediction available. Task may need a start date or more historical data.'
+            })
+            
+    except Exception as e:
+        logger.error(f"Error in get_task_prediction_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def bulk_update_predictions_api(request, board_id):
+    """
+    API endpoint to update predictions for all tasks in a board
+    """
+    try:
+        board = get_object_or_404(Board, pk=board_id)
+        
+        # Check user has access
+        if request.user not in board.members.all():
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        from kanban.utils.task_prediction import bulk_update_predictions
+        result = bulk_update_predictions(board=board)
+        
+        return JsonResponse({
+            'success': True,
+            'total_tasks': result['total_tasks'],
+            'updated': result['updated'],
+            'failed': result['failed'],
+            'message': f"Updated {result['updated']} of {result['total_tasks']} task predictions"
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in bulk_update_predictions_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)

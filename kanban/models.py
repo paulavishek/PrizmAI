@@ -1,5 +1,6 @@
 ﻿from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
 from colorfield.fields import ColorField
 from accounts.models import Organization
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -215,8 +216,49 @@ class Task(models.Model):
         help_text="When AI last analyzed this task for dependency suggestions"
     )
     
+    # Predictive Task Completion Fields
+    completed_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="Actual completion timestamp (when progress reached 100%)"
+    )
+    actual_duration_days = models.FloatField(
+        blank=True,
+        null=True,
+        help_text="Actual days taken to complete (start_date to completed_at)"
+    )
+    predicted_completion_date = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="AI-predicted completion date based on historical data"
+    )
+    prediction_confidence = models.FloatField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Confidence score for prediction (0.0-1.0)"
+    )
+    prediction_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Prediction details: confidence_interval, based_on_tasks, factors"
+    )
+    last_prediction_update = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="When prediction was last calculated"
+    )
+    
     class Meta:
         ordering = ['position']
+        indexes = [
+            models.Index(fields=['column', 'position']),
+            models.Index(fields=['assigned_to']),
+            models.Index(fields=['created_by']),
+            models.Index(fields=['due_date']),
+            models.Index(fields=['progress']),
+            models.Index(fields=['priority']),
+        ]
     
     def __str__(self):
         return self.title
@@ -271,6 +313,51 @@ class Task(models.Model):
             current = current.parent_task
         self.dependency_chain = chain
         self.save()
+    
+    def save(self, *args, **kwargs):
+        """Override save to track completion and update predictions"""
+        # Track completion timestamp
+        if self.progress == 100 and not self.completed_at:
+            self.completed_at = timezone.now()
+            
+            # Calculate actual duration if start_date exists
+            if self.start_date:
+                duration = (self.completed_at.date() - self.start_date).days
+                self.actual_duration_days = max(0.5, duration)  # Minimum 0.5 days
+        
+        # Reset completion if progress drops below 100
+        elif self.progress < 100 and self.completed_at:
+            self.completed_at = None
+            self.actual_duration_days = None
+        
+        super().save(*args, **kwargs)
+    
+    def get_velocity_factor(self):
+        """Calculate team member's velocity factor based on historical data"""
+        if not self.assigned_to:
+            return 1.0
+        
+        from django.db.models import Avg
+        
+        # Get completed tasks by this user with similar complexity
+        completed_tasks = Task.objects.filter(
+            assigned_to=self.assigned_to,
+            progress=100,
+            actual_duration_days__isnull=False,
+            complexity_score__range=(max(1, self.complexity_score - 2), 
+                                    min(10, self.complexity_score + 2))
+        ).exclude(id=self.id)
+        
+        avg_duration = completed_tasks.aggregate(
+            avg=Avg('actual_duration_days')
+        )['avg']
+        
+        if avg_duration and avg_duration > 0:
+            # Calculate velocity relative to baseline
+            baseline = self.complexity_score * 1.5  # Baseline: 1.5 days per complexity point
+            return avg_duration / baseline
+        
+        return 1.0
 
 class Comment(models.Model):
     task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='comments')
@@ -280,6 +367,10 @@ class Comment(models.Model):
     
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['task', '-created_at']),
+            models.Index(fields=['user']),
+        ]
     
     def __str__(self):
         return f"Comment by {self.user.username} on {self.task.title}"
@@ -304,6 +395,11 @@ class TaskActivity(models.Model):
     class Meta:
         ordering = ['-created_at']
         verbose_name_plural = 'Task Activities'
+        indexes = [
+            models.Index(fields=['task', '-created_at']),
+            models.Index(fields=['user']),
+            models.Index(fields=['activity_type']),
+        ]
     
     def __str__(self):
         return f"{self.activity_type} by {self.user.username} on {self.task.title}"

@@ -411,10 +411,30 @@ def board_detail(request, board_id):
 
 @login_required
 def task_detail(request, task_id):
+    from django.db.models import Prefetch
     from kanban.permission_utils import user_has_task_permission
     from kanban.audit_utils import log_model_change, AuditLogContext
     
-    task = get_object_or_404(Task, id=task_id)
+    # Optimize query with select_related and prefetch_related to avoid N+1 queries
+    task = get_object_or_404(
+        Task.objects.select_related(
+            'column',
+            'column__board',
+            'column__board__organization',
+            'assigned_to',
+            'assigned_to__profile',
+            'created_by',
+            'created_by__profile',
+            'parent_task'
+        ).prefetch_related(
+            'labels',
+            'subtasks',
+            'related_tasks',
+            'dependencies',
+            Prefetch('file_attachments', queryset=TaskFile.objects.filter(deleted_at__isnull=True).select_related('uploaded_by'))
+        ),
+        id=task_id
+    )
     board = task.column.board
     
     # Check permission using RBAC
@@ -473,18 +493,56 @@ def task_detail(request, task_id):
     else:
         comment_form = CommentForm()
     
-    # Get all comments for this task
-    comments = Comment.objects.filter(task=task)
+    # Get all comments for this task with optimized queries
+    comments = Comment.objects.filter(task=task).select_related('user', 'user__profile').order_by('-created_at')
     
-    # Get all activities for this task
-    activities = TaskActivity.objects.filter(task=task)
+    # Get all activities for this task with optimized queries
+    activities = TaskActivity.objects.filter(task=task).select_related('user', 'user__profile').order_by('-created_at')
     
-    # Get stakeholders involved in this task
-    stakeholders = StakeholderTaskInvolvement.objects.filter(task=task)
+    # Get stakeholders involved in this task with optimized queries
+    stakeholders = StakeholderTaskInvolvement.objects.filter(task=task).select_related(
+        'stakeholder'
+    ).order_by('stakeholder__name')
     
     # Get linked wiki pages for this task
     from wiki.models import WikiLink
     wiki_links = WikiLink.objects.filter(task=task).select_related('wiki_page')
+    
+    # Get task completion prediction if available
+    prediction_data = None
+    if task.progress < 100 and task.predicted_completion_date:
+        from kanban.utils.task_prediction import predict_task_completion_date
+        
+        # Check if prediction is stale (older than 24 hours) and update if needed
+        if not task.last_prediction_update or \
+           (timezone.now() - task.last_prediction_update > timedelta(hours=24)):
+            from kanban.utils.task_prediction import update_task_prediction
+            try:
+                prediction = update_task_prediction(task)
+                if prediction:
+                    prediction_data = prediction
+            except Exception as e:
+                logger.warning(f"Failed to update prediction for task {task.id}: {e}")
+        
+        # Use existing prediction
+        if not prediction_data and task.predicted_completion_date:
+            is_likely_late = False
+            if task.due_date:
+                is_likely_late = task.predicted_completion_date > task.due_date
+            
+            prediction_data = {
+                'predicted_date': task.predicted_completion_date,
+                'confidence': task.prediction_confidence,
+                'confidence_percentage': int(task.prediction_confidence * 100),
+                'confidence_interval_days': task.prediction_metadata.get('confidence_interval_days', 0),
+                'based_on_tasks': task.prediction_metadata.get('based_on_tasks', 0),
+                'similar_tasks': task.prediction_metadata.get('similar_tasks', []),
+                'factors': task.prediction_metadata.get('factors', {}),
+                'early_date': task.prediction_metadata.get('early_date'),
+                'late_date': task.prediction_metadata.get('late_date'),
+                'prediction_method': task.prediction_metadata.get('prediction_method', 'unknown'),
+                'is_likely_late': is_likely_late
+            }
     
     return render(request, 'kanban/task_detail.html', {
         'task': task,
@@ -495,6 +553,7 @@ def task_detail(request, task_id):
         'activities': activities,
         'stakeholders': stakeholders,
         'wiki_links': wiki_links,
+        'prediction': prediction_data,
     })
 
 @login_required

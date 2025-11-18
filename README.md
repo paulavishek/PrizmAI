@@ -63,6 +63,60 @@ Imagine having a helpful colleague who knows all your projects and can answer qu
 
 Just like chatting with someone in Slack or Teams - natural conversation, smart insights.
 
+### 🎯 Smart Completion Date Predictions
+
+**Know when tasks will actually be done — not just guesses, but data-driven predictions.**
+
+PrizmAI analyzes your team's historical performance and predicts when each task will be completed:
+
+**How It Works:**
+1. Open any task on your board
+2. See the **"Predicted Completion"** section
+3. AI analyzes similar completed tasks from your team
+4. Shows predicted completion date with confidence level
+5. Click to see which similar tasks were used for the prediction
+
+**What You Get:**
+- 📅 **Predicted completion date** - When the task will likely be done
+- 📊 **Confidence level** - How reliable the prediction is (50-95%)
+- 📈 **Date range** - Optimistic to pessimistic estimates
+- 🔍 **Similar tasks** - See the 5-10 historical tasks AI analyzed
+- ⚡ **Real-time updates** - Predictions update as work progresses
+
+**Example:**
+
+```
+Task: "Implement dashboard feature"
+Predicted Completion: Nov 22, 2025
+Confidence: 85%
+Range: Nov 20 - Nov 25
+
+Based on 7 similar tasks:
+✅ "Refactor task module" - 1.5 days (Complexity: 1/10, High priority)
+✅ "Implement dashboard" - 3.8 days (Complexity: 3/10, High priority)
+✅ "Deploy notifications" - 5.4 days (Complexity: 3/10, High priority)
+... and 4 more
+```
+
+**What AI Considers:**
+- Team member's past performance (velocity)
+- Task complexity and priority
+- Historical completion times for similar tasks
+- Current progress percentage
+- Risk factors and dependencies
+
+**Why This Matters:**
+- ✅ **Realistic planning** - No more guessing deadlines
+- ✅ **Identify delays early** - See if tasks will miss due dates
+- ✅ **Better resource allocation** - Know who's overloaded
+- ✅ **Data-driven decisions** - Base planning on actual team velocity
+
+**Perfect For:**
+- Sprint planning (know if you can commit to the deadline)
+- Client commitments (give realistic delivery dates)
+- Resource planning (understand team capacity)
+- Risk management (flag tasks likely to be late)
+
 ### 📊 Smart Task Recommendations
 
 When creating a new board:
@@ -405,6 +459,8 @@ Create a living document of your project knowledge:
 - ✅ Workload forecasting
 - ✅ Risk identification
 - ✅ Analytics & insights
+- ✅ **Task completion predictions** - Data-driven completion date estimates
+- ✅ **Historical analysis** - Learn from past performance
 
 **Advanced Management (When You Need It)**
 - ✅ Task dependencies & tree view

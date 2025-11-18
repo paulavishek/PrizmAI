@@ -45,6 +45,9 @@ class Command(BaseCommand):
         # Create meeting transcript demo data
         self.create_meeting_transcript_demo_data()
         
+        # Create historical task data for predictive analytics
+        self.create_historical_task_data()
+        
         # Fix Gantt chart data with dynamic dates relative to current date
         self.stdout.write(self.style.NOTICE('\nFixing Gantt chart demo data with dynamic dates...'))
         from django.core.management import call_command
@@ -84,6 +87,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('✅ Stakeholder Management - Stakeholder engagement'))
         self.stdout.write(self.style.SUCCESS('✅ Requirements Management - Task dependencies'))
         self.stdout.write(self.style.SUCCESS('✅ Chat Rooms - Multiple chat rooms with messages'))
+        self.stdout.write(self.style.SUCCESS('✅ Predictive Analytics - Historical task completion data'))
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))
 
     def create_users(self):
@@ -2058,3 +2062,172 @@ Carol: Sounds good. Great work this week!
                         self.stdout.write(f'    Meeting notes {meeting.title} already exists')
         
         self.stdout.write(self.style.SUCCESS('  ✓ Meeting notes demo data created!'))
+
+    def create_historical_task_data(self):
+        """Create historical completed tasks for predictive analytics (6 months of data)"""
+        self.stdout.write(self.style.NOTICE('Creating historical task completion data for predictions...'))
+        
+        # Priority factors affect completion speed
+        priority_factors = {
+            'urgent': 0.7,   # Completed 30% faster (high focus)
+            'high': 0.85,    # 15% faster
+            'medium': 1.0,   # Baseline
+            'low': 1.3       # 30% slower (less attention)
+        }
+        
+        # Task type templates for realistic titles
+        task_types = [
+            'Implement {feature}',
+            'Fix bug in {component}',
+            'Refactor {module}',
+            'Add tests for {feature}',
+            'Update documentation for {component}',
+            'Optimize {feature} performance',
+            'Review and merge {feature}',
+            'Deploy {feature} to production',
+            'Design {component} UI',
+            'Research {technology} integration'
+        ]
+        
+        features = ['authentication', 'dashboard', 'reporting', 'notifications', 'API endpoints', 
+                   'user profile', 'search', 'filters', 'export', 'settings']
+        components = ['login', 'navbar', 'sidebar', 'modal', 'form', 'table', 'chart', 'menu']
+        modules = ['user module', 'task module', 'board module', 'analytics module']
+        technologies = ['Redis', 'WebSockets', 'REST API', 'GraphQL', 'Docker']
+        
+        # Create historical tasks for each board
+        for board in Board.objects.all():
+            self.stdout.write(f'  Creating historical tasks for board: {board.name}')
+            
+            # Get or create Done column
+            done_column = board.columns.filter(
+                name__in=['Done', 'Completed', 'Closed']
+            ).first()
+            
+            if not done_column:
+                # Create Done column if it doesn't exist
+                max_position = board.columns.aggregate(Max('position'))['position__max'] or 0
+                done_column = Column.objects.create(
+                    name='Done',
+                    board=board,
+                    position=max_position + 1
+                )
+                self.stdout.write(f'    Created Done column for {board.name}')
+            
+            # Get board members for assignment
+            members = list(board.members.all())
+            if not members:
+                members = [self.users['admin']]
+            
+            # Create 60-100 historical tasks per board
+            num_tasks = random.randint(60, 100)
+            
+            for i in range(num_tasks):
+                # Random date in past 6 months (180 days)
+                days_ago = random.randint(7, 180)  # At least 7 days ago
+                created_date = timezone.now() - timedelta(
+                    days=days_ago,
+                    hours=random.randint(0, 23),
+                    minutes=random.randint(0, 59)
+                )
+                
+                # Random complexity (1-10)
+                complexity = random.randint(1, 10)
+                
+                # Random priority
+                priority = random.choice(['urgent', 'high', 'medium', 'low'])
+                
+                # Calculate realistic completion time
+                # Base: complexity * 1.5 days per complexity point
+                base_days = complexity * 1.5
+                
+                # Apply priority factor
+                adjusted_days = base_days * priority_factors[priority]
+                
+                # Add natural variation (±30%)
+                variation = random.uniform(0.7, 1.3)
+                actual_days = adjusted_days * variation
+                
+                # Apply team member velocity variation (some are faster/slower)
+                team_member = random.choice(members)
+                velocity_variation = random.uniform(0.8, 1.2)  # ±20% per person
+                actual_days *= velocity_variation
+                
+                # Minimum 0.5 days, maximum 30 days
+                actual_days = max(0.5, min(30, actual_days))
+                
+                # Calculate dates
+                start_date = created_date.date()
+                completed_date = created_date + timedelta(days=actual_days)
+                
+                # Due date was estimated as base_days * 1.2 (20% buffer)
+                estimated_due_date = created_date + timedelta(days=base_days * 1.2)
+                
+                # Generate realistic task title
+                task_template = random.choice(task_types)
+                task_title = task_template.format(
+                    feature=random.choice(features),
+                    component=random.choice(components),
+                    module=random.choice(modules),
+                    technology=random.choice(technologies)
+                )
+                
+                # Create historical task
+                task = Task.objects.create(
+                    title=task_title,
+                    description=f"Historical completed task for predictive analytics.\nComplexity: {complexity}/10\nCompleted in {actual_days:.1f} days.",
+                    column=done_column,
+                    position=i,
+                    created_at=created_date,
+                    updated_at=completed_date,
+                    start_date=start_date,
+                    due_date=estimated_due_date,
+                    assigned_to=team_member,
+                    created_by=random.choice(members),
+                    priority=priority,
+                    progress=100,
+                    complexity_score=complexity,
+                    completed_at=completed_date,
+                    actual_duration_days=round(actual_days, 2)
+                )
+                
+                # Add some realistic attributes
+                if random.random() < 0.3:  # 30% have risk scores
+                    task.risk_score = random.randint(1, 9)
+                    task.save()
+                
+                if random.random() < 0.2:  # 20% require collaboration
+                    task.collaboration_required = True
+                    task.save()
+                
+                # Create minimal activity records
+                TaskActivity.objects.create(
+                    task=task,
+                    user=task.created_by,
+                    activity_type='created',
+                    description=f"Created task",
+                    created_at=created_date
+                )
+                
+                TaskActivity.objects.create(
+                    task=task,
+                    user=task.assigned_to,
+                    activity_type='updated',
+                    description=f"Completed task",
+                    created_at=completed_date
+                )
+            
+            self.stdout.write(f'    ✓ Created {num_tasks} historical tasks for {board.name}')
+        
+        # Update predictions for active tasks
+        self.stdout.write(self.style.NOTICE('  Generating predictions for active tasks...'))
+        from kanban.utils.task_prediction import bulk_update_predictions
+        
+        for org in self.organizations.values():
+            result = bulk_update_predictions(organization=org)
+            self.stdout.write(
+                f'    ✓ Updated {result["updated"]} predictions for {org.name} '
+                f'({result["total_tasks"]} active tasks)'
+            )
+        
+        self.stdout.write(self.style.SUCCESS('✅ Historical task data and predictions created!'))

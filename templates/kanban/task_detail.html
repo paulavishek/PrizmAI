@@ -304,12 +304,129 @@
                         {{ task.assigned_to.username }}
                     </div>
                 </div>
-                {% endif %}                {% if task.due_date %}
+                {% endif %}
+
+                {% if task.due_date %}
                 <div class="mb-3">
                     <label class="text-muted">Due Date</label>
                     <div class="p-2 rounded {% if task.due_date < now %}bg-danger text-white{% else %}bg-light{% endif %}">
                         {{ task.due_date|date:"M d, Y" }}
                         {% if task.due_date < now %}<span class="badge bg-light text-danger ms-2">Overdue</span>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- 🔮 AI Predicted Completion Date -->
+                {% if task.progress < 100 %}
+                <div class="mb-3">
+                    <label class="text-muted d-flex align-items-center">
+                        <i class="fas fa-brain text-primary me-2"></i> Predicted Completion
+                        <button type="button" class="btn btn-sm btn-link p-0 ms-2" id="refresh-prediction" data-task-id="{{ task.id }}" title="Refresh prediction">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </label>
+                    <div id="prediction-container" class="p-2 bg-light rounded">
+                        {% if prediction %}
+                            <div class="prediction-content">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <strong class="d-block {% if prediction.is_likely_late %}text-danger{% else %}text-success{% endif %}">
+                                            {{ prediction.predicted_date|date:"M d, Y" }}
+                                        </strong>
+                                        <small class="text-muted">
+                                            Range: {{ prediction.early_date|date:"M d" }} - {{ prediction.late_date|date:"M d" }}
+                                        </small>
+                                    </div>
+                                    <span class="badge {% if prediction.confidence >= 0.7 %}bg-success{% elif prediction.confidence >= 0.5 %}bg-warning{% else %}bg-secondary{% endif %}">
+                                        {{ prediction.confidence_percentage }}% confidence
+                                    </span>
+                                </div>
+                                {% if prediction.is_likely_late %}
+                                    <div class="alert alert-warning alert-sm mb-2 py-1 px-2">
+                                        <i class="fas fa-exclamation-triangle me-1"></i>
+                                        <small>Likely to miss due date</small>
+                                    </div>
+                                {% endif %}
+                                <div class="mt-2">
+                                    <small class="text-muted d-block">
+                                        <i class="fas fa-chart-line me-1"></i>Based on {{ prediction.based_on_tasks }} similar task{{ prediction.based_on_tasks|pluralize }}
+                                    </small>
+                                    
+                                    <!-- Similar Tasks List -->
+                                    {% if prediction.similar_tasks %}
+                                        <button type="button" class="btn btn-outline-info btn-sm mt-1 w-100" data-bs-toggle="collapse" data-bs-target="#similar-tasks-list">
+                                            <i class="fas fa-tasks me-1"></i>View {{ prediction.similar_tasks|length }} Similar Task{{ prediction.similar_tasks|length|pluralize }} 
+                                            <i class="fas fa-chevron-down ms-1"></i>
+                                        </button>
+                                        <div class="collapse mt-2" id="similar-tasks-list">
+                                            <div class="card card-body py-2 px-2 bg-white border-info">
+                                                <small class="text-primary mb-2"><strong><i class="fas fa-info-circle me-1"></i>Tasks used for prediction:</strong></small>
+                                                <div class="list-group list-group-flush">
+                                                    {% for similar_task in prediction.similar_tasks %}
+                                                    <a href="{% url 'task_detail' similar_task.id %}" class="list-group-item list-group-item-action py-2 px-2 small border-start border-info border-3" target="_blank">
+                                                        <div class="d-flex justify-content-between align-items-start">
+                                                            <div class="flex-grow-1">
+                                                                <i class="fas fa-check-circle text-success me-1"></i>
+                                                                <strong>{{ similar_task.title|truncatewords:8 }}</strong>
+                                                            </div>
+                                                            <span class="badge bg-primary ms-2">{{ similar_task.actual_duration_days|floatformat:1 }} days</span>
+                                                        </div>
+                                                        <div class="text-muted mt-1" style="font-size: 0.85em;">
+                                                            <span class="me-2">
+                                                                <i class="fas fa-layer-group"></i> Complexity: {{ similar_task.complexity_score }}/10
+                                                            </span>
+                                                            <span class="me-2">
+                                                                <i class="fas fa-flag"></i> {{ similar_task.priority|title }}
+                                                            </span>
+                                                            <span>
+                                                                <i class="fas fa-calendar-check"></i> {{ similar_task.completed_at|date:"M d, Y" }}
+                                                            </span>
+                                                        </div>
+                                                    </a>
+                                                    {% endfor %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    {% else %}
+                                        <div class="alert alert-info py-2 px-2 mt-2 mb-0">
+                                            <small class="mb-0">
+                                                <i class="fas fa-info-circle me-1"></i>
+                                                <strong>Refresh prediction to see similar tasks</strong>
+                                                <br>Click the <i class="fas fa-sync-alt"></i> button above to reload prediction data.
+                                            </small>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                                
+                                <button type="button" class="btn btn-link btn-sm p-0 mt-1" data-bs-toggle="collapse" data-bs-target="#prediction-details">
+                                    <small>View details <i class="fas fa-chevron-down"></i></small>
+                                </button>
+                                <div class="collapse mt-2" id="prediction-details">
+                                    <div class="card card-body py-2 px-2 bg-white">
+                                        <small class="text-muted">
+                                            <strong>Factors considered:</strong><br>
+                                            {% if prediction.factors.complexity_score %}
+                                            • Complexity: {{ prediction.factors.complexity_score }}/10<br>
+                                            {% endif %}
+                                            {% if prediction.factors.priority %}
+                                            • Priority: {{ prediction.factors.priority|title }}<br>
+                                            {% endif %}
+                                            {% if prediction.factors.team_member_velocity %}
+                                            • Team velocity: {{ prediction.factors.team_member_velocity }}x<br>
+                                            {% endif %}
+                                            • Historical avg: {{ prediction.factors.historical_avg_days|floatformat:1 }} days<br>
+                                            • Method: {{ prediction.prediction_method|title|cut:"_" }}
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="text-muted text-center py-2 prediction-placeholder">
+                                <i class="fas fa-brain mb-2"></i>
+                                <small class="d-block">No prediction available yet</small>
+                                <small class="d-block text-muted">Set a start date to enable predictions</small>
+                            </div>
+                        {% endif %}
                     </div>
                 </div>
                 {% endif %}
@@ -1090,6 +1207,158 @@
             // Fallback to board detail if no history
             window.location.href = '{% url "board_detail" task.column.board.id %}';
         }
+    }
+
+    // Handle prediction refresh
+    document.getElementById('refresh-prediction')?.addEventListener('click', function() {
+        const taskId = this.getAttribute('data-task-id');
+        const btn = this;
+        const container = document.getElementById('prediction-container');
+        const icon = btn.querySelector('i');
+        
+        // Show loading state
+        btn.disabled = true;
+        icon.classList.add('fa-spin');
+        
+        fetch(`/api/task/${taskId}/prediction/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.has_prediction) {
+                const pred = data.prediction;
+                
+                // Update the prediction display
+                container.innerHTML = `
+                    <div class="prediction-content">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <strong class="d-block ${pred.is_likely_late ? 'text-danger' : 'text-success'}">
+                                    ${pred.predicted_date_formatted}
+                                </strong>
+                                <small class="text-muted">
+                                    Range: ${pred.early_date_formatted} - ${pred.late_date_formatted}
+                                </small>
+                            </div>
+                            <span class="badge ${pred.confidence_percentage >= 70 ? 'bg-success' : pred.confidence_percentage >= 50 ? 'bg-warning' : 'bg-secondary'}">
+                                ${pred.confidence_percentage}% confidence
+                            </span>
+                        </div>
+                        ${pred.is_likely_late ? `
+                            <div class="alert alert-warning alert-sm mb-2 py-1 px-2">
+                                <i class="fas fa-exclamation-triangle me-1"></i>
+                                <small>Likely to miss due date</small>
+                            </div>
+                        ` : ''}
+                        <div class="mt-2">
+                            <small class="text-muted d-block">
+                                <i class="fas fa-chart-line me-1"></i>Based on ${pred.based_on_tasks} similar task${pred.based_on_tasks !== 1 ? 's' : ''}
+                            </small>
+                            
+                            ${pred.similar_tasks && pred.similar_tasks.length > 0 ? `
+                                <button type="button" class="btn btn-outline-info btn-sm mt-1 w-100" data-bs-toggle="collapse" data-bs-target="#similar-tasks-list">
+                                    <i class="fas fa-tasks me-1"></i>View ${pred.similar_tasks.length} Similar Task${pred.similar_tasks.length !== 1 ? 's' : ''}
+                                    <i class="fas fa-chevron-down ms-1"></i>
+                                </button>
+                                <div class="collapse mt-2" id="similar-tasks-list">
+                                    <div class="card card-body py-2 px-2 bg-white border-info">
+                                        <small class="text-primary mb-2"><strong><i class="fas fa-info-circle me-1"></i>Tasks used for prediction:</strong></small>
+                                        <div class="list-group list-group-flush">
+                                            ${pred.similar_tasks.map(task => `
+                                                <a href="/tasks/${task.id}/" class="list-group-item list-group-item-action py-2 px-2 small border-start border-info border-3" target="_blank">
+                                                    <div class="d-flex justify-content-between align-items-start">
+                                                        <div class="flex-grow-1">
+                                                            <i class="fas fa-check-circle text-success me-1"></i>
+                                                            <strong>${task.title.split(' ').slice(0, 8).join(' ')}${task.title.split(' ').length > 8 ? '...' : ''}</strong>
+                                                        </div>
+                                                        <span class="badge bg-primary ms-2">${task.actual_duration_days.toFixed(1)} days</span>
+                                                    </div>
+                                                    <div class="text-muted mt-1" style="font-size: 0.85em;">
+                                                        <span class="me-2">
+                                                            <i class="fas fa-layer-group"></i> Complexity: ${task.complexity_score}/10
+                                                        </span>
+                                                        <span class="me-2">
+                                                            <i class="fas fa-flag"></i> ${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                                                        </span>
+                                                        <span>
+                                                            <i class="fas fa-calendar-check"></i> ${task.completed_at ? new Date(task.completed_at).toLocaleDateString('en-US', {month: 'short', day: 'numeric', year: 'numeric'}) : 'N/A'}
+                                                        </span>
+                                                    </div>
+                                                </a>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : `
+                                <div class="alert alert-info py-2 px-2 mt-2 mb-0">
+                                    <small class="mb-0">
+                                        <i class="fas fa-info-circle me-1"></i>
+                                        <strong>No similar tasks found</strong>
+                                        <br>Prediction based on rule-based estimation.
+                                    </small>
+                                </div>
+                            `}
+                        </div>
+                        
+                        <button type="button" class="btn btn-link btn-sm p-0 mt-1" data-bs-toggle="collapse" data-bs-target="#prediction-details">
+                            <small>View factors <i class="fas fa-chevron-down"></i></small>
+                        </button>
+                        <div class="collapse mt-2" id="prediction-details">
+                            <div class="card card-body py-2 px-2 bg-white">
+                                <small class="text-muted">
+                                    <strong>Factors considered:</strong><br>
+                                    ${pred.factors.complexity_score ? `• Complexity: ${pred.factors.complexity_score}/10<br>` : ''}
+                                    ${pred.factors.priority ? `• Priority: ${pred.factors.priority.charAt(0).toUpperCase() + pred.factors.priority.slice(1)}<br>` : ''}
+                                    ${pred.factors.team_member_velocity ? `• Team velocity: ${pred.factors.team_member_velocity}x<br>` : ''}
+                                    • Historical avg: ${pred.factors.historical_avg_days ? pred.factors.historical_avg_days.toFixed(1) : 'N/A'} days<br>
+                                    • Method: ${pred.prediction_method.replace(/_/g, ' ')}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                // Show success message
+                showToast('Prediction updated successfully!', 'success');
+            } else {
+                container.innerHTML = `
+                    <div class="text-muted text-center py-2">
+                        <i class="fas fa-info-circle mb-2"></i>
+                        <small class="d-block">${data.message || 'Unable to generate prediction'}</small>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('Error refreshing prediction:', error);
+            showToast('Failed to refresh prediction', 'error');
+        })
+        .finally(() => {
+            btn.disabled = false;
+            icon.classList.remove('fa-spin');
+        });
+    });
+
+    // Simple toast notification function
+    function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} position-fixed top-0 end-0 m-3`;
+        toast.style.zIndex = '9999';
+        toast.innerHTML = `
+            <div class="d-flex align-items-center">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+                ${message}
+            </div>
+        `;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.remove();
+        }, 3000);
     }
 </script>
 
