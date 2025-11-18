@@ -473,10 +473,17 @@
                 {% if task.risk_level %}
                 <div class="mb-3 p-2 rounded border-2 {% if task.risk_level == 'critical' %}border-danger bg-danger{% elif task.risk_level == 'high' %}border-warning bg-warning{% elif task.risk_level == 'medium' %}border-info bg-info{% else %}border-success bg-success{% endif %} text-white">
                     <div class="d-flex justify-content-between align-items-center">
-                        <div>
+                        <div class="flex-grow-1">
                             <label class="text-white-50 mb-1">Risk Assessment</label>
                             <h6 class="mb-1">🛡️ Risk Level: <strong>{{ task.risk_level|title }}</strong></h6>
                             <small>Score: {{ task.risk_score }}/9 | Likelihood: {{ task.risk_likelihood }}/3 | Impact: {{ task.risk_impact }}/3</small>
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-light" 
+                                    onclick="showRiskExplanation({{ task.id }})" 
+                                    title="Why did AI give this risk score?">
+                                <i class="bi bi-lightbulb me-1"></i> Why?
+                            </button>
                         </div>
                     </div>
                     {% if task.risk_indicators %}
@@ -484,7 +491,15 @@
                         <small class="text-white-50">Indicators to Monitor:</small>
                         <ul class="small mb-0 mt-1">
                             {% for indicator in task.risk_indicators %}
-                            <li>{{ indicator }}</li>
+                            <li>
+                                {% if indicator.indicator %}
+                                    <strong>{{ indicator.indicator }}</strong>
+                                    {% if indicator.frequency %}<span class="text-white-75"> (Monitor: {{ indicator.frequency }})</span>{% endif %}
+                                    {% if indicator.threshold %}<span class="badge bg-light text-dark ms-1">Alert: {{ indicator.threshold }}</span>{% endif %}
+                                {% else %}
+                                    {{ indicator }}
+                                {% endif %}
+                            </li>
                             {% endfor %}
                         </ul>
                     </div>
@@ -495,12 +510,36 @@
                         <div class="small mt-1">
                             {% for suggestion in task.mitigation_suggestions %}
                             <div class="mb-1">
-                                <strong>{{ suggestion.strategy }}</strong>: {{ suggestion.description }} ({{ suggestion.timeline }})
+                                {% if suggestion.action %}
+                                    <strong>{{ suggestion.action }}</strong>
+                                    {% if suggestion.expected_impact %} - <em>{{ suggestion.expected_impact }}</em>{% endif %}
+                                    {% if suggestion.timeline %} <span class="text-white-75">({{ suggestion.timeline }})</span>{% endif %}
+                                    {% if suggestion.priority %}<span class="badge bg-light text-dark ms-1">{{ suggestion.priority|upper }}</span>{% endif %}
+                                {% elif suggestion.strategy %}
+                                    <strong>{{ suggestion.strategy }}</strong>: {{ suggestion.description }} ({{ suggestion.timeline }})
+                                {% else %}
+                                    {{ suggestion }}
+                                {% endif %}
                             </div>
                             {% endfor %}
                         </div>
                     </div>
                     {% endif %}
+                </div>
+                {% else %}
+                <!-- No Risk Assessment Yet - Show AI Assessment Button -->
+                <div class="mb-3 p-3 bg-light rounded border border-2 border-info">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1"><i class="bi bi-shield-check text-info"></i> AI Risk Assessment</h6>
+                            <small class="text-muted">Let AI analyze potential risks for this task</small>
+                        </div>
+                        <button type="button" class="btn btn-info btn-sm" 
+                                onclick="assessTaskRisk({{ task.id }})" 
+                                id="assess-risk-btn-{{ task.id }}">
+                            <i class="bi bi-robot me-1"></i> Assess Risk with AI
+                        </button>
+                    </div>
                 </div>
                 {% endif %}
 
@@ -508,10 +547,19 @@
                 <div class="mb-3">
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <label class="text-muted mb-0">👥 Stakeholders</label>
-                        <a href="{% url 'stakeholder:task_stakeholder_involvement' board_id=task.column.board.id task_id=task.id %}" 
-                           class="btn btn-sm btn-outline-primary">
-                            <i class="fas fa-user-plus me-1"></i> Manage Stakeholders
-                        </a>
+                        <div>
+                            {% if stakeholders %}
+                            <button type="button" class="btn btn-sm btn-outline-info me-2" 
+                                    onclick="explainStakeholderRecommendations({{ task.id }})" 
+                                    title="Why were these stakeholders identified?">
+                                <i class="bi bi-lightbulb me-1"></i> AI Insights
+                            </button>
+                            {% endif %}
+                            <a href="{% url 'stakeholder:task_stakeholder_involvement' board_id=task.column.board.id task_id=task.id %}" 
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-user-plus me-1"></i> Manage Stakeholders
+                            </a>
+                        </div>
                     </div>
                     {% if stakeholders %}
                     <div class="p-2 bg-light rounded">
@@ -1359,6 +1407,435 @@
         setTimeout(() => {
             toast.remove();
         }, 3000);
+    }
+
+    // ========== AI EXPLAINABILITY FUNCTIONS ==========
+    
+    // Cached risk analysis data from server
+    const cachedRiskAnalysis = {{ task.risk_analysis|safe|default:"null" }};
+    
+    // Function to show risk explanation modal
+    window.showRiskExplanation = function(taskId) {
+        const btn = event.target.closest('button');
+        
+        // Check if we have valid cached data with actual risk assessment content
+        const hasValidData = cachedRiskAnalysis && 
+                            Object.keys(cachedRiskAnalysis).length > 0 &&
+                            (cachedRiskAnalysis.risk_assessment || cachedRiskAnalysis.likelihood || cachedRiskAnalysis.impact);
+        
+        // If we have cached data, use it immediately for instant loading
+        if (hasValidData) {
+            showRiskAnalysisModal('{{ task.title|escapejs }}', cachedRiskAnalysis);
+            return;
+        }
+        
+        // Otherwise, fetch fresh data from API
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Loading...';
+        
+        fetch(`/api/kanban/calculate-task-risk/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                task_id: taskId,
+                title: '{{ task.title|escapejs }}',
+                description: '{{ task.description|escapejs }}',
+                priority: '{{ task.priority }}',
+                board_id: {{ task.column.board.id }}
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.risk_analysis) {
+                showRiskAnalysisModal('{{ task.title|escapejs }}', data.risk_analysis);
+            } else {
+                showToast('Failed to load risk explanation: ' + (data.error || 'Unknown error'), 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Failed to load risk explanation. Please try again.', 'error');
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        });
+    };
+
+    // Function to assess task risk (for tasks without risk assessment)
+    window.assessTaskRisk = function(taskId) {
+        const btn = document.getElementById(`assess-risk-btn-${taskId}`);
+        if (!btn) return;
+        
+        const originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Analyzing...';
+        
+        fetch(`/api/kanban/calculate-task-risk/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                task_id: taskId,
+                title: '{{ task.title|escapejs }}',
+                description: '{{ task.description|escapejs }}',
+                priority: '{{ task.priority }}',
+                board_id: {{ task.column.board.id }}
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.risk_analysis) {
+                showRiskAnalysisModal('{{ task.title|escapejs }}', data.risk_analysis);
+                showToast('Risk assessment completed!', 'success');
+                // Reload page after 2 seconds to show updated risk
+                setTimeout(() => location.reload(), 2000);
+            } else {
+                showToast('Failed to assess risk: ' + (data.error || 'Unknown error'), 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Failed to assess risk. Please try again.', 'error');
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = originalHtml;
+        });
+    };
+
+    // Function to show risk analysis modal
+    function showRiskAnalysisModal(taskTitle, riskAnalysis) {
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.setAttribute('tabindex', '-1');
+        modal.innerHTML = `
+            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header bg-gradient text-white" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <h5 class="modal-title">
+                            <i class="bi bi-lightbulb-fill me-2"></i>
+                            AI Risk Analysis: ${escapeHtml(taskTitle)}
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                        ${renderRiskAnalysisContent(riskAnalysis)}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+        
+        modal.addEventListener('hidden.bs.modal', () => {
+            modal.remove();
+        });
+    }
+
+    // Render risk analysis content with explainability
+    function renderRiskAnalysisContent(riskAnalysis) {
+        // Check if we have any meaningful data
+        if (!riskAnalysis || Object.keys(riskAnalysis).length === 0) {
+            return `
+                <div class="alert alert-warning">
+                    <h6 class="alert-heading"><i class="bi bi-exclamation-triangle me-2"></i>No Analysis Data Available</h6>
+                    <p class="mb-0">Risk analysis data is not available for this task. The AI may still be processing the analysis.</p>
+                </div>
+            `;
+        }
+        
+        // Check if we have the essential data structures
+        const hasEssentialData = riskAnalysis.risk_assessment || riskAnalysis.likelihood || riskAnalysis.impact;
+        if (!hasEssentialData) {
+            return `
+                <div class="alert alert-warning">
+                    <h6 class="alert-heading"><i class="bi bi-exclamation-triangle me-2"></i>Incomplete Analysis Data</h6>
+                    <p class="mb-0">The risk analysis is incomplete. Please try refreshing or contact support if the issue persists.</p>
+                </div>
+            `;
+        }
+        
+        // Try to use AIExplainability module if available
+        if (typeof AIExplainability !== 'undefined' && AIExplainability.renderExplainabilityPanel) {
+            return AIExplainability.renderExplainabilityPanel(riskAnalysis);
+        }
+        
+        // Fallback rendering with basic explainability
+        const likelihood = riskAnalysis.likelihood || {};
+        const impact = riskAnalysis.impact || {};
+        const assessment = riskAnalysis.risk_assessment || {};
+        const indicators = riskAnalysis.risk_indicators || [];
+        
+        let html = `
+            <div class="container-fluid">
+                <div class="alert alert-info mb-4">
+                    <h6 class="alert-heading"><i class="bi bi-info-circle me-2"></i>Understanding This Analysis</h6>
+                    <p class="mb-0">This AI assessment considers task complexity, dependencies, assignee skills, timeline, and historical data to predict potential risks.</p>
+                </div>
+        `;
+        
+        // Confidence Score
+        if (riskAnalysis.confidence_score) {
+            const confidence = Math.round(riskAnalysis.confidence_score * 100);
+            html += `
+                <div class="mb-4">
+                    <h6 class="fw-bold">AI Confidence Level</h6>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar ${confidence > 75 ? 'bg-success' : confidence > 50 ? 'bg-warning' : 'bg-danger'}" 
+                             style="width: ${confidence}%">
+                            ${confidence}%
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Risk Scores
+        html += `
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <div class="card border-warning text-center">
+                        <div class="card-body">
+                            <h6 class="text-muted">Likelihood</h6>
+                            <div class="display-4 text-warning">${likelihood.score || '?'}</div>
+                            <small>${likelihood.percentage_range || ''}</small>
+                            ${likelihood.confidence ? `<div class="mt-2"><small>Confidence: ${Math.round(likelihood.confidence * 100)}%</small></div>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-danger text-center">
+                        <div class="card-body">
+                            <h6 class="text-muted">Impact</h6>
+                            <div class="display-4 text-danger">${impact.score || '?'}</div>
+                            <small>${impact.severity_level || ''}</small>
+                            ${impact.confidence ? `<div class="mt-2"><small>Confidence: ${Math.round(impact.confidence * 100)}%</small></div>` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-primary text-center">
+                        <div class="card-body">
+                            <h6 class="text-muted">Risk Score</h6>
+                            <div class="display-4 text-primary">${assessment.risk_score || '?'}/9</div>
+                            <small class="text-uppercase">${assessment.risk_level || ''}</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Calculation Explanation
+        html += `
+            <div class="card mb-4 bg-light">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-calculator me-2"></i>How We Calculated This</h6>
+                    <div class="text-center my-3">
+                        <code class="fs-5">Likelihood (${likelihood.score}) × Impact (${impact.score}) = Risk Score (${assessment.risk_score})</code>
+                    </div>
+                    <p class="mb-0">${assessment.summary || ''}</p>
+                </div>
+            </div>
+        `;
+        
+        // Contributing Factors
+        if (assessment.contributing_factors && assessment.contributing_factors.length > 0) {
+            html += `
+                <div class="mb-4">
+                    <h6 class="fw-bold"><i class="bi bi-pie-chart me-2"></i>Contributing Factors</h6>
+                    ${assessment.contributing_factors.map((factor, idx) => `
+                        <div class="mb-3 p-3 bg-light rounded">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="fw-semibold">
+                                    <span class="badge bg-secondary me-2">${idx + 1}</span>
+                                    ${escapeHtml(factor.factor)}
+                                </div>
+                                <div class="fw-bold text-danger">${factor.contribution_percentage}%</div>
+                            </div>
+                            <p class="small text-muted mb-2">${escapeHtml(factor.description || '')}</p>
+                            <div class="progress" style="height: 8px;">
+                                <div class="progress-bar bg-danger" style="width: ${factor.contribution_percentage}%"></div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+        
+        // Detailed Analysis
+        html += `
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0"><i class="bi bi-graph-up me-2"></i>Likelihood Factors</h6>
+                        </div>
+                        <div class="card-body">
+                            <p>${likelihood.reasoning || 'N/A'}</p>
+                            ${likelihood.key_factors && likelihood.key_factors.length > 0 ? `
+                                <ul class="mb-0">
+                                    ${likelihood.key_factors.map(f => `<li>${escapeHtml(f)}</li>`).join('')}
+                                </ul>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card h-100">
+                        <div class="card-header bg-light">
+                            <h6 class="mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Impact Analysis</h6>
+                        </div>
+                        <div class="card-body">
+                            <p>${impact.reasoning || 'N/A'}</p>
+                            ${impact.affected_areas && impact.affected_areas.length > 0 ? `
+                                <ul class="mb-0">
+                                    ${impact.affected_areas.map(a => `<li>${escapeHtml(a)}</li>`).join('')}
+                                </ul>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Risk Indicators
+        if (indicators.length > 0) {
+            html += `
+                <div class="card mb-4">
+                    <div class="card-header bg-light">
+                        <h6 class="mb-0"><i class="bi bi-clipboard-check me-2"></i>Risk Indicators to Monitor</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-sm">
+                                <thead>
+                                    <tr>
+                                        <th>Indicator</th>
+                                        <th>Frequency</th>
+                                        <th>Alert Threshold</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${indicators.map(ind => `
+                                        <tr>
+                                            <td>${escapeHtml(ind.indicator || '-')}</td>
+                                            <td><span class="badge bg-info">${escapeHtml(ind.frequency || '-')}</span></td>
+                                            <td><span class="badge bg-warning">${escapeHtml(ind.threshold || '-')}</span></td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Model Assumptions
+        if (riskAnalysis.explainability) {
+            const exp = riskAnalysis.explainability;
+            html += `
+                <div class="accordion" id="explainabilityAccordion">
+                    ${exp.model_assumptions && exp.model_assumptions.length > 0 ? `
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#assumptions">
+                                    <i class="bi bi-lightbulb me-2"></i> Model Assumptions
+                                </button>
+                            </h2>
+                            <div id="assumptions" class="accordion-collapse collapse" data-bs-parent="#explainabilityAccordion">
+                                <div class="accordion-body">
+                                    <ul>
+                                        ${exp.model_assumptions.map(a => `<li>${escapeHtml(a)}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                    ${exp.data_limitations && exp.data_limitations.length > 0 ? `
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#limitations">
+                                    <i class="bi bi-exclamation-triangle me-2"></i> Data Limitations
+                                </button>
+                            </h2>
+                            <div id="limitations" class="accordion-collapse collapse" data-bs-parent="#explainabilityAccordion">
+                                <div class="accordion-body">
+                                    <ul>
+                                        ${exp.data_limitations.map(l => `<li>${escapeHtml(l)}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+        
+        html += '</div>';
+        return html;
+    }
+
+    // Function to explain stakeholder recommendations
+    window.explainStakeholderRecommendations = function(taskId) {
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-info text-white">
+                        <h5 class="modal-title"><i class="bi bi-lightbulb me-2"></i>AI Stakeholder Insights</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p><strong>These stakeholders were identified based on:</strong></p>
+                        <ul>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Task requirements and scope analysis</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Historical involvement in similar tasks</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Organizational roles and responsibilities</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Potential impact on their work streams</li>
+                            <li><i class="bi bi-check-circle text-success me-2"></i>Communication patterns in the project</li>
+                        </ul>
+                        <div class="alert alert-light">
+                            <p class="mb-0"><i class="bi bi-info-circle me-2"></i><strong>Note:</strong> AI recommendations improve over time as more project data becomes available.</p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    };
+
+    // Utility: Escape HTML
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    // Get CSRF token
+    function getCsrfToken() {
+        return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+               document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '';
     }
 </script>
 

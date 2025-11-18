@@ -446,6 +446,19 @@
                     </div>
                     {% endif %}
                     
+                    <!-- AI Risk Badge -->
+                    {% if task.risk_level %}
+                    <div class="mt-2">
+                        <span class="badge {% if task.risk_level == 'critical' %}bg-danger{% elif task.risk_level == 'high' %}bg-warning text-dark{% elif task.risk_level == 'medium' %}bg-info{% else %}bg-success{% endif %}" 
+                              style="cursor: pointer;" 
+                              onclick="quickRiskView({{ task.id }}, '{{ task.title|escapejs }}')"
+                              title="Click to see why - AI Risk Assessment">
+                            🛡️ Risk: {{ task.risk_level|title }} ({{ task.risk_score }}/9)
+                            <i class="bi bi-lightbulb ms-1" style="font-size: 0.8em;"></i>
+                        </span>
+                    </div>
+                    {% endif %}
+                    
                     <div class="task-footer">
                         <div>
                             <span class="task-priority priority-{{ task.priority }}">{{ task.priority|title }}</span>
@@ -802,6 +815,45 @@
         }
     };
     
+    // Quick risk view function for task cards
+    window.quickRiskView = function(taskId, taskTitle) {
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-gradient text-white" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <h5 class="modal-title"><i class="bi bi-shield-check me-2"></i>Quick Risk View</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <h6><strong>${taskTitle}</strong></h6>
+                        <p class="text-muted mt-3">Click below to see the full AI risk analysis with detailed explanations:</p>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-check2 text-success me-2"></i>Contributing factors breakdown</li>
+                            <li><i class="bi bi-check2 text-success me-2"></i>AI confidence scores</li>
+                            <li><i class="bi bi-check2 text-success me-2"></i>Impact analysis</li>
+                            <li><i class="bi bi-check2 text-success me-2"></i>Model assumptions & limitations</li>
+                        </ul>
+                        <div class="alert alert-info mb-0">
+                            <small><i class="bi bi-lightbulb me-2"></i><strong>Explainable AI:</strong> See exactly why this risk score was assigned.</small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <a href="/tasks/${taskId}/" class="btn btn-primary">
+                            <i class="bi bi-eye me-2"></i>View Full Analysis
+                        </a>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    };
+    
     // Handle back navigation to previous page
     function goBack() {
         // Check if there's a previous page in history
@@ -810,6 +862,7 @@
         } else {
             // Fallback to board list if no history
             window.location.href = '{% url "board_list" %}';
+        }
         }
     }
     

@@ -6,9 +6,10 @@
 /* ==================== Confidence Meters ==================== */
 .confidence-meter {
     padding: 0.75rem;
-    background: #f8f9fa;
+    background: rgba(255, 255, 255, 0.95);
     border-radius: 8px;
     margin-bottom: 1rem;
+    color: #212529;
 }
 
 .confidence-meter .progress {
@@ -24,40 +25,46 @@
 /* ==================== Factor Breakdown ==================== */
 .factor-breakdown {
     padding: 1rem;
-    background: #ffffff;
+    background: rgba(255, 255, 255, 0.95);
     border-radius: 8px;
+    color: #212529;
 }
 
 .factor-item {
     padding: 0.75rem;
-    background: #f8f9fa;
+    background: rgba(248, 249, 250, 0.95);
     border-radius: 6px;
     border-left: 4px solid #6c757d;
     transition: all 0.3s ease;
+    color: #212529;
 }
 
 .factor-item:hover {
-    background: #e9ecef;
+    background: rgba(233, 236, 239, 0.95);
     transform: translateX(4px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .factor-name {
     font-size: 0.95rem;
-    color: #2c3e50;
+    color: #212529 !important;
+    font-weight: 600;
 }
 
 .factor-contribution {
     font-size: 1.1rem;
     min-width: 60px;
     text-align: right;
+    color: #212529 !important;
+    font-weight: 700;
 }
 
 .factor-description {
     font-size: 0.85rem;
     line-height: 1.4;
     margin-top: 0.25rem;
-    color: #6c757d;
+    color: #6c757d !important;
+    font-weight: 500;
 }
 
 .factor-item .progress {
@@ -75,22 +82,24 @@
 .calculation-explanation {
     border: 1px solid #dee2e6;
     border-radius: 8px;
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    background: linear-gradient(135deg, rgba(248, 249, 250, 0.98) 0%, rgba(233, 236, 239, 0.98) 100%);
+    color: #212529;
 }
 
 .calculation-explanation .card-title {
-    color: #495057;
+    color: #212529;
     font-size: 1rem;
+    font-weight: 700;
 }
 
 .calculation-formula {
     font-family: 'Courier New', monospace;
     font-size: 1rem;
     font-weight: 600;
-    color: #495057;
+    color: #212529;
     text-align: center;
     padding: 0.5rem;
-    background: #ffffff;
+    background: rgba(255, 255, 255, 0.95);
     border-radius: 6px;
     margin: 0.5rem 0;
     border: 1px dashed #adb5bd;
@@ -98,10 +107,11 @@
 
 .metric-box {
     padding: 1rem;
-    background: #ffffff;
+    background: rgba(255, 255, 255, 0.95);
     border-radius: 6px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
     transition: transform 0.2s ease;
+    color: #212529;
 }
 
 .metric-box:hover {
@@ -114,30 +124,34 @@
     font-weight: 600;
     letter-spacing: 0.5px;
     margin-bottom: 0.25rem;
+    color: #495057;
+    font-size: 0.8rem;
 }
 
 .metric-value {
     font-weight: 700;
-    color: #2c3e50;
+    color: #212529;
     line-height: 1;
 }
 
 /* ==================== Impact Breakdown ==================== */
 .impact-breakdown {
     padding: 1rem;
-    background: #ffffff;
+    background: rgba(255, 255, 255, 0.95);
     border-radius: 8px;
+    color: #212529;
 }
 
 .impact-item {
     padding: 0.5rem;
-    background: #f8f9fa;
+    background: rgba(248, 249, 250, 0.95);
     border-radius: 6px;
     transition: background-color 0.2s ease;
+    color: #212529;
 }
 
 .impact-item:hover {
-    background: #e9ecef;
+    background: rgba(233, 236, 239, 0.95);
 }
 
 .impact-item .progress {
@@ -147,7 +161,7 @@
 }
 
 .impact-item i {
-    color: #6c757d;
+    color: #495057;
     font-size: 1rem;
 }
 
@@ -157,18 +171,19 @@
     margin-bottom: 0.5rem;
     border-radius: 6px;
     overflow: hidden;
+    background: rgba(255, 255, 255, 0.95);
 }
 
 .explainability-panel .accordion-button {
     font-weight: 600;
     font-size: 0.9rem;
-    color: #495057;
-    background-color: #f8f9fa;
+    color: #212529;
+    background-color: rgba(248, 249, 250, 0.95);
     padding: 0.75rem 1rem;
 }
 
 .explainability-panel .accordion-button:not(.collapsed) {
-    background-color: #e7f1ff;
+    background-color: rgba(231, 241, 255, 0.95);
     color: #0056b3;
 }
 
@@ -180,6 +195,8 @@
 .explainability-panel .accordion-body {
     font-size: 0.9rem;
     padding: 1rem;
+    color: #212529;
+    background: rgba(255, 255, 255, 0.95);
 }
 
 .explainability-panel .accordion-body ul {
@@ -189,6 +206,7 @@
 .explainability-panel .accordion-body li {
     margin-bottom: 0.5rem;
     line-height: 1.5;
+    color: #212529;
 }
 
 /* ==================== Skill Match Explanation ==================== */
@@ -260,14 +278,20 @@
 /* ==================== Explainability Panel ==================== */
 .explainability-panel {
     padding: 1.5rem;
-    background: #ffffff;
+    background: rgba(255, 255, 255, 0.95);
     border-radius: 8px;
+    color: #212529;
 }
 
 .explainability-panel h6 {
-    color: #2c3e50;
-    font-weight: 600;
+    color: #ffffff;
+    font-weight: 700;
     margin-bottom: 1rem;
+}
+
+.explainability-panel h5 {
+    color: #ffffff;
+    font-weight: 700;
 }
 
 .explainability-panel .card {
@@ -275,10 +299,23 @@
     border-radius: 8px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     transition: box-shadow 0.2s ease;
+    background: rgba(255, 255, 255, 0.95);
+    color: #212529;
 }
 
 .explainability-panel .card:hover {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.explainability-panel .card-title {
+    color: #212529;
+    font-weight: 700;
+}
+
+.explainability-panel .card-text,
+.explainability-panel p,
+.explainability-panel li {
+    color: #212529;
 }
 
 /* ==================== Tooltips & Info Icons ==================== */
@@ -345,37 +382,152 @@
 }
 
 /* ==================== Dark Mode Support ==================== */
+/* Note: Explainability panels use light backgrounds for better readability in modals */
 @media (prefers-color-scheme: dark) {
+    /* Keep panels light for readability on dark modal backgrounds */
     .confidence-meter,
     .factor-breakdown,
     .impact-breakdown,
-    .explainability-panel {
-        background: #1e1e1e;
-        color: #e0e0e0;
-    }
-    
+    .explainability-panel,
+    .calculation-explanation,
+    .metric-box,
     .factor-item,
     .impact-item {
-        background: #2a2a2a;
+        background: rgba(255, 255, 255, 0.95) !important;
+        color: #212529 !important;
     }
     
-    .factor-item:hover,
-    .impact-item:hover {
-        background: #333333;
+    .factor-name,
+    .factor-contribution,
+    .factor-description,
+    .metric-value,
+    .metric-label,
+    .explainability-panel h5,
+    .explainability-panel h6,
+    .explainability-panel .card-title,
+    .explainability-panel p,
+    .explainability-panel li {
+        color: #ffffff !important;
     }
-    
-    .calculation-explanation {
-        background: linear-gradient(135deg, #2a2a2a 0%, #1e1e1e 100%);
-    }
-    
-    .metric-box {
-        background: #2a2a2a;
-        color: #e0e0e0;
-    }
-    
-    .metric-value {
-        color: #ffffff;
-    }
+}
+
+/* ==================== Utility Classes for High Contrast ==================== */
+.text-dark-readable {
+    color: #ffffff !important;
+    font-weight: 500;
+}
+
+.bg-white-readable {
+    background: rgba(255, 255, 255, 0.95) !important;
+}
+
+/* Modal body uses light background - text should be DARK for readability */
+.modal-body h1,
+.modal-body h2,
+.modal-body h3,
+.modal-body h4,
+.modal-body h5,
+.modal-body h6 {
+    color: #212529 !important;
+    font-weight: 700;
+}
+
+/* Ensure all paragraph text is readable - DARK text on light background */
+.modal-body p,
+.modal-body span,
+.modal-body div {
+    color: #212529 !important;
+}
+
+/* Alert boxes with proper contrast */
+.modal-body .alert {
+    background-color: #f8f9fa !important;
+    border: 1px solid #dee2e6 !important;
+    color: #212529 !important;
+}
+
+.modal-body .alert-info {
+    background-color: #d1ecf1 !important;
+    border-color: #bee5eb !important;
+    color: #0c5460 !important;
+}
+
+.modal-body .alert-warning {
+    background-color: #fff3cd !important;
+    border-color: #ffeaa7 !important;
+    color: #856404 !important;
+}
+
+.modal-body .alert-heading {
+    color: inherit !important;
+}
+
+/* Ensure list items are readable - DARK text */
+.modal-body ul li,
+.modal-body ol li {
+    color: #212529 !important;
+}
+
+/* Force DARK text for specific AI explainability elements */
+.factor-breakdown h6,
+.impact-breakdown h6,
+.explainability-panel h6,
+.confidence-meter span,
+.modal-body .fw-bold,
+.modal-body .fw-semibold {
+    color: #212529 !important;
+}
+
+/* Icons should be dark colored */
+.modal-body i.bi {
+    color: #495057 !important;
+}
+
+/* Small text should be muted gray for readability */
+.modal-body .text-muted,
+.modal-body .small {
+    color: #6c757d !important;
+}
+
+/* Badge contrast improvements */
+.badge.bg-success,
+.badge.bg-warning,
+.badge.bg-danger,
+.badge.bg-info {
+    font-weight: 600;
+}
+
+/* Ensure text-muted is actually muted gray, not white */
+.modal-body .text-dark,
+.modal-body .text-secondary {
+    color: #6c757d !important;
+}
+
+/* Specific fix for factor items in modal - DARK text */
+.modal-body .factor-item,
+.modal-body .factor-item * {
+    color: #212529 !important;
+}
+
+.modal-body .factor-item .factor-name,
+.modal-body .factor-item .factor-contribution,
+.modal-body .factor-item .factor-description {
+    color: #212529 !important;
+}
+
+/* Card text should be dark */
+.modal-body .card,
+.modal-body .card-body,
+.modal-body .card-title,
+.modal-body .card-text {
+    color: #212529 !important;
+}
+
+/* Table text should be dark */
+.modal-body table,
+.modal-body th,
+.modal-body td {
+    color: #212529 !important;
 }
 
 /* ==================== Print Styles ==================== */

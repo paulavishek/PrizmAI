@@ -148,21 +148,45 @@ class TaskForm(forms.ModelForm):
         # Initialize risk indicators and mitigation strategies from JSON fields
         if self.instance and self.instance.pk:
             if self.instance.risk_indicators:
-                self.fields['risk_indicators_text'].initial = '\n'.join(self.instance.risk_indicators)
+                # Handle both list of strings and list of dicts (new format with explainability)
+                risk_lines = []
+                for item in self.instance.risk_indicators:
+                    if isinstance(item, dict):
+                        # New format: {"indicator": "...", "frequency": "...", "threshold": "..."}
+                        indicator = item.get('indicator', '')
+                        frequency = item.get('frequency', '')
+                        threshold = item.get('threshold', '')
+                        if indicator:
+                            line = indicator
+                            if frequency:
+                                line += f" (Monitor: {frequency})"
+                            if threshold:
+                                line += f" [Alert: {threshold}]"
+                            risk_lines.append(line)
+                    else:
+                        # Old format: just a string
+                        risk_lines.append(str(item))
+                self.fields['risk_indicators_text'].initial = '\n'.join(risk_lines)
             
             if self.instance.mitigation_suggestions:
                 # Handle both list of strings and list of dicts
                 mitigation_lines = []
                 for item in self.instance.mitigation_suggestions:
                     if isinstance(item, dict):
-                        # Format: "Strategy: Description (Timeline)"
-                        strategy = item.get('strategy', '')
-                        description = item.get('description', '')
+                        # New format: {"action": "...", "timeline": "...", "priority": "...", "expected_impact": "..."}
+                        action = item.get('action', item.get('strategy', ''))
                         timeline = item.get('timeline', '')
-                        if strategy and description:
-                            line = f"{strategy}: {description}"
+                        priority = item.get('priority', '')
+                        expected_impact = item.get('expected_impact', item.get('description', ''))
+                        
+                        if action:
+                            line = action
+                            if expected_impact:
+                                line += f" - {expected_impact}"
                             if timeline:
-                                line += f" ({timeline})"
+                                line += f" (Timeline: {timeline})"
+                            if priority:
+                                line += f" [Priority: {priority}]"
                             mitigation_lines.append(line)
                     else:
                         mitigation_lines.append(str(item))

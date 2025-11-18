@@ -283,6 +283,27 @@ const AIExplainability = (() => {
      * @returns {string} HTML string
      */
     function renderExplainabilityPanel(analysis, options = {}) {
+        // Validate that we have meaningful analysis data
+        if (!analysis || Object.keys(analysis).length === 0) {
+            return `
+                <div class="alert alert-warning">
+                    <h6 class="alert-heading"><i class="bi bi-exclamation-triangle me-2"></i>No Analysis Data Available</h6>
+                    <p class="mb-0">Risk analysis data is not available for this task. The AI may still be processing the analysis.</p>
+                </div>
+            `;
+        }
+        
+        // Check if we have the essential data structures
+        const hasEssentialData = analysis.risk_assessment || analysis.likelihood || analysis.impact;
+        if (!hasEssentialData) {
+            return `
+                <div class="alert alert-warning">
+                    <h6 class="alert-heading"><i class="bi bi-exclamation-triangle me-2"></i>Incomplete Analysis Data</h6>
+                    <p class="mb-0">The risk analysis is incomplete. Please try refreshing or contact support if the issue persists.</p>
+                </div>
+            `;
+        }
+        
         const {
             showConfidence = true,
             showFactors = true,
