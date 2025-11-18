@@ -40,6 +40,61 @@ Think of PrizmAI as **Trello meets ChatGPT** — it's a tool your team already u
 
 ## 🧠 The "Smart" Part - AI Features
 
+### 🎯 **Explainable AI - Understand Why the AI Recommends What It Does**
+
+One of PrizmAI's most powerful features is that **AI decisions are completely transparent**. You never have to wonder "Why did the AI say this?" Every recommendation comes with a detailed explanation.
+
+**How It Works:**
+
+Whenever AI makes a recommendation (risk score, deadline prediction, assignee suggestion), you can click **"Why?"** to see:
+
+1. **AI Confidence Level** - How sure is the AI? (50% = uncertain, 95% = very confident)
+2. **Contributing Factors** - What influenced the decision, ranked by importance
+3. **Calculation Breakdown** - The math behind the recommendation
+4. **Assumptions** - What the AI assumed to be true
+5. **Data Limitations** - What the AI didn't have information about
+6. **Alternative Interpretations** - Other possible perspectives
+
+**Real Example:**
+
+```
+Task: "Integrate Payment Gateway"
+Risk Score: 7/9
+
+Why?
+├─ AI Confidence: 82%
+├─ Contributing Factors:
+│  ├─ High Complexity (35%) - Financial systems need multiple security checks
+│  ├─ External Dependency (30%) - Waiting on payment processor approval
+│  ├─ Assignee Skill Gap (20%) - Bob has intermediate skills, needs expert
+│  └─ Timeline Pressure (15%) - Due in 3 days, typical is 5 days
+├─ Calculation: Likelihood (2) × Impact (3) = Risk Score (6)
+├─ Model Assumptions:
+│  └─ Bob can dedicate 6 hours/day to this task
+├─ Data Limitations:
+│  └─ Limited historical payment integration data
+└─ Alternative View:
+   └─ Risk could be lower if using Stripe instead of custom implementation
+```
+
+**Where You'll See "Why?" Buttons:**
+
+- **Risk Assessment** - "Why is this high risk?"
+- **Deadline Prediction** - "Why do you think this deadline?"
+- **Assignee Recommendation** - "Why assign to this person?"
+- **Priority Suggestion** - "Why is this high priority?"
+- **Workload Forecast** - "Why will this person be overloaded?"
+
+**Benefits:**
+
+✅ **Build Trust** - You can verify AI reasoning makes sense  
+✅ **Make Better Decisions** - Understand what factors matter  
+✅ **Spot Errors Early** - Challenge the AI if reasoning is flawed  
+✅ **Learn Patterns** - Understand your team's performance better  
+✅ **Compliance Ready** - Full audit trail for enterprise requirements  
+
+---
+
 ### AI Assistant (Your Digital Team Member)
 
 Imagine having a helpful colleague who knows all your projects and can answer questions instantly:
@@ -461,6 +516,9 @@ Create a living document of your project knowledge:
 - ✅ Analytics & insights
 - ✅ **Task completion predictions** - Data-driven completion date estimates
 - ✅ **Historical analysis** - Learn from past performance
+- ✅ **Explainable AI** - Click "Why?" to understand AI decisions
+- ✅ **Transparent Reasoning** - See confidence scores, factors, assumptions
+- ✅ **Trust & Verification** - Audit trail for all AI recommendations
 
 **Advanced Management (When You Need It)**
 - ✅ Task dependencies & tree view
@@ -649,6 +707,7 @@ Free. Seriously.
 - **Team Collaboration** - How to work together
 - **Advanced Features** - Risk management, dependencies, forecasting
 - **Knowledge Base** - Create project documentation
+- **Explainable AI Guide** - Understanding AI decisions
 - **API Documentation** - [API_DOCUMENTATION.md](API_DOCUMENTATION.md) - Complete REST API guide
 - **Security Documentation:**
   - [SECURITY.md](SECURITY.md) - Security policies and reporting
@@ -682,6 +741,178 @@ Project management doesn't have to be complicated.
 PrizmAI makes it simple: **Organize your work, see your progress, let AI help you work smarter.**
 
 That's it.
+
+---
+
+## 🎯 Explainable AI - Never Wonder "Why?" Again
+
+### What is Explainable AI?
+
+PrizmAI doesn't just make recommendations - it **explains them**. Every AI decision includes:
+- Why the AI reached that conclusion
+- How confident it is
+- What factors influenced the decision
+- What assumptions it made
+- Known limitations
+- Alternative perspectives
+
+**This is revolutionary because:**
+- Traditional AI tools just say "Here's my recommendation" (trust us!)
+- PrizmAI says "Here's my recommendation, here's why, and here's what I'm uncertain about"
+
+### How Explainability Works in Practice
+
+Whenever you see an AI recommendation, look for the **"Why?"** button. Click it to get:
+
+#### **1. Risk Assessment Explanation**
+
+```
+Task: "Integrate Payment Gateway"
+Risk Score: 7/10
+
+Click "Why?" to see:
+├─ AI Confidence: 82% (Pretty sure about this)
+├─ Contributing Factors:
+│  ├─ 35% - Task Complexity (multiple integration points)
+│  ├─ 30% - External Dependencies (payment processor approval)
+│  ├─ 20% - Skill Gap (needs expert, only have intermediate)
+│  └─ 15% - Timeline Pressure (3 days vs typical 5 days)
+├─ Calculation: Likelihood (2) × Impact (3) = Risk (6)
+├─ Model Assumptions:
+│  └─ Bob can dedicate 6 hours/day to this task
+├─ Data Limitations:
+│  └─ Limited historical payment integration data
+└─ Alternative View:
+   └─ Risk could be lower if using Stripe SDK instead
+```
+
+**What This Means for You:**
+- You understand exactly why it's risky
+- You can challenge the assumption if Bob has more time
+- You can mitigate the risk by choosing Stripe
+- You know the AI is 82% confident (not a guess)
+
+#### **2. Deadline Prediction Explanation**
+
+```
+Task: "Implement User Dashboard"
+Predicted Completion: Nov 25, 2025
+Confidence: 78%
+
+Click "Why?" to see:
+├─ AI Confidence: 78% (fairly reliable)
+├─ Similar Historical Tasks:
+│  ├─ "Build Admin Panel" - 4.2 days (similar complexity)
+│  ├─ "Implement Settings Page" - 3.8 days
+│  ├─ "Create Dashboard Layout" - 5.1 days
+│  └─ ... (4 more similar tasks)
+├─ Calculation:
+│  ├─ Base Estimate: 3 days
+│  ├─ × Complexity Factor: 1.4 (medium complexity)
+│  ├─ × Current Workload: 1.2 (team busy this week)
+│  └─ + Buffer: 1 day (for unknowns)
+│  = Final: 5.4 → 6 days
+├─ Assumptions:
+│  ├─ Bob dedicated 6-8 hours/day
+│  ├─ No major API delays
+│  └─ Code review takes 1 day
+├─ Alternative Scenarios:
+│  ├─ Optimistic: Nov 23 (if no blockers)
+│  ├─ Realistic: Nov 25 (most likely)
+│  └─ Pessimistic: Nov 28 (if API delays happen)
+└─ Risk Factors:
+   ├─ External API dependency
+   └─ Team has 3 other urgent tasks
+```
+
+**What This Means for You:**
+- You can promise clients a realistic date (Nov 25)
+- You know the worst case (Nov 28) to budget for delays
+- You understand why (complexity, team capacity)
+- You can change the outcome (remove other urgent tasks, hire help, use pre-built APIs)
+
+#### **3. Assignee Recommendation Explanation**
+
+```
+Recommended: Jane Smith
+
+Click "Why?" to see:
+├─ Skill Match Score: 92%
+├─ Skill Breakdown:
+│  ├─ Python: Need Expert → Jane has Expert (100% match)
+│  ├─ React: Need Advanced → Jane has Advanced (100% match)
+│  ├─ AWS: Need Intermediate → Jane has Advanced (95% match)
+│  └─ API Design: Need Intermediate → Jane has Intermediate (100% match)
+├─ Historical Performance:
+│  ├─ Similar Tasks: 7 completed
+│  ├─ Average Time: 4.2 days
+│  ├─ Quality Score: 9.2/10
+│  └─ Current Workload: 2 tasks (manageable)
+├─ Availability:
+│  └─ 8 hours/day this week
+└─ Why Not Bob?
+   └─ Bob has only beginner React skills (95% match vs Jane's 100%)
+```
+
+**What This Means for You:**
+- You know Jane is the best person, backed by data
+- You understand why (skills and availability)
+- You can see alternatives if Jane is unavailable
+- You can prioritize training (if you need to develop Bob's skills)
+
+### Why Explainability Matters for Your Team
+
+**For Managers:**
+- Make decisions with confidence, not guesses
+- Explain to executives why you're assigning work this way
+- Challenge AI when you see flawed assumptions
+- Track if AI recommendations actually work
+
+**For Team Members:**
+- Understand why they're assigned work
+- See what skills to develop next
+- Know if deadlines are realistic
+- Learn from AI patterns
+
+**For Executives:**
+- Compliance requirements - every AI decision is auditable
+- Risk management - see model confidence and limitations
+- ROI tracking - understand which AI recommendations work best
+- Trust in AI - employees believe in transparent AI
+
+### All Explainability Features at a Glance
+
+| Feature | When Used | What You Learn |
+|---------|-----------|---------------|
+| Risk Assessment | When evaluating task difficulty | Why it's risky, confidence level, mitigation |
+| Deadline Prediction | When planning timeline | How long it'll really take, confidence, scenarios |
+| Assignee Recommendation | When assigning work | Who's best match, why, skill gaps |
+| Priority Suggestion | When prioritizing tasks | Which tasks matter most, why |
+| Workload Forecast | When capacity planning | Who's overloaded, recommendations, conflicts |
+| Dependency Analysis | When planning complex projects | Which tasks block others, why, critical path |
+
+### Technical Details (For Non-Tech Users)
+
+**How confident can you be?**
+
+- **95%+ confidence**: Almost certainly accurate - act on it
+- **75-95% confidence**: Very reliable - generally trustworthy
+- **50-75% confidence**: Moderate - verify before acting
+- **<50% confidence**: Uncertain - treat as a suggestion only
+
+**When should you challenge the AI?**
+
+1. You know assumptions are wrong ("Bob doesn't have 6 hours available")
+2. Confidence is low (<60%)
+3. Data limitations are significant ("We only have 2 similar tasks")
+4. You have information the AI doesn't
+
+**How accurate is the AI?**
+
+PrizmAI tracks its own accuracy. Over time you'll see:
+- Prediction accuracy improves as more data is available
+- Risk assessments become more reliable
+- Assignment recommendations consistently identify top performers
 
 ---
 
