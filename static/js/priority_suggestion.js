@@ -115,13 +115,13 @@ class PrioritySuggestionWidget {
                         ${this._renderAlternatives()}
                         
                         <div class="mt-3 d-flex gap-2">
-                            <button class="btn btn-sm btn-${label.class}" onclick="prioritySuggestion.acceptSuggestion()">
+                            <button type="button" class="btn btn-sm btn-${label.class}" onclick="event.preventDefault(); prioritySuggestion.acceptSuggestion()">
                                 <i class="fas fa-check"></i> Accept ${label.text}
                             </button>
-                            <button class="btn btn-sm btn-outline-secondary" onclick="prioritySuggestion.rejectSuggestion()">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="event.preventDefault(); prioritySuggestion.rejectSuggestion()">
                                 <i class="fas fa-times"></i> Dismiss
                             </button>
-                            <button class="btn btn-sm btn-outline-info" onclick="prioritySuggestion.toggleDetails()">
+                            <button type="button" class="btn btn-sm btn-outline-info" onclick="event.preventDefault(); prioritySuggestion.toggleDetails()">
                                 <i class="fas fa-info-circle"></i> Details
                             </button>
                         </div>
