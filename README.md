@@ -172,7 +172,7 @@ Based on 7 similar tasks:
 - Resource planning (understand team capacity)
 - Risk management (flag tasks likely to be late)
 
-### 🎯 **Intelligent Task Priority Suggestions**
+### 🧠 **Intelligent Priority Suggestions**
 
 Let AI recommend the right priority level for each task based on what actually matters in your context.
 
@@ -226,6 +226,379 @@ Alternative: Could be URGENT if you need it done today
 - Projects with complex dependencies
 - Ensuring fairness in task assignment
 - Training new team members on priority culture
+
+### 🧠 **AI-Mediated Skill Gap Analysis**
+
+**Automatically identify skill shortages before they block your team's progress.**
+
+PrizmAI analyzes your team's skills and the skills required by your tasks to identify gaps that could impact your project. It's like having an HR consultant who knows exactly what your team needs to succeed.
+
+#### **How Skill Gap Analysis Works**
+
+**1. Automatic Skill Extraction**
+
+When you create tasks, PrizmAI automatically extracts required skills from task descriptions:
+
+```
+Task: "Implement payment gateway integration"
+↓ AI analyzes task
+Extracted Skills:
+├─ Python - Advanced
+├─ API Integration - Advanced
+├─ Security - Intermediate
+└─ Payment Systems - Intermediate
+```
+
+**2. Team Skill Profiling**
+
+PrizmAI builds a profile of your team's current skills:
+
+```
+Team Profile:
+├─ John (Backend Lead)
+│  ├─ Python - Expert
+│  ├─ API Design - Advanced
+│  └─ Database - Advanced
+├─ Alice (Full-Stack)
+│  ├─ Python - Intermediate
+│  ├─ React - Advanced
+│  └─ AWS - Intermediate
+├─ Bob (Frontend)
+│  ├─ React - Expert
+│  ├─ JavaScript - Advanced
+│  └─ CSS - Expert
+└─ Sarah (DevOps)
+   ├─ AWS - Expert
+   ├─ Kubernetes - Advanced
+   └─ Python - Beginner
+```
+
+**3. Gap Identification & Quantification**
+
+The system compares required skills against available skills and identifies gaps:
+
+```
+Skill Gap Report - Mobile App Development Project
+
+Critical Gap: React Native
+├─ Required: 2 people at Advanced level
+├─ Available: 0 people
+├─ Gap: Need 2 more
+├─ Severity: CRITICAL - Cannot proceed
+├─ Affected Tasks: 8 (App UI, Navigation, Testing)
+└─ Impact: 40+ hours of blocked work
+
+High Gap: DevOps/CI-CD
+├─ Required: 1 person at Advanced level
+├─ Available: Sarah (Expert level - overqualified but available)
+├─ Gap: 0 (Covered, but person overqualified)
+├─ Severity: LOW (resolved by promoting Sarah)
+└─ Impact: None
+
+Medium Gap: TypeScript
+├─ Required: 3 people at Intermediate level
+├─ Available: 1 person (Alice)
+├─ Gap: Need 2 more
+├─ Severity: MEDIUM - May cause delays
+├─ Affected Tasks: 5 (Backend type safety)
+└─ Impact: 15-20 hours of learning curve
+```
+
+#### **AI-Generated Recommendations**
+
+For each skill gap, PrizmAI recommends concrete actions:
+
+**Gap: React Native (Critical)**
+
+```
+Recommended Solutions (Ranked by Feasibility):
+
+1. HIRE (Fastest Resolution)
+   ├─ Bring in 2 React Native contractors
+   ├─ Timeline: Can start in 2 weeks
+   ├─ Cost: $50k - $80k for 3-month project
+   ├─ Risk: Onboarding time, context learning
+   └─ Recommendation: ⭐⭐⭐⭐ Best option
+
+2. TRAINING (Develop Internal Talent)
+   ├─ Train Alice and Bob on React Native (they know React)
+   ├─ Timeline: 4-6 weeks training before full productivity
+   ├─ Cost: $5k courses + 2 weeks productivity loss
+   ├─ Risk: Timeline delay of 4-6 weeks
+   └─ Recommendation: ⭐⭐⭐ Consider if timeline allows
+
+3. REDISTRIBUTE (Use Existing Skills)
+   ├─ Have John lead (has mobile experience)
+   ├─ Pair with Bob (React expert, learn mobile)
+   ├─ Timeline: Start immediately
+   ├─ Cost: Learning curve, slower productivity
+   ├─ Risk: Quality concerns, John overloaded
+   └─ Recommendation: ⭐⭐ Fallback option only
+
+4. CONTRACTOR + TRAINING (Balanced Approach)
+   ├─ Bring in 1 React Native expert for 2 months
+   ├─ Expert trains internal team (Alice, Bob)
+   ├─ Gradually transition to internal team
+   ├─ Timeline: 2-3 weeks to productive, 8 weeks full transition
+   ├─ Cost: $25k contractor + training time
+   ├─ Risk: Lower than pure hiring or pure training
+   └─ Recommendation: ⭐⭐⭐⭐⭐ Best balanced approach
+
+AI Confidence: 87%
+```
+
+#### **Development Plan Creation**
+
+Once gaps are identified, create development plans to address them:
+
+```
+Development Plan: "Develop React Native Skills"
+
+Target Skill: React Native (Advanced)
+Target Users: Alice Wong, Bob Martinez
+Plan Type: Training + Contractor Mentorship
+Status: Proposed
+
+Timeline:
+├─ Week 1-2: Contractor onboarding and initial training
+├─ Week 2-8: Contractor mentors team on React Native best practices
+├─ Week 8+: Internal team independently develops features
+└─ Total: 8 weeks to full proficiency
+
+Resource Allocation:
+├─ Budget: $25,000 (contractor fees)
+├─ Time: Alice & Bob: 50% capacity for 8 weeks
+├─ Mentorship: 10 hours/week from contractor
+└─ Success metrics: Deliver 3 features independently
+
+Expected Outcomes:
+├─ 2 React Native experts on team
+├─ Ability to maintain mobile app independently
+├─ Knowledge transfer to future projects
+└─ Competitive advantage in mobile development
+```
+
+#### **Skills Dashboard & Visualization**
+
+**Team Skill Matrix Heatmap:**
+
+```
+                Beginner    Intermediate    Advanced    Expert
+Python            -            Alice          John        ✓
+React             -              -           Alice, Bob   ✓
+TypeScript        -            Alice           -          -
+React Native      -              -             -          -
+AWS               -            Alice          Sarah       ✓
+Docker            -              -            Sarah       ✓
+DevOps            -              -            Sarah       ✓
+Security          -              -            John        ✓
+
+Color Legend: 🟢 Expert (1+) | 🔵 Advanced (1+) | 🟡 Intermediate (1+) | ⚪ Beginner (1+)
+              ⛔ None available (GAP!)
+```
+
+**Gap Severity View:**
+
+```
+Skill Gaps by Severity:
+
+🔴 CRITICAL (Cannot Proceed):
+  └─ React Native (Need 2 Advanced) [URGENT - Hire or train ASAP]
+
+🟠 HIGH (Blocking Work):
+  └─ TypeScript (Need 2 more Intermediate)
+
+🟡 MEDIUM (May Cause Delays):
+  └─ Kubernetes (1 Advanced, but Sarah overloaded)
+
+🟢 LOW (Can Work Around):
+  └─ Advanced CSS (Bob can mentor juniors)
+
+✅ WELL-COVERED (No Action Needed):
+  ├─ Python (3 levels: Expert, Advanced, Intermediate)
+  ├─ AWS (Sarah is Expert)
+  └─ DevOps (Sarah is Expert)
+```
+
+**Historical Trends:**
+
+```
+Skill Gap Evolution:
+
+Nov 2024: 7 gaps (2 critical, 3 high, 2 medium)
+Dec 2024: 5 gaps (1 critical, 2 high, 2 medium) - Training impact
+Jan 2025: 3 gaps (0 critical, 2 high, 1 medium) - New hire helped
+Current:  1 gap  (0 critical, 1 high, 0 medium) - Close to resolved!
+
+Trend: ↘ Improving (Skills are being developed)
+```
+
+#### **Affected Tasks View**
+
+See exactly which tasks are blocked by skill gaps:
+
+```
+React Native Gap → Affects These Tasks:
+
+1. 🔴 CRITICAL: Design mobile app UI
+   ├─ Status: Blocked (No React Native skills)
+   ├─ Due: Jan 20, 2025 (3 days) ⚠️ OVERDUE
+   ├─ Assigned to: Unassigned
+   ├─ Impact: Blocking 5 other tasks
+   └─ Action: Hire React Native developer or train Bob
+
+2. 🟠 HIGH: Implement mobile navigation
+   ├─ Status: Blocked
+   ├─ Due: Jan 25, 2025 (waiting for #1)
+   ├─ Impact: Core feature of mobile app
+   └─ Action: Depends on #1 resolution
+
+3. 🟡 MEDIUM: Setup React Native project
+   ├─ Status: Not Started
+   ├─ Due: Jan 22, 2025
+   ├─ Action: Can be started once decision made on #1
+   └─ Dependencies: #1 (person assignment)
+```
+
+#### **AI Recommendations in Action**
+
+**Example Workflow:**
+
+```
+1. User creates task: "Build mobile app with React Native"
+   ↓
+2. AI extracts skills: React Native (Advanced) required
+   ↓
+3. AI checks team: No one has React Native skills
+   ↓
+4. System creates Skill Gap: "React Native - Critical"
+   ↓
+5. AI generates options:
+   - Hire React Native developer
+   - Train internal team (4-6 weeks delay)
+   - Use Contractor + Training (recommended)
+   ↓
+6. User clicks "View Details" on gap
+   ↓
+7. Modal shows:
+   - All affected tasks (which would be blocked)
+   - Team members with closest skills
+   - Recommended solutions with cost/timeline
+   - Success stories of similar situations
+   ↓
+8. User clicks "Create Development Plan"
+   ↓
+9. Plan created with:
+   - Recommended action (e.g., hire contractor)
+   - Timeline and milestones
+   - Success metrics
+   - Team members involved
+   ↓
+10. Team executes plan
+    ↓
+11. As people gain skills, gaps automatically update
+    ↓
+12. Dashboard shows gap resolution progress
+```
+
+#### **Smart Notifications**
+
+Stay informed about skill gaps affecting your projects:
+
+```
+Notifications:
+
+📌 "ALERT: Critical skill gap detected!"
+   Skill: React Native
+   Impact: 8 tasks cannot start
+   Action: Create development plan to address
+
+📌 "Skill gap update: React Native"
+   Progress: Alice completed React Native course
+   Status: Now 1 expert available (was 0)
+   Next: Need 1 more for full coverage
+
+📌 "Team skill increased!"
+   Achievement: Bob is now Advanced in TypeScript
+   Impact: TypeScript gap reduced from 2 to 1 person needed
+   Affected Tasks: 3 tasks now have resources
+
+📌 "Overdue skill gap!"
+   Skill: Kubernetes expertise
+   Issue: Needed 2 weeks ago for DevOps project
+   Action: Quick training or hire contractor ASAP
+```
+
+#### **Explainable Gap Analysis**
+
+Click "Why?" on any gap to understand the analysis:
+
+```
+Skill Gap: "React Native"
+Severity: CRITICAL
+Gap Size: Need 2 more
+
+Why is this CRITICAL?
+
+├─ AI Confidence: 94% (very sure about this assessment)
+│
+├─ Contributing Factors:
+│  ├─ 35% - Tasks are blocked (8 tasks can't start)
+│  ├─ 30% - Timeline pressure (project due in 4 weeks)
+│  ├─ 20% - No one has any React Native experience
+│  ├─ 10% - High skill complexity (takes weeks to learn)
+│  └─ 5% - It's on critical path (blocks other work)
+│
+├─ Calculation:
+│  ├─ Requirement: 2 people at Advanced level
+│  ├─ Current: 0 people
+│  ├─ Gap: 2 people
+│  └─ Impact: 40+ hours blocked = CRITICAL
+│
+├─ Assumptions:
+│  ├─ These tasks must be done for project success
+│  ├─ React Native is necessary (can't use alternatives)
+│  ├─ Training would take 4-6 weeks
+│  └─ Contractor availability is reasonable
+│
+├─ Data Limitations:
+│  ├─ We don't know Bob's actual learning speed
+│  ├─ No historical React Native projects to compare
+│  └─ Contract market rates may have changed
+│
+└─ Alternative Views:
+   ├─ Could be MEDIUM if project timeline extended 6 weeks
+   ├─ Could be LOW if using React Web + React Native shared code
+   └─ Could be RESOLVED if Alice can dedicate full-time training
+
+Recommendations:
+├─ 1st choice: Hire contractor (fastest)
+├─ 2nd choice: Contractor + Internal training (best long-term)
+└─ 3rd choice: Train internally (cheapest but slowest)
+```
+
+#### **Features of Skill Gap Analysis**
+
+✅ **Automatic Detection** - No manual data entry required  
+✅ **Continuous Monitoring** - Gaps update as team skills change  
+✅ **AI Recommendations** - Concrete solutions (hire, train, redistribute)  
+✅ **Development Plans** - Track progress on closing gaps  
+✅ **Affected Tasks View** - See impact of each gap  
+✅ **Team Skill Matrix** - Visual view of all team capabilities  
+✅ **Historical Trends** - Track skill development over time  
+✅ **Notifications** - Get alerted when gaps emerge or resolve  
+✅ **Explainable Analysis** - Understand why gaps exist and how to fix them  
+✅ **Cost/Timeline Estimates** - Make budget and planning decisions  
+
+#### **Perfect For**
+
+- **Project Planning** - Know if you have the skills before committing to timeline
+- **Resource Planning** - Hire or train based on actual skill requirements
+- **Risk Management** - Identify skill risks early before they become blockers
+- **Team Development** - Track and grow team capabilities
+- **Budget Planning** - Estimate costs for hiring, training, or contractors
+- **Compliance** - Track team certifications and required skills
+- **Onboarding** - Know what skills new hires need
 
 ### 📊 Smart Task Recommendations
 
