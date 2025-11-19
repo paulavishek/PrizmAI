@@ -8,6 +8,7 @@ from kanban.models import (
     Board, Column, TaskLabel, Task, Comment, TaskActivity,
     ResourceDemandForecast, TeamCapacityAlert, WorkloadDistributionRecommendation
 )
+from kanban.priority_models import PriorityDecision
 from kanban.stakeholder_models import (
     ProjectStakeholder, StakeholderTaskInvolvement, 
     StakeholderEngagementRecord, EngagementMetrics, StakeholderTag
@@ -48,6 +49,9 @@ class Command(BaseCommand):
         # Create historical task data for predictive analytics
         self.create_historical_task_data()
         
+        # Create priority decision history for intelligent priority suggestions
+        self.create_priority_decision_history()
+        
         # Fix Gantt chart data with dynamic dates relative to current date
         self.stdout.write(self.style.NOTICE('\nFixing Gantt chart demo data with dynamic dates...'))
         from django.core.management import call_command
@@ -86,8 +90,9 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('✅ Resource Management - Team workload forecasts'))
         self.stdout.write(self.style.SUCCESS('✅ Stakeholder Management - Stakeholder engagement'))
         self.stdout.write(self.style.SUCCESS('✅ Requirements Management - Task dependencies'))
-        self.stdout.write(self.style.SUCCESS('✅ Chat Rooms - Multiple chat rooms with messages'))
+        self.stdout.write(self.style.SUCCESS('✅ Chat Rooms demo data created'))
         self.stdout.write(self.style.SUCCESS('✅ Predictive Analytics - Historical task completion data'))
+        self.stdout.write(self.style.SUCCESS('✅ Intelligent Priority Suggestions - Priority decision history'))
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))
 
     def create_users(self):
@@ -2231,3 +2236,552 @@ Carol: Sounds good. Great work this week!
             )
         
         self.stdout.write(self.style.SUCCESS('✅ Historical task data and predictions created!'))
+
+    def create_priority_decision_history(self):
+        """Create comprehensive priority decision history for ML training (40-60 decisions per board)"""
+        self.stdout.write(self.style.NOTICE('Creating Priority Decision History for AI training...'))
+        
+        # Realistic task contexts for various scenarios
+        task_scenarios = {
+            'urgent': [
+                {
+                    'title': 'Critical production bug - payment gateway failing',
+                    'description': 'Users unable to complete purchases. Revenue impact: high',
+                    'has_due_date': True,
+                    'days_until_due': 1,
+                    'has_dependencies': False,
+                    'complexity': 7,
+                    'risk_score': 9,
+                    'ai_suggested': 'urgent',
+                    'user_chosen': 'urgent',
+                    'accepted_suggestion': True,
+                    'reasoning': 'Critical revenue-impacting bug with immediate customer impact',
+                    'label_names': ['Bug', 'Critical', 'Backend']
+                },
+                {
+                    'title': 'Security vulnerability patch needed urgently',
+                    'description': 'CVE-2024-XXXX affects our authentication system',
+                    'has_due_date': True,
+                    'days_until_due': 2,
+                    'has_dependencies': False,
+                    'complexity': 8,
+                    'risk_score': 9,
+                    'ai_suggested': 'urgent',
+                    'user_chosen': 'urgent',
+                    'accepted_suggestion': True,
+                    'reasoning': 'Security vulnerabilities must be patched immediately',
+                    'label_names': ['Security', 'Critical']
+                },
+                {
+                    'title': 'Database migration blocking deployment',
+                    'description': 'Cannot deploy new features until migration completes',
+                    'has_due_date': True,
+                    'days_until_due': 1,
+                    'has_dependencies': True,
+                    'complexity': 6,
+                    'risk_score': 8,
+                    'ai_suggested': 'high',
+                    'user_chosen': 'urgent',
+                    'accepted_suggestion': False,
+                    'reasoning': 'Blocking deployment is more urgent than AI suggested',
+                    'label_names': ['Backend', 'Deployment']
+                }
+            ],
+            'high': [
+                {
+                    'title': 'Implement OAuth2 authentication flow',
+                    'description': 'Key feature for enterprise customers. Due next week',
+                    'has_due_date': True,
+                    'days_until_due': 7,
+                    'has_dependencies': True,
+                    'complexity': 8,
+                    'risk_score': 6,
+                    'ai_suggested': 'high',
+                    'user_chosen': 'high',
+                    'accepted_suggestion': True,
+                    'reasoning': 'Important enterprise feature with clear deadline',
+                    'label_names': ['Feature', 'Backend', 'Authentication']
+                },
+                {
+                    'title': 'Performance optimization for dashboard loading',
+                    'description': 'Dashboard takes 8+ seconds to load. Multiple user complaints',
+                    'has_due_date': True,
+                    'days_until_due': 5,
+                    'has_dependencies': False,
+                    'complexity': 7,
+                    'risk_score': 5,
+                    'ai_suggested': 'high',
+                    'user_chosen': 'high',
+                    'accepted_suggestion': True,
+                    'reasoning': 'User experience issue affecting all users',
+                    'label_names': ['Performance', 'Frontend']
+                },
+                {
+                    'title': 'API rate limiting implementation',
+                    'description': 'Prevent API abuse and ensure service stability',
+                    'has_due_date': True,
+                    'days_until_due': 10,
+                    'has_dependencies': False,
+                    'complexity': 6,
+                    'risk_score': 7,
+                    'ai_suggested': 'medium',
+                    'user_chosen': 'high',
+                    'accepted_suggestion': False,
+                    'reasoning': 'Security implications make this higher priority',
+                    'label_names': ['Backend', 'Security']
+                },
+                {
+                    'title': 'Fix mobile responsive layout issues',
+                    'description': 'Several UI elements broken on mobile devices',
+                    'has_due_date': True,
+                    'days_until_due': 6,
+                    'has_dependencies': False,
+                    'complexity': 5,
+                    'risk_score': 4,
+                    'ai_suggested': 'high',
+                    'user_chosen': 'medium',
+                    'accepted_suggestion': False,
+                    'reasoning': 'Can wait until after more critical features',
+                    'label_names': ['UI/UX', 'Mobile', 'Frontend']
+                }
+            ],
+            'medium': [
+                {
+                    'title': 'Add user preference settings page',
+                    'description': 'Allow users to customize notifications and themes',
+                    'has_due_date': True,
+                    'days_until_due': 14,
+                    'has_dependencies': False,
+                    'complexity': 5,
+                    'risk_score': 3,
+                    'ai_suggested': 'medium',
+                    'user_chosen': 'medium',
+                    'accepted_suggestion': True,
+                    'reasoning': 'Nice-to-have feature with reasonable timeline',
+                    'label_names': ['Feature', 'Frontend']
+                },
+                {
+                    'title': 'Implement data export functionality',
+                    'description': 'Users want to export data to CSV/Excel',
+                    'has_due_date': True,
+                    'days_until_due': 20,
+                    'has_dependencies': False,
+                    'complexity': 6,
+                    'risk_score': 2,
+                    'ai_suggested': 'medium',
+                    'user_chosen': 'medium',
+                    'accepted_suggestion': True,
+                    'reasoning': 'Requested feature with manageable scope',
+                    'label_names': ['Feature', 'Backend']
+                },
+                {
+                    'title': 'Refactor legacy code in reporting module',
+                    'description': 'Technical debt cleanup to improve maintainability',
+                    'has_due_date': False,
+                    'days_until_due': None,
+                    'has_dependencies': False,
+                    'complexity': 7,
+                    'risk_score': 3,
+                    'ai_suggested': 'low',
+                    'user_chosen': 'medium',
+                    'accepted_suggestion': False,
+                    'reasoning': 'Technical debt is accumulating, should prioritize',
+                    'label_names': ['Refactoring', 'Technical Debt']
+                },
+                {
+                    'title': 'Add tooltips to complex UI elements',
+                    'description': 'Improve user onboarding with contextual help',
+                    'has_due_date': True,
+                    'days_until_due': 21,
+                    'has_dependencies': False,
+                    'complexity': 3,
+                    'risk_score': 2,
+                    'ai_suggested': 'medium',
+                    'user_chosen': 'low',
+                    'accepted_suggestion': False,
+                    'reasoning': 'Can defer for more important features',
+                    'label_names': ['UI/UX', 'Documentation']
+                }
+            ],
+            'low': [
+                {
+                    'title': 'Update UI color scheme to match new branding',
+                    'description': 'Marketing wants updated colors across the app',
+                    'has_due_date': True,
+                    'days_until_due': 30,
+                    'has_dependencies': False,
+                    'complexity': 4,
+                    'risk_score': 1,
+                    'ai_suggested': 'low',
+                    'user_chosen': 'low',
+                    'accepted_suggestion': True,
+                    'reasoning': 'Cosmetic change with no urgency',
+                    'label_names': ['UI/UX', 'Design']
+                },
+                {
+                    'title': 'Add Easter egg animation for fun',
+                    'description': 'Hidden animation when certain key combo is pressed',
+                    'has_due_date': False,
+                    'days_until_due': None,
+                    'has_dependencies': False,
+                    'complexity': 2,
+                    'risk_score': 1,
+                    'ai_suggested': 'low',
+                    'user_chosen': 'low',
+                    'accepted_suggestion': True,
+                    'reasoning': 'Fun but non-essential feature',
+                    'label_names': ['Fun', 'Frontend']
+                },
+                {
+                    'title': 'Update third-party library versions',
+                    'description': 'Keep dependencies up to date for security',
+                    'has_due_date': False,
+                    'days_until_due': None,
+                    'has_dependencies': False,
+                    'complexity': 3,
+                    'risk_score': 2,
+                    'ai_suggested': 'low',
+                    'user_chosen': 'medium',
+                    'accepted_suggestion': False,
+                    'reasoning': 'Security updates should be higher priority',
+                    'label_names': ['Maintenance', 'Security']
+                },
+                {
+                    'title': 'Write additional unit tests for edge cases',
+                    'description': 'Increase code coverage from 75% to 85%',
+                    'has_due_date': False,
+                    'days_until_due': None,
+                    'has_dependencies': False,
+                    'complexity': 5,
+                    'risk_score': 2,
+                    'ai_suggested': 'medium',
+                    'user_chosen': 'low',
+                    'accepted_suggestion': False,
+                    'reasoning': 'Current coverage is acceptable for now',
+                    'label_names': ['Testing', 'Quality']
+                }
+            ]
+        }
+        
+        # Additional mixed scenarios for variety
+        mixed_scenarios = [
+            {
+                'title': 'Implement real-time notifications',
+                'description': 'WebSocket-based notifications for task updates',
+                'has_due_date': True,
+                'days_until_due': 12,
+                'has_dependencies': True,
+                'complexity': 8,
+                'risk_score': 5,
+                'ai_suggested': 'high',
+                'user_chosen': 'high',
+                'accepted_suggestion': True,
+                'reasoning': 'Key feature with technical complexity',
+                'label_names': ['Feature', 'Backend', 'Real-time']
+            },
+            {
+                'title': 'Add dark mode theme support',
+                'description': 'Popular user request for dark theme option',
+                'has_due_date': True,
+                'days_until_due': 25,
+                'has_dependencies': False,
+                'complexity': 6,
+                'risk_score': 2,
+                'ai_suggested': 'medium',
+                'user_chosen': 'high',
+                'accepted_suggestion': False,
+                'reasoning': 'Highly requested by users, boosting priority',
+                'label_names': ['Feature', 'UI/UX']
+            },
+            {
+                'title': 'Create API documentation with examples',
+                'description': 'Comprehensive API docs for external developers',
+                'has_due_date': True,
+                'days_until_due': 15,
+                'has_dependencies': False,
+                'complexity': 4,
+                'risk_score': 3,
+                'ai_suggested': 'medium',
+                'user_chosen': 'medium',
+                'accepted_suggestion': True,
+                'reasoning': 'Important for developer experience',
+                'label_names': ['Documentation', 'API']
+            },
+            {
+                'title': 'Optimize database query performance',
+                'description': 'Some queries taking 2-3 seconds, need optimization',
+                'has_due_date': True,
+                'days_until_due': 8,
+                'has_dependencies': False,
+                'complexity': 7,
+                'risk_score': 6,
+                'ai_suggested': 'high',
+                'user_chosen': 'high',
+                'accepted_suggestion': True,
+                'reasoning': 'Performance degradation affecting users',
+                'label_names': ['Performance', 'Backend', 'Database']
+            },
+            {
+                'title': 'Implement automated backup system',
+                'description': 'Daily automated backups to prevent data loss',
+                'has_due_date': True,
+                'days_until_due': 10,
+                'has_dependencies': False,
+                'complexity': 6,
+                'risk_score': 8,
+                'ai_suggested': 'high',
+                'user_chosen': 'urgent',
+                'accepted_suggestion': False,
+                'reasoning': 'Data protection is critical, elevating priority',
+                'label_names': ['Infrastructure', 'Backup', 'Critical']
+            },
+            {
+                'title': 'Add keyboard shortcuts for power users',
+                'description': 'Vim-style keyboard navigation for efficiency',
+                'has_due_date': False,
+                'days_until_due': None,
+                'has_dependencies': False,
+                'complexity': 5,
+                'risk_score': 2,
+                'ai_suggested': 'low',
+                'user_chosen': 'medium',
+                'accepted_suggestion': False,
+                'reasoning': 'Power user feature worth prioritizing',
+                'label_names': ['Feature', 'UI/UX', 'Accessibility']
+            },
+            {
+                'title': 'Setup monitoring and alerting system',
+                'description': 'Monitor application health and get alerts for issues',
+                'has_due_date': True,
+                'days_until_due': 14,
+                'has_dependencies': False,
+                'complexity': 7,
+                'risk_score': 7,
+                'ai_suggested': 'high',
+                'user_chosen': 'high',
+                'accepted_suggestion': True,
+                'reasoning': 'Essential for production reliability',
+                'label_names': ['Infrastructure', 'Monitoring']
+            },
+            {
+                'title': 'Implement two-factor authentication',
+                'description': 'Add 2FA for enhanced security',
+                'has_due_date': True,
+                'days_until_due': 18,
+                'has_dependencies': False,
+                'complexity': 7,
+                'risk_score': 6,
+                'ai_suggested': 'high',
+                'user_chosen': 'high',
+                'accepted_suggestion': True,
+                'reasoning': 'Security enhancement requested by enterprise clients',
+                'label_names': ['Security', 'Authentication', 'Feature']
+            },
+            {
+                'title': 'Create onboarding tutorial for new users',
+                'description': 'Interactive walkthrough for first-time users',
+                'has_due_date': True,
+                'days_until_due': 22,
+                'has_dependencies': False,
+                'complexity': 5,
+                'risk_score': 3,
+                'ai_suggested': 'medium',
+                'user_chosen': 'medium',
+                'accepted_suggestion': True,
+                'reasoning': 'Improves user activation rates',
+                'label_names': ['Feature', 'Onboarding', 'UI/UX']
+            },
+            {
+                'title': 'Add analytics dashboard for admins',
+                'description': 'Visualize user engagement and usage metrics',
+                'has_due_date': True,
+                'days_until_due': 30,
+                'has_dependencies': True,
+                'complexity': 8,
+                'risk_score': 4,
+                'ai_suggested': 'medium',
+                'user_chosen': 'high',
+                'accepted_suggestion': False,
+                'reasoning': 'Business intelligence feature valuable for decision-making',
+                'label_names': ['Feature', 'Analytics', 'Dashboard']
+            }
+        ]
+        
+        # Create priority decisions for each board
+        for board in Board.objects.all():
+            self.stdout.write(f'  Creating priority decisions for board: {board.name}')
+            
+            # Get board members for realistic decision-making
+            members = list(board.members.all())
+            if not members:
+                members = [self.users['admin']]
+            
+            # Determine number of decisions to create (40-60 per board)
+            num_decisions = random.randint(40, 60)
+            
+            decisions_created = 0
+            
+            # Get available labels for this board
+            available_labels = list(board.labels.all())
+            
+            # Cycle through scenarios and mixed scenarios
+            all_scenarios = []
+            for priority_level, scenarios in task_scenarios.items():
+                all_scenarios.extend(scenarios)
+            all_scenarios.extend(mixed_scenarios)
+            
+            # Create decisions with varied timestamps over past 6 months
+            for i in range(num_decisions):
+                # Pick a scenario (cycle through all available scenarios)
+                scenario = all_scenarios[i % len(all_scenarios)]
+                
+                # Add some randomization to make each instance unique
+                days_variation = random.randint(-3, 3) if scenario['days_until_due'] else 0
+                complexity_variation = random.randint(-1, 1)
+                risk_variation = random.randint(-1, 1)
+                
+                # Calculate decision timestamp (spread over past 180 days)
+                days_ago = random.randint(1, 180)
+                decision_date = timezone.now() - timedelta(
+                    days=days_ago,
+                    hours=random.randint(8, 18),  # During work hours
+                    minutes=random.randint(0, 59)
+                )
+                
+                # Prepare task context
+                adjusted_days_until_due = None
+                if scenario['has_due_date']:
+                    base_days = scenario['days_until_due']
+                    adjusted_days_until_due = max(1, base_days + days_variation)
+                
+                adjusted_complexity = max(1, min(10, scenario['complexity'] + complexity_variation))
+                adjusted_risk = max(1, min(10, scenario['risk_score'] + risk_variation))
+                
+                # Build task context
+                task_context = {
+                    'title': scenario['title'],
+                    'description': scenario['description'],
+                    'has_due_date': scenario['has_due_date'],
+                    'complexity': adjusted_complexity,
+                    'risk_score': adjusted_risk,
+                    'has_dependencies': scenario['has_dependencies']
+                }
+                
+                if adjusted_days_until_due:
+                    task_context['days_until_due'] = adjusted_days_until_due
+                
+                # Prepare AI reasoning
+                ai_reasoning = {
+                    'factors_considered': [
+                        f"Complexity: {adjusted_complexity}/10",
+                        f"Risk score: {adjusted_risk}/10",
+                        f"Has dependencies: {'Yes' if scenario['has_dependencies'] else 'No'}"
+                    ],
+                    'explanation': scenario['reasoning']
+                }
+                
+                if adjusted_days_until_due:
+                    ai_reasoning['factors_considered'].insert(0, f"Due in {adjusted_days_until_due} days")
+                    if adjusted_days_until_due <= 2:
+                        ai_reasoning['factors_considered'].append("Imminent deadline")
+                    elif adjusted_days_until_due <= 7:
+                        ai_reasoning['factors_considered'].append("Approaching deadline")
+                
+                # Occasionally add label information to reasoning
+                if available_labels and random.random() < 0.3:
+                    matching_labels = [l for l in available_labels if any(
+                        name.lower() in l.name.lower() for name in scenario['label_names']
+                    )]
+                    if matching_labels:
+                        ai_reasoning['factors_considered'].append(
+                            f"Labels: {', '.join([l.name for l in matching_labels[:2]])}"
+                        )
+                
+                # Select a team member who made the decision
+                decision_maker = random.choice(members)
+                
+                # Create priority decision using the model's log_decision method
+                try:
+                    # Determine decision type based on scenario
+                    if scenario['accepted_suggestion']:
+                        decision_type = 'ai_accepted'
+                    else:
+                        decision_type = 'ai_rejected'
+                    
+                    # Get a random existing task from the board for context
+                    # (Priority decisions need a task reference)
+                    existing_tasks = Task.objects.filter(column__board=board)
+                    if not existing_tasks.exists():
+                        continue  # Skip if no tasks available
+                    
+                    sample_task = random.choice(list(existing_tasks))
+                    
+                    # Create the decision directly
+                    decision = PriorityDecision.objects.create(
+                        board=board,
+                        task=sample_task,  # Reference an existing task
+                        suggested_priority=scenario['ai_suggested'],
+                        actual_priority=scenario['user_chosen'],
+                        previous_priority=None,
+                        decision_type=decision_type,
+                        decided_by=decision_maker,
+                        task_context=task_context,
+                        confidence_score=0.85 + random.uniform(-0.15, 0.10),  # Realistic confidence
+                        reasoning=ai_reasoning,
+                        was_correct=scenario['accepted_suggestion']
+                    )
+                    
+                    # Adjust the timestamp to the past
+                    decision.created_at = decision_date
+                    decision.save()
+                    
+                    decisions_created += 1
+                    
+                except Exception as e:
+                    self.stdout.write(
+                        self.style.WARNING(f'    Could not create decision: {str(e)}')
+                    )
+            
+            self.stdout.write(
+                self.style.SUCCESS(f'    ✓ Created {decisions_created} priority decisions for {board.name}')
+            )
+            
+            # Calculate acceptance rate for reporting
+            board_decisions = PriorityDecision.objects.filter(board=board)
+            total = board_decisions.count()
+            accepted = board_decisions.filter(was_correct=True).count()
+            acceptance_rate = (accepted / total * 100) if total > 0 else 0
+            
+            self.stdout.write(
+                f'    📊 AI Suggestion Acceptance Rate: {acceptance_rate:.1f}% ({accepted}/{total})'
+            )
+        
+        # Report summary
+        total_decisions = PriorityDecision.objects.count()
+        self.stdout.write(
+            self.style.SUCCESS(
+                f'\n✅ Priority Decision History created! Total: {total_decisions} decisions'
+            )
+        )
+        
+        # Report readiness for ML training
+        from collections import defaultdict
+        boards_with_enough_data = 0
+        board_decision_counts = defaultdict(int)
+        
+        for board in Board.objects.all():
+            count = PriorityDecision.objects.filter(board=board).count()
+            board_decision_counts[board.name] = count
+            if count >= 20:
+                boards_with_enough_data += 1
+        
+        self.stdout.write(
+            self.style.SUCCESS(
+                f'✅ {boards_with_enough_data} boards ready for ML training (20+ decisions)'
+            )
+        )
+        self.stdout.write(
+            self.style.NOTICE(
+                '\n💡 Run "python manage.py train_priority_models --all" to train ML models'
+            )
+        )
