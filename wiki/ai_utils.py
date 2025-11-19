@@ -373,6 +373,144 @@ def extract_text_from_file(file_path: str, file_type: str) -> Optional[str]:
         return None
 
 
+def analyze_wiki_documentation(wiki_content: str, wiki_page_context: Dict,
+                              organization=None, available_boards=None) -> Optional[Dict]:
+    """
+    Analyze general wiki documentation pages (non-meeting content)
+    Provides summary, extracts tasks, suggests improvements, and identifies key information
+    
+    Args:
+        wiki_content: The wiki page content (markdown)
+        wiki_page_context: Context about the wiki page (title, tags, category, etc.)
+        organization: Organization context
+        available_boards: List of available boards for task suggestions
+        
+    Returns:
+        Dictionary with comprehensive documentation analysis including:
+        - Summary and key points
+        - Action items (if any)
+        - Suggested tasks
+        - Related topics
+        - Documentation quality insights
+    """
+    try:
+        # Build organization context
+        org_context = ""
+        board_list = ""
+        if available_boards:
+            board_list = "\n".join([f"- {board.name} (ID: {board.id})" for board in available_boards[:10]])
+            org_context = f"""
+        ## Available Project Boards:
+        {board_list}
+        """
+        
+        prompt = f"""
+        You are analyzing a wiki documentation page. Extract valuable information, provide insights,
+        and identify any actionable items or improvements.
+        
+        ## Wiki Page Context:
+        - Title: {wiki_page_context.get('title', 'Untitled')}
+        - Category: {wiki_page_context.get('category', 'General')}
+        - Date Created: {wiki_page_context.get('created_at', 'Not specified')}
+        - Created By: {wiki_page_context.get('created_by', 'Unknown')}
+        - Tags: {', '.join(wiki_page_context.get('tags', []))}
+        {org_context}
+        
+        ## Documentation Content (Markdown):
+        {wiki_content}
+        
+        ## Your Task:
+        Analyze this documentation and provide:
+        1. **Summary**: Clear, concise summary of the content (2-3 sentences)
+        2. **Key Points**: Main topics and important information (bullet points)
+        3. **Action Items**: Any tasks, TODOs, or action items mentioned (if any)
+        4. **Suggested Improvements**: Areas that could be enhanced or expanded
+        5. **Related Topics**: Related areas or pages that might be relevant
+        6. **Potential Tasks**: Tasks that could be created based on the content
+        
+        **IMPORTANT**: This is general documentation, not meeting notes. Look for:
+        - TODOs or action items mentioned in the text
+        - Incomplete sections or placeholders
+        - References to work that needs to be done
+        - Suggestions for improvements or enhancements
+        
+        Format your response as JSON:
+        {{
+            "documentation_summary": {{
+                "title": "Clear title summarizing the documentation",
+                "summary": "2-3 sentence overview of what this documentation covers",
+                "document_type": "guide|reference|tutorial|process|policy|technical|general",
+                "completeness": "complete|partial|draft",
+                "last_updated_detected": "Detected date if mentioned or null",
+                "target_audience": "Who this documentation is for"
+            }},
+            "key_points": [
+                "Main point 1",
+                "Main point 2",
+                "Main point 3"
+            ],
+            "action_items": [
+                {{
+                    "title": "Clear, actionable task title",
+                    "description": "What needs to be done",
+                    "priority": "low|medium|high",
+                    "type": "todo|enhancement|update|bug_fix|documentation",
+                    "source_context": "Where this was mentioned in the documentation",
+                    "suggested_board_id": "ID if board is obvious, else null",
+                    "suggested_board_name": "Name if obvious, else null"
+                }}
+            ],
+            "suggested_improvements": [
+                {{
+                    "area": "What area needs improvement",
+                    "suggestion": "Specific improvement suggestion",
+                    "priority": "low|medium|high",
+                    "effort": "low|medium|high"
+                }}
+            ],
+            "related_topics": [
+                "Topic 1",
+                "Topic 2",
+                "Topic 3"
+            ],
+            "questions_raised": [
+                "Question or unclear point that needs clarification"
+            ],
+            "dependencies_mentioned": [
+                "External dependencies, tools, or systems mentioned"
+            ],
+            "metadata": {{
+                "total_action_items": 0,
+                "total_suggestions": 0,
+                "documentation_quality": "excellent|good|needs_improvement|incomplete",
+                "requires_update": true/false,
+                "technical_level": "beginner|intermediate|advanced|expert",
+                "processing_notes": "Any important notes about the analysis"
+            }}
+        }}
+        """
+        
+        response_text = generate_ai_content(prompt, task_type='complex')
+        if response_text:
+            # Handle code block formatting
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].strip()
+            
+            result = json.loads(response_text)
+            # Ensure metadata counts are accurate
+            if 'metadata' in result:
+                result['metadata']['total_action_items'] = len(result.get('action_items', []))
+                result['metadata']['total_suggestions'] = len(result.get('suggested_improvements', []))
+            
+            return result
+        return None
+    except Exception as e:
+        logger.error(f"Error analyzing wiki documentation: {str(e)}")
+        return None
+
+
 def get_file_type_from_filename(filename: str) -> str:
     """Get file type from filename"""
     if filename.endswith('.pdf'):

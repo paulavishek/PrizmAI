@@ -124,6 +124,19 @@
                     <span class="badge" style="background-color: {{ page.category.color }}">
                         <i class="fas fa-{{ page.category.icon }}"></i> {{ page.category.name }}
                     </span>
+                    {% if page.category.ai_assistant_type == 'meeting' %}
+                        <span class="badge bg-success ms-2" title="This category uses AI Meeting Analysis">
+                            <i class="fas fa-users"></i> AI: Meeting Analysis
+                        </span>
+                    {% elif page.category.ai_assistant_type == 'documentation' %}
+                        <span class="badge bg-info ms-2" title="This category uses Documentation Assistant">
+                            <i class="fas fa-robot"></i> AI: Doc Assistant
+                        </span>
+                    {% elif page.category.ai_assistant_type == 'none' %}
+                        <span class="badge bg-secondary ms-2" title="AI features disabled for this category">
+                            <i class="fas fa-ban"></i> No AI Assistant
+                        </span>
+                    {% endif %}
                 </div>
                 <div>
                     <button onclick="goBack()" class="btn btn-outline-secondary btn-sm me-2">
@@ -137,8 +150,13 @@
                             <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#linkModal">
                                 <i class="fas fa-link"></i> Link
                             </button>
-                            <button class="btn btn-outline-success" id="processMeetingBtn" onclick="processMeetingNotes()">
-                                <i class="fas fa-robot"></i> AI Assistant
+                            <!-- Meeting Analysis Button - for meeting notes -->
+                            <button class="btn btn-outline-success" id="analyzeMeetingBtn" onclick="processMeetingNotes()" style="display: none;">
+                                <i class="fas fa-users"></i> Analyze Meeting
+                            </button>
+                            <!-- Documentation Assistant Button - for general docs -->
+                            <button class="btn btn-outline-info" id="analyzeDocsBtn" onclick="processDocumentation()" style="display: none;">
+                                <i class="fas fa-robot"></i> Doc Assistant
                             </button>
                             <a href="{% url 'wiki:page_delete' page.slug %}" class="btn btn-outline-danger" onclick="return confirm('Delete this page?')">
                                 <i class="fas fa-trash"></i> Delete
@@ -369,6 +387,47 @@
                 </div>
             </div>
             
+            <!-- AI Assistant Info Card -->
+            {% if page.category.ai_assistant_type != 'none' %}
+            <div class="card mb-3 border-{% if page.category.ai_assistant_type == 'meeting' %}success{% else %}info{% endif %}">
+                <div class="card-header bg-{% if page.category.ai_assistant_type == 'meeting' %}success{% else %}info{% endif %} bg-opacity-10">
+                    <h6 class="mb-0">
+                        <i class="fas fa-{% if page.category.ai_assistant_type == 'meeting' %}users{% else %}robot{% endif %}"></i> 
+                        AI Assistant Available
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if page.category.ai_assistant_type == 'meeting' %}
+                        <p class="mb-2"><strong>Meeting Analysis</strong></p>
+                        <p class="small text-muted mb-0">
+                            This category uses AI Meeting Analysis to extract:
+                        </p>
+                        <ul class="small mb-0 mt-2">
+                            <li>Action items with assignees</li>
+                            <li>Decisions made</li>
+                            <li>Blockers & risks</li>
+                            <li>Meeting summary</li>
+                        </ul>
+                    {% elif page.category.ai_assistant_type == 'documentation' %}
+                        <p class="mb-2"><strong>Documentation Assistant</strong></p>
+                        <p class="small text-muted mb-0">
+                            This category uses Documentation Assistant to provide:
+                        </p>
+                        <ul class="small mb-0 mt-2">
+                            <li>Content summary & key points</li>
+                            <li>Action items & TODOs</li>
+                            <li>Improvement suggestions</li>
+                            <li>Quality assessment</li>
+                        </ul>
+                    {% endif %}
+                    <div class="alert alert-light border mt-3 mb-0 small">
+                        <i class="fas fa-info-circle text-primary"></i> 
+                        Click the AI button in the toolbar to analyze this page
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
             <!-- Tags -->
             {% if page.tags %}
                 <div class="card mb-3">
@@ -435,96 +494,39 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="fas fa-robot text-success"></i> AI Meeting Assistant
+                    <i class="fas fa-users text-success"></i> AI Meeting Analysis
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" id="closeModal"></button>
             </div>
-            <div class="modal-body">
-                <!-- Processing State -->
-                <div id="processingState" class="text-center py-5">
-                    <div class="spinner-border text-success mb-3" role="status" style="width: 3rem; height: 3rem;">
-                        <span class="visually-hidden">Processing...</span>
-                    </div>
-                    <h5>Analyzing meeting notes with AI...</h5>
-                    <p class="text-muted">This may take a few moments</p>
-                </div>
-                
-                <!-- Results State -->
-                <div id="resultsState" style="display: none;">
-                    <!-- Summary -->
-                    <div class="card mb-3">
-                        <div class="card-header bg-light">
-                            <h6 class="mb-0"><i class="fas fa-clipboard-list"></i> Meeting Summary</h6>
-                        </div>
-                        <div class="card-body" id="meetingSummary">
-                            <!-- Will be populated by JavaScript -->
-                        </div>
-                    </div>
-                    
-                    <!-- Tabs for different sections -->
-                    <ul class="nav nav-tabs mb-3" role="tablist">
-                        <li class="nav-item">
-                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#actionItemsTab" type="button">
-                                <i class="fas fa-tasks"></i> Action Items <span id="actionItemsCount" class="badge bg-primary ms-1">0</span>
-                            </button>
-                        </li>
-                        <li class="nav-item">
-                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#decisionsTab" type="button">
-                                <i class="fas fa-check-circle"></i> Decisions <span id="decisionsCount" class="badge bg-info ms-1">0</span>
-                            </button>
-                        </li>
-                        <li class="nav-item">
-                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#blockersTab" type="button">
-                                <i class="fas fa-exclamation-triangle"></i> Blockers <span id="blockersCount" class="badge bg-warning ms-1">0</span>
-                            </button>
-                        </li>
-                        <li class="nav-item">
-                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#risksTab" type="button">
-                                <i class="fas fa-shield-alt"></i> Risks <span id="risksCount" class="badge bg-danger ms-1">0</span>
-                            </button>
-                        </li>
-                    </ul>
-                    
-                    <div class="tab-content">
-                        <!-- Action Items Tab -->
-                        <div class="tab-pane fade show active" id="actionItemsTab">
-                            <div id="actionItemsList">
-                                <!-- Populated by JavaScript -->
-                            </div>
-                        </div>
-                        
-                        <!-- Decisions Tab -->
-                        <div class="tab-pane fade" id="decisionsTab">
-                            <div id="decisionsList">
-                                <!-- Populated by JavaScript -->
-                            </div>
-                        </div>
-                        
-                        <!-- Blockers Tab -->
-                        <div class="tab-pane fade" id="blockersTab">
-                            <div id="blockersList">
-                                <!-- Populated by JavaScript -->
-                            </div>
-                        </div>
-                        
-                        <!-- Risks Tab -->
-                        <div class="tab-pane fade" id="risksTab">
-                            <div id="risksList">
-                                <!-- Populated by JavaScript -->
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Error State -->
-                <div id="errorState" style="display: none;" class="alert alert-danger">
-                    <h5><i class="fas fa-exclamation-circle"></i> Processing Failed</h5>
-                    <p id="errorMessage"></p>
-                </div>
+            <div class="modal-body" id="meetingModalBody">
+                <!-- Content populated by JavaScript -->
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 <button type="button" class="btn btn-success" id="createTasksBtn" style="display: none;" onclick="showTaskCreationModal()">
+                    <i class="fas fa-plus-circle"></i> Create Tasks
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI Documentation Assistant Modal -->
+<div class="modal fade" id="documentationAssistantModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-robot text-info"></i> Documentation Assistant
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="docsModalBody">
+                <!-- Content populated by JavaScript -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="createDocsTasksBtn" style="display: none;" onclick="showDocsTaskCreationModal()">
                     <i class="fas fa-plus-circle"></i> Create Tasks
                 </button>
             </div>
@@ -579,374 +581,12 @@
 </div>
 
 <script>
-// Global variables
-let currentAnalysisId = null;
-let currentAnalysisResults = null;
-let selectedActionItems = new Set();
-let availableBoards = [];
-
-// Handle back navigation to previous page
-function goBack() {
-    // Check if there's a previous page in history
-    if (document.referrer && document.referrer !== window.location.href) {
-        window.history.back();
-    } else {
-        // Fallback to wiki page list if no history
-        window.location.href = '{% url "wiki:page_list" %}';
-    }
-}
-
-// Process meeting notes with AI
-async function processMeetingNotes() {
-    const modal = new bootstrap.Modal(document.getElementById('meetingAssistantModal'));
-    modal.show();
-    
-    // Reset states
-    document.getElementById('processingState').style.display = 'block';
-    document.getElementById('resultsState').style.display = 'none';
-    document.getElementById('errorState').style.display = 'none';
-    document.getElementById('createTasksBtn').style.display = 'none';
-    
-    try {
-        const response = await fetch('/wiki/api/wiki-page/{{ page.id }}/analyze/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            currentAnalysisId = data.analysis_id;
-            currentAnalysisResults = data.analysis_results;
-            displayAnalysisResults(data.analysis_results);
-            
-            // Load available boards
-            await loadAvailableBoards();
-        } else {
-            showError(data.error || 'Failed to analyze meeting notes');
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        showError('An error occurred while processing. Please try again.');
-    }
-}
-
-// Display analysis results
-function displayAnalysisResults(results) {
-    document.getElementById('processingState').style.display = 'none';
-    document.getElementById('resultsState').style.display = 'block';
-    document.getElementById('createTasksBtn').style.display = 'inline-block';
-    
-    // Display summary
-    const summary = results.meeting_summary || {};
-    document.getElementById('meetingSummary').innerHTML = `
-        <h6>${summary.title || 'Meeting Summary'}</h6>
-        <p>${summary.summary || 'No summary available'}</p>
-        ${summary.participants_detected && summary.participants_detected.length > 0 ? 
-            `<p><strong>Participants:</strong> ${summary.participants_detected.join(', ')}</p>` : ''}
-        ${summary.meeting_type ? `<span class="badge bg-secondary">${summary.meeting_type}</span>` : ''}
-        ${summary.confidence ? `<span class="badge bg-info">${summary.confidence} confidence</span>` : ''}
-    `;
-    
-    // Update counts
-    const actionItems = results.action_items || [];
-    const decisions = results.decisions || [];
-    const blockers = results.blockers || [];
-    const risks = results.risks || [];
-    
-    document.getElementById('actionItemsCount').textContent = actionItems.length;
-    document.getElementById('decisionsCount').textContent = decisions.length;
-    document.getElementById('blockersCount').textContent = blockers.length;
-    document.getElementById('risksCount').textContent = risks.length;
-    
-    // Display action items
-    displayActionItems(actionItems);
-    
-    // Display decisions
-    displayDecisions(decisions);
-    
-    // Display blockers
-    displayBlockers(blockers);
-    
-    // Display risks
-    displayRisks(risks);
-}
-
-// Display action items
-function displayActionItems(items) {
-    const container = document.getElementById('actionItemsList');
-    
-    if (items.length === 0) {
-        container.innerHTML = '<p class="text-muted">No action items detected</p>';
-        return;
-    }
-    
-    selectedActionItems.clear();
-    
-    container.innerHTML = items.map((item, index) => `
-        <div class="card mb-3">
-            <div class="card-body">
-                <div class="form-check">
-                    <input class="form-check-input" type="checkbox" id="actionItem${index}" 
-                           onchange="toggleActionItem(${index})" checked>
-                    <label class="form-check-label" for="actionItem${index}">
-                        <h6 class="mb-1">${item.title}</h6>
-                    </label>
-                </div>
-                <p class="mb-2 ms-4">${item.description || ''}</p>
-                <div class="ms-4">
-                    <span class="badge bg-${getPriorityColor(item.priority)}">${item.priority || 'medium'}</span>
-                    ${item.suggested_assignee ? `<span class="badge bg-secondary"><i class="fas fa-user"></i> ${item.suggested_assignee}</span>` : ''}
-                    ${item.due_date_suggestion ? `<span class="badge bg-info"><i class="fas fa-calendar"></i> ${item.due_date_suggestion}</span>` : ''}
-                    ${item.estimated_effort ? `<span class="badge bg-light text-dark"><i class="fas fa-clock"></i> ${item.estimated_effort}</span>` : ''}
-                </div>
-                ${item.source_context ? `<small class="text-muted ms-4 d-block mt-2"><i class="fas fa-quote-left"></i> ${item.source_context}</small>` : ''}
-            </div>
-        </div>
-    `).join('');
-    
-    // Select all by default
-    items.forEach((_, index) => selectedActionItems.add(index));
-}
-
-// Display decisions
-function displayDecisions(decisions) {
-    const container = document.getElementById('decisionsList');
-    
-    if (decisions.length === 0) {
-        container.innerHTML = '<p class="text-muted">No decisions detected</p>';
-        return;
-    }
-    
-    container.innerHTML = decisions.map(decision => `
-        <div class="card mb-3">
-            <div class="card-body">
-                <h6 class="mb-2"><i class="fas fa-check-circle text-success"></i> ${decision.decision}</h6>
-                <p class="mb-2"><strong>Context:</strong> ${decision.context || 'N/A'}</p>
-                <p class="mb-2"><strong>Impact:</strong> ${decision.impact || 'N/A'}</p>
-                ${decision.requires_action ? `
-                    <div class="alert alert-warning mb-0">
-                        <strong>Action Required:</strong> ${decision.action_description || 'Follow-up needed'}
-                    </div>
-                ` : ''}
-            </div>
-        </div>
-    `).join('');
-}
-
-// Display blockers
-function displayBlockers(blockers) {
-    const container = document.getElementById('blockersList');
-    
-    if (blockers.length === 0) {
-        container.innerHTML = '<p class="text-muted">No blockers detected</p>';
-        return;
-    }
-    
-    container.innerHTML = blockers.map(blocker => `
-        <div class="card mb-3 border-${getSeverityColor(blocker.severity)}">
-            <div class="card-body">
-                <div class="d-flex justify-content-between">
-                    <h6 class="mb-2"><i class="fas fa-exclamation-triangle text-warning"></i> ${blocker.blocker}</h6>
-                    <span class="badge bg-${getSeverityColor(blocker.severity)}">${blocker.severity || 'medium'}</span>
-                </div>
-                <p class="mb-2"><strong>Affected Area:</strong> ${blocker.affected_area || 'N/A'}</p>
-                ${blocker.suggested_resolution ? `<p class="mb-2"><strong>Resolution:</strong> ${blocker.suggested_resolution}</p>` : ''}
-                ${blocker.owner ? `<p class="mb-0"><strong>Owner:</strong> ${blocker.owner}</p>` : ''}
-            </div>
-        </div>
-    `).join('');
-}
-
-// Display risks
-function displayRisks(risks) {
-    const container = document.getElementById('risksList');
-    
-    if (risks.length === 0) {
-        container.innerHTML = '<p class="text-muted">No risks detected</p>';
-        return;
-    }
-    
-    container.innerHTML = risks.map(risk => `
-        <div class="card mb-3">
-            <div class="card-body">
-                <div class="d-flex justify-content-between">
-                    <h6 class="mb-2"><i class="fas fa-shield-alt text-danger"></i> ${risk.risk}</h6>
-                    <span class="badge bg-${getProbabilityColor(risk.probability)}">${risk.probability || 'medium'} probability</span>
-                </div>
-                <p class="mb-2"><strong>Impact:</strong> ${risk.impact || 'N/A'}</p>
-                ${risk.mitigation ? `<p class="mb-0"><strong>Mitigation:</strong> ${risk.mitigation}</p>` : ''}
-            </div>
-        </div>
-    `).join('');
-}
-
-// Toggle action item selection
-function toggleActionItem(index) {
-    if (selectedActionItems.has(index)) {
-        selectedActionItems.delete(index);
-    } else {
-        selectedActionItems.add(index);
-    }
-}
-
-// Show task creation modal
-function showTaskCreationModal() {
-    if (selectedActionItems.size === 0) {
-        alert('Please select at least one action item');
-        return;
-    }
-    
-    document.getElementById('selectedTasksCount').textContent = selectedActionItems.size;
-    const taskModal = new bootstrap.Modal(document.getElementById('taskCreationModal'));
-    taskModal.show();
-}
-
-// Load available boards
-async function loadAvailableBoards() {
-    try {
-        const response = await fetch('/wiki/api/boards/', {
-            headers: {
-                'X-CSRFToken': '{{ csrf_token }}'
-            }
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            availableBoards = data.boards;
-            const boardSelect = document.getElementById('boardSelect');
-            boardSelect.innerHTML = '<option value="">-- Select a board --</option>' +
-                data.boards.map(board => `<option value="${board.id}">${board.name}</option>`).join('');
-        }
-    } catch (error) {
-        console.error('Error loading boards:', error);
-    }
-}
-
-// Update column select based on selected board
-function updateColumnSelect() {
-    const boardId = document.getElementById('boardSelect').value;
-    const columnSelect = document.getElementById('columnSelect');
-    
-    if (!boardId) {
-        columnSelect.innerHTML = '<option value="">-- Default column --</option>';
-        return;
-    }
-    
-    const board = availableBoards.find(b => b.id == boardId);
-    if (board && board.columns) {
-        columnSelect.innerHTML = '<option value="">-- Default column --</option>' +
-            board.columns.map(col => `<option value="${col.id}">${col.name}</option>`).join('');
-    }
-}
-
-// Confirm task creation
-async function confirmTaskCreation() {
-    const boardId = document.getElementById('boardSelect').value;
-    
-    if (!boardId) {
-        alert('Please select a board');
-        return;
-    }
-    
-    const columnId = document.getElementById('columnSelect').value;
-    
-    document.getElementById('confirmCreateTasksBtn').disabled = true;
-    document.getElementById('taskCreationProgress').style.display = 'block';
-    
-    try {
-        const response = await fetch(`/wiki/api/meeting-analysis/${currentAnalysisId}/create-tasks/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
-            },
-            body: JSON.stringify({
-                board_id: boardId,
-                column_id: columnId || null,
-                selected_action_items: Array.from(selectedActionItems)
-            })
-        });
-        
-        const data = await response.json();
-        
-        document.getElementById('taskCreationProgress').style.display = 'none';
-        
-        if (data.success) {
-            document.getElementById('taskCreationResult').innerHTML = `
-                <div class="alert alert-success">
-                    <h6><i class="fas fa-check-circle"></i> Tasks Created Successfully!</h6>
-                    <p>${data.total_created} task(s) created</p>
-                    <ul>
-                        ${data.created_tasks.map(task => `<li><a href="${task.url}">${task.title}</a></li>`).join('')}
-                    </ul>
-                </div>
-            `;
-            document.getElementById('taskCreationResult').style.display = 'block';
-            document.getElementById('confirmCreateTasksBtn').style.display = 'none';
-        } else {
-            document.getElementById('taskCreationResult').innerHTML = `
-                <div class="alert alert-danger">
-                    <h6><i class="fas fa-exclamation-circle"></i> Error</h6>
-                    <p>${data.error || 'Failed to create tasks'}</p>
-                </div>
-            `;
-            document.getElementById('taskCreationResult').style.display = 'block';
-            document.getElementById('confirmCreateTasksBtn').disabled = false;
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        document.getElementById('taskCreationProgress').style.display = 'none';
-        document.getElementById('taskCreationResult').innerHTML = `
-            <div class="alert alert-danger">
-                <p>An error occurred. Please try again.</p>
-            </div>
-        `;
-        document.getElementById('taskCreationResult').style.display = 'block';
-        document.getElementById('confirmCreateTasksBtn').disabled = false;
-    }
-}
-
-// Show error state
-function showError(message) {
-    document.getElementById('processingState').style.display = 'none';
-    document.getElementById('resultsState').style.display = 'none';
-    document.getElementById('errorState').style.display = 'block';
-    document.getElementById('errorMessage').textContent = message;
-}
-
-// Helper functions
-function getPriorityColor(priority) {
-    const colors = {
-        'urgent': 'danger',
-        'high': 'warning',
-        'medium': 'primary',
-        'low': 'secondary'
-    };
-    return colors[priority] || 'secondary';
-}
-
-function getSeverityColor(severity) {
-    const colors = {
-        'critical': 'danger',
-        'high': 'warning',
-        'medium': 'info',
-        'low': 'secondary'
-    };
-    return colors[severity] || 'secondary';
-}
-
-function getProbabilityColor(probability) {
-    const colors = {
-        'high': 'danger',
-        'medium': 'warning',
-        'low': 'success'
-    };
-    return colors[probability] || 'secondary';
-}
+// Global variables for the external script
+const wikiPageId = {{ page.id }};
+const csrfToken = '{{ csrf_token }}';
+const wikiListUrl = '{% url "wiki:page_list" %}';
+const categoryAiType = '{{ page.category.ai_assistant_type }}';
+const categoryName = '{{ page.category.name }}';
 </script>
+<script src="{% static 'js/wiki_ai_assistant.js' %}"></script>
 {% endblock %}

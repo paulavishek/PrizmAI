@@ -84,6 +84,29 @@
             {% if form.instance.pk %}Edit{% else %}Create New{% endif %} Wiki Page
         </h2>
         
+        <!-- AI Assistant Info Banner -->
+        <div class="alert alert-info border-info">
+            <div class="d-flex align-items-start">
+                <i class="fas fa-info-circle fa-2x me-3 text-info"></i>
+                <div>
+                    <h6 class="alert-heading mb-2">
+                        <i class="fas fa-robot"></i> AI Assistant Feature
+                    </h6>
+                    <p class="mb-2 small">
+                        <strong>The AI assistant available for your wiki page depends on the category you select:</strong>
+                    </p>
+                    <ul class="small mb-0">
+                        <li><span class="badge bg-success">Meeting Analysis</span> - Extracts action items, decisions, and blockers from meeting notes</li>
+                        <li><span class="badge bg-info">Documentation Assistant</span> - Provides summaries, suggestions, and quality insights for documentation</li>
+                        <li><span class="badge bg-secondary">No AI</span> - AI features disabled for that category</li>
+                    </ul>
+                    <p class="small text-muted mb-0 mt-2">
+                        <i class="fas fa-lightbulb"></i> <strong>Tip:</strong> Choose your category carefully to get the right AI assistant for your content!
+                    </p>
+                </div>
+            </div>
+        </div>
+        
         <form method="post" class="page-form-container" enctype="multipart/form-data">
             {% csrf_token %}
             

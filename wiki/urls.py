@@ -19,6 +19,8 @@ urlpatterns = [
     # Wiki Meeting Assistant API Endpoints
     path('api/wiki-page/<int:wiki_page_id>/analyze/', api_views.analyze_wiki_meeting_page,
          name='api_analyze_wiki_meeting'),
+    path('api/wiki-page/<int:wiki_page_id>/analyze-documentation/', api_views.analyze_wiki_documentation_page,
+         name='api_analyze_wiki_documentation'),
     path('api/meeting-analysis/<int:analysis_id>/details/', api_views.get_meeting_analysis_details,
          name='api_meeting_analysis_details'),
     path('api/meeting-analysis/<int:analysis_id>/create-tasks/', api_views.create_tasks_from_meeting_analysis,

@@ -17,9 +17,72 @@ from django.db import models
 
 from kanban.models import Board, Task, Column
 from .models import WikiPage, WikiMeetingAnalysis, WikiMeetingTask
-from .ai_utils import analyze_meeting_notes_from_wiki, parse_due_date
+from .ai_utils import analyze_meeting_notes_from_wiki, analyze_wiki_documentation, parse_due_date
 
 logger = logging.getLogger(__name__)
+
+
+@login_required
+@require_http_methods(["POST"])
+def analyze_wiki_documentation_page(request, wiki_page_id):
+    """
+    API endpoint to analyze a general wiki documentation page using AI
+    Extracts key information, action items, and provides insights
+    """
+    try:
+        # Get organization
+        if not hasattr(request.user, 'profile') or not request.user.profile.organization:
+            return JsonResponse({'error': 'No organization found'}, status=400)
+        
+        org = request.user.profile.organization
+        
+        # Get the wiki page
+        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id, organization=org)
+        
+        # Check if user has access (must be in the organization)
+        if not (hasattr(request.user, 'profile') and request.user.profile.organization == org):
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        try:
+            # Get available boards for context
+            available_boards = Board.objects.filter(organization=org)
+            
+            # Prepare wiki page context
+            wiki_context = {
+                'title': wiki_page.title,
+                'category': wiki_page.category.name if wiki_page.category else 'Uncategorized',
+                'created_at': wiki_page.created_at.isoformat(),
+                'created_by': wiki_page.created_by.username,
+                'tags': wiki_page.tags if wiki_page.tags else []
+            }
+            
+            # Run AI analysis for documentation
+            analysis_results = analyze_wiki_documentation(
+                wiki_content=wiki_page.content,
+                wiki_page_context=wiki_context,
+                organization=org,
+                available_boards=available_boards
+            )
+            
+            if not analysis_results:
+                return JsonResponse({'error': 'Failed to analyze documentation'}, status=500)
+            
+            return JsonResponse({
+                'success': True,
+                'wiki_page_id': wiki_page.id,
+                'wiki_page_title': wiki_page.title,
+                'analysis_results': analysis_results,
+                'analysis_type': 'documentation',
+                'processed_at': timezone.now().isoformat()
+            })
+            
+        except Exception as e:
+            logger.error(f"Error during documentation AI analysis: {str(e)}")
+            return JsonResponse({'error': f'Analysis failed: {str(e)}'}, status=500)
+        
+    except Exception as e:
+        logger.error(f"Error in analyze_wiki_documentation_page: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
 
 
 @login_required

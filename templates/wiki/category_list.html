@@ -97,6 +97,22 @@
                                     </p>
                                 {% endif %}
                                 
+                                <div class="mb-2">
+                                    {% if category.ai_assistant_type == 'meeting' %}
+                                        <span class="badge bg-success">
+                                            <i class="fas fa-users"></i> Meeting Analysis
+                                        </span>
+                                    {% elif category.ai_assistant_type == 'documentation' %}
+                                        <span class="badge bg-info">
+                                            <i class="fas fa-robot"></i> Doc Assistant
+                                        </span>
+                                    {% elif category.ai_assistant_type == 'none' %}
+                                        <span class="badge bg-secondary">
+                                            <i class="fas fa-ban"></i> No AI
+                                        </span>
+                                    {% endif %}
+                                </div>
+                                
                                 <span class="page-count">
                                     {{ category.pages.count }} page{{ category.pages.count|pluralize }}
                                 </span>

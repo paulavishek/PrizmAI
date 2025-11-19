@@ -9,6 +9,14 @@ from django.utils.safestring import mark_safe
 
 class WikiCategory(models.Model):
     """Categories for organizing wiki pages"""
+    
+    # AI Assistant Type Choices
+    AI_ASSISTANT_CHOICES = [
+        ('meeting', 'Meeting Analysis - For meeting notes, standups, sprint planning'),
+        ('documentation', 'Documentation Assistant - For guides, references, tutorials'),
+        ('none', 'No AI Assistant - Disable AI features for this category'),
+    ]
+    
     name = models.CharField(max_length=100)
     slug = models.SlugField()
     description = models.TextField(blank=True, null=True)
@@ -16,6 +24,12 @@ class WikiCategory(models.Model):
     icon = models.CharField(max_length=50, default='folder', help_text='Font Awesome icon name')
     color = models.CharField(max_length=7, default='#3498db', help_text='Hex color code')
     position = models.IntegerField(default=0)
+    ai_assistant_type = models.CharField(
+        max_length=20, 
+        choices=AI_ASSISTANT_CHOICES, 
+        default='documentation',
+        help_text='Which AI assistant to use for pages in this category'
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

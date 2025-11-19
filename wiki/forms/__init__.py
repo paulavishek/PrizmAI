@@ -6,13 +6,19 @@ from ..models import WikiPage, WikiCategory, WikiAttachment, WikiLink, MeetingNo
 class WikiCategoryForm(forms.ModelForm):
     class Meta:
         model = WikiCategory
-        fields = ['name', 'description', 'icon', 'color', 'position']
+        fields = ['name', 'description', 'icon', 'color', 'position', 'ai_assistant_type']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Category name'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Category description'}),
             'icon': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g., folder, book, lightbulb'}),
             'color': forms.TextInput(attrs={'class': 'form-control', 'type': 'color'}),
             'position': forms.NumberInput(attrs={'class': 'form-control'}),
+            'ai_assistant_type': forms.Select(attrs={'class': 'form-control'}),
+        }
+        help_texts = {
+            'ai_assistant_type': 'Choose which AI assistant will be available for pages in this category. '
+                               'Meeting Analysis for meeting notes, Documentation Assistant for guides/references, '
+                               'or None to disable AI features.',
         }
 
 
