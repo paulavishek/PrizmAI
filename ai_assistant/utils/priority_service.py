@@ -158,7 +158,12 @@ class PrioritySuggestionService:
         days_until_due = 999  # Default for no due date
         is_overdue = False
         if task.due_date:
-            delta = task.due_date - timezone.now()
+            # Make sure due_date is timezone-aware
+            due_date = task.due_date
+            if timezone.is_naive(due_date):
+                due_date = timezone.make_aware(due_date)
+            
+            delta = due_date - timezone.now()
             days_until_due = delta.total_seconds() / 86400
             is_overdue = days_until_due < 0
         
@@ -181,8 +186,20 @@ class PrioritySuggestionService:
         
         # Get team capacity
         team_tasks_per_member = 0
-        if task.column:
-            board = task.column.board
+        board = None
+        
+        # Safely get board
+        if task.pk:
+            try:
+                if task.column:
+                    board = task.column.board
+            except:
+                pass
+        
+        if not board and hasattr(task, '_board'):
+            board = task._board
+        
+        if board:
             team_size = board.members.count()
             if team_size > 0:
                 total_open_tasks = Task.objects.filter(
@@ -336,7 +353,10 @@ class PrioritySuggestionService:
         
         # Due date urgency (0-4 points)
         if task.due_date:
-            delta = task.due_date - timezone.now()
+            due_date = task.due_date
+            if timezone.is_naive(due_date):
+                due_date = timezone.make_aware(due_date)
+            delta = due_date - timezone.now()
             days_until_due = delta.total_seconds() / 86400
             
             if days_until_due < 0:
@@ -363,19 +383,33 @@ class PrioritySuggestionService:
                 factors.append(f"Blocks {blocking_count} tasks")
         
         # Complexity (0-2 points)
-        if task.complexity_score >= 8:
+        complexity = task.complexity_score
+        if isinstance(complexity, str):
+            try:
+                complexity = int(complexity)
+            except (ValueError, TypeError):
+                complexity = 5
+        
+        if complexity >= 8:
             score += 2
-            factors.append(f"High complexity ({task.complexity_score}/10)")
-        elif task.complexity_score >= 6:
+            factors.append(f"High complexity ({complexity}/10)")
+        elif complexity >= 6:
             score += 1
             factors.append(f"Medium-high complexity")
         
         # Risk (0-2 points)
-        if task.risk_score:
-            if task.risk_score >= 7:
+        risk = task.risk_score
+        if risk:
+            if isinstance(risk, str):
+                try:
+                    risk = int(risk)
+                except (ValueError, TypeError):
+                    risk = 0
+            
+            if risk >= 7:
                 score += 2
                 factors.append("High risk")
-            elif task.risk_score >= 4:
+            elif risk >= 4:
                 score += 1
                 factors.append("Medium risk")
         

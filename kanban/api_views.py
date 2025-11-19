@@ -286,24 +286,36 @@ def suggest_task_priority_api(request):
         if not title:
             return JsonResponse({'error': 'Title is required'}, status=400)
         
-        # If task_id is provided, get board context
-        board_context = {}
+        # Get board - either from task or from request
+        board = None
         if task_id:
-            task = get_object_or_404(Task, id=task_id)
-            board = task.column.board
-            
-            # Check access
-            if not (board.created_by == request.user or request.user in board.members.all()):
-                return JsonResponse({'error': 'Access denied'}, status=403)
+            try:
+                task = get_object_or_404(Task, id=task_id)
+                if task.column:
+                    board = task.column.board
+                else:
+                    # Task exists but has no column yet - try board_id from request
+                    board_id = data.get('board_id')
+                    if board_id:
+                        board = get_object_or_404(Board, id=board_id)
+            except Exception as e:
+                logger.error(f"Error getting task: {str(e)}")
+                return JsonResponse({'error': 'Task not found'}, status=404)
         else:
-            # For new tasks, try to get board from request
+            # For new tasks, get board from request
             board_id = data.get('board_id')
             if board_id:
                 board = get_object_or_404(Board, id=board_id)
-                if not (board.created_by == request.user or request.user in board.members.all()):
-                    return JsonResponse({'error': 'Access denied'}, status=403)
             else:
-                return JsonResponse({'error': 'Board ID or Task ID is required'}, status=400)
+                return JsonResponse({'error': 'Board ID is required for new tasks'}, status=400)
+        
+        # Check if we have a board
+        if not board:
+            return JsonResponse({'error': 'Could not determine board for task'}, status=400)
+        
+        # Check access
+        if not (board.created_by == request.user or request.user in board.members.all()):
+            return JsonResponse({'error': 'Access denied'}, status=403)
         
         # Gather board context for priority suggestion
         from django.db.models import Count
@@ -1567,7 +1579,15 @@ def suggest_task_priority_api(request):
         # Get or create task object
         if task_id:
             task = get_object_or_404(Task, pk=task_id)
-            board = task.column.board
+            # Check if task has a column to get board from
+            if task.column:
+                board = task.column.board
+            else:
+                # Task exists but no column - get board from request
+                board_id = data.get('board_id')
+                if not board_id:
+                    return JsonResponse({'error': 'board_id required when task has no column'}, status=400)
+                board = get_object_or_404(Board, pk=board_id)
             
             # Check access
             if request.user not in board.members.all() and board.created_by != request.user:
@@ -1585,12 +1605,27 @@ def suggest_task_priority_api(request):
                 return JsonResponse({'error': 'Access denied'}, status=403)
             
             # Create temporary task (not saved to DB)
+            # Convert string values to appropriate types
+            complexity_score = data.get('complexity_score', 5)
+            if isinstance(complexity_score, str):
+                try:
+                    complexity_score = int(complexity_score)
+                except (ValueError, TypeError):
+                    complexity_score = 5
+            
+            risk_score = data.get('risk_score')
+            if risk_score and isinstance(risk_score, str):
+                try:
+                    risk_score = int(risk_score)
+                except (ValueError, TypeError):
+                    risk_score = None
+            
             task = Task(
                 title=data.get('title', 'New Task'),
                 description=data.get('description', ''),
-                complexity_score=data.get('complexity_score', 5),
+                complexity_score=complexity_score,
                 collaboration_required=data.get('collaboration_required', False),
-                risk_score=data.get('risk_score'),
+                risk_score=risk_score,
             )
             
             # Parse due_date if provided

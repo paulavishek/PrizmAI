@@ -75,6 +75,7 @@
                                         <i class="fas fa-magic me-1"></i> Suggest
                                     </button>
                                 </div>
+                                <div id="priority-suggestion-container" class="mb-2"></div>
                                 {{ form.priority }}
                                 <div id="priority-ai-spinner" class="d-none text-center mt-1">
                                     <div class="spinner-border spinner-border-sm text-warning" role="status">
@@ -82,7 +83,6 @@
                                     </div>
                                     <span class="ms-2 text-muted small">Analyzing optimal priority...</span>
                                 </div>
-                                <div id="priority-suggestion-result" class="d-none mt-2"></div>
                                 {% if form.priority.errors %}
                                     <div class="invalid-feedback d-block">{{ form.priority.errors }}</div>
                                 {% endif %}
@@ -437,4 +437,13 @@
 {% block extra_js %}
 {% load static %}
 <script src="{% static 'js/ai_features.js' %}?v={{ STATIC_VERSION|default:'2' }}"></script>
+<script src="{% static 'js/priority_suggestion.js' %}?v={{ STATIC_VERSION|default:'5' }}"></script>
+<script>
+    // Initialize Priority Suggestion Widget and assign to global variable
+    document.addEventListener('DOMContentLoaded', function() {
+        const boardId = {{ board.id }};
+        prioritySuggestion = new PrioritySuggestionWidget({ boardId: boardId });
+        prioritySuggestion.init();
+    });
+</script>
 {% endblock %}

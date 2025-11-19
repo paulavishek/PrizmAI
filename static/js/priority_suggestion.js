@@ -25,8 +25,8 @@ class PrioritySuggestionWidget {
             this._createContainer();
         }
         
-        // Add button to trigger suggestions
-        this._addTriggerButton();
+        // Setup click handler for existing button (don't create duplicate)
+        this._setupTriggerButton();
         
         // Auto-suggest on certain field changes
         this._setupAutoTriggers();
@@ -36,7 +36,14 @@ class PrioritySuggestionWidget {
      * Get priority suggestion from API
      */
     async getSuggestion(taskData = {}) {
+        const spinner = document.getElementById('priority-ai-spinner');
+        const button = document.getElementById('suggest-priority-btn');
+        
         try {
+            // Show spinner and disable button
+            if (spinner) spinner.classList.remove('d-none');
+            if (button) button.disabled = true;
+            
             const requestData = {
                 board_id: this.boardId,
                 ...taskData
@@ -56,7 +63,8 @@ class PrioritySuggestionWidget {
             });
             
             if (!response.ok) {
-                throw new Error('Failed to get priority suggestion');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to get priority suggestion');
             }
             
             this.suggestion = await response.json();
@@ -64,7 +72,11 @@ class PrioritySuggestionWidget {
             
         } catch (error) {
             console.error('Error getting priority suggestion:', error);
-            this._showError('Failed to get priority suggestion. Please try again.');
+            this._showError(error.message || 'Failed to get priority suggestion. Please try again.');
+        } finally {
+            // Hide spinner and enable button
+            if (spinner) spinner.classList.add('d-none');
+            if (button) button.disabled = false;
         }
     }
     
@@ -314,23 +326,17 @@ class PrioritySuggestionWidget {
     }
     
     /**
-     * Add trigger button
+     * Setup trigger button click handler
      */
-    _addTriggerButton() {
-        const priorityField = document.getElementById(this.priorityFieldId);
-        if (!priorityField) return;
+    _setupTriggerButton() {
+        // Use existing button from template
+        const button = document.getElementById('suggest-priority-btn');
+        if (!button) {
+            console.warn('Priority suggestion button not found');
+            return;
+        }
         
-        // Check if button already exists
-        if (document.getElementById('ai-suggest-priority-btn')) return;
-        
-        const button = document.createElement('button');
-        button.id = 'ai-suggest-priority-btn';
-        button.type = 'button';
-        button.className = 'btn btn-sm btn-outline-primary mt-1';
-        button.innerHTML = '<i class="fas fa-magic"></i> AI Suggest Priority';
         button.onclick = () => this._triggerSuggestion();
-        
-        priorityField.parentElement.appendChild(button);
     }
     
     /**
