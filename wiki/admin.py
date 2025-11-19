@@ -2,7 +2,8 @@ from django.contrib import admin
 from django.utils.html import format_html
 from .models import (
     WikiCategory, WikiPage, WikiAttachment, WikiLink,
-    MeetingNotes, WikiPageVersion, WikiLinkBetweenPages, WikiPageAccess
+    MeetingNotes, WikiPageVersion, WikiLinkBetweenPages, WikiPageAccess,
+    WikiMeetingAnalysis, WikiMeetingTask
 )
 
 
@@ -194,3 +195,68 @@ class WikiPageAccessAdmin(admin.ModelAdmin):
     list_filter = ['access_level', 'granted_at', 'page__organization']
     search_fields = ['page__title', 'user__username']
     readonly_fields = ['granted_at']
+
+
+@admin.register(WikiMeetingAnalysis)
+class WikiMeetingAnalysisAdmin(admin.ModelAdmin):
+    list_display = ['wiki_page', 'processed_by', 'processing_status', 'action_items_count', 
+                   'tasks_created_count', 'confidence_score', 'processed_at']
+    list_filter = ['processing_status', 'confidence_score', 'processed_at', 'organization']
+    search_fields = ['wiki_page__title', 'processed_by__username']
+    readonly_fields = ['processed_at', 'created_at', 'updated_at', 'content_hash']
+    date_hierarchy = 'processed_at'
+    
+    fieldsets = (
+        ('Analysis Info', {
+            'fields': ('wiki_page', 'organization', 'processed_by', 'processing_status')
+        }),
+        ('Results Summary', {
+            'fields': ('action_items_count', 'decisions_count', 'blockers_count', 
+                      'risks_count', 'tasks_created_count', 'confidence_score')
+        }),
+        ('User Interaction', {
+            'fields': ('user_reviewed', 'user_notes')
+        }),
+        ('Technical Details', {
+            'fields': ('analysis_results', 'ai_model_version', 'content_hash', 
+                      'processing_error'),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('processed_at', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        # Prevent manual creation - analyses are created via API
+        return False
+
+
+@admin.register(WikiMeetingTask)
+class WikiMeetingTaskAdmin(admin.ModelAdmin):
+    list_display = ['task', 'meeting_analysis', 'created_by', 'user_modified', 'created_at']
+    list_filter = ['user_modified', 'created_at', 'meeting_analysis__organization']
+    search_fields = ['task__title', 'meeting_analysis__wiki_page__title']
+    readonly_fields = ['created_at', 'action_item_data']
+    date_hierarchy = 'created_at'
+    
+    fieldsets = (
+        ('Task Link', {
+            'fields': ('meeting_analysis', 'task', 'action_item_index')
+        }),
+        ('Creation Info', {
+            'fields': ('created_by', 'created_at')
+        }),
+        ('Modifications', {
+            'fields': ('user_modified', 'modifications_note')
+        }),
+        ('Original AI Data', {
+            'fields': ('action_item_data',),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        # Prevent manual creation - tasks are created via API
+        return False

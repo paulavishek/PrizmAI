@@ -16,13 +16,17 @@ urlpatterns = [
     # path('meetings/<int:pk>/', views.meeting_hub_detail, name='meeting_hub_detail'),
     # path('meetings/analytics/', views.meeting_hub_analytics, name='meeting_hub_analytics'),
     
-    # Meeting Hub API Endpoints - DISABLED (feature removed)
-    # path('api/meetings/<int:meeting_id>/analyze/', api_views.analyze_meeting_transcript_api, 
-    #      name='api_analyze_transcript'),
-    # path('api/meetings/<int:meeting_id>/details/', api_views.get_meeting_details_api,
-    #      name='api_meeting_details'),
-    # path('api/meetings/create-tasks/', api_views.create_tasks_from_extraction_api,
-    #      name='api_create_tasks_from_extraction'),
+    # Wiki Meeting Assistant API Endpoints
+    path('api/wiki-page/<int:wiki_page_id>/analyze/', api_views.analyze_wiki_meeting_page,
+         name='api_analyze_wiki_meeting'),
+    path('api/meeting-analysis/<int:analysis_id>/details/', api_views.get_meeting_analysis_details,
+         name='api_meeting_analysis_details'),
+    path('api/meeting-analysis/<int:analysis_id>/create-tasks/', api_views.create_tasks_from_meeting_analysis,
+         name='api_create_tasks_from_analysis'),
+    path('api/meeting-analysis/<int:analysis_id>/mark-reviewed/', api_views.mark_analysis_reviewed,
+         name='api_mark_analysis_reviewed'),
+    path('api/boards/', api_views.get_boards_for_organization,
+         name='api_get_boards'),
     
     # Category Management
     path('categories/', views.WikiCategoryListView.as_view(), name='category_list'),

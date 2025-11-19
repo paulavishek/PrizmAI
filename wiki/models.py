@@ -386,3 +386,149 @@ class WikiPageAccess(models.Model):
     
     def __str__(self):
         return f"{self.user.username} - {self.page.title} ({self.access_level})"
+
+
+class WikiMeetingAnalysis(models.Model):
+    """
+    AI-powered analysis of wiki pages containing meeting notes
+    Stores extracted action items, decisions, blockers, risks, and suggestions
+    """
+    PROCESSING_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    ]
+    
+    # Link to wiki page
+    wiki_page = models.ForeignKey(WikiPage, on_delete=models.CASCADE, related_name='meeting_analyses')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='wiki_meeting_analyses')
+    
+    # Processing metadata
+    processed_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='processed_meeting_analyses')
+    processed_at = models.DateTimeField(auto_now_add=True)
+    processing_status = models.CharField(max_length=20, choices=PROCESSING_STATUS_CHOICES, default='pending')
+    processing_error = models.TextField(blank=True, null=True, help_text='Error message if processing failed')
+    
+    # AI Analysis Results (comprehensive JSON structure)
+    analysis_results = models.JSONField(default=dict, blank=True, help_text="""
+        Complete AI analysis including:
+        - meeting_summary: {title, summary, date_detected, participants, meeting_type, confidence}
+        - action_items: [{title, description, priority, assignee, due_date, etc.}]
+        - decisions: [{decision, context, impact, requires_action}]
+        - blockers: [{blocker, severity, resolution, owner}]
+        - risks: [{risk, impact, probability, mitigation}]
+        - key_topics: [list of main topics]
+        - follow_ups: [{type, description, timeframe, participants}]
+        - metadata: {counts, sentiment, notes}
+    """)
+    
+    # Quick access counts (denormalized for performance)
+    action_items_count = models.IntegerField(default=0, help_text='Number of action items extracted')
+    decisions_count = models.IntegerField(default=0, help_text='Number of decisions identified')
+    blockers_count = models.IntegerField(default=0, help_text='Number of blockers found')
+    risks_count = models.IntegerField(default=0, help_text='Number of risks identified')
+    tasks_created_count = models.IntegerField(default=0, help_text='Number of tasks created from this analysis')
+    
+    # Analysis metadata
+    content_hash = models.CharField(max_length=64, help_text='Hash of content analyzed (to detect changes)')
+    ai_model_version = models.CharField(max_length=50, default='gemini-2.0-flash-exp', help_text='AI model used (Flash or Flash-Lite)')
+    confidence_score = models.CharField(max_length=20, blank=True, null=True, help_text='Overall confidence: high/medium/low')
+    
+    # User actions
+    user_reviewed = models.BooleanField(default=False, help_text='Has user reviewed the analysis?')
+    user_notes = models.TextField(blank=True, null=True, help_text='User notes about the analysis')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-processed_at']
+        indexes = [
+            models.Index(fields=['wiki_page', '-processed_at']),
+            models.Index(fields=['organization', 'processing_status']),
+            models.Index(fields=['processing_status']),
+        ]
+        verbose_name = 'Wiki Meeting Analysis'
+        verbose_name_plural = 'Wiki Meeting Analyses'
+    
+    def __str__(self):
+        return f"Analysis of {self.wiki_page.title} - {self.processed_at.strftime('%Y-%m-%d %H:%M')}"
+    
+    def get_action_items(self):
+        """Get list of action items from analysis results"""
+        return self.analysis_results.get('action_items', [])
+    
+    def get_decisions(self):
+        """Get list of decisions from analysis results"""
+        return self.analysis_results.get('decisions', [])
+    
+    def get_blockers(self):
+        """Get list of blockers from analysis results"""
+        return self.analysis_results.get('blockers', [])
+    
+    def get_risks(self):
+        """Get list of risks from analysis results"""
+        return self.analysis_results.get('risks', [])
+    
+    def get_meeting_summary(self):
+        """Get meeting summary from analysis results"""
+        return self.analysis_results.get('meeting_summary', {})
+    
+    def get_metadata(self):
+        """Get analysis metadata"""
+        return self.analysis_results.get('metadata', {})
+    
+    def has_urgent_items(self):
+        """Check if there are any urgent action items"""
+        action_items = self.get_action_items()
+        return any(item.get('priority') == 'urgent' for item in action_items)
+    
+    def has_critical_blockers(self):
+        """Check if there are any critical blockers"""
+        blockers = self.get_blockers()
+        return any(blocker.get('severity') == 'critical' for blocker in blockers)
+    
+    def update_counts(self):
+        """Update denormalized counts from analysis results"""
+        self.action_items_count = len(self.get_action_items())
+        self.decisions_count = len(self.get_decisions())
+        self.blockers_count = len(self.get_blockers())
+        self.risks_count = len(self.get_risks())
+        
+        metadata = self.get_metadata()
+        self.confidence_score = metadata.get('confidence', 'medium')
+
+
+class WikiMeetingTask(models.Model):
+    """
+    Tracks tasks created from wiki meeting analysis
+    Links AI-extracted action items to actual created tasks
+    """
+    # Link to analysis and task
+    meeting_analysis = models.ForeignKey(WikiMeetingAnalysis, on_delete=models.CASCADE, 
+                                        related_name='created_tasks')
+    task = models.ForeignKey(Task, on_delete=models.CASCADE, related_name='wiki_meeting_source')
+    
+    # Action item details from AI analysis
+    action_item_index = models.IntegerField(help_text='Index in the action_items array')
+    action_item_data = models.JSONField(default=dict, help_text='Original AI-extracted action item data')
+    
+    # Creation metadata
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_meeting_tasks')
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    # User modifications
+    user_modified = models.BooleanField(default=False, help_text='Did user modify before creating?')
+    modifications_note = models.TextField(blank=True, null=True, help_text='What was changed from AI suggestion')
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['meeting_analysis', 'task']),
+            models.Index(fields=['task']),
+        ]
+        unique_together = ('meeting_analysis', 'action_item_index')
+    
+    def __str__(self):
+        return f"Task '{self.task.title}' from {self.meeting_analysis.wiki_page.title}"

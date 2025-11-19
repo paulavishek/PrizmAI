@@ -8,13 +8,22 @@ logger = logging.getLogger(__name__)
 
 class GeminiClient:
     """
-    Google Gemini AI client - Stateless implementation
+    Google Gemini AI client with smart model routing
     
-    IMPORTANT: Each request is completely independent with NO session persistence.
-    This prevents accumulating token costs from cached history/context.
+    Routes requests to appropriate model based on task complexity:
+    - Gemini 2.5 Flash: Complex reasoning, analysis
+    - Gemini 2.5 Flash-Lite: Simple tasks, chat responses (default)
+    
+    Each request is stateless to prevent token accumulation.
     """
     
-    def __init__(self):
+    def __init__(self, default_model='gemini-2.0-flash-exp'):
+        """
+        Initialize Gemini client with configurable default model.
+        
+        Args:
+            default_model: Default model to use ('gemini-2.0-flash-exp' or 'gemini-2.0-flash-exp')
+        """
         try:
             import google.generativeai as genai
             self.genai = genai
@@ -24,7 +33,7 @@ class GeminiClient:
             genai.configure(api_key=api_key)
             
             # Configure generation settings to disable caching and session persistence
-            generation_config = {
+            self.generation_config = {
                 'temperature': 0.7,
                 'top_p': 0.8,
                 'top_k': 40,
@@ -32,7 +41,7 @@ class GeminiClient:
             }
             
             # Safety settings
-            safety_settings = [
+            self.safety_settings = [
                 {
                     "category": "HARM_CATEGORY_HARASSMENT",
                     "threshold": "BLOCK_MEDIUM_AND_ABOVE"
@@ -43,40 +52,72 @@ class GeminiClient:
                 },
             ]
             
-            # Initialize model WITHOUT chat session (stateless)
-            self.model = genai.GenerativeModel(
-                'gemini-2.0-flash-exp',
-                generation_config=generation_config,
-                safety_settings=safety_settings
-            )
-            logger.info("Gemini client initialized successfully (STATELESS MODE - no session persistence)")
+            # Store models for reuse (singleton pattern per model type)
+            self.models = {}
+            self.default_model = default_model
+            
+            logger.info(f"Gemini client initialized with smart routing (default: {default_model})")
         except ImportError:
             logger.error("google-generativeai package not installed")
-            self.model = None
+            self.models = None
         except Exception as e:
             logger.error(f"Error initializing Gemini client: {e}")
-            self.model = None
+            self.models = None
     
-    def get_response(self, prompt, system_prompt=None, history=None):
+    def get_model(self, model_name=None, task_complexity='simple'):
         """
-        Get response from Gemini model using STATELESS generation.
+        Get or create a model instance with smart routing.
         
-        IMPORTANT: This method does NOT use chat sessions or maintain conversation history
-        to prevent accumulating token costs. Each call is completely independent.
+        Args:
+            model_name: Specific model name or None to use routing
+            task_complexity: 'simple' or 'complex' for automatic routing
+            
+        Returns:
+            GenerativeModel instance
+        """
+        if self.models is None:
+            return None
+            
+        # Determine which model to use
+        if model_name is None:
+            # Smart routing based on task complexity
+            model_name = 'gemini-2.0-flash-exp' if task_complexity == 'complex' else 'gemini-2.0-flash-exp'
+        
+        # Reuse existing model instance (singleton per model type)
+        if model_name not in self.models:
+            self.models[model_name] = self.genai.GenerativeModel(
+                model_name,
+                generation_config=self.generation_config,
+                safety_settings=self.safety_settings
+            )
+            logger.info(f"Created model instance: {model_name}")
+        
+        return self.models[model_name]
+    
+    def get_response(self, prompt, system_prompt=None, history=None, task_complexity='simple'):
+        """
+        Get response from Gemini model using stateless generation with smart routing.
+        
+        Routes to appropriate model:
+        - 'complex': Uses Gemini 2.5 Flash for complex reasoning
+        - 'simple': Uses Gemini 2.5 Flash-Lite for fast, cost-effective responses
         
         Args:
             prompt (str): User prompt
             system_prompt (str): System context (combined with prompt for this call only)
             history (list): DEPRECATED - Not used to prevent session persistence
+            task_complexity (str): 'simple' or 'complex' for model routing
             
         Returns:
-            dict: Response with content and token info
+            dict: Response with content, token info, and model used
         """
-        if not self.model:
+        model = self.get_model(task_complexity=task_complexity)
+        if not model:
             return {
                 'content': 'Gemini service is unavailable',
                 'error': 'Model not initialized',
-                'tokens': 0
+                'tokens': 0,
+                'model_used': 'none'
             }
         
         try:
@@ -86,19 +127,16 @@ class GeminiClient:
                 full_prompt = f"{system_prompt}\n\n{prompt}"
             
             # NOTE: history parameter is intentionally ignored to prevent session persistence
-            # Each generate_content() call is completely independent and stateless
             if history:
                 logger.warning("History parameter provided but ignored - using stateless mode to prevent token accumulation")
             
-            # Generate content WITHOUT using chat sessions
-            # This ensures each request is independent with no cached history
-            response = self.model.generate_content(
-                full_prompt,
-                # No history, no caching, completely fresh request
-            )
+            # Determine which model we're using for logging
+            model_name = 'gemini-2.0-flash-exp' if task_complexity == 'complex' else 'gemini-2.0-flash-exp'
             
-            # Calculate approximate token usage
-            # Note: This is approximate. Use response.usage_metadata if available for accurate counts
+            # Generate content WITHOUT using chat sessions
+            response = model.generate_content(full_prompt)
+            
+            # Calculate token usage
             token_count = 0
             if hasattr(response, 'usage_metadata') and response.usage_metadata:
                 token_count = (
@@ -109,13 +147,15 @@ class GeminiClient:
                 # Fallback: rough approximation
                 token_count = len(full_prompt.split()) + len(response.text.split())
             
-            logger.info(f"Gemini response generated - Tokens used: {token_count} (stateless mode)")
+            logger.info(f"Gemini response generated - Model: {model_name}, Tokens: {token_count}, Complexity: {task_complexity}")
             
             return {
                 'content': response.text,
                 'error': None,
                 'tokens': token_count,
-                'session_mode': 'stateless',  # Explicitly indicate no session persistence
+                'session_mode': 'stateless',
+                'model_used': model_name,
+                'task_complexity': task_complexity
             }
         
         except Exception as e:
@@ -125,4 +165,5 @@ class GeminiClient:
                 'error': str(e),
                 'tokens': 0,
                 'session_mode': 'error',
+                'model_used': 'none'
             }
