@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity
+from .priority_models import PriorityDecision, PriorityModel, PrioritySuggestionLog
 
 @admin.register(Board)
 class BoardAdmin(admin.ModelAdmin):
@@ -63,3 +64,74 @@ class TaskActivityAdmin(admin.ModelAdmin):
     list_display = ('task', 'user', 'activity_type', 'created_at')
     list_filter = ('activity_type', 'created_at')
     search_fields = ('description', 'task__title', 'user__username')
+
+
+@admin.register(PriorityDecision)
+class PriorityDecisionAdmin(admin.ModelAdmin):
+    list_display = ('task', 'actual_priority', 'suggested_priority', 'decision_type', 'was_correct', 'decided_by', 'decided_at')
+    list_filter = ('decision_type', 'actual_priority', 'was_correct', 'decided_at', 'board')
+    search_fields = ('task__title', 'decided_by__username')
+    readonly_fields = ('task_context', 'reasoning', 'decided_at')
+    
+    fieldsets = (
+        ('Decision Information', {
+            'fields': ('task', 'board', 'decision_type', 'decided_by', 'decided_at')
+        }),
+        ('Priority Details', {
+            'fields': ('previous_priority', 'suggested_priority', 'actual_priority', 'was_correct')
+        }),
+        ('AI Context', {
+            'fields': ('confidence_score', 'reasoning', 'task_context'),
+            'classes': ('collapse',)
+        }),
+        ('Feedback', {
+            'fields': ('feedback_notes',),
+            'classes': ('collapse',)
+        })
+    )
+
+
+@admin.register(PriorityModel)
+class PriorityModelAdmin(admin.ModelAdmin):
+    list_display = ('board', 'model_version', 'accuracy_score', 'training_samples', 'is_active', 'trained_at')
+    list_filter = ('is_active', 'trained_at', 'board')
+    readonly_fields = ('model_file', 'feature_importance', 'trained_at', 'precision_scores', 'recall_scores', 'f1_scores', 'confusion_matrix')
+    
+    fieldsets = (
+        ('Model Information', {
+            'fields': ('board', 'model_version', 'model_type', 'is_active', 'trained_at')
+        }),
+        ('Training Metrics', {
+            'fields': ('training_samples', 'accuracy_score')
+        }),
+        ('Performance Details', {
+            'fields': ('precision_scores', 'recall_scores', 'f1_scores', 'confusion_matrix'),
+            'classes': ('collapse',)
+        }),
+        ('Model Data', {
+            'fields': ('feature_importance',),
+            'classes': ('collapse',)
+        })
+    )
+
+
+@admin.register(PrioritySuggestionLog)
+class PrioritySuggestionLogAdmin(admin.ModelAdmin):
+    list_display = ('task', 'suggested_priority', 'confidence_score', 'user_action', 'shown_to_user', 'shown_at')
+    list_filter = ('user_action', 'suggested_priority', 'shown_at')
+    search_fields = ('task__title', 'shown_to_user__username')
+    readonly_fields = ('reasoning', 'feature_values', 'shown_at', 'responded_at')
+    
+    fieldsets = (
+        ('Suggestion Information', {
+            'fields': ('task', 'model', 'shown_to_user', 'shown_at')
+        }),
+        ('AI Suggestion', {
+            'fields': ('suggested_priority', 'confidence_score', 'reasoning', 'feature_values'),
+        }),
+        ('User Response', {
+            'fields': ('user_action', 'actual_priority', 'responded_at'),
+            'classes': ('collapse',)
+        })
+    )
+

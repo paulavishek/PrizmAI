@@ -84,6 +84,12 @@ urlpatterns = [
     path('api/task/<int:task_id>/prediction/', api_views.get_task_prediction_api, name='get_task_prediction_api'),
     path('api/board/<int:board_id>/update-predictions/', api_views.bulk_update_predictions_api, name='bulk_update_predictions_api'),
     
+    # Priority Suggestion API Endpoints
+    path('api/suggest-priority/', api_views.suggest_task_priority_api, name='suggest_task_priority_api'),
+    path('api/log-priority-decision/', api_views.log_priority_decision_api, name='log_priority_decision_api'),
+    path('api/board/<int:board_id>/train-priority-model/', api_views.train_priority_model_api, name='train_priority_model_api'),
+    path('api/board/<int:board_id>/priority-model-info/', api_views.get_priority_model_info_api, name='get_priority_model_info_api'),
+    
     # File Management for Tasks
     path('tasks/<int:task_id>/files/upload/', views.upload_task_file, name='upload_task_file'),
     path('tasks/<int:task_id>/files/list/', views.list_task_files, name='list_task_files'),

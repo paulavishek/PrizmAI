@@ -792,3 +792,133 @@ class LeanSixSigmaIntegrationTestCase(TestCase):
 if __name__ == '__main__':
     import unittest
     unittest.main()
+
+
+# Priority Suggestion Feature Tests
+from .priority_models import PriorityDecision, PriorityModel, PrioritySuggestionLog
+from ai_assistant.utils.priority_service import PrioritySuggestionService, PriorityModelTrainer
+
+
+class PrioritySuggestionServiceTest(TestCase):
+    """Test priority suggestion service"""
+    
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='12345')
+        self.organization = Organization.objects.create(name='Test Org', domain='test.com', created_by=self.user)
+        UserProfile.objects.create(user=self.user, organization=self.organization)
+        
+        self.board = Board.objects.create(
+            name='Test Board',
+            organization=self.organization,
+            created_by=self.user
+        )
+        self.board.members.add(self.user)
+        
+        self.column = Column.objects.create(name='To Do', board=self.board, position=0)
+        self.service = PrioritySuggestionService()
+    
+    def test_rule_based_suggestion_urgent(self):
+        """Test rule-based suggestion for urgent task"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        task = Task(
+            title='Urgent Task',
+            column=self.column,
+            created_by=self.user,
+            due_date=timezone.now() - timedelta(days=1),  # Overdue
+            complexity_score=8
+        )
+        
+        suggestion = self.service.suggest_priority(task)
+        
+        self.assertIsNotNone(suggestion)
+        self.assertIn(suggestion['suggested_priority'], ['urgent', 'high'])
+        self.assertFalse(suggestion['is_ml_based'])
+        self.assertIn('overdue', suggestion['reasoning']['explanation'].lower())
+    
+    def test_rule_based_suggestion_low(self):
+        """Test rule-based suggestion for low priority task"""
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        task = Task(
+            title='Low Priority Task',
+            column=self.column,
+            created_by=self.user,
+            due_date=timezone.now() + timedelta(days=30),  # Far future
+            complexity_score=2
+        )
+        
+        suggestion = self.service.suggest_priority(task)
+        
+        self.assertIsNotNone(suggestion)
+        self.assertEqual(suggestion['suggested_priority'], 'low')
+
+
+class PriorityDecisionTest(TestCase):
+    """Test priority decision tracking"""
+    
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', password='12345')
+        self.organization = Organization.objects.create(name='Test Org', domain='test.com', created_by=self.user)
+        UserProfile.objects.create(user=self.user, organization=self.organization)
+        
+        self.board = Board.objects.create(
+            name='Test Board',
+            organization=self.organization,
+            created_by=self.user
+        )
+        
+        self.column = Column.objects.create(name='To Do', board=self.board, position=0)
+        self.task = Task.objects.create(
+            title='Test Task',
+            column=self.column,
+            created_by=self.user,
+            priority='medium'
+        )
+    
+    def test_log_decision(self):
+        """Test logging priority decision"""
+        decision = PriorityDecision.log_decision(
+            task=self.task,
+            priority='high',
+            user=self.user,
+            decision_type='initial'
+        )
+        
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.actual_priority, 'high')
+        self.assertEqual(decision.task, self.task)
+        self.assertEqual(decision.decided_by, self.user)
+        self.assertIsNotNone(decision.task_context)
+    
+    def test_log_ai_accepted_decision(self):
+        """Test logging when user accepts AI suggestion"""
+        decision = PriorityDecision.log_decision(
+            task=self.task,
+            priority='high',
+            user=self.user,
+            decision_type='ai_accepted',
+            suggested_priority='high',
+            confidence=0.85
+        )
+        
+        self.assertTrue(decision.was_correct)
+        self.assertEqual(decision.suggested_priority, 'high')
+        self.assertEqual(decision.confidence_score, 0.85)
+    
+    def test_log_ai_rejected_decision(self):
+        """Test logging when user rejects AI suggestion"""
+        decision = PriorityDecision.log_decision(
+            task=self.task,
+            priority='medium',
+            user=self.user,
+            decision_type='ai_rejected',
+            suggested_priority='high',
+            confidence=0.75
+        )
+        
+        self.assertFalse(decision.was_correct)
+        self.assertEqual(decision.suggested_priority, 'high')
+        self.assertEqual(decision.actual_priority, 'medium')

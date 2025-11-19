@@ -1,6 +1,9 @@
 # Core Django Framework
 Django==5.2.3
 django-allauth==65.9.0
+asgiref==3.9.2
+sqlparse==0.5.3
+tzdata==2025.2
 
 # RESTful API Framework (for external integrations)
 djangorestframework==3.15.2
@@ -9,6 +12,7 @@ djangorestframework==3.15.2
 cryptography==46.0.3
 cffi==2.0.0
 PyJWT==2.10.1
+pycparser==2.23
 
 # UI and Form Enhancement
 django-crispy-forms==2.4
@@ -28,25 +32,70 @@ whitenoise==6.9.0
 
 # AI Integration - Google Gemini
 google-generativeai==0.8.5
+google-ai-generativelanguage==0.6.15
+google-api-core==2.25.1
+google-api-python-client==2.183.0
+google-auth==2.40.3
+google-auth-httplib2==0.2.0
+googleapis-common-protos==1.70.0
 grpcio==1.76.0
-# pydantic versions managed by google-generativeai dependencies
+grpcio-status==1.71.2
+proto-plus==1.26.1
+protobuf==5.29.5
+
+# Pydantic (AI dependencies)
+pydantic==1.10.24
+pydantic_core==2.41.4
+
+# Machine Learning
+scikit-learn==1.7.2
+numpy==2.3.5
+scipy==1.16.3
+joblib==1.5.2
+threadpoolctl==3.6.0
 
 # Document Processing
 python-docx==1.2.0
 PyPDF2==3.0.1
 Markdown==3.5.1
+lxml==6.0.2
 
 # HTTP Requests (for testing and integrations)
 requests==2.32.3
+urllib3==2.5.0
+certifi==2025.8.3
+charset-normalizer==3.4.3
+idna==3.10
 
 # Real-time Communication (WebSockets)
 channels==4.1.0
 channels-redis==4.1.0
 daphne==4.1.2
+autobahn==25.10.2
+Automat==25.4.16
+Twisted==25.5.0
+txaio==25.9.2
+attrs==25.4.0
+constantly==23.10.4
+hyperlink==21.0.0
+incremental==24.7.2
+pyOpenSSL==25.3.0
+service-identity==24.2.0
+zope.interface==8.0.1
 
 # Asynchronous Task Processing
 celery==5.3.4
 redis==5.0.1
+amqp==5.3.1
+billiard==4.2.2
+kombu==5.5.4
+vine==5.1.0
+click==8.3.0
+click-didyoumean==0.3.1
+click-plugins==1.1.1.2
+click-repl==0.3.0
+prompt_toolkit==3.0.52
+wcwidth==0.2.14
 
 # Security Enhancements
 bleach==6.1.0
@@ -57,6 +106,19 @@ django-axes==8.0.0
 # Security Tools
 bandit==1.7.5
 safety==3.0.1
+safety-schemas==0.0.5
+dparse==0.6.4
+ruamel.yaml==0.18.16
+ruamel.yaml.clib==0.2.15
+packaging==25.0
+marshmallow==4.1.0
+Authlib==1.6.5
+
+# Utility Libraries
+python-dateutil==2.9.0.post0
+six==1.17.0
+webencodings==0.5.1
+MarkupSafe==3.0.2
 
 # Development and Testing Dependencies
 # (Optional - for development environment)

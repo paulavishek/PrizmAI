@@ -1529,3 +1529,238 @@ def bulk_update_predictions_api(request, board_id):
     except Exception as e:
         logger.error(f"Error in bulk_update_predictions_api: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def suggest_task_priority_api(request):
+    """
+    API endpoint to get AI-powered priority suggestion for a task
+    
+    Request body:
+    {
+        "task_id": 123,  # Optional - for existing tasks
+        "title": "Task title",  # Required for new tasks
+        "due_date": "2025-11-25T10:00:00Z",  # Optional
+        "complexity_score": 7,  # Optional
+        "board_id": 5  # Required
+        ... other task fields
+    }
+    
+    Returns:
+    {
+        "suggested_priority": "high",
+        "confidence": 0.85,
+        "reasoning": {
+            "top_factors": [...],
+            "explanation": "...",
+            "confidence_level": "High confidence"
+        },
+        "alternatives": [...],
+        "is_ml_based": true
+    }
+    """
+    try:
+        data = json.loads(request.body)
+        task_id = data.get('task_id')
+        
+        # Get or create task object
+        if task_id:
+            task = get_object_or_404(Task, pk=task_id)
+            board = task.column.board
+            
+            # Check access
+            if request.user not in board.members.all() and board.created_by != request.user:
+                return JsonResponse({'error': 'Access denied'}, status=403)
+        else:
+            # Create temporary task object for prediction
+            board_id = data.get('board_id')
+            if not board_id:
+                return JsonResponse({'error': 'board_id required for new tasks'}, status=400)
+            
+            board = get_object_or_404(Board, pk=board_id)
+            
+            # Check access
+            if request.user not in board.members.all() and board.created_by != request.user:
+                return JsonResponse({'error': 'Access denied'}, status=403)
+            
+            # Create temporary task (not saved to DB)
+            task = Task(
+                title=data.get('title', 'New Task'),
+                description=data.get('description', ''),
+                complexity_score=data.get('complexity_score', 5),
+                collaboration_required=data.get('collaboration_required', False),
+                risk_score=data.get('risk_score'),
+            )
+            
+            # Parse due_date if provided
+            if data.get('due_date'):
+                from django.utils.dateparse import parse_datetime
+                task.due_date = parse_datetime(data.get('due_date'))
+            
+            # Attach board for context
+            task._board = board
+        
+        # Get priority suggestion
+        from ai_assistant.utils.priority_service import PrioritySuggestionService
+        service = PrioritySuggestionService()
+        suggestion = service.suggest_priority(task, user=request.user)
+        
+        return JsonResponse(suggestion)
+        
+    except Exception as e:
+        logger.error(f"Error in suggest_task_priority_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def log_priority_decision_api(request):
+    """
+    API endpoint to log a priority decision for learning
+    
+    Request body:
+    {
+        "task_id": 123,
+        "priority": "high",
+        "decision_type": "initial" | "correction" | "ai_accepted" | "ai_rejected",
+        "suggested_priority": "medium",  # Optional - AI suggestion
+        "confidence": 0.75,  # Optional - AI confidence
+        "reasoning": {...},  # Optional - AI reasoning
+        "feedback_notes": "..."  # Optional - user feedback
+    }
+    """
+    try:
+        data = json.loads(request.body)
+        task_id = data.get('task_id')
+        priority = data.get('priority')
+        
+        if not task_id or not priority:
+            return JsonResponse({'error': 'task_id and priority required'}, status=400)
+        
+        task = get_object_or_404(Task, pk=task_id)
+        board = task.column.board
+        
+        # Check access
+        if request.user not in board.members.all() and board.created_by != request.user:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # Log the decision
+        from kanban.priority_models import PriorityDecision
+        
+        previous_priority = task.priority if task.priority != priority else None
+        
+        decision = PriorityDecision.log_decision(
+            task=task,
+            priority=priority,
+            user=request.user,
+            decision_type=data.get('decision_type', 'initial'),
+            suggested_priority=data.get('suggested_priority'),
+            confidence=data.get('confidence'),
+            reasoning=data.get('reasoning'),
+            previous_priority=previous_priority
+        )
+        
+        # Update feedback notes if provided
+        if data.get('feedback_notes'):
+            decision.feedback_notes = data.get('feedback_notes')
+            decision.save()
+        
+        # Update task priority if it changed
+        if task.priority != priority:
+            old_priority = task.priority
+            task.priority = priority
+            task.save()
+            
+            # Log activity
+            TaskActivity.objects.create(
+                task=task,
+                user=request.user,
+                activity_type='updated',
+                description=f"Changed priority from {old_priority} to {priority}"
+            )
+        
+        return JsonResponse({
+            'success': True,
+            'decision_id': decision.id,
+            'message': 'Priority decision logged successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in log_priority_decision_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def train_priority_model_api(request, board_id):
+    """
+    API endpoint to train/retrain priority model for a board
+    
+    Requires sufficient historical data (min 20 decisions)
+    """
+    try:
+        board = get_object_or_404(Board, pk=board_id)
+        
+        # Check access - only board creators can train models
+        if board.created_by != request.user:
+            return JsonResponse({'error': 'Only board owner can train models'}, status=403)
+        
+        from ai_assistant.utils.priority_service import PriorityModelTrainer
+        
+        trainer = PriorityModelTrainer(board)
+        result = trainer.train_model()
+        
+        if not result['success']:
+            return JsonResponse(result, status=400)
+        
+        return JsonResponse(result)
+        
+    except Exception as e:
+        logger.error(f"Error in train_priority_model_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def get_priority_model_info_api(request, board_id):
+    """
+    Get information about the current priority model for a board
+    """
+    try:
+        board = get_object_or_404(Board, pk=board_id)
+        
+        # Check access
+        if request.user not in board.members.all() and board.created_by != request.user:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        from kanban.priority_models import PriorityModel, PriorityDecision
+        
+        model = PriorityModel.get_active_model(board)
+        
+        if not model:
+            # Check how many decisions we have
+            decision_count = PriorityDecision.objects.filter(board=board).count()
+            
+            return JsonResponse({
+                'has_model': False,
+                'decision_count': decision_count,
+                'min_required': 20,
+                'message': f'Need {max(0, 20 - decision_count)} more decisions to train a model'
+            })
+        
+        return JsonResponse({
+            'has_model': True,
+            'model_version': model.model_version,
+            'accuracy': model.accuracy_score,
+            'trained_at': model.trained_at.isoformat(),
+            'training_samples': model.training_samples,
+            'feature_importance': model.feature_importance,
+            'precision_scores': model.precision_scores,
+            'recall_scores': model.recall_scores,
+            'f1_scores': model.f1_scores
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_priority_model_info_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
