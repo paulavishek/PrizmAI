@@ -1799,3 +1799,451 @@ def get_priority_model_info_api(request, board_id):
     except Exception as e:
         logger.error(f"Error in get_priority_model_info_api: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# ========================================
+# Skill Gap Analysis & Resource Matching
+# ========================================
+
+@login_required
+@require_http_methods(["GET"])
+def analyze_skill_gaps_api(request, board_id):
+    """
+    Analyze skill gaps for a board
+    Identifies missing skills and generates recommendations
+    """
+    try:
+        board = get_object_or_404(Board, pk=board_id)
+        
+        # Check access
+        if request.user not in board.members.all() and board.created_by != request.user:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        from kanban.utils.skill_analysis import calculate_skill_gaps, generate_skill_gap_recommendations
+        from kanban.models import SkillGap
+        
+        # Get sprint period from query params (default 14 days)
+        sprint_days = int(request.GET.get('sprint_days', 14))
+        
+        # Calculate gaps
+        gaps = calculate_skill_gaps(board, sprint_period_days=sprint_days)
+        
+        # Save gaps to database and generate recommendations
+        saved_gaps = []
+        for gap_data in gaps:
+            # Create or update SkillGap record
+            skill_gap, created = SkillGap.objects.update_or_create(
+                board=board,
+                skill_name=gap_data['skill_name'],
+                proficiency_level=gap_data['proficiency_level'],
+                status__in=['identified', 'acknowledged', 'in_progress'],
+                defaults={
+                    'required_count': gap_data['required_count'],
+                    'available_count': gap_data['available_count'],
+                    'gap_count': gap_data['gap_count'],
+                    'severity': gap_data['severity'],
+                    'sprint_period_start': timezone.now().date(),
+                    'sprint_period_end': timezone.now().date() + timedelta(days=sprint_days),
+                }
+            )
+            
+            # Link affected tasks
+            from kanban.models import Task
+            affected_task_ids = [t['id'] for t in gap_data['affected_tasks']]
+            affected_tasks = Task.objects.filter(id__in=affected_task_ids)
+            skill_gap.affected_tasks.set(affected_tasks)
+            
+            # Generate recommendations if not already done
+            if not skill_gap.ai_recommendations or created:
+                recommendations = generate_skill_gap_recommendations(gap_data, board)
+                skill_gap.ai_recommendations = recommendations
+                skill_gap.confidence_score = 0.8
+                skill_gap.save()
+            
+            saved_gaps.append({
+                'id': skill_gap.id,
+                'skill_name': skill_gap.skill_name,
+                'proficiency_level': skill_gap.proficiency_level,
+                'required_count': skill_gap.required_count,
+                'available_count': skill_gap.available_count,
+                'gap_count': skill_gap.gap_count,
+                'severity': skill_gap.severity,
+                'status': skill_gap.status,
+                'affected_tasks': gap_data['affected_tasks'],
+                'recommendations': skill_gap.ai_recommendations,
+                'identified_at': skill_gap.identified_at.isoformat()
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'gaps': saved_gaps,
+            'sprint_period_days': sprint_days,
+            'total_gaps': len(saved_gaps)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in analyze_skill_gaps_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def get_team_skill_profile_api(request, board_id):
+    """
+    Get comprehensive skill inventory for a board's team
+    """
+    try:
+        board = get_object_or_404(Board, pk=board_id)
+        
+        # Check access
+        if request.user not in board.members.all() and board.created_by != request.user:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        from kanban.utils.skill_analysis import build_team_skill_profile, update_team_skill_profile_model
+        
+        # Build and save profile
+        team_profile_model = update_team_skill_profile_model(board)
+        profile_data = build_team_skill_profile(board)
+        
+        # Format skill inventory for display
+        skills_summary = []
+        for skill_name, skill_data in profile_data['skill_inventory'].items():
+            skills_summary.append({
+                'skill_name': skill_name,
+                'total_members': len(skill_data.get('members', [])),
+                'expert': skill_data.get('expert', 0),
+                'advanced': skill_data.get('advanced', 0),
+                'intermediate': skill_data.get('intermediate', 0),
+                'beginner': skill_data.get('beginner', 0),
+                'members': skill_data.get('members', [])
+            })
+        
+        # Sort by total members (most common skills first)
+        skills_summary.sort(key=lambda x: x['total_members'], reverse=True)
+        
+        return JsonResponse({
+            'success': True,
+            'team_size': profile_data['team_size'],
+            'total_capacity_hours': float(profile_data['total_capacity_hours']),
+            'utilized_capacity_hours': float(profile_data['utilized_capacity_hours']),
+            'utilization_percentage': round(profile_data['utilization_percentage'], 1),
+            'skills': skills_summary,
+            'total_unique_skills': len(skills_summary),
+            'last_updated': team_profile_model.last_updated.isoformat() if team_profile_model else None
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_team_skill_profile_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def match_team_to_task_api(request, task_id):
+    """
+    Find best team members for a task based on skill matching
+    """
+    try:
+        task = get_object_or_404(Task, pk=task_id)
+        board = task.column.board
+        
+        # Check access
+        if request.user not in board.members.all() and board.created_by != request.user:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        from kanban.utils.skill_analysis import match_team_member_to_task
+        
+        # Get board members
+        board_members = board.members.select_related('profile').all()
+        
+        # Find matches
+        matches = match_team_member_to_task(task, board_members)
+        
+        # Format response
+        formatted_matches = []
+        for match in matches[:10]:  # Top 10 matches
+            formatted_matches.append({
+                'user_id': match['user_id'],
+                'username': match['username'],
+                'full_name': match['full_name'],
+                'match_score': match['match_score'],
+                'matched_skills': match['matched_skills'],
+                'missing_skills': match['missing_skills'],
+                'current_workload': match['current_workload'],
+                'available_hours': match['available_hours']
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'task_id': task.id,
+            'task_title': task.title,
+            'required_skills': task.required_skills or [],
+            'matches': formatted_matches,
+            'total_candidates': len(formatted_matches)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in match_team_to_task_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def extract_task_skills_api(request, task_id):
+    """
+    AI-extract required skills from a task description
+    """
+    try:
+        task = get_object_or_404(Task, pk=task_id)
+        board = task.column.board
+        
+        # Check access
+        if request.user not in board.members.all() and board.created_by != request.user:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        from kanban.utils.skill_analysis import extract_skills_from_task
+        
+        # Extract skills
+        skills = extract_skills_from_task(task.title, task.description or "")
+        
+        if skills:
+            # Update task
+            task.required_skills = skills
+            task.save(update_fields=['required_skills'])
+            
+            return JsonResponse({
+                'success': True,
+                'task_id': task.id,
+                'skills': skills,
+                'message': f'Extracted {len(skills)} skills from task description'
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'message': 'Could not extract skills from task'
+            }, status=400)
+        
+    except Exception as e:
+        logger.error(f"Error in extract_task_skills_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def create_skill_development_plan_api(request):
+    """
+    Create a skill development plan to address a gap
+    """
+    try:
+        data = json.loads(request.body)
+        
+        skill_gap_id = data.get('skill_gap_id')
+        plan_type = data.get('plan_type')
+        title = data.get('title')
+        description = data.get('description')
+        
+        if not all([skill_gap_id, plan_type, title]):
+            return JsonResponse({'error': 'Missing required fields'}, status=400)
+        
+        from kanban.models import SkillGap, SkillDevelopmentPlan
+        
+        skill_gap = get_object_or_404(SkillGap, pk=skill_gap_id)
+        board = skill_gap.board
+        
+        # Check access
+        if request.user not in board.members.all() and board.created_by != request.user:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # Create plan
+        plan = SkillDevelopmentPlan.objects.create(
+            skill_gap=skill_gap,
+            board=board,
+            plan_type=plan_type,
+            title=title,
+            description=description or '',
+            target_skill=skill_gap.skill_name,
+            target_proficiency=skill_gap.proficiency_level,
+            created_by=request.user,
+            start_date=data.get('start_date'),
+            target_completion_date=data.get('target_completion_date'),
+            estimated_cost=data.get('estimated_cost'),
+            estimated_hours=data.get('estimated_hours'),
+            ai_suggested=data.get('ai_suggested', False),
+            status='proposed'
+        )
+        
+        # Add target users if specified
+        if 'target_user_ids' in data:
+            from django.contrib.auth.models import User
+            target_users = User.objects.filter(id__in=data['target_user_ids'])
+            plan.target_users.set(target_users)
+        
+        return JsonResponse({
+            'success': True,
+            'plan_id': plan.id,
+            'message': 'Development plan created successfully'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        logger.error(f"Error in create_skill_development_plan_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def get_skill_gaps_list_api(request, board_id):
+    """
+    Get list of active skill gaps for a board
+    """
+    try:
+        board = get_object_or_404(Board, pk=board_id)
+        
+        # Check access
+        if request.user not in board.members.all() and board.created_by != request.user:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        from kanban.models import SkillGap
+        
+        # Get active gaps
+        gaps = SkillGap.objects.filter(
+            board=board,
+            status__in=['identified', 'acknowledged', 'in_progress']
+        ).prefetch_related('affected_tasks').order_by('-severity', '-gap_count')
+        
+        gaps_list = []
+        for gap in gaps:
+            gaps_list.append({
+                'id': gap.id,
+                'skill_name': gap.skill_name,
+                'proficiency_level': gap.proficiency_level,
+                'required_count': gap.required_count,
+                'available_count': gap.available_count,
+                'gap_count': gap.gap_count,
+                'severity': gap.severity,
+                'status': gap.status,
+                'affected_tasks_count': gap.affected_tasks.count(),
+                'recommendations_count': len(gap.ai_recommendations) if gap.ai_recommendations else 0,
+                'identified_at': gap.identified_at.isoformat()
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'gaps': gaps_list,
+            'total': len(gaps_list)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_skill_gaps_list_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def get_development_plans_api(request, board_id):
+    """
+    Get skill development plans for a board
+    """
+    try:
+        board = get_object_or_404(Board, pk=board_id)
+        
+        # Check access
+        if request.user not in board.members.all() and board.created_by != request.user:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        from kanban.models import SkillDevelopmentPlan
+        
+        # Get plans
+        status_filter = request.GET.get('status')
+        plans = SkillDevelopmentPlan.objects.filter(board=board)
+        
+        if status_filter:
+            plans = plans.filter(status=status_filter)
+        
+        plans = plans.select_related('skill_gap', 'created_by').prefetch_related('target_users')
+        
+        plans_list = []
+        for plan in plans:
+            plans_list.append({
+                'id': plan.id,
+                'plan_type': plan.plan_type,
+                'title': plan.title,
+                'description': plan.description,
+                'target_skill': plan.target_skill,
+                'target_proficiency': plan.target_proficiency,
+                'status': plan.status,
+                'progress_percentage': plan.progress_percentage,
+                'start_date': plan.start_date.isoformat() if plan.start_date else None,
+                'target_completion_date': plan.target_completion_date.isoformat() if plan.target_completion_date else None,
+                'estimated_cost': float(plan.estimated_cost) if plan.estimated_cost else None,
+                'estimated_hours': float(plan.estimated_hours) if plan.estimated_hours else None,
+                'target_users': [{'id': u.id, 'username': u.username} for u in plan.target_users.all()],
+                'created_by': plan.created_by.username,
+                'created_at': plan.created_at.isoformat(),
+                'ai_suggested': plan.ai_suggested,
+                'is_overdue': plan.is_overdue
+            })
+        
+        return JsonResponse({
+            'success': True,
+            'plans': plans_list,
+            'total': len(plans_list)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_development_plans_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def get_skill_gap_detail_api(request, gap_id):
+    """
+    Get detailed information about a specific skill gap
+    """
+    try:
+        from kanban.models import SkillGap
+        
+        gap = get_object_or_404(SkillGap, pk=gap_id)
+        board = gap.board
+        
+        # Check access
+        if request.user not in board.members.all() and board.created_by != request.user:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # Get affected tasks
+        affected_tasks = []
+        for task in gap.affected_tasks.all():
+            affected_tasks.append({
+                'id': task.id,
+                'title': task.title,
+                'column': task.column.name,
+                'due_date': task.due_date.isoformat() if task.due_date else None,
+                'assigned_to': task.assigned_to.username if task.assigned_to else None
+            })
+        
+        # Prepare response
+        gap_data = {
+            'id': gap.id,
+            'skill_name': gap.skill_name,
+            'proficiency_level': gap.proficiency_level,
+            'required_count': gap.required_count,
+            'available_count': gap.available_count,
+            'gap_count': gap.gap_count,
+            'severity': gap.severity,
+            'status': gap.status,
+            'affected_tasks': affected_tasks,
+            'ai_recommendations': gap.ai_recommendations if gap.ai_recommendations else [],
+            'identified_at': gap.identified_at.isoformat(),
+            'resolved_at': gap.resolved_at.isoformat() if gap.resolved_at else None
+        }
+        
+        return JsonResponse({
+            'success': True,
+            'gap': gap_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in get_skill_gap_detail_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)

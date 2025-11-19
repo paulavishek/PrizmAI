@@ -1,5 +1,8 @@
 from django.contrib import admin
-from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity
+from .models import (
+    Board, Column, Task, TaskLabel, Comment, TaskActivity,
+    TeamSkillProfile, SkillGap, SkillDevelopmentPlan
+)
 from .priority_models import PriorityDecision, PriorityModel, PrioritySuggestionLog
 
 @admin.register(Board)
@@ -134,4 +137,112 @@ class PrioritySuggestionLogAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         })
     )
+
+
+@admin.register(TeamSkillProfile)
+class TeamSkillProfileAdmin(admin.ModelAdmin):
+    list_display = ('board', 'total_capacity_hours', 'utilized_capacity_hours', 'utilization_percentage', 'last_updated')
+    list_filter = ('last_updated', 'last_analysis')
+    search_fields = ('board__name',)
+    readonly_fields = ('last_updated', 'utilization_percentage', 'available_skills')
+    
+    fieldsets = (
+        ('Board Information', {
+            'fields': ('board',)
+        }),
+        ('Capacity Metrics', {
+            'fields': ('total_capacity_hours', 'utilized_capacity_hours', 'utilization_percentage')
+        }),
+        ('Skill Inventory', {
+            'fields': ('skill_inventory', 'available_skills'),
+            'classes': ('collapse',),
+            'description': 'Team-wide skill inventory and availability'
+        }),
+        ('Analysis Metadata', {
+            'fields': ('last_updated', 'last_analysis'),
+            'classes': ('collapse',)
+        })
+    )
+
+
+@admin.register(SkillGap)
+class SkillGapAdmin(admin.ModelAdmin):
+    list_display = ('skill_name', 'proficiency_level', 'gap_count', 'severity', 'status', 'board', 'identified_at')
+    list_filter = ('severity', 'status', 'proficiency_level', 'identified_at', 'board')
+    search_fields = ('skill_name', 'board__name')
+    readonly_fields = ('gap_count', 'identified_at', 'is_critical', 'gap_percentage')
+    filter_horizontal = ('affected_tasks',)
+    
+    fieldsets = (
+        ('Gap Information', {
+            'fields': ('board', 'skill_name', 'proficiency_level', 'severity', 'status')
+        }),
+        ('Gap Metrics', {
+            'fields': ('required_count', 'available_count', 'gap_count', 'gap_percentage', 'is_critical')
+        }),
+        ('Sprint Context', {
+            'fields': ('sprint_period_start', 'sprint_period_end', 'affected_tasks'),
+            'classes': ('collapse',)
+        }),
+        ('AI Analysis', {
+            'fields': ('ai_recommendations', 'estimated_impact_hours', 'confidence_score'),
+            'classes': ('collapse',),
+            'description': 'AI-generated recommendations and impact analysis'
+        }),
+        ('Tracking', {
+            'fields': ('identified_at', 'resolved_at', 'acknowledged_by'),
+            'classes': ('collapse',)
+        })
+    )
+    
+    def save_model(self, request, obj, form, change):
+        """Auto-calculate gap_count before saving"""
+        obj.gap_count = max(0, obj.required_count - obj.available_count)
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(SkillDevelopmentPlan)
+class SkillDevelopmentPlanAdmin(admin.ModelAdmin):
+    list_display = ('title', 'plan_type', 'target_skill', 'status', 'progress_percentage', 'board', 'created_at')
+    list_filter = ('plan_type', 'status', 'target_proficiency', 'ai_suggested', 'created_at', 'board')
+    search_fields = ('title', 'description', 'target_skill', 'board__name')
+    readonly_fields = ('created_at', 'updated_at', 'is_overdue', 'days_until_target')
+    filter_horizontal = ('target_users',)
+    
+    fieldsets = (
+        ('Plan Information', {
+            'fields': ('board', 'skill_gap', 'plan_type', 'title', 'description')
+        }),
+        ('Target & Goals', {
+            'fields': ('target_skill', 'target_proficiency', 'target_users')
+        }),
+        ('Timeline & Budget', {
+            'fields': ('start_date', 'target_completion_date', 'actual_completion_date', 
+                      'estimated_cost', 'estimated_hours', 'is_overdue', 'days_until_target')
+        }),
+        ('Status & Progress', {
+            'fields': ('status', 'progress_percentage')
+        }),
+        ('Impact Tracking', {
+            'fields': ('expected_impact', 'actual_impact', 'success_metrics'),
+            'classes': ('collapse',),
+            'description': 'Track the impact and success of this development plan'
+        }),
+        ('Ownership', {
+            'fields': ('created_by', 'assigned_to', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+        ('AI Metadata', {
+            'fields': ('ai_suggested', 'ai_confidence'),
+            'classes': ('collapse',),
+            'description': 'AI-related metadata for this plan'
+        })
+    )
+    
+    def get_readonly_fields(self, request, obj=None):
+        """Make created_by read-only after creation"""
+        if obj:  # Editing existing object
+            return self.readonly_fields + ('created_by',)
+        return self.readonly_fields
+
 

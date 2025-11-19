@@ -1,0 +1,918 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Skill Gap Analysis - {{ board.name }} - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .stat-card h3 {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+    
+    .stat-card.warning {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    }
+    
+    .stat-card.success {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    }
+    
+    .stat-card.info {
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+    }
+    
+    .gap-card, .plan-card {
+        border-left: 4px solid #6c757d;
+        transition: all 0.2s ease;
+    }
+    
+    .gap-card:hover, .plan-card:hover {
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+    }
+    
+    .gap-card.critical {
+        border-left-color: #dc3545;
+    }
+    
+    .gap-card.high {
+        border-left-color: #ffc107;
+    }
+    
+    .gap-card.medium {
+        border-left-color: #17a2b8;
+    }
+    
+    .gap-card.low {
+        border-left-color: #6c757d;
+    }
+    
+    .skill-matrix-table th {
+        background-color: #f8f9fa;
+        font-weight: 600;
+    }
+    
+    .skill-matrix-table td {
+        vertical-align: middle;
+    }
+    
+    .action-buttons .btn {
+        margin-right: 5px;
+        margin-bottom: 5px;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #6c757d;
+    }
+    
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 20px;
+        opacity: 0.3;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- CSRF Token for AJAX requests -->
+{% csrf_token %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">
+                <i class="fas fa-brain me-2 text-primary"></i>
+                Skill Gap Analysis
+            </h1>
+            <p class="text-muted mb-0">{{ board.name }}</p>
+        </div>
+        <div class="btn-group">
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Back to Board
+            </a>
+            <button class="btn btn-primary" onclick="runSkillAnalysis()">
+                <i class="fas fa-sync-alt me-1"></i> Run Analysis
+            </button>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card warning">
+                <h3>{{ skill_gaps.count }}</h3>
+                <p class="mb-0"><i class="fas fa-exclamation-triangle me-1"></i> Active Skill Gaps</p>
+                <small>{{ critical_gaps }} Critical • {{ high_gaps }} High</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card info">
+                <h3>{{ development_plans.count }}</h3>
+                <p class="mb-0"><i class="fas fa-graduation-cap me-1"></i> Development Plans</p>
+                <small>{{ active_plans }} Active • {{ proposed_plans }} Proposed</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card success">
+                <h3>{% if team_profile %}{{ team_profile.skill_inventory|length }}{% else %}0{% endif %}</h3>
+                <p class="mb-0"><i class="fas fa-tools me-1"></i> Unique Skills</p>
+                <small>Team skill inventory</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card {% if team_profile.utilization_percentage > 90 %}warning{% elif team_profile.utilization_percentage > 75 %}info{% else %}success{% endif %}">
+                <h3>{% if team_profile %}{{ team_profile.utilization_percentage|floatformat:0 }}%{% else %}0%{% endif %}</h3>
+                <p class="mb-0"><i class="fas fa-chart-line me-1"></i> Team Utilization</p>
+                <small>Current capacity usage</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="row">
+        <!-- Skill Gaps Section -->
+        <div class="col-md-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header bg-warning text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Skill Gaps ({{ skill_gaps.count }})
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if skill_gaps %}
+                        {% for gap in skill_gaps %}
+                        <div class="gap-card {{ gap.severity }} p-3 mb-3 border rounded">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <h6 class="mb-1">
+                                        <strong>{{ gap.skill_name }}</strong>
+                                        <span class="badge bg-secondary ms-2">{{ gap.proficiency_level }}</span>
+                                    </h6>
+                                    <small class="text-muted">
+                                        Need {{ gap.gap_count }} more • {{ gap.affected_tasks.count }} tasks affected
+                                    </small>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge 
+                                        {% if gap.severity == 'critical' %}bg-danger
+                                        {% elif gap.severity == 'high' %}bg-warning text-dark
+                                        {% elif gap.severity == 'medium' %}bg-info
+                                        {% else %}bg-secondary{% endif %}">
+                                        {{ gap.get_severity_display }}
+                                    </span>
+                                    <span class="badge bg-light text-dark ms-1">{{ gap.get_status_display }}</span>
+                                </div>
+                            </div>
+                            
+                            {% if gap.ai_recommendations %}
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    <i class="fas fa-lightbulb me-1"></i>
+                                    {{ gap.ai_recommendations|length }} AI recommendation(s)
+                                </small>
+                            </div>
+                            {% endif %}
+                            
+                            <div class="action-buttons mt-2">
+                                <button class="btn btn-sm btn-outline-primary" onclick="viewGapDetails({{ gap.id }})">
+                                    <i class="fas fa-eye me-1"></i> View Details
+                                </button>
+                                <button class="btn btn-sm btn-outline-success" onclick="createPlanForGap({{ gap.id }})">
+                                    <i class="fas fa-plus me-1"></i> Create Plan
+                                </button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-state">
+                            <i class="fas fa-check-circle text-success"></i>
+                            <h5>No Skill Gaps Identified</h5>
+                            <p class="text-muted">Run analysis to check for skill gaps in your team.</p>
+                            <button class="btn btn-primary" onclick="runSkillAnalysis()">
+                                <i class="fas fa-sync-alt me-1"></i> Run Analysis
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Development Plans Section -->
+        <div class="col-md-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-graduation-cap me-2"></i>
+                        Development Plans ({{ development_plans.count }})
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if development_plans %}
+                        {% for plan in development_plans %}
+                        <div class="plan-card p-3 mb-3 border rounded">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <h6 class="mb-1">
+                                        <strong>{{ plan.title }}</strong>
+                                    </h6>
+                                    <small class="text-muted">
+                                        {{ plan.target_skill }} ({{ plan.target_proficiency }})
+                                    </small>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge 
+                                        {% if plan.plan_type == 'training' %}bg-primary
+                                        {% elif plan.plan_type == 'hiring' %}bg-success
+                                        {% elif plan.plan_type == 'contractor' %}bg-info
+                                        {% elif plan.plan_type == 'redistribute' %}bg-warning text-dark
+                                        {% else %}bg-secondary{% endif %}">
+                                        <i class="fas 
+                                            {% if plan.plan_type == 'training' %}fa-book
+                                            {% elif plan.plan_type == 'hiring' %}fa-user-plus
+                                            {% elif plan.plan_type == 'contractor' %}fa-handshake
+                                            {% elif plan.plan_type == 'redistribute' %}fa-exchange-alt
+                                            {% else %}fa-users{% endif %} me-1"></i>
+                                        {{ plan.get_plan_type_display }}
+                                    </span>
+                                    <span class="badge bg-light text-dark ms-1">{{ plan.get_status_display }}</span>
+                                </div>
+                            </div>
+                            
+                            <div class="progress mb-2" style="height: 6px;">
+                                <div class="progress-bar 
+                                    {% if plan.progress_percentage >= 75 %}bg-success
+                                    {% elif plan.progress_percentage >= 50 %}bg-primary
+                                    {% else %}bg-warning{% endif %}" 
+                                    role="progressbar" 
+                                    style="width: {{ plan.progress_percentage }}%" 
+                                    aria-valuenow="{{ plan.progress_percentage }}" 
+                                    aria-valuemin="0" 
+                                    aria-valuemax="100">
+                                </div>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between align-items-center">
+                                <small class="text-muted">
+                                    {{ plan.target_users.count }} team member(s)
+                                    {% if plan.estimated_hours %} • {{ plan.estimated_hours }}h{% endif %}
+                                </small>
+                                <div>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="viewPlanDetails({{ plan.id }})">
+                                        <i class="fas fa-eye me-1"></i> Details
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-state">
+                            <i class="fas fa-clipboard-list"></i>
+                            <h5>No Development Plans</h5>
+                            <p class="text-muted">Create plans to address skill gaps.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Team Skill Matrix -->
+    {% if team_profile and team_profile.skill_inventory %}
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-th me-2"></i>
+                        Team Skill Matrix
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-bordered table-hover skill-matrix-table">
+                            <thead>
+                                <tr>
+                                    <th>Skill</th>
+                                    <th class="text-center">Expert</th>
+                                    <th class="text-center">Advanced</th>
+                                    <th class="text-center">Intermediate</th>
+                                    <th class="text-center">Beginner</th>
+                                    <th class="text-center">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for skill_name, skill_data in team_profile.skill_inventory.items %}
+                                <tr>
+                                    <td><strong>{{ skill_name }}</strong></td>
+                                    <td class="text-center">
+                                        {% if skill_data.expert > 0 %}
+                                            <span class="badge bg-success">{{ skill_data.expert }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if skill_data.advanced > 0 %}
+                                            <span class="badge bg-primary">{{ skill_data.advanced }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if skill_data.intermediate > 0 %}
+                                            <span class="badge bg-info">{{ skill_data.intermediate }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if skill_data.beginner > 0 %}
+                                            <span class="badge bg-secondary">{{ skill_data.beginner }}</span>
+                                        {% else %}
+                                            <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <strong>{{ skill_data.expert|add:skill_data.advanced|add:skill_data.intermediate|add:skill_data.beginner }}</strong>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Hidden element for board ID -->
+    <div id="skill-gap-dashboard" data-board-id="{{ board.id }}" style="display: none;"></div>
+</div>
+
+<!-- Gap Details Modal -->
+<div class="modal fade" id="gapDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Skill Gap Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="gapDetailsContent">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Plan Details Modal -->
+<div class="modal fade" id="planDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Development Plan Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="planDetailsContent">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/skill_gap_analysis.js' %}"></script>
+<script>
+    // Initialize the skill gap analyzer
+    const boardId = {{ board.id }};
+    // Note: skillGapAnalyzer is already declared in skill_gap_analysis.js as a global variable
+
+    document.addEventListener('DOMContentLoaded', function() {
+        if (!window.skillGapAnalyzer) {
+            window.skillGapAnalyzer = new SkillGapAnalyzer(boardId);
+        }
+    });
+
+    // Make function globally accessible
+    window.runSkillAnalysis = function() {
+        if (window.skillGapAnalyzer) {
+            showLoadingOverlay('Running skill gap analysis...');
+            window.skillGapAnalyzer.analyzeGaps(14).then(() => {
+                hideLoadingOverlay();
+                showToast('Analysis complete! Reloading page...', 'success');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            }).catch(error => {
+                hideLoadingOverlay();
+                showToast('Failed to run analysis: ' + error.message, 'error');
+            });
+        }
+    }
+
+    window.viewGapDetails = async function(gapId) {
+        try {
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('gapDetailsModal'));
+            modal.show();
+            
+            // Show loading state
+            document.getElementById('gapDetailsContent').innerHTML = `
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading gap details...</p>
+                </div>
+            `;
+            
+            // Fetch gap details
+            const response = await fetch(`/api/skill-gaps/${gapId}/detail/`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to load gap details');
+            }
+            
+            const data = await response.json();
+            const gap = data.gap;
+            
+            // Build modal content
+            let content = `
+                <div class="gap-details">
+                    <div class="mb-4">
+                        <h5>${gap.skill_name} <span class="badge bg-secondary">${gap.proficiency_level}</span></h5>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <p><strong>Gap Size:</strong> Need ${gap.gap_count} more team member(s)</p>
+                                <p><strong>Currently Available:</strong> ${gap.available_count}</p>
+                                <p><strong>Required:</strong> ${gap.required_count}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Severity:</strong> <span class="badge ${getSeverityClass(gap.severity)}">${gap.severity.toUpperCase()}</span></p>
+                                <p><strong>Status:</strong> <span class="badge ${getStatusClass(gap.status)}">${gap.status.replace('_', ' ').toUpperCase()}</span></p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    ${gap.affected_tasks && gap.affected_tasks.length > 0 ? `
+                        <div class="mb-4">
+                            <h6><i class="fas fa-tasks me-2"></i>Affected Tasks (${gap.affected_tasks.length})</h6>
+                            <div class="list-group">
+                                ${gap.affected_tasks.map(task => `
+                                    <div class="list-group-item">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <strong>${task.title}</strong><br>
+                                                <small class="text-muted">
+                                                    <i class="fas fa-columns me-1"></i>${task.column}
+                                                    ${task.assigned_to ? `<i class="fas fa-user ms-2 me-1"></i>${task.assigned_to}` : ''}
+                                                    ${task.due_date ? `<i class="fas fa-calendar ms-2 me-1"></i>${new Date(task.due_date).toLocaleDateString()}` : ''}
+                                                </small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : '<p class="text-muted">No tasks affected</p>'}
+                    
+                    ${gap.ai_recommendations && gap.ai_recommendations.length > 0 ? `
+                        <div class="mb-3">
+                            <h6><i class="fas fa-lightbulb me-2"></i>AI Recommendations</h6>
+                            ${gap.ai_recommendations.map(rec => `
+                                <div class="card mb-2">
+                                    <div class="card-body">
+                                        <h6 class="card-title">${rec.action || rec.title || 'Recommendation'}</h6>
+                                        <p class="card-text">${rec.description || rec.rationale || ''}</p>
+                                        ${rec.estimated_time ? `<small class="text-muted"><i class="fas fa-clock me-1"></i>Estimated time: ${rec.estimated_time}</small>` : ''}
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i>No AI recommendations available</div>'}
+                    
+                    <div class="mt-4">
+                        <button class="btn btn-primary" onclick="window.createPlanForGap(${gap.id})">
+                            <i class="fas fa-plus me-1"></i> Create Development Plan
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('gapDetailsContent').innerHTML = content;
+            
+        } catch (error) {
+            console.error('Error loading gap details:', error);
+            document.getElementById('gapDetailsContent').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    Failed to load gap details: ${error.message}
+                </div>
+            `;
+        }
+    };
+    
+    function getSeverityClass(severity) {
+        const classes = {
+            'critical': 'bg-danger',
+            'high': 'bg-warning text-dark',
+            'medium': 'bg-info',
+            'low': 'bg-secondary'
+        };
+        return classes[severity] || 'bg-secondary';
+    }
+    
+    function getStatusClass(status) {
+        const classes = {
+            'identified': 'bg-warning',
+            'acknowledged': 'bg-info',
+            'in_progress': 'bg-primary',
+            'resolved': 'bg-success'
+        };
+        return classes[status] || 'bg-secondary';
+    }
+    
+    function getCsrfToken() {
+        // Try to get from hidden input first
+        let token = document.querySelector('[name=csrfmiddlewaretoken]')?.value;
+        if (token) return token;
+        
+        // Try to get from meta tag
+        token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (token) return token;
+        
+        // Try to get from cookie (Django's default)
+        const name = 'csrftoken';
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue || '';
+    }
+
+    window.viewPlanDetails = async function(planId) {
+        try {
+            // Show modal
+            const modal = new bootstrap.Modal(document.getElementById('planDetailsModal'));
+            modal.show();
+            
+            // Show loading state
+            document.getElementById('planDetailsContent').innerHTML = `
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading plan details...</p>
+                </div>
+            `;
+            
+            // Fetch plan details from the plans array loaded on page
+            const response = await fetch(`/api/development-plans/${boardId}/`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to load plan details');
+            }
+            
+            const data = await response.json();
+            const plan = data.plans.find(p => p.id === planId);
+            
+            if (!plan) {
+                throw new Error('Plan not found');
+            }
+            
+            // Build modal content
+            let content = `
+                <div class="plan-details">
+                    <div class="mb-4">
+                        <h5>${plan.title}</h5>
+                        <p class="text-muted">${plan.description || 'No description provided'}</p>
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <p><strong>Target Skill:</strong> ${plan.target_skill}</p>
+                            <p><strong>Target Proficiency:</strong> <span class="badge bg-info">${plan.target_proficiency}</span></p>
+                            <p><strong>Plan Type:</strong> ${getPlanTypeBadgeHTML(plan.plan_type)}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Status:</strong> <span class="badge ${getStatusClass(plan.status)}">${plan.status.replace('_', ' ').toUpperCase()}</span></p>
+                            <p><strong>Progress:</strong> ${plan.progress_percentage}%</p>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar ${plan.progress_percentage >= 75 ? 'bg-success' : plan.progress_percentage >= 50 ? 'bg-primary' : 'bg-warning'}" 
+                                     role="progressbar" 
+                                     style="width: ${plan.progress_percentage}%" 
+                                     aria-valuenow="${plan.progress_percentage}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                    ${plan.progress_percentage}%
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <p><strong>Estimated Hours:</strong> ${plan.estimated_hours ? plan.estimated_hours + 'h' : 'Not specified'}</p>
+                            <p><strong>Estimated Cost:</strong> ${plan.estimated_cost ? '$' + plan.estimated_cost : 'Not specified'}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Start Date:</strong> ${plan.start_date ? new Date(plan.start_date).toLocaleDateString() : 'Not set'}</p>
+                            <p><strong>Target Completion:</strong> ${plan.target_completion_date ? new Date(plan.target_completion_date).toLocaleDateString() : 'Not set'}</p>
+                            ${plan.is_overdue ? '<p class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>Overdue</p>' : ''}
+                        </div>
+                    </div>
+                    
+                    ${plan.target_users && plan.target_users.length > 0 ? `
+                        <div class="mb-4">
+                            <h6><i class="fas fa-users me-2"></i>Target Team Members (${plan.target_users.length})</h6>
+                            <div class="list-group">
+                                ${plan.target_users.map(user => `
+                                    <div class="list-group-item">
+                                        <i class="fas fa-user me-2"></i>${user.username}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : '<p class="text-muted">No specific team members assigned</p>'}
+                    
+                    <div class="mb-3">
+                        <small class="text-muted">
+                            <i class="fas fa-user me-1"></i>Created by: ${plan.created_by} • 
+                            <i class="fas fa-calendar ms-2 me-1"></i>${new Date(plan.created_at).toLocaleDateString()}
+                            ${plan.ai_suggested ? ' • <i class="fas fa-robot ms-2 me-1"></i>AI Suggested' : ''}
+                        </small>
+                    </div>
+                </div>
+            `;
+            
+            document.getElementById('planDetailsContent').innerHTML = content;
+            
+        } catch (error) {
+            console.error('Error loading plan details:', error);
+            document.getElementById('planDetailsContent').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>
+                    Failed to load plan details: ${error.message}
+                </div>
+            `;
+        }
+    };
+    
+    function getPlanTypeBadgeHTML(type) {
+        const badges = {
+            'training': '<span class="badge bg-primary"><i class="fas fa-book me-1"></i>Training</span>',
+            'hiring': '<span class="badge bg-success"><i class="fas fa-user-plus me-1"></i>Hiring</span>',
+            'contractor': '<span class="badge bg-info"><i class="fas fa-handshake me-1"></i>Contractor</span>',
+            'redistribute': '<span class="badge bg-warning text-dark"><i class="fas fa-exchange-alt me-1"></i>Redistribute</span>',
+            'mentorship': '<span class="badge bg-purple"><i class="fas fa-user-graduate me-1"></i>Mentorship</span>',
+            'cross_training': '<span class="badge bg-secondary"><i class="fas fa-users me-1"></i>Cross-training</span>'
+        };
+        return badges[type] || '<span class="badge bg-secondary">' + type + '</span>';
+    };
+
+    window.createPlanForGap = async function(gapId) {
+        try {
+            // Close gap details modal if open
+            const gapModal = bootstrap.Modal.getInstance(document.getElementById('gapDetailsModal'));
+            if (gapModal) {
+                gapModal.hide();
+            }
+            
+            // Fetch gap details to pre-fill form
+            const response = await fetch(`/api/skill-gaps/${gapId}/detail/`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to load gap details');
+            }
+            
+            const data = await response.json();
+            const gap = data.gap;
+            
+            // Create plan modal if it doesn't exist
+            let planModal = document.getElementById('createPlanModal');
+            if (!planModal) {
+                planModal = document.createElement('div');
+                planModal.className = 'modal fade';
+                planModal.id = 'createPlanModal';
+                planModal.setAttribute('tabindex', '-1');
+                planModal.innerHTML = `
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Create Development Plan</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="createPlanForm">
+                                    <input type="hidden" id="planGapId" name="skill_gap_id">
+                                    
+                                    <div class="mb-3">
+                                        <label class="form-label">Skill Gap</label>
+                                        <input type="text" class="form-control" id="planSkillName" readonly>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="planTitle" class="form-label">Plan Title <span class="text-danger">*</span></label>
+                                        <input type="text" class="form-control" id="planTitle" name="title" required>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="planType" class="form-label">Plan Type <span class="text-danger">*</span></label>
+                                        <select class="form-select" id="planType" name="plan_type" required>
+                                            <option value="">Select plan type...</option>
+                                            <option value="training">Training</option>
+                                            <option value="hiring">Hiring</option>
+                                            <option value="contractor">Contractor</option>
+                                            <option value="redistribute">Redistribute Work</option>
+                                            <option value="mentorship">Mentorship</option>
+                                            <option value="cross_training">Cross-Training</option>
+                                        </select>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="planDescription" class="form-label">Description</label>
+                                        <textarea class="form-control" id="planDescription" name="description" rows="3"></textarea>
+                                    </div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="planHours" class="form-label">Estimated Hours</label>
+                                            <input type="number" class="form-control" id="planHours" name="estimated_hours" min="0" step="0.5">
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="planCost" class="form-label">Estimated Cost</label>
+                                            <input type="number" class="form-control" id="planCost" name="estimated_cost" min="0" step="0.01">
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <label for="planTargetDate" class="form-label">Target Completion Date</label>
+                                        <input type="date" class="form-control" id="planTargetDate" name="target_completion_date">
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-primary" onclick="submitPlanForm()">Create Plan</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(planModal);
+            }
+            
+            // Pre-fill form
+            document.getElementById('planGapId').value = gap.id;
+            document.getElementById('planSkillName').value = `${gap.skill_name} (${gap.proficiency_level})`;
+            document.getElementById('planTitle').value = `Develop ${gap.skill_name} Skills`;
+            document.getElementById('planDescription').value = `Address skill gap: Need ${gap.gap_count} more team member(s) with ${gap.proficiency_level} level ${gap.skill_name} skills.`;
+            
+            // Show modal
+            const modal = new bootstrap.Modal(planModal);
+            modal.show();
+            
+        } catch (error) {
+            console.error('Error creating plan:', error);
+            showToast('Failed to open plan creation form: ' + error.message, 'error');
+        }
+    };
+    
+    window.submitPlanForm = async function() {
+        try {
+            const form = document.getElementById('createPlanForm');
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                return;
+            }
+            
+            const formData = {
+                skill_gap_id: document.getElementById('planGapId').value,
+                title: document.getElementById('planTitle').value,
+                plan_type: document.getElementById('planType').value,
+                description: document.getElementById('planDescription').value,
+                estimated_hours: document.getElementById('planHours').value || null,
+                estimated_cost: document.getElementById('planCost').value || null,
+                target_completion_date: document.getElementById('planTargetDate').value || null
+            };
+            
+            const response = await fetch('/api/development-plans/create/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify(formData)
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Failed to create plan');
+            }
+            
+            const data = await response.json();
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('createPlanModal'));
+            if (modal) {
+                modal.hide();
+            }
+            
+            // Show success message and reload
+            showToast('Development plan created successfully!', 'success');
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+            
+        } catch (error) {
+            console.error('Error submitting plan:', error);
+            showToast('Failed to create plan: ' + error.message, 'error');
+        }
+    };
+
+    // Utility functions
+    window.showLoadingOverlay = function(message) {
+        const overlay = document.createElement('div');
+        overlay.id = 'loadingOverlay';
+        overlay.className = 'position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center';
+        overlay.style.backgroundColor = 'rgba(0,0,0,0.5)';
+        overlay.style.zIndex = '9999';
+        overlay.innerHTML = `
+            <div class="text-center text-white">
+                <div class="spinner-border mb-3" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p>${message}</p>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    };
+
+    window.hideLoadingOverlay = function() {
+        const overlay = document.getElementById('loadingOverlay');
+        if (overlay) {
+            overlay.remove();
+        }
+    };
+
+    window.showToast = function(message, type = 'info') {
+        // Simple toast notification
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type} position-fixed bottom-0 end-0 m-3`;
+        toast.style.zIndex = '10000';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.remove();
+        }, 3000);
+    };
+</script>
+{% endblock %}

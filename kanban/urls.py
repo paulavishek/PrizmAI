@@ -16,6 +16,7 @@ urlpatterns = [
     
     path('boards/', views.board_list, name='board_list'),
     path('boards/create/', views.create_board, name='create_board'),    path('boards/<int:board_id>/', views.board_detail, name='board_detail'),    path('boards/<int:board_id>/analytics/', views.board_analytics, name='board_analytics'),
+    path('boards/<int:board_id>/skill-gaps/', views.skill_gap_dashboard, name='skill_gap_dashboard'),
     path('boards/<int:board_id>/gantt/', views.gantt_chart, name='gantt_chart'),
     path('boards/<int:board_id>/edit/', views.edit_board, name='edit_board'),
     path('boards/<int:board_id>/create-task/', views.create_task, name='create_task'),
@@ -89,6 +90,16 @@ urlpatterns = [
     path('api/log-priority-decision/', api_views.log_priority_decision_api, name='log_priority_decision_api'),
     path('api/board/<int:board_id>/train-priority-model/', api_views.train_priority_model_api, name='train_priority_model_api'),
     path('api/board/<int:board_id>/priority-model-info/', api_views.get_priority_model_info_api, name='get_priority_model_info_api'),
+    
+    # Skill Gap Analysis API Endpoints
+    path('api/skill-gaps/analyze/<int:board_id>/', api_views.analyze_skill_gaps_api, name='analyze_skill_gaps_api'),
+    path('api/team-skill-profile/<int:board_id>/', api_views.get_team_skill_profile_api, name='get_team_skill_profile_api'),
+    path('api/skill-gaps/<int:gap_id>/detail/', api_views.get_skill_gap_detail_api, name='get_skill_gap_detail_api'),
+    path('api/task/<int:task_id>/match-team/', api_views.match_team_to_task_api, name='match_team_to_task_api'),
+    path('api/task/<int:task_id>/extract-skills/', api_views.extract_task_skills_api, name='extract_task_skills_api'),
+    path('api/development-plans/create/', api_views.create_skill_development_plan_api, name='create_skill_development_plan_api'),
+    path('api/skill-gaps/list/<int:board_id>/', api_views.get_skill_gaps_list_api, name='get_skill_gaps_list_api'),
+    path('api/development-plans/<int:board_id>/', api_views.get_development_plans_api, name='get_development_plans_api'),
     
     # File Management for Tasks
     path('tasks/<int:task_id>/files/upload/', views.upload_task_file, name='upload_task_file'),

@@ -2018,3 +2018,63 @@ def list_task_files(request, task_id):
         'files': list(files)
     })
 
+
+@login_required
+def skill_gap_dashboard(request, board_id):
+    """
+    Skill Gap Analysis Dashboard
+    Shows team skill inventory, identified gaps, and development plans
+    """
+    board = get_object_or_404(Board, id=board_id)
+    
+    # Check if user has access to this board
+    if not (board.created_by == request.user or request.user in board.members.all()):
+        return HttpResponseForbidden("You don't have access to this board.")
+    
+    # Get skill gaps and development plans
+    from .models import SkillGap, SkillDevelopmentPlan, TeamSkillProfile
+    
+    # Try to get team skill profile
+    try:
+        team_profile = TeamSkillProfile.objects.get(board=board)
+    except TeamSkillProfile.DoesNotExist:
+        team_profile = None
+    
+    # Get active skill gaps
+    skill_gaps = SkillGap.objects.filter(
+        board=board,
+        status__in=['identified', 'acknowledged', 'in_progress']
+    ).prefetch_related('affected_tasks').order_by('-severity', '-gap_count')
+    
+    # Get development plans
+    development_plans = SkillDevelopmentPlan.objects.filter(
+        board=board
+    ).select_related('skill_gap', 'created_by').prefetch_related('target_users').order_by('-created_at')
+    
+    # Count gaps by severity
+    critical_gaps = skill_gaps.filter(severity='critical').count()
+    high_gaps = skill_gaps.filter(severity='high').count()
+    medium_gaps = skill_gaps.filter(severity='medium').count()
+    low_gaps = skill_gaps.filter(severity='low').count()
+    
+    # Count plans by status
+    active_plans = development_plans.filter(status__in=['approved', 'in_progress']).count()
+    proposed_plans = development_plans.filter(status='proposed').count()
+    completed_plans = development_plans.filter(status='completed').count()
+    
+    context = {
+        'board': board,
+        'team_profile': team_profile,
+        'skill_gaps': skill_gaps,
+        'development_plans': development_plans,
+        'critical_gaps': critical_gaps,
+        'high_gaps': high_gaps,
+        'medium_gaps': medium_gaps,
+        'low_gaps': low_gaps,
+        'active_plans': active_plans,
+        'proposed_plans': proposed_plans,
+        'completed_plans': completed_plans,
+    }
+    
+    return render(request, 'kanban/skill_gap_dashboard.html', context)
+

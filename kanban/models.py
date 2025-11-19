@@ -651,6 +651,269 @@ class TaskFile(models.Model):
         return ext in TaskFile.ALLOWED_FILE_TYPES
 
 
+class TeamSkillProfile(models.Model):
+    """
+    Aggregated skill inventory for a team/board
+    Provides high-level view of available skills and capacity
+    """
+    board = models.OneToOneField(Board, on_delete=models.CASCADE, related_name='skill_profile')
+    
+    # Aggregate skill data
+    skill_inventory = models.JSONField(
+        default=dict,
+        help_text="Dictionary of available skills: {'Python': {'expert': 2, 'intermediate': 3, 'beginner': 1}}"
+    )
+    total_capacity_hours = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Total team capacity in hours per week"
+    )
+    utilized_capacity_hours = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Currently utilized hours"
+    )
+    
+    # Metadata
+    last_updated = models.DateTimeField(auto_now=True)
+    last_analysis = models.DateTimeField(blank=True, null=True, help_text="Last AI skill analysis timestamp")
+    
+    class Meta:
+        verbose_name = 'Team Skill Profile'
+        verbose_name_plural = 'Team Skill Profiles'
+    
+    def __str__(self):
+        return f"Skill Profile for {self.board.name}"
+    
+    @property
+    def utilization_percentage(self):
+        """Calculate team utilization"""
+        if self.total_capacity_hours == 0:
+            return 0
+        return min(100, (self.utilized_capacity_hours / self.total_capacity_hours) * 100)
+    
+    @property
+    def available_skills(self):
+        """Get list of all available skill names"""
+        return list(self.skill_inventory.keys())
+
+
+class SkillGap(models.Model):
+    """
+    Identified skill gaps between required and available skills
+    AI-calculated with recommendations for remediation
+    """
+    GAP_SEVERITY_CHOICES = [
+        ('low', 'Low - Can work around'),
+        ('medium', 'Medium - May cause delays'),
+        ('high', 'High - Blocking work'),
+        ('critical', 'Critical - Cannot proceed'),
+    ]
+    
+    GAP_STATUS_CHOICES = [
+        ('identified', 'Identified'),
+        ('acknowledged', 'Acknowledged'),
+        ('in_progress', 'In Progress'),
+        ('resolved', 'Resolved'),
+        ('accepted', 'Accepted Risk'),
+    ]
+    
+    board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='skill_gaps')
+    
+    # Gap details
+    skill_name = models.CharField(max_length=100, help_text="Name of the missing/insufficient skill")
+    proficiency_level = models.CharField(
+        max_length=20,
+        choices=[
+            ('beginner', 'Beginner'),
+            ('intermediate', 'Intermediate'),
+            ('advanced', 'Advanced'),
+            ('expert', 'Expert'),
+        ],
+        help_text="Required proficiency level"
+    )
+    required_count = models.IntegerField(default=1, help_text="Number of team members needed with this skill")
+    available_count = models.IntegerField(default=0, help_text="Number of team members currently with this skill")
+    gap_count = models.IntegerField(help_text="Difference between required and available (auto-calculated)")
+    
+    # Context
+    severity = models.CharField(max_length=20, choices=GAP_SEVERITY_CHOICES, default='medium')
+    status = models.CharField(max_length=20, choices=GAP_STATUS_CHOICES, default='identified')
+    
+    # Associated data
+    affected_tasks = models.ManyToManyField(Task, related_name='skill_gaps', blank=True,
+                                           help_text="Tasks that require this skill")
+    sprint_period_start = models.DateField(blank=True, null=True, help_text="Sprint/period when gap was identified")
+    sprint_period_end = models.DateField(blank=True, null=True)
+    
+    # AI Analysis
+    ai_recommendations = models.JSONField(
+        default=list,
+        help_text="AI-generated recommendations: [{'type': 'hire', 'details': '...', 'priority': 1}]"
+    )
+    estimated_impact_hours = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        help_text="Estimated hours of delay/impact if not addressed"
+    )
+    confidence_score = models.DecimalField(
+        max_digits=3,
+        decimal_places=2,
+        default=0.75,
+        help_text="AI confidence in this gap analysis (0-1)"
+    )
+    
+    # Tracking
+    identified_at = models.DateTimeField(auto_now_add=True)
+    resolved_at = models.DateTimeField(blank=True, null=True)
+    acknowledged_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='acknowledged_skill_gaps')
+    
+    class Meta:
+        ordering = ['-severity', '-identified_at']
+        verbose_name = 'Skill Gap'
+        verbose_name_plural = 'Skill Gaps'
+        indexes = [
+            models.Index(fields=['board', 'status']),
+            models.Index(fields=['skill_name', 'proficiency_level']),
+        ]
+    
+    def __str__(self):
+        return f"{self.skill_name} ({self.proficiency_level}) - Gap: {self.gap_count} - {self.board.name}"
+    
+    def save(self, *args, **kwargs):
+        """Auto-calculate gap_count on save"""
+        self.gap_count = max(0, self.required_count - self.available_count)
+        super().save(*args, **kwargs)
+    
+    @property
+    def is_critical(self):
+        """Check if this is a critical gap"""
+        return self.severity in ['high', 'critical'] or self.gap_count >= 2
+    
+    @property
+    def gap_percentage(self):
+        """Calculate gap as percentage of requirement"""
+        if self.required_count == 0:
+            return 0
+        return (self.gap_count / self.required_count) * 100
+
+
+class SkillDevelopmentPlan(models.Model):
+    """
+    Track training and skill development initiatives to address gaps
+    Includes hiring, training, and work redistribution plans
+    """
+    PLAN_TYPE_CHOICES = [
+        ('training', 'Training/Upskilling'),
+        ('hiring', 'Hire New Resource'),
+        ('contractor', 'Contract Resource'),
+        ('redistribute', 'Redistribute Work'),
+        ('mentorship', 'Mentorship Program'),
+        ('cross_training', 'Cross Training'),
+    ]
+    
+    PLAN_STATUS_CHOICES = [
+        ('proposed', 'Proposed'),
+        ('approved', 'Approved'),
+        ('in_progress', 'In Progress'),
+        ('completed', 'Completed'),
+        ('cancelled', 'Cancelled'),
+    ]
+    
+    skill_gap = models.ForeignKey(SkillGap, on_delete=models.CASCADE, related_name='development_plans')
+    board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='skill_development_plans')
+    
+    # Plan details
+    plan_type = models.CharField(max_length=20, choices=PLAN_TYPE_CHOICES)
+    title = models.CharField(max_length=200, help_text="Brief title of the development plan")
+    description = models.TextField(help_text="Detailed plan description and action steps")
+    
+    # Targets
+    target_users = models.ManyToManyField(User, related_name='skill_development_plans', blank=True,
+                                         help_text="Team members involved in this plan")
+    target_skill = models.CharField(max_length=100, help_text="Skill being developed")
+    target_proficiency = models.CharField(
+        max_length=20,
+        choices=[
+            ('beginner', 'Beginner'),
+            ('intermediate', 'Intermediate'),
+            ('advanced', 'Advanced'),
+            ('expert', 'Expert'),
+        ]
+    )
+    
+    # Timeline and budget
+    start_date = models.DateField(blank=True, null=True)
+    target_completion_date = models.DateField(blank=True, null=True)
+    actual_completion_date = models.DateField(blank=True, null=True)
+    estimated_cost = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True,
+                                        help_text="Estimated cost (training fees, hiring budget, etc.)")
+    estimated_hours = models.DecimalField(max_digits=8, decimal_places=2, blank=True, null=True,
+                                         help_text="Estimated hours investment")
+    
+    # Status and progress
+    status = models.CharField(max_length=20, choices=PLAN_STATUS_CHOICES, default='proposed')
+    progress_percentage = models.IntegerField(default=0, validators=[MinValueValidator(0), MaxValueValidator(100)])
+    
+    # Impact tracking
+    expected_impact = models.TextField(blank=True, help_text="Expected impact on team capability")
+    actual_impact = models.TextField(blank=True, help_text="Measured impact after completion")
+    success_metrics = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Metrics to track success: [{'metric': 'Tasks completed', 'target': 5, 'actual': 3}]"
+    )
+    
+    # Ownership
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_development_plans')
+    assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='owned_development_plans',
+                                   help_text="Person responsible for executing this plan")
+    
+    # Metadata
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    # AI-generated recommendations
+    ai_suggested = models.BooleanField(default=False, help_text="Was this plan AI-generated?")
+    ai_confidence = models.DecimalField(max_digits=3, decimal_places=2, blank=True, null=True,
+                                       help_text="AI confidence in this recommendation (0-1)")
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Skill Development Plan'
+        verbose_name_plural = 'Skill Development Plans'
+        indexes = [
+            models.Index(fields=['board', 'status']),
+            models.Index(fields=['skill_gap']),
+        ]
+    
+    def __str__(self):
+        return f"{self.get_plan_type_display()}: {self.title}"
+    
+    @property
+    def is_overdue(self):
+        """Check if plan is overdue"""
+        if self.target_completion_date and self.status not in ['completed', 'cancelled']:
+            from django.utils import timezone
+            return timezone.now().date() > self.target_completion_date
+        return False
+    
+    @property
+    def days_until_target(self):
+        """Calculate days until target completion"""
+        if self.target_completion_date:
+            from django.utils import timezone
+            delta = self.target_completion_date - timezone.now().date()
+            return delta.days
+        return None
+
+
 # Import security and permission models to register them with Django
 from .audit_models import SystemAuditLog, SecurityEvent, DataAccessLog
 from .permission_models import Role, BoardMembership, PermissionOverride, ColumnPermission
