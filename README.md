@@ -275,6 +275,164 @@ Create a living document of your project knowledge:
 
 **New team members can onboard faster because everything is documented.**
 
+### 🤖 Intelligent AI Assistants for Wiki Pages
+
+**Two Specialized AI Assistants - Configured by Category**
+
+PrizmAI features **category-based AI assistants** that adapt to your documentation type. Each wiki category can be configured with the appropriate AI assistant:
+
+#### **📊 Meeting Analysis AI**
+*For meeting notes, retrospectives, and discussion documentation*
+
+**What It Does:**
+- Extracts action items and deliverables from meeting notes
+- Identifies decisions made and their owners
+- Creates actionable tasks automatically from discussions
+- Tracks follow-ups and commitments
+- Summarizes key points and next steps
+- Assigns priorities to action items
+
+**Perfect For:**
+- Team meeting minutes
+- Sprint retrospectives
+- Client call notes
+- Planning sessions
+- Stakeholder meetings
+- Daily standups
+
+**Example Output:**
+```
+📋 Action Items Found:
+✅ John to finalize budget proposal (Due: Friday)
+✅ Sarah to schedule client demo (High Priority)
+✅ Team to review security audit findings
+
+💡 Key Decisions:
+- Approved Q1 roadmap with mobile-first approach
+- Decided to use Stripe for payment processing
+
+📌 Follow-ups:
+- Schedule architecture review next week
+- Client needs preliminary designs by Monday
+```
+
+#### **📖 Documentation Assistant AI**
+*For general documentation, guides, and reference materials*
+
+**What It Does:**
+- Summarizes technical documentation
+- Extracts actionable suggestions for improvement
+- Identifies knowledge gaps and missing information
+- Suggests related documentation to create
+- Assesses documentation quality and completeness
+- Provides recommendations for clarity
+
+**Perfect For:**
+- Technical documentation
+- API references
+- Best practices guides
+- Onboarding materials
+- Process documentation
+- Brand guidelines
+
+**Example Output:**
+```
+📝 Document Summary:
+Comprehensive API authentication guide covering OAuth 2.0 
+implementation with code examples and security best practices.
+
+💡 Actionable Suggestions:
+✅ Add troubleshooting section for common auth errors
+✅ Include rate limiting documentation
+✅ Create separate guide for token refresh flows
+
+⚠️ Quality Assessment:
+- Completeness: 85% (missing error handling examples)
+- Clarity: 90% (well-structured with clear headings)
+- Technical Depth: 80% (could add more edge cases)
+
+🔗 Recommendations:
+- Link to security best practices guide
+- Add examples in Python and JavaScript
+- Create quick-start checklist
+```
+
+#### **How Category-Based AI Works**
+
+**1. Configure Categories:**
+- When creating or editing a wiki category, select the AI assistant type:
+  - **Meeting Analysis** - For collaborative discussions and decisions
+  - **Documentation Assistant** - For reference materials and guides
+  - **None** - Disable AI features for this category
+
+**2. Automatic Detection:**
+- When viewing a wiki page, the correct AI assistant appears based on the page's category
+- No manual switching needed - it's automatic and contextual
+- Visual indicators show which AI type is available
+
+**3. Clear Visual Guidance:**
+- **Category badges** show AI type in category lists
+- **Info banners** on wiki pages explain which AI is available
+- **Sidebar cards** provide quick reference for AI capabilities
+- **Icon indicators** differentiate meeting vs documentation analysis
+
+#### **Why Category-Based Configuration?**
+
+✅ **Predictable** - You know exactly which AI will be available  
+✅ **Consistent** - All pages in a category use the same AI type  
+✅ **User-Controlled** - You decide which AI fits your content  
+✅ **No Surprises** - Clear visual indicators throughout the interface  
+✅ **Organized** - Natural fit with your existing content structure  
+
+#### **Getting Started with Wiki AI**
+
+**For New Wiki Categories:**
+1. Click "New Category"
+2. Choose AI assistant type from dropdown:
+   - Meeting Analysis (for notes and discussions)
+   - Documentation Assistant (for guides and references)
+   - None (no AI features)
+3. Create your wiki pages in that category
+4. AI button appears automatically based on category setting
+
+**For Existing Categories:**
+1. Navigate to wiki category list
+2. Edit any category
+3. Select appropriate AI assistant type
+4. Save - all pages in that category now use the selected AI
+
+**Visual Indicators:**
+- 📊 **Blue badge** = Meeting Analysis AI available
+- 📖 **Green badge** = Documentation Assistant AI available
+- 🚫 **Gray badge** = No AI features for this category
+
+#### **Best Practices**
+
+**Use Meeting Analysis For:**
+- Content with action items and decisions
+- Collaborative discussions and brainstorming
+- Planning sessions and retrospectives
+- Client or stakeholder meetings
+- Any content where tasks need to be extracted
+
+**Use Documentation Assistant For:**
+- Technical guides and references
+- Process documentation and SOPs
+- Knowledge base articles
+- Training materials and tutorials
+- Best practices and guidelines
+- Any reference material that doesn't require task extraction
+
+**Disable AI When:**
+- Highly sensitive or confidential content
+- Personal notes not meant for analysis
+- Content that doesn't benefit from AI processing
+- Simple lists or directories
+
+---
+
+**Result:** Your team gets AI assistance that's perfectly tailored to the type of content you're working with, making documentation more actionable and organized.
+
 ---
 
 ## 🎯 Quick Start - Get Going in 5 Minutes
@@ -526,7 +684,10 @@ Create a living document of your project knowledge:
 - ✅ Resource forecasting
 - ✅ Risk assessment with mitigation
 - ✅ Lean Six Sigma process analysis
-- ✅ Knowledge base & wiki
+- ✅ Knowledge base & wiki with markdown support
+- ✅ **Category-based AI assistants for wiki pages**
+- ✅ **Meeting Analysis AI** - Extract action items and decisions
+- ✅ **Documentation Assistant AI** - Summarize and improve docs
 - ✅ Real-time team chat
 
 **External Integrations & API (NEW!)**
