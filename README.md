@@ -172,6 +172,61 @@ Based on 7 similar tasks:
 - Resource planning (understand team capacity)
 - Risk management (flag tasks likely to be late)
 
+### 🎯 **Intelligent Task Priority Suggestions**
+
+Let AI recommend the right priority level for each task based on what actually matters in your context.
+
+**How It Works:**
+
+PrizmAI analyzes your tasks and suggests priorities based on:
+- **Due date urgency** - Overdue or due soon?
+- **Blocking dependencies** - Is this blocking other work?
+- **Task complexity** - How hard is this to complete?
+- **Risk level** - What could go wrong?
+- **Team capacity** - Is the assignee overloaded?
+
+**The Smart Part:**
+1. **Rule-Based (Day 1)** - Works immediately with intelligent heuristics
+2. **AI Learning (After 20+ Decisions)** - Gets smarter as your team makes priority decisions
+3. **Explainable** - Click "Why?" to see exactly what influenced the priority recommendation
+
+**Real Example:**
+
+```
+New Task: "Fix critical database bug"
+
+AI Suggests: HIGH Priority
+Why?
+├─ Due in 2 days (urgent)
+├─ Blocking 3 other tasks
+├─ High complexity (database expertise needed)
+├─ High risk (data integrity concern)
+└─ Assignee has capacity (2 tasks currently)
+
+Result: HIGH priority with 87% confidence
+Alternative: Could be URGENT if you need it done today
+```
+
+**What You Get:**
+- 📊 Priority suggestion with confidence level
+- 🔍 Clear reasoning for the recommendation
+- 📈 Alternative priorities if you disagree
+- 💡 Factors ranked by importance
+- 🎓 Team learns your priority culture over time
+
+**Why This Matters:**
+✅ **Consistent priorities** - No more bias or guessing  
+✅ **Data-driven decisions** - Based on what actually impacts your work  
+✅ **Team alignment** - Everyone understands why tasks are prioritized this way  
+✅ **Intelligent automation** - Suggestions improve as the AI learns your patterns  
+✅ **Transparent reasoning** - Understand and override when needed  
+
+**Perfect For:**
+- Teams drowning in "everything is high priority"
+- Projects with complex dependencies
+- Ensuring fairness in task assignment
+- Training new team members on priority culture
+
 ### 📊 Smart Task Recommendations
 
 When creating a new board:
@@ -674,6 +729,7 @@ implementation with code examples and security best practices.
 - ✅ Analytics & insights
 - ✅ **Task completion predictions** - Data-driven completion date estimates
 - ✅ **Historical analysis** - Learn from past performance
+- ✅ **Intelligent priority suggestions** - AI-powered priority recommendations with reasoning
 - ✅ **Explainable AI** - Click "Why?" to understand AI decisions
 - ✅ **Transparent Reasoning** - See confidence scores, factors, assumptions
 - ✅ **Trust & Verification** - Audit trail for all AI recommendations
