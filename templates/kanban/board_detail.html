@@ -231,6 +231,117 @@
     </div>
 </div>
 
+<!-- Scope Creep Alerts -->
+{% if active_scope_alerts %}
+<div class="alert alert-dismissible fade show mb-4" role="alert" 
+     style="border-left: 4px solid 
+     {% if active_scope_alerts.0.severity == 'critical' %}#dc3545{% elif active_scope_alerts.0.severity == 'warning' %}#ffc107{% else %}#17a2b8{% endif %};">
+    <div class="d-flex align-items-start">
+        <div class="me-3">
+            {% if active_scope_alerts.0.severity == 'critical' %}
+                <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
+            {% elif active_scope_alerts.0.severity == 'warning' %}
+                <i class="fas fa-exclamation-circle fa-2x text-warning"></i>
+            {% else %}
+                <i class="fas fa-info-circle fa-2x text-info"></i>
+            {% endif %}
+        </div>
+        <div class="flex-grow-1">
+            <h5 class="alert-heading mb-2">
+                <i class="fas fa-chart-line me-2"></i>Scope Creep Detected
+            </h5>
+            <p class="mb-2">
+                <strong>{{ active_scope_alerts.0.get_severity_display }}</strong>: 
+                Scope has increased by <strong>{{ active_scope_alerts.0.scope_increase_percentage|floatformat:1 }}%</strong>
+                {% if active_scope_alerts.0.tasks_added %}
+                    ({{ active_scope_alerts.0.tasks_added }} tasks added)
+                {% endif %}
+            </p>
+            {% if active_scope_alerts.0.predicted_delay_days %}
+            <p class="mb-2">
+                <i class="fas fa-clock me-2"></i>
+                <strong>Predicted Impact:</strong> {{ active_scope_alerts.0.predicted_delay_days }} day{{ active_scope_alerts.0.predicted_delay_days|pluralize }} delay
+            </p>
+            {% endif %}
+            {% if active_scope_alerts.0.ai_summary %}
+            <p class="mb-2 text-muted small">{{ active_scope_alerts.0.ai_summary }}</p>
+            {% endif %}
+            {% if active_scope_alerts.0.recommendations %}
+            <div class="mt-2">
+                <strong>Recommendations:</strong>
+                <ul class="mb-2 small">
+                    {% for rec in active_scope_alerts.0.recommendations|slice:":3" %}
+                    <li>{{ rec }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            <div class="mt-2">
+                <a href="{% url 'scope_tracking_dashboard' board.id %}" 
+                   class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-chart-line me-1"></i>View Scope Dashboard
+                </a>
+                {% if active_scope_alerts|length > 1 %}
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#allScopeAlertsModal">
+                    <i class="fas fa-list me-1"></i>View All Alerts ({{ active_scope_alerts|length }})
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
+<!-- Scope Status Widget (if baseline set) -->
+{% if scope_status %}
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-md-2 text-center">
+                <i class="fas fa-chart-area fa-3x 
+                   {% if scope_status.scope_change_percentage > 30 %}text-danger
+                   {% elif scope_status.scope_change_percentage > 15 %}text-warning
+                   {% elif scope_status.scope_change_percentage > 5 %}text-info
+                   {% else %}text-success{% endif %}"></i>
+            </div>
+            <div class="col-md-10">
+                <div class="row">
+                    <div class="col-md-3">
+                        <h6 class="text-muted mb-1">Baseline</h6>
+                        <h4 class="mb-0">{{ scope_status.baseline_tasks }} tasks</h4>
+                        <small class="text-muted">{{ scope_status.baseline_complexity }} pts</small>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted mb-1">Current</h6>
+                        <h4 class="mb-0">{{ scope_status.current_tasks }} tasks</h4>
+                        <small class="text-muted">{{ scope_status.current_complexity }} pts</small>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted mb-1">Scope Change</h6>
+                        <h4 class="mb-0 
+                           {% if scope_status.scope_change_percentage > 30 %}text-danger
+                           {% elif scope_status.scope_change_percentage > 15 %}text-warning
+                           {% elif scope_status.scope_change_percentage > 5 %}text-info
+                           {% else %}text-success{% endif %}">
+                            {% if scope_status.scope_change_percentage > 0 %}+{% endif %}{{ scope_status.scope_change_percentage|floatformat:1 }}%
+                        </h4>
+                        <small class="text-muted">
+                            {% if scope_status.tasks_added > 0 %}+{% endif %}{{ scope_status.tasks_added }} tasks
+                        </small>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted mb-1">Since Baseline</h6>
+                        <p class="mb-0 small">{{ scope_status.baseline_date|date:"M d, Y" }}</p>
+                        <small class="text-muted">{{ scope_status.baseline_date|timesince }} ago</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Advanced Features Notification -->
 <!-- Removed: Meeting Transcript Analysis has been consolidated to the dedicated Meeting Hub accessible from the main navigation -->
 
@@ -733,6 +844,78 @@
                 </div>
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- All Scope Alerts Modal -->
+<div class="modal fade" id="allScopeAlertsModal" tabindex="-1" aria-labelledby="allScopeAlertsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="allScopeAlertsModalLabel">
+                    <i class="fas fa-chart-line me-2"></i>All Scope Creep Alerts
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                {% for alert in active_scope_alerts %}
+                <div class="card mb-3 border-start border-4 
+                     {% if alert.severity == 'critical' %}border-danger
+                     {% elif alert.severity == 'warning' %}border-warning
+                     {% else %}border-info{% endif %}">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="card-title">
+                                    {% if alert.severity == 'critical' %}
+                                        <span class="badge bg-danger">Critical</span>
+                                    {% elif alert.severity == 'warning' %}
+                                        <span class="badge bg-warning text-dark">Warning</span>
+                                    {% else %}
+                                        <span class="badge bg-info">Info</span>
+                                    {% endif %}
+                                    Detected {{ alert.detected_at|timesince }} ago
+                                </h6>
+                            </div>
+                            <span class="badge bg-{{ alert.status }} small">{{ alert.get_status_display }}</span>
+                        </div>
+                        
+                        <div class="mt-3">
+                            <p class="mb-2">
+                                <strong>Scope Increase:</strong> {{ alert.scope_increase_percentage|floatformat:1 }}%
+                                ({{ alert.tasks_added }} tasks added)
+                            </p>
+                            {% if alert.predicted_delay_days %}
+                            <p class="mb-2">
+                                <strong>Predicted Delay:</strong> {{ alert.predicted_delay_days }} day{{ alert.predicted_delay_days|pluralize }}
+                            </p>
+                            {% endif %}
+                            {% if alert.ai_summary %}
+                            <p class="text-muted small">{{ alert.ai_summary }}</p>
+                            {% endif %}
+                        </div>
+                        
+                        {% if alert.recommendations %}
+                        <div class="mt-2">
+                            <strong class="small">AI Recommendations:</strong>
+                            <ul class="small mb-0">
+                                {% for rec in alert.recommendations|slice:":3" %}
+                                <li>{{ rec }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="modal-footer">
+                <a href="{% url 'scope_tracking_dashboard' board.id %}" class="btn btn-primary">
+                    View Full Dashboard
+                </a>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>

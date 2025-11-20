@@ -1,0 +1,331 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load kanban_filters %}
+
+{% block title %}Scope Tracking - {{ board.name }} - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        border-left: 4px solid #007bff;
+        transition: all 0.3s ease;
+    }
+    .stat-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    .stat-card.critical {
+        border-left-color: #dc3545;
+    }
+    .stat-card.warning {
+        border-left-color: #ffc107;
+    }
+    .stat-card.info {
+        border-left-color: #17a2b8;
+    }
+    .stat-card.success {
+        border-left-color: #28a745;
+    }
+    .timeline-item {
+        border-left: 2px solid #e9ecef;
+        padding-left: 20px;
+        margin-bottom: 20px;
+        position: relative;
+    }
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -6px;
+        top: 5px;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #007bff;
+    }
+    .timeline-item.baseline::before {
+        background: #28a745;
+        width: 14px;
+        height: 14px;
+        left: -8px;
+    }
+    .alert-card {
+        border-left: 4px solid;
+        margin-bottom: 15px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-0">
+                <i class="fas fa-chart-line me-2"></i>Scope Tracking
+            </h1>
+            <p class="text-muted mb-0">{{ board.name }}</p>
+        </div>
+        <div class="btn-group">
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Board
+            </a>
+            <a href="{% url 'board_analytics' board.id %}" class="btn btn-outline-primary">
+                <i class="fas fa-chart-pie me-1"></i>Analytics
+            </a>
+        </div>
+    </div>
+
+    {% if not scope_status %}
+    <!-- No Baseline Message -->
+    <div class="alert alert-info">
+        <h5><i class="fas fa-info-circle me-2"></i>No Baseline Set</h5>
+        <p class="mb-0">Set a baseline snapshot to start tracking scope changes. Contact your administrator to set a project baseline.</p>
+    </div>
+    {% else %}
+    
+    <!-- Key Metrics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Baseline</h6>
+                    <h3 class="mb-0">{{ scope_status.baseline_tasks }}</h3>
+                    <small class="text-muted">tasks</small>
+                    <div class="mt-2">
+                        <small class="text-muted">{{ scope_status.baseline_complexity }} complexity pts</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card info">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Current</h6>
+                    <h3 class="mb-0">{{ scope_status.current_tasks }}</h3>
+                    <small class="text-muted">tasks</small>
+                    <div class="mt-2">
+                        <small class="text-muted">{{ scope_status.current_complexity }} complexity pts</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card 
+                {% if scope_status.scope_change_percentage > 30 %}critical
+                {% elif scope_status.scope_change_percentage > 15 %}warning
+                {% else %}info{% endif %}">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Scope Change</h6>
+                    <h3 class="mb-0 
+                        {% if scope_status.scope_change_percentage > 30 %}text-danger
+                        {% elif scope_status.scope_change_percentage > 15 %}text-warning
+                        {% else %}text-info{% endif %}">
+                        {% if scope_status.scope_change_percentage > 0 %}+{% endif %}{{ scope_status.scope_change_percentage|floatformat:1 }}%
+                    </h3>
+                    <small class="text-muted">
+                        {% if scope_status.tasks_added > 0 %}+{% endif %}{{ scope_status.tasks_added }} tasks
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Baseline Set</h6>
+                    <p class="mb-0">{{ scope_status.baseline_date|date:"M d, Y" }}</p>
+                    <small class="text-muted">{{ scope_status.baseline_date|timesince }} ago</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Velocity Metrics -->
+    {% if velocity %}
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2"><i class="fas fa-tachometer-alt me-2"></i>Scope Velocity</h6>
+                    <h4 class="mb-0">{{ velocity.avg_tasks_added_per_week|floatformat:1 }}</h4>
+                    <small class="text-muted">tasks added per week</small>
+                    <div class="mt-2">
+                        <span class="badge 
+                            {% if velocity.trend == 'rapidly_increasing' %}bg-danger
+                            {% elif velocity.trend == 'increasing' %}bg-warning
+                            {% elif velocity.trend == 'stable' %}bg-success
+                            {% else %}bg-secondary{% endif %}">
+                            {{ velocity.trend|title|replace:"_,' '" }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2"><i class="fas fa-chart-bar me-2"></i>Complexity Velocity</h6>
+                    <h4 class="mb-0">{{ velocity.avg_complexity_added_per_week|floatformat:1 }}</h4>
+                    <small class="text-muted">complexity pts per week</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2"><i class="fas fa-clock me-2"></i>Analysis Period</h6>
+                    <h4 class="mb-0">{{ velocity.weeks_analyzed|floatformat:0 }}</h4>
+                    <small class="text-muted">weeks analyzed</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Active Alerts -->
+    {% if active_alerts %}
+    <div class="card mb-4">
+        <div class="card-header bg-white">
+            <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Active Alerts ({{ active_alerts.count }})</h5>
+        </div>
+        <div class="card-body">
+            {% for alert in active_alerts %}
+            <div class="alert-card alert 
+                {% if alert.severity == 'critical' %}alert-danger border-danger
+                {% elif alert.severity == 'warning' %}alert-warning border-warning
+                {% else %}alert-info border-info{% endif %}" role="alert">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <h6 class="alert-heading">
+                            {{ alert.get_severity_display }} - Scope +{{ alert.scope_increase_percentage|floatformat:1 }}%
+                        </h6>
+                        <p class="mb-2">
+                            <small class="text-muted">
+                                <i class="fas fa-clock me-1"></i>Detected {{ alert.detected_at|timesince }} ago
+                            </small>
+                        </p>
+                        {% if alert.ai_summary %}
+                        <p class="mb-2">{{ alert.ai_summary }}</p>
+                        {% endif %}
+                        {% if alert.predicted_delay_days %}
+                        <p class="mb-2">
+                            <strong>Predicted Impact:</strong> {{ alert.predicted_delay_days }} day{{ alert.predicted_delay_days|pluralize }} delay
+                        </p>
+                        {% endif %}
+                        {% if alert.recommendations %}
+                        <div class="mt-2">
+                            <strong>Recommendations:</strong>
+                            <ul class="mb-0 small">
+                                {% for rec in alert.recommendations|slice:":3" %}
+                                <li>{{ rec }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <span class="badge bg-{{ alert.status }}">{{ alert.get_status_display }}</span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recent Snapshots -->
+    <div class="card mb-4">
+        <div class="card-header bg-white">
+            <h5 class="mb-0"><i class="fas fa-camera me-2"></i>Scope History</h5>
+        </div>
+        <div class="card-body">
+            {% if snapshots %}
+            <div class="timeline">
+                {% for snapshot in snapshots|slice:":10" %}
+                <div class="timeline-item {% if snapshot.is_baseline %}baseline{% endif %}">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <h6 class="mb-1">
+                                {% if snapshot.is_baseline %}
+                                    <span class="badge bg-success me-2">Baseline</span>
+                                {% endif %}
+                                {{ snapshot.snapshot_date|date:"M d, Y H:i" }}
+                            </h6>
+                            <small class="text-muted">{{ snapshot.get_snapshot_type_display }}</small>
+                        </div>
+                        <div class="text-end">
+                            {% if snapshot.scope_change_percentage %}
+                            <span class="badge 
+                                {% if snapshot.scope_change_percentage > 30 %}bg-danger
+                                {% elif snapshot.scope_change_percentage > 15 %}bg-warning
+                                {% elif snapshot.scope_change_percentage > 5 %}bg-info
+                                {% else %}bg-secondary{% endif %}">
+                                {% if snapshot.scope_change_percentage > 0 %}+{% endif %}{{ snapshot.scope_change_percentage|floatformat:1 }}%
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <small class="text-muted">Tasks:</small> <strong>{{ snapshot.total_tasks }}</strong>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted">Complexity:</small> <strong>{{ snapshot.total_complexity_points }} pts</strong>
+                        </div>
+                        <div class="col-md-4">
+                            <small class="text-muted">Avg:</small> <strong>{{ snapshot.avg_complexity|floatformat:1 }}</strong>
+                        </div>
+                    </div>
+                    {% if snapshot.notes %}
+                    <p class="mb-0 mt-2 small text-muted">{{ snapshot.notes }}</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">No snapshots available yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Alert Summary -->
+    <div class="card">
+        <div class="card-header bg-white">
+            <h5 class="mb-0"><i class="fas fa-history me-2"></i>Alert Summary</h5>
+        </div>
+        <div class="card-body">
+            <div class="row text-center">
+                <div class="col-md-3">
+                    <div class="p-3">
+                        <i class="fas fa-exclamation-circle fa-2x text-danger mb-2"></i>
+                        <h4 class="mb-0">{{ critical_count }}</h4>
+                        <small class="text-muted">Critical</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3">
+                        <i class="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
+                        <h4 class="mb-0">{{ warning_count }}</h4>
+                        <small class="text-muted">Warning</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3">
+                        <i class="fas fa-info-circle fa-2x text-info mb-2"></i>
+                        <h4 class="mb-0">{{ info_count }}</h4>
+                        <small class="text-muted">Info</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="p-3">
+                        <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                        <h4 class="mb-0">{{ resolved_alerts.count }}</h4>
+                        <small class="text-muted">Resolved</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+{% endblock %}

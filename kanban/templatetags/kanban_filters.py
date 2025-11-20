@@ -88,6 +88,19 @@ def timesince_days(value):
     except (AttributeError, TypeError):
         return 0
 
+@register.filter
+def replace(value, args):
+    """
+    Replace a substring in the value
+    
+    Usage: {{ value|replace:"old,new" }}
+    """
+    try:
+        old, new = args.split(',')
+        return value.replace(old, new)
+    except (ValueError, AttributeError):
+        return value
+
 @register.simple_tag
 def assign_value(value):
     """
