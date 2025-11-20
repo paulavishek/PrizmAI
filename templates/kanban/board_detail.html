@@ -188,6 +188,9 @@
         <a href="{% url 'board_analytics' board.id %}" class="btn btn-outline-primary">
             <i class="fas fa-chart-pie me-1"></i> Analytics
         </a>
+        <a href="{% url 'burndown_dashboard' board.id %}" class="btn btn-outline-success">
+            <i class="fas fa-chart-line me-1"></i> Burndown
+        </a>
         <a href="{% url 'skill_gap_dashboard' board.id %}" class="btn btn-outline-warning">
             <i class="fas fa-brain me-1"></i> Skill Gaps
         </a>

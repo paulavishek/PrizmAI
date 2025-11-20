@@ -2,6 +2,7 @@ from django.urls import path
 from . import views
 from . import api_views
 from . import forecasting_views
+from . import burndown_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -69,6 +70,18 @@ urlpatterns = [
     path('board/<int:board_id>/alerts/<int:alert_id>/resolve/', forecasting_views.resolve_alert, name='resolve_alert'),
     path('board/<int:board_id>/capacity-chart/', forecasting_views.team_capacity_chart, name='team_capacity_chart'),
     path('board/<int:board_id>/task/<int:task_id>/assignment-suggestion/', forecasting_views.task_assignment_suggestion, name='task_assignment_suggestion'),
+    
+    # Burndown/Burnup Prediction with Confidence Intervals - NEW FEATURE
+    path('board/<int:board_id>/burndown/', burndown_views.burndown_dashboard, name='burndown_dashboard'),
+    path('board/<int:board_id>/burndown/generate/', burndown_views.generate_burndown_prediction, name='generate_burndown_prediction'),
+    path('board/<int:board_id>/burndown/chart-data/', burndown_views.burndown_chart_data, name='burndown_chart_data'),
+    path('board/<int:board_id>/burndown/velocity-data/', burndown_views.velocity_chart_data, name='velocity_chart_data'),
+    path('board/<int:board_id>/burndown/alerts/<int:alert_id>/acknowledge/', burndown_views.acknowledge_burndown_alert, name='acknowledge_burndown_alert'),
+    path('board/<int:board_id>/burndown/alerts/<int:alert_id>/resolve/', burndown_views.resolve_burndown_alert, name='resolve_burndown_alert'),
+    path('board/<int:board_id>/burndown/milestones/', burndown_views.manage_milestones, name='manage_milestones'),
+    path('board/<int:board_id>/burndown/history/', burndown_views.prediction_history, name='prediction_history'),
+    path('board/<int:board_id>/burndown/suggestions/', burndown_views.actionable_suggestions_api, name='actionable_suggestions_api'),
+
     
     # Task Dependency Management API Endpoints
     path('api/task/<int:task_id>/dependencies/', api_views.get_task_dependencies_api, name='get_task_dependencies_api'),

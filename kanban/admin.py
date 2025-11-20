@@ -4,6 +4,9 @@ from .models import (
     TeamSkillProfile, SkillGap, SkillDevelopmentPlan
 )
 from .priority_models import PriorityDecision, PriorityModel, PrioritySuggestionLog
+from .burndown_models import (
+    TeamVelocitySnapshot, BurndownPrediction, BurndownAlert, SprintMilestone
+)
 
 @admin.register(Board)
 class BoardAdmin(admin.ModelAdmin):
@@ -245,4 +248,137 @@ class SkillDevelopmentPlanAdmin(admin.ModelAdmin):
             return self.readonly_fields + ('created_by',)
         return self.readonly_fields
 
+
+# Burndown/Burnup Prediction Admin
+@admin.register(TeamVelocitySnapshot)
+class TeamVelocitySnapshotAdmin(admin.ModelAdmin):
+    list_display = ('board', 'period_start', 'period_end', 'tasks_completed', 'story_points_completed', 
+                   'active_team_members', 'velocity_per_member', 'quality_score')
+    list_filter = ('board', 'period_type', 'period_end', 'created_at')
+    search_fields = ('board__name',)
+    readonly_fields = ('created_at', 'velocity_per_member', 'days_in_period')
+    
+    fieldsets = (
+        ('Period Information', {
+            'fields': ('board', 'period_start', 'period_end', 'period_type', 'days_in_period')
+        }),
+        ('Velocity Metrics', {
+            'fields': ('tasks_completed', 'story_points_completed', 'hours_completed')
+        }),
+        ('Team Composition', {
+            'fields': ('active_team_members', 'velocity_per_member', 'team_member_list')
+        }),
+        ('Quality Metrics', {
+            'fields': ('tasks_reopened', 'quality_score')
+        }),
+        ('Metadata', {
+            'fields': ('calculated_by', 'created_at'),
+            'classes': ('collapse',)
+        })
+    )
+
+
+@admin.register(BurndownPrediction)
+class BurndownPredictionAdmin(admin.ModelAdmin):
+    list_display = ('board', 'prediction_date', 'predicted_completion_date', 'days_margin_of_error',
+                   'risk_level', 'delay_probability', 'confidence_percentage', 'completion_percentage')
+    list_filter = ('board', 'risk_level', 'prediction_type', 'velocity_trend', 'prediction_date')
+    search_fields = ('board__name',)
+    readonly_fields = ('prediction_date', 'completion_probability_range', 'is_high_risk', 'completion_percentage')
+    filter_horizontal = ('based_on_velocity_snapshots',)
+    
+    fieldsets = (
+        ('Prediction Context', {
+            'fields': ('board', 'prediction_type', 'prediction_date', 'target_completion_date')
+        }),
+        ('Current Scope', {
+            'fields': ('total_tasks', 'completed_tasks', 'remaining_tasks', 'completion_percentage',
+                      'total_story_points', 'completed_story_points', 'remaining_story_points')
+        }),
+        ('Velocity Analysis', {
+            'fields': ('current_velocity', 'average_velocity', 'velocity_std_dev', 'velocity_trend')
+        }),
+        ('Prediction Results', {
+            'fields': ('predicted_completion_date', 'completion_date_lower_bound', 'completion_date_upper_bound',
+                      'days_until_completion_estimate', 'days_margin_of_error', 'completion_probability_range')
+        }),
+        ('Confidence & Risk', {
+            'fields': ('confidence_percentage', 'prediction_confidence_score', 'delay_probability', 
+                      'risk_level', 'is_high_risk')
+        }),
+        ('Target Comparison', {
+            'fields': ('will_meet_target', 'days_ahead_behind_target'),
+            'classes': ('collapse',)
+        }),
+        ('Data Visualization', {
+            'fields': ('burndown_curve_data', 'confidence_bands_data', 'velocity_history_data'),
+            'classes': ('collapse',),
+            'description': 'Chart data for visualization'
+        }),
+        ('AI Suggestions', {
+            'fields': ('actionable_suggestions',),
+            'classes': ('collapse',)
+        }),
+        ('Model Details', {
+            'fields': ('based_on_velocity_snapshots', 'model_parameters'),
+            'classes': ('collapse',)
+        })
+    )
+
+
+@admin.register(BurndownAlert)
+class BurndownAlertAdmin(admin.ModelAdmin):
+    list_display = ('board', 'alert_type', 'severity', 'status', 'title', 'created_at', 'is_active')
+    list_filter = ('board', 'alert_type', 'severity', 'status', 'created_at')
+    search_fields = ('title', 'message', 'board__name')
+    readonly_fields = ('created_at', 'is_active')
+    
+    fieldsets = (
+        ('Alert Information', {
+            'fields': ('prediction', 'board', 'alert_type', 'severity', 'status')
+        }),
+        ('Details', {
+            'fields': ('title', 'message')
+        }),
+        ('Metrics', {
+            'fields': ('metric_value', 'threshold_value'),
+            'classes': ('collapse',)
+        }),
+        ('Suggestions', {
+            'fields': ('suggested_actions',),
+            'classes': ('collapse',)
+        }),
+        ('Tracking', {
+            'fields': ('created_at', 'acknowledged_at', 'acknowledged_by', 'resolved_at', 'is_active'),
+            'classes': ('collapse',)
+        })
+    )
+
+
+@admin.register(SprintMilestone)
+class SprintMilestoneAdmin(admin.ModelAdmin):
+    list_display = ('name', 'board', 'target_date', 'is_completed', 'completion_percentage', 
+                   'days_until_target', 'is_overdue')
+    list_filter = ('board', 'is_completed', 'target_date', 'created_at')
+    search_fields = ('name', 'description', 'board__name')
+    readonly_fields = ('created_at', 'days_until_target', 'is_overdue')
+    
+    fieldsets = (
+        ('Milestone Information', {
+            'fields': ('board', 'name', 'description')
+        }),
+        ('Dates', {
+            'fields': ('target_date', 'actual_date', 'days_until_target', 'is_overdue')
+        }),
+        ('Targets', {
+            'fields': ('target_tasks_completed', 'target_story_points')
+        }),
+        ('Status', {
+            'fields': ('is_completed', 'completion_percentage')
+        }),
+        ('Metadata', {
+            'fields': ('created_by', 'created_at'),
+            'classes': ('collapse',)
+        })
+    )
 
