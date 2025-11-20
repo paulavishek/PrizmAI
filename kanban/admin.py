@@ -1,7 +1,8 @@
 from django.contrib import admin
 from .models import (
     Board, Column, Task, TaskLabel, Comment, TaskActivity,
-    TeamSkillProfile, SkillGap, SkillDevelopmentPlan
+    TeamSkillProfile, SkillGap, SkillDevelopmentPlan,
+    ScopeChangeSnapshot, ScopeCreepAlert
 )
 from .priority_models import PriorityDecision, PriorityModel, PrioritySuggestionLog
 from .burndown_models import (
@@ -381,4 +382,88 @@ class SprintMilestoneAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         })
     )
+
+
+# Scope Tracking Admin
+@admin.register(ScopeChangeSnapshot)
+class ScopeChangeSnapshotAdmin(admin.ModelAdmin):
+    list_display = ('board', 'snapshot_date', 'is_baseline', 'total_tasks', 
+                   'total_complexity_points', 'scope_change_percentage', 'snapshot_type')
+    list_filter = ('board', 'is_baseline', 'snapshot_type', 'snapshot_date')
+    search_fields = ('board__name', 'notes')
+    readonly_fields = ('snapshot_date', 'scope_change_percentage', 'complexity_change_percentage')
+    
+    fieldsets = (
+        ('Snapshot Information', {
+            'fields': ('board', 'snapshot_date', 'snapshot_type', 'is_baseline', 'notes')
+        }),
+        ('Scope Metrics', {
+            'fields': ('total_tasks', 'total_complexity_points', 'avg_complexity', 
+                      'high_priority_tasks', 'urgent_priority_tasks')
+        }),
+        ('Task Breakdown', {
+            'fields': ('todo_tasks', 'in_progress_tasks', 'completed_tasks'),
+            'classes': ('collapse',)
+        }),
+        ('Change Analysis', {
+            'fields': ('baseline_snapshot', 'scope_change_percentage', 'complexity_change_percentage'),
+            'classes': ('collapse',)
+        }),
+        ('AI Analysis', {
+            'fields': ('ai_analysis', 'predicted_delay_days'),
+            'classes': ('collapse',),
+            'description': 'AI-generated analysis of scope changes'
+        }),
+        ('Metadata', {
+            'fields': ('created_by',),
+            'classes': ('collapse',)
+        })
+    )
+
+
+@admin.register(ScopeCreepAlert)
+class ScopeCreepAlertAdmin(admin.ModelAdmin):
+    list_display = ('board', 'severity', 'status', 'scope_increase_percentage', 
+                   'timeline_at_risk', 'detected_at', 'is_unresolved')
+    list_filter = ('board', 'severity', 'status', 'timeline_at_risk', 'detected_at')
+    search_fields = ('board__name', 'ai_summary', 'resolution_notes')
+    readonly_fields = ('detected_at', 'days_since_detected', 'is_unresolved')
+    
+    fieldsets = (
+        ('Alert Information', {
+            'fields': ('board', 'snapshot', 'severity', 'status')
+        }),
+        ('Scope Changes', {
+            'fields': ('scope_increase_percentage', 'complexity_increase_percentage', 
+                      'tasks_added', 'timeline_at_risk')
+        }),
+        ('Impact Analysis', {
+            'fields': ('predicted_delay_days', 'ai_summary'),
+        }),
+        ('AI Recommendations', {
+            'fields': ('recommendations',),
+            'classes': ('collapse',),
+            'description': 'AI-generated recommendations to manage scope creep'
+        }),
+        ('Alert Lifecycle', {
+            'fields': ('detected_at', 'days_since_detected', 'acknowledged_at', 'acknowledged_by',
+                      'resolved_at', 'resolved_by', 'resolution_notes'),
+            'classes': ('collapse',)
+        })
+    )
+    
+    actions = ['mark_as_acknowledged', 'mark_as_resolved']
+    
+    def mark_as_acknowledged(self, request, queryset):
+        for alert in queryset:
+            alert.acknowledge(request.user)
+        self.message_user(request, f'{queryset.count()} alert(s) marked as acknowledged.')
+    mark_as_acknowledged.short_description = 'Mark selected alerts as acknowledged'
+    
+    def mark_as_resolved(self, request, queryset):
+        for alert in queryset:
+            alert.resolve(request.user)
+        self.message_user(request, f'{queryset.count()} alert(s) marked as resolved.')
+    mark_as_resolved.short_description = 'Mark selected alerts as resolved'
+
 

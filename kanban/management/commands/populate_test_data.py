@@ -57,6 +57,9 @@ class Command(BaseCommand):
         from django.core.management import call_command
         call_command('fix_gantt_demo_data')
         
+        # Create scope baselines for all demo boards
+        self.create_scope_baselines()
+        
         self.stdout.write(self.style.SUCCESS('Successfully populated the database with all features!'))
         
         # Print login credentials for easy testing
@@ -93,6 +96,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('✅ Chat Rooms demo data created'))
         self.stdout.write(self.style.SUCCESS('✅ Predictive Analytics - Historical task completion data'))
         self.stdout.write(self.style.SUCCESS('✅ Intelligent Priority Suggestions - Priority decision history'))
+        self.stdout.write(self.style.SUCCESS('✅ Scope Tracking - Baseline snapshots for all boards'))
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))
 
     def create_users(self):
@@ -2785,3 +2789,60 @@ Carol: Sounds good. Great work this week!
                 '\n💡 Run "python manage.py train_priority_models --all" to train ML models'
             )
         )
+    
+    def create_scope_baselines(self):
+        """Create scope baseline snapshots for all demo boards"""
+        self.stdout.write(self.style.NOTICE('\nCreating Scope Baselines for demo boards...'))
+        
+        # Get admin user for snapshot creation
+        admin_user = User.objects.filter(username='admin').first()
+        if not admin_user:
+            admin_user = User.objects.first()
+        
+        # Get all demo boards
+        boards = Board.objects.filter(
+            name__in=['Software Project', 'Marketing Campaign', 'Bug Tracking']
+        )
+        
+        if not boards.exists():
+            self.stdout.write(self.style.WARNING('  No demo boards found to create baselines'))
+            return
+        
+        baselines_created = 0
+        
+        for board in boards:
+            try:
+                # Create baseline snapshot
+                snapshot = board.create_scope_snapshot(
+                    user=admin_user,
+                    snapshot_type='manual',
+                    is_baseline=True,
+                    notes=f'Initial baseline snapshot for {board.name}'
+                )
+                
+                baselines_created += 1
+                
+                self.stdout.write(
+                    self.style.SUCCESS(
+                        f'  ✓ Created baseline for "{board.name}": '
+                        f'{snapshot.total_tasks} tasks, '
+                        f'{snapshot.total_complexity_points} complexity points'
+                    )
+                )
+                
+            except Exception as e:
+                self.stdout.write(
+                    self.style.ERROR(f'  ✗ Failed to create baseline for "{board.name}": {str(e)}')
+                )
+        
+        self.stdout.write(
+            self.style.SUCCESS(
+                f'\n✅ Scope baselines created! Total: {baselines_created} boards'
+            )
+        )
+        self.stdout.write(
+            self.style.NOTICE(
+                '📝 Run "python manage.py simulate_scope_creep" to test scope tracking'
+            )
+        )
+

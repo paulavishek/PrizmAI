@@ -13,8 +13,144 @@ class Board(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_boards')
     members = models.ManyToManyField(User, related_name='member_boards', blank=True)
     
+    # Scope baseline tracking
+    baseline_task_count = models.IntegerField(null=True, blank=True, 
+                                             help_text="Baseline task count for scope tracking")
+    baseline_complexity_total = models.IntegerField(null=True, blank=True,
+                                                    help_text="Baseline complexity total")
+    baseline_set_date = models.DateTimeField(null=True, blank=True,
+                                            help_text="When the baseline was established")
+    baseline_set_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='baseline_boards',
+                                       help_text="User who set the baseline")
+    
     def __str__(self):
         return self.name
+    
+    def create_scope_snapshot(self, user=None, snapshot_type='manual', is_baseline=False, notes=None):
+        """
+        Create a scope snapshot for this board
+        Returns the created ScopeChangeSnapshot instance
+        """
+        from django.db.models import Q, Sum, Avg, Count
+        
+        tasks = Task.objects.filter(column__board=self)
+        
+        # Calculate metrics
+        total_tasks = tasks.count()
+        complexity_sum = tasks.aggregate(Sum('complexity_score'))['complexity_score__sum'] or 0
+        complexity_avg = tasks.aggregate(Avg('complexity_score'))['complexity_score__avg'] or 0.0
+        
+        high_priority = tasks.filter(priority='high').count()
+        urgent_priority = tasks.filter(priority='urgent').count()
+        
+        # Task status breakdown (approximate based on column names)
+        todo_tasks = tasks.filter(column__name__icontains='to do').count() + \
+                    tasks.filter(column__name__icontains='backlog').count()
+        in_progress_tasks = tasks.filter(
+            Q(column__name__icontains='in progress') | 
+            Q(column__name__icontains='doing')
+        ).count()
+        completed_tasks = tasks.filter(
+            Q(column__name__icontains='done') | 
+            Q(column__name__icontains='complete')
+        ).count()
+        
+        # Get baseline for comparison
+        baseline = None
+        if is_baseline:
+            # This is the new baseline
+            baseline = None
+        else:
+            # Find the most recent baseline
+            baseline = self.scope_snapshots.filter(is_baseline=True).order_by('-snapshot_date').first()
+        
+        # Create snapshot
+        snapshot = ScopeChangeSnapshot.objects.create(
+            board=self,
+            total_tasks=total_tasks,
+            total_complexity_points=complexity_sum,
+            avg_complexity=round(complexity_avg, 2),
+            high_priority_tasks=high_priority,
+            urgent_priority_tasks=urgent_priority,
+            todo_tasks=todo_tasks,
+            in_progress_tasks=in_progress_tasks,
+            completed_tasks=completed_tasks,
+            is_baseline=is_baseline,
+            baseline_snapshot=baseline,
+            created_by=user,
+            snapshot_type=snapshot_type,
+            notes=notes
+        )
+        
+        # Calculate changes if there's a baseline
+        if baseline:
+            snapshot.calculate_changes_from_baseline()
+            snapshot.save()
+        
+        # Update board baseline fields if this is a baseline
+        if is_baseline:
+            self.baseline_task_count = total_tasks
+            self.baseline_complexity_total = complexity_sum
+            self.baseline_set_date = timezone.now()
+            self.baseline_set_by = user
+            self.save()
+        
+        return snapshot
+    
+    def get_current_scope_status(self):
+        """
+        Get current scope status compared to baseline
+        Returns dict with scope metrics or None if no baseline
+        """
+        if not self.baseline_task_count:
+            return None
+        
+        tasks = Task.objects.filter(column__board=self)
+        current_count = tasks.count()
+        current_complexity = tasks.aggregate(Sum('complexity_score'))['complexity_score__sum'] or 0
+        
+        if self.baseline_task_count > 0:
+            scope_change = ((current_count - self.baseline_task_count) / self.baseline_task_count) * 100
+        else:
+            scope_change = 0
+        
+        if self.baseline_complexity_total and self.baseline_complexity_total > 0:
+            complexity_change = ((current_complexity - self.baseline_complexity_total) / 
+                               self.baseline_complexity_total) * 100
+        else:
+            complexity_change = 0
+        
+        return {
+            'baseline_tasks': self.baseline_task_count,
+            'current_tasks': current_count,
+            'tasks_added': current_count - self.baseline_task_count,
+            'scope_change_percentage': round(scope_change, 2),
+            'baseline_complexity': self.baseline_complexity_total,
+            'current_complexity': current_complexity,
+            'complexity_change_percentage': round(complexity_change, 2),
+            'baseline_date': self.baseline_set_date,
+        }
+    
+    def check_scope_creep_threshold(self, warning_threshold=15, critical_threshold=30):
+        """
+        Check if scope has exceeded warning or critical thresholds
+        Returns tuple: (has_alert, severity, scope_change_pct)
+        """
+        status = self.get_current_scope_status()
+        if not status:
+            return (False, None, 0)
+        
+        scope_change = abs(status['scope_change_percentage'])
+        
+        if scope_change >= critical_threshold:
+            return (True, 'critical', status['scope_change_percentage'])
+        elif scope_change >= warning_threshold:
+            return (True, 'warning', status['scope_change_percentage'])
+        elif scope_change >= 5:
+            return (True, 'info', status['scope_change_percentage'])
+        
+        return (False, None, status['scope_change_percentage'])
 
 class Column(models.Model):
     name = models.CharField(max_length=100)
@@ -912,6 +1048,189 @@ class SkillDevelopmentPlan(models.Model):
             delta = self.target_completion_date - timezone.now().date()
             return delta.days
         return None
+
+
+class ScopeChangeSnapshot(models.Model):
+    """
+    Captures board scope metrics at a point in time to track scope creep
+    Used for historical comparison and trend analysis
+    """
+    board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='scope_snapshots')
+    snapshot_date = models.DateTimeField(auto_now_add=True)
+    
+    # Scope metrics
+    total_tasks = models.IntegerField(help_text="Total number of tasks")
+    total_complexity_points = models.IntegerField(default=0, help_text="Sum of all task complexity scores")
+    avg_complexity = models.FloatField(default=0.0, help_text="Average complexity per task")
+    high_priority_tasks = models.IntegerField(default=0, help_text="Count of high/urgent priority tasks")
+    urgent_priority_tasks = models.IntegerField(default=0, help_text="Count of urgent priority tasks")
+    
+    # Task status breakdown
+    todo_tasks = models.IntegerField(default=0, help_text="Tasks in To Do columns")
+    in_progress_tasks = models.IntegerField(default=0, help_text="Tasks in In Progress columns")
+    completed_tasks = models.IntegerField(default=0, help_text="Tasks in Done columns")
+    
+    # Baseline tracking
+    is_baseline = models.BooleanField(default=False, help_text="Is this the baseline snapshot?")
+    baseline_snapshot = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True,
+                                         related_name='comparison_snapshots',
+                                         help_text="Reference to baseline snapshot for comparison")
+    
+    # AI analysis results
+    scope_change_percentage = models.FloatField(null=True, blank=True, 
+                                               help_text="Percentage change from baseline")
+    complexity_change_percentage = models.FloatField(null=True, blank=True,
+                                                     help_text="Percentage change in complexity")
+    ai_analysis = models.JSONField(null=True, blank=True,
+                                   help_text="AI-generated analysis of scope changes")
+    predicted_delay_days = models.IntegerField(null=True, blank=True,
+                                              help_text="AI-predicted delay in days")
+    
+    # Metadata
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                  related_name='created_snapshots')
+    snapshot_type = models.CharField(max_length=20, 
+                                     choices=[
+                                         ('manual', 'Manual'),
+                                         ('scheduled', 'Scheduled'),
+                                         ('milestone', 'Milestone'),
+                                     ],
+                                     default='scheduled')
+    notes = models.TextField(blank=True, null=True, help_text="Optional notes about this snapshot")
+    
+    class Meta:
+        ordering = ['-snapshot_date']
+        verbose_name = 'Scope Change Snapshot'
+        verbose_name_plural = 'Scope Change Snapshots'
+        indexes = [
+            models.Index(fields=['board', '-snapshot_date']),
+            models.Index(fields=['board', 'is_baseline']),
+        ]
+    
+    def __str__(self):
+        baseline_str = " (Baseline)" if self.is_baseline else ""
+        return f"{self.board.name} - {self.snapshot_date.strftime('%Y-%m-%d')}{baseline_str}"
+    
+    def calculate_changes_from_baseline(self):
+        """Calculate percentage changes from baseline snapshot"""
+        if not self.baseline_snapshot:
+            return None
+        
+        baseline = self.baseline_snapshot
+        
+        # Calculate scope change
+        if baseline.total_tasks > 0:
+            self.scope_change_percentage = round(
+                ((self.total_tasks - baseline.total_tasks) / baseline.total_tasks) * 100, 2
+            )
+        
+        # Calculate complexity change
+        if baseline.total_complexity_points > 0:
+            self.complexity_change_percentage = round(
+                ((self.total_complexity_points - baseline.total_complexity_points) / 
+                 baseline.total_complexity_points) * 100, 2
+            )
+        
+        return {
+            'scope_change': self.scope_change_percentage,
+            'complexity_change': self.complexity_change_percentage,
+            'tasks_added': self.total_tasks - baseline.total_tasks,
+            'complexity_added': self.total_complexity_points - baseline.total_complexity_points,
+        }
+
+
+class ScopeCreepAlert(models.Model):
+    """
+    Alerts when scope increases beyond acceptable thresholds
+    Helps prevent project timeline slippage due to uncontrolled scope changes
+    """
+    SEVERITY_CHOICES = [
+        ('info', 'Info - Minor increase (<15%)'),
+        ('warning', 'Warning - Moderate increase (15-30%)'),
+        ('critical', 'Critical - Major increase (>30%)'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('acknowledged', 'Acknowledged'),
+        ('resolved', 'Resolved'),
+        ('dismissed', 'Dismissed'),
+    ]
+    
+    board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='scope_creep_alerts')
+    snapshot = models.ForeignKey(ScopeChangeSnapshot, on_delete=models.CASCADE, 
+                                related_name='generated_alerts')
+    
+    # Alert details
+    severity = models.CharField(max_length=20, choices=SEVERITY_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    
+    # Scope change metrics
+    scope_increase_percentage = models.FloatField(help_text="Percentage increase in task count")
+    complexity_increase_percentage = models.FloatField(default=0.0, 
+                                                       help_text="Percentage increase in complexity")
+    tasks_added = models.IntegerField(default=0, help_text="Number of tasks added")
+    
+    # Impact analysis
+    predicted_delay_days = models.IntegerField(null=True, blank=True,
+                                              help_text="Estimated project delay in days")
+    timeline_at_risk = models.BooleanField(default=False, 
+                                          help_text="Is the project timeline at risk?")
+    
+    # AI recommendations
+    recommendations = models.JSONField(default=list, help_text="AI-generated recommendations")
+    ai_summary = models.TextField(blank=True, null=True, 
+                                 help_text="AI-generated summary of scope changes")
+    
+    # Alert lifecycle
+    detected_at = models.DateTimeField(auto_now_add=True)
+    acknowledged_at = models.DateTimeField(null=True, blank=True)
+    acknowledged_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                       related_name='acknowledged_scope_alerts')
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
+                                   related_name='resolved_scope_alerts')
+    resolution_notes = models.TextField(blank=True, null=True,
+                                       help_text="Notes on how the alert was resolved")
+    
+    class Meta:
+        ordering = ['-detected_at']
+        verbose_name = 'Scope Creep Alert'
+        verbose_name_plural = 'Scope Creep Alerts'
+        indexes = [
+            models.Index(fields=['board', 'status', '-detected_at']),
+            models.Index(fields=['severity', 'status']),
+        ]
+    
+    def __str__(self):
+        return f"{self.get_severity_display()} - {self.board.name} (+{self.scope_increase_percentage}%)"
+    
+    def acknowledge(self, user):
+        """Mark alert as acknowledged by user"""
+        self.status = 'acknowledged'
+        self.acknowledged_at = timezone.now()
+        self.acknowledged_by = user
+        self.save()
+    
+    def resolve(self, user, notes=None):
+        """Mark alert as resolved"""
+        self.status = 'resolved'
+        self.resolved_at = timezone.now()
+        self.resolved_by = user
+        if notes:
+            self.resolution_notes = notes
+        self.save()
+    
+    @property
+    def days_since_detected(self):
+        """Calculate days since alert was detected"""
+        delta = timezone.now() - self.detected_at
+        return delta.days
+    
+    @property
+    def is_unresolved(self):
+        """Check if alert is still active or acknowledged but not resolved"""
+        return self.status in ['active', 'acknowledged']
 
 
 # Import security and permission models to register them with Django
