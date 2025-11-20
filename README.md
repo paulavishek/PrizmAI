@@ -1298,6 +1298,292 @@ For complex projects, show how tasks connect:
 
 **Result:** No surprises about blocked work.
 
+### 🎓 AI-Powered Retrospectives
+
+**Capture organizational learning and drive continuous improvement across every sprint and project.**
+
+PrizmAI includes intelligent retrospectives that automatically analyze what went well, what didn't, and what your team should learn.
+
+#### **What You Get**
+
+Every board now has a built-in retrospective system that:
+
+**AI-Generated Analysis:**
+- 🤖 What went well this sprint/project
+- 🤖 What needs improvement
+- 🤖 Key achievements and challenges
+- 🤖 Lessons learned with impact scoring
+- 🤖 Actionable improvement recommendations
+- 🤖 Team sentiment and morale indicators
+
+**Organized Tracking:**
+- 📋 Lessons learned with categories and priorities
+- ✅ Action items with owners and deadlines
+- 📊 Improvement metrics (velocity, quality, team satisfaction)
+- 📈 Performance trends over multiple retrospectives
+- 🔍 Recurring issues detection
+
+**Action Management:**
+- 🎯 Track implementation of lessons
+- ✅ Mark action items as complete
+- 📅 Monitor progress on improvements
+- 🚀 See which recommendations are working
+
+**Team Insights:**
+- 💡 Identify what's improving vs. declining
+- 📊 Calculate implementation rates
+- 🎓 Learn from past retrospectives
+- 🔄 Track progress on recurring issues
+
+#### **How to Use Retrospectives**
+
+**Generate a Retrospective:**
+1. Open any board
+2. Click **"Retrospectives"** in the menu
+3. Click **"Generate New Retrospective"**
+4. Select the date range (suggest defaults: last 14 days for sprint, last 30 for project)
+5. Choose retrospective type: Sprint, Project, Milestone, or Quarterly Review
+6. AI analyzes all tasks, events, and team data
+7. Review the generated insights
+8. Add team notes and finalize
+
+**Example Timeline:**
+```
+Nov 14 - Nov 27 (14-day sprint)
+├─ 47 tasks completed
+├─ 3 tasks failed/blocked
+├─ Velocity: 12 tasks/week
+└─ Quality: 98.2% (only 1 bug in completed tasks)
+
+What Went Well ✅
+├─ Strong team collaboration (no blockers > 2 days)
+├─ Effective code reviews caught critical issue
+├─ New team member ramped up quickly
+└─ Excellent customer communication
+
+Needs Improvement 🔧
+├─ Testing coverage dropped to 85% (was 92%)
+├─ API integration took 2x longer than estimated
+├─ Two meetings ran over schedule (poor time management)
+└─ Technical debt backlog growing
+
+Key Achievements 🏆
+├─ Shipped mobile app beta (2 weeks early!)
+├─ Implemented new CI/CD pipeline
+├─ Reduced deployment time from 30 to 10 minutes
+└─ All team members completed security training
+
+Lessons Learned 📚
+├─ [HIGH] Estimate buffer for external dependencies (API delays cost 3 days)
+├─ [HIGH] Require code coverage thresholds before merge
+├─ [MEDIUM] Schedule important meetings early in day
+├─ [MEDIUM] Do architecture review before starting complex features
+└─ [LOW] Celebrate wins more often (team morale boosted by early ship)
+
+AI Recommendations 💡
+├─ 1. Always add 30% buffer for external integrations
+├─ 2. Implement code coverage CI gates (recommended: >85%)
+├─ 3. Schedule retrospectives at same time every sprint
+├─ 4. Track "time outside planning" for better estimates
+└─ 5. Create knowledge base entry for API integration best practices
+
+Team Sentiment 🎭
+├─ Overall Morale: High
+├─ Confidence in Delivery: Very High (95%)
+├─ Team Satisfaction: 4.2/5 (up from 3.8)
+└─ Stress Level: Low (good work-life balance)
+
+Trend Analysis 📊
+├─ Velocity: Trending up ↗ (8→10→12 tasks/week)
+├─ Quality: Improving ↗ (95%→97%→98%)
+├─ Team Satisfaction: Stable → (4.0→4.1→4.2)
+└─ Technical Debt: Growing ↗ (needs attention)
+```
+
+#### **Track Lessons Learned**
+
+Each retrospective captures lessons that can be:
+- **Identified** - Initial lesson from retrospective
+- **Planned** - Assigned owner and timeline
+- **In Progress** - Work has started
+- **Implemented** - Change has been made
+- **Validated** - Improvement confirmed and measured
+
+**Example Lesson Journey:**
+```
+Lesson: "Always add buffer for external dependencies"
+
+Initial Status: Identified (Nov 27, Retrospective)
+├─ Category: Planning & Estimation
+├─ Priority: HIGH
+├─ Triggered by: API integration took 2x expected time
+├─ Impact: Delayed release by 3 days
+
+Action Planned: Jan 5
+├─ Owner: Alice (Project Manager)
+├─ Recommendation: Add 30% buffer for external integrations in future estimates
+├─ Timeline: Implement by Jan 31
+
+In Progress: Jan 6-20
+├─ Created estimation template with buffer
+├─ Updated team standards documentation
+├─ Ran team training session
+
+Implemented: Jan 25
+├─ New estimates include external dependency buffers
+├─ 2 projects used new template successfully
+
+Validated: Feb 10
+├─ Estimated time for payment integration: 10 days (with buffer)
+├─ Actual time: 8 days
+├─ Buffer was appropriate and prevented rushing
+├─ Success! ✅
+
+Benefit Measured:
+├─ Before: 40% of projects miss deadline due to external delays
+├─ After: 10% miss deadline (75% improvement)
+└─ Time saved: ~30 days across 5 projects
+```
+
+#### **Action Items Management**
+
+Track specific actions from retrospectives:
+
+**Example Action Item:**
+```
+Action: "Implement code coverage CI gates"
+
+Details:
+├─ Type: Technical Improvement
+├─ Status: In Progress (50% complete)
+├─ Owner: Bob (Tech Lead)
+├─ Target Completion: Jan 31, 2025
+├─ Priority: HIGH
+
+Progress Updates:
+├─ Jan 10: Set up GitHub Actions for code coverage checks (✅ 25%)
+├─ Jan 18: Configure minimum threshold to 85% (✅ 25%)
+├─ Jan 25: Tested with 3 PRs, working well (✅ 25%)
+├─ Feb 1: Ready for full rollout (✅ 25%)
+
+Expected Impact:
+├─ Catch more bugs before production
+├─ Improve code quality
+├─ Reduce production defects by 15-20%
+
+Actual Impact:
+├─ First 3 weeks: 2 critical bugs caught by CI gates
+├─ Code coverage improved from 85% to 91%
+├─ Defects down 18% ✅
+```
+
+#### **Improvement Dashboard**
+
+See trends across all retrospectives:
+
+**What the Dashboard Shows:**
+```
+📊 IMPROVEMENT DASHBOARD
+
+Key Metrics:
+├─ Total Retrospectives: 12
+├─ Lessons Learned: 48
+├─ Lessons Implemented: 38 (79% implementation rate) 📈
+├─ Action Items: 45
+├─ Actions Completed: 41 (91% completion rate) 📈
+└─ Recurring Issues: 3 (need attention)
+
+Velocity Trend:
+├─ Nov: 8 tasks/week
+├─ Dec: 10 tasks/week (↗ 25% improvement)
+├─ Jan: 12 tasks/week (↗ 20% improvement)
+└─ Overall: Team getting faster every sprint
+
+Quality Trend:
+├─ Oct: 92% (5% defect rate)
+├─ Nov: 95% (2% defect rate) ↗
+├─ Dec: 97% (1% defect rate) ↗
+└─ Direction: Significantly improving
+
+Lesson Categories (Most Common):
+├─ Planning & Estimation: 18 lessons
+├─ Communication: 12 lessons
+├─ Technical Improvements: 11 lessons
+├─ Quality Assurance: 5 lessons
+└─ Other: 2 lessons
+
+Top Improvements Working:
+✅ Adding buffers for external dependencies - WORKING WELL
+✅ Code review standards - WORKING WELL
+✅ Daily standups - WORKING WELL
+🟡 Technical debt reduction - IN PROGRESS
+❌ Testing coverage gates - NEEDS ADJUSTMENT
+
+Urgent Actions (Overdue):
+🚨 "Document API integration patterns" (Due: Jan 25, still pending)
+🚨 "Implement automated testing for mobile" (Due: Jan 28, 60% done)
+
+Recurring Issues:
+⚠️ Meetings running over schedule (appears in 8 retrospectives)
+   → Suggested fix: Calendar booking with strict end times
+   → Impact if fixed: Save 2-3 hours/week
+
+⚠️ Scope creep on projects (appears in 6 retrospectives)
+   → Suggested fix: Stricter change control process
+   → Impact if fixed: Better timeline predictability
+
+⚠️ Knowledge sharing gaps (appears in 5 retrospectives)
+   → Suggested fix: Pair programming and wikis
+   → Impact if fixed: Faster new member onboarding
+```
+
+#### **Export & Share**
+
+- Export retrospectives as JSON for archiving
+- Share insights with stakeholders
+- Include in project reports
+- Track improvements over time
+
+#### **Features Summary**
+
+✅ **AI-Generated Insights** - Automatic analysis of what worked  
+✅ **Lessons Tracking** - Capture and track learning  
+✅ **Action Items** - Convert lessons into concrete actions  
+✅ **Implementation Monitoring** - See if improvements stick  
+✅ **Trend Analysis** - Track improvement over time  
+✅ **Recurring Issues** - Identify patterns needing attention  
+✅ **Team Sentiment** - Measure morale and satisfaction  
+✅ **Explainable Analysis** - Understand AI recommendations  
+✅ **Multiple Retrospective Types** - Sprint, Project, Milestone, Quarterly  
+✅ **Progress Dashboard** - See organization-wide improvements  
+✅ **Export Capability** - Archive and share insights  
+
+#### **Perfect For**
+
+- **Sprint Reviews** - Capture and act on learnings
+- **Project Retrospectives** - Understand what went well/poorly
+- **Team Development** - Track skill and process improvements
+- **Organizational Learning** - Measure if improvements persist
+- **Continuous Improvement** - Drive quality and efficiency gains
+- **Executive Reporting** - Show team and process improvements
+- **Onboarding** - New team members learn from past experiences
+- **Risk Prevention** - Stop recurring issues before they happen
+
+#### **Getting Started**
+
+1. Complete a sprint or project
+2. Open the board
+3. Navigate to **"Retrospectives"**
+4. Click **"Generate New Retrospective"**
+5. Select your date range and type
+6. Review AI insights (takes 10-30 seconds)
+7. Add team notes and finalize
+8. Use insights to plan next sprint
+
+**The key difference:** Most teams do retrospectives once and forget the insights. **PrizmAI tracks your improvements over time, showing you what's actually working and what needs more attention.**
+
+---
+
 ### Knowledge Base & Wiki
 
 Create a living document of your project knowledge:
