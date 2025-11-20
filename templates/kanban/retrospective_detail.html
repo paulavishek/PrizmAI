@@ -1,0 +1,293 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ retrospective.title }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2>{{ retrospective.title }}</h2>
+            <p class="text-muted">
+                <i class="fas fa-calendar"></i> {{ retrospective.period_start|date:"M d, Y" }} - {{ retrospective.period_end|date:"M d, Y" }}
+                <span class="ms-3"><i class="fas fa-tag"></i> {{ retrospective.get_retrospective_type_display }}</span>
+                <span class="ms-3 badge bg-{% if retrospective.status == 'finalized' %}success{% elif retrospective.status == 'reviewed' %}info{% else %}warning{% endif %}">
+                    {{ retrospective.get_status_display }}
+                </span>
+            </p>
+        </div>
+        <div class="col-md-4 text-end">
+            {% if retrospective.status != 'finalized' %}
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#finalizeModal">
+                <i class="fas fa-check"></i> Finalize
+            </button>
+            {% endif %}
+            <a href="{% url 'retrospective_export' board.id retrospective.id %}?format=json" class="btn btn-info">
+                <i class="fas fa-download"></i> Export
+            </a>
+            <a href="{% url 'retrospective_list' board.id %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4>{{ retrospective.metrics_snapshot.total_tasks|default:0 }}</h4>
+                    <p class="text-muted mb-0">Total Tasks</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4>{{ retrospective.metrics_snapshot.completion_rate|floatformat:1|default:0 }}%</h4>
+                    <p class="text-muted mb-0">Completion Rate</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4>{{ stats.lessons_count }}</h4>
+                    <p class="text-muted mb-0">Lessons Learned</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h4>{{ stats.actions_count }}</h4>
+                    <p class="text-muted mb-0">Action Items</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Analysis -->
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-success text-white">
+                    <h5><i class="fas fa-thumbs-up"></i> What Went Well</h5>
+                </div>
+                <div class="card-body">
+                    {{ retrospective.what_went_well|linebreaks }}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header bg-warning text-dark">
+                    <h5><i class="fas fa-exclamation-triangle"></i> What Needs Improvement</h5>
+                </div>
+                <div class="card-body">
+                    {{ retrospective.what_needs_improvement|linebreaks }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lessons Learned -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="fas fa-graduation-cap"></i> Lessons Learned ({{ lessons.count }})</h5>
+        </div>
+        <div class="card-body">
+            {% if lessons %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Lesson</th>
+                            <th>Category</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lesson in lessons %}
+                        <tr>
+                            <td>
+                                <strong>{{ lesson.title }}</strong>
+                                <br><small class="text-muted">{{ lesson.description|truncatewords:20 }}</small>
+                            </td>
+                            <td><span class="badge bg-info">{{ lesson.get_category_display }}</span></td>
+                            <td><span class="badge bg-{% if lesson.priority == 'critical' %}danger{% elif lesson.priority == 'high' %}warning{% else %}secondary{% endif %}">
+                                {{ lesson.get_priority_display }}
+                            </span></td>
+                            <td><span class="badge bg-primary">{{ lesson.get_status_display }}</span></td>
+                            <td>{{ lesson.recommended_action|truncatewords:10 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted">No lessons identified yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Action Items -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="fas fa-tasks"></i> Action Items ({{ action_items.count }})</h5>
+        </div>
+        <div class="card-body">
+            {% if action_items %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>Type</th>
+                            <th>Priority</th>
+                            <th>Assigned To</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                            <th>Progress</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for action in action_items %}
+                        <tr>
+                            <td>
+                                <strong>{{ action.title }}</strong>
+                                <br><small class="text-muted">{{ action.description|truncatewords:15 }}</small>
+                            </td>
+                            <td><span class="badge bg-secondary">{{ action.get_action_type_display }}</span></td>
+                            <td><span class="badge bg-{% if action.priority == 'critical' %}danger{% elif action.priority == 'high' %}warning{% else %}info{% endif %}">
+                                {{ action.get_priority_display }}
+                            </span></td>
+                            <td>{{ action.assigned_to|default:"Unassigned" }}</td>
+                            <td>
+                                {% if action.target_completion_date %}
+                                    {{ action.target_completion_date|date:"M d, Y" }}
+                                    {% if action.is_overdue %}<br><span class="badge bg-danger">Overdue</span>{% endif %}
+                                {% else %}
+                                    <span class="text-muted">No date</span>
+                                {% endif %}
+                            </td>
+                            <td><span class="badge bg-{% if action.status == 'completed' %}success{% elif action.status == 'blocked' %}danger{% else %}primary{% endif %}">
+                                {{ action.get_status_display }}
+                            </span></td>
+                            <td>
+                                <div class="progress" style="height: 20px;">
+                                    <div class="progress-bar" style="width: {{ action.progress_percentage }}%">
+                                        {{ action.progress_percentage }}%
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted">No action items yet.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Metrics -->
+    {% if metrics %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="fas fa-chart-line"></i> Improvement Metrics</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                {% for metric in metrics %}
+                <div class="col-md-4 mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="text-muted">{{ metric.metric_name }}</h6>
+                            <h3>{{ metric.metric_value }} <small class="text-muted">{{ metric.unit_of_measure }}</small></h3>
+                            {% if metric.change_percentage %}
+                            <span class="badge bg-{% if metric.trend == 'improving' %}success{% elif metric.trend == 'declining' %}danger{% else %}secondary{% endif %}">
+                                {% if metric.change_percentage > 0 %}+{% endif %}{{ metric.change_percentage|floatformat:1 }}%
+                            </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Team Notes -->
+    {% if retrospective.team_notes %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="fas fa-users"></i> Team Notes</h5>
+        </div>
+        <div class="card-body">
+            {{ retrospective.team_notes|linebreaks }}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- AI Metadata -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="fas fa-robot"></i> AI Analysis Metadata</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <strong>Model Used:</strong><br>
+                    <code>{{ retrospective.ai_model_used }}</code>
+                </div>
+                <div class="col-md-3">
+                    <strong>Confidence Score:</strong><br>
+                    {{ retrospective.ai_confidence_score|floatformat:2 }}
+                </div>
+                <div class="col-md-3">
+                    <strong>Sentiment Score:</strong><br>
+                    {{ retrospective.overall_sentiment_score|floatformat:2 }} ({{ retrospective.team_morale_indicator }})
+                </div>
+                <div class="col-md-3">
+                    <strong>Generated:</strong><br>
+                    {{ retrospective.ai_generated_at|date:"M d, Y H:i" }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Finalize Modal -->
+<div class="modal fade" id="finalizeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{% url 'retrospective_finalize' board.id retrospective.id %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Finalize Retrospective</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Finalizing this retrospective will lock the AI-generated insights. You can add team notes below:</p>
+                    <div class="mb-3">
+                        <label for="team_notes" class="form-label">Team Notes (Optional)</label>
+                        <textarea name="team_notes" id="team_notes" class="form-control" rows="4" 
+                                  placeholder="Add any additional team discussion notes...">{{ retrospective.team_notes }}</textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">Finalize Retrospective</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,156 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Lessons Learned - {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-graduation-cap"></i> Lessons Learned - {{ board.name }}</h2>
+            <p class="text-muted">Track and implement organizational learning</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{% url 'retrospective_dashboard' board.id %}" class="btn btn-info">
+                <i class="fas fa-chart-line"></i> Dashboard
+            </a>
+            <a href="{% url 'retrospective_list' board.id %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <select name="category" class="form-select">
+                        <option value="">All Categories</option>
+                        {% for value, label in categories %}
+                        <option value="{{ value }}" {% if category_filter == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select name="priority" class="form-select">
+                        <option value="">All Priorities</option>
+                        {% for value, label in priorities %}
+                        <option value="{{ value }}" {% if priority_filter == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select name="status" class="form-select">
+                        <option value="">All Statuses</option>
+                        {% for value, label in statuses %}
+                        <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter"></i> Apply Filters
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Lessons Table -->
+    <div class="card">
+        <div class="card-body">
+            {% if lessons %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Lesson</th>
+                            <th>Category</th>
+                            <th>Priority</th>
+                            <th>Status</th>
+                            <th>Recommended Action</th>
+                            <th>Owner</th>
+                            <th>Age</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lesson in lessons %}
+                        <tr {% if lesson.is_overdue %}class="table-warning"{% endif %}>
+                            <td>
+                                <strong>{{ lesson.title }}</strong>
+                                {% if lesson.ai_suggested %}<i class="fas fa-robot text-primary" title="AI Suggested"></i>{% endif %}
+                                {% if lesson.is_recurring_issue %}<i class="fas fa-exclamation-triangle text-warning" title="Recurring Issue"></i>{% endif %}
+                                <br>
+                                <small class="text-muted">{{ lesson.description|truncatewords:15 }}</small>
+                                <br>
+                                <small class="text-muted"><i class="fas fa-calendar"></i> From: {{ lesson.retrospective.title }}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-info">{{ lesson.get_category_display }}</span>
+                            </td>
+                            <td>
+                                <span class="badge bg-{% if lesson.priority == 'critical' %}danger{% elif lesson.priority == 'high' %}warning{% elif lesson.priority == 'medium' %}primary{% else %}secondary{% endif %}">
+                                    {{ lesson.get_priority_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge bg-{% if lesson.status == 'validated' %}success{% elif lesson.status == 'implemented' %}info{% elif lesson.status == 'in_progress' %}primary{% else %}secondary{% endif %}">
+                                    {{ lesson.get_status_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <small>{{ lesson.recommended_action|truncatewords:15 }}</small>
+                            </td>
+                            <td>
+                                {% if lesson.action_owner %}
+                                    {{ lesson.action_owner.username }}
+                                {% else %}
+                                    <span class="text-muted">Unassigned</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <small class="text-muted">{{ lesson.days_since_identified }} days</small>
+                                {% if lesson.is_overdue %}
+                                <br><span class="badge bg-danger">Overdue</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> No lessons found matching your filters.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <nav aria-label="Page navigation" class="mt-3">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if priority_filter %}&priority={{ priority_filter }}{% endif %}">Previous</a>
+            </li>
+            {% endif %}
+            
+            {% for num in page_obj.paginator.page_range %}
+            <li class="page-item {% if page_obj.number == num %}active{% endif %}">
+                <a class="page-link" href="?page={{ num }}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if priority_filter %}&priority={{ priority_filter }}{% endif %}">{{ num }}</a>
+            </li>
+            {% endfor %}
+            
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if category_filter %}&category={{ category_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if priority_filter %}&priority={{ priority_filter }}{% endif %}">Next</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

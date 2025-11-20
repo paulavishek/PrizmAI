@@ -8,6 +8,10 @@ from .priority_models import PriorityDecision, PriorityModel, PrioritySuggestion
 from .burndown_models import (
     TeamVelocitySnapshot, BurndownPrediction, BurndownAlert, SprintMilestone
 )
+from .retrospective_models import (
+    ProjectRetrospective, LessonLearned, ImprovementMetric,
+    RetrospectiveActionItem, RetrospectiveTrend
+)
 
 @admin.register(Board)
 class BoardAdmin(admin.ModelAdmin):
@@ -466,4 +470,234 @@ class ScopeCreepAlertAdmin(admin.ModelAdmin):
         self.message_user(request, f'{queryset.count()} alert(s) marked as resolved.')
     mark_as_resolved.short_description = 'Mark selected alerts as resolved'
 
+
+# ============================================================================
+# RETROSPECTIVE MODELS ADMIN
+# ============================================================================
+
+@admin.register(ProjectRetrospective)
+class ProjectRetrospectiveAdmin(admin.ModelAdmin):
+    list_display = ('title', 'board', 'retrospective_type', 'status', 'period_start', 
+                   'period_end', 'overall_sentiment_score', 'created_at')
+    list_filter = ('retrospective_type', 'status', 'board', 'team_morale_indicator', 
+                  'performance_trend', 'created_at')
+    search_fields = ('title', 'board__name', 'what_went_well', 'what_needs_improvement')
+    readonly_fields = ('ai_generated_at', 'ai_confidence_score', 'ai_model_used', 
+                      'created_at', 'updated_at', 'metrics_snapshot')
+    date_hierarchy = 'period_end'
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('board', 'title', 'retrospective_type', 'status')
+        }),
+        ('Period', {
+            'fields': ('period_start', 'period_end')
+        }),
+        ('AI Analysis', {
+            'fields': ('what_went_well', 'what_needs_improvement', 'lessons_learned', 
+                      'key_achievements', 'challenges_faced', 'improvement_recommendations')
+        }),
+        ('Sentiment & Trends', {
+            'fields': ('overall_sentiment_score', 'team_morale_indicator', 
+                      'performance_trend', 'previous_retrospective')
+        }),
+        ('Team Input', {
+            'fields': ('team_notes', 'team_feedback_on_ai'),
+            'classes': ('collapse',)
+        }),
+        ('AI Metadata', {
+            'fields': ('ai_generated_at', 'ai_confidence_score', 'ai_model_used', 
+                      'metrics_snapshot'),
+            'classes': ('collapse',)
+        }),
+        ('Tracking', {
+            'fields': ('created_by', 'created_at', 'updated_at', 'finalized_by', 'finalized_at')
+        })
+    )
+    
+    actions = ['mark_as_reviewed', 'mark_as_finalized']
+    
+    def mark_as_reviewed(self, request, queryset):
+        queryset.update(status='reviewed')
+        self.message_user(request, f'{queryset.count()} retrospective(s) marked as reviewed.')
+    mark_as_reviewed.short_description = 'Mark as reviewed'
+    
+    def mark_as_finalized(self, request, queryset):
+        for retro in queryset:
+            retro.finalize(request.user)
+        self.message_user(request, f'{queryset.count()} retrospective(s) finalized.')
+    mark_as_finalized.short_description = 'Mark as finalized'
+
+
+@admin.register(LessonLearned)
+class LessonLearnedAdmin(admin.ModelAdmin):
+    list_display = ('title', 'category', 'priority', 'status', 'retrospective', 
+                   'board', 'ai_suggested', 'created_at')
+    list_filter = ('category', 'priority', 'status', 'ai_suggested', 'is_recurring_issue', 
+                  'board', 'created_at')
+    search_fields = ('title', 'description', 'recommended_action', 'board__name')
+    readonly_fields = ('ai_confidence', 'recurrence_count', 'created_at', 'updated_at')
+    filter_horizontal = ('related_lessons',)
+    date_hierarchy = 'created_at'
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('retrospective', 'board', 'title', 'description', 'category', 'priority')
+        }),
+        ('Context', {
+            'fields': ('trigger_event', 'impact_description')
+        }),
+        ('Action', {
+            'fields': ('recommended_action', 'action_owner', 'status', 
+                      'implementation_date', 'validation_date')
+        }),
+        ('Impact Measurement', {
+            'fields': ('expected_benefit', 'actual_benefit', 'success_metrics'),
+            'classes': ('collapse',)
+        }),
+        ('AI & Recurrence', {
+            'fields': ('ai_suggested', 'ai_confidence', 'is_recurring_issue', 
+                      'recurrence_count', 'related_lessons'),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        })
+    )
+    
+    actions = ['mark_implemented', 'mark_validated']
+    
+    def mark_implemented(self, request, queryset):
+        for lesson in queryset:
+            lesson.mark_implemented(request.user)
+        self.message_user(request, f'{queryset.count()} lesson(s) marked as implemented.')
+    mark_implemented.short_description = 'Mark as implemented'
+    
+    def mark_validated(self, request, queryset):
+        for lesson in queryset:
+            lesson.mark_validated()
+        self.message_user(request, f'{queryset.count()} lesson(s) marked as validated.')
+    mark_validated.short_description = 'Mark as validated'
+
+
+@admin.register(ImprovementMetric)
+class ImprovementMetricAdmin(admin.ModelAdmin):
+    list_display = ('metric_name', 'metric_type', 'metric_value', 'trend', 
+                   'board', 'retrospective', 'measured_at')
+    list_filter = ('metric_type', 'trend', 'higher_is_better', 'board', 'measured_at')
+    search_fields = ('metric_name', 'description', 'board__name')
+    readonly_fields = ('change_amount', 'change_percentage', 'trend', 'created_at')
+    date_hierarchy = 'measured_at'
+    
+    fieldsets = (
+        ('Metric Information', {
+            'fields': ('board', 'retrospective', 'metric_type', 'metric_name', 'description')
+        }),
+        ('Values', {
+            'fields': ('metric_value', 'previous_value', 'target_value', 
+                      'unit_of_measure', 'higher_is_better')
+        }),
+        ('Change Analysis', {
+            'fields': ('change_amount', 'change_percentage', 'trend'),
+            'classes': ('collapse',)
+        }),
+        ('Tracking', {
+            'fields': ('measured_at', 'created_at')
+        })
+    )
+
+
+@admin.register(RetrospectiveActionItem)
+class RetrospectiveActionItemAdmin(admin.ModelAdmin):
+    list_display = ('title', 'action_type', 'priority', 'status', 'assigned_to', 
+                   'target_completion_date', 'progress_percentage', 'board')
+    list_filter = ('action_type', 'priority', 'status', 'ai_suggested', 'board', 
+                  'target_completion_date')
+    search_fields = ('title', 'description', 'expected_impact', 'board__name')
+    readonly_fields = ('ai_confidence', 'created_at', 'updated_at')
+    filter_horizontal = ('stakeholders',)
+    date_hierarchy = 'target_completion_date'
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('retrospective', 'board', 'title', 'description', 
+                      'action_type', 'priority')
+        }),
+        ('Assignment', {
+            'fields': ('assigned_to', 'stakeholders')
+        }),
+        ('Timeline', {
+            'fields': ('target_completion_date', 'actual_completion_date', 
+                      'progress_percentage', 'status')
+        }),
+        ('Impact', {
+            'fields': ('expected_impact', 'actual_impact'),
+            'classes': ('collapse',)
+        }),
+        ('Blocking', {
+            'fields': ('blocked_reason', 'blocked_date', 'progress_notes'),
+            'classes': ('collapse',)
+        }),
+        ('Related Data', {
+            'fields': ('related_lesson', 'related_task'),
+            'classes': ('collapse',)
+        }),
+        ('AI Metadata', {
+            'fields': ('ai_suggested', 'ai_confidence'),
+            'classes': ('collapse',)
+        }),
+        ('Tracking', {
+            'fields': ('created_at', 'updated_at')
+        })
+    )
+    
+    actions = ['mark_completed', 'mark_blocked']
+    
+    def mark_completed(self, request, queryset):
+        for action in queryset:
+            action.mark_completed()
+        self.message_user(request, f'{queryset.count()} action(s) marked as completed.')
+    mark_completed.short_description = 'Mark as completed'
+    
+    def mark_blocked(self, request, queryset):
+        queryset.update(status='blocked', blocked_date=admin.models.timezone.now().date())
+        self.message_user(request, f'{queryset.count()} action(s) marked as blocked.')
+    mark_blocked.short_description = 'Mark as blocked'
+
+
+@admin.register(RetrospectiveTrend)
+class RetrospectiveTrendAdmin(admin.ModelAdmin):
+    list_display = ('board', 'period_type', 'analysis_date', 'retrospectives_analyzed',
+                   'implementation_rate', 'completion_rate', 'velocity_trend')
+    list_filter = ('period_type', 'velocity_trend', 'quality_trend', 'board', 'analysis_date')
+    search_fields = ('board__name', 'ai_insights')
+    readonly_fields = ('implementation_rate', 'completion_rate', 'created_at')
+    date_hierarchy = 'analysis_date'
+    
+    fieldsets = (
+        ('Analysis Context', {
+            'fields': ('board', 'period_type', 'analysis_date', 'retrospectives_analyzed')
+        }),
+        ('Lessons Learned Metrics', {
+            'fields': ('total_lessons_learned', 'lessons_implemented', 
+                      'lessons_validated', 'implementation_rate')
+        }),
+        ('Action Items Metrics', {
+            'fields': ('total_action_items', 'action_items_completed', 'completion_rate')
+        }),
+        ('Patterns', {
+            'fields': ('recurring_issues', 'top_improvement_categories')
+        }),
+        ('Trends', {
+            'fields': ('velocity_trend', 'quality_trend')
+        }),
+        ('AI Insights', {
+            'fields': ('ai_insights', 'key_recommendations'),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('created_at',)
+        })
+    )
 

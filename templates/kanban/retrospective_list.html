@@ -1,0 +1,182 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Retrospectives - {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-history"></i> Retrospectives - {{ board.name }}</h2>
+            <p class="text-muted">AI-powered analysis of what went well and what needs improvement</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{% url 'retrospective_dashboard' board.id %}" class="btn btn-info me-2">
+                <i class="fas fa-chart-line"></i> Dashboard
+            </a>
+            <a href="{% url 'retrospective_create' board.id %}" class="btn btn-primary">
+                <i class="fas fa-plus"></i> Generate New Retrospective
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3>{{ stats.total_retrospectives }}</h3>
+                    <p class="text-muted mb-0">Total Retrospectives</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3>{{ stats.total_lessons }}</h3>
+                    <p class="text-muted mb-0">Lessons Learned</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3>{{ stats.implemented_lessons }}</h3>
+                    <p class="text-muted mb-0">Lessons Implemented</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3>{{ stats.completed_actions }}</h3>
+                    <p class="text-muted mb-0">Actions Completed</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-3">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-3">
+                    <select name="status" class="form-select">
+                        <option value="">All Statuses</option>
+                        <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+                        <option value="generated" {% if status_filter == 'generated' %}selected{% endif %}>Generated</option>
+                        <option value="reviewed" {% if status_filter == 'reviewed' %}selected{% endif %}>Reviewed</option>
+                        <option value="finalized" {% if status_filter == 'finalized' %}selected{% endif %}>Finalized</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select name="type" class="form-select">
+                        <option value="">All Types</option>
+                        <option value="sprint" {% if type_filter == 'sprint' %}selected{% endif %}>Sprint</option>
+                        <option value="project" {% if type_filter == 'project' %}selected{% endif %}>Project</option>
+                        <option value="milestone" {% if type_filter == 'milestone' %}selected{% endif %}>Milestone</option>
+                        <option value="quarterly" {% if type_filter == 'quarterly' %}selected{% endif %}>Quarterly</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter"></i> Filter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Retrospectives List -->
+    <div class="row">
+        {% for retro in retrospectives %}
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ retro.title }}</h5>
+                    <span class="badge bg-{% if retro.status == 'finalized' %}success{% elif retro.status == 'reviewed' %}info{% elif retro.status == 'generated' %}warning{% else %}secondary{% endif %}">
+                        {{ retro.get_status_display }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">
+                        <i class="fas fa-calendar"></i> 
+                        {{ retro.period_start|date:"M d, Y" }} - {{ retro.period_end|date:"M d, Y" }}
+                        <span class="ms-3">
+                            <i class="fas fa-tag"></i> {{ retro.get_retrospective_type_display }}
+                        </span>
+                    </p>
+                    
+                    <!-- Sentiment indicator -->
+                    {% if retro.overall_sentiment_score %}
+                    <div class="mb-2">
+                        <small class="text-muted">Team Sentiment:</small>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-{% if retro.overall_sentiment_score >= 0.7 %}success{% elif retro.overall_sentiment_score >= 0.5 %}warning{% else %}danger{% endif %}" 
+                                 style="width: {{ retro.overall_sentiment_score|floatformat:0|default:50 }}%"></div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    
+                    <!-- Quick stats -->
+                    <div class="row text-center mt-3">
+                        <div class="col-4">
+                            <small class="text-muted">Lessons</small>
+                            <div><strong>{{ retro.lessons.count }}</strong></div>
+                        </div>
+                        <div class="col-4">
+                            <small class="text-muted">Actions</small>
+                            <div><strong>{{ retro.action_items.count }}</strong></div>
+                        </div>
+                        <div class="col-4">
+                            <small class="text-muted">Metrics</small>
+                            <div><strong>{{ retro.metrics.count }}</strong></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <a href="{% url 'retrospective_detail' board.id retro.id %}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-eye"></i> View Details
+                    </a>
+                    <small class="text-muted float-end">
+                        Created {{ retro.created_at|timesince }} ago
+                    </small>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> No retrospectives found. 
+                <a href="{% url 'retrospective_create' board.id %}">Generate your first retrospective</a> to start tracking improvements.
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <nav aria-label="Page navigation">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}">Previous</a>
+            </li>
+            {% endif %}
+            
+            {% for num in page_obj.paginator.page_range %}
+            <li class="page-item {% if page_obj.number == num %}active{% endif %}">
+                <a class="page-link" href="?page={{ num }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}">{{ num }}</a>
+            </li>
+            {% endfor %}
+            
+            {% if page_obj.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if type_filter %}&type={{ type_filter }}{% endif %}">Next</a>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+</div>
+{% endblock %}

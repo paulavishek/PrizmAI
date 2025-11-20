@@ -1,0 +1,111 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Generate Retrospective - {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-md-8 offset-md-2">
+            <h2><i class="fas fa-magic"></i> Generate AI Retrospective</h2>
+            <p class="text-muted">AI will analyze your project data and generate insights</p>
+
+            <div class="card">
+                <div class="card-body">
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        <div class="mb-3">
+                            <label for="retrospective_type" class="form-label">Retrospective Type</label>
+                            <select name="retrospective_type" id="retrospective_type" class="form-select" required>
+                                <option value="sprint">Sprint Retrospective</option>
+                                <option value="project">Project Retrospective</option>
+                                <option value="milestone">Milestone Retrospective</option>
+                                <option value="quarterly">Quarterly Review</option>
+                            </select>
+                            <small class="form-text text-muted">Choose the type of retrospective you want to generate</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="period_start" class="form-label">Period Start Date</label>
+                            <input type="date" name="period_start" id="period_start" 
+                                   class="form-control" value="{{ suggested_start|date:'Y-m-d' }}" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="period_end" class="form-label">Period End Date</label>
+                            <input type="date" name="period_end" id="period_end" 
+                                   class="form-control" value="{{ suggested_end|date:'Y-m-d' }}" required>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i> <strong>What will be analyzed:</strong>
+                            <ul class="mb-0 mt-2">
+                                <li>Tasks created and completed during this period</li>
+                                <li>Team velocity and performance metrics</li>
+                                <li>Quality indicators and risk factors</li>
+                                <li>Patterns in successes and challenges</li>
+                                <li>Historical trends and comparisons</li>
+                            </ul>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <i class="fas fa-robot"></i> <strong>AI Analysis:</strong>
+                            The system will use Google Gemini AI to generate comprehensive insights,
+                            identify lessons learned, and suggest actionable improvements.
+                            This may take 10-30 seconds to complete.
+                        </div>
+
+                        <div class="d-flex justify-content-between">
+                            <a href="{% url 'retrospective_list' board.id %}" class="btn btn-secondary">
+                                <i class="fas fa-arrow-left"></i> Cancel
+                            </a>
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                <i class="fas fa-magic"></i> Generate Retrospective
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Tips Section -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5><i class="fas fa-lightbulb"></i> Tips for Best Results</h5>
+                </div>
+                <div class="card-body">
+                    <ul>
+                        <li><strong>Choose meaningful periods:</strong> Select date ranges that align with your sprint or project milestones</li>
+                        <li><strong>Regular cadence:</strong> Generate retrospectives consistently (e.g., every 2 weeks) to track improvements</li>
+                        <li><strong>Review and finalize:</strong> After generation, review the AI insights and add team notes before finalizing</li>
+                        <li><strong>Act on lessons:</strong> Assign action items to team members and track their completion</li>
+                        <li><strong>Compare trends:</strong> Use the dashboard to see how metrics improve over time</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Validate that end date is after start date
+    const startInput = document.getElementById('period_start');
+    const endInput = document.getElementById('period_end');
+    
+    function validateDates() {
+        const start = new Date(startInput.value);
+        const end = new Date(endInput.value);
+        
+        if (start >= end) {
+            endInput.setCustomValidity('End date must be after start date');
+        } else {
+            endInput.setCustomValidity('');
+        }
+    }
+    
+    startInput.addEventListener('change', validateDates);
+    endInput.addEventListener('change', validateDates);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,210 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Retrospective Dashboard - {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-chart-line"></i> Improvement Dashboard - {{ board.name }}</h2>
+            <p class="text-muted">Track organizational learning and continuous improvement over time</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{% url 'retrospective_list' board.id %}" class="btn btn-primary">
+                <i class="fas fa-list"></i> All Retrospectives
+            </a>
+            <a href="{% url 'lessons_learned_list' board.id %}" class="btn btn-info">
+                <i class="fas fa-graduation-cap"></i> All Lessons
+            </a>
+        </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3>{{ stats.total_retrospectives }}</h3>
+                    <p class="text-muted mb-0">Retrospectives</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3>{{ stats.implementation_rate|floatformat:1 }}%</h3>
+                    <p class="text-muted mb-0">Implementation Rate</p>
+                    <small class="text-muted">{{ stats.lessons_implemented }}/{{ stats.total_lessons }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3>{{ stats.completion_rate|floatformat:1 }}%</h3>
+                    <p class="text-muted mb-0">Action Completion</p>
+                    <small class="text-muted">{{ stats.actions_completed }}/{{ stats.total_actions }}</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center {% if stats.recurring_issues > 0 %}border-warning{% endif %}">
+                <div class="card-body">
+                    <h3>{{ stats.recurring_issues }}</h3>
+                    <p class="text-muted mb-0">Recurring Issues</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trend Analysis -->
+    {% if trend %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="fas fa-chart-area"></i> Trend Analysis</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Velocity Trend</h6>
+                    <div class="alert alert-{% if trend.velocity_trend == 'improving' %}success{% elif trend.velocity_trend == 'declining' %}danger{% else %}info{% endif %}">
+                        <i class="fas fa-{% if trend.velocity_trend == 'improving' %}arrow-up{% elif trend.velocity_trend == 'declining' %}arrow-down{% else %}minus{% endif %}"></i>
+                        <strong>{{ trend.get_velocity_trend_display }}</strong>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6>Quality Trend</h6>
+                    <div class="alert alert-{% if trend.quality_trend == 'improving' %}success{% elif trend.quality_trend == 'declining' %}danger{% else %}info{% endif %}">
+                        <i class="fas fa-{% if trend.quality_trend == 'improving' %}arrow-up{% elif trend.quality_trend == 'declining' %}arrow-down{% else %}minus{% endif %}"></i>
+                        <strong>{{ trend.get_quality_trend_display }}</strong>
+                    </div>
+                </div>
+            </div>
+            
+            {% if trend.recurring_issues %}
+            <h6 class="mt-3">Recurring Issues</h6>
+            <ul class="list-group">
+                {% for issue in trend.recurring_issues %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    {{ issue.issue }}
+                    <span class="badge bg-warning">{{ issue.count }} times</span>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Lessons by Category -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-pie-chart"></i> Lessons by Category</h5>
+                </div>
+                <div class="card-body">
+                    {% if lessons_by_category %}
+                    <div class="list-group">
+                        {% for cat in lessons_by_category %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            {{ cat.category|title }}
+                            <span class="badge bg-primary rounded-pill">{{ cat.count }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No lessons learned yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="fas fa-exclamation-circle"></i> Urgent Action Items</h5>
+                </div>
+                <div class="card-body">
+                    {% if urgent_actions %}
+                    <div class="list-group">
+                        {% for action in urgent_actions|slice:":5" %}
+                        <div class="list-group-item">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>{{ action.title }}</strong><br>
+                                    <small class="text-muted">
+                                        {% if action.assigned_to %}Assigned to {{ action.assigned_to.username }}{% endif %}
+                                        {% if action.target_completion_date %} | Due {{ action.target_completion_date|date:"M d" }}{% endif %}
+                                    </small>
+                                </div>
+                                <span class="badge bg-{% if action.priority == 'critical' %}danger{% else %}warning{% endif %}">
+                                    {{ action.get_priority_display }}
+                                </span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted">No urgent actions pending.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Retrospectives -->
+    <div class="card">
+        <div class="card-header">
+            <h5><i class="fas fa-history"></i> Recent Retrospectives</h5>
+        </div>
+        <div class="card-body">
+            {% if retrospectives %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Period</th>
+                            <th>Type</th>
+                            <th>Lessons</th>
+                            <th>Actions</th>
+                            <th>Sentiment</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for retro in retrospectives %}
+                        <tr>
+                            <td>{{ retro.title }}</td>
+                            <td>{{ retro.period_start|date:"M d" }} - {{ retro.period_end|date:"M d, Y" }}</td>
+                            <td><span class="badge bg-secondary">{{ retro.get_retrospective_type_display }}</span></td>
+                            <td>{{ retro.lessons.count }}</td>
+                            <td>{{ retro.action_items.count }}</td>
+                            <td>
+                                {% if retro.overall_sentiment_score %}
+                                <span class="badge bg-{% if retro.overall_sentiment_score >= 0.7 %}success{% elif retro.overall_sentiment_score >= 0.5 %}warning{% else %}danger{% endif %}">
+                                    {{ retro.overall_sentiment_score|floatformat:2 }}
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td><span class="badge bg-{% if retro.status == 'finalized' %}success{% else %}warning{% endif %}">{{ retro.get_status_display }}</span></td>
+                            <td>
+                                <a href="{% url 'retrospective_detail' board.id retro.id %}" class="btn btn-sm btn-primary">
+                                    View
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted">No retrospectives found. <a href="{% url 'retrospective_create' board.id %}">Generate one now</a>.</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

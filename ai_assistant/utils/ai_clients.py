@@ -17,12 +17,12 @@ class GeminiClient:
     Each request is stateless to prevent token accumulation.
     """
     
-    def __init__(self, default_model='gemini-2.0-flash-exp'):
+    def __init__(self, default_model='gemini-2.5-flash-lite'):
         """
         Initialize Gemini client with configurable default model.
         
         Args:
-            default_model: Default model to use ('gemini-2.0-flash-exp' or 'gemini-2.0-flash-exp')
+            default_model: Default model to use ('gemini-2.5-flash' or 'gemini-2.5-flash-lite')
         """
         try:
             import google.generativeai as genai
@@ -40,15 +40,23 @@ class GeminiClient:
                 'max_output_tokens': 2048,
             }
             
-            # Safety settings
+            # Safety settings - permissive for business/technical content
             self.safety_settings = [
                 {
                     "category": "HARM_CATEGORY_HARASSMENT",
-                    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+                    "threshold": "BLOCK_ONLY_HIGH"
                 },
                 {
                     "category": "HARM_CATEGORY_HATE_SPEECH",
-                    "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+                    "threshold": "BLOCK_ONLY_HIGH"
+                },
+                {
+                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    "threshold": "BLOCK_ONLY_HIGH"
+                },
+                {
+                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    "threshold": "BLOCK_ONLY_HIGH"
                 },
             ]
             
@@ -81,7 +89,7 @@ class GeminiClient:
         # Determine which model to use
         if model_name is None:
             # Smart routing based on task complexity
-            model_name = 'gemini-2.0-flash-exp' if task_complexity == 'complex' else 'gemini-2.0-flash-exp'
+            model_name = 'gemini-2.5-flash' if task_complexity == 'complex' else 'gemini-2.5-flash-lite'
         
         # Reuse existing model instance (singleton per model type)
         if model_name not in self.models:
@@ -131,10 +139,24 @@ class GeminiClient:
                 logger.warning("History parameter provided but ignored - using stateless mode to prevent token accumulation")
             
             # Determine which model we're using for logging
-            model_name = 'gemini-2.0-flash-exp' if task_complexity == 'complex' else 'gemini-2.0-flash-exp'
+            model_name = 'gemini-2.5-flash' if task_complexity == 'complex' else 'gemini-2.5-flash-lite'
             
             # Generate content WITHOUT using chat sessions
             response = model.generate_content(full_prompt)
+            
+            # Check if response was blocked by safety filters
+            if not response.candidates or not response.candidates[0].content.parts:
+                finish_reason = response.candidates[0].finish_reason if response.candidates else None
+                error_msg = f"Response blocked by Gemini safety filters (finish_reason: {finish_reason})"
+                logger.warning(error_msg)
+                return {
+                    'content': 'The AI response was blocked by safety filters. Please try with different data or time period.',
+                    'error': error_msg,
+                    'tokens': 0,
+                    'session_mode': 'blocked',
+                    'model_used': model_name,
+                    'task_complexity': task_complexity
+                }
             
             # Calculate token usage
             token_count = 0

@@ -1,8 +1,9 @@
-from django.urls import path
+from django.urls import path, include
 from . import views
 from . import api_views
 from . import forecasting_views
 from . import burndown_views
+from . import retrospective_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -120,4 +121,7 @@ urlpatterns = [
     path('tasks/<int:task_id>/files/list/', views.list_task_files, name='list_task_files'),
     path('files/<int:file_id>/download/', views.download_task_file, name='download_task_file'),
     path('files/<int:file_id>/delete/', views.delete_task_file, name='delete_task_file'),
+    
+    # Retrospective URLs
+    path('', include('kanban.retrospective_urls')),
 ]
