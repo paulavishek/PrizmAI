@@ -204,6 +204,526 @@ Alerts:
 
 ---
 
+### 🚨 **Scope Creep Detection & Tracking**
+
+**Automatically detect when your project is growing beyond its original boundaries — before it becomes a problem.**
+
+Scope creep is one of the biggest threats to successful projects. It's when projects gradually expand with new features, requirements, and tasks that weren't originally planned. PrizmAI detects this in real-time and alerts you.
+
+#### **What is Scope Creep Detection?**
+
+Every board now has a **dedicated scope tracking dashboard** that monitors how your project grows over time:
+
+```
+Project Scope Tracking Dashboard
+
+Original Scope: 85 tasks
+Current Scope: 127 tasks
+Scope Growth: +42 tasks (+49.4%)
+
+⚠️ ALERT: Significant Scope Increase Detected!
+```
+
+#### **How It Works**
+
+**1. Baseline Establishment**
+
+When you create a board or enable scope tracking, PrizmAI captures a **baseline snapshot** of your current scope:
+
+```
+Baseline Snapshot (Day 1):
+├─ Total Tasks: 85
+├─ Total Complexity: 340 points
+├─ Total Estimated Hours: 480 hours
+├─ Critical Tasks: 8
+└─ Status: Documented and locked
+```
+
+**2. Continuous Monitoring**
+
+PrizmAI automatically tracks changes:
+
+```
+Daily Monitoring:
+├─ New tasks added
+├─ Tasks marked complete
+├─ Task complexity changes
+├─ Priority level changes
+├─ Dependencies added
+└─ Timeline changes
+```
+
+**3. Alert Generation**
+
+When scope changes exceed configured thresholds, alerts are created:
+
+```
+Scope Creep Alert
+├─ Type: Task Addition Spike
+├─ Severity: HIGH
+├─ Detected: Nov 20, 2025 at 2:30 PM
+├─ Change: +8 new tasks added today
+├─ Impact: +20 hours of work
+└─ Recommendation: Review and prioritize new tasks
+```
+
+#### **Key Metrics Tracked**
+
+**Scope Growth Analysis:**
+
+```
+Overall Scope Growth:
+├─ Original Tasks: 85
+├─ Current Tasks: 127
+├─ Difference: +42 tasks (+49.4%)
+├─ Growth Rate: 2.1 tasks per day (average)
+└─ Trend: Rapidly Increasing 🔴
+
+Complexity Growth:
+├─ Original Complexity: 340 points
+├─ Current Complexity: 512 points
+├─ Difference: +172 points (+50.6%)
+└─ Average Task Complexity: 4.0 → 4.0 (stable)
+
+Effort Growth:
+├─ Original Estimate: 480 hours
+├─ Current Estimate: 720 hours (est.)
+├─ Difference: +240 hours (+50%)
+└─ Impact on Timeline: +3 weeks delay (estimated)
+
+Task Status Breakdown:
+├─ New/Unstarted: 42 (24 were not in original plan)
+├─ In Progress: 38 (18 are new)
+├─ Completed: 47
+└─ Blocked: 2
+```
+
+**Task Addition Timeline:**
+
+```
+Tasks Added Over Time:
+
+Day 1-7:   +5 tasks (planned onboarding)
+Day 8-14:  +8 tasks (requirements clarification)
+Day 15-18: +12 tasks (feature requests) ⚠️ Spike
+Day 19-20: +17 tasks (emergency fixes) 🔴 Critical spike
+Total:     +42 tasks
+
+Trend: Linear growth expected, but exponential spike detected
+```
+
+**Impact Metrics:**
+
+```
+Original Commitment vs Current State:
+
+                  Original    Current    Impact
+├─ Timeline:      4 weeks     6 weeks    +50% delay
+├─ Team Size:     3 people    3 people   100% overload
+├─ Budget:        $50k        $75k       +50% cost
+├─ Quality Risk:  Medium      High       Reduced QA time
+├─ Delivery Date: Jan 20      Feb 24     +35 days slip
+└─ Completion Probability: 85%   35%     -60% confidence
+```
+
+#### **Scope Creep Alerts**
+
+The system generates intelligent alerts based on different types of scope changes:
+
+**Alert Types:**
+
+```
+🔴 CRITICAL ALERT: Exponential Growth
+├─ Threshold: 5+ new high-priority tasks in 1 day
+├─ Impact: Could significantly delay project
+├─ Action: Stop accepting new tasks, prioritize ruthlessly
+├─ Example: 12 new tasks added today alone
+
+🟠 HIGH ALERT: Linear Scope Growth
+├─ Threshold: Project size increased >30% from baseline
+├─ Impact: Timeline extension and resource overload likely
+├─ Action: Negotiate scope reduction or extend timeline
+├─ Example: Added 42 tasks total (+49%)
+
+🟡 MEDIUM ALERT: Complexity Increase
+├─ Threshold: 20%+ increase in average task complexity
+├─ Impact: Slower progress than originally estimated
+├─ Action: Review task complexity and estimate accuracy
+├─ Example: Tasks now average 4.0 vs 3.2 originally
+
+🟢 INFO: Scope Status Update
+├─ Threshold: Routine scope tracking info
+├─ Impact: Minimal
+├─ Action: Monitor for trends
+├─ Example: 2 tasks completed today, scope stabilizing
+```
+
+**Alert Management:**
+
+```
+Alerts List:
+
+1. 🔴 CRITICAL: Exponential growth detected (Nov 20, 2:30 PM)
+   ├─ Status: Active
+   ├─ Severity: Critical
+   └─ Action Buttons: [Acknowledge] [Resolve] [Investigate]
+
+2. 🟠 HIGH: Scope 49.4% above baseline (Today)
+   ├─ Status: Active
+   ├─ Severity: High
+   └─ Action Buttons: [Acknowledge] [Resolve] [Investigate]
+
+3. 🟡 MEDIUM: Complexity increased 50% (Nov 19)
+   ├─ Status: Acknowledged
+   ├─ Severity: Medium
+   └─ Assigned To: Alice (Project Manager)
+
+4. ✅ RESOLVED: Scope stabilized (Nov 18)
+   ├─ Status: Resolved
+   ├─ Duration: 2 days before resolution
+   └─ Resolution Note: Accepted 3 new features, rejected 5
+```
+
+#### **Scope Change Analysis**
+
+See exactly what changed and why:
+
+**What Was Added:**
+
+```
+New Tasks Added (Last 7 Days):
+
+High Priority:
+├─ "Add dark mode theme" (8 hours) - Feature Request from Customer
+├─ "Fix security vulnerability" (6 hours) - Security Issue
+├─ "Implement API rate limiting" (4 hours) - Performance
+└─ Count: 3 high-priority tasks (+18 hours)
+
+Medium Priority:
+├─ "Improve error messages" (3 hours)
+├─ "Add usage analytics" (5 hours)
+├─ "Update documentation" (2 hours)
+└─ Count: 5 medium-priority tasks (+10 hours)
+
+Low Priority:
+├─ "Refactor old code" (4 hours)
+├─ "Add logging" (2 hours)
+├─ Count: 2 low-priority tasks (+6 hours)
+
+Total New Work: +42 tasks, +34 hours
+Source:
+├─ 40% - Customer Requests
+├─ 30% - Bug Fixes/Issues
+├─ 20% - Internal Improvements
+└─ 10% - Scope Creep (undefined, unclear requirements)
+```
+
+**What Was Removed/Completed:**
+
+```
+Tasks Completed/Removed (Last 7 Days):
+
+Completed Successfully:
+├─ "Design UI mockups" (5 hours) ✅
+├─ "Setup database schema" (3 hours) ✅
+├─ "Implement authentication" (8 hours) ✅
+└─ Total: 47 completed tasks, -260 hours of work
+
+Removed (Out of Scope):
+├─ "Mobile app version" (cancelled)
+├─ "AI recommendations" (deferred to v2)
+└─ Total: 2 removed, -50 hours of work
+```
+
+#### **Scope Tracking Dashboard**
+
+**Access the Dashboard:**
+
+1. Open any board
+2. Locate **"Scope Tracking"** section in the board header
+3. Click **"View Scope Dashboard"** button
+4. See real-time scope metrics and visualizations
+
+**Dashboard Sections:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Scope Tracking Dashboard - Project XYZ             │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│ 📊 OVERALL METRICS                                  │
+│ ├─ Original Scope: 85 tasks      Baseline          │
+│ ├─ Current Scope: 127 tasks      +49.4%            │
+│ ├─ Tasks Added: 42 (+49.4%)      Increasing 🔴    │
+│ └─ Tasks Completed: 47 (-55.3%)  On Track          │
+│                                                     │
+│ ⚠️ ALERTS (3 Active)                                │
+│ ├─ 🔴 Exponential growth detected                  │
+│ ├─ 🟠 49.4% over baseline                          │
+│ └─ 🟡 Complexity increased 50%                      │
+│                                                     │
+│ 📈 SCOPE GROWTH CHART                               │
+│ │                           ╱╱╱                     │
+│ │ Tasks                 ╱╱╱╱                        │
+│ │    │              ╱╱╱╱  (Spike)                   │
+│ │ 127├─────────────╱╱─────────                      │
+│ │    │         ╱╱╱ └─ Original: 85                 │
+│ │  85├────────╱                                     │
+│ │    │ ╱╱╱╱╱                                        │
+│ │    └─────────────────────────→ Days              │
+│                                                     │
+│ 🏃 VELOCITY & COMPLETION                            │
+│ ├─ Tasks Completed/Week: 12 tasks                  │
+│ ├─ Current Pace: 6 tasks/week                      │
+│ ├─ At Current Pace: 4 weeks to complete            │
+│ └─ Projected Completion: Feb 24 (vs Jan 20 target) │
+│                                                     │
+│ 💡 RECOMMENDATIONS                                  │
+│ ├─ 1. Stop accepting new tasks (immediate)         │
+│ ├─ 2. Prioritize ruthlessly (keep top 80 only)     │
+│ ├─ 3. Review timeline with stakeholders (urgent)   │
+│ └─ 4. Consider additional resources or MVP release │
+│                                                     │
+│ 📋 RECENT CHANGES                                   │
+│ ├─ +8 tasks in last 24 hours                        │
+│ ├─ +12 tasks in last week                           │
+│ ├─ +5 high-priority tasks                           │
+│ └─ Top Source: Customer Requests (40%)              │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+#### **Scope Trend Analysis**
+
+Track scope changes over time:
+
+```
+Scope Trend (Last 30 Days):
+
+Week 1: 85 tasks (baseline)
+Week 2: 92 tasks (+7, +8.2%)
+Week 3: 105 tasks (+13, +14.1%)
+Week 4: 127 tasks (+22, +21.0%)
+
+Trend Pattern: Exponential growth
+Growth Rate: +4.2 tasks/day (accelerating)
+Status: 🔴 OUT OF CONTROL
+
+Forecast (Next 2 Weeks):
+├─ If trend continues: 171 tasks (+70%)
+├─ At current pace: 3 weeks to complete
+├─ Realistic: 5-6 weeks (with all changes)
+└─ Risk Level: 🔴 CRITICAL
+```
+
+#### **Detailed Scope Report**
+
+Generate comprehensive scope reports:
+
+```
+SCOPE CREEP ANALYSIS REPORT
+Project: Mobile App Development
+Report Date: Nov 20, 2025
+
+EXECUTIVE SUMMARY:
+Scope has increased 49.4% from baseline (85→127 tasks).
+At current productivity, project will miss deadline by 5 weeks.
+Recommend: Scope reduction, timeline extension, or resource increase.
+
+SCOPE CHANGE SUMMARY:
+Original Plan:     85 tasks, 480 hours, 4 weeks
+Current Status:    127 tasks, 720 hours, 9 weeks (forecast)
+Difference:        +42 tasks, +240 hours, +5 weeks
+
+TIMELINE IMPACT:
+Original Deadline:    Jan 20, 2025
+Forecast Completion:  Feb 24, 2025
+Delay:               35 days (+87%)
+Completion Probability: 35% (down from 85%)
+
+COST IMPACT:
+Original Budget:     $50,000
+Current Estimate:    $75,000
+Overage:            $25,000 (+50%)
+
+TEAM IMPACT:
+Original Team Size:  3 people (full time)
+Required Size:       4-5 people (current scope)
+Workload:           100% overloaded
+Burnout Risk:       Very High
+
+KEY FINDINGS:
+
+1. Task Addition Spike
+   When: Nov 18-20 (last 3 days)
+   What: +29 tasks added (69% of total increase)
+   Why: Customer feature requests, bug discoveries
+   Impact: Catastrophic (project derailed)
+
+2. Complexity Increase
+   Average: 3.2 → 4.0 complexity points
+   Impact: 25% slower progress than estimated
+   Cause: Underestimated integration challenges
+
+3. Priority Creep
+   High Priority: 8 → 18 (225% increase)
+   Medium Priority: 12 → 32 (267% increase)
+   Impact: Everything feels urgent (nothing is)
+
+RECOMMENDATIONS (Ranked by Impact):
+
+1. ⭐⭐⭐⭐⭐ IMMEDIATE: Scope Freeze & Prioritization
+   Action: No new tasks accepted after today
+   Timeline: Freeze until project stabilizes
+   Benefit: Prevents further deterioration
+   Timeline to implement: Today
+
+2. ⭐⭐⭐⭐ URGENT: Ruthless Prioritization
+   Action: Use MoSCoW method to reduce to 80 tasks
+   Must Have: 40 tasks (critical features)
+   Should Have: 20 tasks (important but deferrable)
+   Could Have: 15 tasks (nice-to-have)
+   Won't Have: 12 tasks (out of scope, v2.0)
+   Result: 75-task plan, 5-week timeline
+   Timeline to implement: 1-2 hours
+
+3. ⭐⭐⭐⭐ URGENT: Stakeholder Communication
+   Action: Meet with stakeholders TODAY
+   Message: "Current trajectory misses deadline. Recommend A, B, or C:"
+     Option A: Reduce scope 40% (most realistic)
+     Option B: Extend deadline 5 weeks (impacts customers)
+     Option C: Add 2 team members (increases cost 40%)
+   Timeline to implement: Today
+
+4. ⭐⭐⭐ IMPORTANT: Resource Increase (Conditional)
+   Action: If scope reduction rejected, hire contract developers
+   Cost: $25k for 5 weeks
+   Timeline: 2-3 weeks to reach productivity
+   Benefit: Meet deadline with full scope
+
+5. ⭐⭐⭐ IMPORTANT: Better Requirements Process
+   Action: Implement change control process
+   Requirement: All new work must go through approval
+   Purpose: Prevent future uncontrolled growth
+   Timeline: Implement next sprint
+
+HISTORICAL CONTEXT:
+Previous Projects - Scope Growth Patterns:
+├─ Project A (6 months ago): +35% scope, 3-week delay
+├─ Project B (3 months ago): +22% scope, 1-week delay
+├─ Project C (1 month ago): +18% scope, on-time (no scope creep)
+└─ Pattern: Projects with scope creep miss by ~1 week per 10% increase
+
+THIS PROJECT:
+Current +49.4% scope = 5-week delay (if no action)
+Matches historical pattern
+
+CONCLUSION:
+Without immediate intervention, project will miss deadline by 5+ weeks.
+Recommend scope freeze + ruthless prioritization starting today.
+Every day of delay costs ~$5k in labor + customer satisfaction.
+
+Action Required By: Today (Nov 20, 5:00 PM)
+Report Generated: Nov 20, 2025 at 2:45 PM
+Report ID: SCOPE-2025-11-20-001
+```
+
+#### **Proactive Scope Management**
+
+**Set Scope Thresholds:**
+
+```
+Configure Alerts:
+
+Task Addition Threshold:
+├─ Alert if >5 new tasks added per day
+├─ Critical if >10 new tasks added in one day
+└─ Current: 8 tasks today (HIGH ALERT)
+
+Growth Threshold:
+├─ Alert if scope grows >20% from baseline
+├─ Critical if grows >40% from baseline
+└─ Current: 49.4% (CRITICAL)
+
+Complexity Threshold:
+├─ Alert if complexity grows >15%
+├─ Critical if grows >25%
+└─ Current: 50% (CRITICAL)
+
+Timeline Threshold:
+├─ Alert if forecasted delay >1 week
+├─ Critical if forecasted delay >3 weeks
+└─ Current: 5 weeks (CRITICAL)
+```
+
+**Scope Control Features:**
+
+```
+1. Scope Lock
+   ├─ Lock baseline snapshot (make it immutable)
+   ├─ Prevents accidental changes
+   └─ Use: Before project kickoff
+
+2. Change Management
+   ├─ Require approval for new high-priority tasks
+   ├─ Document reason for each addition
+   └─ Audit trail of all changes
+
+3. Scope Reduction
+   ├─ Identify tasks to defer to Phase 2
+   ├─ Move to backlog or new board
+   └─ Reduces current scope
+
+4. Task Priority Review
+   ├─ Review and adjust task priorities
+   ├─ Ensure most important tasks are "High"
+   └─ Reduce scope creep from priority changes
+```
+
+#### **Features of Scope Tracking**
+
+✅ **Automatic Baseline Capture** - Snapshots scope when tracking starts  
+✅ **Continuous Monitoring** - Tracks all scope changes in real-time  
+✅ **Intelligent Alerts** - Notifies on significant scope changes  
+✅ **Visual Trends** - See scope growth over time with charts  
+✅ **Impact Analysis** - Understand impact on timeline and resources  
+✅ **Detailed Reporting** - Generate comprehensive scope reports  
+✅ **Recommendations** - AI suggests scope management actions  
+✅ **Historical Comparison** - Compare to similar past projects  
+✅ **Change Audit Trail** - Track who added/removed what and when  
+✅ **Scope Dashboard** - Central hub for all scope metrics  
+✅ **Email Alerts** - Get notified of critical scope changes  
+✅ **Explainable Analysis** - Understand why alerts were triggered  
+
+#### **Perfect For**
+
+- **Project Managers** - Control scope and keep projects on track
+- **Stakeholder Management** - Show impact of requested changes
+- **Budget Control** - Understand cost impact of scope changes
+- **Timeline Forecasting** - Predict when project will complete
+- **Risk Management** - Identify creep early before it derails projects
+- **Team Protection** - Prevent team burnout from overload
+- **Post-Project Learning** - Track if you're getting better at scope control
+
+#### **Accessing Scope Creep Detection**
+
+**From Your Board:**
+
+1. Open any board
+2. Look for **"Scope Tracking"** section in the header
+3. Click **"View Scope Dashboard"** to see detailed metrics
+4. Click **"Alerts"** to see active scope creep alerts
+5. Click **"Generate Report"** for comprehensive analysis
+
+**Notifications:**
+
+- 📧 Email alerts when scope grows significantly
+- 🔔 In-app notifications for all scope changes
+- 📊 Weekly scope status emails (configurable)
+- 🚨 Urgent alerts for critical growth spikes
+
+---
+
 ### 🎯 Smart Completion Date Predictions
 
 **Know when tasks will actually be done — not just guesses, but data-driven predictions.**
@@ -1195,6 +1715,11 @@ implementation with code examples and security best practices.
 - ✅ **Burndown Charts** - Real-time sprint progress visualization with forecasts
 - ✅ **Burndown Metrics Dashboard** - Completion forecasts, velocity tracking, and risk alerts
 - ✅ **Confidence Intervals** - Optimistic, realistic, and pessimistic completion scenarios
+- ✅ **Scope Creep Detection** - Real-time monitoring of project scope changes and alerts
+- ✅ **Scope Tracking Dashboard** - Visualize baseline vs current scope, growth trends, and impact
+- ✅ **Scope Alerts** - Automatic notifications when scope grows unexpectedly
+- ✅ **Impact Analysis** - Understand timeline, budget, and resource impact of scope changes
+- ✅ **Scope Reports** - Comprehensive analysis with recommendations for scope management
 
 **Advanced Management (When You Need It)**
 - ✅ Task dependencies & tree view
