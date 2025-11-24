@@ -4,6 +4,7 @@ from . import api_views
 from . import forecasting_views
 from . import burndown_views
 from . import retrospective_views
+from . import milestone_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -124,4 +125,12 @@ urlpatterns = [
     
     # Retrospective URLs
     path('', include('kanban.retrospective_urls')),
+    
+    # Milestone Management URLs
+    path('board/<int:board_id>/milestones/create/', milestone_views.create_milestone, name='create_milestone'),
+    path('board/<int:board_id>/milestones/<int:milestone_id>/update/', milestone_views.update_milestone, name='update_milestone'),
+    path('board/<int:board_id>/milestones/<int:milestone_id>/delete/', milestone_views.delete_milestone, name='delete_milestone'),
+    path('board/<int:board_id>/milestones/<int:milestone_id>/toggle/', milestone_views.toggle_milestone_completion, name='toggle_milestone_completion'),
+    path('board/<int:board_id>/milestones/<int:milestone_id>/', milestone_views.get_milestone_details, name='get_milestone_details'),
+    path('api/milestones/<int:board_id>/list/', milestone_views.list_board_milestones, name='list_board_milestones'),
 ]

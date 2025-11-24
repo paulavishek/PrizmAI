@@ -1,0 +1,283 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Manage Milestones - {{ board.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .milestone-card {
+        border-left: 4px solid;
+        transition: all 0.3s ease;
+    }
+    
+    .milestone-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .milestone-completed {
+        border-left-color: #28a745;
+        background-color: #f0f9f4;
+    }
+    
+    .milestone-upcoming {
+        border-left-color: #007bff;
+        background-color: #f0f7ff;
+    }
+    
+    .milestone-overdue {
+        border-left-color: #dc3545;
+        background-color: #fff0f0;
+    }
+    
+    .progress-ring {
+        transform: rotate(-90deg);
+    }
+    
+    .progress-ring-circle {
+        transition: stroke-dashoffset 0.35s;
+    }
+    
+    .badge-status {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1">
+                        <i class="fas fa-flag-checkered text-primary"></i>
+                        Milestones
+                    </h2>
+                    <p class="text-muted mb-0">
+                        <a href="{% url 'board_detail' board.id %}" class="text-decoration-none">{{ board.name }}</a>
+                        <i class="fas fa-chevron-right mx-2"></i>
+                        Milestone Management
+                    </p>
+                </div>
+                <div>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createMilestoneModal">
+                        <i class="fas fa-plus"></i> Create Milestone
+                    </button>
+                    <a href="{% url 'burndown_dashboard' board.id %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-chart-line"></i> Burndown Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <div class="bg-primary bg-opacity-10 rounded p-3">
+                                <i class="fas fa-flag text-primary fa-2x"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="text-muted mb-1">Total Milestones</h6>
+                            <h3 class="mb-0">{{ milestones.count }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <div class="bg-success bg-opacity-10 rounded p-3">
+                                <i class="fas fa-check-circle text-success fa-2x"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="text-muted mb-1">Completed</h6>
+                            <h3 class="mb-0">{{ completed_milestones.count }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <div class="bg-info bg-opacity-10 rounded p-3">
+                                <i class="fas fa-clock text-info fa-2x"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="text-muted mb-1">Upcoming</h6>
+                            <h3 class="mb-0">{{ upcoming_milestones.count }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-shrink-0">
+                            <div class="bg-danger bg-opacity-10 rounded p-3">
+                                <i class="fas fa-exclamation-triangle text-danger fa-2x"></i>
+                            </div>
+                        </div>
+                        <div class="flex-grow-1 ms-3">
+                            <h6 class="text-muted mb-1">Overdue</h6>
+                            <h3 class="mb-0">{{ overdue_milestones.count }}</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overdue Milestones -->
+    {% if overdue_milestones %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3">
+                <i class="fas fa-exclamation-triangle text-danger"></i>
+                Overdue Milestones
+            </h4>
+            <div class="row">
+                {% for milestone in overdue_milestones %}
+                <div class="col-md-6 col-lg-4 mb-3">
+                    {% include 'kanban/partials/milestone_card.html' with milestone=milestone status_class='milestone-overdue' %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Upcoming Milestones -->
+    {% if upcoming_milestones %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3">
+                <i class="fas fa-calendar-alt text-primary"></i>
+                Upcoming Milestones
+            </h4>
+            <div class="row">
+                {% for milestone in upcoming_milestones %}
+                <div class="col-md-6 col-lg-4 mb-3">
+                    {% include 'kanban/partials/milestone_card.html' with milestone=milestone status_class='milestone-upcoming' %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Completed Milestones -->
+    {% if completed_milestones %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4 class="mb-3">
+                <i class="fas fa-check-circle text-success"></i>
+                Completed Milestones
+            </h4>
+            <div class="row">
+                {% for milestone in completed_milestones %}
+                <div class="col-md-6 col-lg-4 mb-3">
+                    {% include 'kanban/partials/milestone_card.html' with milestone=milestone status_class='milestone-completed' %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- No Milestones Message -->
+    {% if not milestones %}
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body text-center py-5">
+                    <i class="fas fa-flag-checkered fa-4x text-muted mb-3"></i>
+                    <h4>No Milestones Yet</h4>
+                    <p class="text-muted mb-4">Create your first milestone to track important project events and deadlines.</p>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createMilestoneModal">
+                        <i class="fas fa-plus"></i> Create First Milestone
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Create Milestone Modal -->
+<div class="modal fade" id="createMilestoneModal" tabindex="-1" aria-labelledby="createMilestoneModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="create">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="createMilestoneModalLabel">
+                        <i class="fas fa-flag-checkered"></i> Create New Milestone
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Milestone Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" required 
+                               placeholder="e.g., Sprint 1 End, MVP Release">
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"
+                                  placeholder="Describe what this milestone represents..."></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label for="target_date" class="form-label">Target Date <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" id="target_date" name="target_date" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="target_tasks" class="form-label">Target Tasks Completed</label>
+                        <input type="number" class="form-control" id="target_tasks" name="target_tasks" 
+                               min="0" value="0" placeholder="Expected number of tasks completed">
+                        <small class="text-muted">Optional: Expected number of tasks to be completed by this milestone</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Create Milestone
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Set minimum date to today
+    document.addEventListener('DOMContentLoaded', function() {
+        const dateInput = document.getElementById('target_date');
+        if (dateInput) {
+            const today = new Date().toISOString().split('T')[0];
+            dateInput.setAttribute('min', today);
+        }
+    });
+</script>
+{% endblock %}
