@@ -6,7 +6,7 @@ from django.utils import timezone
 from accounts.models import Organization, UserProfile
 from kanban.models import (
     Board, Column, TaskLabel, Task, Comment, TaskActivity,
-    ResourceDemandForecast, TeamCapacityAlert, WorkloadDistributionRecommendation
+    ResourceDemandForecast, TeamCapacityAlert, WorkloadDistributionRecommendation, Milestone
 )
 from kanban.priority_models import PriorityDecision
 from kanban.stakeholder_models import (
@@ -36,6 +36,9 @@ class Command(BaseCommand):
         self.create_resource_management_demo_data()
         self.create_stakeholder_management_demo_data()
         self.create_task_dependency_demo_data()
+        
+        # Create milestone demo data
+        self.create_milestone_demo_data()
         
         # Create chat room demo data
         self.create_chat_rooms_demo_data()
@@ -93,6 +96,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('✅ Resource Management - Team workload forecasts'))
         self.stdout.write(self.style.SUCCESS('✅ Stakeholder Management - Stakeholder engagement'))
         self.stdout.write(self.style.SUCCESS('✅ Requirements Management - Task dependencies'))
+        self.stdout.write(self.style.SUCCESS('✅ Milestones - Project milestones and deliverables'))
         self.stdout.write(self.style.SUCCESS('✅ Chat Rooms demo data created'))
         self.stdout.write(self.style.SUCCESS('✅ Predictive Analytics - Historical task completion data'))
         self.stdout.write(self.style.SUCCESS('✅ Intelligent Priority Suggestions - Priority decision history'))
@@ -1308,6 +1312,284 @@ class Command(BaseCommand):
                 self.stdout.write(f'  Enhanced task with resource and dependency data: {task.title}')
         
         self.stdout.write(self.style.SUCCESS('✅ Task Dependencies demo data created'))
+
+    def create_milestone_demo_data(self):
+        """Create demo data for milestone features"""
+        self.stdout.write(self.style.NOTICE('Creating Milestones demo data...'))
+        
+        # Get all boards
+        software_board = Board.objects.filter(name='Software Project').first()
+        bug_board = Board.objects.filter(name='Bug Tracking').first()
+        marketing_board = Board.objects.filter(name='Marketing Campaign').first()
+        
+        # Software Project Milestones
+        if software_board:
+            self.stdout.write(f'Creating milestones for {software_board.name}...')
+            
+            # Get some tasks to link to milestones
+            software_tasks = Task.objects.filter(column__board=software_board)
+            
+            milestones_data = [
+                {
+                    'title': 'Project Kickoff',
+                    'description': 'Official start of the Software Project development phase',
+                    'target_date': timezone.now().date() - timedelta(days=60),
+                    'milestone_type': 'project_start',
+                    'is_completed': True,
+                    'completed_date': timezone.now().date() - timedelta(days=60),
+                    'color': '#28a745',
+                    'created_by': self.users['admin'],
+                    'related_tasks': []
+                },
+                {
+                    'title': 'Authentication Module Complete',
+                    'description': 'Complete implementation of user authentication, including login, registration, and password reset',
+                    'target_date': timezone.now().date() - timedelta(days=30),
+                    'milestone_type': 'phase_completion',
+                    'is_completed': True,
+                    'completed_date': timezone.now().date() - timedelta(days=28),
+                    'color': '#28a745',
+                    'created_by': self.users['john_doe'],
+                    'related_tasks': list(software_tasks.filter(title__icontains='auth')[:2])
+                },
+                {
+                    'title': 'Database Schema Finalized',
+                    'description': 'Complete database design and schema implementation',
+                    'target_date': timezone.now().date() - timedelta(days=20),
+                    'milestone_type': 'deliverable',
+                    'is_completed': True,
+                    'completed_date': timezone.now().date() - timedelta(days=18),
+                    'color': '#17a2b8',
+                    'created_by': self.users['robert_johnson'],
+                    'related_tasks': list(software_tasks.filter(title__icontains='database')[:2])
+                },
+                {
+                    'title': 'Dashboard MVP Ready',
+                    'description': 'Minimum viable product of the main dashboard with key features',
+                    'target_date': timezone.now().date() + timedelta(days=5),
+                    'milestone_type': 'deliverable',
+                    'is_completed': False,
+                    'completed_date': None,
+                    'color': '#ffc107',
+                    'created_by': self.users['john_doe'],
+                    'related_tasks': list(software_tasks.filter(title__icontains='dashboard')[:3])
+                },
+                {
+                    'title': 'Code Review & Testing Phase',
+                    'description': 'Complete code review of all modules and comprehensive testing',
+                    'target_date': timezone.now().date() + timedelta(days=15),
+                    'milestone_type': 'review',
+                    'is_completed': False,
+                    'completed_date': None,
+                    'color': '#6f42c1',
+                    'created_by': self.users['admin'],
+                    'related_tasks': list(software_tasks.filter(title__icontains='review')[:2])
+                },
+                {
+                    'title': 'Beta Release',
+                    'description': 'First beta release of the application to selected users',
+                    'target_date': timezone.now().date() + timedelta(days=30),
+                    'milestone_type': 'deliverable',
+                    'is_completed': False,
+                    'completed_date': None,
+                    'color': '#fd7e14',
+                    'created_by': self.users['admin'],
+                    'related_tasks': list(software_tasks[:5])
+                },
+                {
+                    'title': 'Production Deployment',
+                    'description': 'Final deployment to production environment',
+                    'target_date': timezone.now().date() + timedelta(days=60),
+                    'milestone_type': 'project_end',
+                    'is_completed': False,
+                    'completed_date': None,
+                    'color': '#dc3545',
+                    'created_by': self.users['admin'],
+                    'related_tasks': []
+                },
+            ]
+            
+            for milestone_data in milestones_data:
+                related_tasks = milestone_data.pop('related_tasks', [])
+                milestone = Milestone.objects.create(
+                    board=software_board,
+                    **milestone_data
+                )
+                if related_tasks:
+                    milestone.related_tasks.set(related_tasks)
+                self.stdout.write(f'  Created milestone: {milestone.title}')
+        
+        # Bug Tracking Board Milestones
+        if bug_board:
+            self.stdout.write(f'Creating milestones for {bug_board.name}...')
+            
+            bug_tasks = Task.objects.filter(column__board=bug_board)
+            
+            milestones_data = [
+                {
+                    'title': 'Bug Tracking System Launch',
+                    'description': 'Official launch of the bug tracking board',
+                    'target_date': timezone.now().date() - timedelta(days=45),
+                    'milestone_type': 'project_start',
+                    'is_completed': True,
+                    'completed_date': timezone.now().date() - timedelta(days=45),
+                    'color': '#28a745',
+                    'created_by': self.users['robert_johnson'],
+                    'related_tasks': []
+                },
+                {
+                    'title': 'All Critical Bugs Resolved',
+                    'description': 'Resolution of all critical priority bugs',
+                    'target_date': timezone.now().date() - timedelta(days=10),
+                    'milestone_type': 'phase_completion',
+                    'is_completed': True,
+                    'completed_date': timezone.now().date() - timedelta(days=8),
+                    'color': '#28a745',
+                    'created_by': self.users['robert_johnson'],
+                    'related_tasks': list(bug_tasks.filter(title__icontains='500')[:1])
+                },
+                {
+                    'title': 'Safari Compatibility Fixed',
+                    'description': 'All Safari browser compatibility issues resolved',
+                    'target_date': timezone.now().date() + timedelta(days=3),
+                    'milestone_type': 'deliverable',
+                    'is_completed': False,
+                    'completed_date': None,
+                    'color': '#ffc107',
+                    'created_by': self.users['john_doe'],
+                    'related_tasks': list(bug_tasks.filter(title__icontains='Safari')[:1])
+                },
+                {
+                    'title': 'Performance Optimization Complete',
+                    'description': 'All performance-related bugs and optimizations completed',
+                    'target_date': timezone.now().date() + timedelta(days=12),
+                    'milestone_type': 'phase_completion',
+                    'is_completed': False,
+                    'completed_date': None,
+                    'color': '#17a2b8',
+                    'created_by': self.users['robert_johnson'],
+                    'related_tasks': list(bug_tasks.filter(title__icontains='performance')[:1])
+                },
+                {
+                    'title': 'UI/UX Issues Resolved',
+                    'description': 'All user interface and user experience bugs fixed',
+                    'target_date': timezone.now().date() + timedelta(days=20),
+                    'milestone_type': 'deliverable',
+                    'is_completed': False,
+                    'completed_date': None,
+                    'color': '#20c997',
+                    'created_by': self.users['john_doe'],
+                    'related_tasks': list(bug_tasks.filter(title__icontains='button')[:1])
+                },
+            ]
+            
+            for milestone_data in milestones_data:
+                related_tasks = milestone_data.pop('related_tasks', [])
+                milestone = Milestone.objects.create(
+                    board=bug_board,
+                    **milestone_data
+                )
+                if related_tasks:
+                    milestone.related_tasks.set(related_tasks)
+                self.stdout.write(f'  Created milestone: {milestone.title}')
+        
+        # Marketing Campaign Board Milestones
+        if marketing_board:
+            self.stdout.write(f'Creating milestones for {marketing_board.name}...')
+            
+            marketing_tasks = Task.objects.filter(column__board=marketing_board)
+            
+            milestones_data = [
+                {
+                    'title': 'Q3 Campaign Planning Complete',
+                    'description': 'Finalize all Q3 marketing campaign strategies and plans',
+                    'target_date': timezone.now().date() - timedelta(days=25),
+                    'milestone_type': 'phase_completion',
+                    'is_completed': True,
+                    'completed_date': timezone.now().date() - timedelta(days=23),
+                    'color': '#28a745',
+                    'created_by': self.users['carol_anderson'],
+                    'related_tasks': list(marketing_tasks.filter(title__icontains='Q3')[:1])
+                },
+                {
+                    'title': 'Website Redesign Launch',
+                    'description': 'Launch the newly redesigned website for Q4',
+                    'target_date': timezone.now().date() + timedelta(days=12),
+                    'milestone_type': 'deliverable',
+                    'is_completed': False,
+                    'completed_date': None,
+                    'color': '#fd7e14',
+                    'created_by': self.users['carol_anderson'],
+                    'related_tasks': list(marketing_tasks.filter(title__icontains='Website')[:1])
+                },
+                {
+                    'title': 'Social Media Campaign Launch',
+                    'description': 'Official launch of holiday social media campaign',
+                    'target_date': timezone.now().date() + timedelta(days=18),
+                    'milestone_type': 'deliverable',
+                    'is_completed': False,
+                    'completed_date': None,
+                    'color': '#007bff',
+                    'created_by': self.users['carol_anderson'],
+                    'related_tasks': list(marketing_tasks.filter(title__icontains='social')[:1])
+                },
+                {
+                    'title': 'Q3 Performance Review',
+                    'description': 'Complete review and analysis of Q3 marketing performance',
+                    'target_date': timezone.now().date() + timedelta(days=4),
+                    'milestone_type': 'review',
+                    'is_completed': False,
+                    'completed_date': None,
+                    'color': '#6f42c1',
+                    'created_by': self.users['david_taylor'],
+                    'related_tasks': list(marketing_tasks.filter(title__icontains='report')[:1])
+                },
+                {
+                    'title': 'Video Content Series Complete',
+                    'description': 'Complete production of all video content for product demonstrations',
+                    'target_date': timezone.now().date() + timedelta(days=25),
+                    'milestone_type': 'deliverable',
+                    'is_completed': False,
+                    'completed_date': None,
+                    'color': '#20c997',
+                    'created_by': self.users['david_taylor'],
+                    'related_tasks': list(marketing_tasks.filter(title__icontains='Video')[:1])
+                },
+                {
+                    'title': 'Q4 Campaign Kickoff',
+                    'description': 'Launch of Q4 marketing campaigns and initiatives',
+                    'target_date': timezone.now().date() + timedelta(days=35),
+                    'milestone_type': 'project_start',
+                    'is_completed': False,
+                    'completed_date': None,
+                    'color': '#28a745',
+                    'created_by': self.users['carol_anderson'],
+                    'related_tasks': []
+                },
+            ]
+            
+            for milestone_data in milestones_data:
+                related_tasks = milestone_data.pop('related_tasks', [])
+                milestone = Milestone.objects.create(
+                    board=marketing_board,
+                    **milestone_data
+                )
+                if related_tasks:
+                    milestone.related_tasks.set(related_tasks)
+                self.stdout.write(f'  Created milestone: {milestone.title}')
+        
+        # Print summary
+        total_milestones = Milestone.objects.count()
+        completed_milestones = Milestone.objects.filter(is_completed=True).count()
+        upcoming_milestones = Milestone.objects.filter(is_completed=False, target_date__gte=timezone.now().date()).count()
+        overdue_milestones = Milestone.objects.filter(is_completed=False, target_date__lt=timezone.now().date()).count()
+        
+        self.stdout.write(self.style.SUCCESS(f'✅ Milestones demo data created:'))
+        self.stdout.write(self.style.SUCCESS(f'   Total: {total_milestones} milestones'))
+        self.stdout.write(self.style.SUCCESS(f'   Completed: {completed_milestones}'))
+        self.stdout.write(self.style.SUCCESS(f'   Upcoming: {upcoming_milestones}'))
+        self.stdout.write(self.style.SUCCESS(f'   Overdue: {overdue_milestones}'))
+
 
     def create_chat_rooms_demo_data(self):
         """Create demo data for chat rooms and messaging features"""
