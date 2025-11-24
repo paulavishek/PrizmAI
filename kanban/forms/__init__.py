@@ -1,5 +1,5 @@
 from django import forms
-from ..models import Board, Column, Task, TaskLabel, Comment, TaskFile
+from ..models import Board, Column, Task, TaskLabel, Comment, TaskFile, Milestone
 
 class BoardForm(forms.ModelForm):
     class Meta:
@@ -552,3 +552,65 @@ class TaskFileForm(forms.ModelForm):
             instance.save()
         
         return instance
+
+
+class MilestoneForm(forms.ModelForm):
+    """Form for creating and editing project milestones"""
+    
+    class Meta:
+        model = Milestone
+        fields = ['title', 'description', 'target_date', 'milestone_type', 'related_tasks', 'color']
+        widgets = {
+            'title': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': 'Enter milestone name',
+                'maxlength': '200'
+            }),
+            'description': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3,
+                'placeholder': 'Describe this milestone and its significance...'
+            }),
+            'target_date': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date',
+                'title': 'Target date for achieving this milestone'
+            }),
+            'milestone_type': forms.Select(attrs={
+                'class': 'form-select',
+                'title': 'Type of milestone'
+            }),
+            'related_tasks': forms.SelectMultiple(attrs={
+                'class': 'form-select',
+                'size': '6',
+                'title': 'Select tasks that must be completed for this milestone'
+            }),
+            'color': forms.TextInput(attrs={
+                'class': 'form-control',
+                'type': 'color',
+                'title': 'Color for milestone marker on Gantt chart'
+            }),
+        }
+    
+    def __init__(self, *args, board=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        
+        if board:
+            # Only show tasks from this board
+            self.fields['related_tasks'].queryset = Task.objects.filter(
+                column__board=board
+            ).order_by('start_date', 'title')
+        else:
+            self.fields['related_tasks'].queryset = Task.objects.all().order_by('start_date', 'title')
+        
+        # Make fields optional
+        self.fields['description'].required = False
+        self.fields['related_tasks'].required = False
+        
+        # Set help text
+        self.fields['title'].help_text = 'Name of the milestone (e.g., "Phase 1 Complete", "MVP Launch")'
+        self.fields['description'].help_text = 'Optional detailed description of what this milestone represents'
+        self.fields['target_date'].help_text = 'Target date for achieving this milestone'
+        self.fields['milestone_type'].help_text = 'Category of milestone'
+        self.fields['related_tasks'].help_text = 'Tasks that must be completed for this milestone (optional). Hold Ctrl/Cmd to select multiple.'
+        self.fields['color'].help_text = 'Color for the milestone marker on Gantt chart (default: gold)'

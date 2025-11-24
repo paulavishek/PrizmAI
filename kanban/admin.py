@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     Board, Column, Task, TaskLabel, Comment, TaskActivity,
     TeamSkillProfile, SkillGap, SkillDevelopmentPlan,
-    ScopeChangeSnapshot, ScopeCreepAlert
+    ScopeChangeSnapshot, ScopeCreepAlert, Milestone
 )
 from .priority_models import PriorityDecision, PriorityModel, PrioritySuggestionLog
 from .burndown_models import (
@@ -701,3 +701,50 @@ class RetrospectiveTrendAdmin(admin.ModelAdmin):
         })
     )
 
+
+
+@admin.register(Milestone)
+class MilestoneAdmin(admin.ModelAdmin):
+    list_display = ('title', 'board', 'target_date', 'milestone_type', 'is_completed', 
+                   'completion_percentage', 'status', 'created_by')
+    list_filter = ('board', 'milestone_type', 'is_completed', 'target_date', 'created_at')
+    search_fields = ('title', 'description', 'board__name')
+    readonly_fields = ('created_at', 'updated_at', 'is_overdue', 'completion_percentage', 'status')
+    filter_horizontal = ('related_tasks',)
+    date_hierarchy = 'target_date'
+    
+    fieldsets = (
+        ('Milestone Information', {
+            'fields': ('board', 'title', 'description', 'milestone_type')
+        }),
+        ('Timeline', {
+            'fields': ('target_date', 'is_completed', 'completed_date', 'is_overdue', 'status')
+        }),
+        ('Related Tasks', {
+            'fields': ('related_tasks', 'completion_percentage'),
+            'classes': ('collapse',),
+            'description': 'Tasks that must be completed for this milestone'
+        }),
+        ('Visual', {
+            'fields': ('color',),
+            'classes': ('collapse',)
+        }),
+        ('Metadata', {
+            'fields': ('created_by', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        })
+    )
+    
+    actions = ['mark_as_completed', 'mark_as_incomplete']
+    
+    def mark_as_completed(self, request, queryset):
+        for milestone in queryset:
+            milestone.mark_complete(request.user)
+        self.message_user(request, f'{queryset.count()} milestone(s) marked as completed.')
+    mark_as_completed.short_description = 'Mark selected milestones as completed'
+    
+    def mark_as_incomplete(self, request, queryset):
+        for milestone in queryset:
+            milestone.mark_incomplete()
+        self.message_user(request, f'{queryset.count()} milestone(s) marked as incomplete.')
+    mark_as_incomplete.short_description = 'Mark selected milestones as incomplete'
