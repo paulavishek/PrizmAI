@@ -5,7 +5,7 @@
         <div class="d-flex justify-content-between align-items-start mb-3">
             <h5 class="card-title mb-0">
                 <i class="fas fa-flag-checkered me-2"></i>
-                {{ milestone.name }}
+                {{ milestone.title }}
             </h5>
             <div class="dropdown">
                 <button class="btn btn-sm btn-link text-muted" type="button" data-bs-toggle="dropdown">
@@ -20,22 +20,19 @@
                     </li>
                     {% if not milestone.is_completed %}
                     <li>
-                        <form method="post" class="d-inline">
-                            {% csrf_token %}
-                            <input type="hidden" name="action" value="complete">
-                            <input type="hidden" name="milestone_id" value="{{ milestone.id }}">
-                            <button type="submit" class="dropdown-item text-success">
-                                <i class="fas fa-check-circle me-2"></i> Mark Complete
-                            </button>
-                        </form>
+                        <a class="dropdown-item text-success"
+                            href="{% url 'toggle_milestone_completion' board.id milestone.id %}"
+                            onclick="event.preventDefault(); if(confirm('Mark this milestone as complete?')) { fetch(this.href, {method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token }}'}}).then(() => location.reload()); }">
+                            <i class="fas fa-check-circle me-2"></i> Mark Complete
+                        </a>
                     </li>
-                    {% endif %}
+                    {% endif %}\r
                     <li>
                         <hr class="dropdown-divider">
                     </li>
                     <li>
                         <a class="dropdown-item text-danger" href="#"
-                            onclick="deleteMilestone({{ milestone.id }}, '{{ milestone.name }}')">
+                            onclick="deleteMilestone({{ milestone.id }}, '{{ milestone.title|escapejs }}')">
                             <i class="fas fa-trash me-2"></i> Delete
                         </a>
                     </li>
@@ -68,10 +65,10 @@
                 {% endif %}
             </div>
 
-            {% if milestone.is_completed and milestone.actual_date %}
+            {% if milestone.is_completed and milestone.completed_date %}
             <div class="small text-muted">
                 <i class="fas fa-check-circle me-1"></i>
-                Completed: {{ milestone.actual_date|date:"M d, Y" }}
+                Completed: {{ milestone.completed_date|date:"M d, Y" }}
             </div>
             {% endif %}
         </div>
@@ -101,72 +98,17 @@
         <div class="mt-3 pt-3 border-top">
             <small class="text-muted">
                 <i class="fas fa-tasks me-1"></i>
-                {{ milestone.related_tasks.filter(progress=100).count }} / {{ milestone.related_tasks.count }} tasks
-                completed
+                {{ milestone.related_tasks.count }} related task{{ milestone.related_tasks.count|pluralize }}
             </small>
         </div>
         {% endif %}
-
-        {% if milestone.target_tasks_completed > 0 %}
-        <div class="mt-2">
-            <small class="text-muted">
-                <i class="fas fa-bullseye me-1"></i>
-                Target: {{ milestone.target_tasks_completed }} tasks
-            </small>
-        </div>
-        {% endif %}
-    </div>
-</div>
-
-<!-- Edit Milestone Modal -->
-<div class="modal fade" id="editMilestoneModal{{ milestone.id }}" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form method="post" action="{% url 'update_milestone' board.id milestone.id %}">
-                {% csrf_token %}
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="fas fa-edit"></i> Edit Milestone
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label for="edit_name_{{ milestone.id }}" class="form-label">Milestone Name</label>
-                        <input type="text" class="form-control" id="edit_name_{{ milestone.id }}" name="name"
-                            value="{{ milestone.name }}" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="edit_description_{{ milestone.id }}" class="form-label">Description</label>
-                        <textarea class="form-control" id="edit_description_{{ milestone.id }}" name="description"
-                            rows="3">{{ milestone.description }}</textarea>
-                    </div>
-                    <div class="mb-3">
-                        <label for="edit_target_date_{{ milestone.id }}" class="form-label">Target Date</label>
-                        <input type="date" class="form-control" id="edit_target_date_{{ milestone.id }}"
-                            name="target_date" value="{{ milestone.target_date|date:'Y-m-d' }}" required>
-                    </div>
-                    <div class="mb-3">
-                        <label for="edit_target_tasks_{{ milestone.id }}" class="form-label">Target Tasks</label>
-                        <input type="number" class="form-control" id="edit_target_tasks_{{ milestone.id }}"
-                            name="target_tasks" value="{{ milestone.target_tasks_completed }}" min="0">
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> Save Changes
-                    </button>
-                </div>
-            </form>
-        </div>
     </div>
 </div>
 
 <script>
     function deleteMilestone(milestoneId, milestoneName) {
         if (confirm(`Are you sure you want to delete the milestone "${milestoneName}"?`)) {
-            fetch(`/api/milestones/${milestoneId}/delete/`, {
+            fetch(`{% url 'delete_milestone' board.id 0 %}`.replace('/0/', `/${milestoneId}/`), {
                 method: 'POST',
                 headers: {
                     'X-CSRFToken': '{{ csrf_token }}',
