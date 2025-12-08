@@ -178,7 +178,9 @@ class UserPerformanceProfile(models.Model):
                 total_score += min(skill_freq, 10)  # Cap at 10 to avoid over-weighting
             max_possible += 10
         
-        if max_possible == 0:
+        if max_possible == 0 or total_score == 0:
+            # No keywords to match, or no overlap found
+            # Return neutral score (50) instead of 0 to avoid penalizing unrelated tasks
             return 50.0
         
         # Convert to 0-100 scale
