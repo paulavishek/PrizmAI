@@ -17,6 +17,13 @@ from .budget_models import (
     BudgetRecommendation, CostPattern
 )
 
+# Import resource leveling admin
+from .resource_leveling_admin import (
+    UserPerformanceProfileAdmin,
+    TaskAssignmentHistoryAdmin,
+    ResourceLevelingSuggestionAdmin
+)
+
 @admin.register(Board)
 class BoardAdmin(admin.ModelAdmin):
     list_display = ('name', 'organization', 'created_by', 'created_at')

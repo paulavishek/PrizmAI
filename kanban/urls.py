@@ -139,4 +139,7 @@ urlpatterns = [
     
     # AI Coach URLs
     path('', include('kanban.coach_urls')),
+    
+    # Resource Leveling URLs
+    path('api/resource-leveling/', include('kanban.resource_leveling_urls')),
 ]

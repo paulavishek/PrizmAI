@@ -1,0 +1,381 @@
+{% load static %}
+<!-- Resource Leveling Widget for Board/Task Pages -->
+<div class="resource-leveling-widget card shadow-sm mb-4">
+    <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="fas fa-users-cog"></i> AI Resource Optimization
+        </h5>
+        <button class="btn btn-sm btn-light" onclick="refreshSuggestions()">
+            <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+    </div>
+    
+    <div class="card-body">
+        <!-- Workload Summary -->
+        <div id="workload-summary" class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted">Loading team workload...</span>
+                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                    <span class="sr-only">Loading...</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Suggestions List -->
+        <div id="suggestions-container">
+            <!-- Suggestions will be loaded here -->
+        </div>
+        
+        <!-- Empty State -->
+        <div id="no-suggestions" class="text-center py-4 d-none">
+            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+            <p class="text-muted">No optimization suggestions at this time.<br>Your team workload is well balanced!</p>
+        </div>
+    </div>
+</div>
+
+<!-- Suggestion Card Template -->
+<template id="suggestion-card-template">
+    <div class="suggestion-card card mb-3 border-info" data-suggestion-id="">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <h6 class="mb-2">
+                        <a href="#" class="task-link text-dark"></a>
+                    </h6>
+                    <div class="suggestion-users mb-2">
+                        <span class="badge badge-secondary current-assignee"></span>
+                        <i class="fas fa-arrow-right mx-2"></i>
+                        <span class="badge badge-success suggested-assignee"></span>
+                    </div>
+                    <p class="reasoning text-muted small mb-0"></p>
+                </div>
+                <div class="col-md-3 text-center">
+                    <div class="metrics">
+                        <div class="metric mb-2">
+                            <div class="h4 mb-0 time-savings text-success"></div>
+                            <small class="text-muted">Time Savings</small>
+                        </div>
+                        <div class="metric">
+                            <div class="confidence-badge"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 text-right">
+                    <button class="btn btn-success btn-sm accept-btn" onclick="acceptSuggestion(this)">
+                        <i class="fas fa-check"></i> Accept
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm reject-btn" onclick="rejectSuggestion(this)">
+                        <i class="fas fa-times"></i> Dismiss
+                    </button>
+                    <div class="expires-info text-muted small mt-2">
+                        <i class="far fa-clock"></i> <span class="expires-text"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<!-- Workload Member Template -->
+<template id="workload-member-template">
+    <div class="workload-member d-flex align-items-center mb-2">
+        <div class="flex-grow-1">
+            <span class="member-name font-weight-bold"></span>
+            <small class="text-muted member-stats"></small>
+        </div>
+        <div class="utilization-bar" style="width: 150px;">
+            <div class="progress" style="height: 20px;">
+                <div class="progress-bar" role="progressbar"></div>
+            </div>
+        </div>
+    </div>
+</template>
+
+<style>
+.resource-leveling-widget {
+    border-radius: 8px;
+}
+
+.suggestion-card {
+    transition: all 0.3s ease;
+    border-left-width: 4px;
+}
+
+.suggestion-card:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.confidence-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.confidence-high {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.confidence-medium {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.confidence-low {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.workload-member .progress-bar {
+    transition: width 0.6s ease;
+}
+
+.utilization-overloaded .progress-bar {
+    background-color: #dc3545;
+}
+
+.utilization-high .progress-bar {
+    background-color: #ffc107;
+}
+
+.utilization-balanced .progress-bar {
+    background-color: #28a745;
+}
+
+.utilization-low .progress-bar {
+    background-color: #17a2b8;
+}
+</style>
+
+<script>
+let currentBoardId = {{ board.id|default:"null" }};
+
+// Load suggestions on page load
+document.addEventListener('DOMContentLoaded', function() {
+    if (currentBoardId) {
+        loadWorkloadReport();
+        loadSuggestions();
+    }
+});
+
+function loadWorkloadReport() {
+    fetch(`/api/resource-leveling/boards/${currentBoardId}/workload-report/`)
+        .then(response => response.json())
+        .then(data => {
+            displayWorkloadSummary(data);
+        })
+        .catch(error => {
+            console.error('Error loading workload report:', error);
+        });
+}
+
+function displayWorkloadSummary(data) {
+    const container = document.getElementById('workload-summary');
+    container.innerHTML = '<h6 class="text-muted mb-3">Team Workload</h6>';
+    
+    const template = document.getElementById('workload-member-template');
+    
+    data.members.forEach(member => {
+        const clone = template.content.cloneNode(true);
+        
+        clone.querySelector('.member-name').textContent = member.name;
+        clone.querySelector('.member-stats').textContent = 
+            `${member.active_tasks} tasks • ${member.workload_hours}h`;
+        
+        const progressBar = clone.querySelector('.progress-bar');
+        progressBar.style.width = `${Math.min(member.utilization, 100)}%`;
+        progressBar.textContent = `${member.utilization}%`;
+        
+        // Set color based on utilization
+        const memberDiv = clone.querySelector('.workload-member');
+        if (member.utilization > 90) {
+            memberDiv.classList.add('utilization-overloaded');
+        } else if (member.utilization > 75) {
+            memberDiv.classList.add('utilization-high');
+        } else if (member.utilization > 40) {
+            memberDiv.classList.add('utilization-balanced');
+        } else {
+            memberDiv.classList.add('utilization-low');
+        }
+        
+        container.appendChild(clone);
+    });
+    
+    // Show bottlenecks warning
+    if (data.bottlenecks.length > 0) {
+        const warning = document.createElement('div');
+        warning.className = 'alert alert-warning mt-3';
+        warning.innerHTML = `<i class="fas fa-exclamation-triangle"></i> 
+            <strong>${data.bottlenecks.length} team member(s) overloaded</strong> - 
+            Review suggestions below to optimize workload.`;
+        container.appendChild(warning);
+    }
+}
+
+function loadSuggestions() {
+    fetch(`/api/resource-leveling/boards/${currentBoardId}/leveling-suggestions/`)
+        .then(response => response.json())
+        .then(data => {
+            displaySuggestions(data.suggestions);
+        })
+        .catch(error => {
+            console.error('Error loading suggestions:', error);
+        });
+}
+
+function displaySuggestions(suggestions) {
+    const container = document.getElementById('suggestions-container');
+    const noSuggestions = document.getElementById('no-suggestions');
+    const template = document.getElementById('suggestion-card-template');
+    
+    container.innerHTML = '';
+    
+    if (suggestions.length === 0) {
+        noSuggestions.classList.remove('d-none');
+        return;
+    }
+    
+    noSuggestions.classList.add('d-none');
+    
+    suggestions.forEach(suggestion => {
+        const clone = template.content.cloneNode(true);
+        const card = clone.querySelector('.suggestion-card');
+        
+        card.dataset.suggestionId = suggestion.id;
+        
+        // Task link
+        const taskLink = clone.querySelector('.task-link');
+        taskLink.href = `/tasks/${suggestion.task_id}/`;
+        taskLink.textContent = suggestion.task_title;
+        
+        // Users
+        clone.querySelector('.current-assignee').textContent = 
+            suggestion.current_assignee || 'Unassigned';
+        clone.querySelector('.suggested-assignee').textContent = 
+            suggestion.suggested_name;
+        
+        // Reasoning
+        clone.querySelector('.reasoning').textContent = suggestion.reasoning;
+        
+        // Metrics
+        clone.querySelector('.time-savings').textContent = suggestion.time_savings;
+        
+        // Confidence badge
+        const confidenceBadge = clone.querySelector('.confidence-badge');
+        confidenceBadge.textContent = `${Math.round(suggestion.confidence)}% confidence`;
+        if (suggestion.confidence >= 80) {
+            confidenceBadge.classList.add('confidence-high');
+        } else if (suggestion.confidence >= 60) {
+            confidenceBadge.classList.add('confidence-medium');
+        } else {
+            confidenceBadge.classList.add('confidence-low');
+        }
+        
+        // Expires
+        const expiresDate = new Date(suggestion.expires_at);
+        const hoursUntilExpiry = Math.round((expiresDate - new Date()) / 1000 / 60 / 60);
+        clone.querySelector('.expires-text').textContent = 
+            `Expires in ${hoursUntilExpiry}h`;
+        
+        container.appendChild(clone);
+    });
+}
+
+function acceptSuggestion(button) {
+    const card = button.closest('.suggestion-card');
+    const suggestionId = card.dataset.suggestionId;
+    
+    if (!confirm('Accept this resource optimization suggestion?')) {
+        return;
+    }
+    
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Accepting...';
+    
+    fetch(`/api/resource-leveling/suggestions/${suggestionId}/accept/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            card.classList.remove('border-info');
+            card.classList.add('border-success');
+            card.querySelector('.card-body').innerHTML = `
+                <div class="alert alert-success mb-0">
+                    <i class="fas fa-check-circle"></i> 
+                    Task successfully reassigned to ${data.new_assignee}
+                </div>
+            `;
+            
+            // Refresh after delay
+            setTimeout(() => {
+                refreshSuggestions();
+            }, 2000);
+        } else {
+            alert('Error accepting suggestion: ' + (data.error || 'Unknown error'));
+            button.disabled = false;
+            button.innerHTML = '<i class="fas fa-check"></i> Accept';
+        }
+    })
+    .catch(error => {
+        alert('Error accepting suggestion: ' + error);
+        button.disabled = false;
+        button.innerHTML = '<i class="fas fa-check"></i> Accept';
+    });
+}
+
+function rejectSuggestion(button) {
+    const card = button.closest('.suggestion-card');
+    const suggestionId = card.dataset.suggestionId;
+    
+    button.disabled = true;
+    
+    fetch(`/api/resource-leveling/suggestions/${suggestionId}/reject/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Fade out and remove
+            card.style.opacity = '0';
+            setTimeout(() => {
+                card.remove();
+                
+                // Check if there are any remaining suggestions
+                const container = document.getElementById('suggestions-container');
+                if (container.children.length === 0) {
+                    document.getElementById('no-suggestions').classList.remove('d-none');
+                }
+            }, 300);
+        } else {
+            alert('Error rejecting suggestion: ' + (data.error || 'Unknown error'));
+            button.disabled = false;
+        }
+    })
+    .catch(error => {
+        alert('Error rejecting suggestion: ' + error);
+        button.disabled = false;
+    });
+}
+
+function refreshSuggestions() {
+    loadWorkloadReport();
+    loadSuggestions();
+}
+
+function getCsrfToken() {
+    return document.querySelector('[name=csrfmiddlewaretoken]').value;
+}
+</script>
