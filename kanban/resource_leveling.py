@@ -298,6 +298,7 @@ class ResourceLevelingService:
     def get_board_optimization_suggestions(self, board, limit=10):
         """
         Analyze all tasks on a board and return top optimization opportunities
+        Always regenerates suggestions with current workload data to ensure relevance
         
         Args:
             board: Board object
@@ -307,6 +308,13 @@ class ResourceLevelingService:
             List of ResourceLevelingSuggestion objects
         """
         from kanban.models import Task
+        
+        # Expire all old pending suggestions for this board to ensure fresh recommendations
+        # This prevents showing stale suggestions based on outdated workload
+        ResourceLevelingSuggestion.objects.filter(
+            task__column__board=board,
+            status='pending'
+        ).update(status='expired')
         
         # Get all incomplete tasks
         tasks = Task.objects.filter(
@@ -319,17 +327,7 @@ class ResourceLevelingService:
         suggestions = []
         
         for task in tasks:
-            # Skip if there's already a pending suggestion
-            existing = ResourceLevelingSuggestion.objects.filter(
-                task=task,
-                status='pending'
-            ).first()
-            
-            if existing and not existing.is_expired():
-                suggestions.append(existing)
-                continue
-            
-            # Create new suggestion
+            # Always create fresh suggestion with current workload data
             suggestion = self.create_suggestion(task)
             if suggestion:
                 suggestions.append(suggestion)

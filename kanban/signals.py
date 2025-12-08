@@ -80,6 +80,52 @@ def update_workload_on_assignment_change(sender, instance, created, **kwargs):
                 changed_by=getattr(instance, '_changed_by_user', instance.created_by),
                 reason='manual'
             )
+    
+    # Invalidate stale AI suggestions after assignment change
+    _invalidate_related_suggestions(instance, old_assignee, new_assignee, organization)
+
+
+def _invalidate_related_suggestions(task, old_assignee, new_assignee, organization):
+    """
+    Invalidate AI suggestions that are no longer relevant after an assignment change
+    """
+    from kanban.resource_leveling_models import ResourceLevelingSuggestion
+    
+    # Expire pending suggestions for this specific task
+    ResourceLevelingSuggestion.objects.filter(
+        task=task,
+        status='pending'
+    ).update(status='expired')
+    
+    # Expire suggestions recommending the new assignee if they're now overloaded
+    if new_assignee:
+        profile = UserPerformanceProfile.objects.filter(
+            user=new_assignee,
+            organization=organization
+        ).first()
+        
+        if profile and profile.utilization_percentage > 85:
+            # This user is now overloaded, expire all pending suggestions recommending them
+            ResourceLevelingSuggestion.objects.filter(
+                suggested_assignee=new_assignee,
+                status='pending',
+                organization=organization
+            ).update(status='expired')
+    
+    # Also check if old assignee is now underutilized and could take more work
+    if old_assignee:
+        old_profile = UserPerformanceProfile.objects.filter(
+            user=old_assignee,
+            organization=organization
+        ).first()
+        
+        if old_profile and old_profile.utilization_percentage < 60:
+            # Old assignee now has capacity - expire suggestions moving work AWAY from them
+            ResourceLevelingSuggestion.objects.filter(
+                current_assignee=old_assignee,
+                status='pending',
+                organization=organization
+            ).update(status='expired')
 
 
 @receiver(post_save, sender=Task)
