@@ -2984,6 +2984,188 @@ Click "Why?" to see:
 - You can see alternatives if Jane is unavailable
 - You can prioritize training (if you need to develop Bob's skills)
 
+### 🎯 **AI-Powered Resource Leveling & Optimization**
+
+**Let AI automatically recommend the best task assignments to balance team workload and maximize productivity.**
+
+Resource leveling is one of the hardest parts of project management - balancing skill requirements with team capacity while keeping everyone engaged. PrizmAI automates this with intelligent assignment recommendations that consider multiple factors simultaneously.
+
+#### **How AI Resource Optimization Works**
+
+PrizmAI analyzes five key factors to recommend the best person for each task:
+
+```
+Assignment Score Calculation:
+
+Skill Match (30%)
+├─ How well does the person's skills match the task requirements?
+├─ Based on: Task keywords vs. person's work history
+└─ Example: Task mentions "React" → Jane has completed 15 React tasks
+
+Availability (25%)
+├─ How much free capacity does this person have?
+├─ Based on: Current workload, active tasks, estimated hours
+└─ Example: Alice has 2 tasks (40% capacity) → very available
+
+Velocity (20%)
+├─ How fast does this person complete similar tasks?
+├─ Based on: Historical completion times
+└─ Example: Jane completes feature work in 3 days avg → fast
+
+Reliability (15%)
+├─ How consistently does this person hit deadlines?
+├─ Based on: On-time task completion rate
+└─ Example: Bob completes 95% of tasks on time → very reliable
+
+Quality (10%)
+├─ How high-quality is their work?
+├─ Based on: Task reopens, revisions needed, code quality
+└─ Example: Sarah rarely needs revisions → high quality
+
+Overall Confidence = (Skill×0.30) + (Availability×0.25) + 
+                     (Velocity×0.20) + (Reliability×0.15) + (Quality×0.10)
+```
+
+#### **Real-World Example**
+
+```
+Task: "Create onboarding tutorial"
+
+AI Recommendations (Ranked):
+
+1. ⭐ Jane Smith - Overall Score: 72.7%
+   ├─ Skill Match: 50% (no direct onboarding experience, but has training tasks)
+   ├─ Availability: 87.5% (only 1 task currently - 12% utilized)
+   ├─ Velocity: 100% (completes similar docs in 2-3 days)
+   ├─ Reliability: 65.8% (sometimes misses deadlines)
+   ├─ Quality: 60% (good but occasionally needs revisions)
+   │
+   └─ Why?: Jane is highly available and fast. Despite no direct
+             onboarding experience, her documentation skills transfer well.
+             She can start immediately.
+
+2. ⭐⭐ Bob Martinez - Overall Score: 73.7%
+   ├─ Skill Match: 50% (no direct onboarding experience)
+   ├─ Availability: 87.5% (only 1 task - 12% utilized)
+   ├─ Velocity: 100% (fast worker)
+   ├─ Reliability: 72.4% (more reliable than Jane)
+   ├─ Quality: 60% (solid output)
+   │
+   └─ Why?: Bob is equally available and fast, slightly more reliable.
+             Better choice if reliability matters more than speed.
+
+3. Carol Anderson - Overall Score: 68.2%
+   ├─ Skill Match: 75% (has 2 onboarding task completions)
+   ├─ Availability: 20% (5 active tasks - 80% utilized)
+   ├─ Velocity: 85% (a bit slower)
+   ├─ Reliability: 71% (reliable)
+   ├─ Quality: 65% (good quality)
+   │
+   └─ Why?: Best skill match, but too busy. Could overload her.
+            Consider if other tasks can be reassigned first.
+
+NOT RECOMMENDED:
+
+✗ David Taylor - Overall Score: 41.2%
+  └─ Why?: Busy (95% utilized), slower velocity (65%), and no
+           onboarding experience. Not a good fit right now.
+```
+
+#### **Smart Features**
+
+**1. Workload Balancing**
+- AI tracks active tasks per person and estimated hours
+- Recommends assignments that prevent overload
+- Shows capacity warnings ("Alice is at 85% capacity")
+- Suggests reassignment when someone becomes overloaded
+
+**2. Skill Gap Awareness**
+- Identifies when task requirements don't match available skills
+- Suggests pairing experienced/novice for skill transfer
+- Flags critical skills that no one has
+- Recommends training opportunities
+
+**3. Team Capacity Forecasting**
+- Shows predicted team utilization for the next 1-2 weeks
+- Identifies bottlenecks before they happen
+- Suggests task priorities to prevent overload
+- Warns when deadline is at risk due to capacity
+
+**4. Cross-Training Opportunities**
+- Identifies tasks that develop team skills
+- Suggests assignments that stretch people's abilities
+- Balances growth opportunities across the team
+- Prevents knowledge silos
+
+#### **What You See on the Board**
+
+```
+Resource Optimization Panel:
+
+┌─────────────────────────────────────────┐
+│ Task: "Create onboarding tutorial"      │
+│                                          │
+│ 💡 AI Optimization Suggestions:         │
+│                                          │
+│ ✓ Recommended: Jane Smith (72.7%)       │
+│ • Alt 1: Bob Martinez (73.7%)           │
+│ • Alt 2: Carol Anderson (68.2%)         │
+│                                          │
+│ 📊 Team Capacity:                       │
+│ • Jane: ▮▮▮░░░░░░░░ 12% (2 hrs)        │
+│ • Bob:  ▮▮▮░░░░░░░░ 12% (2 hrs)        │
+│ • Carol:▮▮▮▮▮▮▮▮░░░ 80% (6.4 hrs)      │
+│                                          │
+│ ⚠️  Warning: Carol is near capacity     │
+│                                          │
+│ [Assign to Jane] [See Alternatives]    │
+│ [Why Jane?] [Show Details]             │
+└─────────────────────────────────────────┘
+```
+
+#### **Confidence Score Interpretation**
+
+When you see a score like "72.7%", here's what it means:
+
+- **85-100%**: Excellent match - clear choice
+- **70-84%**: Good match - solid recommendation
+- **50-69%**: Moderate match - acceptable if no better option
+- **<50%**: Poor match - should reassign if possible
+
+The score reflects **data quality**, not just a ranking. If score is low, AI is saying "I'm not confident in this decision because available data is limited."
+
+#### **How to Use Recommendations**
+
+**Step 1: View Suggestions**
+- Open the task
+- See AI recommendations ranked by score
+- Click "Why?" to see the detailed breakdown
+
+**Step 2: Understand the Reasoning**
+- See which factors helped/hurt the recommendation
+- Verify AI assumptions ("Alice has capacity" = true/false?)
+- Consider factors AI doesn't know about (vacation plans, etc.)
+
+**Step 3: Make Decision**
+- Accept recommendation → assign to suggested person
+- Override → assign to different person + explain why
+- Reassign → ask AI to suggest someone else
+
+**Step 4: AI Learns**
+- Each decision trains the AI
+- If you override, AI learns your preferences
+- Recommendations improve over time
+
+#### **Benefits You'll See**
+
+✅ **Faster Decisions** - Stop debating who should do this task  
+✅ **Better Balance** - Team workload stays even, no heroes  
+✅ **Higher Quality** - Tasks go to people with right skills  
+✅ **Faster Delivery** - People work at full capacity, not overloaded  
+✅ **Better Development** - Growth opportunities distributed fairly  
+✅ **Fewer Conflicts** - Transparent, data-driven assignments  
+✅ **Reduced Burnout** - No one consistently overloaded  
+
 ### Why Explainability Matters for Your Team
 
 **For Managers:**
