@@ -354,7 +354,7 @@ class ResourceLevelingSuggestion(models.Model):
             new_assignee=self.suggested_assignee,
             changed_by=user,
             reason='ai_suggestion',
-            predicted_completion_hours=self.suggested_projected_date,
+            predicted_completion_hours=abs(self.time_savings_hours) if self.time_savings_hours else None,
             was_ai_suggested=True,
             ai_confidence_score=self.confidence_score,
             ai_reasoning=self.reasoning
