@@ -58,8 +58,8 @@ class UserPerformanceProfile(models.Model):
         ninety_days_ago = timezone.now() - timedelta(days=90)
         completed_tasks = Task.objects.filter(
             assigned_to=self.user,
-            completed_date__isnull=False,
-            completed_date__gte=ninety_days_ago,
+            completed_at__isnull=False,
+            completed_at__gte=ninety_days_ago,
             column__board__organization=self.organization
         )
         
@@ -72,12 +72,12 @@ class UserPerformanceProfile(models.Model):
         on_time_count = 0
         
         for task in completed_tasks:
-            if task.created_at and task.completed_date:
-                hours = (task.completed_date - task.created_at).total_seconds() / 3600
+            if task.created_at and task.completed_at:
+                hours = (task.completed_at - task.created_at).total_seconds() / 3600
                 completion_times.append(hours)
                 
                 # Check if completed on time
-                if task.due_date and task.completed_date <= task.due_date:
+                if task.due_date and task.completed_at <= task.due_date:
                     on_time_count += 1
         
         if completion_times:
@@ -100,7 +100,7 @@ class UserPerformanceProfile(models.Model):
         self.update_current_workload()
         
         self.total_tasks_completed = task_count
-        self.last_task_completed = completed_tasks.latest('completed_date').completed_date
+        self.last_task_completed = completed_tasks.latest('completed_at').completed_at
         self.save()
     
     def update_skill_profile(self, tasks):
@@ -130,7 +130,7 @@ class UserPerformanceProfile(models.Model):
         
         active_tasks = Task.objects.filter(
             assigned_to=self.user,
-            completed_date__isnull=True,
+            completed_at__isnull=True,
             column__board__organization=self.organization
         ).exclude(column__name__icontains='done')
         
@@ -261,13 +261,13 @@ class TaskAssignmentHistory(models.Model):
     
     def calculate_actual_metrics(self):
         """Calculate actual completion metrics when task is done"""
-        if not self.task.completed_date or not self.task.created_at:
+        if not self.task.completed_at or not self.task.created_at:
             return
         
         # Calculate actual hours
-        actual_hours = (self.task.completed_date - self.changed_at).total_seconds() / 3600
+        actual_hours = (self.task.completed_at - self.changed_at).total_seconds() / 3600
         self.actual_completion_hours = actual_hours
-        self.actual_completion_date = self.task.completed_date
+        self.actual_completion_date = self.task.completed_at
         
         # Calculate prediction accuracy
         if self.predicted_completion_hours and actual_hours > 0:

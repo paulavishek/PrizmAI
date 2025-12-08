@@ -155,20 +155,52 @@ let currentBoardId = {{ board.id|default:"null" }};
 
 // Load suggestions on page load
 document.addEventListener('DOMContentLoaded', function() {
-    if (currentBoardId) {
+    console.log('Resource Leveling Widget: Initializing with board ID:', currentBoardId);
+    if (currentBoardId && currentBoardId !== null) {
         loadWorkloadReport();
         loadSuggestions();
+    } else {
+        console.error('Resource Leveling Widget: No board ID available');
+        showError('Board ID not found');
     }
 });
 
+function showError(message) {
+    const container = document.getElementById('workload-summary');
+    if (container) {
+        container.innerHTML = `
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i> ${message}
+            </div>
+        `;
+    }
+}
+
 function loadWorkloadReport() {
+    console.log('Loading workload report for board:', currentBoardId);
     fetch(`/api/resource-leveling/boards/${currentBoardId}/workload-report/`)
-        .then(response => response.json())
+        .then(response => {
+            console.log('Workload report response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
+            console.log('Workload report data:', data);
             displayWorkloadSummary(data);
         })
         .catch(error => {
             console.error('Error loading workload report:', error);
+            const container = document.getElementById('workload-summary');
+            container.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> 
+                    <strong>No performance data yet.</strong><br>
+                    Complete some tasks to build team profiles. 
+                    <a href="#" onclick="updateProfiles(); return false;">Update Profiles</a>
+                </div>
+            `;
         });
 }
 
@@ -216,13 +248,25 @@ function displayWorkloadSummary(data) {
 }
 
 function loadSuggestions() {
+    console.log('Loading suggestions for board:', currentBoardId);
     fetch(`/api/resource-leveling/boards/${currentBoardId}/leveling-suggestions/`)
-        .then(response => response.json())
+        .then(response => {
+            console.log('Suggestions response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
+            console.log('Suggestions data:', data);
             displaySuggestions(data.suggestions);
         })
         .catch(error => {
             console.error('Error loading suggestions:', error);
+            const container = document.getElementById('suggestions-container');
+            const noSuggestions = document.getElementById('no-suggestions');
+            container.innerHTML = '';
+            noSuggestions.classList.remove('d-none');
         });
 }
 
@@ -371,11 +415,68 @@ function rejectSuggestion(button) {
 }
 
 function refreshSuggestions() {
+    console.log('Refreshing suggestions...');
+    
+    // Show loading state
+    const workloadContainer = document.getElementById('workload-summary');
+    const suggestionsContainer = document.getElementById('suggestions-container');
+    
+    workloadContainer.innerHTML = '<div class="text-muted"><i class="fas fa-spinner fa-spin"></i> Loading team workload...</div>';
+    suggestionsContainer.innerHTML = '<div class="text-muted"><i class="fas fa-spinner fa-spin"></i> Loading suggestions...</div>';
+    
     loadWorkloadReport();
     loadSuggestions();
 }
 
+function updateProfiles() {
+    console.log('Updating performance profiles...');
+    
+    const container = document.getElementById('workload-summary');
+    container.innerHTML = '<div class="text-info"><i class="fas fa-spinner fa-spin"></i> Updating team profiles...</div>';
+    
+    fetch(`/api/resource-leveling/boards/${currentBoardId}/update-profiles/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Profile update result:', data);
+        alert(`Updated ${data.updated} team member profiles!`);
+        refreshSuggestions();
+    })
+    .catch(error => {
+        console.error('Error updating profiles:', error);
+        alert('Error updating profiles. Please try again.');
+        loadWorkloadReport();
+    });
+}
+
 function getCsrfToken() {
-    return document.querySelector('[name=csrfmiddlewaretoken]').value;
+    // Try to get CSRF token from cookie
+    const name = 'csrftoken';
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    
+    // Fallback to form token
+    if (!cookieValue) {
+        const token = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (token) {
+            cookieValue = token.value;
+        }
+    }
+    
+    return cookieValue;
 }
 </script>

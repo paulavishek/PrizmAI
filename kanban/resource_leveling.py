@@ -311,7 +311,7 @@ class ResourceLevelingService:
         # Get all incomplete tasks
         tasks = Task.objects.filter(
             column__board=board,
-            completed_date__isnull=True
+            completed_at__isnull=True
         ).exclude(
             column__name__icontains='done'
         ).select_related('assigned_to', 'column')
@@ -490,7 +490,7 @@ class WorkloadBalancer:
             tasks = Task.objects.filter(
                 assigned_to=overloaded_profile.user,
                 column__board=board,
-                completed_date__isnull=True
+                completed_at__isnull=True
             ).exclude(column__name__icontains='done')
             
             for task in tasks:

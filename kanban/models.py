@@ -9,6 +9,13 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 # Import coach models
 from kanban.coach_models import CoachingSuggestion, CoachingFeedback, PMMetrics, CoachingInsight
 
+# Import resource leveling models
+from kanban.resource_leveling_models import (
+    UserPerformanceProfile,
+    TaskAssignmentHistory,
+    ResourceLevelingSuggestion
+)
+
 class Board(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
