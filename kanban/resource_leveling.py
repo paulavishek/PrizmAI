@@ -42,6 +42,9 @@ class ResourceLevelingService:
             # Initialize with historical data
             profile.update_metrics()
         
+        # Always refresh current workload to ensure real-time accuracy
+        profile.update_current_workload()
+        
         return profile
     
     def analyze_task_assignment(self, task, potential_assignees=None):
@@ -409,8 +412,7 @@ class ResourceLevelingService:
         for member in members:
             profile = self.get_or_create_profile(member)
             
-            # Force refresh workload to ensure real-time accuracy
-            profile.update_current_workload()
+            # Profile is already fresh from get_or_create_profile()
             
             member_data = {
                 'username': member.username,
