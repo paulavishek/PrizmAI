@@ -355,14 +355,14 @@ function acceptSuggestion(button) {
             card.querySelector('.card-body').innerHTML = `
                 <div class="alert alert-success mb-0">
                     <i class="fas fa-check-circle"></i> 
-                    Task successfully reassigned to ${data.new_assignee}
+                    Task successfully reassigned to ${data.new_assignee}. Refreshing page...
                 </div>
             `;
             
-            // Refresh after delay
+            // Reload the page to show updated task assignment on board and widget
             setTimeout(() => {
-                refreshSuggestions();
-            }, 2000);
+                window.location.reload();
+            }, 1500);
         } else {
             alert('Error accepting suggestion: ' + (data.error || 'Unknown error'));
             button.disabled = false;

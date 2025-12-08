@@ -345,6 +345,9 @@ class ResourceLevelingSuggestion(models.Model):
         # Update task assignment
         old_assignee = self.task.assigned_to
         self.task.assigned_to = self.suggested_assignee
+        # Mark that this was accepted by AI to prevent duplicate history entries
+        self.task._ai_suggestion_accepted = True
+        self.task._changed_by_user = user
         self.task.save()
         
         # Create assignment history
@@ -366,7 +369,8 @@ class ResourceLevelingSuggestion(models.Model):
         self.reviewed_by = user
         self.save()
         
-        # Update performance profiles
+        # Update performance profiles - this will now be handled by signals
+        # But we'll keep this as a backup in case signals don't fire
         if old_assignee:
             profile = UserPerformanceProfile.objects.filter(user=old_assignee, organization=self.organization).first()
             if profile:

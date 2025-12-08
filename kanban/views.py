@@ -460,7 +460,10 @@ def task_detail(request, task_id):
         if form.is_valid():
             # Track changes automatically
             with AuditLogContext(task, request.user, request, 'task.updated'):
-                task = form.save()
+                task = form.save(commit=False)
+                # Store who made the change for signal handler
+                task._changed_by_user = request.user
+                task.save()
             
             # Record activity
             TaskActivity.objects.create(
@@ -603,6 +606,8 @@ def create_task(request, board_id, column_id=None):
             # Set position to be at the end of the column
             last_position = Task.objects.filter(column=column).order_by('-position').first()
             task.position = (last_position.position + 1) if last_position else 0
+            # Store who created the task for signal handler
+            task._changed_by_user = request.user
             task.save()
             # Save many-to-many relationships
             form.save_m2m()
