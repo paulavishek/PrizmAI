@@ -1299,9 +1299,15 @@ class Milestone(models.Model):
     @property
     def completion_percentage(self):
         """Calculate completion based on related tasks"""
-        if not self.related_tasks.exists():
-            return 100 if self.is_completed else 0
+        # If milestone is marked as completed, always return 100%
+        if self.is_completed:
+            return 100
         
+        # If no related tasks, return 0% (since not completed)
+        if not self.related_tasks.exists():
+            return 0
+        
+        # Calculate based on related tasks completion
         total_tasks = self.related_tasks.count()
         completed_tasks = self.related_tasks.filter(progress=100).count()
         return int((completed_tasks / total_tasks) * 100)

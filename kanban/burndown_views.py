@@ -11,7 +11,7 @@ from django.utils import timezone
 from datetime import timedelta, datetime
 import json
 
-from kanban.models import Board, Task
+from kanban.models import Board, Task, Milestone
 from kanban.burndown_models import (
     TeamVelocitySnapshot,
     BurndownPrediction,
@@ -279,7 +279,7 @@ def resolve_burndown_alert(request, board_id, alert_id):
 @login_required
 def manage_milestones(request, board_id):
     """
-    Manage sprint milestones
+    Manage project milestones
     """
     board = get_object_or_404(Board, id=board_id)
     
@@ -288,33 +288,8 @@ def manage_milestones(request, board_id):
         messages.error(request, "You don't have access to this board.")
         return redirect('dashboard')
     
-    if request.method == 'POST':
-        action = request.POST.get('action')
-        
-        if action == 'create':
-            # Create new milestone
-            SprintMilestone.objects.create(
-                board=board,
-                name=request.POST.get('name'),
-                description=request.POST.get('description', ''),
-                target_date=request.POST.get('target_date'),
-                target_tasks_completed=int(request.POST.get('target_tasks', 0)),
-                created_by=request.user
-            )
-            messages.success(request, 'Milestone created successfully')
-        
-        elif action == 'complete':
-            milestone_id = request.POST.get('milestone_id')
-            milestone = get_object_or_404(SprintMilestone, id=milestone_id, board=board)
-            milestone.is_completed = True
-            milestone.actual_date = timezone.now().date()
-            milestone.completion_percentage = 100
-            milestone.save()
-            messages.success(request, f"Milestone '{milestone.name}' marked as completed")
-        
-        return redirect('manage_milestones', board_id=board_id)
-    
-    milestones = SprintMilestone.objects.filter(board=board).order_by('target_date')
+    # Get all milestones for this board
+    milestones = Milestone.objects.filter(board=board).order_by('target_date')
     
     context = {
         'board': board,
