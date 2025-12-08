@@ -6,9 +6,10 @@
 
 This project showcases proficiency in building production-ready applications with:
 - 🧠 **AI Integration** - Google Gemini API for intelligent recommendations
+- 🎓 **AI Coach** - Proactive project management coaching with real-time suggestions
 - 🔒 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
 - 🚀 **Modern Architecture** - Django backend, RESTful API, WebSocket support
-- 📊 **Advanced Features** - Burndown charts, scope tracking, skill gap analysis, budget & ROI tracking
+- 📊 **Advanced Features** - Burndown charts, scope tracking, skill gap analysis, budget & ROI tracking, AI coaching
 - 💰 **Financial Management** - Budget tracking, cost analysis, ROI optimization with AI
 - 🎯 **Professional Development** - Clean code, testing, documentation
 
@@ -101,6 +102,404 @@ Why?
 ✅ **Spot Errors Early** - Challenge the AI if reasoning is flawed  
 ✅ **Learn Patterns** - Understand your team's performance better  
 ✅ **Compliance Ready** - Full audit trail for enterprise requirements  
+
+---
+
+### 🎓 **AI Coach for Project Managers**
+
+**Get proactive coaching and intelligent guidance to improve your project management decisions in real-time.**
+
+The AI Coach is like having an experienced mentor looking over your shoulder, watching your project metrics and offering timely, actionable advice. It automatically detects problems before they become critical and learns from your feedback to improve suggestions over time.
+
+#### **What It Does**
+
+The AI Coach continuously monitors your project and:
+
+- 🚨 **Catches problems early** - Detects velocity drops, resource overloads, and risks before they escalate
+- ⚠️ **Prevents disasters** - Alerts you when multiple high-risk tasks converge
+- 💡 **Spots opportunities** - Identifies skilled team members ready for challenging work
+- 📈 **Learns and improves** - Gets smarter from your feedback and actions
+- 🎯 **Provides actionable guidance** - Suggests concrete steps to improve your project
+
+#### **Core Features**
+
+**1. Intelligent Pattern Detection**
+
+The rule engine analyzes your project in real-time and detects:
+
+```
+Detected Issues:
+├─ 🔴 Velocity Drop: Team completing 30% fewer tasks this week
+├─ 🟠 Resource Overload: Jane has 10 active tasks (2x normal)
+├─ 🔴 Risk Convergence: 3 high-risk tasks due same week
+├─ 🟡 Scope Creep: 15% increase in total tasks and complexity
+├─ 🟠 Deadline Risk: 40% probability of missing deadline
+├─ 🟡 Team Burnout: 4 team members working overtime for 2+ weeks
+├─ 🟡 Quality Issues: 5 tasks reopened this week (double normal)
+├─ 🔴 Communication Gap: 2 blockers waiting on external response
+├─ 🟠 Skill Opportunity: Bob ready to lead complex database work
+└─ 🔵 Best Practice: Consider parallel testing for faster feedback
+```
+
+**2. AI-Enhanced Reasoning**
+
+Each suggestion includes AI-generated explanations:
+
+```
+Suggestion: "Your Velocity is Dropping"
+────────────────────────────────────
+
+Why This Matters:
+  Your team completed 30% fewer tasks this week (12 vs 18 tasks).
+  This pattern typically precedes project delays.
+
+What Might Be Happening:
+  ├─ Blocking issues delaying task completion
+  ├─ Increased complexity of recent tasks
+  ├─ Team members pulled to other work
+  └─ Skill gap in emerging technology
+
+Recommended Actions:
+  1. Run quick team standup to identify blockers
+  2. Review 3 oldest "In Progress" tasks for issues
+  3. Pair junior developers with senior mentors
+  4. Consider simplifying next task scope
+
+Expected Impact:
+  If you address blockers, velocity should recover within 2-3 days.
+
+AI Confidence: 82% (based on 12 similar patterns in past projects)
+```
+
+**3. Continuous Learning**
+
+The system learns from your feedback and improves:
+
+```
+Learning Cycle:
+  1. System generates suggestion
+  2. You take action (or dismiss suggestion)
+  3. System learns what worked
+  4. Next similar situation → better suggestion
+
+Example Learning:
+  Week 1: Coach suggests "Pair programming will improve quality"
+          You dismiss it, code reviews work better for your team
+  Week 2: Coach suggests "Pair programming"
+          But with lower confidence (remembers you prefer code reviews)
+  Week 3: Coach suggests "Code review needed" instead
+          Confidence: 95% (learned your preference)
+```
+
+#### **Dashboard & Access**
+
+**Location:** Any board → Click **"AI Coach"** button (🎓) in header
+
+**Dashboard Shows:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 🎓 AI Coach Dashboard                  [Refresh]    │
+│                                                     │
+│ Coaching Effectiveness: 85%                         │
+│ Active Suggestions: 3                               │
+│ Helpful Actions Taken: 67%                          │
+│ Team Improvement Score: ↑ 12%                       │
+├─────────────────────────────────────────────────────┤
+│                                                     │
+│ 🔴 CRITICAL ATTENTION (1)                           │
+│                                                     │
+│  ┌────────────────────────────────────────────┐    │
+│  │ 3 High-Risk Tasks Converging This Week     │    │
+│  │                                            │    │
+│  │ You have 3 tasks marked "High Risk" due   │    │
+│  │ same week. This significantly increases   │    │
+│  │ project failure probability.               │    │
+│  │                                            │    │
+│  │ Why: Task complexity + external deps      │    │
+│  │                                            │    │
+│  │ Actions:                                   │    │
+│  │ • Create risk mitigation plan              │    │
+│  │ • Assign senior dev to critical paths     │    │
+│  │ • Consider staggering deadlines            │    │
+│  │ • Increase communication frequency         │    │
+│  │                                            │    │
+│  │ [Acknowledge] [Get Details] [Dismiss]    │    │
+│  └────────────────────────────────────────────┘    │
+│                                                     │
+│ 🟠 HIGH PRIORITY (2)                                │
+│  • Velocity dropping (details) [Feedback]          │
+│  • Resource overload on Jane (details) [Feedback]  │
+│                                                     │
+│ 🔵 MEDIUM PRIORITY (3)                              │
+│  • Scope creep detected (details) [Feedback]       │
+│  • Communication gap identified (details)          │
+│  • Quality issues emerging (details)                │
+│                                                     │
+├─────────────────────────────────────────────────────┤
+│ 💬 Ask the AI Coach                                 │
+│                                                     │
+│ Have a specific question? Get personalized advice  │
+│ [Ask a Question]  [View Full Analytics]            │
+│                                                     │
+└─────────────────────────────────────────────────────┘
+```
+
+#### **Types of Suggestions You'll Receive**
+
+**Critical Alerts (🔴)** - Require immediate action:
+- Risk convergence (3+ high-risk tasks due same period)
+- Deadline at risk (40%+ probability of missing)
+- Severe team burnout (multiple people 40+ hours/week)
+
+**High Priority (🟠)** - Address within 1-2 days:
+- Velocity drops significantly (30%+ decrease)
+- Resource overload (person has 2x normal tasks)
+- Critical blockers (work waiting on external response)
+
+**Medium Priority (🟡)** - Address this week:
+- Scope creep (15%+ increase in work)
+- Quality issues emerging (higher reopened task rate)
+- Skill gaps identified (task requires unavailable skill)
+
+**Low Priority (🟦)** - Consider when planning:
+- Skill development opportunities (team member ready to stretch)
+- Best practice recommendations
+- Process improvements
+
+#### **Using Suggestions**
+
+**1. View & Understand**
+
+Click any suggestion to see full details:
+
+```
+Full Suggestion View:
+
+Title: Velocity Dropping
+
+Current Status: ACTIVE
+Severity: HIGH PRIORITY
+Confidence Score: 82%
+
+Message:
+  Your team's velocity dropped 30% this week. You completed 12 tasks
+  instead of the typical 18. This is often a warning sign that 
+  something is blocking progress.
+
+Detailed Reasoning:
+  • Historical average: 18 tasks/week
+  • This week: 12 tasks/week
+  • Decline: 33%
+  • Likelihood cause: Blockers or increased complexity
+  • Impact: At this pace, will miss deadline by 3-5 days
+
+Recommended Actions:
+  1. Check for blockers in "In Progress" column
+  2. Run team standup focused on blocking issues
+  3. Pair junior devs with seniors on complex tasks
+  4. Review task complexity of recent additions
+
+Expected Outcomes:
+  If blockers are addressed, velocity typically recovers 
+  within 2-3 days. We've seen this pattern in 12 similar projects.
+
+Data & Context:
+  Generated: Nov 20, 2025 at 2:30 PM
+  Analysis Period: Last 7 days
+  Model: Rule-Engine + Gemini AI Enhancement
+  Metrics Snapshot: [Show More]
+```
+
+**2. Take Action**
+
+After acting on a suggestion, let the system know:
+
+```
+Action Options:
+
+[Acknowledge] - "I see this, planning to act"
+[In Progress] - "Working on addressing this"
+[Resolved] - "Fixed the issue!"
+[Dismiss] - "Not applicable right now"
+[Partial] - "Addressed part of it"
+```
+
+**3. Provide Feedback**
+
+Help the system learn:
+
+```
+Feedback Options:
+
+Was This Helpful?
+├─ Very helpful - I took action and it worked
+├─ Helpful - Good advice but couldn't act
+├─ Somewhat helpful - Interesting perspective
+├─ Not helpful - Not relevant to my situation
+└─ Misleading - Wrong conclusion
+
+Relevance Score: [1 ★★★★★ 5]
+
+What Did You Do?
+└─ Describe action taken (optional)
+
+What Was The Result?
+├─ Improved the situation significantly
+├─ Helped a little
+├─ Didn't help
+└─ Made things worse
+
+Comments:
+[Your feedback here]
+```
+
+#### **Coach Analytics & Progress**
+
+**View your coaching effectiveness:**
+
+```
+Coaching Performance (Last 30 Days):
+
+Engagement:
+├─ Suggestions received: 15
+├─ Actions taken: 10 (67% acted on)
+├─ Helpful feedback: 8 of 10 (80%)
+└─ Improvement: ↑ 12% vs previous month
+
+Effectiveness:
+├─ Suggestions that worked: 8/10 (80%)
+├─ Situations improved: 7 (avg improvement: 15%)
+├─ Deadline misses prevented: 2
+├─ Cost saved (estimate): $8,000
+
+Team Learning:
+├─ Most common issue type: Velocity drops
+├─ Fastest problem resolution: 2 hours (blockers)
+├─ Slowest: 7 days (skill gaps)
+├─ Team trust in suggestions: ↑ 25%
+
+Recommendations for Improvement:
+├─ Focus on: Resource planning (2 recent overloads)
+├─ Strength: Risk identification (100% accuracy)
+└─ Development area: Scope management (missed 3 creep alerts)
+```
+
+#### **Advanced Features**
+
+**1. Ask the AI Coach**
+
+Get answers to specific project questions:
+
+```
+Example Questions:
+• "Is Jane overloaded? Should I reassign something?"
+• "What's our biggest risk this sprint?"
+• "Should we extend the deadline or cut scope?"
+• "Who should lead this new payment feature?"
+• "How can we improve code quality this sprint?"
+```
+
+**2. Coaching Insights**
+
+Learn patterns about your team and projects:
+
+```
+Insights:
+├─ Your team excels at: Agile velocity, Risk detection
+├─ Typical issue: Resource planning (overload ~2x/month)
+├─ Best performing pattern: Small sprints (5-day)
+├─ Risk factor: Tight deadlines without buffer
+└─ Team trend: ↑ Code quality, ↓ Estimation accuracy
+```
+
+**3. Feedback Learning**
+
+The system remembers what works for your team:
+
+```
+Learned Preferences:
+
+Your Team's Proven Solutions:
+├─ Code reviews (80% effective for quality)
+├─ Small batches (60% faster completion)
+├─ Senior-junior pairing (90% knowledge transfer)
+├─ Slack standups (medium effectiveness)
+└─ Written specs (high for complex tasks)
+
+Suggestions Calibrated For:
+├─ Team size: 5 people
+├─ Experience level: Mixed (senior + junior)
+├─ Remote setup: Yes (async-first)
+├─ Project type: Web + Mobile
+└─ Typical sprint length: 1 week
+```
+
+#### **Getting Started with AI Coach**
+
+**1. Initial Setup (One Time)**
+
+```bash
+# Create database tables
+python manage.py makemigrations kanban
+python manage.py migrate
+
+# Generate initial suggestions
+python manage.py generate_coach_suggestions
+```
+
+**2. Accessing the Dashboard**
+
+- Open any board in PrizmAI
+- Click the purple **"AI Coach"** button (🎓) in the top navigation
+- View active suggestions grouped by severity
+
+**3. Daily Usage**
+
+Morning routine (5 minutes):
+1. Check critical suggestions
+2. Acknowledge what you'll address
+3. Dismiss what's not applicable
+
+Weekly review (10 minutes):
+1. Provide feedback on 2-3 suggestions
+2. View coaching analytics
+3. Check improvement trends
+
+**4. Periodic Regeneration**
+
+System automatically regenerates suggestions every 6 hours, but you can force generation:
+
+```bash
+# Regenerate suggestions for specific board
+python manage.py generate_coach_suggestions --board-id 5
+
+# Force regeneration even if recent suggestions exist
+python manage.py generate_coach_suggestions --force
+
+# Skip AI enhancement (faster, rule-based only)
+python manage.py generate_coach_suggestions --no-ai-enhance
+```
+
+#### **Benefits**
+
+✅ **Proactive Management** - Catch issues before they become problems  
+✅ **Data-Driven Decisions** - Recommendations based on actual metrics  
+✅ **Team Development** - Identifies learning opportunities for team growth  
+✅ **Continuous Improvement** - System learns from feedback  
+✅ **Risk Mitigation** - Early warning for project threats  
+✅ **Time Saving** - No need to constantly analyze project metrics  
+✅ **Transparent Reasoning** - Understand why each suggestion is made  
+✅ **Scalable Mentoring** - Works as your team and projects grow  
+
+#### **Perfect For**
+
+- **First-time PMs** - Learn project management best practices
+- **Busy PMs** - Get alerts without constant monitoring
+- **Growing Teams** - Maintain quality as team size increases
+- **Complex Projects** - Manage many moving pieces and risks
+- **Distributed Teams** - Replace in-person oversight with AI coaching
+- **PM Training** - Teaching managers to improve decision-making
 
 ---
 
