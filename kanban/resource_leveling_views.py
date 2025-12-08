@@ -327,7 +327,13 @@ def get_team_workload_report(request, board_id):
         # Generate report
         report = service.get_team_workload_report(board)
         
-        return JsonResponse(report)
+        # Create response with no-cache headers to prevent stale data
+        response = JsonResponse(report)
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        
+        return response
         
     except Board.DoesNotExist:
         return JsonResponse({'error': 'Board not found'}, status=404)

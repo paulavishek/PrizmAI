@@ -401,6 +401,9 @@ class ResourceLevelingService:
         for member in members:
             profile = self.get_or_create_profile(member)
             
+            # Force refresh workload to ensure real-time accuracy
+            profile.update_current_workload()
+            
             member_data = {
                 'username': member.username,
                 'name': member.get_full_name() or member.username,
