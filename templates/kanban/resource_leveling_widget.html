@@ -245,6 +245,22 @@ function displayWorkloadSummary(data) {
             Review suggestions below to optimize workload.`;
         container.appendChild(warning);
     }
+    
+    // Show team capacity warning if present
+    if (data.team_capacity_warning) {
+        const capacityWarning = document.createElement('div');
+        const alertClass = data.team_capacity_warning.level === 'critical' ? 'alert-danger' : 'alert-warning';
+        capacityWarning.className = `alert ${alertClass} mt-3`;
+        
+        let icon = data.team_capacity_warning.level === 'critical' ? 
+            '<i class="fas fa-exclamation-circle"></i>' : 
+            '<i class="fas fa-info-circle"></i>';
+        
+        capacityWarning.innerHTML = `${icon} 
+            <strong>Team Capacity Alert:</strong> ${data.team_capacity_warning.message}`;
+        
+        container.appendChild(capacityWarning);
+    }
 }
 
 function loadSuggestions() {

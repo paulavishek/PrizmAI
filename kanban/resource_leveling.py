@@ -183,13 +183,17 @@ class ResourceLevelingService:
         if recommended['skill_match'] > current['skill_match'] + 10:
             reasons.append(f"Better skill match ({recommended['skill_match']:.0f}% vs {current['skill_match']:.0f}%)")
         
-        # Workload balancing
+        # Workload balancing - show task counts
         if recommended['utilization'] < current['utilization'] - 20:
-            reasons.append(f"Reduces workload imbalance ({current['username']} is {current['utilization']:.0f}% utilized)")
-        
-        # Availability
-        if recommended['availability'] > current['availability'] + 15:
-            reasons.append(f"{recommended['display_name']} has more availability")
+            reasons.append(
+                f"Better workload balance: {recommended['display_name']} has {recommended['current_workload']} tasks "
+                f"({recommended['utilization']:.0f}%) vs {current['username']} with {current['current_workload']} tasks "
+                f"({current['utilization']:.0f}%)"
+            )
+        elif recommended['utilization'] < current['utilization'] - 10:
+            reasons.append(
+                f"{recommended['display_name']} less loaded: {recommended['current_workload']} tasks vs {current['current_workload']} tasks"
+            )
         
         if not reasons:
             reasons.append(f"Overall {improvement:.0f} point improvement in fit score")
@@ -203,8 +207,14 @@ class ResourceLevelingService:
         if recommended['skill_match'] > 70:
             reasons.append(f"Strong skill match ({recommended['skill_match']:.0f}%)")
         
-        if recommended['availability'] > 60:
-            reasons.append(f"Good availability ({recommended['availability']:.0f}% free)")
+        # Show actual task count along with utilization
+        task_info = f"{recommended['current_workload']} tasks, {recommended['utilization']:.0f}% utilized"
+        if recommended['utilization'] < 50:
+            reasons.append(f"Low workload ({task_info})")
+        elif recommended['utilization'] < 75:
+            reasons.append(f"Moderate workload ({task_info})")
+        else:
+            reasons.append(f"High workload but best available ({task_info})")
         
         if recommended['velocity'] > 60:
             reasons.append(f"High velocity ({recommended['velocity']:.0f} score)")
@@ -425,6 +435,27 @@ class ResourceLevelingService:
         
         # Sort by utilization
         report['members'].sort(key=lambda x: x['utilization'], reverse=True)
+        
+        # Check for team capacity issues
+        avg_utilization = sum(m['utilization'] for m in report['members']) / len(report['members']) if report['members'] else 0
+        overloaded_count = len(report['bottlenecks'])
+        
+        report['average_utilization'] = round(avg_utilization, 1)
+        report['team_capacity_warning'] = None
+        
+        # Generate capacity warnings
+        if avg_utilization > 85 and overloaded_count >= len(report['members']) * 0.5:
+            report['team_capacity_warning'] = {
+                'level': 'critical',
+                'message': f'Team is at {avg_utilization:.0f}% capacity with {overloaded_count} overloaded members. Consider adding resources or extending deadlines.',
+                'recommendation': 'add_resources'
+            }
+        elif avg_utilization > 75:
+            report['team_capacity_warning'] = {
+                'level': 'warning',
+                'message': f'Team is at {avg_utilization:.0f}% capacity. Monitor workload closely.',
+                'recommendation': 'monitor'
+            }
         
         return report
     
