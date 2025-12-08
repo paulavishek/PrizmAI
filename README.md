@@ -8,7 +8,8 @@ This project showcases proficiency in building production-ready applications wit
 - 🧠 **AI Integration** - Google Gemini API for intelligent recommendations
 - 🔒 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
 - 🚀 **Modern Architecture** - Django backend, RESTful API, WebSocket support
-- 📊 **Advanced Features** - Burndown charts, scope tracking, skill gap analysis
+- 📊 **Advanced Features** - Burndown charts, scope tracking, skill gap analysis, budget & ROI tracking
+- 💰 **Financial Management** - Budget tracking, cost analysis, ROI optimization with AI
 - 🎯 **Professional Development** - Clean code, testing, documentation
 
 **Built to demonstrate skills for job applications** - This is not a commercial product but a showcase of technical capabilities in full-stack development, AI/ML integration, security implementation, and software architecture.
@@ -1305,6 +1306,237 @@ For complex projects, show how tasks connect:
 - AI suggests dependencies automatically
 
 **Result:** No surprises about blocked work.
+
+### 💰 **Budget & ROI Tracking with AI Optimization**
+
+**Control your project finances and maximize return on investment with intelligent budget management.**
+
+Every project has a budget and a goal to achieve ROI. PrizmAI gives you complete visibility into project financials with AI-powered optimization recommendations.
+
+#### **What You Get**
+
+**Budget Management Dashboard:**
+- Set and track project budgets with real-time utilization monitoring
+- Multi-currency support (USD, EUR, GBP, INR, JPY)
+- Automatic status alerts (OK/Warning/Critical/Over Budget)
+- Visual budget health indicators with percentage utilization
+- Configure warning (80%) and critical (95%) thresholds
+
+**Cost Tracking:**
+- Track task-level estimated and actual costs
+- Log time spent on tasks with automatic labor cost calculation
+- Separate tracking for resource and material costs
+- Cost variance analysis (compare estimated vs. actual)
+- Calculate average cost per completed task
+
+**Time & Labor Management:**
+- Log hours spent on work with work date tracking
+- Automatic labor cost calculation based on hourly rates
+- Compare time spent vs. allocated time budget
+- Team time analytics showing distribution across members
+- Productivity metrics and efficiency tracking
+
+**ROI Analysis:**
+- Create point-in-time ROI snapshots
+- Track expected vs. realized project value
+- Automatic ROI calculation: (Value - Cost) / Cost × 100
+- Compare ROI performance across historical snapshots
+- Cost per task ROI metrics and efficiency analysis
+
+**Burn Rate & Overrun Prediction:**
+- Calculate daily spending rate and trend analysis
+- Predict budget exhaustion date with accuracy
+- Sustainability warnings when burn rate is unsustainable
+- Days remaining calculations with real-time updates
+- Cost overrun prediction before it happens
+
+#### **AI-Powered Intelligence**
+
+**Budget Health Analysis:**
+Comprehensive AI assessment of your project budget:
+- Health rating: Excellent / Good / Concerning / Critical
+- Risk identification and severity analysis
+- Positive indicators highlighting what's working
+- Immediate action recommendations
+- Trend analysis based on historical data
+
+**Smart Recommendations (3-7 per analysis):**
+The AI generates targeted recommendations:
+1. **Budget Reallocation** - Optimize budget distribution across work areas
+2. **Scope Reduction** - Identify scope cuts to stay within budget
+3. **Timeline Adjustment** - Timeline changes to optimize costs
+4. **Resource Optimization** - Better resource allocation strategies
+5. **Risk Mitigation** - Address financial risks proactively
+6. **Efficiency Improvement** - Process improvements to reduce costs
+
+**Each recommendation includes:**
+- Confidence score (0-100%)
+- Estimated cost savings
+- Priority level (Low / Medium / High / Urgent)
+- AI reasoning and supporting data patterns
+- Implementation difficulty assessment
+
+**Cost Overrun Prediction:**
+AI predicts financial problems before they occur:
+- Likelihood probability (0-100%)
+- Predicted overrun amount in currency
+- Expected overrun date
+- Contributing factors analysis
+- Risk level assessment with mitigation strategies
+
+**Pattern Learning:**
+AI learns from your project history:
+- Identifies recurring cost patterns across tasks
+- Learns from historical project data
+- Task overrun patterns (which types exceed budgets)
+- Productivity patterns by time period
+- Resource allocation inefficiencies
+- Seasonal and cyclical variations
+- Team-specific cost patterns
+
+**Resource Allocation Optimization:**
+- Task prioritization suggestions for better ROI
+- Resource reallocation recommendations
+- Scope adjustment suggestions based on budget
+- Efficiency improvement ideas with impact estimates
+- Capacity optimization for maximum value delivery
+
+#### **Real-World Example**
+
+```
+Project: Mobile App Release - Budget: $150,000
+
+Current Status:
+├─ Spent: $98,500 (65.7%)
+├─ Remaining Budget: $51,500
+├─ Burn Rate: $4,200/day
+├─ Projected Completion: Dec 22 (12 days away)
+├─ Projected Cost: $148,900
+└─ Status: ⚠️ WARNING (approaching budget limit)
+
+AI Analysis:
+├─ Health: Concerning (85% threshold exceeded)
+├─ Risk: 72% probability of minor overrun
+└─ Days until budget exhaustion: 12.3 days
+
+🤖 AI Recommendations:
+1. [HIGH PRIORITY] Reduce scope on mobile-only features
+   • Estimated Savings: $15,000
+   • Impact: 3-day timeline acceleration
+   • Confidence: 88%
+
+2. [MEDIUM PRIORITY] Optimize testing resources
+   • Move QA testing to earlier phases
+   • Estimated Savings: $8,000
+   • Confidence: 76%
+
+3. [LOW PRIORITY] Extend timeline by 2 weeks
+   • Reduces daily burn rate
+   • Estimated Savings: $12,000
+   • Trade-off: Later market release
+   • Confidence: 91%
+
+Expected Outcome: Stay within budget with strategic adjustments
+```
+
+#### **Key Metrics Available**
+
+**Budget Metrics:**
+- Budget utilization percentage
+- Remaining budget amount
+- Budget status (OK/Warning/Critical/Over)
+- Cost variance from estimates
+- Spending velocity trend
+
+**Time Metrics:**
+- Hours logged vs. allocated
+- Time utilization percentage
+- Average hours per task
+- Team time distribution
+- Productivity trends
+
+**ROI Metrics:**
+- Return on investment percentage
+- Cost per delivered value unit
+- Value realization rate
+- Efficiency ratio (value per dollar spent)
+- Historical ROI comparison
+
+**Burn Rate Metrics:**
+- Daily spending rate
+- Burn rate trend (increasing/stable/decreasing)
+- Days remaining until exhaustion
+- Sustainability index
+- Overrun probability
+
+#### **How to Use**
+
+**1. Set Up Your Budget:**
+- Navigate to any board
+- Click "Budget" → "Create Budget"
+- Enter allocated budget amount and currency
+- Set time budget (hours) if tracking labor
+- Configure warning/critical thresholds
+- Save and enable AI optimization
+
+**2. Track Costs & Time:**
+- For each task, click "Edit Cost"
+- Enter estimated cost and labor hours
+- As work progresses, log time entries
+- Add material/resource costs as needed
+- System automatically calculates variance
+
+**3. Monitor Dashboard:**
+- Visit Budget dashboard regularly
+- Check health status and warnings
+- Review burn rate trends
+- See AI recommendations in real-time
+- Take action on suggestions
+
+**4. Create ROI Snapshots:**
+- At project milestones, create ROI snapshot
+- Record expected and realized value
+- Document achievements and learnings
+- Compare with previous snapshots
+- Track ROI improvement over time
+
+**5. Act on AI Recommendations:**
+- Review pending AI recommendations
+- Click "Review" to see detailed analysis
+- Implement approved recommendations
+- Mark as implemented when complete
+- System learns from your decisions
+
+#### **Perfect For**
+
+- **Large projects** - Big budgets need tight control
+- **Client work** - Bill accurately and maintain margins
+- **Cost-sensitive organizations** - Track every dollar
+- **Financial accountability** - Explain spending to executives
+- **ROI optimization** - Maximize value delivered per dollar
+- **Project portfolio management** - Compare profitability across projects
+- **Resource planning** - Allocate resources to highest-ROI work
+- **Post-project analysis** - Understand what was profitable
+
+#### **Accessing Budget & ROI Tracking**
+
+1. Open any board in PrizmAI
+2. Click the **"Budget"** menu item
+3. Set up your project budget (one-time setup)
+4. View the budget dashboard with real-time metrics
+5. Log task costs and time as work progresses
+6. Review AI recommendations and health analysis
+7. Create ROI snapshots at project milestones
+8. Use insights for financial planning
+
+**Quick Links:**
+- **Budget Dashboard** - `/board/{board_id}/budget/`
+- **Budget Analytics** - `/board/{board_id}/budget/analytics/`
+- **ROI Dashboard** - `/board/{board_id}/roi/`
+- **AI Analysis** - `/board/{board_id}/budget/ai/analyze/`
+- **Recommendations** - `/board/{board_id}/budget/recommendations/`
+
+---
 
 ### 🎓 AI-Powered Retrospectives
 
