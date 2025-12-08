@@ -1,0 +1,420 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Budget Analytics - {{ board.name }} - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .metric-card {
+        border-left: 4px solid #007bff;
+        transition: transform 0.2s;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .overrun-high { color: #dc3545; }
+    .overrun-medium { color: #fd7e14; }
+    .overrun-low { color: #ffc107; }
+    
+    .cost-breakdown-card {
+        transition: all 0.3s ease;
+    }
+    
+    .cost-breakdown-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-chart-line me-2"></i>Budget Analytics</h2>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'budget_dashboard' board.id %}">Budget</a></li>
+                            <li class="breadcrumb-item active">Analytics</li>
+                        </ol>
+                    </nav>
+                </div>
+                <div>
+                    <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-secondary me-2">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                    <a href="{% url 'roi_dashboard' board.id %}" class="btn btn-success">
+                        <i class="fas fa-chart-bar"></i> ROI
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Burn Rate</h6>
+                    <h3>{{ budget.currency }} {{ metrics.burn_rate|floatformat:2 }}/day</h3>
+                    <small class="text-muted">Average daily spending</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Days Remaining</h6>
+                    <h3>{{ metrics.days_remaining|floatformat:0 }}</h3>
+                    <small class="text-muted">At current burn rate</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Total Time Logged</h6>
+                    <h3>{{ metrics.total_time_logged|floatformat:1 }}h</h3>
+                    <small class="text-muted">Across all tasks</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Cost Per Hour</h6>
+                    <h3>{{ budget.currency }} {{ metrics.cost_per_hour|floatformat:2 }}</h3>
+                    <small class="text-muted">Average hourly cost</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cost Trend Chart -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-area me-2"></i>Cost Trend (Last 30 Days)</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="costTrendChart" height="80"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cost Breakdown by Task -->
+    {% if cost_breakdown %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-tasks me-2"></i>Cost Breakdown by Task</h5>
+                    <span class="badge bg-primary">{{ cost_breakdown|length }} Tasks</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Task</th>
+                                    <th>Assignee</th>
+                                    <th>Estimated Cost</th>
+                                    <th>Actual Cost</th>
+                                    <th>Time Logged</th>
+                                    <th>Variance</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in cost_breakdown %}
+                                <tr class="cost-breakdown-card">
+                                    <td>
+                                        <a href="{% url 'board_detail' board.id %}#task-{{ task.task_id }}" class="text-decoration-none">
+                                            {{ task.task_title }}
+                                        </a>
+                                    </td>
+                                    <td>{{ task.assignee|default:"-" }}</td>
+                                    <td>{{ budget.currency }} {{ task.estimated_cost|floatformat:2 }}</td>
+                                    <td>
+                                        <strong>{{ budget.currency }} {{ task.actual_cost|floatformat:2 }}</strong>
+                                    </td>
+                                    <td>{{ task.time_logged|floatformat:1 }}h</td>
+                                    <td>
+                                        {% if task.variance > 0 %}
+                                            <span class="text-danger">+{{ budget.currency }} {{ task.variance|floatformat:2 }}</span>
+                                        {% elif task.variance < 0 %}
+                                            <span class="text-success">{{ budget.currency }} {{ task.variance|floatformat:2 }}</span>
+                                        {% else %}
+                                            <span class="text-muted">{{ budget.currency }} 0.00</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="progress" style="height: 20px; width: 100px;">
+                                            <div class="progress-bar 
+                                                {% if task.variance_percent > 20 %}bg-danger
+                                                {% elif task.variance_percent > 10 %}bg-warning
+                                                {% else %}bg-success{% endif %}" 
+                                                style="width: {{ task.percent_of_budget }}%">
+                                                {{ task.percent_of_budget|floatformat:1 }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Cost Overruns -->
+    {% if overruns %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Cost Overruns</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Task</th>
+                                    <th>Assignee</th>
+                                    <th>Estimated</th>
+                                    <th>Actual</th>
+                                    <th>Overrun Amount</th>
+                                    <th>Overrun %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for overrun in overruns %}
+                                <tr>
+                                    <td>
+                                        <a href="{% url 'board_detail' board.id %}#task-{{ overrun.task_id }}" class="text-decoration-none">
+                                            {{ overrun.task_title }}
+                                        </a>
+                                    </td>
+                                    <td>{{ overrun.assignee|default:"-" }}</td>
+                                    <td>{{ budget.currency }} {{ overrun.estimated_cost|floatformat:2 }}</td>
+                                    <td>{{ budget.currency }} {{ overrun.actual_cost|floatformat:2 }}</td>
+                                    <td>
+                                        <span class="text-danger">
+                                            <strong>+{{ budget.currency }} {{ overrun.overrun_amount|floatformat:2 }}</strong>
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <span class="
+                                            {% if overrun.overrun_percent > 50 %}overrun-high
+                                            {% elif overrun.overrun_percent > 25 %}overrun-medium
+                                            {% else %}overrun-low{% endif %}">
+                                            <strong>+{{ overrun.overrun_percent }}%</strong>
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Cost Distribution Charts -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Cost Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="costDistributionChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Top 10 Expensive Tasks</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="expensiveTasksChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Budget Utilization -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-percentage me-2"></i>Budget Utilization</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-3">Overall Budget</h6>
+                            <div class="progress mb-2" style="height: 30px;">
+                                <div class="progress-bar 
+                                    {% if metrics.budget.utilization_percent > 90 %}bg-danger
+                                    {% elif metrics.budget.utilization_percent > 75 %}bg-warning
+                                    {% else %}bg-success{% endif %}" 
+                                    style="width: {{ metrics.budget.utilization_percent }}%">
+                                    {{ metrics.budget.utilization_percent }}%
+                                </div>
+                            </div>
+                            <p class="mb-0">
+                                <strong>{{ budget.currency }} {{ metrics.budget.spent|floatformat:2 }}</strong> 
+                                of 
+                                <strong>{{ budget.currency }} {{ metrics.budget.allocated|floatformat:2 }}</strong> spent
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-muted mb-3">Projected Final Cost</h6>
+                            <div class="alert 
+                                {% if metrics.projected_final_cost > metrics.budget.allocated %}alert-danger
+                                {% elif metrics.projected_final_cost > metrics.budget.allocated_90_percent %}alert-warning
+                                {% else %}alert-success{% endif %}" role="alert">
+                                <h4 class="mb-0">{{ budget.currency }} {{ metrics.projected_final_cost|floatformat:2 }}</h4>
+                                <small>
+                                    {% if metrics.projected_final_cost > metrics.budget.allocated %}
+                                        Over budget by {{ budget.currency }} {{ metrics.projected_overrun|floatformat:2 }}
+                                    {% else %}
+                                        Within budget
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Cost Trend Chart
+    {% if trend_data %}
+    const trendDates = [{% for item in trend_data %}'{{ item.date|date:"M d" }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const trendCosts = [{% for item in trend_data %}{{ item.cumulative_cost }}{% if not forloop.last %}, {% endif %}{% endfor %}];
+    
+    new Chart(document.getElementById('costTrendChart'), {
+        type: 'line',
+        data: {
+            labels: trendDates,
+            datasets: [{
+                label: 'Cumulative Cost',
+                data: trendCosts,
+                borderColor: '#007bff',
+                backgroundColor: 'rgba(0, 123, 255, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '{{ budget.currency }} ' + value.toFixed(2);
+                        }
+                    }
+                }
+            }
+        }
+    });
+    {% endif %}
+
+    // Cost Distribution Chart
+    {% if cost_breakdown %}
+    const taskLabels = [{% for task in cost_breakdown|slice:":10" %}'{{ task.task_title|truncatechars:20 }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const taskCosts = [{% for task in cost_breakdown|slice:":10" %}{{ task.actual_cost }}{% if not forloop.last %}, {% endif %}{% endfor %}];
+    
+    new Chart(document.getElementById('costDistributionChart'), {
+        type: 'doughnut',
+        data: {
+            labels: taskLabels,
+            datasets: [{
+                data: taskCosts,
+                backgroundColor: [
+                    '#007bff', '#28a745', '#ffc107', '#dc3545', '#17a2b8',
+                    '#6c757d', '#fd7e14', '#6610f2', '#e83e8c', '#20c997'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+
+    // Top 10 Expensive Tasks Chart
+    const sortedTasks = [...taskCosts].sort((a, b) => b - a).slice(0, 10);
+    const sortedLabels = taskLabels.slice(0, 10);
+    
+    new Chart(document.getElementById('expensiveTasksChart'), {
+        type: 'bar',
+        data: {
+            labels: sortedLabels,
+            datasets: [{
+                label: 'Cost',
+                data: taskCosts,
+                backgroundColor: '#007bff'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            indexAxis: 'y',
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '{{ budget.currency }} ' + value.toFixed(0);
+                        }
+                    }
+                }
+            }
+        }
+    });
+    {% endif %}
+</script>
+{% endblock %}

@@ -1,0 +1,361 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Budget Dashboard - {{ board.name }} - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .budget-status-ok { color: #28a745; }
+    .budget-status-warning { color: #ffc107; }
+    .budget-status-critical { color: #fd7e14; }
+    .budget-status-over { color: #dc3545; }
+    
+    .metric-card {
+        border-left: 4px solid #007bff;
+        transition: transform 0.2s;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .recommendation-card {
+        border-left: 4px solid #6c757d;
+    }
+    
+    .recommendation-card.priority-urgent { border-left-color: #dc3545; }
+    .recommendation-card.priority-high { border-left-color: #fd7e14; }
+    .recommendation-card.priority-medium { border-left-color: #ffc107; }
+    .recommendation-card.priority-low { border-left-color: #28a745; }
+    
+    .progress-ring {
+        width: 120px;
+        height: 120px;
+    }
+    
+    .ai-insight-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-dollar-sign me-2"></i>Budget Dashboard</h2>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+                            <li class="breadcrumb-item active">Budget</li>
+                        </ol>
+                    </nav>
+                </div>
+                <div>
+                    {% if has_budget %}
+                        <a href="{% url 'budget_analytics' board.id %}" class="btn btn-info me-2">
+                            <i class="fas fa-chart-line"></i> Analytics
+                        </a>
+                        <a href="{% url 'roi_dashboard' board.id %}" class="btn btn-success me-2">
+                            <i class="fas fa-chart-bar"></i> ROI
+                        </a>
+                        <a href="{% url 'budget_create_or_edit' board.id %}" class="btn btn-primary">
+                            <i class="fas fa-edit"></i> Edit Budget
+                        </a>
+                    {% else %}
+                        <a href="{% url 'budget_create_or_edit' board.id %}" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Create Budget
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not has_budget %}
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <h4><i class="fas fa-info-circle me-2"></i>No Budget Configured</h4>
+                <p>Start tracking your project budget by creating a budget plan. This will enable:</p>
+                <ul>
+                    <li>Real-time budget tracking and alerts</li>
+                    <li>Time and cost monitoring per task</li>
+                    <li>ROI analysis and predictions</li>
+                    <li>AI-powered optimization recommendations</li>
+                </ul>
+                <a href="{% url 'budget_create_or_edit' board.id %}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Create Budget Now
+                </a>
+            </div>
+        </div>
+    </div>
+    {% else %}
+
+    <!-- Alerts -->
+    {% if metrics.alerts %}
+    <div class="row mb-4">
+        <div class="col-12">
+            {% for alert in metrics.alerts %}
+            <div class="alert alert-{{ alert.type }} alert-dismissible fade show" role="alert">
+                <strong>
+                    {% if alert.type == 'critical' %}
+                        <i class="fas fa-exclamation-triangle"></i>
+                    {% else %}
+                        <i class="fas fa-exclamation-circle"></i>
+                    {% endif %}
+                    {{ alert.category|title }}:
+                </strong> {{ alert.message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Budget Overview Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Budget Status</h6>
+                    <h3 class="budget-status-{{ metrics.budget.status }}">
+                        {{ metrics.budget.status|upper }}
+                    </h3>
+                    <div class="progress mt-2" style="height: 8px;">
+                        <div class="progress-bar bg-{{ metrics.budget.status }}" 
+                             style="width: {{ metrics.budget.utilization_percent }}%"></div>
+                    </div>
+                    <small class="text-muted">{{ metrics.budget.utilization_percent }}% utilized</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Allocated Budget</h6>
+                    <h3>{{ metrics.budget.currency }} {{ metrics.budget.allocated|floatformat:2 }}</h3>
+                    <small class="text-muted">Total budget</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Spent</h6>
+                    <h3>{{ metrics.budget.currency }} {{ metrics.budget.spent|floatformat:2 }}</h3>
+                    <small class="text-muted">
+                        <span class="{% if metrics.costs.variance_percent > 0 %}text-danger{% else %}text-success{% endif %}">
+                            {{ metrics.costs.variance_percent|floatformat:1 }}%
+                        </span>
+                        variance
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Remaining</h6>
+                    <h3>{{ metrics.budget.currency }} {{ metrics.budget.remaining|floatformat:2 }}</h3>
+                    <small class="text-muted">Available budget</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Time & Tasks Row -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Time Spent</h6>
+                    <h3>{{ metrics.time.spent_hours|floatformat:1 }}h</h3>
+                    {% if metrics.time.allocated_hours %}
+                    <div class="progress mt-2" style="height: 6px;">
+                        <div class="progress-bar" style="width: {{ metrics.time.utilization_percent }}%"></div>
+                    </div>
+                    <small class="text-muted">of {{ metrics.time.allocated_hours|floatformat:0 }}h ({{ metrics.time.utilization_percent|floatformat:0 }}%)</small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Tasks Completed</h6>
+                    <h3>{{ metrics.tasks.completed }} / {{ metrics.tasks.total }}</h3>
+                    <div class="progress mt-2" style="height: 6px;">
+                        <div class="progress-bar bg-success" style="width: {{ metrics.tasks.completion_rate }}%"></div>
+                    </div>
+                    <small class="text-muted">{{ metrics.tasks.completion_rate|floatformat:1 }}% complete</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Cost per Task</h6>
+                    <h3>{{ metrics.budget.currency }} {{ metrics.tasks.cost_per_completed_task|floatformat:2 }}</h3>
+                    <small class="text-muted">Average for completed tasks</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Burn Rate -->
+    {% if burn_rate %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="fas fa-fire"></i> Burn Rate Analysis</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <strong>Daily Burn Rate:</strong><br>
+                            {{ metrics.budget.currency }} {{ burn_rate.daily_burn_rate|floatformat:2 }}/day
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Days Remaining:</strong><br>
+                            {{ burn_rate.days_remaining }} days
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Projected End:</strong><br>
+                            {{ burn_rate.projected_end_date|default:"N/A" }}
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Sustainability:</strong><br>
+                            <span class="badge bg-{% if burn_rate.is_sustainable %}success{% else %}danger{% endif %}">
+                                {% if burn_rate.is_sustainable %}Sustainable{% else %}At Risk{% endif %}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- AI Recommendations & Recent Time Entries -->
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-robot"></i> AI Recommendations</h5>
+                    <div>
+                        <button class="btn btn-sm btn-primary" onclick="generateRecommendations()">
+                            <i class="fas fa-magic"></i> Generate New
+                        </button>
+                        <a href="{% url 'recommendations_list' board.id %}" class="btn btn-sm btn-outline-primary">
+                            View All
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body">
+                    {% if recommendations %}
+                        {% for rec in recommendations %}
+                        <div class="recommendation-card priority-{{ rec.priority }} card mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6>{{ rec.title }}</h6>
+                                        <span class="badge bg-secondary">{{ rec.get_recommendation_type_display }}</span>
+                                        <span class="badge bg-{{ rec.priority }}">{{ rec.priority|upper }}</span>
+                                        <span class="badge bg-info">{{ rec.confidence_score }}% confidence</span>
+                                    </div>
+                                    <div>
+                                        {% if rec.estimated_savings %}
+                                        <span class="text-success">
+                                            <i class="fas fa-piggy-bank"></i> Save {{ metrics.budget.currency }} {{ rec.estimated_savings|floatformat:2 }}
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <p class="mb-2 mt-2">{{ rec.description|truncatewords:30 }}</p>
+                                <small class="text-muted">{{ rec.created_at|timesince }} ago</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-lightbulb fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">No recommendations yet. Click "Generate New" to get AI-powered suggestions.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-clock"></i> Recent Time Entries</h5>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    {% if recent_entries %}
+                        <div class="list-group list-group-flush">
+                            {% for entry in recent_entries %}
+                            <div class="list-group-item px-0">
+                                <div class="d-flex justify-content-between">
+                                    <strong>{{ entry.user.username }}</strong>
+                                    <span class="badge bg-primary">{{ entry.hours_spent }}h</span>
+                                </div>
+                                <small class="text-muted">{{ entry.task.title|truncatewords:8 }}</small><br>
+                                <small class="text-muted">{{ entry.work_date }}</small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted text-center">No time entries yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+
+<script>
+function generateRecommendations() {
+    const btn = event.target.closest('button');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    
+    fetch("{% url 'ai_generate_recommendations' board.id %}", {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + (data.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-magic"></i> Generate New';
+        }
+    })
+    .catch(error => {
+        alert('Error generating recommendations: ' + error);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-magic"></i> Generate New';
+    });
+}
+</script>
+{% endblock %}

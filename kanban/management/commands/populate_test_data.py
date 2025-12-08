@@ -9,6 +9,10 @@ from kanban.models import (
     ResourceDemandForecast, TeamCapacityAlert, WorkloadDistributionRecommendation
 )
 from kanban.priority_models import PriorityDecision
+from kanban.budget_models import (
+    ProjectBudget, TaskCost, TimeEntry, ProjectROI,
+    BudgetRecommendation, CostPattern
+)
 from kanban.stakeholder_models import (
     ProjectStakeholder, StakeholderTaskInvolvement, 
     StakeholderEngagementRecord, EngagementMetrics, StakeholderTag
@@ -36,6 +40,9 @@ class Command(BaseCommand):
         self.create_resource_management_demo_data()
         self.create_stakeholder_management_demo_data()
         self.create_task_dependency_demo_data()
+        
+        # Create budget and ROI demo data
+        self.create_budget_roi_demo_data()
         
         # Create chat room demo data
         self.create_chat_rooms_demo_data()
@@ -97,6 +104,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('✅ Predictive Analytics - Historical task completion data'))
         self.stdout.write(self.style.SUCCESS('✅ Intelligent Priority Suggestions - Priority decision history'))
         self.stdout.write(self.style.SUCCESS('✅ Scope Tracking - Baseline snapshots for all boards'))
+        self.stdout.write(self.style.SUCCESS('✅ Budget & ROI Tracking - Complete financial analysis with AI'))
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))
 
     def create_users(self):
@@ -2845,4 +2853,268 @@ Carol: Sounds good. Great work this week!
                 '📝 Run "python manage.py simulate_scope_creep" to test scope tracking'
             )
         )
+
+    def create_budget_roi_demo_data(self):
+        """Create budget and ROI tracking demo data"""
+        from decimal import Decimal
+        
+        self.stdout.write(self.style.NOTICE('\nCreating Budget & ROI demo data...'))
+        
+        # Get demo boards
+        software_board = Board.objects.filter(name='Software Project').first()
+        marketing_board = Board.objects.filter(name='Marketing Campaign').first()
+        
+        if not software_board and not marketing_board:
+            self.stdout.write(self.style.WARNING('  No demo boards found'))
+            return
+        
+        boards_to_process = []
+        if software_board:
+            boards_to_process.append(software_board)
+        if marketing_board:
+            boards_to_process.append(marketing_board)
+        
+        for board in boards_to_process:
+            # Create Project Budget
+            budget, created = ProjectBudget.objects.get_or_create(
+                board=board,
+                defaults={
+                    'allocated_budget': Decimal('50000.00') if board.name == 'Software Project' else Decimal('25000.00'),
+                    'currency': 'USD',
+                    'allocated_hours': Decimal('800.0') if board.name == 'Software Project' else Decimal('400.0'),
+                    'warning_threshold': 80,
+                    'critical_threshold': 95,
+                    'ai_optimization_enabled': True,
+                    'created_by': User.objects.first(),
+                }
+            )
+            
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'  ✓ Created budget for "{board.name}": ${budget.allocated_budget}'))
+            
+            # Get tasks for this board
+            tasks = Task.objects.filter(column__board=board)[:15]  # Limit to first 15 tasks
+            
+            # Create task costs and time entries
+            users = list(User.objects.all()[:5])
+            time_entries_created = 0
+            task_costs_created = 0
+            
+            for i, task in enumerate(tasks):
+                # Create TaskCost
+                estimated_cost = Decimal(random.uniform(100, 2000))
+                estimated_hours = Decimal(random.uniform(2, 40))
+                
+                # Make some tasks over budget for demo
+                is_over_budget = i % 4 == 0  # Every 4th task
+                variance_factor = Decimal(random.uniform(1.1, 1.4)) if is_over_budget else Decimal(random.uniform(0.7, 1.0))
+                
+                actual_cost = estimated_cost * variance_factor
+                hourly_rate = Decimal(random.choice(['50.00', '75.00', '100.00', '125.00']))
+                resource_cost = Decimal(random.uniform(0, 500)) if i % 3 == 0 else Decimal('0.00')
+                
+                task_cost, created = TaskCost.objects.get_or_create(
+                    task=task,
+                    defaults={
+                        'estimated_cost': estimated_cost,
+                        'estimated_hours': estimated_hours,
+                        'actual_cost': actual_cost,
+                        'hourly_rate': hourly_rate,
+                        'resource_cost': resource_cost,
+                    }
+                )
+                
+                if created:
+                    task_costs_created += 1
+                
+                # Create multiple time entries for each task
+                num_entries = random.randint(2, 5)
+                for j in range(num_entries):
+                    user = random.choice(users)
+                    hours_spent = Decimal(random.uniform(1, 8))
+                    work_date = timezone.now().date() - timedelta(days=random.randint(1, 30))
+                    
+                    descriptions = [
+                        'Implemented core functionality',
+                        'Fixed bugs and edge cases',
+                        'Code review and testing',
+                        'Updated documentation',
+                        'Refactored for performance',
+                        'Integration testing',
+                        'UI/UX improvements',
+                        'Database optimization',
+                        'Security enhancements',
+                        'API development',
+                    ]
+                    
+                    TimeEntry.objects.create(
+                        task=task,
+                        user=user,
+                        hours_spent=hours_spent,
+                        work_date=work_date,
+                        description=random.choice(descriptions)
+                    )
+                    time_entries_created += 1
+            
+            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {task_costs_created} task costs for "{board.name}"'))
+            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {time_entries_created} time entries for "{board.name}"'))
+            
+            # Create ROI snapshots
+            # Query completed tasks directly (can't filter tasks queryset after slicing)
+            completed_tasks = Task.objects.filter(
+                column__board=board,
+                column__name__in=['Done', 'Completed', 'Closed', 'Deployed']
+            ).count()
+            
+            total_tasks = Task.objects.filter(column__board=board).count()
+            
+            # Calculate total cost from task costs
+            total_cost = sum([tc.get_total_actual_cost() for tc in TaskCost.objects.filter(task__column__board=board)])
+            
+            # Create initial ROI snapshot
+            expected_value = budget.allocated_budget * Decimal('1.5')  # 50% ROI expected
+            realized_value = expected_value * Decimal(random.uniform(0.8, 1.2))  # Some variation
+            
+            roi_percentage = None
+            if total_cost > 0:
+                roi_percentage = ((realized_value - total_cost) / total_cost) * 100
+            
+            roi_snapshot = ProjectROI.objects.create(
+                board=board,
+                expected_value=expected_value,
+                realized_value=realized_value,
+                total_cost=total_cost,
+                roi_percentage=roi_percentage,
+                completed_tasks=completed_tasks,
+                total_tasks=total_tasks,
+                snapshot_date=timezone.now(),
+                created_by=User.objects.first(),
+                ai_insights={
+                    'health': 'Good',
+                    'risks': ['Resource allocation needs optimization', 'Some tasks showing cost overruns'],
+                    'opportunities': ['Strong completion rate', 'Good ROI projection']
+                },
+                ai_risk_score=35  # Low-medium risk
+            )
+            
+            self.stdout.write(self.style.SUCCESS(
+                f'  ✓ Created ROI snapshot for "{board.name}": ROI {roi_percentage:.1f}%' if roi_percentage else 
+                f'  ✓ Created ROI snapshot for "{board.name}"'
+            ))
+            
+            # Create AI recommendations
+            recommendations_data = [
+                {
+                    'type': 'resource_optimization',
+                    'title': 'Optimize Senior Developer Allocation',
+                    'description': 'Reallocate senior developer time to critical path tasks. Current allocation shows senior developers spending 30% of time on low-priority tasks.',
+                    'savings': Decimal('2500.00'),
+                    'confidence': 85,
+                    'priority': 'high',
+                    'reasoning': 'Analysis of time entries shows inefficient resource allocation. Senior developers are spending time on tasks that could be handled by junior team members.',
+                },
+                {
+                    'type': 'timeline_change',
+                    'title': 'Extend Sprint by 3 Days to Reduce Overtime',
+                    'description': 'Current burn rate suggests team is working overtime. Extending sprint by 3 days would reduce overtime costs and improve quality.',
+                    'savings': Decimal('1800.00'),
+                    'confidence': 72,
+                    'priority': 'medium',
+                    'reasoning': 'Time entry patterns show consistent late-night work. Extending timeline would reduce overtime costs while maintaining quality.',
+                },
+                {
+                    'type': 'scope_cut',
+                    'title': 'Defer Low-Priority Feature to Next Release',
+                    'description': 'Feature "Advanced Reporting" has high cost variance and low business impact. Consider moving to next release.',
+                    'savings': Decimal('3200.00'),
+                    'confidence': 78,
+                    'priority': 'medium',
+                    'reasoning': 'Cost-benefit analysis shows this feature consuming 15% of budget with minimal immediate value. Deferring would ensure on-budget completion.',
+                },
+                {
+                    'type': 'efficiency_improvement',
+                    'title': 'Implement Code Review Automation',
+                    'description': 'Code reviews are taking 20% longer than industry average. Implementing automated checks could save significant time.',
+                    'savings': Decimal('1500.00'),
+                    'confidence': 65,
+                    'priority': 'low',
+                    'reasoning': 'Time tracking shows code reviews averaging 3.2 hours per task vs industry standard of 2.5 hours. Automation could improve efficiency.',
+                },
+            ]
+            
+            for rec_data in recommendations_data:
+                BudgetRecommendation.objects.create(
+                    board=board,
+                    recommendation_type=rec_data['type'],
+                    title=rec_data['title'],
+                    description=rec_data['description'],
+                    estimated_savings=rec_data.get('savings'),
+                    confidence_score=rec_data['confidence'],
+                    priority=rec_data['priority'],
+                    ai_reasoning=rec_data['reasoning'],
+                    status='pending',
+                    based_on_patterns={
+                        'time_entries_analyzed': time_entries_created,
+                        'tasks_analyzed': task_costs_created,
+                        'pattern_confidence': rec_data['confidence']
+                    }
+                )
+            
+            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {len(recommendations_data)} AI recommendations for "{board.name}"'))
+            
+            # Create cost patterns
+            patterns_data = [
+                {
+                    'name': 'Backend Tasks Consistently Over Budget',
+                    'type': 'task_overrun',
+                    'confidence': Decimal('82.5'),
+                    'occurrences': 5,
+                    'data': {
+                        'task_category': 'backend',
+                        'average_overrun': '25%',
+                        'frequency': 'high',
+                        'root_cause': 'Underestimation of complexity'
+                    }
+                },
+                {
+                    'name': 'Friday Afternoon Productivity Dip',
+                    'type': 'time_pattern',
+                    'confidence': Decimal('71.0'),
+                    'occurrences': 8,
+                    'data': {
+                        'time_period': 'Friday 2pm-5pm',
+                        'productivity_drop': '35%',
+                        'recommendation': 'Schedule less complex tasks for Friday afternoons'
+                    }
+                },
+                {
+                    'name': 'UI/UX Tasks Exceeding Time Estimates',
+                    'type': 'task_overrun',
+                    'confidence': Decimal('76.3'),
+                    'occurrences': 6,
+                    'data': {
+                        'task_category': 'ui_ux',
+                        'time_overrun': '40%',
+                        'cost_impact': 'medium',
+                        'pattern': 'Design iteration cycles not accounted for in estimates'
+                    }
+                }
+            ]
+            
+            for pattern_data in patterns_data:
+                CostPattern.objects.create(
+                    board=board,
+                    pattern_name=pattern_data['name'],
+                    pattern_type=pattern_data['type'],
+                    pattern_data=pattern_data['data'],
+                    confidence=pattern_data['confidence'],
+                    occurrence_count=pattern_data['occurrences'],
+                    last_occurred=timezone.now() - timedelta(days=random.randint(1, 7))
+                )
+            
+            self.stdout.write(self.style.SUCCESS(f'  ✓ Created {len(patterns_data)} cost patterns for "{board.name}"'))
+        
+        self.stdout.write(self.style.SUCCESS('\n✅ Budget & ROI demo data created successfully!'))
+        self.stdout.write(self.style.NOTICE('   Navigate to any board and click "Budget & ROI" to explore the feature'))
+
 

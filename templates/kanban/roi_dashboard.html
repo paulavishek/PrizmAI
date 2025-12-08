@@ -1,0 +1,357 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}ROI Dashboard - {{ board.name }} - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .roi-positive { color: #28a745; }
+    .roi-negative { color: #dc3545; }
+    .roi-neutral { color: #6c757d; }
+    
+    .metric-card {
+        border-left: 4px solid #28a745;
+        transition: transform 0.2s;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .roi-card-positive { border-left-color: #28a745; }
+    .roi-card-negative { border-left-color: #dc3545; }
+    .roi-card-neutral { border-left-color: #6c757d; }
+    
+    .snapshot-card {
+        transition: all 0.3s ease;
+    }
+    
+    .snapshot-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-chart-bar me-2"></i>ROI Dashboard</h2>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'budget_dashboard' board.id %}">Budget</a></li>
+                            <li class="breadcrumb-item active">ROI</li>
+                        </ol>
+                    </nav>
+                </div>
+                <div>
+                    <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-secondary me-2">
+                        <i class="fas fa-arrow-left"></i> Back to Budget
+                    </a>
+                    <a href="{% url 'budget_analytics' board.id %}" class="btn btn-info">
+                        <i class="fas fa-chart-line"></i> Analytics
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not has_budget %}
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-warning">
+                <h4><i class="fas fa-exclamation-triangle me-2"></i>No Budget Data</h4>
+                <p>Please create a budget first to track ROI metrics.</p>
+                <a href="{% url 'budget_create_or_edit' board.id %}" class="btn btn-primary">
+                    <i class="fas fa-plus"></i> Create Budget
+                </a>
+            </div>
+        </div>
+    </div>
+    {% else %}
+
+    <!-- Current ROI Overview -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card metric-card {% if roi_metrics.roi_percent > 0 %}roi-card-positive{% elif roi_metrics.roi_percent < 0 %}roi-card-negative{% else %}roi-card-neutral{% endif %}">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-2">Current ROI</h6>
+                    <h2 class="{% if roi_metrics.roi_percent > 0 %}roi-positive{% elif roi_metrics.roi_percent < 0 %}roi-negative{% else %}roi-neutral{% endif %}">
+                        {{ roi_metrics.roi_percent|floatformat:1 }}%
+                    </h2>
+                    <small class="text-muted">Return on Investment</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Total Investment</h6>
+                    <h3>{{ budget.currency }} {{ roi_metrics.total_investment|floatformat:2 }}</h3>
+                    <small class="text-muted">Budget allocated</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Expected Value</h6>
+                    <h3>{{ budget.currency }} {{ roi_metrics.expected_value|floatformat:2 }}</h3>
+                    <small class="text-muted">Projected return</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <div class="card metric-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Realized Value</h6>
+                    <h3>{{ budget.currency }} {{ roi_metrics.realized_value|floatformat:2 }}</h3>
+                    <small class="text-muted">Actual return</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Progress Metrics -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-3">Project Completion</h6>
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <div class="progress" style="height: 25px;">
+                                <div class="progress-bar bg-success" style="width: {{ roi_metrics.completion_rate }}%">
+                                    {{ roi_metrics.completion_rate|floatformat:1 }}%
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <small class="text-muted mt-2 d-block">
+                        {{ roi_metrics.tasks_completed }} of {{ roi_metrics.total_tasks }} tasks completed
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Cost Efficiency</h6>
+                    <h3>{{ roi_metrics.cost_efficiency|floatformat:2 }}%</h3>
+                    <small class="text-muted">Cost vs Budget ratio</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Value Delivery</h6>
+                    <h3>{{ roi_metrics.value_delivery_rate|floatformat:2 }}%</h3>
+                    <small class="text-muted">Realized vs Expected value</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ROI History -->
+    {% if roi_snapshots %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>ROI History</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>ROI %</th>
+                                    <th>Investment</th>
+                                    <th>Expected Value</th>
+                                    <th>Realized Value</th>
+                                    <th>Completion</th>
+                                    <th>Notes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for snapshot in roi_snapshots %}
+                                <tr class="snapshot-card">
+                                    <td>{{ snapshot.recorded_at|date:"M d, Y" }}</td>
+                                    <td>
+                                        <span class="{% if snapshot.roi_percent > 0 %}roi-positive{% elif snapshot.roi_percent < 0 %}roi-negative{% else %}roi-neutral{% endif %}">
+                                            <strong>{{ snapshot.roi_percent|floatformat:1 }}%</strong>
+                                        </span>
+                                    </td>
+                                    <td>{{ budget.currency }} {{ snapshot.total_investment|floatformat:2 }}</td>
+                                    <td>{{ budget.currency }} {{ snapshot.expected_value|floatformat:2 }}</td>
+                                    <td>{{ budget.currency }} {{ snapshot.realized_value|floatformat:2 }}</td>
+                                    <td>
+                                        <div class="progress" style="height: 20px; width: 100px;">
+                                            <div class="progress-bar bg-info" style="width: {{ snapshot.completion_rate }}%">
+                                                {{ snapshot.completion_rate|floatformat:0 }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>{{ snapshot.notes|default:"-" }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ROI Trend Chart -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>ROI Trend</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="roiTrendChart" height="80"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cost vs Value Analysis -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-balance-scale me-2"></i>Cost vs Value</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="costValueChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Value Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="valueDistributionChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    {% if has_budget and roi_snapshots %}
+    // ROI Trend Chart
+    const roiDates = [{% for snapshot in roi_snapshots %}'{{ snapshot.recorded_at|date:"M d" }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const roiValues = [{% for snapshot in roi_snapshots %}{{ snapshot.roi_percent }}{% if not forloop.last %}, {% endif %}{% endfor %}];
+    
+    new Chart(document.getElementById('roiTrendChart'), {
+        type: 'line',
+        data: {
+            labels: roiDates,
+            datasets: [{
+                label: 'ROI %',
+                data: roiValues,
+                borderColor: roiValues[roiValues.length - 1] >= 0 ? '#28a745' : '#dc3545',
+                backgroundColor: roiValues[roiValues.length - 1] >= 0 ? 'rgba(40, 167, 69, 0.1)' : 'rgba(220, 53, 69, 0.1)',
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return value + '%';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Cost vs Value Chart
+    const investments = [{% for snapshot in roi_snapshots %}{{ snapshot.total_investment }}{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const realizedValues = [{% for snapshot in roi_snapshots %}{{ snapshot.realized_value }}{% if not forloop.last %}, {% endif %}{% endfor %}];
+    
+    new Chart(document.getElementById('costValueChart'), {
+        type: 'bar',
+        data: {
+            labels: roiDates,
+            datasets: [
+                {
+                    label: 'Investment',
+                    data: investments,
+                    backgroundColor: '#007bff'
+                },
+                {
+                    label: 'Realized Value',
+                    data: realizedValues,
+                    backgroundColor: '#28a745'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                y: { beginAtZero: true }
+            }
+        }
+    });
+
+    // Value Distribution Chart
+    new Chart(document.getElementById('valueDistributionChart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Realized Value', 'Remaining Potential'],
+            datasets: [{
+                data: [
+                    {{ roi_metrics.realized_value }},
+                    Math.max(0, {{ roi_metrics.expected_value }} - {{ roi_metrics.realized_value }})
+                ],
+                backgroundColor: ['#28a745', '#e9ecef']
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+    {% endif %}
+</script>
+{% endblock %}

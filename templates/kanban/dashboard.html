@@ -249,8 +249,11 @@
                                 </p>
                                 <div class="text-end mt-2">
                                     <a href="{% url 'board_detail' board.id %}" class="btn btn-sm btn-primary">Open Board</a>
-                                    <a href="{% url 'board_analytics' board.id %}" class="btn btn-sm btn-outline-secondary">
+                                    <a href="{% url 'board_analytics' board.id %}" class="btn btn-sm btn-outline-secondary" title="Analytics">
                                         <i class="fas fa-chart-pie fa-sm"></i>
+                                    </a>
+                                    <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-sm btn-outline-success" title="Budget & ROI">
+                                        <i class="fas fa-dollar-sign fa-sm"></i>
                                     </a>
                                 </div>
                             </div>

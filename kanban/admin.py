@@ -12,6 +12,10 @@ from .retrospective_models import (
     ProjectRetrospective, LessonLearned, ImprovementMetric,
     RetrospectiveActionItem, RetrospectiveTrend
 )
+from .budget_models import (
+    ProjectBudget, TaskCost, TimeEntry, ProjectROI,
+    BudgetRecommendation, CostPattern
+)
 
 @admin.register(Board)
 class BoardAdmin(admin.ModelAdmin):
@@ -748,3 +752,77 @@ class MilestoneAdmin(admin.ModelAdmin):
             milestone.mark_incomplete()
         self.message_user(request, f'{queryset.count()} milestone(s) marked as incomplete.')
     mark_as_incomplete.short_description = 'Mark selected milestones as incomplete'
+
+
+# Budget & ROI Tracking Admin
+@admin.register(ProjectBudget)
+class ProjectBudgetAdmin(admin.ModelAdmin):
+    list_display = ('board', 'allocated_budget', 'currency', 'get_utilization', 'get_status', 'created_at')
+    list_filter = ('currency', 'ai_optimization_enabled', 'created_at')
+    search_fields = ('board__name',)
+    readonly_fields = ('created_at', 'updated_at', 'last_ai_analysis')
+    
+    def get_utilization(self, obj):
+        return f"{obj.get_budget_utilization_percent():.1f}%"
+    get_utilization.short_description = 'Utilization'
+    
+    def get_status(self, obj):
+        return obj.get_status()
+    get_status.short_description = 'Status'
+
+
+@admin.register(TaskCost)
+class TaskCostAdmin(admin.ModelAdmin):
+    list_display = ('task', 'estimated_cost', 'actual_cost', 'get_total_cost', 'is_over_budget', 'updated_at')
+    list_filter = ('created_at',)
+    search_fields = ('task__title',)
+    readonly_fields = ('created_at', 'updated_at')
+    
+    def get_total_cost(self, obj):
+        return f"{obj.get_total_actual_cost():.2f}"
+    get_total_cost.short_description = 'Total Cost'
+
+
+@admin.register(TimeEntry)
+class TimeEntryAdmin(admin.ModelAdmin):
+    list_display = ('task', 'user', 'hours_spent', 'work_date', 'created_at')
+    list_filter = ('work_date', 'user', 'created_at')
+    search_fields = ('task__title', 'user__username', 'description')
+    date_hierarchy = 'work_date'
+    readonly_fields = ('created_at', 'updated_at')
+
+
+@admin.register(ProjectROI)
+class ProjectROIAdmin(admin.ModelAdmin):
+    list_display = ('board', 'snapshot_date', 'roi_percentage', 'total_cost', 'expected_value', 'completed_tasks')
+    list_filter = ('snapshot_date', 'created_at')
+    search_fields = ('board__name',)
+    readonly_fields = ('created_at', 'snapshot_date')
+
+
+@admin.register(BudgetRecommendation)
+class BudgetRecommendationAdmin(admin.ModelAdmin):
+    list_display = ('title', 'board', 'recommendation_type', 'priority', 'status', 'confidence_score', 'created_at')
+    list_filter = ('recommendation_type', 'priority', 'status', 'created_at')
+    search_fields = ('title', 'description', 'board__name')
+    readonly_fields = ('created_at', 'reviewed_at')
+    
+    actions = ['mark_as_accepted', 'mark_as_rejected']
+    
+    def mark_as_accepted(self, request, queryset):
+        queryset.update(status='accepted', reviewed_by=request.user, reviewed_at=admin.models.timezone.now())
+        self.message_user(request, f'{queryset.count()} recommendation(s) accepted.')
+    mark_as_accepted.short_description = 'Mark selected as accepted'
+    
+    def mark_as_rejected(self, request, queryset):
+        queryset.update(status='rejected', reviewed_by=request.user, reviewed_at=admin.models.timezone.now())
+        self.message_user(request, f'{queryset.count()} recommendation(s) rejected.')
+    mark_as_rejected.short_description = 'Mark selected as rejected'
+
+
+@admin.register(CostPattern)
+class CostPatternAdmin(admin.ModelAdmin):
+    list_display = ('pattern_name', 'board', 'pattern_type', 'confidence', 'occurrence_count', 'last_occurred')
+    list_filter = ('pattern_type', 'last_occurred', 'created_at')
+    search_fields = ('pattern_name', 'board__name')
+    readonly_fields = ('created_at', 'updated_at')
