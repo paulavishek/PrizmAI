@@ -1,0 +1,523 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}AI Coach - {{ board.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .coach-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .coach-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 15px;
+        margin-bottom: 30px;
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+    }
+
+    .coach-title {
+        font-size: 32px;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    .effectiveness-score {
+        display: inline-block;
+        background: rgba(255, 255, 255, 0.2);
+        padding: 10px 20px;
+        border-radius: 25px;
+        margin-right: 15px;
+    }
+
+    .suggestion-card {
+        background: white;
+        border-radius: 12px;
+        padding: 25px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        border-left: 5px solid;
+        transition: all 0.3s;
+    }
+
+    .suggestion-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+    }
+
+    .suggestion-card.critical {
+        border-left-color: #dc3545;
+        background: linear-gradient(to right, #fff5f5 0%, white 100%);
+    }
+
+    .suggestion-card.high {
+        border-left-color: #fd7e14;
+        background: linear-gradient(to right, #fff8f0 0%, white 100%);
+    }
+
+    .suggestion-card.medium {
+        border-left-color: #0d6efd;
+        background: linear-gradient(to right, #f0f8ff 0%, white 100%);
+    }
+
+    .suggestion-card.low {
+        border-left-color: #198754;
+        background: linear-gradient(to right, #f0fff4 0%, white 100%);
+    }
+
+    .suggestion-card.info {
+        border-left-color: #6c757d;
+        background: linear-gradient(to right, #f8f9fa 0%, white 100%);
+    }
+
+    .severity-badge {
+        display: inline-block;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .severity-critical {
+        background: #dc3545;
+        color: white;
+        animation: pulse 2s infinite;
+    }
+
+    .severity-high {
+        background: #fd7e14;
+        color: white;
+    }
+
+    .severity-medium {
+        background: #0d6efd;
+        color: white;
+    }
+
+    .severity-low {
+        background: #198754;
+        color: white;
+    }
+
+    .severity-info {
+        background: #6c757d;
+        color: white;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+
+    .suggestion-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 12px;
+    }
+
+    .suggestion-message {
+        color: #475569;
+        margin-bottom: 15px;
+        line-height: 1.6;
+    }
+
+    .reasoning-section {
+        background: rgba(102, 126, 234, 0.05);
+        padding: 15px;
+        border-radius: 8px;
+        margin: 15px 0;
+        border-left: 3px solid #667eea;
+    }
+
+    .actions-list {
+        list-style: none;
+        padding-left: 0;
+        margin: 15px 0;
+    }
+
+    .actions-list li {
+        padding: 8px 0 8px 30px;
+        position: relative;
+        color: #334155;
+    }
+
+    .actions-list li:before {
+        content: "→";
+        position: absolute;
+        left: 0;
+        color: #667eea;
+        font-weight: bold;
+        font-size: 18px;
+    }
+
+    .impact-badge {
+        display: inline-block;
+        background: #f0fdf4;
+        color: #166534;
+        padding: 8px 16px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        margin-top: 10px;
+    }
+
+    .confidence-bar {
+        height: 6px;
+        background: #e2e8f0;
+        border-radius: 3px;
+        overflow: hidden;
+        margin-top: 10px;
+    }
+
+    .confidence-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        transition: width 0.5s;
+    }
+
+    .action-buttons {
+        margin-top: 20px;
+        display: flex;
+        gap: 10px;
+    }
+
+    .btn-acknowledge {
+        background: #667eea;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+
+    .btn-acknowledge:hover {
+        background: #5568d3;
+        transform: translateY(-2px);
+        color: white;
+    }
+
+    .btn-feedback {
+        background: white;
+        color: #667eea;
+        border: 2px solid #667eea;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+
+    .btn-feedback:hover {
+        background: #667eea;
+        color: white;
+    }
+
+    .btn-dismiss {
+        background: transparent;
+        color: #94a3b8;
+        border: none;
+        padding: 10px 20px;
+        font-weight: 600;
+    }
+
+    .btn-dismiss:hover {
+        color: #64748b;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background: white;
+        border-radius: 12px;
+        margin: 20px 0;
+    }
+
+    .empty-state i {
+        font-size: 64px;
+        color: #cbd5e0;
+        margin-bottom: 20px;
+    }
+
+    .section-title {
+        font-size: 24px;
+        font-weight: 700;
+        color: #1e293b;
+        margin: 30px 0 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .stats-row {
+        display: flex;
+        gap: 20px;
+        margin-bottom: 30px;
+        flex-wrap: wrap;
+    }
+
+    .stat-card {
+        flex: 1;
+        min-width: 200px;
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        text-align: center;
+    }
+
+    .stat-value {
+        font-size: 36px;
+        font-weight: 700;
+        color: #667eea;
+        display: block;
+    }
+
+    .stat-label {
+        font-size: 14px;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-top: 8px;
+    }
+
+    .btn-generate {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 14px 30px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 16px;
+        transition: all 0.3s;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-generate:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        color: white;
+    }
+
+    .ask-coach-box {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        padding: 25px;
+        border-radius: 12px;
+        margin-top: 30px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .days-active {
+        font-size: 12px;
+        color: #94a3b8;
+        margin-left: 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="coach-container">
+    <!-- Header -->
+    <div class="coach-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h1 class="coach-title">
+                    <i class="fas fa-user-graduate me-2"></i>AI Coach
+                </h1>
+                <p class="mb-0" style="font-size: 16px; opacity: 0.9;">Proactive guidance to improve your project</p>
+            </div>
+            <div class="text-end">
+                <button onclick="location.href='{% url 'board_detail' board.id %}'" class="btn btn-light">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Board
+                </button>
+                <button onclick="generateSuggestions()" class="btn btn-generate ms-2">
+                    <i class="fas fa-sync-alt me-2"></i>Refresh Suggestions
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Effectiveness Stats -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <span class="stat-value">{{ effectiveness.effectiveness_score|floatformat:0 }}%</span>
+            <div class="stat-label">Coaching Effectiveness</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">{{ total_active }}</span>
+            <div class="stat-label">Active Suggestions</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">{{ effectiveness.action_rate|floatformat:0 }}%</span>
+            <div class="stat-label">Action Rate</div>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">{{ effectiveness.helpful_rate|floatformat:0 }}%</span>
+            <div class="stat-label">Helpful Rate</div>
+        </div>
+    </div>
+
+    <!-- Critical Suggestions -->
+    {% if critical_suggestions %}
+    <h2 class="section-title">
+        <i class="fas fa-exclamation-triangle text-danger me-2"></i>Critical Attention Needed
+    </h2>
+    {% for suggestion in critical_suggestions %}
+        {% include 'kanban/partials/suggestion_card.html' %}
+    {% endfor %}
+    {% endif %}
+
+    <!-- High Priority Suggestions -->
+    {% if high_suggestions %}
+    <h2 class="section-title">
+        <i class="fas fa-exclamation-circle text-warning me-2"></i>High Priority
+    </h2>
+    {% for suggestion in high_suggestions %}
+        {% include 'kanban/partials/suggestion_card.html' %}
+    {% endfor %}
+    {% endif %}
+
+    <!-- Medium Priority Suggestions -->
+    {% if medium_suggestions %}
+    <h2 class="section-title">
+        <i class="fas fa-info-circle text-primary me-2"></i>Medium Priority
+    </h2>
+    {% for suggestion in medium_suggestions %}
+        {% include 'kanban/partials/suggestion_card.html' %}
+    {% endfor %}
+    {% endif %}
+
+    <!-- Low Priority & Info -->
+    {% if low_suggestions or info_suggestions %}
+    <h2 class="section-title">
+        <i class="fas fa-lightbulb text-success me-2"></i>Opportunities & Info
+    </h2>
+    {% for suggestion in low_suggestions %}
+        {% include 'kanban/partials/suggestion_card.html' %}
+    {% endfor %}
+    {% for suggestion in info_suggestions %}
+        {% include 'kanban/partials/suggestion_card.html' %}
+    {% endfor %}
+    {% endif %}
+
+    <!-- Empty State -->
+    {% if not total_active %}
+    <div class="empty-state">
+        <i class="fas fa-check-circle"></i>
+        <h3>All Looking Good! 🎉</h3>
+        <p class="text-muted">No coaching suggestions right now. Your project is running smoothly.</p>
+        <button onclick="generateSuggestions()" class="btn btn-generate mt-3">
+            <i class="fas fa-sync-alt me-2"></i>Generate New Suggestions
+        </button>
+    </div>
+    {% endif %}
+
+    <!-- Ask the Coach -->
+    <div class="ask-coach-box">
+        <h4><i class="fas fa-comment-dots me-2"></i>Ask the AI Coach</h4>
+        <p class="text-muted mb-3">Have a specific question about your project? Ask the AI coach for personalized advice.</p>
+        <a href="{% url 'coach_ask' board.id %}" class="btn btn-primary">
+            <i class="fas fa-question-circle me-2"></i>Ask a Question
+        </a>
+        <a href="{% url 'coach_analytics' board.id %}" class="btn btn-outline-secondary ms-2">
+            <i class="fas fa-chart-bar me-2"></i>View Analytics
+        </a>
+    </div>
+
+    <!-- Improvement Recommendations -->
+    {% if recommendations %}
+    <div class="mt-4 p-4 bg-light rounded">
+        <h5><i class="fas fa-star me-2 text-warning"></i>Tips for You</h5>
+        <ul class="mb-0">
+            {% for rec in recommendations %}
+            <li class="mb-2">{{ rec }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function generateSuggestions() {
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Generating...';
+    
+    fetch("{% url 'coach_generate_suggestions' board.id %}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(`✅ ${data.message}\n\nCreated: ${data.created}\nSkipped: ${data.skipped}`);
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to generate suggestions');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    });
+}
+
+function acknowledgeSuggestion(suggestionId) {
+    fetch(`/coach/suggestion/${suggestionId}/acknowledge/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+function dismissSuggestion(suggestionId) {
+    if (confirm('Are you sure you want to dismiss this suggestion?')) {
+        fetch(`/coach/suggestion/${suggestionId}/dismiss/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => console.error('Error:', error));
+    }
+}
+
+function provideFeedback(suggestionId) {
+    // Redirect to detailed feedback page
+    window.location.href = `/coach/suggestion/${suggestionId}/`;
+}
+</script>
+{% endblock %}

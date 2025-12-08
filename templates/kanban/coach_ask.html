@@ -1,0 +1,249 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Ask AI Coach - {{ board.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ask-coach-container {
+        max-width: 900px;
+        margin: 40px auto;
+        padding: 20px;
+    }
+
+    .ask-header {
+        text-align: center;
+        margin-bottom: 40px;
+    }
+
+    .ask-header h1 {
+        font-size: 36px;
+        font-weight: 700;
+        color: #1e293b;
+        margin-bottom: 10px;
+    }
+
+    .ask-header p {
+        font-size: 18px;
+        color: #64748b;
+    }
+
+    .question-box {
+        background: white;
+        padding: 40px;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        margin-bottom: 30px;
+    }
+
+    .question-input {
+        width: 100%;
+        padding: 15px;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        font-size: 16px;
+        resize: vertical;
+        min-height: 120px;
+    }
+
+    .question-input:focus {
+        outline: none;
+        border-color: #667eea;
+    }
+
+    .example-questions {
+        background: #f8f9fa;
+        padding: 25px;
+        border-radius: 12px;
+        margin-top: 30px;
+    }
+
+    .example-question {
+        background: white;
+        padding: 15px 20px;
+        margin: 10px 0;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s;
+        border-left: 4px solid #667eea;
+    }
+
+    .example-question:hover {
+        transform: translateX(5px);
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+    }
+
+    .advice-box {
+        background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+        padding: 30px;
+        border-radius: 12px;
+        margin-top: 30px;
+        border-left: 5px solid #667eea;
+    }
+
+    .advice-box h4 {
+        color: #1e293b;
+        margin-bottom: 15px;
+    }
+
+    .advice-content {
+        color: #475569;
+        line-height: 1.8;
+        white-space: pre-wrap;
+    }
+
+    .btn-ask {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 15px 40px;
+        border-radius: 10px;
+        font-size: 18px;
+        font-weight: 600;
+        width: 100%;
+        margin-top: 20px;
+        transition: all 0.3s;
+    }
+
+    .btn-ask:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        color: white;
+    }
+
+    .btn-ask:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ask-coach-container">
+    <div class="ask-header">
+        <h1><i class="fas fa-comment-dots text-primary"></i> Ask the AI Coach</h1>
+        <p>Get personalized project management advice based on your board's context</p>
+    </div>
+
+    <div class="question-box">
+        <label for="question" class="form-label h5">Your Question</label>
+        <textarea 
+            id="question" 
+            class="question-input" 
+            placeholder="e.g., How can I improve my team's velocity? What should I do about scope creep?"
+        ></textarea>
+        
+        <button onclick="askCoach()" class="btn-ask" id="askBtn">
+            <i class="fas fa-paper-plane me-2"></i>Get AI Advice
+        </button>
+    </div>
+
+    <div id="adviceContainer" style="display: none;">
+        <div class="advice-box">
+            <h4><i class="fas fa-lightbulb me-2"></i>AI Coach's Advice</h4>
+            <div class="advice-content" id="adviceContent"></div>
+        </div>
+    </div>
+
+    <div class="example-questions">
+        <h5 class="mb-3"><i class="fas fa-question-circle me-2"></i>Example Questions</h5>
+        
+        <div class="example-question" onclick="setQuestion(this.textContent)">
+            <i class="fas fa-chart-line me-2 text-primary"></i>
+            How can I improve my team's velocity?
+        </div>
+        
+        <div class="example-question" onclick="setQuestion(this.textContent)">
+            <i class="fas fa-exclamation-triangle me-2 text-warning"></i>
+            What should I do about scope creep in my project?
+        </div>
+        
+        <div class="example-question" onclick="setQuestion(this.textContent)">
+            <i class="fas fa-users me-2 text-info"></i>
+            How do I handle an overloaded team member?
+        </div>
+        
+        <div class="example-question" onclick="setQuestion(this.textContent)">
+            <i class="fas fa-clock me-2 text-danger"></i>
+            We're at risk of missing our deadline. What are my options?
+        </div>
+        
+        <div class="example-question" onclick="setQuestion(this.textContent)">
+            <i class="fas fa-shield-alt me-2 text-success"></i>
+            How can I better manage project risks?
+        </div>
+    </div>
+
+    <div class="text-center mt-4">
+        <a href="{% url 'coach_dashboard' board.id %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Back to Coach Dashboard
+        </a>
+    </div>
+</div>
+
+<script>
+function setQuestion(text) {
+    // Remove the icon part
+    const cleanText = text.replace(/^\s*[^\w]*\s*/, '').trim();
+    document.getElementById('question').value = cleanText;
+    document.getElementById('question').focus();
+}
+
+function askCoach() {
+    const question = document.getElementById('question').value.trim();
+    
+    if (!question) {
+        alert('Please enter a question');
+        return;
+    }
+    
+    const btn = document.getElementById('askBtn');
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Thinking...';
+    
+    // Hide previous advice
+    document.getElementById('adviceContainer').style.display = 'none';
+    
+    fetch("{% url 'coach_ask' board.id %}", {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({ question: question })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('adviceContent').textContent = data.advice;
+            document.getElementById('adviceContainer').style.display = 'block';
+            
+            // Scroll to advice
+            document.getElementById('adviceContainer').scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'start' 
+            });
+        } else {
+            alert('Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to get advice. Please try again.');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+    });
+}
+
+// Allow Enter key to submit (Shift+Enter for new line)
+document.getElementById('question').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        askCoach();
+    }
+});
+</script>
+{% endblock %}

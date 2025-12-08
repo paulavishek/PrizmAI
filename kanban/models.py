@@ -6,6 +6,9 @@ from colorfield.fields import ColorField
 from accounts.models import Organization
 from django.core.validators import MinValueValidator, MaxValueValidator
 
+# Import coach models
+from kanban.coach_models import CoachingSuggestion, CoachingFeedback, PMMetrics, CoachingInsight
+
 class Board(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)

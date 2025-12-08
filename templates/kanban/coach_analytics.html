@@ -1,0 +1,269 @@
+{% extends 'kanban/base.html' %}
+{% load static %}
+
+{% block title %}AI Coach Analytics - {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-chart-bar me-2"></i>AI Coach Analytics</h2>
+                    <p class="text-muted">{{ board.name }} - Last {{ days }} days</p>
+                </div>
+                <div>
+                    <a href="{% url 'coach_dashboard' board.id %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i> Back to Coach
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Time Period Selector -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="btn-group" role="group">
+                <a href="?days=7" class="btn btn-sm {% if days == 7 %}btn-primary{% else %}btn-outline-primary{% endif %}">7 Days</a>
+                <a href="?days=30" class="btn btn-sm {% if days == 30 %}btn-primary{% else %}btn-outline-primary{% endif %}">30 Days</a>
+                <a href="?days=90" class="btn btn-sm {% if days == 90 %}btn-primary{% else %}btn-outline-primary{% endif %}">90 Days</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-primary">
+                <div class="card-body text-center">
+                    <h3 class="mb-0 text-primary">{{ total_suggestions }}</h3>
+                    <p class="text-muted mb-0">Total Suggestions</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-success">
+                <div class="card-body text-center">
+                    <h3 class="mb-0 text-success">{{ acted_on }}</h3>
+                    <p class="text-muted mb-0">Acted Upon</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-info">
+                <div class="card-body text-center">
+                    <h3 class="mb-0 text-info">{{ helpful_count }}</h3>
+                    <p class="text-muted mb-0">Marked Helpful</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-warning">
+                <div class="card-body text-center">
+                    <h3 class="mb-0 text-warning">{{ effectiveness.overall_score|floatformat:0 }}%</h3>
+                    <p class="text-muted mb-0">Effectiveness Score</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="row mb-4">
+        <!-- By Type -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-tags me-2"></i>Suggestions by Type</h5>
+                </div>
+                <div class="card-body">
+                    {% if by_type %}
+                        <div class="list-group">
+                            {% for item in by_type %}
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span class="text-capitalize">{{ item.suggestion_type|replace:"_":" " }}</span>
+                                    <span class="badge bg-primary rounded-pill">{{ item.count }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted text-center mb-0">No suggestions yet</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- By Severity -->
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Suggestions by Severity</h5>
+                </div>
+                <div class="card-body">
+                    {% if by_severity %}
+                        <div class="list-group">
+                            {% for item in by_severity %}
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <span class="text-capitalize">
+                                        {% if item.severity == 'critical' %}
+                                            <span class="badge bg-danger">Critical</span>
+                                        {% elif item.severity == 'high' %}
+                                            <span class="badge bg-warning">High</span>
+                                        {% elif item.severity == 'medium' %}
+                                            <span class="badge bg-info">Medium</span>
+                                        {% elif item.severity == 'low' %}
+                                            <span class="badge bg-secondary">Low</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">Info</span>
+                                        {% endif %}
+                                    </span>
+                                    <span class="badge bg-primary rounded-pill">{{ item.count }}</span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted text-center mb-0">No data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status Distribution -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-check-circle me-2"></i>Suggestion Status</h5>
+                </div>
+                <div class="card-body">
+                    {% if by_status %}
+                        <div class="row">
+                            {% for item in by_status %}
+                                <div class="col-md-3 mb-3">
+                                    <div class="text-center">
+                                        <h4 class="mb-0">{{ item.count }}</h4>
+                                        <p class="text-muted text-capitalize mb-0">{{ item.status }}</p>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted text-center mb-0">No status data available</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Effectiveness Breakdown -->
+    {% if effectiveness %}
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-trophy me-2"></i>Coaching Effectiveness Breakdown</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center p-3 border rounded">
+                                <h4 class="mb-0 text-primary">{{ effectiveness.action_rate|floatformat:0 }}%</h4>
+                                <p class="text-muted mb-0 small">Action Rate</p>
+                                <small class="text-muted">Suggestions acted upon</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center p-3 border rounded">
+                                <h4 class="mb-0 text-success">{{ effectiveness.helpful_rate|floatformat:0 }}%</h4>
+                                <p class="text-muted mb-0 small">Helpful Rate</p>
+                                <small class="text-muted">Marked as helpful</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center p-3 border rounded">
+                                <h4 class="mb-0 text-info">{{ effectiveness.avg_confidence|floatformat:2 }}</h4>
+                                <p class="text-muted mb-0 small">Avg Confidence</p>
+                                <small class="text-muted">System confidence</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center p-3 border rounded">
+                                <h4 class="mb-0 text-warning">{{ effectiveness.dismissal_rate|floatformat:0 }}%</h4>
+                                <p class="text-muted mb-0 small">Dismissal Rate</p>
+                                <small class="text-muted">Suggestions dismissed</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Learned Insights -->
+    {% if insights %}
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="fas fa-lightbulb me-2"></i>Learned Insights</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        {% for insight in insights %}
+                            <div class="list-group-item">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="mb-1 text-capitalize">{{ insight.insight_type|replace:"_":" " }}</h6>
+                                        <p class="mb-1">{{ insight.pattern_description }}</p>
+                                        <small class="text-muted">
+                                            Observed {{ insight.occurrence_count }} times | 
+                                            Confidence: {{ insight.confidence_score|floatformat:2 }}
+                                        </small>
+                                    </div>
+                                    <span class="badge bg-success">Active</span>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<style>
+    .card {
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 1rem;
+    }
+    
+    .card-header {
+        background-color: #f8f9fa;
+        border-bottom: 2px solid #e9ecef;
+    }
+    
+    .border-primary {
+        border-color: #667eea !important;
+        border-width: 2px;
+    }
+    
+    .border-success {
+        border-color: #10b981 !important;
+        border-width: 2px;
+    }
+    
+    .border-info {
+        border-color: #3b82f6 !important;
+        border-width: 2px;
+    }
+    
+    .border-warning {
+        border-color: #f59e0b !important;
+        border-width: 2px;
+    }
+</style>
+{% endblock %}

@@ -614,7 +614,7 @@ def analyze_workflow_optimization_api(request):
             })
         
         # Calculate productivity
-        total_progress = sum(task.progress for task in all_tasks)
+        total_progress = sum(task.progress if task.progress is not None else 0 for task in all_tasks)
         productivity = 0
         if total_tasks > 0:
             productivity = total_progress / total_tasks

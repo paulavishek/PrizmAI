@@ -56,8 +56,8 @@ class RetrospectiveGenerator:
             # Task metrics
             'total_tasks': tasks.count(),
             'completed_tasks': completed_tasks.count(),
-            'in_progress_tasks': tasks.filter(progress__gt=0, progress__lt=100).count(),
-            'blocked_tasks': tasks.filter(progress=0).count(),
+            'in_progress_tasks': tasks.filter(progress__isnull=False, progress__gt=0, progress__lt=100).count(),
+            'blocked_tasks': tasks.filter(Q(progress=0) | Q(progress__isnull=True)).count(),
             
             # Completion rate
             'completion_rate': (completed_tasks.count() / tasks.count() * 100) if tasks.count() > 0 else 0,
