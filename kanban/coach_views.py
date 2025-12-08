@@ -198,7 +198,9 @@ def generate_suggestions(request, board_id):
         })
         
     except Exception as e:
+        import traceback
         logger.error(f"Error generating suggestions: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return JsonResponse({
             'success': False,
             'error': str(e)

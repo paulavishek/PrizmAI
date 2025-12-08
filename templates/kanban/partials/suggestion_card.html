@@ -10,7 +10,7 @@
             </span>
         </div>
         <span class="badge bg-light text-dark">
-            {{ suggestion.confidence_score|floatformat:0 }}% confident
+            {% widthratio suggestion.confidence_score 1 100 %}% confident
         </span>
     </div>
 

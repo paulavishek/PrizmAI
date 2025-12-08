@@ -255,17 +255,18 @@ class FeedbackLearningSystem:
         """
         from kanban.coach_models import CoachingSuggestion, CoachingInsight
         
-        # Get insights for this suggestion type
-        insights = CoachingInsight.objects.filter(
-            is_active=True,
-            applicable_to_suggestion_types__contains=[suggestion_type]
-        ).order_by('-confidence_score', '-sample_size')
+        # Get all active insights and filter in Python (SQLite doesn't support JSONField contains)
+        all_insights = CoachingInsight.objects.filter(is_active=True).order_by('-confidence_score', '-sample_size')
+        insights = [
+            insight for insight in all_insights 
+            if suggestion_type in insight.applicable_to_suggestion_types
+        ]
         
-        if not insights.exists():
+        if not insights:
             return base_confidence
         
         # Use top insight to adjust confidence
-        top_insight = insights.first()
+        top_insight = insights[0]
         rule_adjustments = top_insight.rule_adjustments
         
         if 'recommended_confidence' in rule_adjustments:
@@ -300,11 +301,12 @@ class FeedbackLearningSystem:
         """
         from kanban.coach_models import CoachingInsight
         
-        # Get insights for this type
-        insights = CoachingInsight.objects.filter(
-            is_active=True,
-            applicable_to_suggestion_types__contains=[suggestion_type]
-        )
+        # Get all active insights and filter in Python (SQLite doesn't support JSONField contains)
+        all_insights = CoachingInsight.objects.filter(is_active=True)
+        insights = [
+            insight for insight in all_insights 
+            if suggestion_type in insight.applicable_to_suggestion_types
+        ]
         
         for insight in insights:
             adjustments = insight.rule_adjustments

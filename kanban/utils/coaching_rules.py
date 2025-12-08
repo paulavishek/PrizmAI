@@ -333,15 +333,24 @@ class CoachingRuleEngine:
             return
         
         # Check for significant scope increases
-        if recent_snapshot.scope_change_percentage > 15:
-            severity = 'high' if recent_snapshot.scope_change_percentage > 25 else 'medium'
+        scope_change = recent_snapshot.scope_change_percentage if recent_snapshot.scope_change_percentage is not None else 0
+        
+        # Calculate tasks and complexity added from baseline
+        tasks_added = 0
+        complexity_added = 0
+        if recent_snapshot.baseline_snapshot:
+            tasks_added = recent_snapshot.total_tasks - recent_snapshot.baseline_snapshot.total_tasks
+            complexity_added = recent_snapshot.total_complexity_points - recent_snapshot.baseline_snapshot.total_complexity_points
+        
+        if scope_change > 15:
+            severity = 'high' if scope_change > 25 else 'medium'
             
             self._add_suggestion(
                 suggestion_type='scope_creep',
                 severity=severity,
-                title=f"Scope increased by {recent_snapshot.scope_change_percentage:.0f}%",
-                message=f"Your project scope has grown by {recent_snapshot.scope_change_percentage:.0f}% "
-                       f"({recent_snapshot.tasks_added} new tasks, {recent_snapshot.complexity_added:.0f} "
+                title=f"Scope increased by {scope_change:.0f}%",
+                message=f"Your project scope has grown by {scope_change:.0f}% "
+                       f"({tasks_added} new tasks, {complexity_added:.0f} "
                        f"complexity points added). This may impact your timeline and team capacity.",
                 reasoning=f"Scope creep of this magnitude typically delays projects and can lead "
                          f"to missed deadlines if not managed proactively.",
@@ -355,9 +364,9 @@ class CoachingRuleEngine:
                 expected_impact="Managing scope creep prevents timeline slips and helps maintain "
                               "team focus on highest-priority work.",
                 metrics_snapshot={
-                    'scope_change_percentage': float(recent_snapshot.scope_change_percentage),
-                    'tasks_added': recent_snapshot.tasks_added,
-                    'complexity_added': float(recent_snapshot.complexity_added),
+                    'scope_change_percentage': float(scope_change),
+                    'tasks_added': tasks_added,
+                    'complexity_added': float(complexity_added),
                     'snapshot_date': recent_snapshot.snapshot_date.isoformat()
                 },
                 confidence_score=0.85
@@ -372,20 +381,25 @@ class CoachingRuleEngine:
             board=self.board
         ).order_by('-prediction_date').first()
         
-        if not latest_prediction or not latest_prediction.target_date:
+        if not latest_prediction or not latest_prediction.target_completion_date:
             return
         
         # Check if we're at risk of missing deadline
-        if latest_prediction.will_meet_target == False and latest_prediction.delay_probability > 30:
+        delay_prob = latest_prediction.delay_probability if latest_prediction.delay_probability is not None else 0
+        days_behind = latest_prediction.days_ahead_behind_target if latest_prediction.days_ahead_behind_target is not None else 0
+        current_vel = latest_prediction.current_velocity if latest_prediction.current_velocity is not None else 0
+        remaining = latest_prediction.remaining_tasks if latest_prediction.remaining_tasks is not None else 0
+        
+        if latest_prediction.will_meet_target == False and delay_prob > 30:
             self._add_suggestion(
                 suggestion_type='deadline_risk',
                 severity='critical',
-                title=f"{latest_prediction.delay_probability:.0f}% chance of missing deadline",
-                message=f"Current projections show {latest_prediction.delay_probability:.0f}% probability "
-                       f"of missing your target date ({latest_prediction.target_date.strftime('%B %d, %Y')}). "
-                       f"You're estimated to finish {abs(latest_prediction.days_ahead_behind)} days late.",
-                reasoning=f"Based on current velocity ({latest_prediction.current_velocity} tasks/week) "
-                         f"and remaining work ({latest_prediction.remaining_tasks} tasks), deadline is at risk.",
+                title=f"{delay_prob:.0f}% chance of missing deadline",
+                message=f"Current projections show {delay_prob:.0f}% probability "
+                       f"of missing your target date ({latest_prediction.target_completion_date.strftime('%B %d, %Y')}). "
+                       f"You're estimated to finish {abs(days_behind)} days late.",
+                reasoning=f"Based on current velocity ({current_vel} tasks/week) "
+                         f"and remaining work ({remaining} tasks), deadline is at risk.",
                 recommended_actions=[
                     "Review and cut scope - what can move to next phase?",
                     "Add resources if budget allows",
@@ -396,11 +410,11 @@ class CoachingRuleEngine:
                 expected_impact="Early escalation and corrective action can help recover timeline "
                               "or reset stakeholder expectations before it's too late.",
                 metrics_snapshot={
-                    'delay_probability': float(latest_prediction.delay_probability),
-                    'days_behind': abs(latest_prediction.days_ahead_behind),
-                    'target_date': latest_prediction.target_date.isoformat(),
-                    'remaining_tasks': latest_prediction.remaining_tasks,
-                    'current_velocity': float(latest_prediction.current_velocity)
+                    'delay_probability': float(delay_prob),
+                    'days_behind': abs(days_behind),
+                    'target_date': latest_prediction.target_completion_date.isoformat(),
+                    'remaining_tasks': remaining,
+                    'current_velocity': float(current_vel)
                 },
                 confidence_score=0.90
             )
@@ -471,6 +485,7 @@ class CoachingRuleEngine:
         
         if latest.quality_score is not None and latest.quality_score < 85:
             severity = 'high' if latest.quality_score < 75 else 'medium'
+            tasks_reopened = latest.tasks_reopened if latest.tasks_reopened is not None else 0
             
             self._add_suggestion(
                 suggestion_type='quality_issue',
@@ -479,7 +494,7 @@ class CoachingRuleEngine:
                 message=f"Your team's quality score is {latest.quality_score:.0f}/100, indicating "
                        f"an unusual number of tasks being reopened or rejected. This suggests "
                        f"potential quality issues.",
-                reasoning=f"{latest.tasks_reopened} tasks were reopened in the recent period, "
+                reasoning=f"{tasks_reopened} tasks were reopened in the recent period, "
                          f"affecting overall quality metrics.",
                 recommended_actions=[
                     "Review why tasks are being reopened - definition of done clear?",
@@ -492,7 +507,7 @@ class CoachingRuleEngine:
                               "and improves team morale.",
                 metrics_snapshot={
                     'quality_score': float(latest.quality_score),
-                    'tasks_reopened': latest.tasks_reopened,
+                    'tasks_reopened': tasks_reopened,
                     'period': f"{latest.period_start} to {latest.period_end}"
                 },
                 confidence_score=0.85
