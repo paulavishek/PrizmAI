@@ -52,6 +52,9 @@ pip install -r requirements.txt
 # Run migrations
 python manage.py migrate
 
+# Create demo data (optional, recommended for first-time users)
+python manage.py populate_test_data
+
 # Create a superuser (optional)
 python manage.py createsuperuser
 
@@ -60,6 +63,8 @@ python manage.py runserver
 ```
 
 **Open http://localhost:8000** and start creating boards!
+
+**💡 Tip:** Demo data dates are dynamic and automatically adjust to the current date. If you revisit the demo later, run `python manage.py refresh_demo_dates` to keep tasks current.
 
 **→ [Full setup guide with configuration options](SETUP.md)**
 

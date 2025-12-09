@@ -127,6 +127,25 @@ Create demo data for testing:
 python setup_ai_demo.py
 ```
 
+Or use the Django management command:
+```bash
+python manage.py populate_test_data
+```
+
+### Refresh Demo Data Dates
+To keep demo data fresh and relevant, refresh all task and milestone dates to be relative to the current date:
+```bash
+python manage.py refresh_demo_dates
+```
+
+This command will:
+- Update all task due dates and start dates to be relative to today
+- Update milestone target dates
+- Update time entries and engagement records
+- Distribute tasks appropriately (past for completed, future for in-progress/to-do)
+
+**Tip:** Run this command periodically (e.g., monthly) to ensure demo data always appears current and prevents most tasks from appearing overdue.
+
 ### AI Features Testing
 Test AI features with demo scripts:
 ```bash
