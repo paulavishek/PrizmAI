@@ -1,0 +1,495 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Conflict Dashboard - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .conflict-card {
+        border-left: 4px solid #dee2e6;
+        transition: all 0.3s ease;
+    }
+    .conflict-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        transform: translateY(-2px);
+    }
+    .conflict-card.critical {
+        border-left-color: #dc3545;
+    }
+    .conflict-card.high {
+        border-left-color: #fd7e14;
+    }
+    .conflict-card.medium {
+        border-left-color: #ffc107;
+    }
+    .conflict-card.low {
+        border-left-color: #17a2b8;
+    }
+    .conflict-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+    .stat-card {
+        border-radius: 10px;
+        padding: 1.5rem;
+        text-align: center;
+        transition: transform 0.2s;
+    }
+    .stat-card:hover {
+        transform: scale(1.05);
+    }
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin: 0;
+    }
+    .stat-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+    }
+    .notification-item {
+        border-left: 3px solid #007bff;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        background: #f8f9fa;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+    .notification-item:hover {
+        background: #e9ecef;
+    }
+    .notification-item.unread {
+        background: #e7f3ff;
+        font-weight: 500;
+    }
+    .filter-btn {
+        margin: 0.25rem;
+    }
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: #6c757d;
+    }
+    .empty-state i {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h1 class="mb-2">
+                <i class="fas fa-exclamation-triangle text-warning"></i> 
+                Conflict Dashboard
+            </h1>
+            <p class="text-muted">AI-powered conflict detection and resolution</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <button class="btn btn-primary" onclick="triggerDetection()">
+                <i class="fas fa-sync-alt"></i> Scan Now
+            </button>
+            <a href="{% url 'conflict_analytics' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-chart-line"></i> Analytics
+            </a>
+        </div>
+    </div>
+
+    <!-- Statistics Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-card bg-danger text-white">
+                <p class="stat-number">{{ stats.total_active }}</p>
+                <p class="stat-label mb-0">Active Conflicts</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card bg-dark text-white">
+                <p class="stat-number">{{ stats.by_severity.critical }}</p>
+                <p class="stat-label mb-0">Critical</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card bg-warning text-white">
+                <p class="stat-number">{{ stats.by_severity.high }}</p>
+                <p class="stat-label mb-0">High Priority</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-card bg-info text-white">
+                <p class="stat-number">{{ stats.unread_notifications }}</p>
+                <p class="stat-label mb-0">Notifications</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Main Conflict List -->
+        <div class="col-md-8">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Active Conflicts</h5>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-secondary filter-btn active" data-filter="all">
+                                All ({{ stats.total_active }})
+                            </button>
+                            <button type="button" class="btn btn-outline-danger filter-btn" data-filter="resource">
+                                <i class="fas fa-users"></i> Resource ({{ stats.by_type.resource }})
+                            </button>
+                            <button type="button" class="btn btn-outline-warning filter-btn" data-filter="schedule">
+                                <i class="fas fa-clock"></i> Schedule ({{ stats.by_type.schedule }})
+                            </button>
+                            <button type="button" class="btn btn-outline-info filter-btn" data-filter="dependency">
+                                <i class="fas fa-link"></i> Dependency ({{ stats.by_type.dependency }})
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                    {% if conflicts %}
+                        {% for conflict in conflicts %}
+                        <div class="conflict-card card mb-3 {{ conflict.severity }}" data-type="{{ conflict.conflict_type }}">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="mb-0">
+                                        <a href="{% url 'conflict_detail' conflict.id %}" class="text-decoration-none text-dark">
+                                            {{ conflict.title }}
+                                        </a>
+                                    </h6>
+                                    <div>
+                                        <span class="badge bg-{{ conflict.get_severity_color }} conflict-badge">
+                                            {{ conflict.get_severity_display }}
+                                        </span>
+                                        <span class="badge bg-secondary conflict-badge">
+                                            {{ conflict.get_conflict_type_display }}
+                                        </span>
+                                    </div>
+                                </div>
+                                
+                                <p class="text-muted small mb-2">{{ conflict.description|truncatewords:20 }}</p>
+                                
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small class="text-muted">
+                                            <i class="fas fa-project-diagram"></i> {{ conflict.board.name }}
+                                        </small>
+                                        <small class="text-muted ms-3">
+                                            <i class="fas fa-tasks"></i> {{ conflict.tasks.count }} task(s)
+                                        </small>
+                                        <small class="text-muted ms-3">
+                                            <i class="fas fa-user-friends"></i> {{ conflict.affected_users.count }} user(s)
+                                        </small>
+                                    </div>
+                                    <div>
+                                        <small class="text-muted">
+                                            <i class="fas fa-clock"></i> {{ conflict.detected_at|timesince }} ago
+                                        </small>
+                                    </div>
+                                </div>
+                                
+                                {% if conflict.resolutions.count > 0 %}
+                                <div class="mt-2">
+                                    <small class="text-success">
+                                        <i class="fas fa-lightbulb"></i> {{ conflict.resolutions.count }} AI suggestion(s) available
+                                    </small>
+                                </div>
+                                {% endif %}
+                                
+                                <div class="mt-2">
+                                    <a href="{% url 'conflict_detail' conflict.id %}" class="btn btn-sm btn-primary">
+                                        View & Resolve
+                                    </a>
+                                    <button class="btn btn-sm btn-outline-secondary" onclick="ignoreConflict({{ conflict.id }})">
+                                        Ignore
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="empty-state">
+                            <i class="fas fa-check-circle text-success"></i>
+                            <h4>No Active Conflicts</h4>
+                            <p>All clear! No conflicts detected in your projects.</p>
+                            <button class="btn btn-primary" onclick="triggerDetection()">
+                                <i class="fas fa-sync-alt"></i> Run Detection
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-md-4">
+            <!-- Notifications -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-bell"></i> Your Notifications
+                        {% if stats.unread_notifications > 0 %}
+                        <span class="badge bg-danger ms-2">{{ stats.unread_notifications }}</span>
+                        {% endif %}
+                    </h6>
+                </div>
+                <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                    {% if notifications %}
+                        {% for notif in notifications %}
+                        <div class="notification-item {% if not notif.acknowledged %}unread{% endif %}" 
+                             onclick="viewConflict({{ notif.conflict.id }}, {{ notif.id }})">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>{{ notif.conflict.get_conflict_type_display }} Conflict</strong>
+                                    <p class="mb-1 small">{{ notif.conflict.title }}</p>
+                                    <small class="text-muted">{{ notif.sent_at|timesince }} ago</small>
+                                </div>
+                                <span class="badge bg-{{ notif.conflict.get_severity_color }}">
+                                    {{ notif.conflict.get_severity_display }}
+                                </span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted text-center mb-0">No new notifications</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Recent Resolutions -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-check-circle"></i> Recent Resolutions
+                    </h6>
+                </div>
+                <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                    {% if recent_resolutions %}
+                        {% for conflict in recent_resolutions %}
+                        <div class="mb-3 pb-3 border-bottom">
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <strong class="small">{{ conflict.title|truncatewords:8 }}</strong>
+                                <span class="badge bg-success">Resolved</span>
+                            </div>
+                            {% if conflict.chosen_resolution %}
+                            <p class="mb-1 small text-muted">
+                                <i class="fas fa-arrow-right"></i> {{ conflict.chosen_resolution.title }}
+                            </p>
+                            {% endif %}
+                            {% if conflict.resolution_effectiveness %}
+                            <div class="small text-warning">
+                                {% for i in "12345" %}
+                                    {% if forloop.counter <= conflict.resolution_effectiveness %}
+                                        <i class="fas fa-star"></i>
+                                    {% else %}
+                                        <i class="far fa-star"></i>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+                            <small class="text-muted">{{ conflict.resolved_at|timesince }} ago</small>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="text-muted text-center mb-0">No recent resolutions</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Board Selection -->
+            <div class="card shadow-sm mt-3">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-project-diagram"></i> Scan Specific Board
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <select id="boardSelect" class="form-select mb-2">
+                        <option value="">Select a board...</option>
+                        {% for board in boards %}
+                        <option value="{{ board.id }}">{{ board.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn btn-primary btn-sm w-100" onclick="scanBoard()">
+                        <i class="fas fa-search"></i> Scan Board
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ignore Conflict Modal -->
+<div class="modal fade" id="ignoreModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Ignore Conflict</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="ignoreForm">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Reason (optional)</label>
+                        <textarea class="form-control" name="reason" rows="3" 
+                                  placeholder="Why are you ignoring this conflict?"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" onclick="confirmIgnore()">Ignore Conflict</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentConflictId = null;
+
+// Filter conflicts
+document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        this.classList.add('active');
+        
+        const filter = this.dataset.filter;
+        document.querySelectorAll('.conflict-card').forEach(card => {
+            if (filter === 'all' || card.dataset.type === filter) {
+                card.style.display = 'block';
+            } else {
+                card.style.display = 'none';
+            }
+        });
+    });
+});
+
+// Trigger detection for all boards
+function triggerDetection() {
+    if (confirm('This will scan all boards for conflicts. Continue?')) {
+        showLoading('Scanning for conflicts...');
+        // In production, trigger via API
+        fetch('/kanban/conflicts/trigger/all/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        }).then(response => response.json())
+          .then(data => {
+              hideLoading();
+              if (data.success) {
+                  alert('Conflict detection started! Page will refresh shortly.');
+                  setTimeout(() => location.reload(), 3000);
+              } else {
+                  alert('Error: ' + data.error);
+              }
+          }).catch(error => {
+              hideLoading();
+              alert('Error starting detection');
+          });
+    }
+}
+
+// Scan specific board
+function scanBoard() {
+    const boardId = document.getElementById('boardSelect').value;
+    if (!boardId) {
+        alert('Please select a board');
+        return;
+    }
+    
+    showLoading('Scanning board...');
+    fetch(`/kanban/conflicts/trigger/${boardId}/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    }).then(response => response.json())
+      .then(data => {
+          hideLoading();
+          if (data.success) {
+              alert(data.message);
+              location.reload();
+          } else {
+              alert('Error: ' + data.error);
+          }
+      }).catch(error => {
+          hideLoading();
+          alert('Error scanning board');
+      });
+}
+
+// Ignore conflict
+function ignoreConflict(conflictId) {
+    currentConflictId = conflictId;
+    new bootstrap.Modal(document.getElementById('ignoreModal')).show();
+}
+
+function confirmIgnore() {
+    const reason = document.querySelector('#ignoreForm textarea[name="reason"]').value;
+    const formData = new FormData();
+    formData.append('reason', reason);
+    
+    fetch(`/kanban/conflicts/${currentConflictId}/ignore/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: formData
+    }).then(response => response.json())
+      .then(data => {
+          if (data.success) {
+              bootstrap.Modal.getInstance(document.getElementById('ignoreModal')).hide();
+              location.reload();
+          } else {
+              alert('Error: ' + data.error);
+          }
+      });
+}
+
+// View conflict from notification
+function viewConflict(conflictId, notificationId) {
+    // Mark as read
+    fetch(`/kanban/conflicts/notifications/${notificationId}/acknowledge/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    });
+    // Navigate to conflict
+    window.location.href = `/kanban/conflicts/${conflictId}/`;
+}
+
+// Loading helpers
+function showLoading(message) {
+    // Simple loading indicator
+    const loading = document.createElement('div');
+    loading.id = 'loadingOverlay';
+    loading.innerHTML = `
+        <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
+                    background: rgba(0,0,0,0.5); z-index: 9999; 
+                    display: flex; align-items: center; justify-content: center;">
+            <div style="background: white; padding: 2rem; border-radius: 10px; text-align: center;">
+                <div class="spinner-border text-primary mb-2" role="status"></div>
+                <p class="mb-0">${message}</p>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(loading);
+}
+
+function hideLoading() {
+    const loading = document.getElementById('loadingOverlay');
+    if (loading) loading.remove();
+}
+</script>
+{% endblock %}

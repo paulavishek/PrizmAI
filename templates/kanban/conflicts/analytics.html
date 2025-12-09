@@ -1,0 +1,400 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Conflict Analytics - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .metric-card {
+        border-radius: 10px;
+        padding: 1.5rem;
+        text-align: center;
+        background: white;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        transition: transform 0.2s;
+    }
+    .metric-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    }
+    .metric-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin: 0;
+    }
+    .metric-label {
+        color: #6c757d;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        margin-top: 0.5rem;
+    }
+    .pattern-card {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        transition: all 0.3s ease;
+    }
+    .pattern-card:hover {
+        border-color: #007bff;
+        box-shadow: 0 2px 8px rgba(0,123,255,0.2);
+    }
+    .success-bar {
+        height: 8px;
+        background: #e9ecef;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .success-fill {
+        height: 100%;
+        transition: width 0.5s ease;
+    }
+    .success-high { background: linear-gradient(90deg, #28a745, #20c997); }
+    .success-medium { background: linear-gradient(90deg, #ffc107, #fd7e14); }
+    .success-low { background: linear-gradient(90deg, #dc3545, #c82333); }
+    .chart-container {
+        position: relative;
+        height: 300px;
+    }
+    .trend-badge {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h1 class="mb-2">
+                <i class="fas fa-chart-line text-primary"></i> 
+                Conflict Analytics
+            </h1>
+            <p class="text-muted">Learn from past resolutions and identify patterns</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{% url 'conflict_dashboard' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Key Metrics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="metric-card">
+                <i class="fas fa-check-circle text-success fa-2x mb-2"></i>
+                <p class="metric-value text-success">{{ total_resolved }}</p>
+                <p class="metric-label mb-0">Total Resolved</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card">
+                <i class="fas fa-clock text-primary fa-2x mb-2"></i>
+                <p class="metric-value text-primary">
+                    {% if avg_resolution_time %}
+                        {{ avg_resolution_time.days }}d {{ avg_resolution_time.seconds|div:3600 }}h
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </p>
+                <p class="metric-label mb-0">Avg Resolution Time</p>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card">
+                <i class="fas fa-star text-warning fa-2x mb-2"></i>
+                <p class="metric-value text-warning">
+                    {% if avg_effectiveness %}
+                        {{ avg_effectiveness|floatformat:1 }}
+                    {% else %}
+                        N/A
+                    {% endif %}
+                </p>
+                <p class="metric-label mb-0">Avg Effectiveness</p>
+                <small class="text-muted">Out of 5 stars</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="metric-card">
+                <i class="fas fa-comments text-info fa-2x mb-2"></i>
+                <p class="metric-value text-info">{{ rated_count }}</p>
+                <p class="metric-label mb-0">Rated Resolutions</p>
+                <small class="text-muted">{{ rated_count|div:total_resolved|mul:100|floatformat:0 }}% of total</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Resolution Patterns -->
+        <div class="col-md-8">
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-brain"></i> Learned Resolution Patterns
+                    </h5>
+                    <small class="text-muted">AI confidence adjustments based on your team's history</small>
+                </div>
+                <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                    {% if patterns %}
+                        {% for pattern in patterns %}
+                        <div class="pattern-card">
+                            <div class="row align-items-center">
+                                <div class="col-md-5">
+                                    <h6 class="mb-1">
+                                        <span class="badge bg-secondary">{{ pattern.get_conflict_type_display }}</span>
+                                        <i class="fas fa-arrow-right mx-2"></i>
+                                        <span class="badge bg-primary">{{ pattern.get_resolution_type_display }}</span>
+                                    </h6>
+                                    {% if pattern.board %}
+                                    <small class="text-muted">
+                                        <i class="fas fa-project-diagram"></i> {{ pattern.board.name }}
+                                    </small>
+                                    {% else %}
+                                    <small class="text-muted">
+                                        <i class="fas fa-globe"></i> Global Pattern
+                                    </small>
+                                    {% endif %}
+                                </div>
+                                
+                                <div class="col-md-4">
+                                    <div class="mb-2">
+                                        <div class="d-flex justify-content-between align-items-center mb-1">
+                                            <small><strong>Success Rate</strong></small>
+                                            <small><strong>{{ pattern.success_rate|mul:100|floatformat:0 }}%</strong></small>
+                                        </div>
+                                        <div class="success-bar">
+                                            <div class="success-fill {% if pattern.success_rate >= 0.7 %}success-high{% elif pattern.success_rate >= 0.4 %}success-medium{% else %}success-low{% endif %}" 
+                                                 style="width: {{ pattern.success_rate|mul:100 }}%">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">
+                                        {{ pattern.times_successful }} / {{ pattern.times_used }} successful
+                                    </small>
+                                </div>
+                                
+                                <div class="col-md-3 text-end">
+                                    {% if pattern.confidence_boost > 0 %}
+                                    <span class="trend-badge badge bg-success">
+                                        <i class="fas fa-arrow-up"></i> +{{ pattern.confidence_boost|floatformat:0 }}%
+                                    </span>
+                                    <p class="mb-0 small text-success mt-1">Confidence boost</p>
+                                    {% elif pattern.confidence_boost < 0 %}
+                                    <span class="trend-badge badge bg-danger">
+                                        <i class="fas fa-arrow-down"></i> {{ pattern.confidence_boost|floatformat:0 }}%
+                                    </span>
+                                    <p class="mb-0 small text-danger mt-1">Confidence penalty</p>
+                                    {% else %}
+                                    <span class="trend-badge badge bg-secondary">
+                                        <i class="fas fa-minus"></i> 0%
+                                    </span>
+                                    <p class="mb-0 small text-muted mt-1">Neutral</p>
+                                    {% endif %}
+                                    
+                                    {% if pattern.avg_effectiveness_rating %}
+                                    <div class="mt-2">
+                                        <small class="text-warning">
+                                            {% for i in "12345" %}
+                                                {% if forloop.counter <= pattern.avg_effectiveness_rating %}
+                                                    ⭐
+                                                {% endif %}
+                                            {% endfor %}
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            {% if pattern.last_used_at %}
+                            <div class="mt-2 pt-2 border-top">
+                                <small class="text-muted">
+                                    <i class="fas fa-clock"></i> Last used {{ pattern.last_used_at|timesince }} ago
+                                </small>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-5">
+                            <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+                            <h5>No Patterns Yet</h5>
+                            <p class="text-muted">Resolve more conflicts to build pattern data</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Insights & Tips -->
+        <div class="col-md-4">
+            <!-- Pattern Insights -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-lightbulb text-warning"></i> Pattern Insights
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% if patterns %}
+                        <div class="mb-3">
+                            <h6 class="text-success">Top Performing Resolution</h6>
+                            {% with patterns|first as top_pattern %}
+                            <p class="mb-1">
+                                <strong>{{ top_pattern.get_resolution_type_display }}</strong>
+                            </p>
+                            <p class="small text-muted mb-0">
+                                for {{ top_pattern.get_conflict_type_display }} conflicts
+                                <br>
+                                <span class="text-success">{{ top_pattern.success_rate|mul:100|floatformat:0 }}% success rate</span>
+                            </p>
+                            {% endwith %}
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="mb-3">
+                            <h6>What's Working Well</h6>
+                            {% for pattern in patterns %}
+                                {% if pattern.success_rate >= 0.7 and forloop.counter <= 3 %}
+                                <div class="mb-2">
+                                    <small class="text-success">
+                                        <i class="fas fa-check-circle"></i>
+                                        <strong>{{ pattern.get_resolution_type_display }}</strong>
+                                        for {{ pattern.get_conflict_type_display }}
+                                    </small>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        
+                        <hr>
+                        
+                        <div>
+                            <h6>Areas for Improvement</h6>
+                            {% for pattern in patterns %}
+                                {% if pattern.success_rate < 0.5 and forloop.counter <= 3 %}
+                                <div class="mb-2">
+                                    <small class="text-danger">
+                                        <i class="fas fa-exclamation-triangle"></i>
+                                        <strong>{{ pattern.get_resolution_type_display }}</strong>
+                                        needs review
+                                    </small>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-0">
+                            Start resolving conflicts to see insights about what works best for your team.
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- How It Works -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-info-circle"></i> How Pattern Learning Works
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <ol class="small ps-3">
+                        <li class="mb-2">
+                            <strong>Detection:</strong> System identifies conflicts automatically
+                        </li>
+                        <li class="mb-2">
+                            <strong>Suggestions:</strong> AI generates resolution options
+                        </li>
+                        <li class="mb-2">
+                            <strong>Your Choice:</strong> You select and apply a resolution
+                        </li>
+                        <li class="mb-2">
+                            <strong>Feedback:</strong> Rate the effectiveness (1-5 stars)
+                        </li>
+                        <li class="mb-2">
+                            <strong>Learning:</strong> System adjusts confidence for future suggestions
+                        </li>
+                    </ol>
+                    
+                    <div class="alert alert-info py-2 mt-3">
+                        <small>
+                            <i class="fas fa-graduation-cap"></i>
+                            <strong>Tip:</strong> Provide ratings after resolving conflicts to improve AI suggestions!
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-chart-pie"></i> Quick Stats
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="small">Board-Specific Patterns:</span>
+                        <strong>{{ patterns|filter_board_specific|length }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="small">Global Patterns:</span>
+                        <strong>{{ patterns|filter_global|length }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="small">Most Used Pattern:</span>
+                        <strong class="small">
+                            {% with patterns|dictsort:"times_used"|last as most_used %}
+                                {{ most_used.get_resolution_type_display|truncatewords:3 }}
+                            {% endwith %}
+                        </strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="small">Overall Success Rate:</span>
+                        <strong class="text-success">
+                            {% if patterns %}
+                                {% widthratio patterns|avg_success_rate 1 100 %}%
+                            {% else %}
+                                N/A
+                            {% endif %}
+                        </strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Section (Placeholder for future) -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-bar"></i> Resolution Trends Over Time
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container d-flex align-items-center justify-content-center">
+                        <div class="text-center">
+                            <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">Chart visualization coming soon!</p>
+                            <p class="small text-muted">Will show conflict resolution trends over time</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Future: Add Chart.js integration for visualizations
+// Example patterns over time, success rates by type, etc.
+</script>
+{% endblock %}

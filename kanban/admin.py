@@ -833,3 +833,114 @@ class CostPatternAdmin(admin.ModelAdmin):
     list_filter = ('pattern_type', 'last_occurred', 'created_at')
     search_fields = ('pattern_name', 'board__name')
     readonly_fields = ('created_at', 'updated_at')
+
+
+# Import and register conflict detection models
+from .conflict_models import (
+    ConflictDetection, ConflictResolution, ResolutionPattern, ConflictNotification
+)
+from django.utils import timezone
+
+@admin.register(ConflictDetection)
+class ConflictDetectionAdmin(admin.ModelAdmin):
+    list_display = ('title', 'conflict_type', 'severity', 'status', 'board', 'detected_at', 'resolved_at')
+    list_filter = ('conflict_type', 'severity', 'status', 'auto_detection', 'detected_at', 'board')
+    search_fields = ('title', 'description', 'board__name')
+    filter_horizontal = ('tasks', 'affected_users')
+    readonly_fields = ('detected_at', 'resolved_at', 'detection_run_id', 'conflict_data', 'suggested_resolutions')
+    
+    fieldsets = (
+        ('Conflict Information', {
+            'fields': ('conflict_type', 'severity', 'status', 'title', 'description', 'board')
+        }),
+        ('Related Entities', {
+            'fields': ('tasks', 'affected_users')
+        }),
+        ('Conflict Details', {
+            'fields': ('conflict_data', 'ai_confidence_score', 'suggested_resolutions'),
+            'classes': ('collapse',)
+        }),
+        ('Resolution', {
+            'fields': ('chosen_resolution', 'resolution_feedback', 'resolution_effectiveness'),
+            'classes': ('collapse',)
+        }),
+        ('Detection Metadata', {
+            'fields': ('detected_at', 'resolved_at', 'detection_run_id', 'auto_detection'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    actions = ['mark_as_resolved', 'mark_as_ignored']
+    
+    def mark_as_resolved(self, request, queryset):
+        updated = queryset.update(status='resolved', resolved_at=timezone.now())
+        self.message_user(request, f'{updated} conflicts marked as resolved.')
+    mark_as_resolved.short_description = "Mark selected conflicts as resolved"
+    
+    def mark_as_ignored(self, request, queryset):
+        updated = queryset.update(status='ignored', resolved_at=timezone.now())
+        self.message_user(request, f'{updated} conflicts marked as ignored.')
+    mark_as_ignored.short_description = "Mark selected conflicts as ignored"
+
+
+@admin.register(ConflictResolution)
+class ConflictResolutionAdmin(admin.ModelAdmin):
+    list_display = ('title', 'conflict', 'resolution_type', 'ai_confidence', 'auto_applicable', 'times_accepted', 'applied_at')
+    list_filter = ('resolution_type', 'auto_applicable', 'created_at', 'applied_at')
+    search_fields = ('title', 'description', 'conflict__title')
+    readonly_fields = ('created_at', 'applied_at', 'times_suggested', 'times_accepted', 'avg_effectiveness_rating')
+    
+    fieldsets = (
+        ('Resolution Information', {
+            'fields': ('conflict', 'resolution_type', 'title', 'description')
+        }),
+        ('Implementation', {
+            'fields': ('action_steps', 'estimated_impact', 'auto_applicable', 'implementation_data')
+        }),
+        ('AI Analysis', {
+            'fields': ('ai_confidence', 'ai_reasoning'),
+            'classes': ('collapse',)
+        }),
+        ('Tracking', {
+            'fields': ('created_at', 'applied_at', 'applied_by', 'times_suggested', 'times_accepted', 'avg_effectiveness_rating'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(ResolutionPattern)
+class ResolutionPatternAdmin(admin.ModelAdmin):
+    list_display = ('conflict_type', 'resolution_type', 'board', 'success_rate', 'times_used', 'times_successful', 'confidence_boost')
+    list_filter = ('conflict_type', 'resolution_type', 'board')
+    readonly_fields = ('times_used', 'times_successful', 'success_rate', 'created_at', 'updated_at', 'last_used_at')
+    
+    fieldsets = (
+        ('Pattern Identification', {
+            'fields': ('conflict_type', 'resolution_type', 'board', 'pattern_context')
+        }),
+        ('Success Metrics', {
+            'fields': ('times_used', 'times_successful', 'success_rate', 'avg_effectiveness_rating', 'confidence_boost')
+        }),
+        ('Metadata', {
+            'fields': ('created_at', 'updated_at', 'last_used_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(ConflictNotification)
+class ConflictNotificationAdmin(admin.ModelAdmin):
+    list_display = ('conflict', 'user', 'notification_type', 'sent_at', 'read_at', 'acknowledged')
+    list_filter = ('notification_type', 'acknowledged', 'sent_at')
+    search_fields = ('conflict__title', 'user__username')
+    readonly_fields = ('sent_at', 'read_at')
+    
+    fieldsets = (
+        ('Notification Information', {
+            'fields': ('conflict', 'user', 'notification_type')
+        }),
+        ('Status', {
+            'fields': ('sent_at', 'read_at', 'acknowledged')
+        }),
+    )
+

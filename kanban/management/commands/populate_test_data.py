@@ -70,6 +70,9 @@ class Command(BaseCommand):
         # Create scope baselines for all demo boards
         self.create_scope_baselines()
         
+        # Create conflict scenarios for demo
+        self.create_conflict_scenarios()
+        
         self.stdout.write(self.style.SUCCESS('Successfully populated the database with all features!'))
         
         # Print login credentials for easy testing
@@ -109,6 +112,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('✅ Intelligent Priority Suggestions - Priority decision history'))
         self.stdout.write(self.style.SUCCESS('✅ Scope Tracking - Baseline snapshots for all boards'))
         self.stdout.write(self.style.SUCCESS('✅ Budget & ROI Tracking - Complete financial analysis with AI'))
+        self.stdout.write(self.style.SUCCESS('✅ Conflict Detection - Realistic conflict scenarios created'))
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))
 
     def create_users(self):
@@ -3398,5 +3402,206 @@ Carol: Sounds good. Great work this week!
         
         self.stdout.write(self.style.SUCCESS('\n✅ Budget & ROI demo data created successfully!'))
         self.stdout.write(self.style.NOTICE('   Navigate to any board and click "Budget & ROI" to explore the feature'))
+
+    def create_conflict_scenarios(self):
+        """
+        Create realistic conflict scenarios for demonstration:
+        - Resource conflicts (same person assigned to overlapping tasks)
+        - Schedule conflicts (overdue tasks, unrealistic timelines)
+        - Dependency conflicts (blocked tasks)
+        """
+        self.stdout.write(self.style.NOTICE('\n📋 Creating Conflict Detection Demo Data...'))
+        
+        # Get test users
+        john = User.objects.get(username='john_doe')
+        jane = User.objects.get(username='jane_smith')
+        robert = User.objects.get(username='robert_johnson')
+        alice = User.objects.get(username='alice_williams')
+        
+        # Get dev organization and board
+        dev_org = Organization.objects.filter(name='TechCorp Solutions').first()
+        if not dev_org:
+            self.stdout.write(self.style.WARNING('  ⚠️ Dev organization not found, skipping conflict scenarios'))
+            return
+        
+        boards = Board.objects.filter(organization=dev_org).order_by('created_at')
+        if not boards.exists():
+            self.stdout.write(self.style.WARNING('  ⚠️ No boards found, skipping conflict scenarios'))
+            return
+        
+        # Use the first board for conflict scenarios
+        board = boards.first()
+        
+        # Get columns
+        todo_column = Column.objects.filter(board=board, name__icontains='To Do').first()
+        in_progress_column = Column.objects.filter(board=board, name__icontains='In Progress').first()
+        
+        if not (todo_column and in_progress_column):
+            self.stdout.write(self.style.WARNING('  ⚠️ Required columns not found, skipping conflict scenarios'))
+            return
+        
+        self.stdout.write(f'  Creating conflict scenarios for board: {board.name}')
+        
+        # Scenario 1: Resource Conflict - John assigned to overlapping tasks
+        now = timezone.now()
+        task1 = Task.objects.create(
+            title="Critical Bug Fix in Authentication System",
+            description="Fix security vulnerability in login flow. High priority.",
+            column=in_progress_column,
+            assigned_to=john,
+            created_by=john,
+            priority='urgent',
+            start_date=now.date(),
+            due_date=now + timedelta(days=3),
+            progress=30,
+            complexity_score=8
+        )
+        
+        task2 = Task.objects.create(
+            title="Implement Real-time Notifications Feature",
+            description="Build WebSocket-based notification system.",
+            column=in_progress_column,
+            assigned_to=john,  # Same person!
+            created_by=robert,
+            priority='high',
+            start_date=now.date(),
+            due_date=now + timedelta(days=4),
+            progress=15,
+            complexity_score=9
+        )
+        
+        task3 = Task.objects.create(
+            title="Database Performance Optimization",
+            description="Optimize slow queries and add indexes.",
+            column=in_progress_column,
+            assigned_to=john,  # Same person again!
+            created_by=jane,
+            priority='high',
+            start_date=(now + timedelta(days=1)).date(),
+            due_date=now + timedelta(days=3),
+            progress=0,
+            complexity_score=7
+        )
+        
+        self.stdout.write(self.style.SUCCESS(f'    ✓ Created resource conflict scenario: {john.username} overbooked with 3 overlapping tasks'))
+        
+        # Scenario 2: Schedule Conflict - Overdue task
+        overdue_task = Task.objects.create(
+            title="Update API Documentation",
+            description="Documentation is outdated and needs to be refreshed.",
+            column=in_progress_column,
+            assigned_to=jane,
+            created_by=robert,
+            priority='medium',
+            start_date=(now - timedelta(days=10)).date(),
+            due_date=now - timedelta(days=3),  # Overdue by 3 days
+            progress=60,
+            complexity_score=4
+        )
+        
+        self.stdout.write(self.style.SUCCESS(f'    ✓ Created schedule conflict: Task overdue by 3 days'))
+        
+        # Scenario 3: Schedule Conflict - Unrealistic timeline for complex task
+        unrealistic_task = Task.objects.create(
+            title="Migrate to New Database Architecture",
+            description="Complete migration from PostgreSQL to distributed database system.",
+            column=todo_column,
+            assigned_to=alice,
+            created_by=robert,
+            priority='high',
+            start_date=now.date(),
+            due_date=now + timedelta(days=2),  # Only 2 days for complexity 9 task!
+            progress=0,
+            complexity_score=9
+        )
+        
+        self.stdout.write(self.style.SUCCESS(f'    ✓ Created schedule conflict: Complex task with unrealistic 2-day timeline'))
+        
+        # Scenario 4: Another resource conflict - Alice overbooked
+        task4 = Task.objects.create(
+            title="Frontend Performance Audit",
+            description="Analyze and improve frontend loading times.",
+            column=in_progress_column,
+            assigned_to=alice,
+            created_by=john,
+            priority='medium',
+            start_date=now.date(),
+            due_date=now + timedelta(days=5),
+            progress=25,
+            complexity_score=6
+        )
+        
+        task5 = Task.objects.create(
+            title="Mobile App Responsive Design Updates",
+            description="Fix responsive issues across different screen sizes.",
+            column=in_progress_column,
+            assigned_to=alice,
+            created_by=jane,
+            priority='high',
+            start_date=now.date(),
+            due_date=now + timedelta(days=4),
+            progress=10,
+            complexity_score=7
+        )
+        
+        self.stdout.write(self.style.SUCCESS(f'    ✓ Created resource conflict scenario: {alice.username} assigned to multiple overlapping tasks'))
+        
+        # Scenario 5: Dependency Conflict - Task with dependencies in description
+        blocked_task = Task.objects.create(
+            title="Deploy to Production Environment",
+            description="Deploy new features. BLOCKED: Depends on completion of database migration and security audit. Waiting for infrastructure team approval.",
+            column=todo_column,
+            assigned_to=robert,
+            created_by=john,
+            priority='urgent',
+            start_date=(now - timedelta(days=2)).date(),
+            due_date=now + timedelta(days=1),  # Due soon but blocked
+            progress=0,
+            complexity_score=5
+        )
+        
+        self.stdout.write(self.style.SUCCESS(f'    ✓ Created dependency conflict: Blocked task with dependencies'))
+        
+        # Scenario 6: More overdue tasks to trigger schedule conflicts
+        overdue_task2 = Task.objects.create(
+            title="User Feedback Analysis Report",
+            description="Compile and analyze Q4 user feedback data.",
+            column=in_progress_column,
+            assigned_to=jane,
+            created_by=alice,
+            priority='medium',
+            start_date=(now - timedelta(days=7)).date(),
+            due_date=now - timedelta(days=1),  # Overdue by 1 day
+            progress=75,
+            complexity_score=3
+        )
+        
+        overdue_task3 = Task.objects.create(
+            title="Security Vulnerability Patch",
+            description="Apply security patch for identified vulnerabilities.",
+            column=in_progress_column,
+            assigned_to=robert,
+            created_by=john,
+            priority='urgent',
+            start_date=(now - timedelta(days=5)).date(),
+            due_date=now - timedelta(days=2),  # Overdue by 2 days
+            progress=40,
+            complexity_score=6
+        )
+        
+        self.stdout.write(self.style.SUCCESS(f'    ✓ Created additional schedule conflicts: 2 more overdue tasks'))
+        
+        # Summary
+        self.stdout.write(self.style.SUCCESS('\n✅ Conflict scenarios created successfully!'))
+        self.stdout.write(self.style.NOTICE('  📊 Conflict Summary:'))
+        self.stdout.write(self.style.NOTICE('    • Resource Conflicts: 2 scenarios (John with 3 tasks, Alice with 3 tasks)'))
+        self.stdout.write(self.style.NOTICE('    • Schedule Conflicts: 4 scenarios (3 overdue tasks, 1 unrealistic timeline)'))
+        self.stdout.write(self.style.NOTICE('    • Dependency Conflicts: 1 scenario (blocked deployment task)'))
+        self.stdout.write(self.style.NOTICE('  '))
+        self.stdout.write(self.style.NOTICE('  🔍 Run conflict detection with:'))
+        self.stdout.write(self.style.NOTICE('     python manage.py detect_conflicts --all-boards'))
+        self.stdout.write(self.style.NOTICE('  or with AI suggestions:'))
+        self.stdout.write(self.style.NOTICE('     python manage.py detect_conflicts --all-boards --with-ai'))
+
 
 

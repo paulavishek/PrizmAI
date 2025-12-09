@@ -1,0 +1,512 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ conflict.title }} - Conflict Detail{% endblock %}
+
+{% block extra_css %}
+<style>
+    .resolution-card {
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    .resolution-card:hover {
+        border-color: #007bff;
+        box-shadow: 0 4px 12px rgba(0,123,255,0.2);
+        transform: translateY(-2px);
+    }
+    .resolution-card.selected {
+        border-color: #28a745;
+        background: #f0f9f4;
+    }
+    .confidence-bar {
+        height: 8px;
+        background: #e9ecef;
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .confidence-fill {
+        height: 100%;
+        transition: width 0.3s ease;
+    }
+    .confidence-high { background: linear-gradient(90deg, #28a745, #20c997); }
+    .confidence-medium { background: linear-gradient(90deg, #ffc107, #fd7e14); }
+    .confidence-low { background: linear-gradient(90deg, #dc3545, #c82333); }
+    
+    .task-badge {
+        display: inline-block;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        background: #f8f9fa;
+        margin: 0.25rem;
+    }
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #007bff;
+        color: white;
+        font-weight: bold;
+    }
+    .timeline-item {
+        position: relative;
+        padding-left: 2rem;
+        padding-bottom: 1.5rem;
+        border-left: 2px solid #dee2e6;
+    }
+    .timeline-item:last-child {
+        border-left-color: transparent;
+    }
+    .timeline-dot {
+        position: absolute;
+        left: -8px;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: #007bff;
+    }
+    .rating-stars i {
+        cursor: pointer;
+        font-size: 1.5rem;
+        color: #dee2e6;
+        transition: color 0.2s;
+    }
+    .rating-stars i:hover,
+    .rating-stars i.active {
+        color: #ffc107;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'conflict_dashboard' %}">Conflicts</a></li>
+            <li class="breadcrumb-item active">{{ conflict.title }}</li>
+        </ol>
+    </nav>
+
+    <div class="row">
+        <!-- Main Content -->
+        <div class="col-md-8">
+            <!-- Conflict Overview -->
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-{{ conflict.get_severity_color }} text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h4 class="mb-0">
+                            <i class="fas fa-exclamation-triangle"></i> {{ conflict.title }}
+                        </h4>
+                        <span class="badge bg-white text-dark">
+                            {{ conflict.get_conflict_type_display }}
+                        </span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <p class="lead">{{ conflict.description }}</p>
+                    
+                    <div class="row mt-3">
+                        <div class="col-md-3">
+                            <strong>Severity:</strong><br>
+                            <span class="badge bg-{{ conflict.get_severity_color }} mt-1">
+                                {{ conflict.get_severity_display }}
+                            </span>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Detected:</strong><br>
+                            <small>{{ conflict.detected_at|date:"M d, Y H:i" }}</small>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>Board:</strong><br>
+                            <a href="{% url 'board_detail' conflict.board.id %}">{{ conflict.board.name }}</a>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>AI Confidence:</strong><br>
+                            {{ conflict.ai_confidence_score }}%
+                        </div>
+                    </div>
+
+                    <!-- Affected Tasks -->
+                    <div class="mt-4">
+                        <h6><i class="fas fa-tasks"></i> Affected Tasks</h6>
+                        <div class="mt-2">
+                            {% for task in conflict.tasks.all %}
+                            <div class="task-badge">
+                                <strong>{{ task.title }}</strong>
+                                <br>
+                                <small class="text-muted">
+                                    <i class="fas fa-calendar"></i> 
+                                    {{ task.start_date|date:"M d" }} - {{ task.due_date|date:"M d" }}
+                                    {% if task.assigned_to %}
+                                    | <i class="fas fa-user"></i> {{ task.assigned_to.get_full_name }}
+                                    {% endif %}
+                                </small>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Affected Users -->
+                    <div class="mt-4">
+                        <h6><i class="fas fa-user-friends"></i> Affected Team Members</h6>
+                        <div class="mt-2">
+                            {% for user in conflict.affected_users.all %}
+                            <div class="d-inline-block me-3 text-center">
+                                <div class="user-avatar">
+                                    {{ user.first_name.0|default:user.username.0|upper }}
+                                </div>
+                                <div><small>{{ user.get_full_name|default:user.username }}</small></div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Conflict Data -->
+                    {% if conflict.conflict_data %}
+                    <div class="mt-4">
+                        <h6><i class="fas fa-info-circle"></i> Technical Details</h6>
+                        <div class="bg-light p-3 rounded">
+                            <pre class="mb-0" style="font-size: 0.85rem;">{{ conflict.conflict_data|pprint }}</pre>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Resolution Suggestions -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="fas fa-lightbulb text-warning"></i> AI-Powered Resolution Suggestions
+                    </h5>
+                    <small class="text-muted">Select the best resolution and apply it</small>
+                </div>
+                <div class="card-body">
+                    {% if resolutions %}
+                        <form id="resolutionForm">
+                            {% csrf_token %}
+                            {% for resolution in resolutions %}
+                            <div class="resolution-card p-3 mb-3" data-resolution-id="{{ resolution.id }}" 
+                                 onclick="selectResolution({{ resolution.id }})">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-{{ resolution.resolution_type|resolution_icon }}"></i>
+                                        {{ resolution.title }}
+                                    </h6>
+                                    <div>
+                                        <span class="badge bg-primary">{{ resolution.get_resolution_type_display }}</span>
+                                        <input type="radio" name="selected_resolution" value="{{ resolution.id }}" 
+                                               style="display: none;">
+                                    </div>
+                                </div>
+
+                                <!-- Confidence Score -->
+                                <div class="mb-3">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <small><strong>AI Confidence:</strong></small>
+                                        <small><strong>{{ resolution.ai_confidence }}%</strong></small>
+                                    </div>
+                                    <div class="confidence-bar">
+                                        <div class="confidence-fill {% if resolution.ai_confidence >= 70 %}confidence-high{% elif resolution.ai_confidence >= 40 %}confidence-medium{% else %}confidence-low{% endif %}" 
+                                             style="width: {{ resolution.ai_confidence }}%">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <p class="mb-2">{{ resolution.description }}</p>
+
+                                {% if resolution.estimated_impact %}
+                                <div class="alert alert-info py-2 mb-2">
+                                    <small><strong>Impact:</strong> {{ resolution.estimated_impact }}</small>
+                                </div>
+                                {% endif %}
+
+                                {% if resolution.ai_reasoning %}
+                                <div class="alert alert-light py-2 mb-2">
+                                    <small><strong>Why this works:</strong> {{ resolution.ai_reasoning }}</small>
+                                </div>
+                                {% endif %}
+
+                                {% if resolution.action_steps %}
+                                <details class="mb-2">
+                                    <summary class="text-primary" style="cursor: pointer;">
+                                        <small><strong>Implementation Steps</strong></small>
+                                    </summary>
+                                    <ol class="mt-2 mb-0 ps-3">
+                                        {% for step in resolution.action_steps %}
+                                        <li><small>{{ step }}</small></li>
+                                        {% endfor %}
+                                    </ol>
+                                </details>
+                                {% endif %}
+
+                                {% if resolution.times_accepted > 0 %}
+                                <div class="mt-2">
+                                    <small class="text-success">
+                                        <i class="fas fa-check-circle"></i> 
+                                        Accepted {{ resolution.times_accepted }} time(s) 
+                                        {% if resolution.avg_effectiveness_rating %}
+                                        | Avg rating: {{ resolution.avg_effectiveness_rating|floatformat:1 }} ⭐
+                                        {% endif %}
+                                    </small>
+                                </div>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+
+                            <!-- Action Buttons -->
+                            <div class="mt-4 text-end">
+                                <button type="button" class="btn btn-success btn-lg" onclick="applyResolution()" id="applyBtn" disabled>
+                                    <i class="fas fa-check"></i> Apply Selected Resolution
+                                </button>
+                            </div>
+                        </form>
+                    {% else %}
+                        <div class="text-center py-4">
+                            <i class="fas fa-spinner fa-spin fa-3x text-muted mb-3"></i>
+                            <p class="text-muted">Generating AI suggestions...</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-md-4">
+            <!-- Quick Actions -->
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0">Quick Actions</h6>
+                </div>
+                <div class="card-body">
+                    <button class="btn btn-warning w-100 mb-2" onclick="ignoreConflict()">
+                        <i class="fas fa-eye-slash"></i> Ignore This Conflict
+                    </button>
+                    <a href="{% url 'conflict_dashboard' %}" class="btn btn-outline-secondary w-100">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+            </div>
+
+            <!-- Similar Past Conflicts -->
+            {% if similar_conflicts %}
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-history"></i> Similar Past Conflicts
+                    </h6>
+                </div>
+                <div class="card-body">
+                    {% for similar in similar_conflicts %}
+                    <div class="timeline-item">
+                        <div class="timeline-dot"></div>
+                        <small class="text-muted">{{ similar.resolved_at|date:"M d, Y" }}</small>
+                        <p class="mb-1"><strong>{{ similar.title|truncatewords:10 }}</strong></p>
+                        {% if similar.chosen_resolution %}
+                        <small class="text-success">
+                            <i class="fas fa-arrow-right"></i> {{ similar.chosen_resolution.get_resolution_type_display }}
+                        </small>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Help -->
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-question-circle"></i> Need Help?
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <p class="small mb-2">
+                        <strong>What are conflicts?</strong><br>
+                        Conflicts are issues that could delay your project, such as overbooked resources or unrealistic deadlines.
+                    </p>
+                    <p class="small mb-2">
+                        <strong>How to resolve?</strong><br>
+                        Review the AI suggestions, select the best one, and click "Apply". The system will learn from your choice.
+                    </p>
+                    <p class="small mb-0">
+                        <strong>Can I customize?</strong><br>
+                        Yes! Provide feedback after resolving to improve future suggestions.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Feedback Modal -->
+<div class="modal fade" id="feedbackModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Resolution Feedback</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>How effective was this resolution?</p>
+                <div class="rating-stars text-center mb-3" id="ratingStars">
+                    <i class="fas fa-star" data-rating="1"></i>
+                    <i class="fas fa-star" data-rating="2"></i>
+                    <i class="fas fa-star" data-rating="3"></i>
+                    <i class="fas fa-star" data-rating="4"></i>
+                    <i class="fas fa-star" data-rating="5"></i>
+                </div>
+                <input type="hidden" id="effectivenessRating" value="0">
+                
+                <div class="mb-3">
+                    <label class="form-label">Additional Feedback (optional)</label>
+                    <textarea class="form-control" id="feedbackText" rows="3" 
+                              placeholder="Any comments about this resolution?"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Skip</button>
+                <button type="button" class="btn btn-primary" onclick="submitFeedback()">Submit Feedback</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let selectedResolutionId = null;
+let appliedResolutionId = null;
+
+// Select resolution
+function selectResolution(resolutionId) {
+    // Deselect all
+    document.querySelectorAll('.resolution-card').forEach(card => {
+        card.classList.remove('selected');
+        card.querySelector('input[type="radio"]').checked = false;
+    });
+    
+    // Select this one
+    const card = document.querySelector(`.resolution-card[data-resolution-id="${resolutionId}"]`);
+    card.classList.add('selected');
+    card.querySelector('input[type="radio"]').checked = true;
+    
+    selectedResolutionId = resolutionId;
+    document.getElementById('applyBtn').disabled = false;
+}
+
+// Apply resolution
+function applyResolution() {
+    if (!selectedResolutionId) {
+        alert('Please select a resolution');
+        return;
+    }
+    
+    if (!confirm('Are you sure you want to apply this resolution?')) {
+        return;
+    }
+    
+    const btn = document.getElementById('applyBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Applying...';
+    
+    fetch(`/kanban/conflicts/{{ conflict.id }}/resolutions/${selectedResolutionId}/apply/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    }).then(response => response.json())
+      .then(data => {
+          if (data.success) {
+              appliedResolutionId = selectedResolutionId;
+              // Show feedback modal
+              new bootstrap.Modal(document.getElementById('feedbackModal')).show();
+          } else {
+              alert('Error: ' + data.error);
+              btn.disabled = false;
+              btn.innerHTML = '<i class="fas fa-check"></i> Apply Selected Resolution';
+          }
+      }).catch(error => {
+          alert('Error applying resolution');
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-check"></i> Apply Selected Resolution';
+      });
+}
+
+// Rating stars interaction
+document.querySelectorAll('#ratingStars i').forEach(star => {
+    star.addEventListener('click', function() {
+        const rating = parseInt(this.dataset.rating);
+        document.getElementById('effectivenessRating').value = rating;
+        
+        // Update star display
+        document.querySelectorAll('#ratingStars i').forEach((s, idx) => {
+            if (idx < rating) {
+                s.classList.add('active');
+            } else {
+                s.classList.remove('active');
+            }
+        });
+    });
+});
+
+// Submit feedback
+function submitFeedback() {
+    const rating = document.getElementById('effectivenessRating').value;
+    const feedback = document.getElementById('feedbackText').value;
+    
+    // In production, send to server
+    // For now, just redirect
+    bootstrap.Modal.getInstance(document.getElementById('feedbackModal')).hide();
+    
+    setTimeout(() => {
+        window.location.href = '{% url "conflict_dashboard" %}';
+    }, 500);
+}
+
+// Ignore conflict
+function ignoreConflict() {
+    const reason = prompt('Why are you ignoring this conflict? (optional)');
+    
+    if (reason !== null) { // null means cancelled
+        fetch(`/kanban/conflicts/{{ conflict.id }}/ignore/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: `reason=${encodeURIComponent(reason)}`
+        }).then(response => response.json())
+          .then(data => {
+              if (data.success) {
+                  alert('Conflict ignored');
+                  window.location.href = '{% url "conflict_dashboard" %}';
+              } else {
+                  alert('Error: ' + data.error);
+              }
+          });
+    }
+}
+
+// Template filter helper (add to Django later)
+function getResolutionIcon(type) {
+    const icons = {
+        'reassign': 'user-friends',
+        'reschedule': 'calendar-alt',
+        'adjust_dates': 'clock',
+        'remove_dependency': 'unlink',
+        'modify_dependency': 'link',
+        'split_task': 'cut',
+        'reduce_scope': 'minus-circle',
+        'add_resources': 'user-plus',
+        'custom': 'cog'
+    };
+    return icons[type] || 'lightbulb';
+}
+</script>
+{% endblock %}

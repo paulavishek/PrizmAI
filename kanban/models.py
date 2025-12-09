@@ -16,6 +16,14 @@ from kanban.resource_leveling_models import (
     ResourceLevelingSuggestion
 )
 
+# Import conflict detection models
+from kanban.conflict_models import (
+    ConflictDetection,
+    ConflictResolution,
+    ResolutionPattern,
+    ConflictNotification
+)
+
 class Board(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
