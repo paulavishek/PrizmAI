@@ -199,7 +199,7 @@ def task_assignment_changed(sender, instance, **kwargs):
             if old_task.assigned_to_id != instance.assigned_to_id:
                 # Task assignment changed
                 instance._assignment_changed = True
-                instance._old_assignee = old_task.assigned_to
+                instance._old_assigned_to = old_task.assigned_to
         except Task.DoesNotExist:
             pass
 
@@ -226,10 +226,10 @@ def task_assigned(sender, instance, created, **kwargs):
                 'email': task.assigned_to.email
             } if task.assigned_to else None,
             'previous_assignee': {
-                'id': instance._old_assignee.id,
-                'username': instance._old_assignee.username,
-                'email': instance._old_assignee.email
-            } if instance._old_assignee else None,
+                'id': instance._old_assigned_to.id,
+                'username': instance._old_assigned_to.username,
+                'email': instance._old_assigned_to.email
+            } if instance._old_assigned_to else None,
             'assigned_at': task.updated_at.isoformat()
         }
         
@@ -243,7 +243,7 @@ def task_assigned(sender, instance, created, **kwargs):
         
         # Clean up temporary attributes
         delattr(instance, '_assignment_changed')
-        delattr(instance, '_old_assignee')
+        delattr(instance, '_old_assigned_to')
 
 
 @receiver(post_delete, sender=Task)
