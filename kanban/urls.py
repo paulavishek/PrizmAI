@@ -5,6 +5,7 @@ from . import forecasting_views
 from . import burndown_views
 from . import retrospective_views
 from . import milestone_views
+from . import conflict_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -142,4 +143,14 @@ urlpatterns = [
     
     # Resource Leveling URLs
     path('api/resource-leveling/', include('kanban.resource_leveling_urls')),
+    
+    # Conflict Detection & Resolution URLs
+    path('conflicts/', conflict_views.conflict_dashboard, name='conflict_dashboard'),
+    path('conflicts/<int:conflict_id>/', conflict_views.conflict_detail, name='conflict_detail'),
+    path('conflicts/<int:conflict_id>/resolutions/<int:resolution_id>/apply/', conflict_views.apply_resolution, name='apply_resolution'),
+    path('conflicts/<int:conflict_id>/ignore/', conflict_views.ignore_conflict, name='ignore_conflict'),
+    path('conflicts/trigger/all/', conflict_views.trigger_detection_all, name='trigger_detection_all'),
+    path('conflicts/trigger/<int:board_id>/', conflict_views.trigger_detection, name='trigger_detection_board'),
+    path('conflicts/notifications/<int:notification_id>/acknowledge/', conflict_views.acknowledge_notification, name='acknowledge_notification'),
+    path('conflicts/analytics/', conflict_views.conflict_analytics, name='conflict_analytics'),
 ]

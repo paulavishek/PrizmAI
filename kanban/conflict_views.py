@@ -282,6 +282,44 @@ def acknowledge_notification(request, notification_id):
 
 @login_required
 @require_POST
+def trigger_detection_all(request):
+    """
+    Manually trigger conflict detection for all accessible boards.
+    """
+    try:
+        profile = request.user.profile
+        organization = profile.organization
+        
+        # Get all accessible boards
+        boards = Board.objects.filter(
+            Q(organization=organization) &
+            (Q(created_by=request.user) | Q(members=request.user))
+        ).distinct()
+        
+        # Trigger detection for each board
+        count = 0
+        for board in boards:
+            detect_board_conflicts_task.delay(board.id)
+            count += 1
+        
+        messages.success(request, f"Conflict detection started for {count} board(s)")
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Conflict detection started for {count} board(s). Results will appear shortly.',
+            'boards_scanned': count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error triggering detection for all boards: {e}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required
+@require_POST
 def trigger_detection(request, board_id):
     """
     Manually trigger conflict detection for a specific board.
