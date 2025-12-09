@@ -379,7 +379,7 @@ function triggerDetection() {
     if (confirm('This will scan all boards for conflicts. Continue?')) {
         showLoading('Scanning for conflicts...');
         // In production, trigger via API
-        fetch('/kanban/conflicts/trigger/all/', {
+        fetch('/conflicts/trigger/all/', {
             method: 'POST',
             headers: {
                 'X-CSRFToken': '{{ csrf_token }}'
@@ -409,7 +409,7 @@ function scanBoard() {
     }
     
     showLoading('Scanning board...');
-    fetch(`/kanban/conflicts/trigger/${boardId}/`, {
+    fetch(`/conflicts/trigger/${boardId}/`, {
         method: 'POST',
         headers: {
             'X-CSRFToken': '{{ csrf_token }}'

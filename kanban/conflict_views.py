@@ -16,6 +16,7 @@ from kanban.conflict_models import (
     ConflictDetection, ConflictResolution, ConflictNotification, ResolutionPattern
 )
 from kanban.tasks.conflict_tasks import detect_board_conflicts_task
+from kanban.utils.conflict_detection import ConflictDetectionService
 
 logger = logging.getLogger(__name__)
 
@@ -298,15 +299,34 @@ def trigger_detection_all(request):
         
         # Trigger detection for each board
         count = 0
+        total_conflicts = 0
+        sync_mode = False
+        
         for board in boards:
-            detect_board_conflicts_task.delay(board.id)
+            try:
+                detect_board_conflicts_task.delay(board.id)
+            except Exception as celery_error:
+                # Fallback to synchronous detection if Celery/Redis unavailable
+                if not sync_mode:
+                    logger.warning(f"Celery unavailable, switching to sync detection: {celery_error}")
+                    sync_mode = True
+                
+                service = ConflictDetectionService(board=board)
+                results = service.detect_all_conflicts()
+                total_conflicts += results['total_conflicts']
+            
             count += 1
         
-        messages.success(request, f"Conflict detection started for {count} board(s)")
+        if sync_mode:
+            message = f'Conflict detection completed for {count} board(s). Found {total_conflicts} conflicts.'
+        else:
+            message = f'Conflict detection started for {count} board(s). Results will appear shortly.'
+        
+        messages.success(request, message)
         
         return JsonResponse({
             'success': True,
-            'message': f'Conflict detection started for {count} board(s). Results will appear shortly.',
+            'message': message,
             'boards_scanned': count
         })
         
@@ -342,14 +362,22 @@ def trigger_detection(request, board_id):
                 'error': "You don't have permission"
             }, status=403)
         
-        # Trigger async conflict detection
-        detect_board_conflicts_task.delay(board.id)
+        # Try async detection first, fallback to sync if Redis unavailable
+        try:
+            detect_board_conflicts_task.delay(board.id)
+            message = 'Conflict detection started. Results will appear shortly.'
+        except Exception as celery_error:
+            # Fallback to synchronous detection if Celery/Redis unavailable
+            logger.warning(f"Celery unavailable, running sync detection: {celery_error}")
+            service = ConflictDetectionService(board=board)
+            results = service.detect_all_conflicts()
+            message = f"Conflict detection completed: {results['total_conflicts']} conflicts found"
         
         messages.success(request, f"Conflict detection started for {board.name}")
         
         return JsonResponse({
             'success': True,
-            'message': 'Conflict detection started. Results will appear shortly.'
+            'message': message
         })
         
     except Exception as e:
