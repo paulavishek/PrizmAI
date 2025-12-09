@@ -7,6 +7,7 @@
 This project showcases proficiency in building production-ready applications with:
 - 🧠 **AI Integration** - Google Gemini API for intelligent recommendations
 - 🎓 **AI Coach** - Proactive project management coaching with real-time suggestions
+- 🚨 **Conflict Detection & Resolution** - Automatic detection of resource, schedule, and dependency conflicts with AI-powered solutions
 - 🔒 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
 - 🚀 **Modern Architecture** - Django backend, RESTful API, WebSocket support
 - 📊 **Advanced Features** - Burndown charts, scope tracking, skill gap analysis, budget & ROI tracking, AI coaching
@@ -2223,6 +2224,235 @@ Recurring Issues:
 
 ---
 
+### 🚨 **Automated Conflict Detection & Resolution**
+
+**Automatically detect and resolve resource, schedule, and dependency conflicts before they derail your projects.**
+
+Conflicts happen in every project—two people assigned to the same task at the same time, task B can't start because task A is blocked, or a team member is overbooked. PrizmAI's intelligent conflict detection catches these problems automatically and suggests solutions powered by AI.
+
+#### **What It Detects**
+
+**Resource Conflicts**
+- Same person assigned to multiple tasks at the same time
+- Team members overbooked beyond capacity
+- Critical skills bottlenecks (one person is the only expert)
+- Conflicting assignment requests
+- Workload imbalances across team
+
+**Schedule Conflicts**
+- Task deadlines that overlap with dependencies
+- Impossible timelines (due date before task can realistically start)
+- Critical path delays due to resource unavailability
+- Sprint commitments exceeding team capacity
+- Meeting overload preventing task work
+
+**Dependency Conflicts**
+- Circular dependencies (Task A depends on B, B depends on A)
+- Broken dependency chains (Task depends on cancelled task)
+- Missing dependencies (task assumes prior work that isn't tracked)
+- Critical path bottlenecks (one task blocks multiple others)
+- External dependency risks
+
+#### **How It Works**
+
+**Automatic Detection:**
+1. PrizmAI continuously scans your board for conflicts
+2. AI analyzes: assignments, due dates, dependencies, team capacity
+3. Conflicts are scored by severity (Critical, High, Medium, Low)
+4. Dashboard shows all active conflicts with impact analysis
+5. Real-time alerts notify team members of new conflicts
+
+**AI-Powered Suggestions:**
+For each detected conflict, AI generates multiple resolution options:
+
+**Example: Resource Conflict**
+```
+Conflict: Jane assigned to 3 simultaneous tasks
+Severity: 🔴 CRITICAL
+Impact: Will miss all deadlines, team blocked
+
+🤖 AI Suggestions:
+1. Reassign "Mobile UI" to Tom
+   ├─ Confidence: 88%
+   ├─ Reasoning: Tom completed similar work 15% faster
+   ├─ Impact: Jane has capacity, Tom handles 40% of work
+   └─ Risk: Tom not familiar with design system
+
+2. Extend "API Integration" deadline by 3 days
+   ├─ Confidence: 92%
+   ├─ Reasoning: Current deadline gives only 2 days/task
+   ├─ Impact: Realistic timeline, all work completes on schedule
+   └─ Risk: Client communication needed
+
+3. Split "Authentication" into 2 subtasks
+   ├─ Confidence: 78%
+   ├─ Reasoning: Can parallelize OAuth & JWT implementation
+   ├─ Impact: Jane + Bob work together, faster completion
+   └─ Risk: Requires coordination overhead
+```
+
+**Example: Schedule Conflict**
+```
+Conflict: "Payment Gateway" due Dec 15, but blocks "Testing" due Dec 14
+Severity: 🟠 HIGH
+Impact: Testing can't start on schedule, project delay risk
+
+🤖 AI Suggestions:
+1. Move "Testing" start to Dec 16
+   ├─ Confidence: 91%
+   ├─ Reasoning: Allows Payment Gateway to complete first
+   ├─ Impact: Resolves dependency, maintains overall timeline
+   └─ Risk: Tight timeline, no buffer
+
+2. Parallelize "Testing Prep" (setup test environment) now
+   ├─ Confidence: 85%
+   ├─ Reasoning: Test prep doesn't need Payment Gateway code
+   ├─ Impact: Testing can start faster when code ready
+   └─ Risk: Requires coordination between teams
+
+3. Reduce Payment Gateway scope
+   ├─ Confidence: 72%
+   ├─ Reasoning: MVP payment processing by Dec 14, advanced features later
+   ├─ Impact: Meets both deadlines, MVP launch on schedule
+   └─ Risk: Removes some features
+```
+
+#### **Conflict Dashboard**
+
+**Real-time Overview:**
+```
+Project: Mobile App Launch
+Status: ⚠️ 3 Active Conflicts
+
+Critical Conflicts (1):
+├─ Jane overallocated (3 tasks, 100%+ capacity)
+│  ├─ Recommend: Reassign or extend timeline
+│  └─ AI Confidence: 88%
+
+High Conflicts (1):
+├─ Payment Gateway blocks Testing
+│  ├─ Recommend: Adjust schedule or parallelize
+│  └─ AI Confidence: 91%
+
+Medium Conflicts (1):
+├─ SMS integration expertise bottleneck
+   ├─ Single person (Bob) is only SMS expert
+   ├─ Recommend: Pair Bob with team member for knowledge sharing
+   └─ AI Confidence: 76%
+
+Recent Resolutions:
+✅ Resolved: "Database design" circular dependency (3 hours ago)
+✅ Resolved: "API team overload" by reassigning 2 tasks (1 day ago)
+```
+
+#### **Resolution Features**
+
+**View & Analyze**
+- Click any conflict to see full details
+- View all AI suggestions with reasoning
+- Compare potential resolutions side-by-side
+- Understand impact of each option
+- See confidence scores and risk assessments
+
+**Apply Resolutions**
+- Click "Apply" on suggested resolution
+- AI applies changes (reassignments, reschedules, etc.)
+- Team members notified of changes
+- Track resolution in conflict history
+- Undo if needed (keeps full audit trail)
+
+**Learn & Improve**
+- AI tracks which resolutions work best
+- Learns from your decisions and outcomes
+- Improves suggestions over time
+- Pattern matching: "Similar conflicts resolved with..."
+- Historical patterns inform future suggestions
+
+#### **Integration Points**
+
+**Board View:**
+- Red warning badges on conflicted tasks
+- Hover to see quick conflict summary
+- "Resolve" button jumps to conflict dashboard
+
+**Task Details:**
+- Shows if task is involved in conflict
+- Lists conflicting tasks and reasons
+- Quick resolve options right in task view
+- Resolution history for the task
+
+**Team View:**
+- See team members involved in conflicts
+- Shows workload distribution
+- Highlights overallocation risks
+- Capacity alerts for coming weeks
+
+**Calendar View:**
+- Visualize conflicting task dates
+- See resource allocation over time
+- Identify scheduling issues at a glance
+
+#### **Smart Learning**
+
+**Pattern Recognition:**
+- Learns which resolutions work best for your team
+- Tracks success rates of different approaches
+- Adapts suggestions based on team preferences
+- Recognizes "similar to past conflicts" patterns
+
+**Confidence Scoring:**
+- Each suggestion shows confidence level (0-100%)
+- Based on: historical success, team size, project type
+- Shows reasoning: "88% because Tom succeeded with similar work"
+- Improves over time as system learns your patterns
+
+**Outcome Tracking:**
+- After applying resolution, tracks the outcome
+- Did the conflict actually get resolved?
+- How long did it take?
+- Any new conflicts created by the solution?
+- Uses outcomes to improve future suggestions
+
+#### **Prevention Mode**
+
+**Proactive Alerts:**
+- "Jane will be overallocated next week if current assignments continue"
+- "This task deadline makes the critical path impossible"
+- "Adding this task creates a circular dependency"
+- "This assignment matches a pattern that failed before"
+
+**Before Conflicts Happen:**
+1. New assignment shows capacity impact immediately
+2. New deadline shows dependency impacts
+3. New dependency shows circular dependency warnings
+4. Dashboard shows "upcoming conflicts" based on forecasts
+
+#### **Perfect For**
+
+- **Complex Projects** - Multiple dependencies and constraints
+- **Distributed Teams** - Hard to see resource conflicts across locations
+- **Tight Timelines** - Less buffer means more conflicts
+- **Cross-functional Work** - Dependencies between teams
+- **Scaling Teams** - Growing teams have more conflicts
+- **Automated Project Management** - Removes manual conflict resolution
+- **Risk Reduction** - Prevents project delays before they happen
+- **Team Burnout Prevention** - Catches overallocation early
+
+#### **Getting Started**
+
+1. Open any board
+2. Navigate to **"Conflicts"** in the menu
+3. See all detected conflicts ranked by severity
+4. Click any conflict to see AI suggestions
+5. Review the recommended resolutions
+6. Click "Apply" to implement or "Skip" to dismiss
+7. Monitor resolved conflicts in history
+8. System learns and improves over time
+
+**Result:** Your conflicts are detected automatically, suggested resolutions are powered by AI, and the system learns which approaches work best for your team.
+
+---
+
 ### Knowledge Base & Wiki
 
 Create a living document of your project knowledge:
@@ -2656,6 +2886,10 @@ implementation with code examples and security best practices.
 - ✅ **Category-based AI assistants for wiki pages**
 - ✅ **Meeting Analysis AI** - Extract action items and decisions
 - ✅ **Documentation Assistant AI** - Summarize and improve docs
+- ✅ **Automated Conflict Detection & Resolution** - Detect and resolve resource, schedule, and dependency conflicts
+- ✅ **AI-Powered Conflict Suggestions** - Multiple resolution options with reasoning and confidence scores
+- ✅ **Real-time Conflict Alerts** - Proactive notifications of emerging conflicts
+- ✅ **Smart Learning** - System learns which resolutions work best for your team
 - ✅ Real-time team chat
 
 **External Integrations & API (NEW!)**
