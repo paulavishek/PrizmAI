@@ -1,108 +1,266 @@
 # 🚀 PrizmAI - AI-Powered Project Management Platform
 
-> **A Portfolio Project Demonstrating Full-Stack Development & AI Integration**
+> **Kanban Boards Powered by AI**
 
-**See Your Projects with Intelligence** - A comprehensive project management platform that combines Kanban boards with AI-powered features to demonstrate modern software engineering practices and AI integration capabilities.
+**See your projects with intelligence.** PrizmAI combines visual project management with AI that helps you work smarter—no setup required, just start organizing.
 
-This project showcases proficiency in building production-ready applications with:
-- 🧠 **AI Integration** - Google Gemini API for intelligent recommendations
-- 🎓 **AI Coach** - Proactive project management coaching with real-time suggestions
-- 🚨 **Conflict Detection & Resolution** - Automatic detection of resource, schedule, and dependency conflicts with AI-powered solutions
-- 🔒 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
-- 🚀 **Modern Architecture** - Django backend, RESTful API, WebSocket support
-- 📊 **Advanced Features** - Burndown charts, scope tracking, skill gap analysis, budget & ROI tracking, AI coaching
-- 💰 **Financial Management** - Budget tracking, cost analysis, ROI optimization with AI
-- 🎯 **Professional Development** - Clean code, testing, documentation
-
-**Built to demonstrate skills for job applications** - This is not a commercial product but a showcase of technical capabilities in full-stack development, AI/ML integration, security implementation, and software architecture.
+PrizmAI is an open-source portfolio project demonstrating full-stack development, AI integration, enterprise security, and modern software architecture. Built with Django, Python, Google Gemini API, WebSockets, and a professional REST API.
 
 ---
 
+## ✨ Key Features
 
-## 🎯 What Can You Do With PrizmAI?
-
-### For Your Daily Workflow
-
-**📋 Organize Work on Smart Boards**
-- Create visual boards with columns (like "To Do," "In Progress," "Done")
-- Drag and drop tasks between columns to show progress
-- AI automatically suggests the best column structure for your project type
-- Works exactly like popular tools: Trello, Asana, or Jira
-
-**✅ Assign & Track Tasks**
-- Add tasks to your board with descriptions, due dates, and team members
-- See at a glance who's working on what
-- AI can write detailed task descriptions based on a simple title
-- Track progress with percentage completion
-
-**👥 Collaborate with Your Team**
-- Invite team members to your boards
-- Add comments to tasks to discuss ideas
-- Get notifications when someone mentions you
-- Real-time chat rooms for quick team conversations
-
-**🏠 See All Your Work in One Place**
-- Dashboard shows all tasks assigned to you across all boards
-- Know exactly what needs your attention today
-- Overdue tasks are highlighted in red
-- Simple priority system (High, Medium, Low)
+- ✅ **Visual Kanban Boards** - Drag & drop task management with smart column suggestions
+- 🧠 **AI-Powered Insights** - Intelligent recommendations for priorities, assignments, and deadlines
+- 📊 **Burndown Charts & Forecasting** - Real-time sprint progress with completion predictions
+- 🚨 **Scope Creep Detection** - Automatic alerts when project scope grows unexpectedly
+- ⚠️ **Conflict Detection** - Identifies resource, schedule, and dependency conflicts before they block work
+- 💰 **Budget & ROI Tracking** - Control finances with AI cost optimization recommendations
+- 🎓 **AI Coach** - Proactive suggestions to improve project management decisions
+- 🔍 **Explainable AI** - Every recommendation includes "why" for full transparency
+- 📚 **Knowledge Base & Wiki** - Markdown documentation with AI-assisted insights
+- 🔐 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
+- 🌐 **RESTful API** - 20+ endpoints for integrations (Slack, Teams, Jira-ready)
+- 📱 **Real-Time Collaboration** - WebSocket support for live updates and chat
+- 🔗 **Webhook Integration** - Event-driven automation with external apps
 
 ---
 
-## 🧠 The "Smart" Part - AI Features
+## 🚀 Quick Start
 
-### 🎯 **Explainable AI - Understand Why the AI Recommends What It Does**
+### 5-Minute Setup
 
-One of PrizmAI's most powerful features is that **AI decisions are completely transparent**. You never have to wonder "Why did the AI say this?" Every recommendation comes with a detailed explanation.
+```bash
+# Clone the repository
+git clone https://github.com/paulavishek/PrizmAI.git
+cd PrizmAI
 
-**How It Works:**
+# Create and activate virtual environment
+python -m venv env
+source env/bin/activate  # Windows: env\Scripts\activate
 
-Whenever AI makes a recommendation (risk score, deadline prediction, assignee suggestion), you can click **"Why?"** to see:
+# Install dependencies
+pip install -r requirements.txt
 
-1. **AI Confidence Level** - How sure is the AI? (50% = uncertain, 95% = very confident)
-2. **Contributing Factors** - What influenced the decision, ranked by importance
-3. **Calculation Breakdown** - The math behind the recommendation
-4. **Assumptions** - What the AI assumed to be true
-5. **Data Limitations** - What the AI didn't have information about
-6. **Alternative Interpretations** - Other possible perspectives
+# Run migrations
+python manage.py migrate
 
-**Real Example:**
-
-```
-Task: "Integrate Payment Gateway"
-Risk Score: 7/9
-
-Why?
-├─ AI Confidence: 82%
-├─ Contributing Factors:
-│  ├─ High Complexity (35%) - Financial systems need multiple security checks
-│  ├─ External Dependency (30%) - Waiting on payment processor approval
-│  ├─ Assignee Skill Gap (20%) - Bob has intermediate skills, needs expert
-│  └─ Timeline Pressure (15%) - Due in 3 days, typical is 5 days
-├─ Calculation: Likelihood (2) × Impact (3) = Risk Score (6)
-├─ Model Assumptions:
-│  └─ Bob can dedicate 6 hours/day to this task
-├─ Data Limitations:
-│  └─ Limited historical payment integration data
-└─ Alternative View:
-   └─ Risk could be lower if using Stripe instead of custom implementation
+# Start the development server
+python manage.py runserver
 ```
 
-**Where You'll See "Why?" Buttons:**
+Then open **http://localhost:8000** in your browser.
 
-- **Risk Assessment** - "Why is this high risk?"
-- **Deadline Prediction** - "Why do you think this deadline?"
-- **Assignee Recommendation** - "Why assign to this person?"
-- **Priority Suggestion** - "Why is this high priority?"
-- **Workload Forecast** - "Why will this person be overloaded?"
+### First Steps
 
-**Benefits:**
+1. **Sign up** - Create a free account (no credit card required)
+2. **Create a board** - Give it a name and let AI suggest the columns
+3. **Add tasks** - AI can auto-generate task descriptions and checklists
+4. **Invite team** - Add team members and start collaborating
+5. **Monitor & act** - Check AI suggestions and monitor project health
 
-✅ **Build Trust** - You can verify AI reasoning makes sense  
-✅ **Make Better Decisions** - Understand what factors matter  
-✅ **Spot Errors Early** - Challenge the AI if reasoning is flawed  
-✅ **Learn Patterns** - Understand your team's performance better  
-✅ **Compliance Ready** - Full audit trail for enterprise requirements  
+---
+
+## 📚 Documentation
+
+Everything you need to know is here:
+
+- **[📖 USER_GUIDE.md](USER_GUIDE.md)** - What you can do with PrizmAI, examples, common questions
+- **[✨ FEATURES.md](FEATURES.md)** - Detailed feature descriptions and how-to guides
+- **[🔌 API_DOCUMENTATION.md](API_DOCUMENTATION.md)** - REST API reference with examples
+- **[🪝 WEBHOOKS.md](WEBHOOKS.md)** - Webhook integration guide
+- **[🔒 SECURITY_OVERVIEW.md](SECURITY_OVERVIEW.md)** - Security features and best practices
+- **[⚙️ SETUP.md](SETUP.md)** - Full installation and configuration guide
+- **[🤝 CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute to the project
+
+---
+
+## 🛠 Technology Stack
+
+**Backend:**
+- Python 3.10+
+- Django 5.2.3
+- Django REST Framework 3.15.2
+- Google Gemini API for AI features
+- Django Channels 4.1.0 for WebSocket support
+- PostgreSQL/SQLite for data storage
+
+**Frontend:**
+- HTML5, CSS3, JavaScript
+- Bootstrap 5 for responsive design
+- Real-time updates via WebSockets
+
+**Security:**
+- bleach 6.1.0 (XSS prevention)
+- django-csp 3.8 (Content Security Policy)
+- django-axes 8.0.0 (Brute force protection)
+- HMAC signature verification for webhooks
+- OAuth 2.0 support (Google login)
+
+**Deployment:**
+- Docker containerization ready
+- Self-hosted on your servers
+- Cloud deployment compatible
+- Kubernetes-ready
+
+---
+
+## 🔒 Security & Privacy
+
+PrizmAI prioritizes security with enterprise-grade protection:
+
+- **9.5/10 Security Rating** - Comprehensive vulnerability scanning and testing
+- **Brute Force Protection** - Account lockout after 5 failed login attempts
+- **XSS Prevention** - HTML sanitization on all user content
+- **CSRF Protection** - Secure token validation on all forms
+- **SQL Injection Prevention** - Django ORM query parameterization
+- **Secure File Uploads** - MIME type validation and malicious content detection
+- **Data Isolation** - Organization-based multi-tenancy with complete separation
+- **Audit Logging** - Full audit trail of sensitive operations
+- **HTTPS Enforcement** - Encrypted data in transit with HSTS headers
+- **Your Data, Your Control** - Self-hosted option for complete privacy
+
+For detailed security information, see **[SECURITY_OVERVIEW.md](SECURITY_OVERVIEW.md)**.
+
+---
+
+## 🎯 Use Cases
+
+### Software Development Teams
+Organize sprints, track bugs, manage releases, forecast burndown
+
+### Marketing & Product Teams
+Plan campaigns, track content creation, manage timelines
+
+### Operations & Support
+Coordinate processes, track service requests, manage incidents
+
+### Any Team with Projects
+If you have more than 2 people working on something, PrizmAI helps you stay organized
+
+---
+
+## 📊 Why Choose PrizmAI?
+
+| Feature | PrizmAI | Trello | Jira | Monday.com |
+|---------|---------|--------|------|-----------|
+| **AI Recommendations** | ✅ Yes | ❌ No | ❌ No | Limited |
+| **Explainable AI** | ✅ Full | N/A | N/A | N/A |
+| **Scope Creep Detection** | ✅ Yes | ❌ No | ❌ No | ❌ No |
+| **Burndown Forecasting** | ✅ Yes | ❌ No | Limited | Limited |
+| **Conflict Detection** | ✅ Yes | ❌ No | Limited | ❌ No |
+| **Budget Tracking** | ✅ Yes | ❌ No | Limited | Limited |
+| **Self-Hosted** | ✅ Yes | ❌ No | ✅ Yes | ❌ No |
+| **Cost** | 🆓 Free | Paid | Paid | Paid |
+| **Open Source** | ✅ Yes | ❌ No | ❌ No | ❌ No |
+
+---
+
+## 💡 Example: From Idea to Done
+
+```
+Day 1:
+├─ Create board "Mobile App Launch"
+├─ AI suggests columns (great default structure)
+├─ Add 20 tasks from requirements
+└─ Result: Board ready in 10 minutes
+
+Day 2:
+├─ Invite team members
+├─ AI prioritizes tasks intelligently
+├─ Assign based on AI recommendations
+└─ Team starts working
+
+Day 5:
+├─ AI Coach alerts: "Velocity dropping"
+├─ You catch the issue early
+├─ Identify and fix blockers
+└─ Stay on track
+
+Day 30:
+├─ Burndown chart shows 95% complete
+├─ Scope creep? AI detected +15% growth (1 week earlier than traditional methods)
+├─ AI suggests scope reduction options
+└─ Complete on schedule
+
+Result: Delivered on time with zero surprises ✅
+```
+
+---
+
+## 🌟 Highlights
+
+- **Zero Configuration** - Works out of the box with sensible defaults
+- **Learning AI** - Gets smarter as you use it
+- **Transparent Decisions** - Click "Why?" on any AI recommendation
+- **Privacy First** - Your data stays with you (no external storage)
+- **Team Friendly** - No special training needed—works like tools your team already knows
+- **Always Free** - No credit card, no hidden costs, ever
+
+---
+
+## 🏆 Security Achievements
+
+- ✅ Successfully completed comprehensive security audit
+- ✅ Fixed all critical and high-severity vulnerabilities  
+- ✅ Implemented enterprise security features
+- ✅ Passed dependency security scanning
+- ✅ Enabled all security middleware and protections
+- ✅ 9.5/10 security rating achieved
+
+---
+
+## 📄 License
+
+PrizmAI is open source under the MIT License. You can use it, modify it, and deploy it anywhere.
+
+---
+
+## 🤝 Support
+
+- **Documentation** - Comprehensive guides in the docs folder
+- **Issues** - Report bugs on GitHub
+- **Discussions** - Community forum for questions
+- **Contributing** - Pull requests welcome!
+
+---
+
+## 👨‍💻 Built to Demonstrate
+
+This is a portfolio project showcasing:
+- Full-stack web development (Django + Modern Frontend)
+- AI/ML integration and prompt engineering
+- Enterprise security implementation
+- REST API design and development
+- Database architecture and optimization
+- Real-time communication (WebSockets)
+- DevOps and deployment practices
+- Project management domain expertise
+
+Perfect for developers building their portfolio or evaluating production-ready Python/Django applications.
+
+---
+
+## 🚀 Ready to Get Started?
+
+**👉 [Create Your First Board →](http://localhost:8000)**
+
+Learn more:
+- **[USER_GUIDE.md](USER_GUIDE.md)** - See what you can do
+- **[FEATURES.md](FEATURES.md)** - Explore all features  
+- **[SETUP.md](SETUP.md)** - Advanced setup and configuration
+
+---
+
+**The AI-Powered Way to Manage Projects**
+
+## 📖 Full Documentation
+
+For detailed information about all features, see separate documentation files:
+
+- **[FEATURES.md](FEATURES.md)** - Complete feature descriptions and guides
+- **[USER_GUIDE.md](USER_GUIDE.md)** - Real-world examples and how-to's
+- **[WEBHOOKS.md](WEBHOOKS.md)** - Webhook integration guide  
 
 ---
 
