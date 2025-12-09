@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 def conflict_dashboard(request):
     """
     Main dashboard showing all conflicts for user's boards.
+    Optional board_id parameter to filter by specific board.
     """
     try:
         profile = request.user.profile
@@ -36,9 +37,21 @@ def conflict_dashboard(request):
             (Q(created_by=request.user) | Q(members=request.user))
         ).distinct()
         
+        # Check if filtering by specific board
+        board_filter_id = request.GET.get('board_id')
+        selected_board = None
+        if board_filter_id:
+            try:
+                selected_board = boards.get(id=board_filter_id)
+                boards_to_show = [selected_board]
+            except Board.DoesNotExist:
+                boards_to_show = boards
+        else:
+            boards_to_show = boards
+        
         # Get active conflicts
         active_conflicts = ConflictDetection.objects.filter(
-            board__in=boards,
+            board__in=boards_to_show,
             status='active'
         ).select_related('board').prefetch_related(
             'tasks', 'affected_users', 'resolutions'
@@ -69,7 +82,7 @@ def conflict_dashboard(request):
         
         # Recent resolutions (for learning display)
         recent_resolutions = ConflictDetection.objects.filter(
-            board__in=boards,
+            board__in=boards_to_show,
             status='resolved'
         ).select_related('chosen_resolution').order_by('-resolved_at')[:5]
         
@@ -79,6 +92,7 @@ def conflict_dashboard(request):
             'stats': stats,
             'recent_resolutions': recent_resolutions,
             'boards': boards,
+            'selected_board': selected_board,
         }
         
         return render(request, 'kanban/conflicts/dashboard.html', context)
@@ -377,7 +391,9 @@ def trigger_detection(request, board_id):
         
         return JsonResponse({
             'success': True,
-            'message': message
+            'message': message,
+            'board_id': board.id,
+            'board_name': board.name
         })
         
     except Exception as e:
