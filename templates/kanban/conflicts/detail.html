@@ -416,7 +416,7 @@ function applyResolution() {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Applying...';
     
-    fetch(`/kanban/conflicts/{{ conflict.id }}/resolutions/${selectedResolutionId}/apply/`, {
+    fetch(`/conflicts/{{ conflict.id }}/resolutions/${selectedResolutionId}/apply/`, {
         method: 'POST',
         headers: {
             'X-CSRFToken': '{{ csrf_token }}'
@@ -475,7 +475,7 @@ function ignoreConflict() {
     const reason = prompt('Why are you ignoring this conflict? (optional)');
     
     if (reason !== null) { // null means cancelled
-        fetch(`/kanban/conflicts/{{ conflict.id }}/ignore/`, {
+        fetch(`/conflicts/{{ conflict.id }}/ignore/`, {
             method: 'POST',
             headers: {
                 'X-CSRFToken': '{{ csrf_token }}',

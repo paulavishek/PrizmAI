@@ -7,6 +7,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
+from datetime import datetime
 
 
 class ConflictDetection(models.Model):
@@ -254,6 +255,21 @@ class ConflictResolution(models.Model):
         # Import here to avoid circular imports
         from kanban.models import Task
         
+        # Helper function to parse date strings
+        def parse_date(date_str):
+            """Convert date string to date object if needed."""
+            if isinstance(date_str, str):
+                try:
+                    # Try parsing ISO format date
+                    return datetime.fromisoformat(date_str.replace('Z', '+00:00')).date()
+                except (ValueError, AttributeError):
+                    try:
+                        # Try parsing YYYY-MM-DD format
+                        return datetime.strptime(date_str, '%Y-%m-%d').date()
+                    except ValueError:
+                        return None
+            return date_str
+        
         if resolution_type == 'reassign' and 'task_id' in data and 'new_assignee_id' in data:
             task = Task.objects.get(id=data['task_id'])
             new_assignee = User.objects.get(id=data['new_assignee_id'])
@@ -263,17 +279,17 @@ class ConflictResolution(models.Model):
         elif resolution_type == 'reschedule' and 'task_id' in data:
             task = Task.objects.get(id=data['task_id'])
             if 'new_start_date' in data:
-                task.start_date = data['new_start_date']
+                task.start_date = parse_date(data['new_start_date'])
             if 'new_due_date' in data:
-                task.due_date = data['new_due_date']
+                task.due_date = parse_date(data['new_due_date'])
             task.save()
         
         elif resolution_type == 'adjust_dates' and 'task_id' in data:
             task = Task.objects.get(id=data['task_id'])
             if 'new_start_date' in data:
-                task.start_date = data['new_start_date']
+                task.start_date = parse_date(data['new_start_date'])
             if 'new_due_date' in data:
-                task.due_date = data['new_due_date']
+                task.due_date = parse_date(data['new_due_date'])
             task.save()
         
         # Add more auto-apply logic for other resolution types as needed
