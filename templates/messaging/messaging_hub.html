@@ -256,12 +256,7 @@
             <div class="boards-grid">
                 {% for item in boards_with_unread %}
                     <div class="board-card">
-                        <div class="board-name">
-                            {{ item.board.name }}
-                            {% if item.unread_count > 0 %}
-                                <span class="badge bg-danger ms-2">{{ item.unread_count }}</span>
-                            {% endif %}
-                        </div>
+                        <div class="board-name">{{ item.board.name }}</div>
                         <div class="board-members">
                             <i class="fas fa-users me-1"></i> {{ item.board.members.count }} members
                         </div>
