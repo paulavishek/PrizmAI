@@ -122,21 +122,51 @@ python manage.py test accounts
 ```
 
 ### Demo Data
-Create demo data for testing:
-```bash
-python setup_ai_demo.py
-```
 
-Or use the Django management command:
+PrizmAI includes comprehensive demo data that showcases all features with realistic project scenarios. The demo data is **intelligently designed with dynamic dates** that adjust relative to the current date, ensuring the demo always appears fresh and relevant.
+
+#### Creating Demo Data
+
+To create demo data for testing and exploration:
+
 ```bash
 python manage.py populate_test_data
 ```
 
-### Refresh Demo Data Dates
-To keep demo data fresh and relevant, refresh all task and milestone dates to be relative to the current date:
+This command will:
+- Create sample organizations, users, boards, tasks, and milestones
+- Generate historical data for predictive analytics (last 180 days)
+- Set up realistic task dependencies and workflows
+- Distribute tasks across time periods based on their status:
+  - **Completed tasks**: Last 60 days (realistic completion dates)
+  - **In-progress tasks**: Recent past to near future (±10-15 days)
+  - **To-do tasks**: Near to mid future (2-20 days)
+  - **Backlog tasks**: Further future (15-60 days)
+- Automatically refresh all dates to be current
+
+**Note:** The demo includes users across different roles. See login credentials in the command output.
+
+#### Refreshing Demo Data Dates
+
+If you revisit the demo after some time (weeks or months), you may want to refresh the dates to keep the demo experience realistic:
+
 ```bash
 python manage.py refresh_demo_dates
 ```
+
+This command intelligently updates:
+- ✅ All task dates (preserves status-based distribution)
+- ✅ Milestone dates (maintains project timeline logic)
+- ✅ Time entry dates (keeps work logs in the past)
+- ✅ Stakeholder engagement records
+- ✅ Task dependencies (maintains logical relationships)
+
+**When to refresh:**
+- After not using the demo for several weeks
+- Before showing the demo to stakeholders
+- When many tasks appear overdue or stale
+
+**Frequency:** Run this command as needed, typically every 1-2 months for demos that are revisited.
 
 This command will:
 - Update all task due dates and start dates to be relative to today

@@ -64,7 +64,20 @@ python manage.py runserver
 
 **Open http://localhost:8000** and start creating boards!
 
-**💡 Tip:** Demo data dates are dynamic and automatically adjust to the current date. If you revisit the demo later, run `python manage.py refresh_demo_dates` to keep tasks current.
+**💡 Dynamic Demo Data:** Demo data is intelligently designed with dates relative to the current date, so tasks and milestones will always appear fresh and relevant. The system automatically:
+- Distributes tasks across past, present, and future based on their status
+- Keeps completed tasks in the past (last 60 days)
+- Places active tasks around the current date
+- Schedules future tasks appropriately (next 60 days)
+- Historical tasks (for predictive analytics) span the last 180 days
+
+**🔄 Refreshing Demo Data:** If you revisit the demo after a long time, simply run:
+```bash
+python manage.py refresh_demo_dates
+```
+This will update all task, milestone, and time entry dates to maintain a realistic timeline.
+
+**📖 Learn More:** See [DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md) for comprehensive information about the dynamic date system.
 
 **→ [Full setup guide with configuration options](SETUP.md)**
 
@@ -76,6 +89,7 @@ python manage.py runserver
 |----------|-------------|
 | **[📖 USER_GUIDE.md](USER_GUIDE.md)** | Practical usage, examples, and best practices |
 | **[✨ FEATURES.md](FEATURES.md)** | Detailed feature descriptions (11 major features) |
+| **[📅 DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md)** | **NEW!** Dynamic demo data system guide |
 | **[🔌 API_DOCUMENTATION.md](API_DOCUMENTATION.md)** | REST API reference with 20+ endpoints |
 | **[🪝 WEBHOOKS.md](WEBHOOKS.md)** | Webhook integration and automation guide |
 | **[🔒 SECURITY_OVERVIEW.md](SECURITY_OVERVIEW.md)** | Security features and compliance |

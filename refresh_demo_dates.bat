@@ -1,12 +1,15 @@
 @echo off
 REM Refresh PrizmAI Demo Data Dates
 REM This script refreshes all demo data dates to be relative to the current date
+REM Run this periodically to keep your demo data fresh and prevent overdue tasks
 
 echo ========================================================================
 echo Refreshing PrizmAI Demo Data Dates
 echo ========================================================================
 echo.
-echo This will update all task and milestone dates to be current...
+echo This will update all task, milestone, and time entry dates
+echo to be relative to the current date, maintaining realistic
+echo date distributions based on task status.
 echo.
 
 python manage.py refresh_demo_dates

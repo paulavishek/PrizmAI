@@ -73,6 +73,11 @@ class Command(BaseCommand):
         # Create conflict scenarios for demo
         self.create_conflict_scenarios()
         
+        # Refresh all demo data dates to be relative to current date
+        # This ensures that even if demo data creation took time, all dates are current
+        self.stdout.write(self.style.NOTICE('\nRefreshing all demo data dates to current date...'))
+        call_command('refresh_demo_dates')
+        
         self.stdout.write(self.style.SUCCESS('Successfully populated the database with all features!'))
         
         # Print login credentials for easy testing
