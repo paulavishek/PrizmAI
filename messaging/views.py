@@ -17,7 +17,19 @@ from .forms import ChatRoomForm, ChatMessageForm, TaskThreadCommentForm, Mention
 @login_required
 def messaging_hub(request):
     """Main messaging hub showing all boards and recent notifications"""
-    user_boards = Board.objects.filter(members=request.user)
+    try:
+        profile = request.user.profile
+        organization = profile.organization
+        
+        # Filter boards by organization and membership, consistent with board_list view
+        user_boards = Board.objects.filter(
+            Q(organization=organization) & 
+            (Q(created_by=request.user) | Q(members=request.user))
+        ).distinct()
+    except:
+        # If user has no profile/organization, show no boards
+        user_boards = Board.objects.none()
+    
     unread_notifications = Notification.objects.filter(
         recipient=request.user,
         is_read=False
