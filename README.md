@@ -71,6 +71,13 @@ python manage.py runserver
 - Schedules future tasks appropriately (next 60 days)
 - Historical tasks (for predictive analytics) span the last 180 days
 
+**📊 Demo Data Health (Current):**
+- ✅ Only 3.6% overdue incomplete tasks (4 out of 111)
+- ✅ 29 tasks due in the next 7 days
+- ✅ 90 tasks due in the next 30 days
+- ✅ 1,440+ completed tasks showing recent work
+- ✅ Zero critical overdue items
+
 **🔄 Refreshing Demo Data:** If you revisit the demo after a long time, simply run:
 ```bash
 python manage.py refresh_demo_dates
