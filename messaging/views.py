@@ -30,13 +30,25 @@ def messaging_hub(request):
         # If user has no profile/organization, show no boards
         user_boards = Board.objects.none()
     
+    # Calculate unread messages per board
+    boards_with_unread = []
+    for board in user_boards:
+        board_rooms = board.chat_rooms.filter(members=request.user)
+        unread_count = 0
+        for room in board_rooms:
+            unread_count += room.messages.exclude(read_by=request.user).exclude(author=request.user).count()
+        boards_with_unread.append({
+            'board': board,
+            'unread_count': unread_count
+        })
+    
     unread_notifications = Notification.objects.filter(
         recipient=request.user,
         is_read=False
     ).order_by('-created_at')[:10]
     
     context = {
-        'boards': user_boards,
+        'boards_with_unread': boards_with_unread,
         'unread_notifications': unread_notifications,
     }
     return render(request, 'messaging/messaging_hub.html', context)
@@ -53,9 +65,22 @@ def chat_room_list(request, board_id):
         return redirect('board_list')
     
     chat_rooms = board.chat_rooms.all()
+    
+    # Add unread count for each chat room
+    chat_rooms_with_unread = []
+    total_unread_in_board = 0
+    for room in chat_rooms:
+        unread_count = room.messages.exclude(read_by=request.user).exclude(author=request.user).count()
+        chat_rooms_with_unread.append({
+            'room': room,
+            'unread_count': unread_count
+        })
+        total_unread_in_board += unread_count
+    
     context = {
         'board': board,
-        'chat_rooms': chat_rooms,
+        'chat_rooms_with_unread': chat_rooms_with_unread,
+        'total_unread_in_board': total_unread_in_board,
     }
     return render(request, 'messaging/chat_room_list.html', context)
 
@@ -253,7 +278,9 @@ def notifications(request):
     
     # Mark as read if requested
     if request.GET.get('mark_read'):
-        user_notifications.update(is_read=True)
+        user_notifications.filter(is_read=False).update(is_read=True)
+        django_messages.success(request, 'All notifications marked as read.')
+        return redirect('messaging:notifications')
     
     context = {
         'notifications': user_notifications,

@@ -60,28 +60,41 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h1>Chat Rooms for {{ board.name }}</h1>
-        <p class="text-muted">Real-time team communication</p>
+        <p class="text-muted">
+            Real-time team communication
+            {% if total_unread_in_board > 0 %}
+                <span class="badge bg-danger ms-2">{{ total_unread_in_board }} unread message{{ total_unread_in_board|pluralize }}</span>
+            {% endif %}
+        </p>
     </div>
     <a href="{% url 'messaging:create_chat_room' board_id=board.id %}" class="btn btn-primary">
         <i class="fas fa-plus me-2"></i> Create New Room
     </a>
 </div>
 
-{% if chat_rooms %}
+{% if chat_rooms_with_unread %}
     <div class="chat-rooms-container">
-        {% for room in chat_rooms %}
+        {% for item in chat_rooms_with_unread %}
             <div class="room-card">
-                <div class="room-name">{{ room.name }}</div>
-                {% if room.description %}
-                    <div class="room-description">{{ room.description }}</div>
+                <div class="room-name">
+                    {{ item.room.name }}
+                    {% if item.unread_count > 0 %}
+                        <span class="badge bg-danger ms-2">{{ item.unread_count }}</span>
+                    {% endif %}
+                </div>
+                {% if item.room.description %}
+                    <div class="room-description">{{ item.room.description }}</div>
                 {% endif %}
                 <div class="room-members">
                     <i class="fas fa-users me-1"></i>
-                    {{ room.members.count }} member{{ room.members.count|pluralize }}
+                    {{ item.room.members.count }} member{{ item.room.members.count|pluralize }}
                 </div>
                 <div class="room-actions">
-                    <a href="{% url 'messaging:chat_room_detail' room_id=room.id %}" class="btn btn-sm btn-primary">
+                    <a href="{% url 'messaging:chat_room_detail' room_id=item.room.id %}" class="btn btn-sm btn-primary">
                         <i class="fas fa-comments me-1"></i> Open
+                        {% if item.unread_count > 0 %}
+                            <span class="badge bg-light text-dark ms-1">{{ item.unread_count }}</span>
+                        {% endif %}
                     </a>
                 </div>
             </div>

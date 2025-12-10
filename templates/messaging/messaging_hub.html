@@ -207,10 +207,15 @@
             <p>Browse your boards</p>
         </div>
         
-        <a href="{% url 'messaging:notifications' %}" class="action-card">
+        <a href="{% url 'messaging:notifications' %}" class="action-card" style="position: relative;">
             <i class="fas fa-bell"></i>
             <h3>Notifications</h3>
             <p>See all updates</p>
+            {% if unread_notifications|length > 0 %}
+            <span class="position-absolute top-0 end-0 translate-middle badge rounded-pill bg-danger" style="font-size: 0.75rem; margin-top: 1rem; margin-right: 1rem;">
+                {{ unread_notifications|length }}
+            </span>
+            {% endif %}
         </a>
     </div>
 
@@ -247,19 +252,27 @@
     <div class="boards-section">
         <h2 class="section-title"><i class="fas fa-layer-group me-2"></i>Your Boards & Chat Rooms</h2>
         
-        {% if boards %}
+        {% if boards_with_unread %}
             <div class="boards-grid">
-                {% for board in boards %}
+                {% for item in boards_with_unread %}
                     <div class="board-card">
-                        <div class="board-name">{{ board.name }}</div>
+                        <div class="board-name">
+                            {{ item.board.name }}
+                            {% if item.unread_count > 0 %}
+                                <span class="badge bg-danger ms-2">{{ item.unread_count }}</span>
+                            {% endif %}
+                        </div>
                         <div class="board-members">
-                            <i class="fas fa-users me-1"></i> {{ board.members.count }} members
+                            <i class="fas fa-users me-1"></i> {{ item.board.members.count }} members
                         </div>
                         <div class="board-actions">
-                            <a href="{% url 'messaging:chat_room_list' board_id=board.id %}" class="btn btn-sm btn-primary">
+                            <a href="{% url 'messaging:chat_room_list' board_id=item.board.id %}" class="btn btn-sm btn-primary">
                                 <i class="fas fa-comments me-1"></i> Chat Rooms
+                                {% if item.unread_count > 0 %}
+                                    <span class="badge bg-light text-dark ms-1">{{ item.unread_count }}</span>
+                                {% endif %}
                             </a>
-                            <a href="{% url 'board_detail' board_id=board.id %}" class="btn btn-sm btn-outline-secondary">
+                            <a href="{% url 'board_detail' board_id=item.board.id %}" class="btn btn-sm btn-outline-secondary">
                                 <i class="fas fa-arrow-right"></i>
                             </a>
                         </div>
