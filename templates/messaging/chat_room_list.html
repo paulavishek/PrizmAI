@@ -76,12 +76,7 @@
     <div class="chat-rooms-container">
         {% for item in chat_rooms_with_unread %}
             <div class="room-card">
-                <div class="room-name">
-                    {{ item.room.name }}
-                    {% if item.unread_count > 0 %}
-                        <span class="badge bg-danger ms-2">{{ item.unread_count }}</span>
-                    {% endif %}
-                </div>
+                <div class="room-name">{{ item.room.name }}</div>
                 {% if item.room.description %}
                     <div class="room-description">{{ item.room.description }}</div>
                 {% endif %}

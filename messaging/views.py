@@ -378,13 +378,31 @@ def get_unread_message_count(request):
     """API endpoint to get unread message count for the current user
     
     Counts messages that the user hasn't marked as read yet.
+    Only counts messages from boards in the user's organization (matching messaging hub).
     Optional query parameter:
     - board_id: If provided, only count messages from chat rooms in this board
     """
     board_id = request.GET.get('board_id')
     
-    # Get all chat rooms the user is a member of
-    user_chat_rooms = ChatRoom.objects.filter(members=request.user)
+    # Get boards accessible to the user (same logic as messaging_hub)
+    try:
+        profile = request.user.profile
+        organization = profile.organization
+        
+        # Filter boards by organization and membership
+        accessible_boards = Board.objects.filter(
+            Q(organization=organization) & 
+            (Q(created_by=request.user) | Q(members=request.user))
+        ).distinct()
+        
+        # Get chat rooms from accessible boards only
+        user_chat_rooms = ChatRoom.objects.filter(
+            members=request.user,
+            board__in=accessible_boards
+        )
+    except:
+        # Fallback: get all chat rooms if no profile/organization
+        user_chat_rooms = ChatRoom.objects.filter(members=request.user)
     
     # If board_id is provided, filter to only that board
     if board_id:
