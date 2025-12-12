@@ -1,42 +1,191 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}API Rate Limiting Dashboard - PrizmAI{% endblock %}
+{% block title %}API Usage - PrizmAI{% endblock %}
 
 {% block extra_css %}
 <style>
-    .rate-limit-card {
-        transition: all 0.3s ease;
-        border-left: 4px solid #0d6efd;
+    :root {
+        --github-bg: #0d1117;
+        --github-card-bg: #161b22;
+        --github-border: #30363d;
+        --github-text: #c9d1d9;
+        --github-text-muted: #8b949e;
+        --github-green: #238636;
+        --github-yellow: #d29922;
+        --github-red: #da3633;
     }
     
-    .rate-limit-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    .usage-section {
+        background: white;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        padding: 24px;
+        margin-bottom: 20px;
     }
     
-    .usage-bar {
-        height: 30px;
-        border-radius: 8px;
-        position: relative;
-        overflow: hidden;
-        background: #e9ecef;
-    }
-    
-    .usage-fill {
-        height: 100%;
-        transition: width 0.5s ease, background-color 0.3s ease;
+    .usage-header {
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: 600;
-        font-size: 0.85rem;
+        margin-bottom: 16px;
     }
     
-    .usage-low { background: linear-gradient(90deg, #198754, #20c997); }
-    .usage-medium { background: linear-gradient(90deg, #ffc107, #fd7e14); }
-    .usage-high { background: linear-gradient(90deg, #dc3545, #c82333); }
+    .usage-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #24292f;
+        margin: 0;
+    }
+    
+    .usage-subtitle {
+        font-size: 12px;
+        color: #57606a;
+        margin-top: 4px;
+    }
+    
+    .progress-bar-container {
+        background: #f6f8fa;
+        height: 8px;
+        border-radius: 4px;
+        overflow: hidden;
+        margin: 16px 0;
+    }
+    
+    .progress-bar-fill {
+        height: 100%;
+        transition: width 0.3s ease;
+        border-radius: 4px;
+    }
+    
+    .progress-green { background: #2da44e; }
+    .progress-yellow { background: #bf8700; }
+    .progress-red { background: #cf222e; }
+    
+    .usage-stats {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 14px;
+        color: #24292f;
+    }
+    
+    .usage-number {
+        font-weight: 600;
+    }
+    
+    .usage-note {
+        font-size: 12px;
+        color: #57606a;
+        margin-top: 12px;
+        line-height: 1.5;
+    }
+    
+    .reset-info {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 12px;
+        color: #57606a;
+    }
+    
+    .token-card {
+        background: white;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        padding: 16px;
+        margin-bottom: 12px;
+        transition: border-color 0.2s;
+    }
+    
+    .token-card:hover {
+        border-color: #0969da;
+    }
+    
+    .token-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+    }
+    
+    .token-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: #24292f;
+    }
+    
+    .badge {
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-weight: 500;
+    }
+    
+    .badge-active {
+        background: #dafbe1;
+        color: #1a7f37;
+    }
+    
+    .badge-inactive {
+        background: #f6f8fa;
+        color: #57606a;
+    }
+    
+    .prediction-box {
+        background: #fff8c5;
+        border: 1px solid #d4a72c;
+        border-radius: 6px;
+        padding: 12px;
+        margin-top: 16px;
+        font-size: 13px;
+    }
+    
+    .prediction-warning {
+        background: #ffebe9;
+        border-color: #ff8182;
+    }
+    
+    .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 24px;
+    }
+    
+    .stat-card {
+        background: white;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        padding: 16px;
+    }
+    
+    .stat-label {
+        font-size: 12px;
+        color: #57606a;
+        margin-bottom: 4px;
+    }
+    
+    .stat-value {
+        font-size: 24px;
+        font-weight: 600;
+        color: #24292f;
+    }
+    
+    .chart-container {
+        background: white;
+        border: 1px solid #d0d7de;
+        border-radius: 6px;
+        padding: 16px;
+        margin-bottom: 16px;
+    }
+    
+    .chart-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #24292f;
+        margin-bottom: 16px;
+    }
     
     .stat-card {
         border-radius: 12px;
@@ -108,248 +257,175 @@
 {% endblock %}
 
 {% block content %}
-<div class="container-fluid py-4">
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h1 class="mb-2">
-                        <i class="fas fa-tachometer-alt me-2"></i>
-                        API Rate Limiting Dashboard
-                    </h1>
-                    <p class="text-muted mb-0">
-                        <span class="live-indicator"></span>
-                        Real-time monitoring of API usage and rate limits
-                    </p>
-                </div>
-                <div>
-                    <button class="btn btn-outline-primary" onclick="window.location.reload()">
-                        <i class="fas fa-sync-alt me-2"></i>Refresh
-                    </button>
+<div class="container py-4">
+    <!-- Page Header -->
+    <div class="mb-4">
+        <h1 class="h3 mb-2">API Usage</h1>
+        <p class="text-muted mb-0">Monitor your API request usage and quotas</p>
+    </div>
+
+    <!-- Monthly Usage Overview (GitHub Style) -->
+    <div class="usage-section">
+        <div class="usage-header">
+            <div>
+                <h2 class="usage-title">API requests</h2>
+                <p class="usage-subtitle">Track your monthly API usage across all tokens</p>
+            </div>
+            <div class="text-end">
+                <div class="usage-number" style="font-size: 20px;">
+                    {{ monthly_usage_percent }}%
                 </div>
             </div>
+        </div>
+        
+        <div class="progress-bar-container">
+            <div class="progress-bar-fill {% if monthly_usage_percent < 50 %}progress-green{% elif monthly_usage_percent < 80 %}progress-yellow{% else %}progress-red{% endif %}" 
+                 style="width: {{ monthly_usage_percent }}%"
+                 id="monthly-progress">
+            </div>
+        </div>
+        
+        <div class="usage-stats">
+            <span>
+                <strong id="monthly-used">{{ total_monthly_usage|default:0 }}</strong> 
+                of <strong>{{ total_monthly_quota|default:10000 }}</strong> requests used
+            </span>
+            <span class="reset-info" id="monthly-reset">
+                <i class="fas fa-clock"></i>
+                Resets in <span id="days-until-reset">{{ prediction.days_remaining|default:"--" }}</span> days
+            </span>
+        </div>
+        
+        {% if prediction %}
+        <div class="prediction-box {% if prediction.will_exceed %}prediction-warning{% endif %}">
+            <strong><i class="fas fa-chart-line me-2"></i>Usage Prediction:</strong>
+            Based on your current usage pattern ({{ prediction.avg_per_day }} requests/day), 
+            {% if prediction.will_exceed %}
+                you're projected to use approximately <strong>{{ prediction.predicted_total }}</strong> requests this month, 
+                which will <strong>exceed your quota</strong>. Consider optimizing your API calls or increasing your limit.
+            {% else %}
+                you're on track to use approximately <strong>{{ prediction.predicted_total }}</strong> requests this month,
+                staying within your quota.
+            {% endif %}
+        </div>
+        {% endif %}
+        
+        <p class="usage-note">
+            Please note that there may be a delay in the displayed usage percentage. 
+            Your monthly request quota will reset at the start of next month.
+        </p>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="stat-grid">
+        <div class="stat-card">
+            <div class="stat-label">Total Tokens</div>
+            <div class="stat-value">{{ total_tokens }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Active Tokens</div>
+            <div class="stat-value">{{ active_tokens }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Requests (24h)</div>
+            <div class="stat-value" id="requests-24h">{{ requests_last_24h }}</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Monthly Remaining</div>
+            <div class="stat-value" id="monthly-remaining">{{ monthly_remaining|default:0 }}</div>
         </div>
     </div>
 
-    <!-- Summary Stats -->
-    <div class="row mb-4">
-        <div class="col-md-3 mb-3">
-            <div class="stat-card">
-                <div class="d-flex align-items-center">
-                    <div class="stat-icon bg-primary bg-opacity-10 text-primary me-3">
-                        <i class="fas fa-key"></i>
-                    </div>
-                    <div>
-                        <h6 class="text-muted mb-1">Total Tokens</h6>
-                        <h3 class="mb-0">{{ total_tokens }}</h3>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 mb-3">
-            <div class="stat-card">
-                <div class="d-flex align-items-center">
-                    <div class="stat-icon bg-success bg-opacity-10 text-success me-3">
-                        <i class="fas fa-check-circle"></i>
-                    </div>
-                    <div>
-                        <h6 class="text-muted mb-1">Active Tokens</h6>
-                        <h3 class="mb-0">{{ active_tokens }}</h3>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 mb-3">
-            <div class="stat-card">
-                <div class="d-flex align-items-center">
-                    <div class="stat-icon bg-warning bg-opacity-10 text-warning me-3">
-                        <i class="fas fa-clock"></i>
-                    </div>
-                    <div>
-                        <h6 class="text-muted mb-1">Requests (1h)</h6>
-                        <h3 class="mb-0" id="requests-1h">{{ requests_last_hour }}</h3>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3 mb-3">
-            <div class="stat-card">
-                <div class="d-flex align-items-center">
-                    <div class="stat-icon bg-info bg-opacity-10 text-info me-3">
-                        <i class="fas fa-chart-line"></i>
-                    </div>
-                    <div>
-                        <h6 class="text-muted mb-1">Requests (24h)</h6>
-                        <h3 class="mb-0" id="requests-24h">{{ requests_last_24h }}</h3>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <!-- API Tokens -->
+    <div class="mb-3">
+        <h2 class="h5 mb-3">Your API Tokens</h2>
     </div>
 
-    <!-- Token Rate Limit Cards -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <h4 class="mb-3">
-                <i class="fas fa-list-alt me-2"></i>
-                Token Rate Limits
-            </h4>
-        </div>
-    </div>
-
-    <div class="row" id="token-cards">
+    <div id="token-list">
         {% for token in tokens %}
-        <div class="col-md-6 col-lg-4 mb-4" data-token-id="{{ token.id }}">
-            <div class="card rate-limit-card h-100">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start mb-3">
-                        <div>
-                            <h5 class="card-title mb-1">
-                                <i class="fas fa-key me-2"></i>{{ token.name }}
-                            </h5>
-                            <small class="text-muted">ID: {{ token.id }}</small>
-                        </div>
-                        <div>
-                            {% if token.is_active %}
-                                <span class="token-badge bg-success text-white">Active</span>
-                            {% else %}
-                                <span class="token-badge bg-secondary text-white">Inactive</span>
-                            {% endif %}
-                        </div>
-                    </div>
-
+        <div class="token-card" data-token-id="{{ token.id }}">
+            <div class="token-header">
+                <div class="token-name">
+                    <i class="fas fa-key me-2"></i>{{ token.name }}
+                </div>
+                <div>
                     {% if token.is_active %}
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between mb-2">
-                            <span class="text-muted">Usage:</span>
-                            <span class="fw-bold token-usage">
-                                <span class="current-count">{{ token.request_count_current_hour }}</span> / 
-                                <span class="limit">{{ token.rate_limit_per_hour }}</span>
-                            </span>
-                        </div>
-                        <div class="usage-bar">
-                            <div class="usage-fill usage-low token-usage-bar" style="width: 0%">
-                                <span class="usage-percent">0%</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="text-muted">
-                                <i class="fas fa-hourglass-half me-1"></i>
-                                Reset in:
-                            </span>
-                            <span class="reset-timer token-reset" data-reset="{{ token.rate_limit_reset_at.isoformat }}">
-                                --:--:--
-                            </span>
-                        </div>
-                    </div>
-
-                    <div class="d-flex justify-content-between text-sm">
-                        <div>
-                            <small class="text-muted">Last Used:</small><br>
-                            <small class="token-last-used">
-                                {% if token.last_used %}
-                                    {{ token.last_used|timesince }} ago
-                                {% else %}
-                                    Never
-                                {% endif %}
-                            </small>
-                        </div>
-                        <div class="text-end">
-                            <small class="text-muted">Created:</small><br>
-                            <small>{{ token.created_at|date:"M d, Y" }}</small>
-                        </div>
-                    </div>
+                        <span class="badge badge-active">Active</span>
                     {% else %}
-                    <div class="alert alert-secondary mb-0">
-                        <i class="fas fa-info-circle me-2"></i>
-                        Token is currently inactive
-                    </div>
+                        <span class="badge badge-inactive">Inactive</span>
                     {% endif %}
                 </div>
             </div>
+            
+            {% if token.is_active %}
+            <div>
+                <div class="d-flex justify-content-between mb-2" style="font-size: 13px;">
+                    <span style="color: #57606a;">Monthly usage:</span>
+                    <span class="token-monthly-usage">
+                        <strong class="monthly-count">{{ token.request_count_current_month }}</strong> / 
+                        {{ token.monthly_quota }}
+                    </span>
+                </div>
+                <div class="progress-bar-container" style="height: 6px;">
+                    <div class="progress-bar-fill token-monthly-bar {% if token.get_monthly_usage_percent < 50 %}progress-green{% elif token.get_monthly_usage_percent < 80 %}progress-yellow{% else %}progress-red{% endif %}" 
+                         style="width: {{ token.get_monthly_usage_percent }}%">
+                    </div>
+                </div>
+                <div class="mt-2" style="font-size: 12px; color: #57606a;">
+                    <span><i class="fas fa-calendar-alt me-1"></i>Resets: {{ token.monthly_reset_at|date:"M j, Y" }}</span>
+                    <span class="float-end"><i class="fas fa-clock me-1"></i>Last used: 
+                        {% if token.last_used %}{{ token.last_used|timesince }} ago{% else %}Never{% endif %}
+                    </span>
+                </div>
+            </div>
+            {% else %}
+            <div style="font-size: 13px; color: #57606a;">
+                <i class="fas fa-info-circle me-1"></i>Token is currently inactive
+            </div>
+            {% endif %}
         </div>
         {% empty %}
-        <div class="col-12">
-            <div class="alert alert-info">
-                <i class="fas fa-info-circle me-2"></i>
-                No API tokens found. Create a token to start monitoring rate limits.
-            </div>
+        <div class="usage-section text-center py-5">
+            <i class="fas fa-key fa-3x mb-3" style="color: #d0d7de;"></i>
+            <h3 class="h5 mb-2">No API tokens yet</h3>
+            <p class="text-muted mb-3">Create an API token to start using the PrizmAI API and track your usage.</p>
+            <a href="{% url 'admin:api_apitoken_add' %}" class="btn btn-primary">
+                <i class="fas fa-plus me-2"></i>Create Token
+            </a>
         </div>
         {% endfor %}
     </div>
 
-    <!-- Charts Section -->
-    <div class="row mb-4">
-        <div class="col-lg-6 mb-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title mb-3">
-                        <i class="fas fa-chart-bar me-2"></i>
-                        Requests Per Hour (24h)
-                    </h5>
-                    <div class="chart-container">
-                        <canvas id="hourlyRequestsChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-lg-6 mb-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title mb-3">
-                        <i class="fas fa-chart-line me-2"></i>
-                        Requests Per Minute (1h)
-                    </h5>
-                    <div class="chart-container">
-                        <canvas id="minuteRequestsChart"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <!-- Analytics Charts -->
+    <div class="mb-3 mt-4">
+        <h2 class="h5 mb-3">Usage Analytics</h2>
     </div>
 
-    <div class="row mb-4">
-        <div class="col-lg-6 mb-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title mb-3">
-                        <i class="fas fa-chart-pie me-2"></i>
-                        Status Code Distribution
-                    </h5>
-                    <div class="chart-container">
-                        <canvas id="statusDistributionChart"></canvas>
-                    </div>
-                </div>
+    <div class="row">
+        <div class="col-lg-6 mb-3">
+            <div class="chart-container">
+                <h3 class="chart-title">Requests Per Hour (Last 24h)</h3>
+                <canvas id="hourlyRequestsChart" height="250"></canvas>
             </div>
         </div>
-        <div class="col-lg-6 mb-4">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title mb-3">
-                        <i class="fas fa-list-ol me-2"></i>
-                        Top 10 Endpoints (24h)
-                    </h5>
-                    <div class="table-responsive">
-                        <table class="table table-hover" id="top-endpoints-table">
-                            <thead>
-                                <tr>
-                                    <th>Endpoint</th>
-                                    <th class="text-end">Requests</th>
-                                    <th class="text-end">Avg Response</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td colspan="3" class="text-center text-muted">
-                                        Loading...
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
+        <div class="col-lg-6 mb-3">
+            <div class="chart-container">
+                <h3 class="chart-title">Top Endpoints</h3>
+                <div style="max-height: 300px; overflow-y: auto;">
+                    <table class="table table-sm" id="top-endpoints-table">
+                        <thead>
+                            <tr style="font-size: 12px; color: #57606a;">
+                                <th>Endpoint</th>
+                                <th class="text-end">Count</th>
+                                <th class="text-end">Avg Time</th>
+                            </tr>
+                        </thead>
+                        <tbody style="font-size: 13px;">
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -374,51 +450,69 @@ function updateDashboard() {
 }
 
 function updateTokenCards(tokens) {
+    // Update overall monthly progress
+    let totalUsed = 0;
+    let totalQuota = 0;
+    
     tokens.forEach(token => {
+        totalUsed += token.monthly_usage;
+        totalQuota += token.monthly_quota;
+        
         const card = document.querySelector(`[data-token-id="${token.id}"]`);
         if (!card) return;
 
-        // Update usage counts
-        const currentCount = card.querySelector('.current-count');
-        if (currentCount) currentCount.textContent = token.current_usage;
+        // Update monthly usage counts
+        const monthlyCount = card.querySelector('.monthly-count');
+        if (monthlyCount) monthlyCount.textContent = token.monthly_usage;
 
-        // Update usage bar
-        const usageBar = card.querySelector('.token-usage-bar');
-        if (usageBar) {
-            const percent = token.usage_percent;
-            usageBar.style.width = percent + '%';
-            usageBar.querySelector('.usage-percent').textContent = percent + '%';
+        // Update monthly usage bar
+        const monthlyBar = card.querySelector('.token-monthly-bar');
+        if (monthlyBar) {
+            const percent = token.monthly_usage_percent;
+            monthlyBar.style.width = percent + '%';
             
             // Update color based on usage
-            usageBar.classList.remove('usage-low', 'usage-medium', 'usage-high');
+            monthlyBar.classList.remove('progress-green', 'progress-yellow', 'progress-red');
             if (percent < 50) {
-                usageBar.classList.add('usage-low');
+                monthlyBar.classList.add('progress-green');
             } else if (percent < 80) {
-                usageBar.classList.add('usage-medium');
+                monthlyBar.classList.add('progress-yellow');
             } else {
-                usageBar.classList.add('usage-high');
+                monthlyBar.classList.add('progress-red');
             }
         }
-
-        // Update reset timer
-        updateResetTimer(card, token.seconds_until_reset);
     });
-}
-
-function updateResetTimer(card, seconds) {
-    const timer = card.querySelector('.token-reset');
-    if (!timer) return;
-
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-
-    timer.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    
+    // Update overall stats
+    const monthlyUsed = document.getElementById('monthly-used');
+    const monthlyRemaining = document.getElementById('monthly-remaining');
+    const monthlyProgress = document.getElementById('monthly-progress');
+    const daysUntilReset = document.getElementById('days-until-reset');
+    
+    if (monthlyUsed) monthlyUsed.textContent = totalUsed;
+    if (monthlyRemaining) monthlyRemaining.textContent = totalQuota - totalUsed;
+    
+    if (monthlyProgress && totalQuota > 0) {
+        const percent = (totalUsed / totalQuota * 100).toFixed(1);
+        monthlyProgress.style.width = percent + '%';
+        monthlyProgress.classList.remove('progress-green', 'progress-yellow', 'progress-red');
+        if (percent < 50) {
+            monthlyProgress.classList.add('progress-green');
+        } else if (percent < 80) {
+            monthlyProgress.classList.add('progress-yellow');
+        } else {
+            monthlyProgress.classList.add('progress-red');
+        }
+    }
+    
+    if (daysUntilReset && tokens.length > 0) {
+        daysUntilReset.textContent = tokens[0].days_until_monthly_reset || '--';
+    }
 }
 
 function updateCharts(chartData) {
     // Hourly Requests Chart
-    if (chartData.hourly_requests.length > 0) {
+    if (chartData.hourly_requests && chartData.hourly_requests.length > 0) {
         const hourlyLabels = chartData.hourly_requests.map(item => {
             const date = new Date(item.hour);
             return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -428,7 +522,7 @@ function updateCharts(chartData) {
         if (charts.hourly) {
             charts.hourly.data.labels = hourlyLabels;
             charts.hourly.data.datasets[0].data = hourlyData;
-            charts.hourly.update();
+            charts.hourly.update('none'); // No animation on update
         } else {
             const ctx = document.getElementById('hourlyRequestsChart');
             charts.hourly = new Chart(ctx, {
@@ -438,9 +532,8 @@ function updateCharts(chartData) {
                     datasets: [{
                         label: 'Requests',
                         data: hourlyData,
-                        backgroundColor: 'rgba(13, 110, 253, 0.6)',
-                        borderColor: 'rgba(13, 110, 253, 1)',
-                        borderWidth: 1
+                        backgroundColor: '#0969da',
+                        borderRadius: 4
                     }]
                 },
                 options: {
@@ -450,87 +543,14 @@ function updateCharts(chartData) {
                         legend: { display: false }
                     },
                     scales: {
-                        y: { beginAtZero: true, ticks: { precision: 0 } }
-                    }
-                }
-            });
-        }
-    }
-
-    // Minute Requests Chart
-    if (chartData.minute_requests.length > 0) {
-        const minuteLabels = chartData.minute_requests.map(item => {
-            const date = new Date(item.minute);
-            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        });
-        const minuteData = chartData.minute_requests.map(item => item.count);
-
-        if (charts.minute) {
-            charts.minute.data.labels = minuteLabels;
-            charts.minute.data.datasets[0].data = minuteData;
-            charts.minute.update();
-        } else {
-            const ctx = document.getElementById('minuteRequestsChart');
-            charts.minute = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: minuteLabels,
-                    datasets: [{
-                        label: 'Requests',
-                        data: minuteData,
-                        borderColor: 'rgba(25, 135, 84, 1)',
-                        backgroundColor: 'rgba(25, 135, 84, 0.1)',
-                        fill: true,
-                        tension: 0.4
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { display: false }
-                    },
-                    scales: {
-                        y: { beginAtZero: true, ticks: { precision: 0 } }
-                    }
-                }
-            });
-        }
-    }
-
-    // Status Distribution Chart
-    if (chartData.status_distribution.length > 0) {
-        const statusLabels = chartData.status_distribution.map(item => `${item.status}`);
-        const statusData = chartData.status_distribution.map(item => item.count);
-        const statusColors = statusLabels.map(code => {
-            if (code.startsWith('2')) return 'rgba(25, 135, 84, 0.8)';
-            if (code.startsWith('3')) return 'rgba(13, 202, 240, 0.8)';
-            if (code.startsWith('4')) return 'rgba(255, 193, 7, 0.8)';
-            if (code.startsWith('5')) return 'rgba(220, 53, 69, 0.8)';
-            return 'rgba(108, 117, 125, 0.8)';
-        });
-
-        if (charts.status) {
-            charts.status.data.labels = statusLabels;
-            charts.status.data.datasets[0].data = statusData;
-            charts.status.data.datasets[0].backgroundColor = statusColors;
-            charts.status.update();
-        } else {
-            const ctx = document.getElementById('statusDistributionChart');
-            charts.status = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: statusLabels,
-                    datasets: [{
-                        data: statusData,
-                        backgroundColor: statusColors
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: { position: 'bottom' }
+                        y: { 
+                            beginAtZero: true, 
+                            ticks: { precision: 0 },
+                            grid: { color: '#e1e4e8' }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
                     }
                 }
             });
@@ -539,10 +559,10 @@ function updateCharts(chartData) {
 
     // Top Endpoints Table
     const tbody = document.querySelector('#top-endpoints-table tbody');
-    if (chartData.top_endpoints.length > 0) {
+    if (chartData.top_endpoints && chartData.top_endpoints.length > 0) {
         tbody.innerHTML = chartData.top_endpoints.map(item => `
             <tr>
-                <td><code class="text-primary">${item.endpoint}</code></td>
+                <td><code style="font-size: 12px; color: #0969da;">${item.endpoint}</code></td>
                 <td class="text-end"><strong>${item.count}</strong></td>
                 <td class="text-end">${item.avg_response_time} ms</td>
             </tr>
@@ -552,43 +572,13 @@ function updateCharts(chartData) {
     }
 }
 
-// Initialize countdown timers
-function initializeTimers() {
-    const timers = document.querySelectorAll('.token-reset');
-    timers.forEach(timer => {
-        const resetTime = new Date(timer.dataset.reset);
-        updateTimerDisplay(timer, resetTime);
-    });
-}
-
-function updateTimerDisplay(timer, resetTime) {
-    const now = new Date();
-    const diff = Math.max(0, Math.floor((resetTime - now) / 1000));
-    
-    const hours = Math.floor(diff / 3600);
-    const minutes = Math.floor((diff % 3600) / 60);
-    const seconds = diff % 60;
-    
-    timer.textContent = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
-
 // Initialize on page load
 document.addEventListener('DOMContentLoaded', function() {
     // Initial load
     updateDashboard();
-    initializeTimers();
     
-    // Update every 5 seconds
-    setInterval(updateDashboard, 5000);
-    
-    // Update timers every second
-    setInterval(function() {
-        const timers = document.querySelectorAll('.token-reset');
-        timers.forEach(timer => {
-            const resetTime = new Date(timer.dataset.reset);
-            updateTimerDisplay(timer, resetTime);
-        });
-    }, 1000);
+    // Update every 10 seconds for smoother experience
+    setInterval(updateDashboard, 10000);
 });
 </script>
 {% endblock %}

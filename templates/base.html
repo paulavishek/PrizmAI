@@ -84,9 +84,11 @@
                                     <li><a class="dropdown-item" href="{% url 'organization_members' %}">Organization</a></li>
                                 {% endif %}
                                 <li><hr class="dropdown-divider"></li>
+                                {% if user.api_tokens.exists %}
                                 <li><a class="dropdown-item" href="{% url 'api_v1:rate_limit_dashboard' %}">
                                     <i class="fas fa-tachometer-alt me-1"></i> API Rate Limits
                                 </a></li>
+                                {% endif %}
                                 <li><a class="dropdown-item" href="{% url 'getting_started_wizard' %}">
                                     <i class="fas fa-magic me-1"></i> Getting Started Wizard
                                 </a></li>

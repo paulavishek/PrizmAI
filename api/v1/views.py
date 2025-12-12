@@ -336,15 +336,16 @@ def api_status(request):
     })
 
 
-@api_view(['GET'])
-@authentication_classes([])
-@permission_classes([permissions.IsAuthenticated])
+from django.shortcuts import render
+from django.contrib.auth.decorators import login_required
+
+
+@login_required
 def rate_limit_dashboard(request):
     """
     Dashboard view showing rate limiting statistics and monitoring.
     Requires session authentication.
     """
-    from django.shortcuts import render
     from api.models import APIRequestLog
     from datetime import datetime, timedelta
     
@@ -360,23 +361,37 @@ def rate_limit_dashboard(request):
         timestamp__gte=last_24h
     )
     
+    # Calculate total monthly usage across all tokens
+    total_monthly_usage = sum(token.request_count_current_month for token in tokens)
+    total_monthly_quota = sum(token.monthly_quota for token in tokens)
+    monthly_usage_percent = round((total_monthly_usage / total_monthly_quota * 100), 1) if total_monthly_quota > 0 else 0
+    
+    # Get prediction for primary token (if exists)
+    primary_token = tokens.first()
+    prediction = primary_token.predict_monthly_usage() if primary_token else None
+    
     context = {
         'tokens': tokens,
         'total_tokens': tokens.count(),
         'active_tokens': tokens.filter(is_active=True).count(),
         'requests_last_hour': recent_requests.filter(timestamp__gte=last_hour).count(),
         'requests_last_24h': recent_requests.count(),
+        'total_monthly_usage': total_monthly_usage,
+        'total_monthly_quota': total_monthly_quota,
+        'monthly_usage_percent': monthly_usage_percent,
+        'monthly_remaining': total_monthly_quota - total_monthly_usage,
+        'prediction': prediction,
     }
     
     return render(request, 'api/rate_limit_dashboard.html', context)
 
 
 @api_view(['GET'])
-@authentication_classes([])
 @permission_classes([permissions.IsAuthenticated])
 def rate_limit_stats(request):
     """
     AJAX endpoint for real-time rate limit statistics.
+    Uses session authentication for logged-in users.
     """
     from api.models import APIRequestLog
     from datetime import datetime, timedelta
@@ -401,15 +416,29 @@ def rate_limit_stats(request):
         usage_percent = (token.request_count_current_hour / token.rate_limit_per_hour) * 100
         time_until_reset = (token.rate_limit_reset_at - timezone.now()).total_seconds()
         
+        # Get monthly stats
+        monthly_usage_percent = token.get_monthly_usage_percent()
+        prediction = token.predict_monthly_usage()
+        
         token_stats.append({
             'id': token.id,
             'name': token.name,
+            # Hourly stats
             'rate_limit': token.rate_limit_per_hour,
             'current_usage': token.request_count_current_hour,
             'remaining': token.rate_limit_per_hour - token.request_count_current_hour,
             'usage_percent': round(usage_percent, 1),
             'reset_at': token.rate_limit_reset_at.isoformat(),
             'seconds_until_reset': max(0, int(time_until_reset)),
+            # Monthly stats
+            'monthly_quota': token.monthly_quota,
+            'monthly_usage': token.request_count_current_month,
+            'monthly_remaining': token.get_monthly_remaining(),
+            'monthly_usage_percent': monthly_usage_percent,
+            'monthly_reset_at': token.monthly_reset_at.isoformat(),
+            'days_until_monthly_reset': token.get_days_until_reset(),
+            'prediction': prediction,
+            # General
             'last_used': token.last_used.isoformat() if token.last_used else None,
         })
     
