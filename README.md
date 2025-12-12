@@ -100,6 +100,7 @@ This will update all task, milestone, and time entry dates to maintain a realist
 | **[📅 DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md)** | Dynamic demo data system guide |
 | **[📈 API_RATE_LIMITING_DASHBOARD.md](API_RATE_LIMITING_DASHBOARD.md)** | **NEW!** AI usage tracking and quota management |
 | **[🔌 API_DOCUMENTATION.md](API_DOCUMENTATION.md)** | REST API reference with 20+ endpoints |
+| **[🔗 INTEGRATIONS.md](INTEGRATIONS.md)** | **NEW!** Complete integration guide (Slack, Zapier, Teams) with diagrams |
 | **[🪝 WEBHOOKS.md](WEBHOOKS.md)** | Webhook integration and automation guide |
 | **[🔒 SECURITY_OVERVIEW.md](SECURITY_OVERVIEW.md)** | Security features and compliance |
 | **[⚙️ SETUP.md](SETUP.md)** | Installation and configuration guide |
