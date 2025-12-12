@@ -135,6 +135,70 @@ This will update all task, milestone, and time entry dates to maintain a realist
 
 ---
 
+## 🏗️ System Architecture
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        A[Web Browser]
+        B[Mobile/Desktop Apps]
+    end
+    
+    subgraph "Application Layer"
+        C[Django Backend]
+        D[Django Channels<br/>WebSocket Server]
+        E[Celery Workers<br/>Async Tasks]
+    end
+    
+    subgraph "API & Integration"
+        F[REST API<br/>20+ Endpoints]
+        G[Webhook System<br/>Event Publishing]
+    end
+    
+    subgraph "External Services"
+        H[Google Gemini API<br/>AI/ML Processing]
+        I[External Apps<br/>Slack, Teams, Jira]
+    end
+    
+    subgraph "Data & Cache Layer"
+        J[PostgreSQL/SQLite<br/>Primary Database]
+        K[Redis<br/>Cache & Message Broker]
+    end
+    
+    A --> C
+    A --> D
+    B --> F
+    C --> F
+    C --> H
+    C --> J
+    C --> K
+    D --> K
+    E --> H
+    E --> J
+    E --> K
+    C --> E
+    G --> I
+    C --> G
+    F --> I
+    
+    style H fill:#4285f4,stroke:#333,stroke-width:2px,color:#fff
+    style C fill:#0c4b33,stroke:#333,stroke-width:2px,color:#fff
+    style E fill:#ff6b6b,stroke:#333,stroke-width:2px,color:#fff
+    style K fill:#dc382d,stroke:#333,stroke-width:2px,color:#fff
+```
+
+**Key Architecture Components:**
+
+- **Django Backend** - Core application logic, business rules, and data processing
+- **WebSocket Server** - Real-time collaboration and live updates via Django Channels
+- **Celery Workers** - Asynchronous task processing for AI operations and scheduled jobs
+- **Redis** - Message broker for Celery and caching layer for performance
+- **Google Gemini API** - AI-powered recommendations, forecasting, and insights
+- **REST API** - 20+ endpoints for third-party integrations and mobile apps
+- **Webhook System** - Event-driven automation with external tools
+
+---
+
 ## 🔒 Security Highlights
 
 - **9.5/10 Security Rating** - Comprehensive vulnerability scanning and testing
