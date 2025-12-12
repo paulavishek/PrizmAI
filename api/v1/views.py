@@ -334,3 +334,158 @@ def api_status(request):
         'user': request.user.username,
         'token_info': token_info
     })
+
+
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([permissions.IsAuthenticated])
+def rate_limit_dashboard(request):
+    """
+    Dashboard view showing rate limiting statistics and monitoring.
+    Requires session authentication.
+    """
+    from django.shortcuts import render
+    from api.models import APIRequestLog
+    from datetime import datetime, timedelta
+    
+    # Get all tokens for user
+    tokens = APIToken.objects.filter(user=request.user).order_by('-created_at')
+    
+    # Get recent request stats
+    last_hour = timezone.now() - timedelta(hours=1)
+    last_24h = timezone.now() - timedelta(hours=24)
+    
+    recent_requests = APIRequestLog.objects.filter(
+        token__user=request.user,
+        timestamp__gte=last_24h
+    )
+    
+    context = {
+        'tokens': tokens,
+        'total_tokens': tokens.count(),
+        'active_tokens': tokens.filter(is_active=True).count(),
+        'requests_last_hour': recent_requests.filter(timestamp__gte=last_hour).count(),
+        'requests_last_24h': recent_requests.count(),
+    }
+    
+    return render(request, 'api/rate_limit_dashboard.html', context)
+
+
+@api_view(['GET'])
+@authentication_classes([])
+@permission_classes([permissions.IsAuthenticated])
+def rate_limit_stats(request):
+    """
+    AJAX endpoint for real-time rate limit statistics.
+    """
+    from api.models import APIRequestLog
+    from datetime import datetime, timedelta
+    from django.db.models import Count, Avg
+    from django.db.models.functions import TruncHour, TruncMinute
+    
+    token_id = request.GET.get('token_id')
+    
+    # Get token stats
+    if token_id:
+        try:
+            token = APIToken.objects.get(id=token_id, user=request.user)
+            tokens = [token]
+        except APIToken.DoesNotExist:
+            return Response({'error': 'Token not found'}, status=status.HTTP_404_NOT_FOUND)
+    else:
+        tokens = APIToken.objects.filter(user=request.user, is_active=True)
+    
+    # Calculate stats for each token
+    token_stats = []
+    for token in tokens:
+        usage_percent = (token.request_count_current_hour / token.rate_limit_per_hour) * 100
+        time_until_reset = (token.rate_limit_reset_at - timezone.now()).total_seconds()
+        
+        token_stats.append({
+            'id': token.id,
+            'name': token.name,
+            'rate_limit': token.rate_limit_per_hour,
+            'current_usage': token.request_count_current_hour,
+            'remaining': token.rate_limit_per_hour - token.request_count_current_hour,
+            'usage_percent': round(usage_percent, 1),
+            'reset_at': token.rate_limit_reset_at.isoformat(),
+            'seconds_until_reset': max(0, int(time_until_reset)),
+            'last_used': token.last_used.isoformat() if token.last_used else None,
+        })
+    
+    # Get historical data for charts (last 24 hours)
+    last_24h = timezone.now() - timedelta(hours=24)
+    
+    # Requests per hour for the last 24 hours
+    hourly_requests = APIRequestLog.objects.filter(
+        token__user=request.user,
+        timestamp__gte=last_24h
+    ).annotate(
+        hour=TruncHour('timestamp')
+    ).values('hour').annotate(
+        count=Count('id')
+    ).order_by('hour')
+    
+    # Requests per minute for the last hour
+    last_hour = timezone.now() - timedelta(hours=1)
+    minute_requests = APIRequestLog.objects.filter(
+        token__user=request.user,
+        timestamp__gte=last_hour
+    ).annotate(
+        minute=TruncMinute('timestamp')
+    ).values('minute').annotate(
+        count=Count('id')
+    ).order_by('minute')
+    
+    # Status code distribution
+    status_distribution = APIRequestLog.objects.filter(
+        token__user=request.user,
+        timestamp__gte=last_24h
+    ).values('status_code').annotate(
+        count=Count('id')
+    ).order_by('status_code')
+    
+    # Top endpoints
+    top_endpoints = APIRequestLog.objects.filter(
+        token__user=request.user,
+        timestamp__gte=last_24h
+    ).values('endpoint', 'method').annotate(
+        count=Count('id'),
+        avg_response_time=Avg('response_time_ms')
+    ).order_by('-count')[:10]
+    
+    return Response({
+        'tokens': token_stats,
+        'charts': {
+            'hourly_requests': [
+                {
+                    'hour': item['hour'].isoformat(),
+                    'count': item['count']
+                }
+                for item in hourly_requests
+            ],
+            'minute_requests': [
+                {
+                    'minute': item['minute'].isoformat(),
+                    'count': item['count']
+                }
+                for item in minute_requests
+            ],
+            'status_distribution': [
+                {
+                    'status': item['status_code'],
+                    'count': item['count']
+                }
+                for item in status_distribution
+            ],
+            'top_endpoints': [
+                {
+                    'endpoint': f"{item['method']} {item['endpoint']}",
+                    'count': item['count'],
+                    'avg_response_time': round(item['avg_response_time'], 2)
+                }
+                for item in top_endpoints
+            ]
+        },
+        'timestamp': timezone.now().isoformat()
+    })

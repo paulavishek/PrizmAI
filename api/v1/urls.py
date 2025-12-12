@@ -22,6 +22,10 @@ urlpatterns = [
     path('auth/tokens/create/', views.create_api_token, name='create_token'),
     path('auth/tokens/<int:token_id>/delete/', views.delete_api_token, name='delete_token'),
     
+    # Rate Limiting Dashboard
+    path('dashboard/rate-limits/', views.rate_limit_dashboard, name='rate_limit_dashboard'),
+    path('dashboard/rate-limits/stats/', views.rate_limit_stats, name='rate_limit_stats'),
+    
     # ViewSet routes
     path('', include(router.urls)),
 ]

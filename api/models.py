@@ -147,6 +147,8 @@ class APIRequestLog(models.Model):
     
     class Meta:
         ordering = ['-timestamp']
+        verbose_name = "API Request Log"
+        verbose_name_plural = "API Request Logs"
         indexes = [
             models.Index(fields=['-timestamp']),
             models.Index(fields=['token', '-timestamp']),
