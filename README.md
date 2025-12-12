@@ -17,14 +17,15 @@ PrizmAI combines visual project management with AI that helps you work smarter�
 - ⚠️ **Conflict Detection** - Identifies resource, schedule, and dependency conflicts
 - 💰 **Budget & ROI Tracking** - Control finances with AI cost optimization
 - 🎓 **AI Coach** - Proactive suggestions to improve project management decisions
-- 🔍 **Explainable AI** - Every recommendation includes "why" for full transparency
+- � **AI Usage Monitoring** - Track and manage your monthly AI feature consumption with quota limits
+- �🔍 **Explainable AI** - Every recommendation includes "why" for full transparency
 - 📚 **Knowledge Base & Wiki** - Markdown documentation with AI-assisted insights
 - 🔐 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
 - 🌐 **RESTful API** - 20+ endpoints for integrations (Slack, Teams, Jira-ready)
 - 📱 **Real-Time Collaboration** - WebSocket support for live updates and chat
 - 🔗 **Webhook Integration** - Event-driven automation with external apps
 
-**→ [See all 11 features in detail](FEATURES.md)**
+**→ [See all 12 features in detail](FEATURES.md)**
 
 ---
 
@@ -95,8 +96,9 @@ This will update all task, milestone, and time entry dates to maintain a realist
 | Document | Description |
 |----------|-------------|
 | **[📖 USER_GUIDE.md](USER_GUIDE.md)** | Practical usage, examples, and best practices |
-| **[✨ FEATURES.md](FEATURES.md)** | Detailed feature descriptions (11 major features) |
-| **[📅 DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md)** | **NEW!** Dynamic demo data system guide |
+| **[✨ FEATURES.md](FEATURES.md)** | Detailed feature descriptions (12 major features) |
+| **[📅 DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md)** | Dynamic demo data system guide |
+| **[📈 API_RATE_LIMITING_DASHBOARD.md](API_RATE_LIMITING_DASHBOARD.md)** | **NEW!** AI usage tracking and quota management |
 | **[🔌 API_DOCUMENTATION.md](API_DOCUMENTATION.md)** | REST API reference with 20+ endpoints |
 | **[🪝 WEBHOOKS.md](WEBHOOKS.md)** | Webhook integration and automation guide |
 | **[🔒 SECURITY_OVERVIEW.md](SECURITY_OVERVIEW.md)** | Security features and compliance |
