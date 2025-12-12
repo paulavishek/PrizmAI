@@ -434,7 +434,7 @@
             </div>
         </div>
         
-        {% if daily_usage and daily_usage|length > 0 %}
+        {% if daily_usage and daily_usage|length >= 2 %}
         <div class="chart-container">
             <canvas id="usageChart"></canvas>
         </div>
@@ -442,8 +442,12 @@
         <div class="empty-state">
             <i class="fas fa-chart-line"></i>
             <h3>Not enough data yet</h3>
-            <p>Continue using AI features to see your usage trend. We need a few more requests to generate a meaningful chart.</p>
-            <small class="text-muted mt-2">Chart will appear once you have 3 or more AI requests</small>
+            <p>Continue using AI features over multiple days to see your usage trend.</p>
+            {% if daily_usage and daily_usage|length > 0 %}
+            <small class="text-muted mt-2">You have {{ daily_usage|length }} day{{ daily_usage|length|pluralize }} of data. Chart will appear once you have activity across 2 or more days.</small>
+            {% else %}
+            <small class="text-muted mt-2">Chart will appear once you have AI usage across at least 2 different days.</small>
+            {% endif %}
         </div>
         {% endif %}
     </div>
