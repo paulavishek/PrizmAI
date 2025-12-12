@@ -29,6 +29,7 @@ urlpatterns = [
     path('messaging/', include('messaging.urls')),  # Real-time messaging URLs
     path('wiki/', include('wiki.urls')),  # Wiki and Knowledge Base URLs
     path('api/v1/', include('api.v1.urls')),  # RESTful API v1
+    path('api/ai-usage/', include('api.ai_usage_urls')),  # AI Usage tracking
     path('webhooks/', include('webhooks.urls')),  # Webhook management
 ]
 

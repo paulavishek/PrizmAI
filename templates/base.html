@@ -84,11 +84,9 @@
                                     <li><a class="dropdown-item" href="{% url 'organization_members' %}">Organization</a></li>
                                 {% endif %}
                                 <li><hr class="dropdown-divider"></li>
-                                {% if user.api_tokens.exists %}
-                                <li><a class="dropdown-item" href="{% url 'api_v1:rate_limit_dashboard' %}">
-                                    <i class="fas fa-tachometer-alt me-1"></i> API Rate Limits
+                                <li><a class="dropdown-item" href="{% url 'ai_usage:dashboard' %}">
+                                    <i class="fas fa-robot me-1"></i> AI Usage
                                 </a></li>
-                                {% endif %}
                                 <li><a class="dropdown-item" href="{% url 'getting_started_wizard' %}">
                                     <i class="fas fa-magic me-1"></i> Getting Started Wizard
                                 </a></li>

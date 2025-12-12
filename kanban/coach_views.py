@@ -332,6 +332,9 @@ def ask_coach(request, board_id):
     """
     Ask the AI coach a question
     """
+    from api.ai_usage_utils import check_ai_quota, track_ai_request
+    import time
+    
     board = get_object_or_404(Board, id=board_id)
     
     # Check access
@@ -339,6 +342,20 @@ def ask_coach(request, board_id):
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     if request.method == 'POST':
+        # Check AI quota before processing
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        
+        if not has_quota:
+            days_until_reset = quota.get_days_until_reset()
+            return JsonResponse({
+                'success': False,
+                'error': 'AI usage quota exceeded',
+                'quota_exceeded': True,
+                'message': f'You have reached your monthly AI usage limit of {quota.monthly_quota} requests. '
+                           f'Your quota will reset in {days_until_reset} days.'
+            }, status=429)
+        
+        start_time = time.time()
         try:
             data = json.loads(request.body)
             question = data.get('question', '')
@@ -353,21 +370,65 @@ def ask_coach(request, board_id):
             ai_coach = AICoachService()
             advice = ai_coach.generate_coaching_advice(board, request.user, question)
             
+            # Track successful AI request
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='ai_coach',
+                request_type='question',
+                board_id=board_id,
+                success=True,
+                response_time_ms=response_time_ms
+            )
+            
+            # Get updated remaining count
+            _, _, remaining = check_ai_quota(request.user)
+            
             return JsonResponse({
                 'success': True,
                 'advice': advice,
-                'question': question
+                'question': question,
+                'ai_usage': {
+                    'remaining': remaining,
+                    'used': quota.requests_used + 1
+                }
             })
             
         except Exception as e:
             logger.error(f"Error getting coaching advice: {e}")
+            
+            # Track failed request (doesn't count against quota)
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='ai_coach',
+                request_type='question',
+                board_id=board_id,
+                success=False,
+                error_message=str(e),
+                response_time_ms=response_time_ms
+            )
+            
             return JsonResponse({
                 'success': False,
                 'error': str(e)
             }, status=500)
     
-    # GET request - show ask coach page
-    return render(request, 'kanban/coach_ask.html', {'board': board})
+    # GET request - show ask coach page with quota info
+    from api.ai_usage_utils import get_or_create_quota
+    quota = get_or_create_quota(request.user)
+    
+    context = {
+        'board': board,
+        'ai_quota': {
+            'used': quota.requests_used,
+            'limit': quota.monthly_quota,
+            'remaining': quota.get_remaining_requests(),
+            'percentage': quota.get_usage_percent()
+        }
+    }
+    
+    return render(request, 'kanban/coach_ask.html', context)
 
 
 @login_required

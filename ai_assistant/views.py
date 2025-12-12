@@ -114,6 +114,23 @@ def create_session(request):
 @require_POST
 def send_message(request):
     """Send message to AI Assistant and get response"""
+    from api.ai_usage_utils import check_ai_quota, track_ai_request
+    import time
+    
+    # Check AI quota before processing
+    has_quota, quota, remaining = check_ai_quota(request.user)
+    
+    if not has_quota:
+        days_until_reset = quota.get_days_until_reset()
+        return JsonResponse({
+            'error': 'AI usage quota exceeded',
+            'quota_exceeded': True,
+            'message': f'You have reached your monthly AI usage limit of {quota.monthly_quota} requests. '
+                       f'Your quota will reset in {days_until_reset} days.'
+        }, status=429)
+    
+    start_time = time.time()
+    
     try:
         data = json.loads(request.body)
         
@@ -199,6 +216,21 @@ def send_message(request):
         except Exception as e:
             print(f"Error updating analytics: {e}")
         
+        # Track AI usage
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='ai_assistant',
+            request_type='message',
+            board_id=board_id,
+            success=True,
+            tokens_used=response.get('tokens', 0),
+            response_time_ms=response_time_ms
+        )
+        
+        # Get updated remaining count
+        _, _, remaining = check_ai_quota(request.user)
+        
         return JsonResponse({
             'status': 'success',
             'message_id': assistant_message.id,
@@ -206,11 +238,27 @@ def send_message(request):
             'source': response.get('source', 'gemini'),
             'used_web_search': response.get('used_web_search', False),
             'search_sources': response.get('search_sources', []),
+            'ai_usage': {
+                'remaining': remaining,
+                'used': quota.requests_used + 1
+            }
         })
     
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     except Exception as e:
+        # Track failed request (doesn't count against quota)
+        response_time_ms = int((time.time() - start_time) * 1000)
+        board_id_val = board_id if 'board_id' in locals() else None
+        track_ai_request(
+            user=request.user,
+            feature='ai_assistant',
+            request_type='message',
+            board_id=board_id_val,
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         return JsonResponse({'error': str(e)}, status=500)
 
 
