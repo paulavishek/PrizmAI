@@ -3,6 +3,7 @@ Views for AI-Powered Retrospective Generator
 """
 
 import logging
+import time
 from datetime import datetime, timedelta
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
@@ -20,6 +21,7 @@ from kanban.retrospective_models import (
     RetrospectiveActionItem, RetrospectiveTrend
 )
 from kanban.utils.retrospective_generator import RetrospectiveGenerator
+from api.ai_usage_utils import track_ai_request, check_ai_quota
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +147,14 @@ def retrospective_create(request, board_id):
         return render(request, 'kanban/retrospective_create.html', context)
     
     else:  # POST
+        start_time = time.time()
         try:
+            # Check AI quota
+            has_quota, quota, remaining = check_ai_quota(request.user)
+            if not has_quota:
+                messages.error(request, "AI usage quota exceeded. Please upgrade or wait for quota reset.")
+                return redirect('retrospective_create', board_id=board_id)
+            
             # Get form data
             period_start = datetime.strptime(request.POST.get('period_start'), '%Y-%m-%d').date()
             period_end = datetime.strptime(request.POST.get('period_end'), '%Y-%m-%d').date()
@@ -167,6 +176,17 @@ def retrospective_create(request, board_id):
                 retrospective_type=retrospective_type
             )
             
+            # Track successful AI request
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='retrospective_generation',
+                request_type='generate',
+                board_id=board.id,
+                success=True,
+                response_time_ms=response_time_ms
+            )
+            
             messages.success(
                 request,
                 f"Retrospective generated successfully! AI analyzed {retrospective.metrics_snapshot.get('total_tasks', 0)} tasks."
@@ -174,6 +194,16 @@ def retrospective_create(request, board_id):
             return redirect('retrospective_detail', board_id=board_id, retro_id=retrospective.id)
             
         except Exception as e:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='retrospective_generation',
+                request_type='generate',
+                board_id=board.id,
+                success=False,
+                error_message=str(e),
+                response_time_ms=response_time_ms
+            )
             logger.error(f"Error creating retrospective: {e}")
             messages.error(request, f"Error generating retrospective: {str(e)}")
             return redirect('retrospective_create', board_id=board_id)

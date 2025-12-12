@@ -6,6 +6,7 @@ the front-end for AI-powered features.
 """
 import json
 import logging
+import time
 from datetime import timedelta
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -37,6 +38,7 @@ from kanban.utils.ai_utils import (
     generate_risk_mitigation_suggestions,
     assess_task_dependencies_and_risks
 )
+from api.ai_usage_utils import track_ai_request, check_ai_quota
 
 @login_required
 @require_http_methods(["POST"])
@@ -44,7 +46,16 @@ def generate_task_description_api(request):
     """
     API endpoint to generate a task description using AI
     """
+    start_time = time.time()
     try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         data = json.loads(request.body)
         title = data.get('title', '')
         
@@ -55,10 +66,39 @@ def generate_task_description_api(request):
         description = generate_task_description(title)
         
         if not description:
+            # Track failed request
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='task_description',
+                request_type='generate',
+                success=False,
+                error_message='Failed to generate description',
+                response_time_ms=response_time_ms
+            )
             return JsonResponse({'error': 'Failed to generate description'}, status=500)
+        
+        # Track successful request
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='task_description',
+            request_type='generate',
+            success=True,
+            response_time_ms=response_time_ms
+        )
             
         return JsonResponse({'description': description})
     except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='task_description',
+            request_type='generate',
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
@@ -67,7 +107,16 @@ def summarize_comments_api(request, task_id):
     """
     API endpoint to summarize task comments using AI
     """
+    start_time = time.time()
     try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         # Get the task and verify user access
         task = get_object_or_404(Task, id=task_id)
         board = task.column.board
@@ -92,9 +141,40 @@ def summarize_comments_api(request, task_id):
         summary = summarize_comments(comments_data)
         
         if not summary:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='comment_summary',
+                request_type='summarize',
+                board_id=board.id,
+                success=False,
+                error_message='Failed to generate summary',
+                response_time_ms=response_time_ms
+            )
             return JsonResponse({'error': 'Failed to generate summary'}, status=500)
+        
+        # Track successful request
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='comment_summary',
+            request_type='summarize',
+            board_id=board.id,
+            success=True,
+            response_time_ms=response_time_ms
+        )
+        
         return JsonResponse({'summary': summary})
     except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='comment_summary',
+            request_type='summarize',
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
@@ -103,7 +183,16 @@ def suggest_lss_classification_api(request):
     """
     API endpoint to suggest Lean Six Sigma classification for a task
     """
+    start_time = time.time()
     try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         data = json.loads(request.body)
         title = data.get('title', '')
         description = data.get('description', '')
@@ -115,10 +204,38 @@ def suggest_lss_classification_api(request):
         suggestion = suggest_lean_classification(title, description)
         
         if not suggestion:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='lean_classification',
+                request_type='suggest',
+                success=False,
+                error_message='Failed to suggest classification',
+                response_time_ms=response_time_ms
+            )
             return JsonResponse({'error': 'Failed to suggest classification'}, status=500)
+        
+        # Track successful request
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='lean_classification',
+            request_type='suggest',
+            success=True,
+            response_time_ms=response_time_ms
+        )
             
         return JsonResponse(suggestion)
     except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='lean_classification',
+            request_type='suggest',
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
@@ -127,7 +244,16 @@ def summarize_board_analytics_api(request, board_id):
     """
     API endpoint to summarize board analytics using AI
     """
+    start_time = time.time()
     try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         # Get the board and verify user access
         board = get_object_or_404(Board, id=board_id)
         
@@ -264,10 +390,41 @@ def summarize_board_analytics_api(request, board_id):
         summary = summarize_board_analytics(analytics_data)
         
         if not summary:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='board_analytics',
+                request_type='summarize',
+                board_id=board.id,
+                success=False,
+                error_message='Failed to generate analytics summary',
+                response_time_ms=response_time_ms
+            )
             return JsonResponse({'error': 'Failed to generate analytics summary'}, status=500)
+        
+        # Track successful request
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='board_analytics',
+            request_type='summarize',
+            board_id=board.id,
+            success=True,
+            response_time_ms=response_time_ms
+        )
             
         return JsonResponse({'summary': summary})
     except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='board_analytics',
+            request_type='summarize',
+            board_id=board_id if 'board' in locals() else None,
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
@@ -276,7 +433,16 @@ def suggest_task_priority_api(request):
     """
     API endpoint to suggest optimal priority for a task using AI
     """
+    start_time = time.time()
     try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         data = json.loads(request.body)
         task_id = data.get('task_id')
         title = data.get('title', '')
@@ -343,10 +509,42 @@ def suggest_task_priority_api(request):
         suggestion = suggest_task_priority(task_data, board_context)
         
         if not suggestion:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='task_priority',
+                request_type='suggest',
+                board_id=board.id,
+                success=False,
+                error_message='Failed to suggest priority',
+                response_time_ms=response_time_ms
+            )
             return JsonResponse({'error': 'Failed to suggest priority'}, status=500)
+        
+        # Track successful request
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='task_priority',
+            request_type='suggest',
+            board_id=board.id,
+            success=True,
+            response_time_ms=response_time_ms
+        )
             
         return JsonResponse(suggestion)
     except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        board_id_val = board.id if 'board' in locals() and board else None
+        track_ai_request(
+            user=request.user,
+            feature='task_priority',
+            request_type='suggest',
+            board_id=board_id_val,
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
@@ -762,7 +960,16 @@ def calculate_task_risk_api(request):
     """
     API endpoint to calculate AI-powered risk score for a task
     """
+    start_time = time.time()
     try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         data = json.loads(request.body)
         task_id = data.get('task_id')
         title = data.get('title', '')
@@ -793,7 +1000,28 @@ def calculate_task_risk_api(request):
         risk_analysis = calculate_task_risk_score(title, description, priority, board_context)
         
         if not risk_analysis:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='risk_analysis',
+                request_type='calculate',
+                board_id=board.id,
+                success=False,
+                error_message='Failed to calculate risk score',
+                response_time_ms=response_time_ms
+            )
             return JsonResponse({'error': 'Failed to calculate risk score'}, status=500)
+        
+        # Track successful request
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='risk_analysis',
+            request_type='calculate',
+            board_id=board.id,
+            success=True,
+            response_time_ms=response_time_ms
+        )
         
         # If task_id provided, save the analysis to the task
         if task_id:
@@ -813,6 +1041,17 @@ def calculate_task_risk_api(request):
             'saved': bool(task_id)
         })
     except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        board_id_val = board.id if 'board' in locals() and board else None
+        track_ai_request(
+            user=request.user,
+            feature='risk_analysis',
+            request_type='calculate',
+            board_id=board_id_val,
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         logger.error(f"Error in calculate_task_risk_api: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -823,7 +1062,16 @@ def get_mitigation_suggestions_api(request):
     """
     API endpoint to get AI-generated mitigation suggestions for a high-risk task
     """
+    start_time = time.time()
     try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         data = json.loads(request.body)
         task_id = data.get('task_id')
         title = data.get('title', '')
@@ -859,7 +1107,28 @@ def get_mitigation_suggestions_api(request):
         )
         
         if not mitigation_suggestions:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='risk_mitigation',
+                request_type='suggest',
+                board_id=board.id,
+                success=False,
+                error_message='Failed to generate mitigation suggestions',
+                response_time_ms=response_time_ms
+            )
             return JsonResponse({'error': 'Failed to generate mitigation suggestions'}, status=500)
+        
+        # Track successful request
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='risk_mitigation',
+            request_type='suggest',
+            board_id=board.id,
+            success=True,
+            response_time_ms=response_time_ms
+        )
         
         # If task_id provided, update the task
         if task_id:
@@ -872,6 +1141,17 @@ def get_mitigation_suggestions_api(request):
             'count': len(mitigation_suggestions)
         })
     except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        board_id_val = board.id if 'board' in locals() and board else None
+        track_ai_request(
+            user=request.user,
+            feature='risk_mitigation',
+            request_type='suggest',
+            board_id=board_id_val,
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         logger.error(f"Error in get_mitigation_suggestions_api: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -1812,7 +2092,16 @@ def analyze_skill_gaps_api(request, board_id):
     Analyze skill gaps for a board
     Identifies missing skills and generates recommendations
     """
+    start_time = time.time()
     try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         board = get_object_or_404(Board, pk=board_id)
         
         # Check access
@@ -1874,6 +2163,17 @@ def analyze_skill_gaps_api(request, board_id):
                 'identified_at': skill_gap.identified_at.isoformat()
             })
         
+        # Track successful request
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='skill_analysis',
+            request_type='analyze_gaps',
+            board_id=board.id,
+            success=True,
+            response_time_ms=response_time_ms
+        )
+        
         return JsonResponse({
             'success': True,
             'gaps': saved_gaps,
@@ -1882,6 +2182,17 @@ def analyze_skill_gaps_api(request, board_id):
         })
         
     except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        board_id_val = board.id if 'board' in locals() and board else board_id
+        track_ai_request(
+            user=request.user,
+            feature='skill_analysis',
+            request_type='analyze_gaps',
+            board_id=board_id_val,
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         logger.error(f"Error in analyze_skill_gaps_api: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 

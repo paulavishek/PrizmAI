@@ -6,6 +6,7 @@ Handles AI-powered analysis of wiki pages containing meeting notes
 import json
 import logging
 import hashlib
+import time
 from django.shortcuts import get_object_or_404
 from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
@@ -18,6 +19,7 @@ from django.db import models
 from kanban.models import Board, Task, Column
 from .models import WikiPage, WikiMeetingAnalysis, WikiMeetingTask
 from .ai_utils import analyze_meeting_notes_from_wiki, analyze_wiki_documentation, parse_due_date
+from api.ai_usage_utils import track_ai_request, check_ai_quota
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +31,16 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
     API endpoint to analyze a general wiki documentation page using AI
     Extracts key information, action items, and provides insights
     """
+    start_time = time.time()
     try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         # Get organization
         if not hasattr(request.user, 'profile') or not request.user.profile.organization:
             return JsonResponse({'error': 'No organization found'}, status=400)
@@ -65,7 +76,26 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
             )
             
             if not analysis_results:
+                response_time_ms = int((time.time() - start_time) * 1000)
+                track_ai_request(
+                    user=request.user,
+                    feature='wiki_documentation_analysis',
+                    request_type='analyze',
+                    success=False,
+                    error_message='Failed to analyze documentation',
+                    response_time_ms=response_time_ms
+                )
                 return JsonResponse({'error': 'Failed to analyze documentation'}, status=500)
+            
+            # Track successful request
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='wiki_documentation_analysis',
+                request_type='analyze',
+                success=True,
+                response_time_ms=response_time_ms
+            )
             
             return JsonResponse({
                 'success': True,
@@ -77,10 +107,28 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
             })
             
         except Exception as e:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='wiki_documentation_analysis',
+                request_type='analyze',
+                success=False,
+                error_message=str(e),
+                response_time_ms=response_time_ms
+            )
             logger.error(f"Error during documentation AI analysis: {str(e)}")
             return JsonResponse({'error': f'Analysis failed: {str(e)}'}, status=500)
         
     except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='wiki_documentation_analysis',
+            request_type='analyze',
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         logger.error(f"Error in analyze_wiki_documentation_page: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -92,7 +140,16 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
     API endpoint to analyze a wiki page as meeting notes using AI
     Extracts action items, decisions, blockers, risks, etc.
     """
+    start_time = time.time()
     try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         # Get organization
         if not hasattr(request.user, 'profile') or not request.user.profile.organization:
             return JsonResponse({'error': 'No organization found'}, status=400)
@@ -154,10 +211,29 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
             )
             
             if not analysis_results:
+                response_time_ms = int((time.time() - start_time) * 1000)
+                track_ai_request(
+                    user=request.user,
+                    feature='wiki_meeting_analysis',
+                    request_type='analyze',
+                    success=False,
+                    error_message='AI analysis returned no results',
+                    response_time_ms=response_time_ms
+                )
                 analysis.processing_status = 'failed'
                 analysis.processing_error = 'AI analysis returned no results'
                 analysis.save()
                 return JsonResponse({'error': 'Failed to analyze meeting notes'}, status=500)
+            
+            # Track successful request
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='wiki_meeting_analysis',
+                request_type='analyze',
+                success=True,
+                response_time_ms=response_time_ms
+            )
             
             # Store results
             analysis.analysis_results = analysis_results
@@ -174,6 +250,15 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
             })
             
         except Exception as e:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='wiki_meeting_analysis',
+                request_type='analyze',
+                success=False,
+                error_message=str(e),
+                response_time_ms=response_time_ms
+            )
             logger.error(f"Error during AI analysis: {str(e)}")
             analysis.processing_status = 'failed'
             analysis.processing_error = str(e)
@@ -181,6 +266,15 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
             return JsonResponse({'error': f'Analysis failed: {str(e)}'}, status=500)
         
     except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='wiki_meeting_analysis',
+            request_type='analyze',
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         logger.error(f"Error in analyze_wiki_meeting_page: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
 

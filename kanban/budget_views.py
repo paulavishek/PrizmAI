@@ -3,6 +3,7 @@ Budget & ROI Tracking Views
 Handles budget dashboard, analytics, and AI recommendations
 """
 import logging
+import time
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -24,6 +25,7 @@ from kanban.budget_forms import (
     ProjectBudgetForm, TaskCostForm, TimeEntryForm, 
     ProjectROIForm, BudgetRecommendationActionForm
 )
+from api.ai_usage_utils import track_ai_request, check_ai_quota
 
 logger = logging.getLogger(__name__)
 
@@ -339,12 +341,21 @@ def ai_analyze_budget(request, board_id):
     """
     Trigger AI budget analysis
     """
+    start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
     
     if not _can_access_board(request.user, board):
         return JsonResponse({'error': 'Permission denied'}, status=403)
     
     try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         # Check if budget exists
         budget = ProjectBudget.objects.get(board=board)
         
@@ -358,7 +369,28 @@ def ai_analyze_budget(request, board_id):
         results = optimizer.analyze_budget_health()
         
         if 'error' in results:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='budget_analysis',
+                request_type='analyze',
+                board_id=board.id,
+                success=False,
+                error_message=results['error'],
+                response_time_ms=response_time_ms
+            )
             return JsonResponse({'error': results['error']}, status=400)
+        
+        # Track successful request
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='budget_analysis',
+            request_type='analyze',
+            board_id=board.id,
+            success=True,
+            response_time_ms=response_time_ms
+        )
         
         return JsonResponse({
             'success': True,
@@ -368,6 +400,16 @@ def ai_analyze_budget(request, board_id):
     except ProjectBudget.DoesNotExist:
         return JsonResponse({'error': 'No budget configured'}, status=400)
     except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='budget_analysis',
+            request_type='analyze',
+            board_id=board.id,
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         logger.error(f"Error in AI budget analysis: {e}")
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -378,12 +420,21 @@ def ai_generate_recommendations(request, board_id):
     """
     Generate AI-powered budget recommendations
     """
+    start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
     
     if not _can_access_board(request.user, board):
         return JsonResponse({'error': 'Permission denied'}, status=403)
     
     try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         budget = ProjectBudget.objects.get(board=board)
         
         if not budget.ai_optimization_enabled:
@@ -401,6 +452,17 @@ def ai_generate_recommendations(request, board_id):
         optimizer = BudgetAIOptimizer(board)
         recommendations = optimizer.generate_recommendations(context=context)
         
+        # Track successful request
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='budget_recommendations',
+            request_type='generate',
+            board_id=board.id,
+            success=True,
+            response_time_ms=response_time_ms
+        )
+        
         return JsonResponse({
             'success': True,
             'recommendations': recommendations,
@@ -410,6 +472,16 @@ def ai_generate_recommendations(request, board_id):
     except ProjectBudget.DoesNotExist:
         return JsonResponse({'error': 'No budget configured'}, status=400)
     except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='budget_recommendations',
+            request_type='generate',
+            board_id=board.id,
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         logger.error(f"Error generating recommendations: {e}")
         return JsonResponse({'error': str(e)}, status=500)
 
@@ -487,12 +559,21 @@ def ai_predict_overrun(request, board_id):
     """
     Get AI prediction for cost overruns
     """
+    start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
     
     if not _can_access_board(request.user, board):
         return JsonResponse({'error': 'Permission denied'}, status=403)
     
     try:
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         budget = ProjectBudget.objects.get(board=board)
         
         if not budget.ai_optimization_enabled:
@@ -502,7 +583,28 @@ def ai_predict_overrun(request, board_id):
         prediction = optimizer.predict_cost_overrun()
         
         if 'error' in prediction:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='budget_prediction',
+                request_type='predict_overrun',
+                board_id=board.id,
+                success=False,
+                error_message=prediction['error'],
+                response_time_ms=response_time_ms
+            )
             return JsonResponse({'error': prediction['error']}, status=400)
+        
+        # Track successful request
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='budget_prediction',
+            request_type='predict_overrun',
+            board_id=board.id,
+            success=True,
+            response_time_ms=response_time_ms
+        )
         
         return JsonResponse({
             'success': True,
@@ -512,6 +614,16 @@ def ai_predict_overrun(request, board_id):
     except ProjectBudget.DoesNotExist:
         return JsonResponse({'error': 'No budget configured'}, status=400)
     except Exception as e:
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='budget_prediction',
+            request_type='predict_overrun',
+            board_id=board.id,
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         logger.error(f"Error predicting overrun: {e}")
         return JsonResponse({'error': str(e)}, status=500)
 
