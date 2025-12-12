@@ -259,6 +259,16 @@
         margin-bottom: 8px;
     }
     
+    .empty-state p {
+        margin-bottom: 4px;
+    }
+    
+    .empty-state .text-muted {
+        font-size: 12px;
+        color: #9ca3af;
+        display: block;
+    }
+    
     .quota-badge {
         display: inline-flex;
         align-items: center;
@@ -415,8 +425,7 @@
         {% endif %}
     </div>
     
-    <!-- Daily Usage Chart Placeholder -->
-    {% if daily_usage %}
+    <!-- Daily Usage Chart -->
     <div class="usage-card">
         <div class="card-header">
             <div>
@@ -425,11 +434,19 @@
             </div>
         </div>
         
+        {% if daily_usage and daily_usage|length > 0 %}
         <div class="chart-container">
             <canvas id="usageChart"></canvas>
         </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="fas fa-chart-line"></i>
+            <h3>Not enough data yet</h3>
+            <p>Continue using AI features to see your usage trend. We need a few more requests to generate a meaningful chart.</p>
+            <small class="text-muted mt-2">Chart will appear once you have 3 or more AI requests</small>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
