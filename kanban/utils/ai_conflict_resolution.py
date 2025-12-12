@@ -6,6 +6,7 @@ import google.generativeai as genai
 from django.conf import settings
 from typing import List, Dict
 import json
+import time
 
 
 class AIConflictResolutionEngine:
@@ -19,16 +20,22 @@ class AIConflictResolutionEngine:
         genai.configure(api_key=settings.GEMINI_API_KEY)
         self.model = genai.GenerativeModel('gemini-pro')
     
-    def generate_advanced_resolutions(self, conflict):
+    def generate_advanced_resolutions(self, conflict, user=None):
         """
         Generate AI-powered resolution suggestions for a conflict.
         
         Args:
             conflict: ConflictDetection instance
+            user: User making the request (for AI tracking)
             
         Returns:
             List of resolution suggestions with AI reasoning
         """
+        start_time = time.time()
+        
+        # Import tracking here to avoid circular imports
+        from api.ai_usage_utils import track_ai_request
+        
         # Build context prompt
         prompt = self._build_conflict_resolution_prompt(conflict)
         
@@ -39,9 +46,34 @@ class AIConflictResolutionEngine:
             # Parse suggestions
             suggestions = self._parse_ai_suggestions(response.text, conflict)
             
+            # Track successful AI request
+            if user:
+                response_time_ms = int((time.time() - start_time) * 1000)
+                track_ai_request(
+                    user=user,
+                    feature='conflict_resolution',
+                    request_type='suggest',
+                    board_id=conflict.board.id if conflict.board else None,
+                    success=True,
+                    response_time_ms=response_time_ms
+                )
+            
             return suggestions
             
         except Exception as e:
+            # Track failed AI request
+            if user:
+                response_time_ms = int((time.time() - start_time) * 1000)
+                track_ai_request(
+                    user=user,
+                    feature='conflict_resolution',
+                    request_type='suggest',
+                    board_id=conflict.board.id if conflict.board else None,
+                    success=False,
+                    error_message=str(e),
+                    response_time_ms=response_time_ms
+                )
+            
             print(f"AI resolution generation error: {e}")
             return []
     
@@ -241,19 +273,25 @@ Provide practical, actionable suggestions that a project manager can implement i
         
         return 'custom'
     
-    def enhance_basic_suggestions(self, conflict, basic_suggestions):
+    def enhance_basic_suggestions(self, conflict, basic_suggestions, user=None):
         """
         Enhance basic rule-based suggestions with AI insights.
         
         Args:
             conflict: ConflictDetection instance
             basic_suggestions: List of ConflictResolution instances from rule-based system
+            user: User making the request (for AI tracking)
             
         Returns:
             Enhanced suggestions with AI reasoning
         """
         if not basic_suggestions:
             return []
+        
+        start_time = time.time()
+        
+        # Import tracking here to avoid circular imports
+        from api.ai_usage_utils import track_ai_request
         
         # Build prompt to enhance existing suggestions
         prompt = f"""You are an expert project management AI assistant.
@@ -317,8 +355,34 @@ FORMAT AS JSON:
                             suggestion.ai_confidence = min(100, max(0, int(revised_conf)))
                         
                         suggestion.save()
-        
+            
+            # Track successful AI request
+            if user:
+                response_time_ms = int((time.time() - start_time) * 1000)
+                track_ai_request(
+                    user=user,
+                    feature='conflict_resolution',
+                    request_type='enhance',
+                    board_id=conflict.board.id if conflict.board else None,
+                    success=True,
+                    response_time_ms=response_time_ms
+                )
+            
+            return basic_suggestions
+            
         except Exception as e:
+            # Track failed AI request
+            if user:
+                response_time_ms = int((time.time() - start_time) * 1000)
+                track_ai_request(
+                    user=user,
+                    feature='conflict_resolution',
+                    request_type='enhance',
+                    board_id=conflict.board.id if conflict.board else None,
+                    success=False,
+                    error_message=str(e),
+                    response_time_ms=response_time_ms
+                )
+            
             print(f"Error enhancing suggestions: {e}")
-        
-        return basic_suggestions
+            return basic_suggestions
