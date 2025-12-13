@@ -22,6 +22,7 @@ PrizmAI combines visual project management with AI that helps you work smarter�
 - 📚 **Knowledge Base & Wiki** - Markdown documentation with AI-assisted insights
 - 🔐 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
 - 🌐 **RESTful API** - 20+ endpoints for integrations (Slack, Teams, Jira-ready)
+- 📱 **Mobile PWA Support** - Progressive Web App with offline capabilities and mobile-first design
 - 📱 **Real-Time Collaboration** - WebSocket support for live updates and chat
 - 🔗 **Webhook Integration** - Event-driven automation with external apps
 
@@ -98,7 +99,8 @@ This will update all task, milestone, and time entry dates to maintain a realist
 | **[📖 USER_GUIDE.md](USER_GUIDE.md)** | Practical usage, examples, and best practices |
 | **[✨ FEATURES.md](FEATURES.md)** | Detailed feature descriptions (12 major features) |
 | **[📅 DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md)** | Dynamic demo data system guide |
-| **[📈 API_RATE_LIMITING_DASHBOARD.md](API_RATE_LIMITING_DASHBOARD.md)** | **NEW!** AI usage tracking and quota management |
+| **[� MOBILE_PWA_BACKEND_SETUP.md](MOBILE_PWA_BACKEND_SETUP.md)** | **NEW!** Mobile PWA configuration and setup guide |
+| **[�📈 API_RATE_LIMITING_DASHBOARD.md](API_RATE_LIMITING_DASHBOARD.md)** | **NEW!** AI usage tracking and quota management |
 | **[🔌 API_DOCUMENTATION.md](API_DOCUMENTATION.md)** | REST API reference with 20+ endpoints |
 | **[🔗 INTEGRATIONS.md](INTEGRATIONS.md)** | **NEW!** Complete integration guide (Slack, Zapier, Teams) with diagrams |
 | **[🪝 WEBHOOKS.md](WEBHOOKS.md)** | Webhook integration and automation guide |
@@ -113,6 +115,7 @@ This will update all task, milestone, and time entry dates to maintain a realist
 **Backend:**
 - Python 3.10+ with Django 5.2.3
 - Django REST Framework 3.15.2
+- django-cors-headers 4.6.0 (Mobile/PWA support)
 - Google Gemini API (AI features)
 - Django Channels 4.1.0 (WebSockets)
 - PostgreSQL/SQLite
@@ -120,6 +123,7 @@ This will update all task, milestone, and time entry dates to maintain a realist
 **Frontend:**
 - HTML5, CSS3, JavaScript
 - Bootstrap 5
+- Progressive Web App (PWA) support
 - Real-time updates via WebSockets
 
 **Security:**
@@ -142,7 +146,8 @@ This will update all task, milestone, and time entry dates to maintain a realist
 graph TB
     subgraph "Client Layer"
         A[Web Browser]
-        B[Mobile/Desktop Apps]
+        B[Mobile PWA]
+        C[Mobile/Desktop Apps]
     end
     
     subgraph "Application Layer"
@@ -215,7 +220,37 @@ graph TB
 
 ---
 
-## 📊 Why Choose PrizmAI?
+## � Mobile PWA Support
+
+PrizmAI now includes a **Progressive Web App (PWA)** for mobile devices!
+
+**Features:**
+- 📱 Mobile-first design with thumb-friendly navigation
+- 🔄 Offline support with background sync
+- 🏠 Installable on home screen (iOS/Android)
+- 🔐 Bearer token authentication
+- ⚡ Fast, responsive, and optimized for mobile
+
+**Get Started:**
+- **Mobile PWA Repository:** [github.com/paulavishek/PrizmAI_mobile_PWA](https://github.com/paulavishek/PrizmAI_mobile_PWA)
+- **Setup Guide:** [MOBILE_PWA_BACKEND_SETUP.md](MOBILE_PWA_BACKEND_SETUP.md)
+
+**Quick Setup:**
+```bash
+# Backend is already configured for PWA support!
+# Just start the Django server:
+python manage.py runserver
+
+# Then serve the PWA (separate repo):
+cd PrizmAI_mobile_PWA
+python -m http.server 8080
+```
+
+Open http://localhost:8080 on your mobile device and install the PWA!
+
+---
+
+## �📊 Why Choose PrizmAI?
 
 | Feature | PrizmAI | Others |
 |---------|---------|--------|
