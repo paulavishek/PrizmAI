@@ -3,7 +3,7 @@ API v1 URL Configuration
 """
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from api.v1 import views
+from api.v1 import views, auth_views
 
 # Create router for viewsets
 router = DefaultRouter()
@@ -16,6 +16,13 @@ app_name = 'api_v1'
 urlpatterns = [
     # Status endpoint
     path('status/', views.api_status, name='status'),
+    
+    # Mobile/PWA Authentication endpoints
+    path('auth/login/', auth_views.api_login, name='api_login'),
+    path('auth/register/', auth_views.api_register, name='api_register'),
+    path('auth/logout/', auth_views.api_logout, name='api_logout'),
+    path('auth/user/', auth_views.api_current_user, name='api_current_user'),
+    path('auth/refresh/', auth_views.api_refresh_token, name='api_refresh_token'),
     
     # Token management (requires session auth)
     path('auth/tokens/', views.list_api_tokens, name='list_tokens'),

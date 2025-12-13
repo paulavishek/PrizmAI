@@ -83,6 +83,7 @@ INSTALLED_APPS = [
     'widget_tweaks',
     'channels',  # Django Channels for WebSockets
     'rest_framework',  # Django REST Framework for API
+    'corsheaders',  # Django CORS headers for mobile/PWA support
     'axes',  # django-axes for brute force protection
     'csp',  # django-csp for Content Security Policy
     
@@ -105,6 +106,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',  # Add WhiteNoise for static files in production
+    'corsheaders.middleware.CorsMiddleware',  # CORS middleware for mobile/PWA support
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -412,6 +414,51 @@ REST_FRAMEWORK = {
     'EXCEPTION_HANDLER': 'rest_framework.views.exception_handler',
     'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.openapi.AutoSchema',
 }
+
+# ============================================
+# CORS CONFIGURATION (for Mobile/PWA Support)
+# ============================================
+
+# Allow requests from mobile PWA during development
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:8080",
+    "http://localhost:3000",
+    "http://127.0.0.1:8080",
+    "http://127.0.0.1:3000",
+]
+
+# Allow all origins in development (can be restricted in production)
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    # In production, specify exact origins
+    CORS_ALLOW_ALL_ORIGINS = False
+
+# Allow credentials (cookies, authorization headers, etc.)
+CORS_ALLOW_CREDENTIALS = True
+
+# Allow these HTTP methods
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+# Allow these headers
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
 
 # ============================================
 # CONTENT SECURITY POLICY (CSP) CONFIGURATION
