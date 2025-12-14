@@ -115,7 +115,10 @@ class TaskViewSet(viewsets.ModelViewSet):
         # Filter by assigned_to if provided
         assigned_to = self.request.query_params.get('assigned_to')
         if assigned_to:
-            queryset = queryset.filter(assigned_to_id=assigned_to)
+            if assigned_to.lower() == 'me':
+                queryset = queryset.filter(assigned_to_id=self.request.user.id)
+            else:
+                queryset = queryset.filter(assigned_to_id=assigned_to)
         
         # Filter by priority if provided
         priority = self.request.query_params.get('priority')

@@ -50,7 +50,7 @@ def api_login(request):
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    user = authenticate(username=username, password=password)
+    user = authenticate(request=request, username=username, password=password)
     
     if user:
         # Get or create API token for mobile app
