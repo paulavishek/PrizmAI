@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile
 from .forms import BoardForm, ColumnForm, TaskForm, TaskLabelForm, CommentForm, TaskMoveForm, TaskSearchForm, TaskFileForm
-from accounts.models import UserProfile
+from accounts.models import UserProfile, Organization
 from .stakeholder_models import StakeholderTaskInvolvement
 
 @login_required
@@ -2162,52 +2162,129 @@ def scope_tracking_dashboard(request, board_id):
 @login_required
 def load_demo_data(request):
     """
-    Load demo data for the current user's organization
+    Clone existing demo boards to the current user's organization
     Accessible to all authenticated users (not just admins)
     """
-    from django.core.management import call_command
-    from io import StringIO
-    
     if request.method == 'POST':
         try:
-            # Check if user already has demo data (prevent duplicate loading)
             profile = request.user.profile
-            org = profile.organization
+            user_org = profile.organization
             
-            # Check if demo users exist in the organization
-            demo_usernames = ['john_doe', 'jane_smith', 'robert_johnson', 
-                            'alice_williams', 'bob_martinez', 
-                            'carol_anderson', 'david_taylor']
+            # Check if user already has demo boards
+            existing_demo_boards = Board.objects.filter(
+                organization=user_org,
+                name__in=['Software Project', 'Bug Tracking', 'Marketing Campaign']
+            )
             
-            from django.contrib.auth.models import User
-            existing_demo_users = User.objects.filter(username__in=demo_usernames).exists()
-            
-            if existing_demo_users:
-                messages.warning(request, 'Demo data already exists in the system. Please delete existing demo data first if you want to reload it.')
+            if existing_demo_boards.count() >= 2:
+                messages.warning(request, 'You already have demo boards in your organization.')
                 return redirect('dashboard')
             
-            # Capture command output
-            out = StringIO()
+            # Find the demo organizations
+            demo_org_names = ['Dev Team', 'Marketing Team']
+            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
             
-            # Run the populate_test_data command
-            call_command('populate_test_data', stdout=out)
+            if not demo_orgs.exists():
+                messages.error(request, 'Demo data not found. Please contact administrator to load the initial demo data.')
+                return redirect('dashboard')
             
-            messages.success(request, '✅ Demo data loaded successfully! You can now explore all features with realistic sample data.')
+            # Get the demo boards
+            demo_boards = Board.objects.filter(
+                organization__in=demo_orgs,
+                name__in=['Software Project', 'Bug Tracking', 'Marketing Campaign']
+            )
+            
+            if not demo_boards.exists():
+                messages.error(request, 'Demo boards not found. Please contact administrator to load the initial demo data.')
+                return redirect('dashboard')
+            
+            cloned_count = 0
+            
+            # Clone each demo board to user's organization
+            for demo_board in demo_boards:
+                # Check if already exists
+                if Board.objects.filter(organization=user_org, name=demo_board.name).exists():
+                    continue
+                
+                # Create new board
+                new_board = Board.objects.create(
+                    name=demo_board.name,
+                    description=demo_board.description,
+                    organization=user_org,
+                    created_by=request.user
+                )
+                new_board.members.add(request.user)
+                
+                # Clone columns
+                column_mapping = {}
+                for column in demo_board.columns.all().order_by('position'):
+                    new_column = Column.objects.create(
+                        name=column.name,
+                        board=new_board,
+                        position=column.position
+                    )
+                    column_mapping[column.id] = new_column
+                
+                # Clone labels
+                label_mapping = {}
+                for label in demo_board.labels.all():
+                    new_label = TaskLabel.objects.create(
+                        name=label.name,
+                        color=label.color,
+                        board=new_board
+                    )
+                    label_mapping[label.id] = new_label
+                
+                # Clone tasks (limited to avoid overwhelming new users)
+                # Get tasks through columns
+                tasks_to_clone = Task.objects.filter(column__board=demo_board)[:15]  # Limit to 15 tasks per board
+                for task in tasks_to_clone:
+                    if task.column_id in column_mapping:
+                        new_task = Task.objects.create(
+                            title=task.title,
+                            description=task.description,
+                            column=column_mapping[task.column_id],
+                            created_by=request.user,
+                            assigned_to=request.user,  # Assign to new user
+                            priority=task.priority,
+                            due_date=task.due_date,
+                            progress=task.progress,
+                            position=task.position
+                        )
+                        
+                        # Add labels
+                        for label in task.labels.all():
+                            if label.id in label_mapping:
+                                new_task.labels.add(label_mapping[label.id])
+                
+                cloned_count += 1
+            
+            if cloned_count > 0:
+                messages.success(request, f'✅ Successfully copied {cloned_count} demo board(s) to your organization! You can now explore all features with realistic sample data.')
+            else:
+                messages.info(request, 'Demo boards already exist in your organization.')
             
             # If came from wizard, go to dashboard, otherwise go back
             if request.GET.get('from_wizard') == 'true':
                 return redirect('dashboard')
             else:
-                return redirect(request.META.get('HTTP_REFERER', 'dashboard'))
+                return redirect('dashboard')
                 
         except Exception as e:
             messages.error(request, f'Error loading demo data: {str(e)}')
             return redirect('dashboard')
     
     # GET request - show confirmation page
+    # Check if demo boards exist in system
+    from django.contrib.auth.models import User
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+    demo_available = demo_orgs.exists() and Board.objects.filter(organization__in=demo_orgs).exists()
+    
     context = {
         'user': request.user,
-        'from_wizard': request.GET.get('from_wizard', 'false')
+        'from_wizard': request.GET.get('from_wizard', 'false'),
+        'demo_available': demo_available
     }
     return render(request, 'kanban/load_demo_data.html', context)
 
