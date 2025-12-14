@@ -2169,6 +2169,9 @@ def load_demo_data(request):
     """
     if request.method == 'POST':
         try:
+            profile = request.user.profile
+            user_org = profile.organization
+            
             # Find the demo organizations
             demo_org_names = ['Dev Team', 'Marketing Team']
             demo_orgs = Organization.objects.filter(name__in=demo_org_names)
@@ -2178,14 +2181,29 @@ def load_demo_data(request):
                 return redirect('dashboard')
             
             # Get the demo boards
+            demo_board_names = ['Software Project', 'Bug Tracking', 'Marketing Campaign']
             demo_boards = Board.objects.filter(
                 organization__in=demo_orgs,
-                name__in=['Software Project', 'Bug Tracking', 'Marketing Campaign']
+                name__in=demo_board_names
             )
             
             if not demo_boards.exists():
                 messages.error(request, 'Demo boards not found. Please contact administrator to load the initial demo data.')
                 return redirect('dashboard')
+            
+            # Check if user has duplicate boards in their own organization
+            duplicate_boards = Board.objects.filter(
+                organization=user_org,
+                name__in=demo_board_names
+            )
+            
+            if duplicate_boards.exists():
+                duplicate_names = ', '.join([board.name for board in duplicate_boards])
+                messages.warning(request, 
+                    f'⚠️ You have duplicate demo boards in your organization ({duplicate_names}). '
+                    f'Please delete them first to avoid confusion, then access the full demo boards. '
+                    f'The original demo boards have 1000+ tasks and all features enabled.')
+                return redirect('board_list')
             
             # Check if user is already a member of any demo boards
             already_member_boards = demo_boards.filter(members=request.user)
@@ -2202,7 +2220,10 @@ def load_demo_data(request):
                     added_count += 1
             
             if added_count > 0:
-                messages.success(request, f'✅ Successfully added you to {added_count} demo board(s)! You can now explore all features with the full demo data including tasks, milestones, risk management, budget tracking, and more.')
+                messages.success(request, 
+                    f'✅ Successfully added you to {added_count} demo board(s)! '
+                    f'You now have access to 1000+ tasks with all advanced features including risk management, '
+                    f'budget tracking, milestones, and more. Check your dashboard!')
             else:
                 messages.info(request, 'You already have access to all demo boards.')
             
