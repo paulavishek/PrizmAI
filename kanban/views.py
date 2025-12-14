@@ -97,7 +97,10 @@ def dashboard(request):
             column__board__in=boards,
             assigned_to=request.user
         ).exclude(
-            column__name__icontains='done'
+            Q(column__name__icontains='done') |
+            Q(column__name__icontains='closed') |
+            Q(column__name__icontains='completed') |
+            Q(progress=100)
         ).select_related('column', 'column__board', 'assigned_to')
         
         # Apply sorting based on user preference
@@ -170,7 +173,10 @@ def dashboard(request):
             column__board__in=boards,
             assigned_to=request.user
         ).exclude(
-            column__name__icontains='done'
+            Q(column__name__icontains='done') |
+            Q(column__name__icontains='closed') |
+            Q(column__name__icontains='completed') |
+            Q(progress=100)
         ).count()        
         return render(request, 'kanban/dashboard.html', {
             'boards': boards,

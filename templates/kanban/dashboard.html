@@ -182,9 +182,9 @@
                                 
                                 {% if task.due_date %}
                                 <div class="mb-2">
-                                    <small class="{% if task.due_date < now %}text-danger{% else %}text-muted{% endif %}">
+                                    <small class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
                                         <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
-                                        {% if task.due_date < now %}<span class="badge bg-danger ms-1">Overdue</span>{% endif %}
+                                        {% if task.due_date < now and task.progress < 100 %}<span class="badge bg-danger ms-1">Overdue</span>{% endif %}
                                     </small>
                                 </div>
                                 {% endif %}

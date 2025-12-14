@@ -594,7 +594,7 @@
                         </div>
                         <div>
                             {% if task.due_date %}
-                            <span class="task-due-date {% if task.due_date < now %}overdue{% endif %}">
+                            <span class="task-due-date {% if task.due_date < now and task.progress < 100 %}overdue{% endif %}">
                                 <i class="far fa-calendar-alt me-1"></i> {{ task.due_date|date:"M d" }}
                             </span>
                             {% endif %}

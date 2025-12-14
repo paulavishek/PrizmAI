@@ -309,9 +309,9 @@
                 {% if task.due_date %}
                 <div class="mb-3">
                     <label class="text-muted">Due Date</label>
-                    <div class="p-2 rounded {% if task.due_date < now %}bg-danger text-white{% else %}bg-light{% endif %}">
+                    <div class="p-2 rounded {% if task.due_date < now and task.progress < 100 %}bg-danger text-white{% else %}bg-light{% endif %}">
                         {{ task.due_date|date:"M d, Y" }}
-                        {% if task.due_date < now %}<span class="badge bg-light text-danger ms-2">Overdue</span>{% endif %}
+                        {% if task.due_date < now and task.progress < 100 %}<span class="badge bg-light text-danger ms-2">Overdue</span>{% endif %}
                     </div>
                 </div>
                 {% endif %}
