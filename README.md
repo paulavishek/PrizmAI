@@ -67,24 +67,31 @@ python manage.py runserver
 **Open http://localhost:8000** and start creating boards!
 
 **💡 Dynamic Demo Data:** Demo data is intelligently designed with dates relative to the current date, so tasks and milestones will always appear fresh and relevant. The system automatically:
+- Creates **3 official demo boards** with **1000+ tasks** in dedicated demo organizations
 - Distributes tasks across past, present, and future based on their status
 - Keeps completed tasks in the past (last 60 days)
 - Places active tasks around the current date
 - Schedules future tasks appropriately (next 60 days)
 - Historical tasks (for predictive analytics) span the last 180 days
 
-**📊 Demo Data Health (Current):**
-- ✅ Only 3.6% overdue incomplete tasks (4 out of 111)
-- ✅ 29 tasks due in the next 7 days
-- ✅ 90 tasks due in the next 30 days
-- ✅ 1,440+ completed tasks showing recent work
-- ✅ Zero critical overdue items
+**📊 Demo Data Overview:**
+- ✅ 3 comprehensive demo boards (Software Project, Bug Tracking, Marketing Campaign)
+- ✅ 1000+ sample tasks with complete feature demonstrations
+- ✅ Risk management, resource forecasting, budget tracking
+- ✅ Milestones, dependencies, stakeholder management
+- ✅ Dynamic dates that always appear current
 
 **🔄 Refreshing Demo Data:** If you revisit the demo after a long time, simply run:
 ```bash
 python manage.py refresh_demo_dates
 ```
 This will update all task, milestone, and time entry dates to maintain a realistic timeline.
+
+**🧹 Cleanup Duplicates:** If you see duplicate demo boards, run:
+```bash
+python manage.py cleanup_duplicate_demo_boards --auto-fix
+```
+This removes duplicate boards and migrates users to the official demo boards.
 
 **📖 Learn More:** See [DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md) for comprehensive information about the dynamic date system.
 

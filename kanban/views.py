@@ -2199,10 +2199,17 @@ def load_demo_data(request):
             
             if duplicate_boards.exists():
                 duplicate_names = ', '.join([board.name for board in duplicate_boards])
+                duplicate_count = duplicate_boards.count()
+                
+                # Count tasks in user's duplicate boards vs official demo boards
+                user_duplicate_tasks = sum(board.tasks.count() for board in duplicate_boards)
+                official_demo_tasks = sum(board.tasks.count() for board in demo_boards)
+                
                 messages.warning(request, 
-                    f'⚠️ You have duplicate demo boards in your organization ({duplicate_names}). '
-                    f'Please delete them first to avoid confusion, then access the full demo boards. '
-                    f'The original demo boards have 1000+ tasks and all features enabled.')
+                    f'⚠️ You have {duplicate_count} duplicate demo board(s) in your organization: {duplicate_names}. '
+                    f'Your duplicates have {user_duplicate_tasks} tasks vs {official_demo_tasks} tasks in the full demo. '
+                    f'Please delete your duplicate boards first to access the complete demo with 1000+ tasks. '
+                    f'Admin can run: python manage.py cleanup_duplicate_demo_boards --auto-fix')
                 return redirect('board_list')
             
             # Check if user is already a member of any demo boards

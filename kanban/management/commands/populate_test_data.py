@@ -2403,8 +2403,25 @@ Carol: Sounds good. Great work this week!
         modules = ['user module', 'task module', 'board module', 'analytics module']
         technologies = ['Redis', 'WebSockets', 'REST API', 'GraphQL', 'Docker']
         
-        # Create historical tasks for each board
-        for board in Board.objects.all():
+        # CRITICAL: Only create historical tasks for DEMO BOARDS to avoid polluting user boards
+        # Get only the official demo boards in demo organizations
+        demo_org_names = ['Dev Team', 'Marketing Team']
+        demo_board_names = ['Software Project', 'Bug Tracking', 'Marketing Campaign']
+        
+        demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+        demo_boards = Board.objects.filter(
+            organization__in=demo_orgs,
+            name__in=demo_board_names
+        )
+        
+        if not demo_boards.exists():
+            self.stdout.write(self.style.WARNING('  ⚠️  No demo boards found. Skipping historical task creation.'))
+            return
+        
+        self.stdout.write(f'  Creating historical tasks for {demo_boards.count()} demo boards only')
+        
+        # Create historical tasks for each DEMO board only
+        for board in demo_boards:
             self.stdout.write(f'  Creating historical tasks for board: {board.name}')
             
             # Get or create Done column
@@ -2427,8 +2444,17 @@ Carol: Sounds good. Great work this week!
             if not members:
                 members = [self.users['admin']]
             
-            # Create 60-100 historical tasks per board
-            num_tasks = random.randint(60, 100)
+            # Check if this board already has historical tasks (for idempotency)
+            existing_historical_tasks = done_column.tasks.filter(
+                description__contains='Historical completed task'
+            ).count()
+            
+            if existing_historical_tasks > 50:
+                self.stdout.write(f'    ⏭️  Board {board.name} already has {existing_historical_tasks} historical tasks, skipping...')
+                continue
+            
+            # Create 300-350 historical tasks per board for comprehensive demo (total ~1000 across 3 boards)
+            num_tasks = random.randint(300, 350)
             
             for i in range(num_tasks):
                 # Random date in past 6 months (180 days)

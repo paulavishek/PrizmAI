@@ -4,6 +4,21 @@
 
 PrizmAI's demo data system is designed to provide a realistic, always-fresh demonstration experience. All dates in the demo are **dynamically generated relative to the current date**, ensuring that no matter when you run the demo - today, next month, or next year - the data will appear current and relevant.
 
+## 🎯 Single Source of Truth: Official Demo Boards
+
+**IMPORTANT:** PrizmAI maintains a single set of official demo boards with **1000+ tasks** in dedicated demo organizations:
+- **Dev Team** organization: Software Project, Bug Tracking boards
+- **Marketing Team** organization: Marketing Campaign board
+
+These boards contain comprehensive demo data including:
+- 300-350 tasks per board (total ~1000 tasks across all 3 boards)
+- Complete feature demonstrations
+- Historical task data for AI predictions
+- Risk management, resource forecasting, budget tracking
+- Milestones, dependencies, and stakeholder management
+
+**Users should NEVER create their own demo boards.** Instead, use the "Load Demo Data" feature to get access to these official shared boards.
+
 ## ✨ Key Features
 
 ### 1. **Intelligent Date Distribution**
@@ -227,14 +242,48 @@ python manage.py refresh_demo_dates
 - **Setup Guide**: See [SETUP.md](SETUP.md)
 - **User Guide**: See [USER_GUIDE.md](USER_GUIDE.md)
 
+## 🧹 Handling Duplicate Demo Boards
+
+### Problem: Users See Duplicate Boards
+
+If users report seeing duplicate demo boards (e.g., two "Software Project" boards with different task counts), this usually happens when:
+- Demo boards were accidentally created in user organizations
+- Old demo data exists alongside new demo data
+- `populate_test_data` was run before the cleanup improvements
+
+### Solution: Cleanup Command
+
+Run the cleanup command to automatically fix duplicates:
+
+```bash
+# Check for duplicates (dry run - no changes)
+python manage.py cleanup_duplicate_demo_boards --dry-run
+
+# Automatically remove duplicates and migrate users
+python manage.py cleanup_duplicate_demo_boards --auto-fix
+```
+
+This command will:
+1. ✅ Identify official demo boards in demo organizations
+2. ✅ Find duplicate boards in user organizations
+3. ✅ Migrate users to official demo boards
+4. ✅ Remove duplicate boards and their tasks
+
+### Prevention
+
+**Always use the "Load Demo Data" feature** from the dashboard or getting started wizard. Never manually create boards named "Software Project", "Bug Tracking", or "Marketing Campaign" in user organizations.
+
 ## 🚀 Quick Reference
 
 ```bash
-# Create demo data (includes automatic refresh)
+# Create demo data (includes automatic refresh, 1000+ tasks)
 python manage.py populate_test_data
 
-# Refresh dates only
+# Refresh dates only (keeps existing tasks)
 python manage.py refresh_demo_dates
+
+# Remove duplicate demo boards
+python manage.py cleanup_duplicate_demo_boards --auto-fix
 
 # Fix Gantt chart dates
 python manage.py fix_gantt_demo_data
