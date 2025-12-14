@@ -2159,3 +2159,55 @@ def scope_tracking_dashboard(request, board_id):
     return render(request, 'kanban/scope_tracking_dashboard.html', context)
 
 
+@login_required
+def load_demo_data(request):
+    """
+    Load demo data for the current user's organization
+    Accessible to all authenticated users (not just admins)
+    """
+    from django.core.management import call_command
+    from io import StringIO
+    
+    if request.method == 'POST':
+        try:
+            # Check if user already has demo data (prevent duplicate loading)
+            profile = request.user.profile
+            org = profile.organization
+            
+            # Check if demo users exist in the organization
+            demo_usernames = ['john_doe', 'jane_smith', 'robert_johnson', 
+                            'alice_williams', 'bob_martinez', 
+                            'carol_anderson', 'david_taylor']
+            
+            from django.contrib.auth.models import User
+            existing_demo_users = User.objects.filter(username__in=demo_usernames).exists()
+            
+            if existing_demo_users:
+                messages.warning(request, 'Demo data already exists in the system. Please delete existing demo data first if you want to reload it.')
+                return redirect('dashboard')
+            
+            # Capture command output
+            out = StringIO()
+            
+            # Run the populate_test_data command
+            call_command('populate_test_data', stdout=out)
+            
+            messages.success(request, '✅ Demo data loaded successfully! You can now explore all features with realistic sample data.')
+            
+            # If came from wizard, go to dashboard, otherwise go back
+            if request.GET.get('from_wizard') == 'true':
+                return redirect('dashboard')
+            else:
+                return redirect(request.META.get('HTTP_REFERER', 'dashboard'))
+                
+        except Exception as e:
+            messages.error(request, f'Error loading demo data: {str(e)}')
+            return redirect('dashboard')
+    
+    # GET request - show confirmation page
+    context = {
+        'user': request.user,
+        'from_wizard': request.GET.get('from_wizard', 'false')
+    }
+    return render(request, 'kanban/load_demo_data.html', context)
+

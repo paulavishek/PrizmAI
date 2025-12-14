@@ -1,0 +1,217 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Load Demo Data - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+.demo-info-container {
+    max-width: 800px;
+    margin: 3rem auto;
+}
+
+.demo-feature-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-left: 4px solid #007bff;
+}
+
+.demo-feature-card i {
+    color: #007bff;
+    margin-right: 0.5rem;
+}
+
+.demo-warning {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border-left: 4px solid #ffc107;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.demo-hero {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 3rem 2rem;
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.demo-hero h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+.feature-list {
+    list-style: none;
+    padding: 0;
+}
+
+.feature-list li {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.feature-list li:last-child {
+    border-bottom: none;
+}
+
+.btn-load-demo {
+    background: linear-gradient(45deg, #667eea, #764ba2);
+    border: none;
+    color: white;
+    padding: 1rem 3rem;
+    font-size: 1.2rem;
+    border-radius: 50px;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    transition: all 0.3s ease;
+}
+
+.btn-load-demo:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    color: white;
+}
+
+.demo-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin: 2rem 0;
+}
+
+.demo-stat {
+    background: rgba(255, 255, 255, 0.2);
+    padding: 1rem;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.demo-stat h3 {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.demo-stat p {
+    margin: 0;
+    font-size: 0.9rem;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="demo-info-container">
+    <div class="demo-hero">
+        <i class="fas fa-database fa-3x mb-3"></i>
+        <h1>Load Demo Data</h1>
+        <p class="lead mb-0">Instantly populate your workspace with realistic sample data to explore all features</p>
+        
+        <div class="demo-stats">
+            <div class="demo-stat">
+                <h3>15+</h3>
+                <p>Sample Boards</p>
+            </div>
+            <div class="demo-stat">
+                <h3>100+</h3>
+                <p>Sample Tasks</p>
+            </div>
+            <div class="demo-stat">
+                <h3>7</h3>
+                <p>Demo Users</p>
+            </div>
+            <div class="demo-stat">
+                <h3>50+</h3>
+                <p>Wiki Pages</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="demo-warning">
+        <h5><i class="fas fa-info-circle"></i> What You'll Get</h5>
+        <p class="mb-0">The demo data includes sample organizations, teams, projects, tasks, milestones, chat rooms, wiki pages, and more. All dates are dynamically generated to be current and relevant.</p>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="demo-feature-card">
+                <h5><i class="fas fa-users"></i> Teams & Organizations</h5>
+                <ul class="feature-list">
+                    <li>Dev Team organization</li>
+                    <li>Marketing Team organization</li>
+                    <li>7 demo team members</li>
+                </ul>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="demo-feature-card">
+                <h5><i class="fas fa-clipboard-list"></i> Boards & Tasks</h5>
+                <ul class="feature-list">
+                    <li>Software Project board</li>
+                    <li>Bug Tracking board</li>
+                    <li>Marketing Campaign board</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="demo-feature-card">
+                <h5><i class="fas fa-chart-line"></i> Advanced Features</h5>
+                <ul class="feature-list">
+                    <li>Risk management data</li>
+                    <li>Resource forecasting</li>
+                    <li>Budget & ROI tracking</li>
+                    <li>Milestone tracking</li>
+                </ul>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="demo-feature-card">
+                <h5><i class="fas fa-book"></i> Knowledge Base</h5>
+                <ul class="feature-list">
+                    <li>Wiki categories</li>
+                    <li>Technical documentation</li>
+                    <li>Meeting notes</li>
+                    <li>Best practices</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-info mt-4">
+        <h5><i class="fas fa-lightbulb"></i> Perfect For:</h5>
+        <ul class="mb-0">
+            <li>New users wanting to explore features</li>
+            <li>Testing and demonstration purposes</li>
+            <li>Learning how to use the platform effectively</li>
+            <li>Understanding project management workflows</li>
+        </ul>
+    </div>
+
+    <div class="text-center mt-5">
+        <form method="post" action="{% url 'load_demo_data' %}{% if from_wizard == 'true' %}?from_wizard=true{% endif %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-load-demo">
+                <i class="fas fa-magic me-2"></i> Load Demo Data Now
+            </button>
+            <br><br>
+            <a href="{% if from_wizard == 'true' %}{% url 'dashboard' %}{% else %}{{ request.META.HTTP_REFERER|default:'dashboard' }}{% endif %}" class="btn btn-outline-secondary">
+                <i class="fas fa-times me-1"></i> Cancel
+            </a>
+        </form>
+    </div>
+
+    <div class="alert alert-secondary mt-4">
+        <small>
+            <strong>Note:</strong> You can only load demo data once. If you've already loaded it and want to reload, 
+            you'll need to delete the existing demo data first using the management command: 
+            <code>python manage.py delete_demo_data</code>
+        </small>
+    </div>
+</div>
+{% endblock %}

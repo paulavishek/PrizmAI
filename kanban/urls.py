@@ -18,6 +18,9 @@ urlpatterns = [
     path('api/wizard/create-board/', views.wizard_create_board, name='wizard_create_board'),
     path('api/wizard/create-task/', views.wizard_create_task, name='wizard_create_task'),
     
+    # Demo Data Loading
+    path('load-demo-data/', views.load_demo_data, name='load_demo_data'),
+    
     path('boards/', views.board_list, name='board_list'),
     path('boards/create/', views.create_board, name='create_board'),    path('boards/<int:board_id>/', views.board_detail, name='board_detail'),    path('boards/<int:board_id>/analytics/', views.board_analytics, name='board_analytics'),
     path('boards/<int:board_id>/scope-tracking/', views.scope_tracking_dashboard, name='scope_tracking_dashboard'),
