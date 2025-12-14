@@ -43,9 +43,11 @@ def dashboard(request):
             if user_boards.count() == 0 and user_tasks.count() == 0:
                 return redirect('getting_started_wizard')
         
+        # Get boards from user's organization OR where user is a member (including demo boards)
         boards = Board.objects.filter(
-            Q(organization=organization) & 
-            (Q(created_by=request.user) | Q(members=request.user))
+            Q(organization=organization) | Q(members=request.user)
+        ).filter(
+            Q(created_by=request.user) | Q(members=request.user)
         ).distinct()
         
         # Get analytics data
@@ -204,11 +206,11 @@ def board_list(request):
         profile = request.user.profile
         organization = profile.organization
         
-        # All users (including superusers) should only see boards in their current organization
-        # to maintain consistency with the dashboard view
+        # Get boards from user's organization OR where user is a member (including demo boards)
         boards = Board.objects.filter(
-            Q(organization=organization) & 
-            (Q(created_by=request.user) | Q(members=request.user))
+            Q(organization=organization) | Q(members=request.user)
+        ).filter(
+            Q(created_by=request.user) | Q(members=request.user)
         ).distinct()
         
         # For board_list, we only display boards, creation is handled by create_board view
