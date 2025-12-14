@@ -2162,30 +2162,17 @@ def scope_tracking_dashboard(request, board_id):
 @login_required
 def load_demo_data(request):
     """
-    Clone existing demo boards to the current user's organization
+    Add user as member to existing demo boards so they can explore all features
     Accessible to all authenticated users (not just admins)
     """
     if request.method == 'POST':
         try:
-            profile = request.user.profile
-            user_org = profile.organization
-            
-            # Check if user already has demo boards
-            existing_demo_boards = Board.objects.filter(
-                organization=user_org,
-                name__in=['Software Project', 'Bug Tracking', 'Marketing Campaign']
-            )
-            
-            if existing_demo_boards.count() >= 2:
-                messages.warning(request, 'You already have demo boards in your organization.')
-                return redirect('dashboard')
-            
             # Find the demo organizations
             demo_org_names = ['Dev Team', 'Marketing Team']
             demo_orgs = Organization.objects.filter(name__in=demo_org_names)
             
             if not demo_orgs.exists():
-                messages.error(request, 'Demo data not found. Please contact administrator to load the initial demo data.')
+                messages.error(request, 'Demo data not found. Please contact administrator to load the initial demo data using: python manage.py populate_test_data')
                 return redirect('dashboard')
             
             # Get the demo boards
@@ -2198,71 +2185,24 @@ def load_demo_data(request):
                 messages.error(request, 'Demo boards not found. Please contact administrator to load the initial demo data.')
                 return redirect('dashboard')
             
-            cloned_count = 0
+            # Check if user is already a member of any demo boards
+            already_member_boards = demo_boards.filter(members=request.user)
             
-            # Clone each demo board to user's organization
+            if already_member_boards.count() >= demo_boards.count():
+                messages.info(request, 'You already have access to all demo boards!')
+                return redirect('dashboard')
+            
+            # Add user as member to all demo boards
+            added_count = 0
             for demo_board in demo_boards:
-                # Check if already exists
-                if Board.objects.filter(organization=user_org, name=demo_board.name).exists():
-                    continue
-                
-                # Create new board
-                new_board = Board.objects.create(
-                    name=demo_board.name,
-                    description=demo_board.description,
-                    organization=user_org,
-                    created_by=request.user
-                )
-                new_board.members.add(request.user)
-                
-                # Clone columns
-                column_mapping = {}
-                for column in demo_board.columns.all().order_by('position'):
-                    new_column = Column.objects.create(
-                        name=column.name,
-                        board=new_board,
-                        position=column.position
-                    )
-                    column_mapping[column.id] = new_column
-                
-                # Clone labels
-                label_mapping = {}
-                for label in demo_board.labels.all():
-                    new_label = TaskLabel.objects.create(
-                        name=label.name,
-                        color=label.color,
-                        board=new_board
-                    )
-                    label_mapping[label.id] = new_label
-                
-                # Clone tasks (limited to avoid overwhelming new users)
-                # Get tasks through columns
-                tasks_to_clone = Task.objects.filter(column__board=demo_board)[:15]  # Limit to 15 tasks per board
-                for task in tasks_to_clone:
-                    if task.column_id in column_mapping:
-                        new_task = Task.objects.create(
-                            title=task.title,
-                            description=task.description,
-                            column=column_mapping[task.column_id],
-                            created_by=request.user,
-                            assigned_to=request.user,  # Assign to new user
-                            priority=task.priority,
-                            due_date=task.due_date,
-                            progress=task.progress,
-                            position=task.position
-                        )
-                        
-                        # Add labels
-                        for label in task.labels.all():
-                            if label.id in label_mapping:
-                                new_task.labels.add(label_mapping[label.id])
-                
-                cloned_count += 1
+                if request.user not in demo_board.members.all():
+                    demo_board.members.add(request.user)
+                    added_count += 1
             
-            if cloned_count > 0:
-                messages.success(request, f'✅ Successfully copied {cloned_count} demo board(s) to your organization! You can now explore all features with realistic sample data.')
+            if added_count > 0:
+                messages.success(request, f'✅ Successfully added you to {added_count} demo board(s)! You can now explore all features with the full demo data including tasks, milestones, risk management, budget tracking, and more.')
             else:
-                messages.info(request, 'Demo boards already exist in your organization.')
+                messages.info(request, 'You already have access to all demo boards.')
             
             # If came from wizard, go to dashboard, otherwise go back
             if request.GET.get('from_wizard') == 'true':
@@ -2271,7 +2211,7 @@ def load_demo_data(request):
                 return redirect('dashboard')
                 
         except Exception as e:
-            messages.error(request, f'Error loading demo data: {str(e)}')
+            messages.error(request, f'Error accessing demo data: {str(e)}')
             return redirect('dashboard')
     
     # GET request - show confirmation page

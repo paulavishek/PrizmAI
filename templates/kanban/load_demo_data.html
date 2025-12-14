@@ -106,9 +106,9 @@
 {% block content %}
 <div class="demo-info-container">
     <div class="demo-hero">
-        <i class="fas fa-copy fa-3x mb-3"></i>
-        <h1>Copy Demo Boards</h1>
-        <p class="lead mb-0">Get your own copy of our demo boards to explore all features with realistic sample data</p>
+        <i class="fas fa-users fa-3x mb-3"></i>
+        <h1>Access Demo Boards</h1>
+        <p class="lead mb-0">Get full access to our comprehensive demo boards with all features enabled</p>
         
         <div class="demo-stats">
             <div class="demo-stat">
@@ -116,16 +116,16 @@
                 <p>Demo Boards</p>
             </div>
             <div class="demo-stat">
-                <h3>15+</h3>
+                <h3>1000+</h3>
                 <p>Sample Tasks</p>
             </div>
             <div class="demo-stat">
                 <h3>✓</h3>
-                <p>Your Own Copy</p>
+                <p>Full Features</p>
             </div>
             <div class="demo-stat">
                 <h3>✓</h3>
-                <p>Safe to Edit</p>
+                <p>All Data</p>
             </div>
         </div>
     </div>
@@ -138,7 +138,7 @@
     {% else %}
     <div class="demo-warning">
         <h5><i class="fas fa-info-circle"></i> What You'll Get</h5>
-        <p class="mb-0">We'll copy the existing demo boards to your organization with sample tasks, labels, and columns. You'll have your own private copy that you can safely modify and experiment with.</p>
+        <p class="mb-0">You'll be added as a member to the existing demo boards, giving you full access to explore 1000+ tasks with all features including risk management, resource forecasting, budget tracking, milestones, wiki pages, and more!</p>
     </div>
     {% endif %}
 
@@ -147,10 +147,10 @@
             <div class="demo-feature-card">
                 <h5><i class="fas fa-laptop-code"></i> Software Project</h5>
                 <ul class="feature-list">
-                    <li>Multiple task columns</li>
-                    <li>Sample development tasks</li>
-                    <li>Priority levels & labels</li>
-                    <li>Progress tracking</li>
+                    <li>400+ development tasks</li>
+                    <li>Complete workflow example</li>
+                    <li>Risk management data</li>
+                    <li>Resource forecasting</li>
                 </ul>
             </div>
         </div>
@@ -158,10 +158,10 @@
             <div class="demo-feature-card">
                 <h5><i class="fas fa-bug"></i> Bug Tracking</h5>
                 <ul class="feature-list">
-                    <li>Bug workflow columns</li>
-                    <li>Sample bug reports</li>
-                    <li>Severity labels</li>
-                    <li>Resolution tracking</li>
+                    <li>300+ bug reports</li>
+                    <li>Complete lifecycle tracking</li>
+                    <li>Priority & severity data</li>
+                    <li>Resolution patterns</li>
                 </ul>
             </div>
         </div>
@@ -169,10 +169,10 @@
             <div class="demo-feature-card">
                 <h5><i class="fas fa-bullhorn"></i> Marketing Campaign</h5>
                 <ul class="feature-list">
-                    <li>Campaign stages</li>
-                    <li>Marketing tasks</li>
-                    <li>Status labels</li>
-                    <li>Deadline tracking</li>
+                    <li>300+ marketing tasks</li>
+                    <li>Campaign workflows</li>
+                    <li>Budget & ROI tracking</li>
+                    <li>Milestone tracking</li>
                 </ul>
             </div>
         </div>
@@ -181,20 +181,20 @@
     <div class="alert alert-info mt-4">
         <h5><i class="fas fa-lightbulb"></i> Perfect For:</h5>
         <ul class="mb-0">
-            <li>New users wanting to explore features without starting from scratch</li>
-            <li>Testing and experimenting with different workflows</li>
-            <li>Learning how to use the platform with realistic examples</li>
-            <li>Understanding project management best practices</li>
+            <li>Exploring all platform features with comprehensive realistic data</li>
+            <li>Learning project management workflows with 1000+ sample tasks</li>
+            <li>Testing risk management, resource forecasting, and budget tracking</li>
+            <li>Understanding how all features work together in real scenarios</li>
         </ul>
     </div>
 
     <div class="alert alert-success mt-4">
-        <h5><i class="fas fa-shield-alt"></i> Safe & Private:</h5>
+        <h5><i class="fas fa-shield-alt"></i> Full Feature Access:</h5>
         <ul class="mb-0">
-            <li><strong>Your own copy:</strong> The boards will be copied to your organization</li>
-            <li><strong>No shared data:</strong> Your changes won't affect other users</li>
-            <li><strong>Safe to delete:</strong> You can delete these boards anytime without affecting others</li>
-            <li><strong>Reusable:</strong> You can get a fresh copy if you delete your boards</li>
+            <li><strong>Complete demo environment:</strong> All advanced features enabled</li>
+            <li><strong>Shared boards:</strong> Collaborate with other demo users</li>
+            <li><strong>Learn by doing:</strong> Explore and experiment safely</li>
+            <li><strong>Always available:</strong> Access demo boards anytime from your dashboard</li>
         </ul>
     </div>
 
@@ -203,7 +203,7 @@
         <form method="post" action="{% url 'load_demo_data' %}{% if from_wizard == 'true' %}?from_wizard=true{% endif %}">
             {% csrf_token %}
             <button type="submit" class="btn btn-load-demo">
-                <i class="fas fa-copy me-2"></i> Copy Demo Boards Now
+                <i class="fas fa-key me-2"></i> Get Access to Demo Boards
             </button>
             <br><br>
             <a href="{% if from_wizard == 'true' %}{% url 'dashboard' %}{% else %}{{ request.META.HTTP_REFERER|default:'dashboard' }}{% endif %}" class="btn btn-outline-secondary">
