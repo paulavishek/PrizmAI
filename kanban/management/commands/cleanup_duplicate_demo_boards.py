@@ -65,7 +65,7 @@ class Command(BaseCommand):
 
         self.stdout.write(f'✓ Found {official_demo_boards.count()} official demo board(s):')
         for board in official_demo_boards:
-            task_count = board.tasks.count()
+            task_count = Task.objects.filter(column__board=board).count()
             member_count = board.members.count()
             self.stdout.write(f'  • {board.name} ({board.organization.name}) - {task_count} tasks, {member_count} members')
 
@@ -99,7 +99,7 @@ class Command(BaseCommand):
         for org_name, boards in duplicates_by_org.items():
             self.stdout.write(f'\n  📁 Organization: {org_name}')
             for board in boards:
-                task_count = board.tasks.count()
+                task_count = Task.objects.filter(column__board=board).count()
                 member_count = board.members.count()
                 total_tasks_to_remove += task_count
                 total_members_affected += member_count
@@ -133,9 +133,11 @@ class Command(BaseCommand):
         self.stdout.write(self.style.NOTICE('\n🔄 Migrating users to official demo boards...'))
         
         migrated_users = set()
+        deleted_boards = 0
+        deleted_tasks = 0
         
-        with transaction.atomic():
-            for board in duplicate_boards:
+        for board in duplicate_boards:
+            try:
                 # Get members of the duplicate board
                 members = list(board.members.all())
                 
@@ -150,11 +152,20 @@ class Command(BaseCommand):
                             migrated_users.add(member.username)
                             self.stdout.write(f'  ✓ Migrated {member.username} to official {official_board.name}')
                 
-                # Delete the duplicate board (this will cascade delete tasks)
+                # Get task count before deletion
+                task_count = Task.objects.filter(column__board=board).count()
+                
+                # Store board info
                 board_name = board.name
                 board_id = board.id
-                task_count = board.tasks.count()
-                board.delete()
+                
+                # Delete the duplicate board (this will cascade delete related objects)
+                # Delete in a transaction for each board
+                with transaction.atomic():
+                    board.delete()
+                
+                deleted_boards += 1
+                deleted_tasks += task_count
                 
                 self.stdout.write(
                     self.style.SUCCESS(
@@ -162,13 +173,21 @@ class Command(BaseCommand):
                         f'with {task_count} tasks'
                     )
                 )
+            except Exception as e:
+                self.stdout.write(
+                    self.style.ERROR(
+                        f'  ✗ Failed to remove board: {board.name} (ID: {board.id})'
+                    )
+                )
+                self.stdout.write(self.style.ERROR(f'    Error: {str(e)}'))
 
         # Final summary
         self.stdout.write(self.style.SUCCESS('\n' + '='*70))
         self.stdout.write(self.style.SUCCESS('✅ Cleanup Complete!'))
         self.stdout.write(self.style.SUCCESS('='*70))
-        self.stdout.write(f'  • Removed {duplicate_boards.count()} duplicate board(s)')
-        self.stdout.write(f'  • Deleted {total_tasks_to_remove} duplicate tasks')
+        self.stdout.write(f'  • Removed {deleted_boards} duplicate board(s)')
+        self.stdout.write(f'  • Deleted {deleted_tasks} duplicate tasks')
         self.stdout.write(f'  • Migrated {len(migrated_users)} user(s) to official demo boards')
-        self.stdout.write(self.style.SUCCESS('\n💡 Users can now access the official demo boards from their dashboard!'))
+        if deleted_boards > 0:
+            self.stdout.write(self.style.SUCCESS('\n💡 Users can now access the official demo boards from their dashboard!'))
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))
