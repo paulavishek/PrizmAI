@@ -22,6 +22,15 @@ from kanban.resource_leveling_models import (
 logger = logging.getLogger(__name__)
 
 
+def _can_access_board(user, board):
+    """Check if user can access board (includes demo board bypass)"""
+    # Demo boards bypass RBAC
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    if board.organization.name in demo_org_names:
+        return True
+    return user in board.members.all()
+
+
 @login_required
 @require_http_methods(["POST"])
 def analyze_task_assignment(request, task_id):
@@ -368,7 +377,7 @@ def optimize_board_workload(request, board_id):
         board = get_object_or_404(Board, id=board_id)
         
         # Check permissions
-        if request.user not in board.members.all():
+        if not _can_access_board(request.user, board):
             return JsonResponse({
                 'error': 'You do not have permission to access this board'
             }, status=403)

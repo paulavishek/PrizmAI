@@ -742,8 +742,12 @@ def delete_label(request, label_id):
 def board_analytics(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
+    # Check if this is a demo board (bypass RBAC)
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    is_demo_board = board.organization.name in demo_org_names
+    
     # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
+    if not is_demo_board and not (board.created_by == request.user or request.user in board.members.all()):
         return HttpResponseForbidden("You don't have access to this board.")
     
     # Get columns for this board
@@ -938,9 +942,14 @@ def gantt_chart(request, board_id):
         due_date__isnull=False
     ).select_related('assigned_to', 'column').prefetch_related('dependencies').order_by('start_date', 'id')
     
+    # Check if demo board
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    is_demo_board = board.organization.name in demo_org_names
+    
     context = {
         'board': board,
         'tasks': tasks,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/gantt_chart.html', context)
@@ -2043,8 +2052,12 @@ def skill_gap_dashboard(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
     
+    # Check if this is a demo board (bypass RBAC)
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    is_demo_board = board.organization.name in demo_org_names
+    
     # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
+    if not is_demo_board and not (board.created_by == request.user or request.user in board.members.all()):
         return HttpResponseForbidden("You don't have access to this board.")
     
     # Get skill gaps and development plans
