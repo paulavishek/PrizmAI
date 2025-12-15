@@ -73,7 +73,7 @@ def analyze_task_assignment(request, task_id):
         service = ResourceLevelingService(board.organization)
         
         # Analyze assignment
-        analysis = service.analyze_task_assignment(task)
+        analysis = service.analyze_task_assignment(task, requesting_user=request.user)
         
         return JsonResponse(analysis)
         
@@ -116,7 +116,7 @@ def create_leveling_suggestion(request, task_id):
         service = ResourceLevelingService(board.organization)
         
         # Create suggestion
-        suggestion = service.create_suggestion(task)
+        suggestion = service.create_suggestion(task, requesting_user=request.user)
         
         if not suggestion:
             return JsonResponse({
@@ -263,7 +263,7 @@ def get_board_suggestions(request, board_id):
         service = ResourceLevelingService(board.organization)
         
         # Get suggestions
-        suggestions = service.get_board_optimization_suggestions(board, limit=20)
+        suggestions = service.get_board_optimization_suggestions(board, limit=20, requesting_user=request.user)
         
         # Format response
         suggestion_list = []

@@ -47,7 +47,7 @@ class ResourceLevelingService:
         
         return profile
     
-    def analyze_task_assignment(self, task, potential_assignees=None):
+    def analyze_task_assignment(self, task, potential_assignees=None, requesting_user=None):
         """
         Analyze a task and suggest optimal assignment
         
@@ -55,6 +55,7 @@ class ResourceLevelingService:
             task: Task object to analyze
             potential_assignees: Optional list of User objects to consider. 
                                 If None, considers all board members
+            requesting_user: User requesting the analysis (for demo board filtering)
         
         Returns:
             Dict with suggestions and impact analysis
@@ -66,7 +67,18 @@ class ResourceLevelingService:
             board = task.column.board if task.column else None
             if not board:
                 return {'error': 'Task must be in a column on a board'}
-            potential_assignees = list(board.members.all())
+            potential_assignees = board.members.all()
+            
+            # For demo boards, filter to only users from requesting user's organization
+            demo_org_names = ['Dev Team', 'Marketing Team']
+            if board.organization.name in demo_org_names and requesting_user:
+                try:
+                    user_org = requesting_user.profile.organization
+                    potential_assignees = potential_assignees.filter(profile__organization=user_org)
+                except Exception:
+                    potential_assignees = potential_assignees.filter(id=requesting_user.id)
+            
+            potential_assignees = list(potential_assignees)
         
         if not potential_assignees:
             return {'error': 'No potential assignees available'}
@@ -263,7 +275,7 @@ class ResourceLevelingService:
         
         return f"Assign to {recommended['display_name']}: " + ", ".join(reasons)
     
-    def create_suggestion(self, task, force_analysis=False):
+    def create_suggestion(self, task, force_analysis=False, requesting_user=None):
         """
         Create and store a ResourceLevelingSuggestion if beneficial
         
@@ -274,7 +286,7 @@ class ResourceLevelingService:
         Returns:
             ResourceLevelingSuggestion object or None
         """
-        analysis = self.analyze_task_assignment(task)
+        analysis = self.analyze_task_assignment(task, requesting_user=requesting_user)
         
         if 'error' in analysis:
             logger.warning(f"Cannot analyze task {task.id}: {analysis['error']}")
@@ -344,7 +356,7 @@ class ResourceLevelingService:
         else:
             return 'improves_timeline'
     
-    def get_board_optimization_suggestions(self, board, limit=10):
+    def get_board_optimization_suggestions(self, board, limit=10, requesting_user=None):
         """
         Analyze all tasks on a board and return top optimization opportunities
         Always regenerates suggestions with current workload data to ensure relevance
@@ -352,6 +364,7 @@ class ResourceLevelingService:
         Args:
             board: Board object
             limit: Maximum number of suggestions to return
+            requesting_user: User requesting suggestions (for demo board filtering)
         
         Returns:
             List of ResourceLevelingSuggestion objects
@@ -373,11 +386,26 @@ class ResourceLevelingService:
             column__name__icontains='done'
         ).select_related('assigned_to', 'column')
         
+        # For demo boards, filter tasks to only those from requesting user's organization
+        demo_org_names = ['Dev Team', 'Marketing Team']
+        if board.organization.name in demo_org_names and requesting_user:
+            try:
+                user_org = requesting_user.profile.organization
+                # Only show tasks assigned to users from the same real organization
+                tasks = tasks.filter(
+                    Q(assigned_to__isnull=True) |  # Unassigned tasks
+                    Q(assigned_to__profile__organization=user_org)  # Or assigned to org members
+                )
+            except Exception:
+                # If error, only show unassigned tasks
+                tasks = tasks.filter(assigned_to__isnull=True)
+        
         suggestions = []
         
         for task in tasks:
             # Always create fresh suggestion with current workload data
-            suggestion = self.create_suggestion(task)
+            # For demo boards, this will only suggest users from requesting user's org
+            suggestion = self.create_suggestion(task, requesting_user=requesting_user)
             if suggestion:
                 suggestions.append(suggestion)
         

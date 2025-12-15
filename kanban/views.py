@@ -1073,12 +1073,31 @@ def add_board_member(request, board_id):
                 user = User.objects.get(id=user_id)
                 # Check if user is in the same organization
                 if user.profile.organization == request.user.profile.organization:
-                    # Add user to board members if not already a member
-                    if user not in board.members.all():
-                        board.members.add(user)
-                        messages.success(request, f'{user.username} added to the board successfully!')
+                    # Check if this is a demo board
+                    demo_org_names = ['Dev Team', 'Marketing Team']
+                    is_demo_board = board.organization.name in demo_org_names
+                    
+                    if is_demo_board:
+                        # For demo boards: add user to ALL boards in this demo organization
+                        # This maintains organization-level access consistency
+                        demo_boards = Board.objects.filter(organization=board.organization)
+                        added_count = 0
+                        for demo_board in demo_boards:
+                            if user not in demo_board.members.all():
+                                demo_board.members.add(user)
+                                added_count += 1
+                        
+                        if added_count > 0:
+                            messages.success(request, f'{user.username} added to {added_count} demo board(s) successfully!')
+                        else:
+                            messages.info(request, f'{user.username} is already a member of all demo boards.')
                     else:
-                        messages.info(request, f'{user.username} is already a member of this board.')
+                        # For regular boards: add user to this board only
+                        if user not in board.members.all():
+                            board.members.add(user)
+                            messages.success(request, f'{user.username} added to the board successfully!')
+                        else:
+                            messages.info(request, f'{user.username} is already a member of this board.')
                 else:
                     messages.error(request, 'You can only add members from your organization.')
             except User.DoesNotExist:
