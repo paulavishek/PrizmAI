@@ -88,9 +88,9 @@ def demo_dashboard(request):
         }
         return render(request, 'kanban/demo_dashboard.html', context)
     
-    # AUTO-ADD: Add current user as member to all demo boards if not already
-    # This ensures they appear in resource lists and have proper access
-    _ensure_user_in_demo_boards(request.user, demo_boards)
+    # Filter demo boards to only those the user is a member of
+    # This respects invitation-based access control even for demo boards
+    demo_boards = demo_boards.filter(members=request.user)
     
     # Calculate analytics for demo boards
     task_count = Task.objects.filter(column__board__in=demo_boards).count()
@@ -205,15 +205,13 @@ def demo_board_detail(request, board_id):
     demo_org_names = ['Dev Team', 'Marketing Team']
     demo_orgs = Organization.objects.filter(name__in=demo_org_names)
     
-    # Get the board - must be a demo board
+    # Get the board - must be a demo board AND user must be a member
     board = get_object_or_404(
         Board,
         id=board_id,
-        organization__in=demo_orgs
+        organization__in=demo_orgs,
+        members=request.user
     )
-    
-    # AUTO-ADD: Add current user as member to this demo board if not already
-    _ensure_user_in_demo_boards(request.user, [board])
     
     # Get columns and tasks
     columns = Column.objects.filter(board=board).order_by('position')

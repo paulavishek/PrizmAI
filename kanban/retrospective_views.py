@@ -236,12 +236,12 @@ def retrospective_dashboard(request, board_id):
     """Dashboard showing improvement trends over time"""
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if this is a demo board (bypass RBAC)
+    # Check if this is a demo board (for display purposes only)
     demo_org_names = ['Dev Team', 'Marketing Team']
     is_demo_board = board.organization.name in demo_org_names
     
-    # Check permissions
-    if not is_demo_board and not (request.user == board.created_by or request.user in board.members.all()):
+    # Check permissions - all boards require membership
+    if not (request.user == board.created_by or request.user in board.members.all()):
         return HttpResponseForbidden("You don't have access to this board")
     
     # Get recent retrospectives

@@ -751,12 +751,12 @@ def delete_label(request, label_id):
 def board_analytics(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if this is a demo board (bypass RBAC)
+    # Check if this is a demo board (for display purposes only)
     demo_org_names = ['Dev Team', 'Marketing Team']
     is_demo_board = board.organization.name in demo_org_names
     
-    # Check if user has access to this board
-    if not is_demo_board and not (board.created_by == request.user or request.user in board.members.all()):
+    # Check if user has access to this board - all boards require membership
+    if not (board.created_by == request.user or request.user in board.members.all()):
         return HttpResponseForbidden("You don't have access to this board.")
     
     # Get columns for this board
@@ -2061,12 +2061,12 @@ def skill_gap_dashboard(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if this is a demo board (bypass RBAC)
+    # Check if this is a demo board (for display purposes only)
     demo_org_names = ['Dev Team', 'Marketing Team']
     is_demo_board = board.organization.name in demo_org_names
     
-    # Check if user has access to this board
-    if not is_demo_board and not (board.created_by == request.user or request.user in board.members.all()):
+    # Check if user has access to this board - all boards require membership
+    if not (board.created_by == request.user or request.user in board.members.all()):
         return HttpResponseForbidden("You don't have access to this board.")
     
     # Get skill gaps and development plans
@@ -2240,6 +2240,8 @@ def load_demo_data(request):
                 return redirect('dashboard')
             
             # Add user as member to all demo boards with proper roles
+            # NOTE: This is intentionally a one-time setup action via "Load Demo Data" button
+            # After this, users must use normal invitation process to add others to boards
             from kanban.permission_models import BoardMembership, Role
             from messaging.models import ChatRoom
             

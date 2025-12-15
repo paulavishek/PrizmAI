@@ -28,12 +28,12 @@ def burndown_dashboard(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if this is a demo board (bypass RBAC)
+    # Check if this is a demo board (for display purposes only)
     demo_org_names = ['Dev Team', 'Marketing Team']
     is_demo_board = board.organization.name in demo_org_names
     
-    # Check access
-    if not is_demo_board and not (board.created_by == request.user or request.user in board.members.all()):
+    # Check access - all boards require membership
+    if not (board.created_by == request.user or request.user in board.members.all()):
         messages.error(request, "You don't have access to this board.")
         return redirect('dashboard')
     

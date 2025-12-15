@@ -692,15 +692,9 @@ def budget_api_metrics(request, board_id):
 
 def _can_access_board(user, board):
     """
-    Check if user can access the board
+    Check if user can access the board - requires board membership
     """
-    # Demo boards bypass RBAC
-    demo_org_names = ['Dev Team', 'Marketing Team']
-    if board.organization.name in demo_org_names:
-        return True
-    
     return (
         board.created_by == user or
-        user in board.members.all() or
-        board.organization == user.profile.organization
+        user in board.members.all()
     )

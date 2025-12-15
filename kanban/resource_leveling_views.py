@@ -23,12 +23,8 @@ logger = logging.getLogger(__name__)
 
 
 def _can_access_board(user, board):
-    """Check if user can access board (includes demo board bypass)"""
-    # Demo boards bypass RBAC
-    demo_org_names = ['Dev Team', 'Marketing Team']
-    if board.organization.name in demo_org_names:
-        return True
-    return user in board.members.all()
+    """Check if user can access board - requires board membership"""
+    return user in board.members.all() or board.created_by == user
 
 
 @login_required
