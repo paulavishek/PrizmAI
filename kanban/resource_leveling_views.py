@@ -23,8 +23,22 @@ logger = logging.getLogger(__name__)
 
 
 def _can_access_board(user, board):
-    """Check if user can access board - requires board membership"""
-    return user in board.members.all() or board.created_by == user
+    """Check if user can access board - requires board membership or demo org access"""
+    # Direct membership or creator
+    if user in board.members.all() or board.created_by == user:
+        return True
+    
+    # Demo boards: organization-level access
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    if board.organization.name in demo_org_names:
+        # Check if user has access to any board in this demo organization
+        from kanban.models import Board as BoardModel
+        return BoardModel.objects.filter(
+            organization=board.organization,
+            members=user
+        ).exists()
+    
+    return False
 
 
 @login_required

@@ -692,9 +692,20 @@ def budget_api_metrics(request, board_id):
 
 def _can_access_board(user, board):
     """
-    Check if user can access the board - requires board membership
+    Check if user can access the board - requires board membership or demo org access
     """
-    return (
-        board.created_by == user or
-        user in board.members.all()
-    )
+    # Direct membership or creator
+    if board.created_by == user or user in board.members.all():
+        return True
+    
+    # Demo boards: organization-level access
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    if board.organization.name in demo_org_names:
+        # Check if user has access to any board in this demo organization
+        from kanban.models import Board as BoardModel
+        return BoardModel.objects.filter(
+            organization=board.organization,
+            members=user
+        ).exists()
+    
+    return False

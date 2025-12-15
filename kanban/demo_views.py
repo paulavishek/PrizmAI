@@ -88,9 +88,15 @@ def demo_dashboard(request):
         }
         return render(request, 'kanban/demo_dashboard.html', context)
     
-    # Filter demo boards to only those the user is a member of
-    # This respects invitation-based access control even for demo boards
-    demo_boards = demo_boards.filter(members=request.user)
+    # Organization-level access: if user is a member of ANY board in a demo organization,
+    # they can see ALL boards in that organization
+    user_demo_orgs = Organization.objects.filter(
+        name__in=demo_org_names,
+        boards__members=request.user
+    ).distinct()
+    
+    # Filter to show boards only from organizations user has access to
+    demo_boards = demo_boards.filter(organization__in=user_demo_orgs)
     
     # Calculate analytics for demo boards
     task_count = Task.objects.filter(column__board__in=demo_boards).count()
@@ -205,13 +211,22 @@ def demo_board_detail(request, board_id):
     demo_org_names = ['Dev Team', 'Marketing Team']
     demo_orgs = Organization.objects.filter(name__in=demo_org_names)
     
-    # Get the board - must be a demo board AND user must be a member
+    # Get the board - must be a demo board
     board = get_object_or_404(
         Board,
         id=board_id,
-        organization__in=demo_orgs,
-        members=request.user
+        organization__in=demo_orgs
     )
+    
+    # Organization-level access check: user must have access to at least one board in this org
+    user_has_org_access = Board.objects.filter(
+        organization=board.organization,
+        members=request.user
+    ).exists()
+    
+    if not user_has_org_access:
+        messages.error(request, "You don't have access to this demo organization. Click 'Load Demo Data' to get started.")
+        return redirect('demo_dashboard')
     
     # Get columns and tasks
     columns = Column.objects.filter(board=board).order_by('position')

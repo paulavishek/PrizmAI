@@ -306,8 +306,11 @@ def board_detail(request, board_id):
     demo_org_names = ['Dev Team', 'Marketing Team']
     is_demo_board = board.organization.name in demo_org_names
     
-    # Check permission using RBAC
+    # Check permission using RBAC (includes organization-level access for demo boards)
     if not user_has_board_permission(request.user, board, 'board.view'):
+        if is_demo_board:
+            messages.error(request, "You don't have access to this demo board. Click 'Load Demo Data' to get started.")
+            return redirect('demo_dashboard')
         return HttpResponseForbidden("You don't have permission to view this board.")
     
     # Log board view
@@ -2256,14 +2259,15 @@ def load_demo_data(request):
                 return redirect('dashboard')
             
             # Add user as member to all demo boards with proper roles
-            # NOTE: This is intentionally a one-time setup action via "Load Demo Data" button
-            # After this, users must use normal invitation process to add others to boards
+            # NOTE: This grants organization-level access - once added to one board in a demo org,
+            # user can access all boards in that organization
             from kanban.permission_models import BoardMembership, Role
             from messaging.models import ChatRoom
             
             added_count = 0
             for demo_board in demo_boards:
                 # Add to members list if not already
+                # This gives them the "key" to access all boards in this demo organization
                 if request.user not in demo_board.members.all():
                     demo_board.members.add(request.user)
                     added_count += 1
