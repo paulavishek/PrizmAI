@@ -6,6 +6,7 @@ from . import burndown_views
 from . import retrospective_views
 from . import milestone_views
 from . import conflict_views
+from . import demo_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -18,8 +19,9 @@ urlpatterns = [
     path('api/wizard/create-board/', views.wizard_create_board, name='wizard_create_board'),
     path('api/wizard/create-task/', views.wizard_create_task, name='wizard_create_task'),
     
-    # Demo Data Loading
-    path('load-demo-data/', views.load_demo_data, name='load_demo_data'),
+    # Demo Mode (New System)
+    path('demo/', demo_views.demo_dashboard, name='demo_dashboard'),
+    path('demo/board/<int:board_id>/', demo_views.demo_board_detail, name='demo_board_detail'),
     
     path('boards/', views.board_list, name='board_list'),
     path('boards/create/', views.create_board, name='create_board'),    path('boards/<int:board_id>/', views.board_detail, name='board_detail'),    path('boards/<int:board_id>/analytics/', views.board_analytics, name='board_analytics'),

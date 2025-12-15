@@ -44,6 +44,11 @@
                             <a class="nav-link" href="{% url 'board_list' %}">Boards</a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link {% if request.resolver_match.url_name == 'demo_dashboard' %}active{% endif %}" href="{% url 'demo_dashboard' %}">
+                                <i class="fas fa-graduation-cap me-1"></i> Demo
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link" href="{% url 'wiki:knowledge_hub_home' %}">
                                 <i class="fas fa-brain me-1"></i> Wiki
                             </a>
@@ -86,12 +91,6 @@
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{% url 'ai_usage:dashboard' %}">
                                     <i class="fas fa-robot me-1"></i> AI Usage
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'getting_started_wizard' %}">
-                                    <i class="fas fa-magic me-1"></i> Getting Started Wizard
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'load_demo_data' %}">
-                                    <i class="fas fa-key me-1"></i> Access Demo Boards
                                 </a></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{% url 'logout' %}">Logout</a></li>

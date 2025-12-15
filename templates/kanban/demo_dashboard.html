@@ -1,0 +1,371 @@
+{% extends 'base.html' %}
+
+{% block title %}Demo Dashboard - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Demo mode banner */
+.demo-banner {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 10px;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.demo-banner h2 {
+    margin: 0 0 10px 0;
+    font-size: 1.8rem;
+    font-weight: 600;
+}
+
+.demo-banner p {
+    margin: 0;
+    font-size: 1.1rem;
+    opacity: 0.95;
+}
+
+/* Demo board cards */
+.demo-board-card {
+    border: 2px solid #667eea;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    height: 100%;
+}
+
+.demo-board-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(102, 126, 234, 0.3);
+    border-color: #764ba2;
+}
+
+.demo-board-card .card-body {
+    padding: 1.5rem;
+}
+
+.demo-board-title {
+    color: #667eea;
+    font-weight: 600;
+    font-size: 1.25rem;
+    margin-bottom: 15px;
+}
+
+.demo-stat {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.demo-stat:last-child {
+    border-bottom: none;
+}
+
+.demo-stat-label {
+    color: #666;
+    font-size: 0.9rem;
+}
+
+.demo-stat-value {
+    color: #333;
+    font-weight: 600;
+}
+
+/* Stats cards */
+.stats-card {
+    border-radius: 10px;
+    border: none;
+    transition: transform 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-3px);
+}
+
+.stats-card.primary {
+    border-left: 4px solid #4e73df;
+}
+
+.stats-card.success {
+    border-left: 4px solid #1cc88a;
+}
+
+.stats-card.warning {
+    border-left: 4px solid #f6c23e;
+}
+
+.stats-card.danger {
+    border-left: 4px solid #e74a3b;
+}
+
+.stats-icon {
+    font-size: 2rem;
+}
+
+/* Feature highlights */
+.feature-badge {
+    display: inline-block;
+    padding: 6px 12px;
+    margin: 5px;
+    background: #f8f9fc;
+    border: 1px solid #667eea;
+    border-radius: 20px;
+    color: #667eea;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+/* Task preview */
+.demo-task-item {
+    padding: 12px;
+    border-left: 3px solid #667eea;
+    background: #f8f9fc;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    transition: all 0.2s;
+}
+
+.demo-task-item:hover {
+    background: #e8e9fc;
+    transform: translateX(5px);
+}
+
+/* No demo message */
+.no-demo-container {
+    text-align: center;
+    padding: 60px 20px;
+}
+
+.no-demo-icon {
+    font-size: 4rem;
+    color: #ddd;
+    margin-bottom: 20px;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+{% if not demo_available %}
+    <div class="no-demo-container">
+        <i class="fas fa-graduation-cap no-demo-icon"></i>
+        <h2>Demo Environment Not Available</h2>
+        <p class="text-muted">{{ message }}</p>
+        <a href="{% url 'dashboard' %}" class="btn btn-primary mt-3">
+            <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+        </a>
+    </div>
+{% else %}
+    <!-- Demo Mode Banner -->
+    <div class="demo-banner">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2><i class="fas fa-graduation-cap me-2"></i>Welcome to Demo Mode</h2>
+                <p>Explore all PrizmAI features with pre-populated demo data. This is a shared tutorial environment visible to all users.</p>
+            </div>
+            <a href="{% url 'dashboard' %}" class="btn btn-light btn-lg">
+                <i class="fas fa-arrow-left me-2"></i>Exit to My Dashboard
+            </a>
+        </div>
+    </div>
+
+    <!-- Analytics Cards -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Tasks</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ task_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clipboard-list stats-icon text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Completed Tasks</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completed_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-check-circle stats-icon text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Completion Rate</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completion_rate }}%</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-line stats-icon text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card stats-card danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Overdue Tasks</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ overdue_count }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-exclamation-triangle stats-icon text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Highlights -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-star me-2"></i>Explore These Features in Demo Boards
+            </h6>
+        </div>
+        <div class="card-body">
+            <div class="text-center">
+                <span class="feature-badge"><i class="fas fa-comments me-1"></i>{{ message_count }} Messages</span>
+                <span class="feature-badge"><i class="fas fa-exclamation-triangle me-1"></i>{{ conflict_count }} Active Conflicts</span>
+                <span class="feature-badge"><i class="fas fa-brain me-1"></i>{{ wiki_count }} Wiki Pages</span>
+                <span class="feature-badge"><i class="fas fa-users me-1"></i>Stakeholder Management</span>
+                <span class="feature-badge"><i class="fas fa-chart-gantt me-1"></i>Gantt Charts</span>
+                <span class="feature-badge"><i class="fas fa-dollar-sign me-1"></i>Budget Tracking</span>
+                <span class="feature-badge"><i class="fas fa-robot me-1"></i>AI Predictions</span>
+                <span class="feature-badge"><i class="fas fa-balance-scale me-1"></i>Resource Leveling</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Demo Boards -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h3 class="mb-3"><i class="fas fa-layer-group me-2"></i>Demo Boards</h3>
+        </div>
+        {% for board_data in demo_boards %}
+        <div class="col-md-4 mb-4">
+            <div class="card demo-board-card" onclick="window.location.href='{% url 'demo_board_detail' board_data.board.id %}'">
+                <div class="card-body">
+                    <h5 class="demo-board-title">
+                        <i class="fas fa-folder-open me-2"></i>{{ board_data.board.name }}
+                    </h5>
+                    <div class="demo-stat">
+                        <span class="demo-stat-label">Total Tasks</span>
+                        <span class="demo-stat-value">{{ board_data.task_count }}</span>
+                    </div>
+                    <div class="demo-stat">
+                        <span class="demo-stat-label">Completed</span>
+                        <span class="demo-stat-value">{{ board_data.completed_count }}</span>
+                    </div>
+                    <div class="demo-stat">
+                        <span class="demo-stat-label">Completion Rate</span>
+                        <span class="demo-stat-value">{{ board_data.completion_rate }}%</span>
+                    </div>
+                    <div class="demo-stat">
+                        <span class="demo-stat-label">Organization</span>
+                        <span class="demo-stat-value">{{ board_data.board.organization.name }}</span>
+                    </div>
+                    <div class="mt-3 text-center">
+                        <button class="btn btn-primary btn-sm">
+                            <i class="fas fa-eye me-1"></i>View Board
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Recent Demo Tasks Preview -->
+    {% if demo_tasks %}
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-tasks me-2"></i>Sample Tasks (Sorted by Priority & Due Date)
+            </h6>
+        </div>
+        <div class="card-body">
+            {% for task in demo_tasks %}
+            <div class="demo-task-item">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <h6 class="mb-1">
+                            <a href="{% url 'demo_board_detail' task.column.board.id %}" class="text-decoration-none">
+                                {{ task.title }}
+                            </a>
+                        </h6>
+                        <small class="text-muted">
+                            <i class="fas fa-folder me-1"></i>{{ task.column.board.name }}
+                            <i class="fas fa-columns ms-2 me-1"></i>{{ task.column.name }}
+                            {% if task.assigned_to %}
+                            <i class="fas fa-user ms-2 me-1"></i>{{ task.assigned_to.username }}
+                            {% endif %}
+                        </small>
+                    </div>
+                    <div class="text-end ms-3">
+                        {% if task.priority == 'urgent' %}
+                            <span class="badge bg-danger">Urgent</span>
+                        {% elif task.priority == 'high' %}
+                            <span class="badge bg-warning text-dark">High</span>
+                        {% elif task.priority == 'medium' %}
+                            <span class="badge bg-info">Medium</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Low</span>
+                        {% endif %}
+                        {% if task.due_date %}
+                        <div class="small text-muted mt-1">
+                            <i class="fas fa-calendar me-1"></i>{{ task.due_date|date:"M d, Y" }}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Help Section -->
+    <div class="card shadow border-left-info mb-4">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <h5 class="text-info mb-2"><i class="fas fa-info-circle me-2"></i>About Demo Mode</h5>
+                    <p class="mb-0">
+                        This is a <strong>shared tutorial environment</strong> where all users see the same demo data. 
+                        Explore all features including AI predictions, resource leveling, stakeholder management, conflicts, 
+                        messaging, and wiki pages. When you're ready to work on your own projects, 
+                        click "Exit to My Dashboard" to return to your personal workspace where RBAC permissions apply.
+                    </p>
+                </div>
+                <div class="col-md-4 text-center">
+                    <a href="{% url 'dashboard' %}" class="btn btn-info btn-lg">
+                        <i class="fas fa-arrow-right me-2"></i>Go to My Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}
