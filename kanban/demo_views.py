@@ -13,11 +13,52 @@ from kanban.conflict_models import ConflictDetection
 from wiki.models import WikiPage
 
 
+def _ensure_user_in_demo_boards(user, demo_boards):
+    """
+    Helper function to automatically add user as member to demo boards
+    This ensures they appear in resource lists and have proper access
+    
+    Args:
+        user: User object
+        demo_boards: QuerySet or list of Board objects
+    """
+    from kanban.permission_models import BoardMembership, Role
+    
+    for board in demo_boards:
+        # Skip if user is already a member
+        if user in board.members.all():
+            continue
+        
+        # Add user to board members
+        board.members.add(user)
+        
+        # Create BoardMembership with Editor role for proper RBAC
+        editor_role = Role.objects.filter(
+            organization=board.organization,
+            name='Editor'
+        ).first()
+        
+        if editor_role:
+            BoardMembership.objects.get_or_create(
+                board=board,
+                user=user,
+                defaults={'role': editor_role}
+            )
+        
+        # Add user to all chat rooms for this board
+        chat_rooms = ChatRoom.objects.filter(board=board)
+        for room in chat_rooms:
+            if user not in room.members.all():
+                room.members.add(user)
+
+
 @login_required
 def demo_dashboard(request):
     """
     Demo dashboard - shows demo boards to ALL authenticated users
     This bypasses RBAC and provides a consistent tutorial environment
+    
+    IMPORTANT: Automatically adds users as members when they access demo mode
     """
     # Get the demo organizations
     demo_org_names = ['Dev Team', 'Marketing Team']
@@ -46,6 +87,10 @@ def demo_dashboard(request):
             'message': 'Demo boards not found. Please run: python manage.py populate_test_data'
         }
         return render(request, 'kanban/demo_dashboard.html', context)
+    
+    # AUTO-ADD: Add current user as member to all demo boards if not already
+    # This ensures they appear in resource lists and have proper access
+    _ensure_user_in_demo_boards(request.user, demo_boards)
     
     # Calculate analytics for demo boards
     task_count = Task.objects.filter(column__board__in=demo_boards).count()
@@ -153,6 +198,8 @@ def demo_board_detail(request, board_id):
     """
     Demo board detail - shows a demo board to ALL authenticated users
     This bypasses RBAC checks completely
+    
+    IMPORTANT: Automatically adds users as members when they access demo boards
     """
     # Get the demo organizations
     demo_org_names = ['Dev Team', 'Marketing Team']
@@ -164,6 +211,9 @@ def demo_board_detail(request, board_id):
         id=board_id,
         organization__in=demo_orgs
     )
+    
+    # AUTO-ADD: Add current user as member to this demo board if not already
+    _ensure_user_in_demo_boards(request.user, [board])
     
     # Get columns and tasks
     columns = Column.objects.filter(board=board).order_by('position')
