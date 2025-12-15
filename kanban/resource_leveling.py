@@ -127,6 +127,9 @@ class ResourceLevelingService:
         
         Returns dict with scores and metrics
         """
+        # Check if user has task history on this board
+        has_history = profile.total_tasks_completed > 0
+        
         # 1. Skill match score (0-100)
         skill_score = profile.calculate_skill_match(task_text)
         
@@ -134,23 +137,42 @@ class ResourceLevelingService:
         availability_score = profile.get_availability_score()
         
         # 3. Velocity score (normalized to 0-100)
-        # Assume average velocity is 1.0, scale accordingly
-        velocity_normalized = min(profile.velocity_score * 50, 100)  # 2.0 velocity = 100 points
+        # Only use velocity if they have history, otherwise use neutral baseline
+        if has_history:
+            velocity_normalized = min(profile.velocity_score * 50, 100)  # 2.0 velocity = 100 points
+        else:
+            velocity_normalized = 50.0  # Neutral - no data available
         
         # 4. Reliability score (on-time completion rate)
-        reliability_score = profile.on_time_completion_rate
+        # Only use if they have history, otherwise neutral
+        if has_history:
+            reliability_score = profile.on_time_completion_rate
+        else:
+            reliability_score = 50.0  # Neutral - no data available
         
         # 5. Quality score (normalized to 0-100)
         quality_normalized = (profile.quality_score / 5.0) * 100
         
-        # Calculate weighted overall score
-        overall_score = (
-            skill_score * 0.30 +          # 30% weight on skills
-            availability_score * 0.25 +    # 25% weight on availability
-            velocity_normalized * 0.20 +   # 20% weight on velocity
-            reliability_score * 0.15 +     # 15% weight on reliability
-            quality_normalized * 0.10      # 10% weight on quality
-        )
+        # For users without history, increase weight on availability and skills
+        # For users with history, use historical performance metrics
+        if has_history:
+            # Standard weighted score with full metrics
+            overall_score = (
+                skill_score * 0.30 +          # 30% weight on skills
+                availability_score * 0.25 +    # 25% weight on availability
+                velocity_normalized * 0.20 +   # 20% weight on velocity
+                reliability_score * 0.15 +     # 15% weight on reliability
+                quality_normalized * 0.10      # 10% weight on quality
+            )
+        else:
+            # For users without history: prioritize availability and skills more
+            overall_score = (
+                skill_score * 0.35 +          # 35% weight on skills (can assess from profile)
+                availability_score * 0.45 +    # 45% weight on availability (objective fact)
+                velocity_normalized * 0.10 +   # 10% weight on velocity (no data, less important)
+                reliability_score * 0.05 +     # 5% weight on reliability (no data, less important)
+                quality_normalized * 0.05      # 5% weight on quality (minimal weight without data)
+            )
         
         # Predict completion time
         estimated_hours = profile.predict_completion_time(task)
@@ -176,54 +198,68 @@ class ResourceLevelingService:
         """Generate human-readable reasoning for reassignment"""
         reasons = []
         
-        # Time savings
-        time_diff = current['estimated_hours'] - recommended['estimated_hours']
-        if time_diff > 0:
-            time_saved_pct = (time_diff / current['estimated_hours']) * 100
-            reasons.append(f"{time_saved_pct:.0f}% faster completion ({time_diff:.1f} hours saved)")
-        
-        # Skill match
-        if recommended['skill_match'] > current['skill_match'] + 10:
-            reasons.append(f"Better skill match ({recommended['skill_match']:.0f}% vs {current['skill_match']:.0f}%)")
-        
-        # Workload balancing - show task counts
-        if recommended['utilization'] < current['utilization'] - 20:
+        # Workload comparison - most important for balancing
+        if recommended['current_workload'] == 0:
+            reasons.append(f"{recommended['display_name']} is available (0 tasks, 100% capacity free)")
+        elif recommended['utilization'] < current['utilization'] - 20:
             reasons.append(
                 f"Better workload balance: {recommended['display_name']} has {recommended['current_workload']} tasks "
                 f"({recommended['utilization']:.0f}%) vs {current['username']} with {current['current_workload']} tasks "
                 f"({current['utilization']:.0f}%)"
             )
-        elif recommended['utilization'] < current['utilization'] - 10:
+        elif recommended['current_workload'] < current['current_workload'] - 1:
             reasons.append(
                 f"{recommended['display_name']} less loaded: {recommended['current_workload']} tasks vs {current['current_workload']} tasks"
             )
         
+        # Skill match comparison
+        if recommended['skill_match'] > 60:
+            if current['skill_match'] > 0 and recommended['skill_match'] > current['skill_match'] + 10:
+                reasons.append(f"Better skill match ({recommended['skill_match']:.0f}% vs {current['skill_match']:.0f}%)")
+            elif recommended['skill_match'] > 70:
+                reasons.append(f"Good skill match ({recommended['skill_match']:.0f}%)")
+        
+        # Time savings (if available)
+        time_diff = current.get('estimated_hours', 0) - recommended.get('estimated_hours', 0)
+        if time_diff > 0.5:
+            time_saved_pct = (time_diff / current['estimated_hours']) * 100
+            reasons.append(f"{time_saved_pct:.0f}% faster estimated completion")
+        
         if not reasons:
-            reasons.append(f"Overall {improvement:.0f} point improvement in fit score")
+            reasons.append(f"Better overall fit based on availability and skills")
         
         return f"Move task to {recommended['display_name']}: " + ", ".join(reasons)
     
     def _generate_initial_assignment_reasoning(self, recommended):
-        """Generate reasoning for initial assignment"""
+        """Generate reasoning for initial assignment - provide objective facts"""
         reasons = []
         
-        if recommended['skill_match'] > 70:
-            reasons.append(f"Strong skill match ({recommended['skill_match']:.0f}%)")
-        
-        # Show actual task count along with utilization
-        task_info = f"{recommended['current_workload']} tasks, {recommended['utilization']:.0f}% utilized"
-        if recommended['utilization'] < 50:
-            reasons.append(f"Low workload ({task_info})")
-        elif recommended['utilization'] < 75:
-            reasons.append(f"Moderate workload ({task_info})")
+        # 1. Availability (most objective metric)
+        if recommended['current_workload'] == 0:
+            reasons.append(f"Available (0 tasks, 100% capacity free)")
         else:
-            reasons.append(f"High workload but best available ({task_info})")
+            task_info = f"{recommended['current_workload']} tasks, {recommended['utilization']:.0f}% capacity used"
+            if recommended['utilization'] < 30:
+                reasons.append(f"Low workload ({task_info})")
+            elif recommended['utilization'] < 60:
+                reasons.append(f"Moderate workload ({task_info})")
+            else:
+                reasons.append(f"Current workload: {task_info}")
         
-        if recommended['velocity'] > 60:
+        # 2. Skill match (objective assessment)
+        if recommended['skill_match'] >= 70:
+            reasons.append(f"Strong skill match ({recommended['skill_match']:.0f}%)")
+        elif recommended['skill_match'] >= 50:
+            reasons.append(f"Moderate skill match ({recommended['skill_match']:.0f}%)")
+        elif recommended['skill_match'] > 0:
+            reasons.append(f"Skill match: {recommended['skill_match']:.0f}%")
+        
+        # 3. Performance (only if data available - velocity > 50 means they have history)
+        if recommended['velocity'] > 55:
             reasons.append(f"High velocity ({recommended['velocity']:.0f} score)")
         
         if not reasons:
-            reasons.append("Best overall fit based on skills and capacity")
+            reasons.append("Best available based on current capacity")
         
         return f"Assign to {recommended['display_name']}: " + ", ".join(reasons)
     

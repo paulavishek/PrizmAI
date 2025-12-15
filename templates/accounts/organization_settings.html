@@ -33,8 +33,17 @@
                         <div class="card-body">
                             <p><strong>Created By:</strong> {{ organization.created_by.username }}</p>
                             <p><strong>Created On:</strong> {{ organization.created_at|date:"M d, Y" }}</p>
-                            <p><strong>Total Members:</strong> {{ organization.userprofile_set.count }}</p>
-                            <p><strong>Admins:</strong> {{ organization.userprofile_set.filter.is_admin.count }}</p>
+                            <p><strong>Total Members:</strong> {{ organization.members.count }}</p>
+                            <p><strong>Admins:</strong> {% with organization.members.all as members %}{{ members|selectattr:"is_admin"|list|length }}{% endwith %}</p>
+                            
+                            <div class="alert alert-info mt-3 mb-0">
+                                <small>
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    <strong>Note:</strong> Organization membership is separate from individual board membership. 
+                                    Not all organization members are automatically added to every board. 
+                                    Board creators/admins control who can access specific boards.
+                                </small>
+                            </div>
                         </div>
                     </div>
                     
