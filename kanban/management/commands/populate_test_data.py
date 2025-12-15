@@ -2565,6 +2565,90 @@ Carol: Sounds good. Great work this week!
             )
         
         self.stdout.write(self.style.SUCCESS('✅ Historical task data and predictions created!'))
+        
+        # Create and update performance profiles for all demo board members
+        self.create_performance_profiles()
+
+    def create_performance_profiles(self):
+        """Create and update UserPerformanceProfile for all demo board members"""
+        self.stdout.write(self.style.NOTICE('\nCreating Resource Optimization performance profiles...'))
+        
+        from kanban.resource_leveling_models import UserPerformanceProfile
+        
+        # Get demo boards
+        demo_org_names = ['Dev Team', 'Marketing Team']
+        demo_board_names = ['Software Project', 'Bug Tracking', 'Marketing Campaign']
+        
+        demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+        demo_boards = Board.objects.filter(
+            organization__in=demo_orgs,
+            name__in=demo_board_names
+        )
+        
+        if not demo_boards.exists():
+            self.stdout.write(self.style.WARNING('  ⚠️  No demo boards found. Skipping profile creation.'))
+            return
+        
+        total_profiles_created = 0
+        total_profiles_updated = 0
+        
+        # Process each demo board
+        for board in demo_boards:
+            self.stdout.write(f'  Processing board: {board.name}')
+            
+            # Get all board members
+            board_members = board.members.all()
+            
+            if not board_members.exists():
+                self.stdout.write(f'    ⚠️  No members found for {board.name}')
+                continue
+            
+            # Create/update profile for each member
+            for member in board_members:
+                try:
+                    profile, created = UserPerformanceProfile.objects.get_or_create(
+                        user=member,
+                        organization=board.organization,
+                        defaults={
+                            'weekly_capacity_hours': 40.0,
+                            'velocity_score': 1.0,
+                            'quality_score': 3.0
+                        }
+                    )
+                    
+                    # Update metrics from historical task data
+                    profile.update_metrics()
+                    profile.update_current_workload()
+                    
+                    if created:
+                        total_profiles_created += 1
+                        self.stdout.write(
+                            f'    ✓ Created profile for {member.username}: '
+                            f'{profile.total_tasks_completed} completed tasks, '
+                            f'velocity: {profile.velocity_score:.2f} tasks/week'
+                        )
+                    else:
+                        total_profiles_updated += 1
+                        self.stdout.write(
+                            f'    ✓ Updated profile for {member.username}: '
+                            f'{profile.total_tasks_completed} completed tasks, '
+                            f'velocity: {profile.velocity_score:.2f} tasks/week'
+                        )
+                        
+                except Exception as e:
+                    self.stdout.write(
+                        self.style.ERROR(f'    ✗ Error processing {member.username}: {str(e)}')
+                    )
+        
+        self.stdout.write(
+            self.style.SUCCESS(
+                f'\n✅ Performance profiles ready! '
+                f'Created: {total_profiles_created}, Updated: {total_profiles_updated}'
+            )
+        )
+        self.stdout.write(
+            self.style.SUCCESS('   AI Resource Optimization widget will now show team performance data!')
+        )
 
     def create_priority_decision_history(self):
         """Create comprehensive priority decision history for ML training (40-60 decisions per board)"""
