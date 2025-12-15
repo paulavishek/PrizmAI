@@ -88,12 +88,46 @@ def demo_dashboard(request):
         }
         return render(request, 'kanban/demo_dashboard.html', context)
     
-    # Organization-level access: if user is a member of ANY board in a demo organization,
-    # they can see ALL boards in that organization
+    # Auto-grant access: First time user visits demo, automatically add them to demo boards
+    # This provides seamless access to demo data without explicit "Load Demo Data" button
     user_demo_orgs = Organization.objects.filter(
         name__in=demo_org_names,
         boards__members=request.user
     ).distinct()
+    
+    if not user_demo_orgs.exists():
+        # User doesn't have access yet - grant it automatically
+        from kanban.permission_models import BoardMembership, Role
+        from messaging.models import ChatRoom
+        
+        for demo_board in demo_boards:
+            # Add user to board members
+            demo_board.members.add(request.user)
+            
+            # Create BoardMembership with Editor role
+            editor_role = Role.objects.filter(
+                organization=demo_board.organization,
+                name='Editor'
+            ).first()
+            
+            if editor_role:
+                BoardMembership.objects.get_or_create(
+                    board=demo_board,
+                    user=request.user,
+                    defaults={'role': editor_role}
+                )
+            
+            # Add user to all chat rooms for this board
+            chat_rooms = ChatRoom.objects.filter(board=demo_board)
+            for room in chat_rooms:
+                if request.user not in room.members.all():
+                    room.members.add(request.user)
+        
+        # Refresh the query to include newly added organizations
+        user_demo_orgs = Organization.objects.filter(
+            name__in=demo_org_names,
+            boards__members=request.user
+        ).distinct()
     
     # Filter to show boards only from organizations user has access to
     demo_boards = demo_boards.filter(organization__in=user_demo_orgs)
@@ -225,8 +259,31 @@ def demo_board_detail(request, board_id):
     ).exists()
     
     if not user_has_org_access:
-        messages.error(request, "You don't have access to this demo organization. Click 'Load Demo Data' to get started.")
-        return redirect('demo_dashboard')
+        # Auto-grant access when user clicks on a demo board
+        from kanban.permission_models import BoardMembership, Role
+        from messaging.models import ChatRoom
+        
+        # Add user to this board
+        board.members.add(request.user)
+        
+        # Create BoardMembership with Editor role
+        editor_role = Role.objects.filter(
+            organization=board.organization,
+            name='Editor'
+        ).first()
+        
+        if editor_role:
+            BoardMembership.objects.get_or_create(
+                board=board,
+                user=request.user,
+                defaults={'role': editor_role}
+            )
+        
+        # Add user to all chat rooms for this board
+        chat_rooms = ChatRoom.objects.filter(board=board)
+        for room in chat_rooms:
+            if request.user not in room.members.all():
+                room.members.add(request.user)
     
     # Get columns and tasks
     columns = Column.objects.filter(board=board).order_by('position')
