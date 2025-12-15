@@ -15,8 +15,8 @@ class UserPerformanceProfile(models.Model):
     Tracks historical performance metrics for each user
     Used for predicting task completion times and skill matching
     """
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='performance_profile')
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='performance_profiles')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='performance_profiles')
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='performance_profiles_org')
     
     # Performance metrics
     total_tasks_completed = models.IntegerField(default=0)

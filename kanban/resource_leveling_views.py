@@ -244,7 +244,7 @@ def get_board_suggestions(request, board_id):
         board = get_object_or_404(Board, id=board_id)
         
         # Check permissions
-        if request.user not in board.members.all():
+        if not _can_access_board(request.user, board):
             return JsonResponse({
                 'error': 'You do not have permission to access this board'
             }, status=403)
@@ -325,7 +325,7 @@ def get_team_workload_report(request, board_id):
         board = get_object_or_404(Board, id=board_id)
         
         # Check permissions
-        if request.user not in board.members.all():
+        if not _can_access_board(request.user, board):
             return JsonResponse({
                 'error': 'You do not have permission to access this board'
             }, status=403)
