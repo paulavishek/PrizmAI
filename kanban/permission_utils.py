@@ -45,6 +45,11 @@ def user_has_board_permission(user, board, permission):
     Returns:
         Boolean
     """
+    # Demo boards bypass RBAC - all authenticated users have full access
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    if hasattr(board, 'organization') and board.organization.name in demo_org_names:
+        return True
+    
     # Board creator always has full access
     if board.created_by == user:
         return True

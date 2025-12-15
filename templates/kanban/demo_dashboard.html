@@ -161,8 +161,8 @@
     <div class="demo-banner">
         <div class="d-flex justify-content-between align-items-center">
             <div>
-                <h2><i class="fas fa-graduation-cap me-2"></i>Welcome to Demo Mode</h2>
-                <p>Explore all PrizmAI features with pre-populated demo data. This is a shared tutorial environment visible to all users.</p>
+                <h2><i class="fas fa-hands-helping me-2"></i>Welcome to Interactive Demo Mode</h2>
+                <p><strong>Learn by doing!</strong> Create, edit, and experiment with all features. This is your playground - try everything!</p>
             </div>
             <a href="{% url 'dashboard' %}" class="btn btn-light btn-lg">
                 <i class="fas fa-arrow-left me-2"></i>Exit to My Dashboard
@@ -265,7 +265,7 @@
         </div>
         {% for board_data in demo_boards %}
         <div class="col-md-4 mb-4">
-            <div class="card demo-board-card" onclick="window.location.href='{% url 'demo_board_detail' board_data.board.id %}'">
+            <div class="card demo-board-card" onclick="window.location.href='{% url 'board_detail' board_data.board.id %}'">
                 <div class="card-body">
                     <h5 class="demo-board-title">
                         <i class="fas fa-folder-open me-2"></i>{{ board_data.board.name }}
@@ -288,7 +288,7 @@
                     </div>
                     <div class="mt-3 text-center">
                         <button class="btn btn-primary btn-sm">
-                            <i class="fas fa-eye me-1"></i>View Board
+                            <i class="fas fa-play me-1"></i>Open & Experiment
                         </button>
                     </div>
                 </div>
@@ -311,7 +311,7 @@
                 <div class="d-flex justify-content-between align-items-start">
                     <div class="flex-grow-1">
                         <h6 class="mb-1">
-                            <a href="{% url 'demo_board_detail' task.column.board.id %}" class="text-decoration-none">
+                            <a href="{% url 'task_detail' task.id %}" class="text-decoration-none">
                                 {{ task.title }}
                             </a>
                         </h6>
@@ -347,21 +347,22 @@
     {% endif %}
 
     <!-- Help Section -->
-    <div class="card shadow border-left-info mb-4">
+    <div class="card shadow border-left-success mb-4">
         <div class="card-body">
             <div class="row align-items-center">
                 <div class="col-md-8">
-                    <h5 class="text-info mb-2"><i class="fas fa-info-circle me-2"></i>About Demo Mode</h5>
+                    <h5 class="text-success mb-2"><i class="fas fa-hands-helping me-2"></i>Interactive Demo - Try It Out!</h5>
                     <p class="mb-0">
-                        This is a <strong>shared tutorial environment</strong> where all users see the same demo data. 
-                        Explore all features including AI predictions, resource leveling, stakeholder management, conflicts, 
-                        messaging, and wiki pages. When you're ready to work on your own projects, 
-                        click "Exit to My Dashboard" to return to your personal workspace where RBAC permissions apply.
+                        This is a <strong>hands-on playground</strong> where you can experiment freely! 
+                        <strong>Create tasks, edit them, add comments, send messages, resolve conflicts, and explore all features.</strong> 
+                        Don't worry about breaking anything - this is a shared demo environment for learning. 
+                        When you're ready to create your own projects, click "Go to My Dashboard" where your personal workspace 
+                        with RBAC permissions awaits.
                     </p>
                 </div>
                 <div class="col-md-4 text-center">
-                    <a href="{% url 'dashboard' %}" class="btn btn-info btn-lg">
-                        <i class="fas fa-arrow-right me-2"></i>Go to My Dashboard
+                    <a href="{% url 'dashboard' %}" class="btn btn-success btn-lg">
+                        <i class="fas fa-arrow-right me-2"></i>Start My Own Project
                     </a>
                 </div>
             </div>

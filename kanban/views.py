@@ -312,6 +312,10 @@ def board_detail(request, board_id):
     
     board = get_object_or_404(Board, id=board_id)
     
+    # Check if this is a demo board
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    is_demo_board = board.organization.name in demo_org_names
+    
     # Check permission using RBAC
     if not user_has_board_permission(request.user, board, 'board.view'):
         return HttpResponseForbidden("You don't have permission to view this board.")
@@ -431,6 +435,7 @@ def board_detail(request, board_id):
         'wiki_links': wiki_links,  # Add linked wiki pages
         'scope_status': scope_status,  # Add scope tracking data
         'active_scope_alerts': active_scope_alerts,  # Add active alerts
+        'is_demo_board': is_demo_board,  # Flag to show demo mode banner
     })
 
 @login_required
