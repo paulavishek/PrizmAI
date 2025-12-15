@@ -2230,18 +2230,48 @@ def load_demo_data(request):
                 messages.info(request, 'You already have access to all demo boards!')
                 return redirect('dashboard')
             
-            # Add user as member to all demo boards
+            # Add user as member to all demo boards with proper roles
+            from kanban.permission_models import BoardMembership, Role
+            from messaging.models import ChatRoom
+            
             added_count = 0
             for demo_board in demo_boards:
+                # Add to members list if not already
                 if request.user not in demo_board.members.all():
                     demo_board.members.add(request.user)
                     added_count += 1
+                
+                # Create BoardMembership with Editor role (allows full access)
+                membership_exists = BoardMembership.objects.filter(
+                    board=demo_board,
+                    user=request.user
+                ).exists()
+                
+                if not membership_exists:
+                    # Get the Editor role for the board's organization
+                    editor_role = Role.objects.filter(
+                        organization=demo_board.organization,
+                        name='Editor'
+                    ).first()
+                    
+                    if editor_role:
+                        BoardMembership.objects.create(
+                            board=demo_board,
+                            user=request.user,
+                            role=editor_role
+                        )
+                
+                # Add user to all chat rooms for this board
+                chat_rooms = ChatRoom.objects.filter(board=demo_board)
+                for room in chat_rooms:
+                    if request.user not in room.members.all():
+                        room.members.add(request.user)
             
             if added_count > 0:
                 messages.success(request, 
                     f'✅ Successfully added you to {added_count} demo board(s)! '
                     f'You now have access to 1000+ tasks with all advanced features including risk management, '
-                    f'budget tracking, milestones, and more. Check your dashboard!')
+                    f'budget tracking, milestones, messages, conflicts, wiki, and more. Check your dashboard!')
             else:
                 messages.info(request, 'You already have access to all demo boards.')
             
