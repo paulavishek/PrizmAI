@@ -386,12 +386,20 @@ def board_detail(request, board_id):
     # Get all labels for this board
     labels = TaskLabel.objects.filter(board=board)
     
-    # Get all organization members for the member dropdown
+    # Get board members only (not all organization members)
+    # This ensures users only see others who are invited to this specific board
+    board_member_ids = board.members.values_list('id', flat=True)
+    board_member_profiles = UserProfile.objects.filter(user_id__in=board_member_ids)
+    
+    # For adding new members: get org members who aren't on the board yet
+    # Only board admins/creators will see this dropdown
     try:
         organization = request.user.profile.organization
-        organization_members = UserProfile.objects.filter(organization=organization)
+        available_org_members = UserProfile.objects.filter(
+            organization=organization
+        ).exclude(user_id__in=board_member_ids)
     except UserProfile.DoesNotExist:
-        organization_members = []
+        available_org_members = []
     
     # Get linked wiki pages for this board
     from wiki.models import WikiLink
@@ -410,7 +418,8 @@ def board_detail(request, board_id):
         'columns': columns,
         'tasks': tasks,
         'labels': labels,
-        'organization_members': organization_members,
+        'board_member_profiles': board_member_profiles,
+        'available_org_members': available_org_members,
         'now': timezone.now(),  # Used for due date comparison
         'search_form': search_form,  # Add the search form to the context
         'any_filter_active': any_filter_active,  # Add the flag for active filters

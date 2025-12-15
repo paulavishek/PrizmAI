@@ -187,9 +187,16 @@ def organization_settings(request):
         else:
             form = OrganizationSettingsForm(instance=organization)
         
+        # Calculate admin count
+        admin_count = UserProfile.objects.filter(
+            organization=organization,
+            is_admin=True
+        ).count()
+        
         return render(request, 'accounts/organization_settings.html', {
             'form': form,
-            'organization': organization
+            'organization': organization,
+            'admin_count': admin_count
         })
     except UserProfile.DoesNotExist:
         return redirect('create_organization')

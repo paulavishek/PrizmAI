@@ -34,7 +34,7 @@
                             <p><strong>Created By:</strong> {{ organization.created_by.username }}</p>
                             <p><strong>Created On:</strong> {{ organization.created_at|date:"M d, Y" }}</p>
                             <p><strong>Total Members:</strong> {{ organization.members.count }}</p>
-                            <p><strong>Admins:</strong> {% with organization.members.all as members %}{{ members|selectattr:"is_admin"|list|length }}{% endwith %}</p>
+                            <p><strong>Admins:</strong> {{ admin_count }}</p>
                             
                             <div class="alert alert-info mt-3 mb-0">
                                 <small>

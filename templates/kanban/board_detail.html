@@ -813,10 +813,8 @@
                     <div class="input-group mb-3">
                         <select class="form-select" name="user_id">
                             <option selected disabled>Add a member...</option>
-                            {% for user_profile in organization_members %}
-                                {% if user_profile.user not in board.members.all %}
+                            {% for user_profile in available_org_members %}
                                 <option value="{{ user_profile.user.id }}">{{ user_profile.user.username }}</option>
-                                {% endif %}
                             {% endfor %}
                         </select>
                         <button class="btn btn-outline-primary" type="submit">Add</button>
