@@ -26,28 +26,10 @@ def dashboard(request):
         profile = request.user.profile
         organization = profile.organization
         
-        # Check if user needs the getting started wizard (only for brand new users)
+        # Mark wizard as completed for new users (we skip the wizard now)
         if not profile.completed_wizard:
-            # Check if this is a truly new user (no boards created, no tasks assigned)
-            user_boards = Board.objects.filter(
-                Q(organization=organization) & 
-                (Q(created_by=request.user) | Q(members=request.user))
-            ).distinct()
-            
-            user_tasks = Task.objects.filter(
-                column__board__organization=organization,
-                assigned_to=request.user
-            )
-            
-            # Check if user has access to demo boards
-            demo_board_access = Board.objects.filter(
-                members=request.user,
-                name__in=['Software Project', 'Bug Tracking', 'Marketing Campaign']
-            ).exists()
-            
-            # Only show wizard for completely new users (no boards and no demo access)
-            if user_boards.count() == 0 and user_tasks.count() == 0 and not demo_board_access:
-                return redirect('getting_started_wizard')
+            profile.completed_wizard = True
+            profile.save()
         
         # Get boards from user's organization OR where user is a member (including demo boards)
         boards = Board.objects.filter(
