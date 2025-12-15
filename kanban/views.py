@@ -39,8 +39,14 @@ def dashboard(request):
                 assigned_to=request.user
             )
             
-            # Only show wizard for completely new users
-            if user_boards.count() == 0 and user_tasks.count() == 0:
+            # Check if user has access to demo boards
+            demo_board_access = Board.objects.filter(
+                members=request.user,
+                name__in=['Software Project', 'Bug Tracking', 'Marketing Campaign']
+            ).exists()
+            
+            # Only show wizard for completely new users (no boards and no demo access)
+            if user_boards.count() == 0 and user_tasks.count() == 0 and not demo_board_access:
                 return redirect('getting_started_wizard')
         
         # Get boards from user's organization OR where user is a member (including demo boards)
@@ -2216,6 +2222,11 @@ def load_demo_data(request):
             already_member_boards = demo_boards.filter(members=request.user)
             
             if already_member_boards.count() >= demo_boards.count():
+                # Mark wizard as completed even if they already have access
+                profile = request.user.profile
+                if not profile.completed_wizard:
+                    profile.completed_wizard = True
+                    profile.save()
                 messages.info(request, 'You already have access to all demo boards!')
                 return redirect('dashboard')
             
@@ -2233,6 +2244,12 @@ def load_demo_data(request):
                     f'budget tracking, milestones, and more. Check your dashboard!')
             else:
                 messages.info(request, 'You already have access to all demo boards.')
+            
+            # Mark wizard as completed since user now has access to boards
+            profile = request.user.profile
+            if not profile.completed_wizard:
+                profile.completed_wizard = True
+                profile.save()
             
             # If came from wizard, go to dashboard, otherwise go back
             if request.GET.get('from_wizard') == 'true':
