@@ -31,11 +31,15 @@ def dashboard(request):
             profile.completed_wizard = True
             profile.save()
         
-        # Get boards from user's organization OR where user is a member (including demo boards)
+        # Get boards from user's organization OR where user is a member
+        # EXCLUDE demo boards - demo environment is isolated and accessed via demo dashboard
+        demo_org_names = ['Dev Team', 'Marketing Team']
         boards = Board.objects.filter(
             Q(organization=organization) | Q(members=request.user)
         ).filter(
             Q(created_by=request.user) | Q(members=request.user)
+        ).exclude(
+            organization__name__in=demo_org_names
         ).distinct()
         
         # Get analytics data
@@ -194,11 +198,15 @@ def board_list(request):
         profile = request.user.profile
         organization = profile.organization
         
-        # Get boards from user's organization OR where user is a member (including demo boards)
+        # Get boards from user's organization OR where user is a member
+        # EXCLUDE demo boards - demo environment is isolated
+        demo_org_names = ['Dev Team', 'Marketing Team']
         boards = Board.objects.filter(
             Q(organization=organization) | Q(members=request.user)
         ).filter(
             Q(created_by=request.user) | Q(members=request.user)
+        ).exclude(
+            organization__name__in=demo_org_names
         ).distinct()
         
         # For board_list, we only display boards, creation is handled by create_board view
@@ -1131,12 +1139,20 @@ def organization_boards(request):
         organization = profile.organization
         
         # Get all boards for this organization, even if user is not a member
-        all_org_boards = Board.objects.filter(organization=organization)
+        # EXCLUDE demo boards - demo environment is isolated
+        demo_org_names = ['Dev Team', 'Marketing Team']
+        all_org_boards = Board.objects.filter(
+            organization=organization
+        ).exclude(
+            organization__name__in=demo_org_names
+        )
         
         # Determine which boards the user is a member of
         user_boards = Board.objects.filter(
             Q(organization=organization) & 
             (Q(created_by=request.user) | Q(members=request.user))
+        ).exclude(
+            organization__name__in=demo_org_names
         ).distinct()
         
         # Create a list to track which boards the user is a member of
