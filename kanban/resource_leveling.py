@@ -428,14 +428,28 @@ class ResourceLevelingService:
         
         return result
     
-    def get_team_workload_report(self, board):
+    def get_team_workload_report(self, board, requesting_user=None):
         """
         Generate team workload report for a board
+        
+        Args:
+            board: Board object
+            requesting_user: User requesting the report (for demo board filtering)
         
         Returns:
             Dict with team member workloads and recommendations
         """
-        members = board.members.all()
+        # For demo boards, filter to show only users from requesting user's real organization
+        demo_org_names = ['Dev Team', 'Marketing Team']
+        if board.organization.name in demo_org_names and requesting_user:
+            try:
+                user_org = requesting_user.profile.organization
+                # Get users from requesting user's real org who are also members of this demo board
+                members = board.members.filter(profile__organization=user_org)
+            except Exception:
+                members = board.members.filter(id=requesting_user.id)
+        else:
+            members = board.members.all()
         
         report = {
             'board': board.name,

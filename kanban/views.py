@@ -397,20 +397,38 @@ def board_detail(request, board_id):
     # Get all labels for this board
     labels = TaskLabel.objects.filter(board=board)
     
-    # Get board members only (not all organization members)
-    # This ensures users only see others who are invited to this specific board
-    board_member_ids = board.members.values_list('id', flat=True)
-    board_member_profiles = UserProfile.objects.filter(user_id__in=board_member_ids)
-    
-    # For adding new members: get org members who aren't on the board yet
-    # Only board admins/creators will see this dropdown
-    try:
-        organization = request.user.profile.organization
-        available_org_members = UserProfile.objects.filter(
-            organization=organization
-        ).exclude(user_id__in=board_member_ids)
-    except UserProfile.DoesNotExist:
-        available_org_members = []
+    # Get board members - for demo boards, show only users from viewer's real organization
+    if is_demo_board:
+        try:
+            # For demo boards: show only users from the viewer's REAL organization
+            # This ensures invitation-based visibility even in demo mode
+            user_org = request.user.profile.organization
+            # Get users from viewer's real org who are also members of this demo board
+            board_member_profiles = UserProfile.objects.filter(
+                organization=user_org,
+                user__in=board.members.all()
+            )
+            # For adding new members: show other users from viewer's real organization
+            board_member_ids = board_member_profiles.values_list('user_id', flat=True)
+            available_org_members = UserProfile.objects.filter(
+                organization=user_org
+            ).exclude(user_id__in=board_member_ids)
+        except UserProfile.DoesNotExist:
+            board_member_profiles = UserProfile.objects.none()
+            available_org_members = []
+    else:
+        # For regular boards: show all board members
+        board_member_ids = board.members.values_list('id', flat=True)
+        board_member_profiles = UserProfile.objects.filter(user_id__in=board_member_ids)
+        
+        # For adding new members: get org members who aren't on the board yet
+        try:
+            organization = request.user.profile.organization
+            available_org_members = UserProfile.objects.filter(
+                organization=organization
+            ).exclude(user_id__in=board_member_ids)
+        except UserProfile.DoesNotExist:
+            available_org_members = []
     
     # Get linked wiki pages for this board
     from wiki.models import WikiLink

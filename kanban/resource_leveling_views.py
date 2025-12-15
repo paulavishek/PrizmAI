@@ -343,8 +343,8 @@ def get_team_workload_report(request, board_id):
         # Initialize service
         service = ResourceLevelingService(board.organization)
         
-        # Generate report
-        report = service.get_team_workload_report(board)
+        # Generate report (pass requesting user for demo board filtering)
+        report = service.get_team_workload_report(board, requesting_user=request.user)
         
         # Create response with no-cache headers to prevent stale data
         response = JsonResponse(report)
