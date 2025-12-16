@@ -69,12 +69,22 @@ class ResourceLevelingService:
                 return {'error': 'Task must be in a column on a board'}
             potential_assignees = board.members.all()
             
-            # For demo boards, filter to only users from requesting user's organization
+            # For demo boards, show demo users + real users from requesting user's org who are members
             demo_org_names = ['Dev Team', 'Marketing Team']
             if board.organization.name in demo_org_names and requesting_user:
                 try:
+                    from django.db.models import Q
+                    from accounts.models import Organization
+                    
+                    # Get demo organizations
+                    demo_orgs = Organization.objects.filter(name__in=demo_org_names)
                     user_org = requesting_user.profile.organization
-                    potential_assignees = potential_assignees.filter(profile__organization=user_org)
+                    
+                    # Show: demo users (from demo orgs) OR real users from requesting user's org
+                    potential_assignees = potential_assignees.filter(
+                        Q(profile__organization__in=demo_orgs) |  # Demo users
+                        Q(profile__organization=user_org)  # Real users from same org
+                    )
                 except Exception:
                     potential_assignees = potential_assignees.filter(id=requesting_user.id)
             
@@ -386,15 +396,21 @@ class ResourceLevelingService:
             column__name__icontains='done'
         ).select_related('assigned_to', 'column')
         
-        # For demo boards, filter tasks to only those from requesting user's organization
+        # For demo boards, show tasks assigned to demo users + real users from requesting user's org
         demo_org_names = ['Dev Team', 'Marketing Team']
         if board.organization.name in demo_org_names and requesting_user:
             try:
+                from accounts.models import Organization
+                
+                # Get demo organizations
+                demo_orgs = Organization.objects.filter(name__in=demo_org_names)
                 user_org = requesting_user.profile.organization
-                # Only show tasks assigned to users from the same real organization
+                
+                # Show: unassigned tasks, tasks assigned to demo users, or tasks assigned to real users from same org
                 tasks = tasks.filter(
                     Q(assigned_to__isnull=True) |  # Unassigned tasks
-                    Q(assigned_to__profile__organization=user_org)  # Or assigned to org members
+                    Q(assigned_to__profile__organization__in=demo_orgs) |  # Tasks assigned to demo users
+                    Q(assigned_to__profile__organization=user_org)  # Tasks assigned to real users from same org
                 )
             except Exception:
                 # If error, only show unassigned tasks
@@ -467,13 +483,22 @@ class ResourceLevelingService:
         Returns:
             Dict with team member workloads and recommendations
         """
-        # For demo boards, filter to show only users from requesting user's real organization
+        # For demo boards, show demo users + real users from requesting user's org who are members
         demo_org_names = ['Dev Team', 'Marketing Team']
         if board.organization.name in demo_org_names and requesting_user:
             try:
+                from django.db.models import Q
+                from accounts.models import Organization
+                
+                # Get demo organizations
+                demo_orgs = Organization.objects.filter(name__in=demo_org_names)
                 user_org = requesting_user.profile.organization
-                # Get users from requesting user's real org who are also members of this demo board
-                members = board.members.filter(profile__organization=user_org)
+                
+                # Show: demo users (from demo orgs) OR real users from requesting user's org
+                members = board.members.filter(
+                    Q(profile__organization__in=demo_orgs) |  # Demo users
+                    Q(profile__organization=user_org)  # Real users from same org
+                )
             except Exception:
                 members = board.members.filter(id=requesting_user.id)
         else:
