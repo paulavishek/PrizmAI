@@ -565,6 +565,7 @@
                             <div class="progress flex-grow-1 mx-1" style="height: 12px;">
                                 <div class="progress-bar {% if task.progress == 100 %}bg-success{% elif task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
                                      role="progressbar"
+                                     style="width: {{ task.progress }}%;"
                                      data-progress="{{ task.progress }}"
                                      aria-valuenow="{{ task.progress }}"
                                      aria-valuemin="0"
@@ -964,7 +965,11 @@
 
         // Set progress bar widths after DOM is loaded
         document.querySelectorAll('.progress-bar[data-progress]').forEach(el => {
-            el.style.width = el.dataset.progress + '%';
+            const progressValue = el.dataset.progress;
+            el.style.width = progressValue + '%';
+            el.setAttribute('aria-valuenow', progressValue);
+            // Force a repaint to ensure the width is applied
+            el.offsetHeight;
         });
         
         // Set up search panel toggle
