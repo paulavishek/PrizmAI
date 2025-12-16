@@ -31,6 +31,25 @@
                     
                     <span class="badge bg-info">{{ profile.organization.name }}</span>
                 </div>
+                
+                <hr>
+                
+                <div class="text-start">
+                    <h6 class="text-muted mb-2"><i class="fas fa-briefcase"></i> Capacity</h6>
+                    <p class="mb-2"><strong>{{ profile.weekly_capacity_hours }}</strong> hours/week</p>
+                    <p class="mb-2"><strong>{{ profile.utilization_percentage|floatformat:0 }}%</strong> utilized</p>
+                    
+                    {% if profile.skills %}
+                        <h6 class="text-muted mb-2 mt-3"><i class="fas fa-code"></i> Skills</h6>
+                        <div class="d-flex flex-wrap gap-1">
+                            {% for skill in profile.skills %}
+                                {% if skill.name %}
+                                    <span class="badge bg-success">{{ skill.name }}</span>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                </div>
             </div>
         </div>
     </div>

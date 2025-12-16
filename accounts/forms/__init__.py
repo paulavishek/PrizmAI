@@ -90,12 +90,64 @@ class RegistrationForm(UserCreationForm):
         return user
 
 class UserProfileForm(forms.ModelForm):
+    # Add a text field for entering skills (comma-separated)
+    skills_input = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={
+            'class': 'form-control',
+            'rows': 3,
+            'placeholder': 'Enter skills separated by commas (e.g., Python, JavaScript, Project Management)'
+        }),
+        help_text='Enter your skills separated by commas. Example: Python, Django, React, AWS',
+        label='Skills'
+    )
+    
     class Meta:
         model = UserProfile
-        fields = ['profile_picture']
+        fields = ['profile_picture', 'weekly_capacity_hours']
         widgets = {
-            'profile_picture': forms.FileInput(attrs={'class': 'form-control'})
+            'profile_picture': forms.FileInput(attrs={'class': 'form-control'}),
+            'weekly_capacity_hours': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': 1,
+                'max': 168
+            })
         }
+        labels = {
+            'weekly_capacity_hours': 'Weekly Working Hours',
+        }
+        help_texts = {
+            'weekly_capacity_hours': 'How many hours per week are you available for work?',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Pre-populate skills input with existing skills
+        if self.instance and self.instance.pk and self.instance.skills:
+            # Convert list of skill dicts to comma-separated string
+            skills_list = []
+            for skill in self.instance.skills:
+                if isinstance(skill, dict):
+                    skills_list.append(skill.get('name', ''))
+                elif isinstance(skill, str):
+                    skills_list.append(skill)
+            self.fields['skills_input'].initial = ', '.join(skills_list)
+    
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        
+        # Process skills input
+        skills_text = self.cleaned_data.get('skills_input', '')
+        if skills_text:
+            # Split by comma and create skill objects
+            skill_names = [s.strip() for s in skills_text.split(',') if s.strip()]
+            instance.skills = [{'name': name, 'level': 'Intermediate'} for name in skill_names]
+        else:
+            instance.skills = []
+        
+        if commit:
+            instance.save()
+        return instance
 
 class OrganizationSettingsForm(forms.ModelForm):
     """
