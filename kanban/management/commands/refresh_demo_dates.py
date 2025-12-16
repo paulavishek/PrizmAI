@@ -38,7 +38,22 @@ class Command(BaseCommand):
         self.stdout.write(self.style.NOTICE('Refreshing task dates...'))
         tasks = list(Task.objects.all().select_related('column'))
         
+        # Identify demo boards
+        demo_org_names = ['Dev Team', 'Marketing Team']
+        from accounts.models import Organization
+        demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+        demo_tasks = [t for t in tasks if t.column and t.column.board.organization in demo_orgs]
+        non_demo_tasks = [t for t in tasks if t not in demo_tasks]
+        
+        # For demo boards, we'll ensure exactly 4-5 overdue tasks consistently
+        # Select 4-5 incomplete tasks from demo boards to make overdue
+        incomplete_demo_tasks = [t for t in demo_tasks if t.progress < 100 and t.column.name.lower() not in ['done', 'closed', 'completed']]
+        target_overdue_count = 5
+        overdue_candidates = incomplete_demo_tasks[:target_overdue_count] if len(incomplete_demo_tasks) >= target_overdue_count else incomplete_demo_tasks
+        
         tasks_to_update = []
+        overdue_set_count = 0
+        
         for task in tasks:
             if not task.due_date:
                 continue
@@ -50,8 +65,15 @@ class Command(BaseCommand):
             # Determine the offset based on column status
             column_name = task.column.name.lower() if task.column else ''
             
+            # Check if this is one of the designated overdue tasks
+            is_designated_overdue = task in overdue_candidates and overdue_set_count < target_overdue_count
+            
+            # For designated overdue tasks, set them 3-10 days in the past
+            if is_designated_overdue:
+                days_offset = -(3 + (task.id % 8))  # -3 to -10 days
+                overdue_set_count += 1
             # For completed/done tasks - put them in the past
-            if column_name in ['done', 'closed', 'completed']:
+            elif column_name in ['done', 'closed', 'completed']:
                 if task.progress == 100:
                     # Spread completed tasks across the past 60 days
                     days_offset = -(task.id % 60 + 3)  # -3 to -63 days

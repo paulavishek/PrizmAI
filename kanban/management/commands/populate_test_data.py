@@ -2449,12 +2449,12 @@ Carol: Sounds good. Great work this week!
                 description__contains='Historical completed task'
             ).count()
             
-            if existing_historical_tasks > 50:
+            if existing_historical_tasks > 20:
                 self.stdout.write(f'    ⏭️  Board {board.name} already has {existing_historical_tasks} historical tasks, skipping...')
                 continue
             
-            # Create 300-350 historical tasks per board for comprehensive demo (total ~1000 across 3 boards)
-            num_tasks = random.randint(300, 350)
+            # Create 20-25 historical tasks per board for manageable demo (total ~70 across 3 boards)
+            num_tasks = random.randint(20, 25)
             
             for i in range(num_tasks):
                 # Random date in past 6 months (180 days)
