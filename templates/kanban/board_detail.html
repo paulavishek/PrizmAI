@@ -563,10 +563,10 @@
                             </button>
                             
                             <div class="progress flex-grow-1 mx-1" style="height: 12px;">
-                                <div class="progress-bar {% if task.column.name|lower == 'done' %}bg-success{% elif task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                <div class="progress-bar {% if 'done' in task.column.name|lower or 'complete' in task.column.name|lower %}bg-success{% elif task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
                                      role="progressbar"
-                                     data-progress="{% if task.column.name|lower == 'done' %}100{% else %}{{ task.progress }}{% endif %}"
-                                     aria-valuenow="{% if task.column.name|lower == 'done' %}100{% else %}{{ task.progress }}{% endif %}"
+                                     data-progress="{% if 'done' in task.column.name|lower or 'complete' in task.column.name|lower %}100{% else %}{{ task.progress }}{% endif %}"
+                                     aria-valuenow="{% if 'done' in task.column.name|lower or 'complete' in task.column.name|lower %}100{% else %}{{ task.progress }}{% endif %}"
                                      aria-valuemin="0"
                                      aria-valuemax="100">
                                 </div>
@@ -578,7 +578,7 @@
                             </button>
                         </div>
                         <div class="text-center">
-                            <small class="text-muted">{% if task.column.name|lower == 'done' %}100{% else %}{{ task.progress }}{% endif %}% complete</small>
+                            <small class="text-muted">{% if 'done' in task.column.name|lower or 'complete' in task.column.name|lower %}100{% else %}{{ task.progress }}{% endif %}% complete</small>
                         </div>
                     </div>
                       {% if task.labels.all %}

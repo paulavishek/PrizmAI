@@ -1014,8 +1014,9 @@ def move_task(request):
         task.column = new_column
         task.position = position
         
-        # Auto-update progress to 100% when moved to a "Done" column
-        if new_column.name.lower().find('done') >= 0:
+        # Auto-update progress to 100% when moved to a "Done" or "Complete" column
+        column_name_lower = new_column.name.lower()
+        if 'done' in column_name_lower or 'complete' in column_name_lower:
             task.progress = 100
         
         task.save()
@@ -1035,12 +1036,13 @@ def move_task(request):
                   changes={'column': {'old': old_column.name, 'new': new_column.name}})
         
         # If progress was set to 100% automatically, record that too
-        if new_column.name.lower().find('done') >= 0 and task.progress == 100:
+        column_name_lower = new_column.name.lower()
+        if ('done' in column_name_lower or 'complete' in column_name_lower) and task.progress == 100:
             TaskActivity.objects.create(
                 task=task,
                 user=request.user,
                 activity_type='updated',
-                description=f"Automatically updated progress for '{task.title}' to 100% (Done)"
+                description=f"Automatically updated progress for '{task.title}' to 100% ({new_column.name})"
             )
         
         # Reorder tasks in the column

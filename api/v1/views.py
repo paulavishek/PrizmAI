@@ -159,6 +159,12 @@ class TaskViewSet(viewsets.ModelViewSet):
         try:
             column = Column.objects.get(id=column_id, board=task.column.board)
             task.column = column
+            
+            # Auto-update progress to 100% when moved to a "Done" or "Complete" column
+            column_name_lower = column.name.lower()
+            if 'done' in column_name_lower or 'complete' in column_name_lower:
+                task.progress = 100
+            
             task.save()
             
             serializer = self.get_serializer(task)

@@ -27,6 +27,19 @@ def track_task_assignment_change(sender, instance, **kwargs):
         instance._assignment_changed = bool(instance.assigned_to)
 
 
+@receiver(pre_save, sender=Task)
+def auto_update_progress_for_done_column(sender, instance, **kwargs):
+    """
+    Automatically set progress to 100% when a task is moved to a Done or Complete column
+    This ensures the progress bar always shows full when tasks are in completion columns
+    """
+    if instance.column:
+        column_name_lower = instance.column.name.lower()
+        # Check if column name contains 'done' or 'complete'
+        if ('done' in column_name_lower or 'complete' in column_name_lower) and instance.progress < 100:
+            instance.progress = 100
+
+
 @receiver(post_save, sender=Task)
 def update_workload_on_assignment_change(sender, instance, created, **kwargs):
     """
