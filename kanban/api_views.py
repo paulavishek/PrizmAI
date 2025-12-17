@@ -2325,8 +2325,10 @@ def analyze_skill_gaps_api(request, board_id):
         # Calculate gaps
         gaps = calculate_skill_gaps(board, sprint_period_days=sprint_days)
         
-        # Save gaps to database and generate recommendations
+        # Save gaps to database (without AI recommendations initially for speed)
         saved_gaps = []
+        gaps_needing_recommendations = []
+        
         for gap_data in gaps:
             # Create or update SkillGap record
             skill_gap, created = SkillGap.objects.update_or_create(
@@ -2350,12 +2352,9 @@ def analyze_skill_gaps_api(request, board_id):
             affected_tasks = Task.objects.filter(id__in=affected_task_ids)
             skill_gap.affected_tasks.set(affected_tasks)
             
-            # Generate recommendations if not already done
+            # Queue for async recommendation generation if needed
             if not skill_gap.ai_recommendations or created:
-                recommendations = generate_skill_gap_recommendations(gap_data, board)
-                skill_gap.ai_recommendations = recommendations
-                skill_gap.confidence_score = 0.8
-                skill_gap.save()
+                gaps_needing_recommendations.append((skill_gap, gap_data))
             
             saved_gaps.append({
                 'id': skill_gap.id,
@@ -2367,9 +2366,26 @@ def analyze_skill_gaps_api(request, board_id):
                 'severity': skill_gap.severity,
                 'status': skill_gap.status,
                 'affected_tasks': gap_data['affected_tasks'],
-                'recommendations': skill_gap.ai_recommendations,
+                'recommendations': skill_gap.ai_recommendations or [],
+                'recommendations_pending': not skill_gap.ai_recommendations,
                 'identified_at': skill_gap.identified_at.isoformat()
             })
+        
+        # Generate AI recommendations in background (non-blocking)
+        if gaps_needing_recommendations:
+            from threading import Thread
+            def generate_recommendations_async():
+                for skill_gap, gap_data in gaps_needing_recommendations:
+                    try:
+                        recommendations = generate_skill_gap_recommendations(gap_data, board)
+                        skill_gap.ai_recommendations = recommendations
+                        skill_gap.confidence_score = 0.8
+                        skill_gap.save()
+                    except Exception as e:
+                        logger.error(f"Error generating recommendations for {skill_gap.skill_name}: {str(e)}")
+            
+            thread = Thread(target=generate_recommendations_async, daemon=True)
+            thread.start()
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)

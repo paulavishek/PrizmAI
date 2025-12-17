@@ -420,12 +420,23 @@
     window.runSkillAnalysis = function() {
         if (window.skillGapAnalyzer) {
             showLoadingOverlay('Running skill gap analysis...');
-            window.skillGapAnalyzer.analyzeGaps(14).then(() => {
+            window.skillGapAnalyzer.analyzeGaps(14).then((data) => {
                 hideLoadingOverlay();
-                showToast('Analysis complete! Reloading page...', 'success');
-                setTimeout(() => {
-                    window.location.reload();
-                }, 1500);
+                
+                // Check if recommendations are pending
+                const pendingCount = data.gaps.filter(g => g.recommendations_pending).length;
+                if (pendingCount > 0) {
+                    showToast(`Analysis complete! AI generating ${pendingCount} recommendation(s) in background...`, 'info');
+                    // Auto-refresh after a delay to show completed recommendations
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 15000); // 15 seconds - enough time for most recommendations to complete
+                } else {
+                    showToast('Analysis complete! Reloading page...', 'success');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                }
             }).catch(error => {
                 hideLoadingOverlay();
                 showToast('Failed to run analysis: ' + error.message, 'error');

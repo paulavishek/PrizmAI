@@ -217,14 +217,14 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
     try:
         from kanban.models import Task
         
-        # Get upcoming/active tasks
+        # Get upcoming/active tasks with optimized query
         end_date = timezone.now() + timedelta(days=sprint_period_days)
         tasks = Task.objects.filter(
             column__board=board,
             progress__lt=100
         ).filter(
             Q(due_date__isnull=True) | Q(due_date__lte=end_date)
-        )
+        ).select_related('column').only('id', 'title', 'required_skills', 'column__board')
         
         # Build team skill profile
         team_profile = build_team_skill_profile(board)

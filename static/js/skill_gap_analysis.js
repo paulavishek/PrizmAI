@@ -41,7 +41,14 @@ class SkillGapAnalyzer {
             const data = await response.json();
             this.gaps = data.gaps;
             this.renderGapsSection();
-            this.showNotification('Skill gap analysis completed', 'success');
+            
+            // Check if recommendations are pending
+            const pendingCount = data.gaps.filter(g => g.recommendations_pending).length;
+            if (pendingCount > 0) {
+                this.showNotification(`Analysis complete! ${pendingCount} gap(s) pending AI recommendations...`, 'info');
+            } else {
+                this.showNotification('Skill gap analysis completed', 'success');
+            }
             
             return data;
         } catch (error) {
@@ -370,7 +377,11 @@ class SkillGapAnalyzer {
                         ${statusBadge}
                     </div>
                 </div>
-                ${gap.recommendations && gap.recommendations.length > 0 ? `
+                ${gap.recommendations_pending ? `
+                    <div class="mt-2">
+                        <small class="text-warning"><i class="fas fa-spinner fa-spin me-1"></i>AI recommendations generating...</small>
+                    </div>
+                ` : gap.recommendations && gap.recommendations.length > 0 ? `
                     <div class="mt-2">
                         <small class="text-muted"><i class="fas fa-lightbulb me-1"></i>${gap.recommendations_count} recommendations</small>
                         <button class="btn btn-sm btn-outline-primary ms-2" onclick="skillGapAnalyzer.showGapDetails(${gap.id})">
