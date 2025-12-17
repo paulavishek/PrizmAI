@@ -389,16 +389,39 @@ class Command(BaseCommand):
                 self.stdout.write(f'    ✓ {task.title[:50]} (auto): {start_date} → {end_date}')
         
         # Create finish-to-start dependencies for bug tracking
-        # Clear dependency chain: Each bug depends on the previous one being resolved
+        # Comprehensive dependency chain for all tasks
         
         dependency_chains = [
-            # Sequential workflow: Fix bugs in priority order
+            # Main sequential workflow: Fix bugs in priority order
             ('Typo on welcome screen', ['Error 500 when uploading large files']),
             ('Fixed pagination on user list', ['Typo on welcome screen']),
             ('Button alignment issue on mobile', ['Fixed pagination on user list']),
             ('Inconsistent data in reports', ['Button alignment issue on mobile']),
             ('Login page not working on Safari', ['Inconsistent data in reports']),
             ('Slow response time on search feature', ['Login page not working on Safari']),
+            
+            # Additional dependencies for supporting tasks
+            ('Fix bug in menu', ['Error 500 when uploading large files']),
+            ('Add tests for dashboard', ['Fix bug in menu']),
+            ('Update documentation for chart', ['Add tests for dashboard']),
+            ('Implement filters', ['Error 500 when uploading large files']),
+            ('Fix bug in table', ['Implement filters']),
+            ('Optimize authentication performance', ['Fix bug in table']),
+            ('Optimize dashboard performance', ['Add tests for dashboard']),
+            ('Add tests for search', ['Implement filters']),
+            ('Fix bug in form', ['Add tests for search']),
+            ('Deploy export to production', ['Fix bug in form']),
+            ('Design form UI', ['Fix bug in form']),
+            ('Refactor task module', ['Design form UI']),
+            ('Update documentation for form', ['Refactor task module']),
+            ('Optimize notifications performance', ['Optimize authentication performance']),
+            ('Update documentation for modal', ['Update documentation for chart']),
+            ('Refactor user module', ['Optimize authentication performance']),
+            ('Design table UI', ['Fix bug in table']),
+            ('Deploy filters to production', ['Implement filters', 'Design table UI']),
+            ('Optimize API endpoints performance', ['Deploy export to production']),
+            ('Research REST API integration', ['Optimize API endpoints performance']),
+            ('Add tests for API endpoints', ['Research REST API integration']),
         ]
         
         for task_title, dep_titles in dependency_chains:
@@ -419,18 +442,27 @@ class Command(BaseCommand):
                                 break
                     
                     if dep_task and dep_task.start_date and dep_task.due_date and task.start_date:
-                        # Ensure dependency task ends BEFORE dependent task starts
-                        if dep_task.due_date.date() <= task.start_date:
-                            task.dependencies.add(dep_task)
-                            self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}"')
-                        else:
-                            # Adjust task start date to be after dependency ends
-                            task.start_date = dep_task.due_date.date() + timedelta(days=1)
-                            task.due_date = datetime.combine(task.start_date + timedelta(days=5), datetime.max.time())
+                        # Always adjust task dates to start after ALL dependencies complete
+                        latest_dep_end = dep_task.due_date.date()
+                        for existing_dep in task.dependencies.all():
+                            if existing_dep.due_date and existing_dep.due_date.date() > latest_dep_end:
+                                latest_dep_end = existing_dep.due_date.date()
+                        
+                        required_start = latest_dep_end + timedelta(days=1)
+                        
+                        if task.start_date < required_start:
+                            original_duration = (task.due_date.date() - task.start_date).days if task.due_date else 4
+                            duration = max(3, min(original_duration, 8))
+                            
+                            task.start_date = required_start
+                            task.due_date = datetime.combine(task.start_date + timedelta(days=duration), datetime.max.time())
                             task.due_date = timezone.make_aware(task.due_date) if timezone.is_naive(task.due_date) else task.due_date
                             task.save()
                             task.dependencies.add(dep_task)
-                            self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}" (dates adjusted)')
+                            self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}" (adjusted: {task.start_date} → {task.due_date.date()})')
+                        else:
+                            task.dependencies.add(dep_task)
+                            self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}"')
 
     def fix_marketing_campaign_board(self, board, columns_tasks):
         """Fix Marketing Campaign board with marketing workflow"""
@@ -537,22 +569,42 @@ class Command(BaseCommand):
                 self.stdout.write(f'    ✓ {task.title[:50]} (auto): {start_date} → {end_date}')
         
         # Create finish-to-start dependencies for marketing campaign
-        # Marketing flow: Research → Planning → Execution → Review → Complete
+        # Comprehensive dependency chain for all marketing tasks
         
         dependency_chains = [
-            # Phase 1: Analysis drives planning
+            # Phase 1: Analysis and initial campaigns
             ('Q3 Email newsletter schedule', ['Competitor analysis report']),
             ('Holiday social campaign concept', ['Competitor analysis report']),
-            
-            # Phase 2: Planning leads to execution
-            ('Website redesign for Q4 launch', ['Q3 Email newsletter schedule']),
             ('Monthly performance report', ['Summer campaign graphics']),
+            ('Remove outdated content', ['Summer campaign graphics']),
             
-            # Phase 3: Review depends on execution
-            ('New product announcement email', ['Website redesign for Q4 launch']),
+            # Phase 2: Planning and design work
+            ('Website redesign for Q4 launch', ['Q3 Email newsletter schedule', 'Remove outdated content']),
+            ('New product announcement email', ['Monthly performance report']),
             
-            # Phase 4: Future campaigns build on current work
+            # Phase 3: Future campaigns
             ('Video content strategy', ['New product announcement email', 'Monthly performance report']),
+            
+            # Supporting tasks dependencies
+            ('Implement filters', ['Summer campaign graphics']),
+            ('Deploy search to production', ['Implement filters']),
+            ('Deploy notifications to production', ['Deploy search to production']),
+            ('Fix bug in modal', ['Implement filters']),
+            ('Fix bug in login', ['Summer campaign graphics']),
+            ('Research WebSockets integration', ['Fix bug in login']),
+            ('Optimize search performance', ['Deploy search to production']),
+            ('Add tests for authentication', ['Fix bug in login']),
+            ('Research REST API integration', ['Research WebSockets integration']),
+            ('Update documentation for navbar', ['Deploy search to production']),
+            ('Update documentation for modal', ['Fix bug in modal']),
+            ('Optimize filters performance', ['Implement filters', 'Optimize search performance']),
+            ('Refactor analytics module', ['Monthly performance report']),
+            ('Add tests for dashboard', ['Refactor analytics module']),
+            ('Review and merge dashboard', ['Add tests for dashboard']),
+            ('Optimize authentication performance', ['Add tests for authentication']),
+            ('Fix bug in sidebar', ['Fix bug in modal']),
+            ('Review and merge authentication', ['Optimize authentication performance']),
+            ('Design menu UI', ['Fix bug in sidebar']),
         ]
         
         for task_title, dep_titles in dependency_chains:
@@ -572,10 +624,25 @@ class Command(BaseCommand):
                                 dep_task = obj
                                 break
                     
-                    if dep_task and dep_task.start_date and dep_task.due_date:
-                        # Ensure dependency task ends before dependent task starts
-                        if dep_task.due_date.date() <= task.start_date:
+                    if dep_task and dep_task.start_date and dep_task.due_date and task.start_date:
+                        # Always adjust task dates to start after ALL dependencies complete
+                        latest_dep_end = dep_task.due_date.date()
+                        for existing_dep in task.dependencies.all():
+                            if existing_dep.due_date and existing_dep.due_date.date() > latest_dep_end:
+                                latest_dep_end = existing_dep.due_date.date()
+                        
+                        required_start = latest_dep_end + timedelta(days=1)
+                        
+                        if task.start_date < required_start:
+                            original_duration = (task.due_date.date() - task.start_date).days if task.due_date else 5
+                            duration = max(4, min(original_duration, 10))
+                            
+                            task.start_date = required_start
+                            task.due_date = datetime.combine(task.start_date + timedelta(days=duration), datetime.max.time())
+                            task.due_date = timezone.make_aware(task.due_date) if timezone.is_naive(task.due_date) else task.due_date
+                            task.save()
+                            task.dependencies.add(dep_task)
+                            self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}" (adjusted: {task.start_date} → {task.due_date.date()})')
+                        else:
                             task.dependencies.add(dep_task)
                             self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}"')
-                        else:
-                            self.stdout.write(f'    ⚠ Skipped invalid dependency: "{task.title[:40]}" -> "{dep_task.title[:40]}" (dates conflict)')
