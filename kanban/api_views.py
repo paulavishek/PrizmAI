@@ -2330,21 +2330,39 @@ def analyze_skill_gaps_api(request, board_id):
         gaps_needing_recommendations = []
         
         for gap_data in gaps:
-            # Create or update SkillGap record
-            skill_gap, created = SkillGap.objects.update_or_create(
+            # Find existing active gap or create new one
+            skill_gap = SkillGap.objects.filter(
                 board=board,
                 skill_name=gap_data['skill_name'],
                 proficiency_level=gap_data['proficiency_level'],
-                status__in=['identified', 'acknowledged', 'in_progress'],
-                defaults={
-                    'required_count': gap_data['required_count'],
-                    'available_count': gap_data['available_count'],
-                    'gap_count': gap_data['gap_count'],
-                    'severity': gap_data['severity'],
-                    'sprint_period_start': timezone.now().date(),
-                    'sprint_period_end': timezone.now().date() + timedelta(days=sprint_days),
-                }
-            )
+                status__in=['identified', 'acknowledged', 'in_progress']
+            ).first()
+            
+            if skill_gap:
+                # Update existing gap
+                skill_gap.required_count = gap_data['required_count']
+                skill_gap.available_count = gap_data['available_count']
+                skill_gap.gap_count = gap_data['gap_count']
+                skill_gap.severity = gap_data['severity']
+                skill_gap.sprint_period_start = timezone.now().date()
+                skill_gap.sprint_period_end = timezone.now().date() + timedelta(days=sprint_days)
+                skill_gap.save()
+                created = False
+            else:
+                # Create new gap
+                skill_gap = SkillGap.objects.create(
+                    board=board,
+                    skill_name=gap_data['skill_name'],
+                    proficiency_level=gap_data['proficiency_level'],
+                    required_count=gap_data['required_count'],
+                    available_count=gap_data['available_count'],
+                    gap_count=gap_data['gap_count'],
+                    severity=gap_data['severity'],
+                    status='identified',
+                    sprint_period_start=timezone.now().date(),
+                    sprint_period_end=timezone.now().date() + timedelta(days=sprint_days),
+                )
+                created = True
             
             # Link affected tasks
             from kanban.models import Task
