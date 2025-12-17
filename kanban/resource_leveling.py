@@ -243,7 +243,7 @@ class ResourceLevelingService:
         
         # Time savings (if available)
         time_diff = current.get('estimated_hours', 0) - recommended.get('estimated_hours', 0)
-        if time_diff > 0.5:
+        if time_diff > 0.5 and current.get('estimated_hours', 0) > 0:
             time_saved_pct = (time_diff / current['estimated_hours']) * 100
             reasons.append(f"{time_saved_pct:.0f}% faster estimated completion")
         
