@@ -45,8 +45,8 @@ def dashboard(request):
         # Get analytics data
         task_count = Task.objects.filter(column__board__in=boards).count()
         completed_count = Task.objects.filter(
-            column__board__in=boards, 
-            column__name__icontains='done'
+            column__board__in=boards,
+            progress=100
         ).count()
         
         # Get completion rate
@@ -69,8 +69,8 @@ def dashboard(request):
         # Get detailed task data for modals
         all_tasks = Task.objects.filter(column__board__in=boards).select_related('column', 'assigned_to', 'column__board')
         completed_tasks = Task.objects.filter(
-            column__board__in=boards, 
-            column__name__icontains='done'
+            column__board__in=boards,
+            progress=100
         ).select_related('column', 'assigned_to', 'column__board')
         overdue_tasks = Task.objects.filter(
             column__board__in=boards,

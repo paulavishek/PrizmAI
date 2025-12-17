@@ -136,7 +136,7 @@ def demo_dashboard(request):
     task_count = Task.objects.filter(column__board__in=demo_boards).count()
     completed_count = Task.objects.filter(
         column__board__in=demo_boards,
-        column__name__icontains='done'
+        progress=100
     ).count()
     
     completion_rate = 0
@@ -202,7 +202,7 @@ def demo_dashboard(request):
         board_task_count = Task.objects.filter(column__board=board).count()
         board_completed = Task.objects.filter(
             column__board=board,
-            column__name__icontains='done'
+            progress=100
         ).count()
         board_completion_rate = 0
         if board_task_count > 0:
@@ -300,7 +300,7 @@ def demo_board_detail(request, board_id):
     total_tasks = Task.objects.filter(column__board=board).count()
     completed_tasks = Task.objects.filter(
         column__board=board,
-        column__name__icontains='done'
+        progress=100
     ).count()
     
     # Get chat rooms
