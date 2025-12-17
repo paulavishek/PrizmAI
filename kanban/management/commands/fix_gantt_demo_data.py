@@ -158,13 +158,14 @@ class Command(BaseCommand):
                     task_objects[title_pattern] = task
                     self.stdout.write(f'    ✓ {task.title[:50]}: {start_date} → {end_date}')
         
-        # Handle any remaining unscheduled tasks based on their column
+        # Handle any remaining unscheduled tasks - temporarily assign dates
+        # These will be adjusted later based on dependencies
         offset_counter = 45  # Start future tasks far out
         for task in all_tasks_dict.values():
             if task not in scheduled_tasks:
                 col_name = task.column.name
                 
-                # Assign default dates based on column
+                # Assign temporary dates based on column
                 if col_name.lower() in ['done', 'closed', 'completed']:
                     start_offset = -40 - (offset_counter % 10)
                     duration = 4
@@ -190,7 +191,7 @@ class Command(BaseCommand):
                 task.due_date = timezone.make_aware(task.due_date) if timezone.is_naive(task.due_date) else task.due_date
                 task.save()
                 
-                self.stdout.write(f'    ✓ {task.title[:50]} (auto): {start_date} → {end_date}')
+                self.stdout.write(f'    ✓ {task.title[:50]} (temp dates): {start_date} → {end_date}')
         
         # Create finish-to-start dependencies for a realistic project flow
         # Project flow: Setup (Done) → Design (Done/Backlog) → Backend (In Progress/To Do) → Frontend (To Do/Review) → Pipeline
@@ -199,6 +200,7 @@ class Command(BaseCommand):
             # Phase 1: Foundation → Current Work
             ('Create UI mockups', ['Setup project repository']),
             ('Setup authentication middleware', ['Setup project repository']),
+            ('Remove legacy', ['Setup project repository']),
             
             # Phase 2: Current work dependencies
             ('Implement dashboard layout', ['Create UI mockups', 'Setup authentication middleware']),
@@ -216,6 +218,26 @@ class Command(BaseCommand):
             # Phase 6: Documentation and CI/CD come last
             ('Write documentation for API endpoints', ['Create component library', 'Implement user authentication']),
             ('Setup CI/CD pipeline', ['Implement user authentication']),
+            
+            # Additional dependencies for better organization
+            ('Deploy authentication', ['Implement user authentication']),
+            ('Review and merge reporting', ['Create component library']),
+            ('Add tests for user profile', ['Implement user authentication']),
+            ('Research WebSockets', ['Setup authentication middleware']),
+            ('Design sidebar', ['Create UI mockups']),
+            ('Update documentation for table', ['Write documentation for API endpoints']),
+            ('Refactor user module', ['Implement user authentication']),
+            ('Add tests for export', ['Create component library']),
+            ('Fix bug in modal', ['Implement dashboard layout']),
+            ('Refactor task module', ['Design database schema']),
+            ('Optimize dashboard', ['Implement dashboard layout']),
+            ('Research REST API', ['Setup authentication middleware']),
+            ('Optimize reporting', ['Review and merge reporting']),
+            ('Research Docker', ['Setup CI/CD pipeline']),
+            ('Review and merge notifications', ['Setup authentication middleware']),
+            ('Research Redis', ['Design database schema']),
+            ('Update documentation for menu', ['Design sidebar']),
+            ('Fix bug in login', ['Setup authentication middleware']),
         ]
         
         for task_title, dep_titles in dependency_chains:
@@ -238,20 +260,31 @@ class Command(BaseCommand):
                                 break
                     
                     if dep_task and dep_task.start_date and dep_task.due_date and task.start_date:
-                        # Ensure dependency task ends BEFORE dependent task starts
-                        if dep_task.due_date.date() <= task.start_date:
-                            task.dependencies.add(dep_task)
-                            self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}"')
-                        else:
-                            # Auto-adjust task dates to start after dependency
-                            task.start_date = dep_task.due_date.date() + timedelta(days=1)
-                            original_duration = (task.due_date.date() - base_date).days if task.due_date else 7
+                        # Always adjust task dates to start after ALL dependencies complete
+                        # Find the latest end date among all current dependencies
+                        latest_dep_end = dep_task.due_date.date()
+                        for existing_dep in task.dependencies.all():
+                            if existing_dep.due_date and existing_dep.due_date.date() > latest_dep_end:
+                                latest_dep_end = existing_dep.due_date.date()
+                        
+                        # Task must start after the latest dependency ends
+                        required_start = latest_dep_end + timedelta(days=1)
+                        
+                        if task.start_date < required_start:
+                            # Calculate original duration to preserve it
+                            original_duration = (task.due_date.date() - task.start_date).days if task.due_date else 5
                             duration = max(3, min(original_duration, 10))  # Keep reasonable duration
+                            
+                            # Adjust dates
+                            task.start_date = required_start
                             task.due_date = datetime.combine(task.start_date + timedelta(days=duration), datetime.max.time())
                             task.due_date = timezone.make_aware(task.due_date) if timezone.is_naive(task.due_date) else task.due_date
                             task.save()
                             task.dependencies.add(dep_task)
-                            self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}" (dates auto-adjusted)')
+                            self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}" (adjusted: {task.start_date} → {task.due_date.date()})')
+                        else:
+                            task.dependencies.add(dep_task)
+                            self.stdout.write(f'    → "{task.title[:40]}" depends on "{dep_task.title[:40]}"')
 
     def fix_bug_tracking_board(self, board, columns_tasks):
         """Fix Bug Tracking board with bug resolution workflow"""
