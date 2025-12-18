@@ -419,8 +419,24 @@
         {% else %}
         <div class="empty-state">
             <i class="fas fa-chart-bar"></i>
-            <h3>No AI usage yet</h3>
-            <p>Start using AI Coach or AI Assistant to see your usage statistics here.</p>
+            <h3>📊 No AI Usage Yet</h3>
+            <p style="font-size: 15px; margin-bottom: 16px;">You haven't used any AI features in the last 30 days.</p>
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin: 0 auto; max-width: 500px; text-align: left;">
+                <div style="display: flex; align-items: start; gap: 12px;">
+                    <i class="fas fa-lightbulb" style="color: #15803d; font-size: 20px; margin-top: 2px;"></i>
+                    <div>
+                        <p style="margin: 0 0 8px 0; font-weight: 600; color: #14532d;">Get Started with AI Features:</p>
+                        <ul style="margin: 0; padding-left: 20px; color: #14532d;">
+                            <li><strong>AI Coach:</strong> Get project insights and recommendations</li>
+                            <li><strong>AI Assistant:</strong> Ask questions about your tasks and boards</li>
+                            <li><strong>Analytics:</strong> Generate AI-powered board summaries</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <small class="text-muted mt-3" style="display: block; font-size: 13px;">
+                Navigate to any board and look for AI-powered features to get started! 🚀
+            </small>
         </div>
         {% endif %}
     </div>
@@ -441,12 +457,35 @@
         {% else %}
         <div class="empty-state">
             <i class="fas fa-chart-line"></i>
-            <h3>Not enough data yet</h3>
-            <p>Continue using AI features over multiple days to see your usage trend.</p>
+            <h3>📊 Not Enough Data for Trend Chart</h3>
+            <p style="font-size: 15px; margin-bottom: 16px;">
+                {% if daily_usage and daily_usage|length > 0 %}
+                You have used AI features on <strong>{{ daily_usage|length }} day{{ daily_usage|length|pluralize }}</strong> so far.
+                {% else %}
+                You haven't used any AI features yet.
+                {% endif %}
+            </p>
+            <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px; margin: 0 auto; max-width: 500px; text-align: left;">
+                <div style="display: flex; align-items: start; gap: 12px;">
+                    <i class="fas fa-info-circle" style="color: #0284c7; font-size: 20px; margin-top: 2px;"></i>
+                    <div>
+                        <p style="margin: 0 0 8px 0; font-weight: 600; color: #0c4a6e;">To see your usage trend:</p>
+                        <ul style="margin: 0; padding-left: 20px; color: #0c4a6e;">
+                            <li>Use AI Coach or AI Assistant features</li>
+                            <li>Come back on different days to use AI features</li>
+                            <li>The chart will appear once you have activity on <strong>2 or more different days</strong></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
             {% if daily_usage and daily_usage|length > 0 %}
-            <small class="text-muted mt-2">You have {{ daily_usage|length }} day{{ daily_usage|length|pluralize }} of data. Chart will appear once you have activity across 2 or more days.</small>
+            <small class="text-muted mt-3" style="display: block; font-size: 13px;">
+                Keep using AI features on another day, and your trend chart will appear here! 📈
+            </small>
             {% else %}
-            <small class="text-muted mt-2">Chart will appear once you have AI usage across at least 2 different days.</small>
+            <small class="text-muted mt-3" style="display: block; font-size: 13px;">
+                Try asking the AI Coach for project insights or use the AI Assistant to get started! 🚀
+            </small>
             {% endif %}
         </div>
         {% endif %}
