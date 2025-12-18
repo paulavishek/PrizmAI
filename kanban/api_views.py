@@ -426,6 +426,310 @@ def summarize_board_analytics_api(request, board_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 @login_required
+@require_http_methods(["GET"])
+def download_analytics_summary_pdf(request, board_id):
+    """
+    API endpoint to download board analytics summary as PDF
+    """
+    try:
+        from reportlab.lib.pagesizes import letter, A4
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+        from io import BytesIO
+        from datetime import datetime
+        
+        # Get the board and verify user access
+        board = get_object_or_404(Board, id=board_id)
+        
+        # Check if user has access to this board
+        if not (board.created_by == request.user or request.user in board.members.all()):
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # Check if there's a summary to download (get it from session or regenerate)
+        # For now, we'll fetch the analytics data and generate fresh summary
+        from django.db.models import Count, Q
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        # Get all tasks for this board
+        all_tasks = Task.objects.filter(column__board=board)
+        total_tasks = all_tasks.count()
+        
+        # Completed tasks
+        completed_count = Task.objects.filter(
+            column__board=board, 
+            progress=100
+        ).count()
+        
+        # Calculate productivity
+        total_progress_percentage = 0
+        for task in all_tasks:
+            progress = task.progress if task.progress is not None else 0
+            total_progress_percentage += progress
+        
+        productivity = 0
+        if total_tasks > 0:
+            productivity = (total_progress_percentage / (total_tasks * 100)) * 100
+        
+        # Overdue and upcoming tasks
+        today = timezone.now().date()
+        overdue_tasks = Task.objects.filter(
+            column__board=board,
+            due_date__date__lt=today
+        ).exclude(progress=100)
+        
+        upcoming_tasks = Task.objects.filter(
+            column__board=board,
+            due_date__date__gte=today,
+            due_date__date__lte=today + timedelta(days=7)
+        )
+        
+        # Lean Six Sigma metrics
+        value_added_count = Task.objects.filter(
+            column__board=board, 
+            labels__name='Value-Added', 
+            labels__category='lean'
+        ).count()
+        
+        necessary_nva_count = Task.objects.filter(
+            column__board=board, 
+            labels__name='Necessary NVA', 
+            labels__category='lean'
+        ).count()
+        
+        waste_count = Task.objects.filter(
+            column__board=board, 
+            labels__name='Waste/Eliminate', 
+            labels__category='lean'
+        ).count()
+        
+        total_categorized = value_added_count + necessary_nva_count + waste_count
+        value_added_percentage = 0
+        if total_categorized > 0:
+            value_added_percentage = (value_added_count / total_categorized) * 100
+        
+        # Task distribution by column
+        columns = Column.objects.filter(board=board)
+        tasks_by_column = []
+        for column in columns:
+            count = Task.objects.filter(column=column).count()
+            tasks_by_column.append({'name': column.name, 'count': count})
+        
+        # Task distribution by priority
+        priority_queryset = Task.objects.filter(column__board=board).values('priority').annotate(
+            count=Count('id')
+        ).order_by('priority')
+        
+        tasks_by_priority = []
+        for item in priority_queryset:
+            priority_name = dict(Task.PRIORITY_CHOICES).get(item['priority'], item['priority'])
+            tasks_by_priority.append({'priority': priority_name, 'count': item['count']})
+        
+        # Task distribution by user
+        user_queryset = Task.objects.filter(
+            column__board=board
+        ).values('assigned_to__username').annotate(
+            count=Count('id')
+        ).order_by('-count')
+        
+        tasks_by_user = []
+        for item in user_queryset:
+            username = item['assigned_to__username'] or 'Unassigned'
+            user_tasks = Task.objects.filter(
+                column__board=board, 
+                assigned_to__username=username
+            )
+            completed_by_user = user_tasks.filter(progress=100).count()
+            user_completion_rate = 0
+            if item['count'] > 0:
+                user_completion_rate = (completed_by_user / item['count']) * 100
+            
+            tasks_by_user.append({
+                'username': username,
+                'count': item['count'],
+                'completion_rate': int(user_completion_rate)
+            })
+        
+        # Prepare analytics data for AI
+        analytics_data = {
+            'total_tasks': total_tasks,
+            'completed_count': completed_count,
+            'productivity': round(productivity, 1),
+            'overdue_count': overdue_tasks.count(),
+            'upcoming_count': upcoming_tasks.count(),
+            'value_added_percentage': round(value_added_percentage, 1),
+            'total_categorized': total_categorized,
+            'tasks_by_lean_category': [
+                {'name': 'Value-Added', 'count': value_added_count},
+                {'name': 'Necessary NVA', 'count': necessary_nva_count},
+                {'name': 'Waste/Eliminate', 'count': waste_count}
+            ],
+            'tasks_by_column': tasks_by_column,
+            'tasks_by_priority': tasks_by_priority,
+            'tasks_by_user': tasks_by_user
+        }
+        
+        # Generate analytics summary using AI
+        from kanban.utils.ai_utils import summarize_board_analytics
+        summary = summarize_board_analytics(analytics_data)
+        
+        if not summary:
+            return JsonResponse({'error': 'Failed to generate analytics summary'}, status=500)
+        
+        # Create PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+        
+        # Container for PDF elements
+        elements = []
+        
+        # Define styles
+        styles = getSampleStyleSheet()
+        
+        # Custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=24,
+            textColor=colors.HexColor('#2c3e50'),
+            spaceAfter=30,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold'
+        )
+        
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Normal'],
+            fontSize=12,
+            textColor=colors.HexColor('#7f8c8d'),
+            spaceAfter=20,
+            alignment=TA_CENTER,
+            fontName='Helvetica'
+        )
+        
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=16,
+            textColor=colors.HexColor('#34495e'),
+            spaceAfter=12,
+            spaceBefore=12,
+            fontName='Helvetica-Bold'
+        )
+        
+        body_style = ParagraphStyle(
+            'CustomBody',
+            parent=styles['Normal'],
+            fontSize=11,
+            textColor=colors.HexColor('#2c3e50'),
+            alignment=TA_JUSTIFY,
+            spaceAfter=12,
+            leading=16,
+            fontName='Helvetica'
+        )
+        
+        # Add title
+        title = Paragraph(f"<b>{board.name}</b>", title_style)
+        elements.append(title)
+        
+        # Add subtitle
+        subtitle = Paragraph(f"AI Analytics Summary - Generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", subtitle_style)
+        elements.append(subtitle)
+        elements.append(Spacer(1, 0.3 * inch))
+        
+        # Add key metrics table
+        metrics_heading = Paragraph("<b>Key Metrics Overview</b>", heading_style)
+        elements.append(metrics_heading)
+        
+        metrics_data = [
+            ['Metric', 'Value'],
+            ['Total Tasks', str(total_tasks)],
+            ['Completed Tasks', str(completed_count)],
+            ['Productivity Rate', f"{round(productivity, 1)}%"],
+            ['Overdue Tasks', str(overdue_tasks.count())],
+            ['Tasks Due Soon (7 days)', str(upcoming_tasks.count())],
+            ['Value-Added Percentage', f"{round(value_added_percentage, 1)}%"]
+        ]
+        
+        metrics_table = Table(metrics_data, colWidths=[3.5*inch, 2.5*inch])
+        metrics_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498db')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 12),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 10),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')])
+        ]))
+        elements.append(metrics_table)
+        elements.append(Spacer(1, 0.3 * inch))
+        
+        # Add AI Summary
+        summary_heading = Paragraph("<b>AI-Generated Analytics Summary</b>", heading_style)
+        elements.append(summary_heading)
+        
+        # Process the summary text - convert markdown-like formatting to proper paragraphs
+        import re
+        
+        # Split summary into sections
+        summary_lines = summary.split('\n')
+        for line in summary_lines:
+            line = line.strip()
+            if not line:
+                elements.append(Spacer(1, 0.1 * inch))
+                continue
+            
+            # Check if it's a heading (starts with ##)
+            if line.startswith('##'):
+                heading_text = line.replace('##', '').strip()
+                heading_para = Paragraph(f"<b>{heading_text}</b>", heading_style)
+                elements.append(heading_para)
+            # Check if it's a subheading (starts with single #)
+            elif line.startswith('#') and not line.startswith('##'):
+                heading_text = line.replace('#', '').strip()
+                heading_para = Paragraph(f"<b>{heading_text}</b>", heading_style)
+                elements.append(heading_para)
+            # Check if it's a bullet point
+            elif line.startswith('*') or line.startswith('-'):
+                bullet_text = line.lstrip('*- ').strip()
+                # Replace **bold** with <b>bold</b>
+                bullet_text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', bullet_text)
+                bullet_para = Paragraph(f"• {bullet_text}", body_style)
+                elements.append(bullet_para)
+            else:
+                # Regular text - replace **bold** with <b>bold</b>
+                formatted_line = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', line)
+                text_para = Paragraph(formatted_line, body_style)
+                elements.append(text_para)
+        
+        # Build PDF
+        doc.build(elements)
+        
+        # Get PDF from buffer
+        pdf = buffer.getvalue()
+        buffer.close()
+        
+        # Create response
+        from django.http import HttpResponse
+        response = HttpResponse(pdf, content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="{board.name}_Analytics_Summary_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf"'
+        
+        return response
+        
+    except Exception as e:
+        import traceback
+        print(f"Error generating PDF: {str(e)}")
+        print(traceback.format_exc())
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
 @require_http_methods(["POST"])
 def suggest_task_priority_api(request):
     """

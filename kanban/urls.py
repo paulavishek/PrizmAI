@@ -56,6 +56,7 @@ urlpatterns = [
     path('api/summarize-comments/<int:task_id>/', api_views.summarize_comments_api, name='summarize_comments_api'),
     path('api/suggest-lss-classification/', api_views.suggest_lss_classification_api, name='suggest_lss_classification_api'),
     path('api/summarize-board-analytics/<int:board_id>/', api_views.summarize_board_analytics_api, name='summarize_board_analytics_api'),
+    path('api/download-analytics-pdf/<int:board_id>/', api_views.download_analytics_summary_pdf, name='download_analytics_summary_pdf'),
     path('api/summarize-task-details/<int:task_id>/', api_views.summarize_task_details_api, name='summarize_task_details_api'),
       # New AI Enhancement API Endpoints
     path('api/suggest-task-priority/', api_views.suggest_task_priority_api, name='suggest_task_priority_api'),

@@ -44,10 +44,16 @@
                 <h6 class="m-0 font-weight-bold text-info">
                     <i class="fas fa-robot me-2"></i>AI Analytics Summary
                 </h6>
-                <button id="generate-ai-summary" class="btn btn-sm btn-info" data-board-id="{{ board.id }}">
-                    <span id="ai-summary-spinner" class="spinner-border spinner-border-sm d-none me-1" role="status"></span>
-                    <i class="fas fa-brain me-1"></i> Generate AI Summary
-                </button>
+                <div>
+                    <button id="generate-ai-summary" class="btn btn-sm btn-info" data-board-id="{{ board.id }}">
+                        <span id="ai-summary-spinner" class="spinner-border spinner-border-sm d-none me-1" role="status"></span>
+                        <i class="fas fa-brain me-1"></i> Generate AI Summary
+                    </button>
+                    <button id="download-pdf-summary" class="btn btn-sm btn-success ms-2 d-none" data-board-id="{{ board.id }}">
+                        <span id="pdf-download-spinner" class="spinner-border spinner-border-sm d-none me-1" role="status"></span>
+                        <i class="fas fa-file-pdf me-1"></i> Download PDF
+                    </button>
+                </div>
             </div>
             <div class="card-body">
                 <div id="ai-summary-container" class="d-none">

@@ -413,6 +413,24 @@ function initializeAIFeatures() {
         });
     }
     
+    // PDF Download
+    const downloadPDFBtn = document.getElementById('download-pdf-summary');
+    if (downloadPDFBtn) {
+        downloadPDFBtn.addEventListener('click', function() {
+            const boardId = this.getAttribute('data-board-id');
+            downloadAnalyticsPDF(boardId);
+        });
+    }
+    
+    // PDF Download
+    const downloadPDFBtn = document.getElementById('download-pdf-summary');
+    if (downloadPDFBtn) {
+        downloadPDFBtn.addEventListener('click', function() {
+            const boardId = this.getAttribute('data-board-id');
+            downloadAnalyticsPDF(boardId);
+        });
+    }
+    
     // Workflow Optimization Analysis
     const analyzeWorkflowBtn = document.getElementById('analyze-workflow-btn');
     if (analyzeWorkflowBtn) {
@@ -457,12 +475,72 @@ function generateAISummary(boardId) {
         const formattedSummary = formatAISummary(data.summary);
         textElement.innerHTML = formattedSummary;
         
+        // Show the download PDF button
+        const downloadBtn = document.getElementById('download-pdf-summary');
+        if (downloadBtn) {
+            downloadBtn.classList.remove('d-none');
+        }
     })
     .catch(error => {
         console.error('Error generating AI summary:', error);
         textElement.innerHTML = '<div class="alert alert-danger">Failed to generate AI summary. Please try again.</div>';
         placeholder.classList.add('d-none');
         container.classList.remove('d-none');
+    })
+    .finally(() => {
+        // Hide loading state
+        btn.disabled = false;
+        spinner.classList.add('d-none');
+    });
+}
+
+function downloadAnalyticsPDF(boardId) {
+    const btn = document.getElementById('download-pdf-summary');
+    const spinner = document.getElementById('pdf-download-spinner');
+    
+    // Show loading state
+    btn.disabled = true;
+    spinner.classList.remove('d-none');
+    
+    // Create a temporary link and trigger download
+    const downloadUrl = `/api/download-analytics-pdf/${boardId}/`;
+    
+    fetch(downloadUrl, {
+        method: 'GET',
+        headers: {
+            'X-CSRFToken': getCSRFToken(),
+        },
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Failed to generate PDF');
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        // Create a temporary URL for the blob
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        
+        // Extract filename from Content-Disposition header or use default
+        const filename = `Analytics_Summary_${new Date().toISOString().slice(0, 10)}.pdf`;
+        a.download = filename;
+        
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        // Show success message
+        console.log('PDF downloaded successfully');
+    })
+    .catch(error => {
+        console.error('Error downloading PDF:', error);
+        alert('Failed to download PDF. Please try again.');
     })
     .finally(() => {
         // Hide loading state
