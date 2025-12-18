@@ -270,19 +270,17 @@ def summarize_board_analytics_api(request, board_id):
         all_tasks = Task.objects.filter(column__board=board)
         total_tasks = all_tasks.count()
         
-        # Completed tasks
+        # Completed tasks (based on progress = 100%)
         completed_count = Task.objects.filter(
             column__board=board, 
-            column__name__icontains='done'
+            progress=100
         ).count()
         
         # Calculate productivity
         total_progress_percentage = 0
         for task in all_tasks:
-            if task.column.name.lower().find('done') >= 0:
-                progress = 100
-            else:
-                progress = task.progress
+            # Use actual task progress, defaulting to 0 if None
+            progress = task.progress if task.progress is not None else 0
             total_progress_percentage += progress
         
         productivity = 0
@@ -294,7 +292,7 @@ def summarize_board_analytics_api(request, board_id):
         overdue_tasks = Task.objects.filter(
             column__board=board,
             due_date__date__lt=today
-        ).exclude(column__name__icontains='done')
+        ).exclude(progress=100)
         
         upcoming_tasks = Task.objects.filter(
             column__board=board,
@@ -491,7 +489,7 @@ def suggest_task_priority_api(request):
             'total_tasks': all_tasks.count(),
             'high_priority_count': all_tasks.filter(priority='high').count(),
             'urgent_count': all_tasks.filter(priority='urgent').count(),
-            'overdue_count': all_tasks.filter(due_date__lt=timezone.now()).exclude(column__name__icontains='done').count(),
+            'overdue_count': all_tasks.filter(due_date__lt=timezone.now()).exclude(progress=100).count(),
             'upcoming_deadlines': all_tasks.filter(
                 due_date__gte=timezone.now(),
                 due_date__lte=timezone.now() + timedelta(days=7)
@@ -594,7 +592,7 @@ def predict_deadline_api(request):
         # Calculate average completion times (simplified calculation)
         completed_tasks = Task.objects.filter(
             column__board=board, 
-            column__name__icontains='done'
+            progress=100
         )
         
         team_avg_completion = 5  # Default fallback
@@ -623,7 +621,7 @@ def predict_deadline_api(request):
                 assignee_current_tasks = Task.objects.filter(
                     column__board=board,
                     assigned_to=assignee_user
-                ).exclude(column__name__icontains='done').count()
+                ).exclude(progress=100).count()
             except User.DoesNotExist:
                 pass
         
@@ -899,7 +897,7 @@ def analyze_workflow_optimization_api(request):
         total_tasks = all_tasks.count()
         
         # Calculate average completion time
-        completed_tasks = all_tasks.filter(column__name__icontains='done')
+        completed_tasks = all_tasks.filter(progress=100)
         avg_completion_time = 5  # Default
         if completed_tasks.exists():
             total_days = 0
@@ -955,7 +953,7 @@ def analyze_workflow_optimization_api(request):
         # Overdue count
         overdue_count = all_tasks.filter(
             due_date__lt=timezone.now()
-        ).exclude(column__name__icontains='done').count()
+        ).exclude(progress=100).count()
         
         board_analytics = {
             'total_tasks': total_tasks,

@@ -143,12 +143,12 @@ def demo_dashboard(request):
     if task_count > 0:
         completion_rate = round((completed_count / task_count) * 100, 1)
     
-    # Get overdue tasks
+    # Get overdue tasks (exclude completed tasks with progress=100)
     overdue_count = Task.objects.filter(
         column__board__in=demo_boards,
         due_date__lt=timezone.now()
     ).exclude(
-        column__name__icontains='done'
+        progress=100
     ).count()
     
     # Get tasks due soon
@@ -157,14 +157,11 @@ def demo_dashboard(request):
         due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
     ).count()
     
-    # Get demo tasks sorted by urgency (for display)
+    # Get demo tasks sorted by urgency (for display) - exclude completed tasks
     demo_tasks = Task.objects.filter(
         column__board__in=demo_boards
     ).exclude(
-        Q(column__name__icontains='done') |
-        Q(column__name__icontains='closed') |
-        Q(column__name__icontains='completed') |
-        Q(progress=100)
+        progress=100
     ).select_related('column', 'column__board', 'assigned_to').extra(
         select={
             'priority_order': """

@@ -58,12 +58,12 @@ def dashboard(request):
             column__board__in=boards,
             due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
         ).count()
-          # Get overdue tasks (due date in the past and not in done columns)
+          # Get overdue tasks (due date in the past and not completed)
         overdue_count = Task.objects.filter(
             column__board__in=boards,
             due_date__lt=timezone.now()
         ).exclude(
-            column__name__icontains='done'
+            progress=100
         ).count()
         
         # Get detailed task data for modals
@@ -76,7 +76,7 @@ def dashboard(request):
             column__board__in=boards,
             due_date__lt=timezone.now()
         ).exclude(
-            column__name__icontains='done'
+            progress=100
         ).select_related('column', 'assigned_to', 'column__board')
         due_soon_tasks = Task.objects.filter(
             column__board__in=boards,
@@ -86,15 +86,12 @@ def dashboard(request):
         # Get sort preference from request (default to 'urgency')
         sort_by = request.GET.get('sort_tasks', 'urgency')
         
-        # Base query for My Tasks
+        # Base query for My Tasks - exclude only completed tasks (progress=100)
         my_tasks_query = Task.objects.filter(
             column__board__in=boards,
             assigned_to=request.user
         ).exclude(
-            Q(column__name__icontains='done') |
-            Q(column__name__icontains='closed') |
-            Q(column__name__icontains='completed') |
-            Q(progress=100)
+            progress=100
         ).select_related('column', 'column__board', 'assigned_to')
         
         # Apply sorting based on user preference
@@ -824,11 +821,11 @@ def board_analytics(request, board_id):
     tasks_by_user = []
     for item in user_queryset:
         username = item['assigned_to__username'] or 'Unassigned'
-        # Count completed tasks for this user
+        # Count completed tasks for this user based on progress = 100%
         completed_user_tasks = Task.objects.filter(
             column__board=board,
             assigned_to__username=item['assigned_to__username'],
-            column__name__icontains='done'
+            progress=100
         ).count()
         
         # Calculate completion percentage
@@ -867,23 +864,17 @@ def board_analytics(request, board_id):
     # Get all tasks and their progress values
     all_tasks = Task.objects.filter(column__board=board)
     
-    # Sum of completed tasks (100% progress or in Done column)
-    done_column_tasks = Task.objects.filter(
-        column__board=board, 
-        column__name__icontains='done'
-    )
-    completed_count = done_column_tasks.count() # Count completed tasks for this board
+    # Count completed tasks based on progress percentage (100%) instead of column name
+    completed_count = Task.objects.filter(
+        column__board=board,
+        progress=100
+    ).count()
     
-    # Set tasks in Done column to 100% progress for calculation
+    # Calculate total progress percentage across all tasks
     total_progress_percentage = 0
     for task in all_tasks:
-        # If task is in Done column, count as 100%
-        if task.column.name.lower().find('done') >= 0:
-            progress = 100
-        else:
-            # Handle None progress values by defaulting to 0
-            progress = task.progress if task.progress is not None else 0
-        
+        # Use actual task progress, defaulting to 0 if None
+        progress = task.progress if task.progress is not None else 0
         total_progress_percentage += progress
     
     # Calculate overall productivity based on progress of all tasks
@@ -898,13 +889,13 @@ def board_analytics(request, board_id):
         due_date__date__lte=today + timedelta(days=7)
     ).order_by('due_date')
     
-    # Get overdue tasks (due date in the past and not in done columns)
+    # Get overdue tasks (due date in the past and not completed)
     overdue_tasks = Task.objects.filter(
         column__board=board,
         due_date__isnull=False,
         due_date__date__lt=today
     ).exclude(
-        column__name__icontains='done'
+        progress=100
     ).order_by('due_date')
     
     # Get count of overdue tasks
