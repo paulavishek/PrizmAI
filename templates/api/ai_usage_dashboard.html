@@ -455,7 +455,7 @@
             <canvas id="usageChart"></canvas>
         </div>
         {% else %}
-        <div class="empty-state">
+        <div class="empty-state" style="display: block !important; visibility: visible !important;">
             <i class="fas fa-chart-line"></i>
             <h3>📊 Not Enough Data for Trend Chart</h3>
             <p style="font-size: 15px; margin-bottom: 16px;">
@@ -530,7 +530,7 @@ function refreshUsageStats() {
 document.addEventListener('DOMContentLoaded', function() {
     refreshInterval = setInterval(refreshUsageStats, 30000);
     
-    {% if daily_usage %}
+    {% if daily_usage and daily_usage|length >= 2 %}
     // Create chart
     const ctx = document.getElementById('usageChart').getContext('2d');
     const dailyData = {{ daily_usage|safe }};
