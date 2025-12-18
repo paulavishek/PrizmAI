@@ -1,0 +1,501 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Suggestion Detail - {{ suggestion.title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .suggestion-detail-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+
+    .suggestion-header {
+        background: white;
+        border-radius: 15px;
+        padding: 30px;
+        margin-bottom: 30px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .severity-badge {
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 15px;
+    }
+
+    .severity-critical {
+        background: #dc3545;
+        color: white;
+    }
+
+    .severity-high {
+        background: #fd7e14;
+        color: white;
+    }
+
+    .severity-medium {
+        background: #0d6efd;
+        color: white;
+    }
+
+    .severity-low {
+        background: #198754;
+        color: white;
+    }
+
+    .severity-info {
+        background: #6c757d;
+        color: white;
+    }
+
+    .suggestion-title {
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 10px;
+        color: #2c3e50;
+    }
+
+    .suggestion-meta {
+        color: #6c757d;
+        font-size: 14px;
+        margin-bottom: 20px;
+    }
+
+    .suggestion-section {
+        background: white;
+        border-radius: 12px;
+        padding: 25px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    }
+
+    .section-title {
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 15px;
+        color: #2c3e50;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .section-icon {
+        width: 30px;
+        height: 30px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 16px;
+    }
+
+    .action-list {
+        list-style: none;
+        padding: 0;
+    }
+
+    .action-item {
+        padding: 12px;
+        background: #f8f9fa;
+        border-left: 4px solid #667eea;
+        margin-bottom: 10px;
+        border-radius: 6px;
+        display: flex;
+        align-items: start;
+        gap: 10px;
+    }
+
+    .action-item i {
+        color: #667eea;
+        margin-top: 2px;
+    }
+
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 15px;
+    }
+
+    .metric-card {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    .metric-label {
+        font-size: 12px;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 5px;
+    }
+
+    .metric-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #2c3e50;
+    }
+
+    .confidence-bar {
+        height: 8px;
+        background: #e9ecef;
+        border-radius: 10px;
+        overflow: hidden;
+        margin-top: 5px;
+    }
+
+    .confidence-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #198754, #28a745);
+        border-radius: 10px;
+        transition: width 0.3s;
+    }
+
+    .feedback-form {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 10px;
+        margin-top: 20px;
+    }
+
+    .btn-action {
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+
+    .btn-helpful {
+        background: #28a745;
+        color: white;
+        border: none;
+    }
+
+    .btn-helpful:hover {
+        background: #218838;
+        color: white;
+    }
+
+    .btn-not-helpful {
+        background: #dc3545;
+        color: white;
+        border: none;
+    }
+
+    .btn-not-helpful:hover {
+        background: #c82333;
+        color: white;
+    }
+
+    .feedback-entry {
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        border-left: 4px solid #667eea;
+        margin-bottom: 15px;
+    }
+
+    .feedback-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .feedback-author {
+        font-weight: 600;
+        color: #2c3e50;
+    }
+
+    .feedback-date {
+        color: #6c757d;
+        font-size: 13px;
+    }
+
+    .feedback-helpful-badge {
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .feedback-helpful-yes {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .feedback-helpful-no {
+        background: #f8d7da;
+        color: #721c24;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="suggestion-detail-container">
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-4">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'coach_dashboard' board.id %}">AI Coach</a></li>
+            <li class="breadcrumb-item active">Suggestion Detail</li>
+        </ol>
+    </nav>
+
+    <!-- Suggestion Header -->
+    <div class="suggestion-header">
+        <span class="severity-badge severity-{{ suggestion.severity }}">
+            {{ suggestion.get_severity_display }}
+        </span>
+        <span class="badge bg-secondary ms-2">{{ suggestion.get_suggestion_type_display }}</span>
+        
+        <h1 class="suggestion-title">{{ suggestion.title }}</h1>
+        
+        <div class="suggestion-meta">
+            <i class="fas fa-calendar-alt me-2"></i>Generated {{ suggestion.created_at|date:"F d, Y" }} at {{ suggestion.created_at|time:"g:i A" }}
+            {% if suggestion.task %}
+            <span class="ms-3"><i class="fas fa-link me-2"></i>Related to: <a href="{% url 'board_detail' board.id %}">{{ suggestion.task.title }}</a></span>
+            {% endif %}
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+            <button onclick="location.href='{% url 'coach_dashboard' board.id %}'" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back to Coach
+            </button>
+            {% if suggestion.status == 'active' %}
+            <button onclick="acknowledgeSuggestion()" class="btn btn-primary">
+                <i class="fas fa-check me-2"></i>Acknowledge
+            </button>
+            <button onclick="dismissSuggestion()" class="btn btn-outline-danger">
+                <i class="fas fa-times me-2"></i>Dismiss
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Message -->
+    <div class="suggestion-section">
+        <h3 class="section-title">
+            <div class="section-icon"><i class="fas fa-info"></i></div>
+            What's Happening
+        </h3>
+        <p class="mb-0" style="font-size: 16px; line-height: 1.6;">{{ suggestion.message }}</p>
+    </div>
+
+    <!-- Reasoning -->
+    {% if suggestion.reasoning %}
+    <div class="suggestion-section">
+        <h3 class="section-title">
+            <div class="section-icon"><i class="fas fa-brain"></i></div>
+            Why This Matters
+        </h3>
+        <p class="mb-0" style="font-size: 15px; line-height: 1.6; color: #555;">{{ suggestion.reasoning }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Recommended Actions -->
+    {% if suggestion.recommended_actions %}
+    <div class="suggestion-section">
+        <h3 class="section-title">
+            <div class="section-icon"><i class="fas fa-tasks"></i></div>
+            Recommended Actions
+        </h3>
+        <ul class="action-list">
+            {% for action in suggestion.recommended_actions %}
+            <li class="action-item">
+                <i class="fas fa-arrow-right"></i>
+                <span>{{ action }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- Expected Impact -->
+    {% if suggestion.expected_impact %}
+    <div class="suggestion-section">
+        <h3 class="section-title">
+            <div class="section-icon"><i class="fas fa-chart-line"></i></div>
+            Expected Impact
+        </h3>
+        <p class="mb-0" style="font-size: 15px; line-height: 1.6; color: #555;">{{ suggestion.expected_impact }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Metrics Snapshot -->
+    {% if suggestion.metrics_snapshot %}
+    <div class="suggestion-section">
+        <h3 class="section-title">
+            <div class="section-icon"><i class="fas fa-chart-bar"></i></div>
+            Metrics
+        </h3>
+        <div class="metrics-grid">
+            {% for key, value in suggestion.metrics_snapshot.items %}
+            <div class="metric-card">
+                <div class="metric-label">{{ key|title }}</div>
+                <div class="metric-value">{{ value }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- AI Confidence -->
+    <div class="suggestion-section">
+        <h3 class="section-title">
+            <div class="section-icon"><i class="fas fa-robot"></i></div>
+            AI Analysis
+        </h3>
+        <div class="row">
+            <div class="col-md-6">
+                <p class="mb-2"><strong>Confidence Score:</strong> {{ suggestion.confidence_score|floatformat:0 }}%</p>
+                <div class="confidence-bar">
+                    <div class="confidence-fill" style="width: {{ suggestion.confidence_score|floatformat:0 }}%"></div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <p class="mb-1"><strong>Generation Method:</strong> {{ suggestion.get_generation_method_display }}</p>
+                <p class="mb-0"><strong>AI Model:</strong> {{ suggestion.ai_model_used }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback Section -->
+    <div class="suggestion-section">
+        <h3 class="section-title">
+            <div class="section-icon"><i class="fas fa-comment-dots"></i></div>
+            Provide Feedback
+        </h3>
+        
+        {% if suggestion.was_helpful is None %}
+        <p class="text-muted mb-3">Help us improve by rating this suggestion:</p>
+        
+        <form method="POST" action="{% url 'coach_submit_feedback' suggestion.id %}">
+            {% csrf_token %}
+            <div class="d-flex gap-3 mb-4">
+                <button type="submit" name="helpful" value="true" class="btn btn-helpful">
+                    <i class="fas fa-thumbs-up me-2"></i>Helpful
+                </button>
+                <button type="submit" name="helpful" value="false" class="btn btn-not-helpful">
+                    <i class="fas fa-thumbs-down me-2"></i>Not Helpful
+                </button>
+            </div>
+            
+            <div class="form-group">
+                <label for="comment" class="form-label"><strong>Additional Comments (Optional)</strong></label>
+                <textarea name="comment" id="comment" class="form-control" rows="4" 
+                          placeholder="Share your thoughts about this suggestion..."></textarea>
+            </div>
+            
+            <div class="form-group mt-3">
+                <label for="action_taken" class="form-label"><strong>What Action Did You Take? (Optional)</strong></label>
+                <select name="action_taken" id="action_taken" class="form-control">
+                    <option value="">-- Select --</option>
+                    <option value="implemented">Implemented the suggestion</option>
+                    <option value="partially_implemented">Partially implemented</option>
+                    <option value="modified">Modified and implemented</option>
+                    <option value="ignored">Decided not to implement</option>
+                    <option value="deferred">Deferred to later</option>
+                </select>
+            </div>
+        </form>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-check-circle me-2"></i>
+            You marked this suggestion as <strong>{{ suggestion.was_helpful|yesno:"Helpful,Not Helpful" }}</strong>
+            {% if suggestion.user_comment %}
+            <p class="mt-2 mb-0"><strong>Your comment:</strong> {{ suggestion.user_comment }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Previous Feedback Entries -->
+        {% if feedback_entries %}
+        <div class="mt-4">
+            <h5 class="mb-3">Feedback History</h5>
+            {% for feedback in feedback_entries %}
+            <div class="feedback-entry">
+                <div class="feedback-header">
+                    <div>
+                        <span class="feedback-author">{{ feedback.user.username }}</span>
+                        <span class="feedback-helpful-badge feedback-helpful-{{ feedback.was_helpful|yesno:'yes,no' }}">
+                            {{ feedback.was_helpful|yesno:"Helpful,Not Helpful" }}
+                        </span>
+                    </div>
+                    <span class="feedback-date">{{ feedback.created_at|date:"M d, Y" }}</span>
+                </div>
+                {% if feedback.comment %}
+                <p class="mb-1">{{ feedback.comment }}</p>
+                {% endif %}
+                {% if feedback.action_taken %}
+                <p class="mb-0 text-muted"><small><strong>Action:</strong> {{ feedback.get_action_taken_display }}</small></p>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function acknowledgeSuggestion() {
+    if (confirm('Mark this suggestion as acknowledged?')) {
+        fetch("{% url 'coach_acknowledge_suggestion' suggestion.id %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Suggestion acknowledged!');
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to acknowledge suggestion');
+        });
+    }
+}
+
+function dismissSuggestion() {
+    if (confirm('Are you sure you want to dismiss this suggestion? This action cannot be undone.')) {
+        fetch("{% url 'coach_dismiss_suggestion' suggestion.id %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert('Suggestion dismissed!');
+                window.location.href = "{% url 'coach_dashboard' board.id %}";
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to dismiss suggestion');
+        });
+    }
+}
+</script>
+{% endblock %}
