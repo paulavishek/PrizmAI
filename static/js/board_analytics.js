@@ -422,15 +422,6 @@ function initializeAIFeatures() {
         });
     }
     
-    // PDF Download
-    const downloadPDFBtn = document.getElementById('download-pdf-summary');
-    if (downloadPDFBtn) {
-        downloadPDFBtn.addEventListener('click', function() {
-            const boardId = this.getAttribute('data-board-id');
-            downloadAnalyticsPDF(boardId);
-        });
-    }
-    
     // Workflow Optimization Analysis
     const analyzeWorkflowBtn = document.getElementById('analyze-workflow-btn');
     if (analyzeWorkflowBtn) {
