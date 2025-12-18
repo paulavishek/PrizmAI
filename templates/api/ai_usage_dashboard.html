@@ -553,7 +553,7 @@ document.addEventListener('DOMContentLoaded', function() {
     {% if daily_usage and daily_usage|length >= 2 %}
     // Create chart
     const ctx = document.getElementById('usageChart').getContext('2d');
-    const dailyData = {{ daily_usage|safe }};
+    const dailyData = JSON.parse('{{ daily_usage_json|escapejs }}');
     
     const chart = new Chart(ctx, {
         type: 'line',

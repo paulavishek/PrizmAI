@@ -4,6 +4,7 @@ AI Usage Dashboard Views
 Dashboard for monitoring AI feature consumption and quotas
 """
 
+import json
 import logging
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
@@ -63,13 +64,23 @@ def ai_usage_dashboard(request):
         count=Count('id')
     ).order_by('date')
     
+    # Convert dates to ISO format strings for JavaScript
+    daily_usage_list = [
+        {
+            'date': item['date'].isoformat() if item['date'] else None,
+            'count': item['count']
+        }
+        for item in daily_usage
+    ]
+    
     context = {
         'quota': quota,
         'stats': stats,
         'recent_requests_24h': recent_logs.count(),
         'hourly_requests': list(hourly_requests),
         'by_feature': list(by_feature),
-        'daily_usage': list(daily_usage),
+        'daily_usage': daily_usage_list,
+        'daily_usage_json': json.dumps(daily_usage_list),
     }
     
     return render(request, 'api/ai_usage_dashboard.html', context)
