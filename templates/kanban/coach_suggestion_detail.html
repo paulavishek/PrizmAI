@@ -355,18 +355,51 @@
         </h3>
         <div class="metrics-grid">
             {% for key, value in suggestion.metrics_snapshot.items %}
+            {% if key != 'task_titles' %}
             <div class="metric-card">
-                <div class="metric-label" style="color: #475569 !important;">{{ key|title|replace:"_":" " }}</div>
+                <div class="metric-label" style="color: #475569 !important;">
+                    {% if key == 'week_start' %}Week Starting
+                    {% elif key == 'high_risk_task_count' %}High Risk Tasks
+                    {% elif key == 'active_tasks' %}Active Tasks
+                    {% elif key == 'high_priority_tasks' %}High Priority
+                    {% elif key == 'recommended_max' %}Recommended Max
+                    {% elif key == 'current_velocity' %}Current Velocity
+                    {% elif key == 'avg_previous_velocity' %}Avg Previous Velocity
+                    {% elif key == 'drop_percentage' %}Drop Percentage
+                    {% elif key == 'period' %}Period
+                    {% elif key == 'username' %}User
+                    {% else %}{{ key|title }}{% endif %}
+                </div>
                 <div class="metric-value" style="color: #1e293b !important;">
                     {% if value is not None %}
-                        {{ value }}
+                        {% if key == 'week_start' %}
+                            {{ value|slice:":10" }}
+                        {% elif key == 'drop_percentage' %}
+                            {{ value|floatformat:0 }}%
+                        {% else %}
+                            {{ value }}
+                        {% endif %}
                     {% else %}
                         N/A
                     {% endif %}
                 </div>
             </div>
+            {% endif %}
             {% endfor %}
         </div>
+        
+        {% if suggestion.metrics_snapshot.task_titles %}
+        <div class="mt-3">
+            <div class="metric-label" style="color: #475569 !important; font-size: 13px; font-weight: 600; margin-bottom: 10px;">Affected Tasks:</div>
+            <ul style="list-style: none; padding-left: 0; margin: 0;">
+                {% for task_title in suggestion.metrics_snapshot.task_titles %}
+                <li style="padding: 8px 12px; background: #f8f9fa; border-left: 3px solid #667eea; margin-bottom: 6px; border-radius: 4px; color: #1e293b;">
+                    <i class="fas fa-exclamation-triangle text-warning me-2"></i>{{ task_title }}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
     </div>
     {% endif %}
 
