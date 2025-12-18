@@ -358,9 +358,10 @@
         </h3>
         <div class="row">
             <div class="col-md-6">
-                <p class="mb-2"><strong>Confidence Score:</strong> {{ suggestion.confidence_score|floatformat:0 }}%</p>
+                {% widthratio suggestion.confidence_score 1 100 as confidence_percent %}
+                <p class="mb-2"><strong>Confidence Score:</strong> {{ confidence_percent }}%</p>
                 <div class="confidence-bar">
-                    <div class="confidence-fill" style="width: {{ suggestion.confidence_score|floatformat:0 }}%"></div>
+                    <div class="confidence-fill" style="width: {{ confidence_percent }}%"></div>
                 </div>
             </div>
             <div class="col-md-6">
@@ -378,27 +379,39 @@
         </h3>
         
         {% if suggestion.was_helpful is None %}
-        <p class="text-muted mb-3">Help us improve by rating this suggestion:</p>
+        <div class="alert alert-info mb-3">
+            <i class="fas fa-lightbulb me-2"></i>
+            <strong>Help us improve!</strong> Your feedback trains the AI Coach to provide better suggestions for your team.
+        </div>
         
-        <form method="POST" action="{% url 'coach_submit_feedback' suggestion.id %}">
+        <form method="POST" action="{% url 'coach_submit_feedback' suggestion.id %}" id="feedbackForm">
             {% csrf_token %}
-            <div class="d-flex gap-3 mb-4">
-                <button type="submit" name="helpful" value="true" class="btn btn-helpful">
-                    <i class="fas fa-thumbs-up me-2"></i>Helpful
-                </button>
-                <button type="submit" name="helpful" value="false" class="btn btn-not-helpful">
-                    <i class="fas fa-thumbs-down me-2"></i>Not Helpful
-                </button>
+            
+            <div class="mb-4">
+                <label class="form-label"><strong>Was this suggestion helpful?</strong> <span class="text-danger">*</span></label>
+                <div class="d-flex gap-3">
+                    <button type="button" onclick="selectRating(true)" class="btn btn-helpful" id="helpfulBtn">
+                        <i class="fas fa-thumbs-up me-2"></i>Helpful
+                    </button>
+                    <button type="button" onclick="selectRating(false)" class="btn btn-not-helpful" id="notHelpfulBtn">
+                        <i class="fas fa-thumbs-down me-2"></i>Not Helpful
+                    </button>
+                </div>
+                <input type="hidden" name="helpful" id="helpfulInput" required>
+                <small class="text-muted">Required: Please rate before submitting</small>
             </div>
             
-            <div class="form-group">
-                <label for="comment" class="form-label"><strong>Additional Comments (Optional)</strong></label>
+            <div class="form-group mb-3">
+                <label for="comment" class="form-label"><strong>Comments</strong> <small class="text-muted">(Optional)</small></label>
                 <textarea name="comment" id="comment" class="form-control" rows="4" 
-                          placeholder="Share your thoughts about this suggestion..."></textarea>
+                          placeholder="Share your experience with this suggestion..."></textarea>
+                <small class="text-muted">
+                    <i class="fas fa-users me-1"></i>Your team members can see these comments to learn from your experience.
+                </small>
             </div>
             
-            <div class="form-group mt-3">
-                <label for="action_taken" class="form-label"><strong>What Action Did You Take? (Optional)</strong></label>
+            <div class="form-group mb-4">
+                <label for="action_taken" class="form-label"><strong>What Action Did You Take?</strong> <small class="text-muted">(Optional)</small></label>
                 <select name="action_taken" id="action_taken" class="form-control">
                     <option value="">-- Select --</option>
                     <option value="implemented">Implemented the suggestion</option>
@@ -407,11 +420,19 @@
                     <option value="ignored">Decided not to implement</option>
                     <option value="deferred">Deferred to later</option>
                 </select>
+                <small class="text-muted">
+                    <i class="fas fa-chart-line me-1"></i>Helps track effectiveness of AI Coach recommendations.
+                </small>
             </div>
+            
+            <button type="submit" class="btn btn-primary btn-lg" id="submitFeedbackBtn" disabled>
+                <i class="fas fa-paper-plane me-2"></i>Submit Feedback
+            </button>
         </form>
         {% else %}
-        <div class="alert alert-info">
+        <div class="alert alert-success">
             <i class="fas fa-check-circle me-2"></i>
+            <strong>Thank you for your feedback!</strong><br>
             You marked this suggestion as <strong>{{ suggestion.was_helpful|yesno:"Helpful,Not Helpful" }}</strong>
             {% if suggestion.user_comment %}
             <p class="mt-2 mb-0"><strong>Your comment:</strong> {{ suggestion.user_comment }}</p>
@@ -448,6 +469,37 @@
 </div>
 
 <script>
+let selectedRating = null;
+
+function selectRating(isHelpful) {
+    selectedRating = isHelpful;
+    document.getElementById('helpfulInput').value = isHelpful;
+    
+    // Update button styles
+    const helpfulBtn = document.getElementById('helpfulBtn');
+    const notHelpfulBtn = document.getElementById('notHelpfulBtn');
+    const submitBtn = document.getElementById('submitFeedbackBtn');
+    
+    if (isHelpful) {
+        helpfulBtn.style.opacity = '1';
+        helpfulBtn.style.transform = 'scale(1.05)';
+        helpfulBtn.style.boxShadow = '0 4px 12px rgba(40, 167, 69, 0.3)';
+        notHelpfulBtn.style.opacity = '0.5';
+        notHelpfulBtn.style.transform = 'scale(1)';
+        notHelpfulBtn.style.boxShadow = 'none';
+    } else {
+        notHelpfulBtn.style.opacity = '1';
+        notHelpfulBtn.style.transform = 'scale(1.05)';
+        notHelpfulBtn.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.3)';
+        helpfulBtn.style.opacity = '0.5';
+        helpfulBtn.style.transform = 'scale(1)';
+        helpfulBtn.style.boxShadow = 'none';
+    }
+    
+    // Enable submit button
+    submitBtn.disabled = false;
+}
+
 function acknowledgeSuggestion() {
     if (confirm('Mark this suggestion as acknowledged?')) {
         fetch("{% url 'coach_acknowledge_suggestion' suggestion.id %}", {

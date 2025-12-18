@@ -291,17 +291,27 @@ def submit_feedback(request, suggestion_id):
     # Check access
     if request.user not in suggestion.board.members.all() and \
        suggestion.board.created_by != request.user:
-        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
+        messages.error(request, "You don't have access to this suggestion.")
+        return redirect('board_list')
     
     try:
-        data = json.loads(request.body)
-        
-        was_helpful = data.get('was_helpful', False)
-        relevance_score = int(data.get('relevance_score', 3))
-        action_taken = data.get('action_taken', 'ignored')
-        feedback_text = data.get('feedback_text', '')
-        outcome_description = data.get('outcome_description', '')
-        improved_situation = data.get('improved_situation')
+        # Accept both form POST and JSON data
+        if request.content_type == 'application/json':
+            data = json.loads(request.body)
+            was_helpful = data.get('was_helpful', False)
+            action_taken = data.get('action_taken', 'ignored')
+            feedback_text = data.get('feedback_text', '')
+            outcome_description = data.get('outcome_description', '')
+            improved_situation = data.get('improved_situation')
+            relevance_score = int(data.get('relevance_score', 3))
+        else:
+            # Form POST data
+            was_helpful = request.POST.get('helpful', '').lower() == 'true'
+            action_taken = request.POST.get('action_taken', '') or 'ignored'
+            feedback_text = request.POST.get('comment', '')
+            outcome_description = ''
+            improved_situation = None
+            relevance_score = 3
         
         # Record feedback
         learning_system = FeedbackLearningSystem()
@@ -316,18 +326,28 @@ def submit_feedback(request, suggestion_id):
             improved_situation=improved_situation
         )
         
-        return JsonResponse({
-            'success': True,
-            'message': 'Thank you for your feedback!',
-            'feedback_id': feedback.id
-        })
+        # Return appropriate response based on request type
+        if request.content_type == 'application/json':
+            return JsonResponse({
+                'success': True,
+                'message': 'Thank you for your feedback!',
+                'feedback_id': feedback.id
+            })
+        else:
+            # Form submission - redirect back with success message
+            messages.success(request, 'Thank you for your feedback! It helps us improve AI Coach.')
+            return redirect('coach_suggestion_detail', suggestion_id=suggestion.id)
         
     except Exception as e:
         logger.error(f"Error submitting feedback: {e}")
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+        if request.content_type == 'application/json':
+            return JsonResponse({
+                'success': False,
+                'error': str(e)
+            }, status=500)
+        else:
+            messages.error(request, f'Error submitting feedback: {str(e)}')
+            return redirect('coach_suggestion_detail', suggestion_id=suggestion.id)
 
 
 @login_required
