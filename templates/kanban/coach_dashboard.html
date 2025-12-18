@@ -265,25 +265,34 @@
         flex: 1;
         min-width: 200px;
         background: white;
-        padding: 20px;
+        padding: 25px 20px;
         border-radius: 12px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
         text-align: center;
+        border: 1px solid #e2e8f0;
+        transition: all 0.3s;
+    }
+
+    .stat-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+        transform: translateY(-2px);
     }
 
     .stat-value {
-        font-size: 36px;
+        font-size: 42px;
         font-weight: 700;
         color: #667eea;
         display: block;
+        line-height: 1;
+        margin-bottom: 10px;
     }
 
     .stat-label {
-        font-size: 14px;
-        color: #64748b;
+        font-size: 13px;
+        color: #475569;
         text-transform: uppercase;
         letter-spacing: 0.5px;
-        margin-top: 8px;
+        font-weight: 600;
     }
 
     .btn-generate {
@@ -345,19 +354,23 @@
     <!-- Effectiveness Stats -->
     <div class="stats-row">
         <div class="stat-card">
-            <span class="stat-value">{{ effectiveness.effectiveness_score|floatformat:0 }}%</span>
+            <i class="fas fa-trophy" style="color: #fbbf24; font-size: 24px; margin-bottom: 10px;"></i>
+            <span class="stat-value">{{ effectiveness.effectiveness_score|default:0|floatformat:0 }}%</span>
             <div class="stat-label">Coaching Effectiveness</div>
         </div>
         <div class="stat-card">
-            <span class="stat-value">{{ total_active }}</span>
+            <i class="fas fa-lightbulb" style="color: #667eea; font-size: 24px; margin-bottom: 10px;"></i>
+            <span class="stat-value">{{ total_active|default:0 }}</span>
             <div class="stat-label">Active Suggestions</div>
         </div>
         <div class="stat-card">
-            <span class="stat-value">{{ effectiveness.action_rate|floatformat:0 }}%</span>
+            <i class="fas fa-check-circle" style="color: #10b981; font-size: 24px; margin-bottom: 10px;"></i>
+            <span class="stat-value">{{ effectiveness.action_rate|default:0|floatformat:0 }}%</span>
             <div class="stat-label">Action Rate</div>
         </div>
         <div class="stat-card">
-            <span class="stat-value">{{ effectiveness.helpful_rate|floatformat:0 }}%</span>
+            <i class="fas fa-thumbs-up" style="color: #3b82f6; font-size: 24px; margin-bottom: 10px;"></i>
+            <span class="stat-value">{{ effectiveness.helpful_rate|default:0|floatformat:0 }}%</span>
             <div class="stat-label">Helpful Rate</div>
         </div>
     </div>
