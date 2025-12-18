@@ -362,8 +362,7 @@
             <div class="metric-card">
                 <div class="metric-label">Completion Range</div>
                 <div class="metric-value" style="font-size: 18px;">
-                    {{ prediction.completion_date_lower_bound|date:"M d" }} - {{
-                    prediction.completion_date_upper_bound|date:"M d" }}
+                    {{ prediction.completion_date_lower_bound|date:"M d" }} - {{ prediction.completion_date_upper_bound|date:"M d, Y" }}
                 </div>
                 <div class="metric-subtext">{{ prediction.confidence_percentage }}% confidence interval</div>
             </div>
