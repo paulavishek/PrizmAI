@@ -524,33 +524,36 @@ def recommendation_action(request, recommendation_id):
     board = recommendation.board
     
     if not _can_access_board(request.user, board):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
+        messages.error(request, "You don't have permission to access this board.")
+        return redirect('budget_dashboard', board_id=board.id)
     
     try:
-        data = json.loads(request.body)
-        action = data.get('action')  # 'accept', 'reject', 'implement'
+        # Get action from POST data (form submission)
+        action = request.POST.get('action')  # 'accept', 'reject', 'implement'
         
         if action == 'accept':
             recommendation.status = 'accepted'
+            messages.success(request, f'Recommendation "{recommendation.title}" has been accepted.')
         elif action == 'reject':
             recommendation.status = 'rejected'
+            messages.info(request, f'Recommendation "{recommendation.title}" has been rejected.')
         elif action == 'implement':
             recommendation.status = 'implemented'
+            messages.success(request, f'Recommendation "{recommendation.title}" has been marked as implemented.')
         else:
-            return JsonResponse({'error': 'Invalid action'}, status=400)
+            messages.error(request, 'Invalid action.')
+            return redirect('recommendations_list', board_id=board.id)
         
         recommendation.reviewed_by = request.user
         recommendation.reviewed_at = timezone.now()
         recommendation.save()
         
-        return JsonResponse({
-            'success': True,
-            'status': recommendation.status
-        })
+        return redirect('recommendations_list', board_id=board.id)
         
     except Exception as e:
         logger.error(f"Error updating recommendation: {e}")
-        return JsonResponse({'error': str(e)}, status=500)
+        messages.error(request, f'Error updating recommendation: {str(e)}')
+        return redirect('recommendations_list', board_id=board.id)
 
 
 @login_required
