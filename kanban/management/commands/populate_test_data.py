@@ -3272,8 +3272,9 @@ Carol: Sounds good. Great work this week!
         # Get demo boards
         software_board = Board.objects.filter(name='Software Project').first()
         marketing_board = Board.objects.filter(name='Marketing Campaign').first()
+        bug_board = Board.objects.filter(name='Bug Tracking').first()
         
-        if not software_board and not marketing_board:
+        if not software_board and not marketing_board and not bug_board:
             self.stdout.write(self.style.WARNING('  No demo boards found'))
             return
         
@@ -3282,15 +3283,25 @@ Carol: Sounds good. Great work this week!
             boards_to_process.append(software_board)
         if marketing_board:
             boards_to_process.append(marketing_board)
+        if bug_board:
+            boards_to_process.append(bug_board)
         
         for board in boards_to_process:
-            # Create Project Budget
+            # Create Project Budget with different amounts for each board
+            budget_amounts = {
+                'Software Project': {'budget': Decimal('50000.00'), 'hours': Decimal('800.0')},
+                'Marketing Campaign': {'budget': Decimal('25000.00'), 'hours': Decimal('400.0')},
+                'Bug Tracking': {'budget': Decimal('30000.00'), 'hours': Decimal('600.0')},
+            }
+            
+            board_config = budget_amounts.get(board.name, {'budget': Decimal('30000.00'), 'hours': Decimal('600.0')})
+            
             budget, created = ProjectBudget.objects.get_or_create(
                 board=board,
                 defaults={
-                    'allocated_budget': Decimal('50000.00') if board.name == 'Software Project' else Decimal('25000.00'),
+                    'allocated_budget': board_config['budget'],
                     'currency': 'USD',
-                    'allocated_hours': Decimal('800.0') if board.name == 'Software Project' else Decimal('400.0'),
+                    'allocated_hours': board_config['hours'],
                     'warning_threshold': 80,
                     'critical_threshold': 95,
                     'ai_optimization_enabled': True,

@@ -284,6 +284,14 @@ def roi_dashboard(request, board_id):
     if not _can_access_board(request.user, board):
         return HttpResponseForbidden("You don't have permission to access this board.")
     
+    # Check if budget exists
+    try:
+        budget = ProjectBudget.objects.get(board=board)
+        has_budget = True
+    except ProjectBudget.DoesNotExist:
+        budget = None
+        has_budget = False
+    
     # Get ROI metrics
     roi_metrics = BudgetAnalyzer.calculate_roi_metrics(board)
     
@@ -292,6 +300,8 @@ def roi_dashboard(request, board_id):
     
     context = {
         'board': board,
+        'budget': budget,
+        'has_budget': has_budget,
         'roi_metrics': roi_metrics,
         'roi_snapshots': roi_snapshots,
     }
