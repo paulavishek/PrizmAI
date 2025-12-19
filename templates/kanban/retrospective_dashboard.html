@@ -11,6 +11,9 @@
             <p class="text-muted">Track organizational learning and continuous improvement over time</p>
         </div>
         <div class="col-md-4 text-end">
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-secondary me-2">
+                <i class="fas fa-arrow-left"></i> Back to Board
+            </a>
             <a href="{% url 'retrospective_list' board.id %}" class="btn btn-primary">
                 <i class="fas fa-list"></i> All Retrospectives
             </a>
