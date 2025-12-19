@@ -108,7 +108,6 @@
                             <th>Category</th>
                             <th>Priority</th>
                             <th>Status</th>
-                            <th>Action</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -135,7 +134,6 @@
                                     <option value="not_applicable" {% if lesson.status == 'not_applicable' %}selected{% endif %}>N/A</option>
                                 </select>
                             </td>
-                            <td>{{ lesson.recommended_action|truncatewords:10 }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -164,7 +162,6 @@
                             <th>Assigned To</th>
                             <th>Due Date</th>
                             <th>Status</th>
-                            <th>Progress</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -198,13 +195,6 @@
                                     <option value="blocked" {% if action.status == 'blocked' %}selected{% endif %}>Blocked</option>
                                     <option value="cancelled" {% if action.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
                                 </select>
-                            </td>
-                            <td>
-                                <div class="progress" style="height: 20px;">
-                                    <div class="progress-bar" style="width: {{ action.progress_percentage }}%">
-                                        {{ action.progress_percentage }}%
-                                    </div>
-                                </div>
                             </td>
                         </tr>
                         {% endfor %}
@@ -311,6 +301,7 @@
         </div>
     </div>
 </div>
+{% endblock %}
 
 {% block extra_js %}
 <script>
