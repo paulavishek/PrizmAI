@@ -330,13 +330,16 @@ class ResourceLevelingService:
         # Determine workload impact
         workload_impact = self._determine_workload_impact(top, current_analysis)
         
+        # Calculate actual AI confidence in this suggestion (not user suitability)
+        ai_confidence = self._calculate_suggestion_confidence(top, current_analysis, workload_impact)
+        
         # Create suggestion
         suggestion = ResourceLevelingSuggestion.objects.create(
             task=task,
             organization=self.organization,
             current_assignee=current_assignee,
             suggested_assignee=suggested_user,
-            confidence_score=top['overall_score'],
+            confidence_score=ai_confidence,  # AI confidence in the suggestion
             time_savings_hours=max(time_savings, 0),
             time_savings_percentage=max(time_savings_pct, 0),
             skill_match_score=top['skill_match'],
@@ -348,6 +351,67 @@ class ResourceLevelingService:
         )
         
         return suggestion
+    
+    def _calculate_suggestion_confidence(self, recommended, current, workload_impact):
+        """
+        Calculate AI's confidence in this suggestion (0-100)
+        This is different from user suitability score - it's about how certain
+        we are that this action will improve the situation.
+        
+        High confidence factors:
+        - Large workload imbalance being corrected
+        - Good availability data (objective)
+        - Clear improvement in multiple dimensions
+        """
+        base_confidence = 70.0  # Start with reasonable base
+        
+        # Factor 1: Workload improvement (most objective)
+        if current:
+            util_diff = current['utilization'] - recommended['utilization']
+            if util_diff > 40:  # Major imbalance
+                base_confidence += 15
+            elif util_diff > 20:  # Significant imbalance
+                base_confidence += 10
+            elif util_diff > 10:  # Moderate imbalance
+                base_confidence += 5
+        else:
+            # First assignment - base confidence is good
+            base_confidence += 5
+        
+        # Factor 2: Availability difference (objective data)
+        if current:
+            avail_diff = recommended['availability'] - current['availability']
+            if avail_diff > 30:
+                base_confidence += 8
+            elif avail_diff > 15:
+                base_confidence += 5
+        
+        # Factor 3: Skill match of recommended person
+        if recommended['skill_match'] > 60:
+            base_confidence += 5
+        elif recommended['skill_match'] > 40:
+            base_confidence += 3
+        
+        # Factor 4: Overall suitability score
+        if recommended['overall_score'] > 70:
+            base_confidence += 5
+        elif recommended['overall_score'] > 60:
+            base_confidence += 3
+        
+        # Factor 5: Workload impact type
+        if workload_impact == 'reduces_bottleneck':
+            base_confidence += 5
+        elif workload_impact == 'balances_load':
+            base_confidence += 3
+        
+        # Factor 6: Recommended person's current workload (availability is objective)
+        if recommended['current_workload'] == 0:
+            base_confidence += 5  # Completely available
+        elif recommended['current_workload'] < 3:
+            base_confidence += 3  # Very available
+        
+        # Cap at 95 (never claim 100% certainty)
+        return min(round(base_confidence, 1), 95.0)
     
     def _determine_workload_impact(self, recommended, current):
         """Determine the type of workload impact"""

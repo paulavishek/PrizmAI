@@ -326,6 +326,7 @@ function displaySuggestions(suggestions) {
         // Confidence badge
         const confidenceBadge = clone.querySelector('.confidence-badge');
         confidenceBadge.textContent = `${Math.round(suggestion.confidence)}% confidence`;
+        confidenceBadge.title = 'AI confidence that this change will improve your project';
         if (suggestion.confidence >= 80) {
             confidenceBadge.classList.add('confidence-high');
         } else if (suggestion.confidence >= 60) {
