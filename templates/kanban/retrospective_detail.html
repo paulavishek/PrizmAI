@@ -122,7 +122,19 @@
                             <td><span class="badge bg-{% if lesson.priority == 'critical' %}danger{% elif lesson.priority == 'high' %}warning{% else %}secondary{% endif %}">
                                 {{ lesson.get_priority_display }}
                             </span></td>
-                            <td><span class="badge bg-primary">{{ lesson.get_status_display }}</span></td>
+                            <td>
+                                <select class="form-select form-select-sm lesson-status-dropdown" 
+                                        data-lesson-id="{{ lesson.id }}" 
+                                        data-board-id="{{ board.id }}"
+                                        style="width: auto; display: inline-block;">
+                                    <option value="identified" {% if lesson.status == 'identified' %}selected{% endif %}>Identified</option>
+                                    <option value="planned" {% if lesson.status == 'planned' %}selected{% endif %}>Action Planned</option>
+                                    <option value="in_progress" {% if lesson.status == 'in_progress' %}selected{% endif %}>In Progress</option>
+                                    <option value="implemented" {% if lesson.status == 'implemented' %}selected{% endif %}>Implemented</option>
+                                    <option value="validated" {% if lesson.status == 'validated' %}selected{% endif %}>Validated</option>
+                                    <option value="not_applicable" {% if lesson.status == 'not_applicable' %}selected{% endif %}>N/A</option>
+                                </select>
+                            </td>
                             <td>{{ lesson.recommended_action|truncatewords:10 }}</td>
                         </tr>
                         {% endfor %}
@@ -175,9 +187,18 @@
                                     <span class="text-muted">No date</span>
                                 {% endif %}
                             </td>
-                            <td><span class="badge bg-{% if action.status == 'completed' %}success{% elif action.status == 'blocked' %}danger{% else %}primary{% endif %}">
-                                {{ action.get_status_display }}
-                            </span></td>
+                            <td>
+                                <select class="form-select form-select-sm action-status-dropdown" 
+                                        data-action-id="{{ action.id }}" 
+                                        data-board-id="{{ board.id }}"
+                                        style="width: auto; display: inline-block;">
+                                    <option value="pending" {% if action.status == 'pending' %}selected{% endif %}>Pending</option>
+                                    <option value="in_progress" {% if action.status == 'in_progress' %}selected{% endif %}>In Progress</option>
+                                    <option value="completed" {% if action.status == 'completed' %}selected{% endif %}>Completed</option>
+                                    <option value="blocked" {% if action.status == 'blocked' %}selected{% endif %}>Blocked</option>
+                                    <option value="cancelled" {% if action.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                                </select>
+                            </td>
                             <td>
                                 <div class="progress" style="height: 20px;">
                                     <div class="progress-bar" style="width: {{ action.progress_percentage }}%">
@@ -290,4 +311,152 @@
         </div>
     </div>
 </div>
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Handle lesson status updates
+    document.querySelectorAll('.lesson-status-dropdown').forEach(function(dropdown) {
+        dropdown.addEventListener('change', function() {
+            const lessonId = this.getAttribute('data-lesson-id');
+            const boardId = this.getAttribute('data-board-id');
+            const newStatus = this.value;
+            const originalValue = this.querySelector('option[selected]')?.value || this.value;
+            
+            // Show loading state
+            this.disabled = true;
+            
+            fetch(`/board/${boardId}/lessons/${lessonId}/status/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: `status=${newStatus}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    showToast('Lesson status updated to: ' + data.status_display, 'success');
+                    // Update the selected attribute
+                    this.querySelectorAll('option').forEach(opt => opt.removeAttribute('selected'));
+                    this.querySelector(`option[value="${newStatus}"]`).setAttribute('selected', 'selected');
+                    
+                    // Reload page if status changed to implemented or validated
+                    if (newStatus === 'implemented' || newStatus === 'validated') {
+                        setTimeout(() => location.reload(), 1000);
+                    }
+                } else {
+                    showToast('Error updating status: ' + (data.error || 'Unknown error'), 'error');
+                    this.value = originalValue;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showToast('Failed to update lesson status', 'error');
+                this.value = originalValue;
+            })
+            .finally(() => {
+                this.disabled = false;
+            });
+        });
+    });
+    
+    // Handle action status updates
+    document.querySelectorAll('.action-status-dropdown').forEach(function(dropdown) {
+        dropdown.addEventListener('change', function() {
+            const actionId = this.getAttribute('data-action-id');
+            const boardId = this.getAttribute('data-board-id');
+            const newStatus = this.value;
+            const originalValue = this.querySelector('option[selected]')?.value || this.value;
+            
+            // Show loading state
+            this.disabled = true;
+            
+            fetch(`/board/${boardId}/actions/${actionId}/status/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: `status=${newStatus}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success message
+                    showToast('Action status updated to: ' + data.status_display, 'success');
+                    // Update the selected attribute
+                    this.querySelectorAll('option').forEach(opt => opt.removeAttribute('selected'));
+                    this.querySelector(`option[value="${newStatus}"]`).setAttribute('selected', 'selected');
+                    
+                    // Reload page if status changed to completed
+                    if (newStatus === 'completed') {
+                        setTimeout(() => location.reload(), 1000);
+                    }
+                } else {
+                    showToast('Error updating status: ' + (data.error || 'Unknown error'), 'error');
+                    this.value = originalValue;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showToast('Failed to update action status', 'error');
+                this.value = originalValue;
+            })
+            .finally(() => {
+                this.disabled = false;
+            });
+        });
+    });
+    
+    // Helper function to get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    // Helper function to show toast notifications
+    function showToast(message, type) {
+        // Create toast element
+        const toastContainer = document.getElementById('toast-container') || createToastContainer();
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type === 'success' ? 'success' : 'danger'} alert-dismissible fade show`;
+        toast.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        toastContainer.appendChild(toast);
+        
+        // Auto-remove after 3 seconds
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => toast.remove(), 150);
+        }, 3000);
+    }
+    
+    function createToastContainer() {
+        const container = document.createElement('div');
+        container.id = 'toast-container';
+        container.style.position = 'fixed';
+        container.style.top = '20px';
+        container.style.right = '20px';
+        container.style.zIndex = '9999';
+        container.style.width = '300px';
+        document.body.appendChild(container);
+        return container;
+    }
+});
+</script>
 {% endblock %}

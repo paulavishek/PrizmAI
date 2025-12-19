@@ -119,6 +119,8 @@
                             <span class="badge bg-{% if retro.overall_sentiment_score >= 0.7 %}success{% elif retro.overall_sentiment_score >= 0.5 %}warning{% else %}danger{% endif %}">
                                 {{ retro.get_team_morale_indicator_display|default:"Moderate" }}
                             </span>
+                            <i class="fas fa-info-circle" data-bs-toggle="tooltip" data-bs-placement="top" 
+                               title="AI-calculated team sentiment based on project metrics and patterns. Scale: Excellent (70-100%), High (60-70%), Moderate (40-60%), Low (0-40%). Higher scores indicate more positive team dynamics and project health."></i>
                         </small>
                         <div class="progress" style="height: 10px;">
                             <div class="progress-bar bg-{% if retro.overall_sentiment_score >= 0.7 %}success{% elif retro.overall_sentiment_score >= 0.5 %}warning{% else %}danger{% endif %}" 
@@ -193,4 +195,15 @@
     </nav>
     {% endif %}
 </div>
+
+{% block extra_js %}
+<script>
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+</script>
 {% endblock %}
