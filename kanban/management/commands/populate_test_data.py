@@ -3380,10 +3380,10 @@ Carol: Sounds good. Great work this week!
             self.stdout.write(self.style.SUCCESS(f'  ✓ Created {time_entries_created} time entries for "{board.name}"'))
             
             # Create ROI snapshots
-            # Query completed tasks directly (can't filter tasks queryset after slicing)
+            # Query completed tasks by progress (100% = complete)
             completed_tasks = Task.objects.filter(
                 column__board=board,
-                column__name__in=['Done', 'Completed', 'Closed', 'Deployed']
+                progress=100
             ).count()
             
             total_tasks = Task.objects.filter(column__board=board).count()

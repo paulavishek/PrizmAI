@@ -69,10 +69,8 @@ class BudgetAnalyzer:
         if total_estimated_cost > 0:
             cost_variance_percent = float((cost_variance / total_estimated_cost) * 100)
         
-        # Task breakdown
-        completed_tasks = tasks.filter(
-            Q(column__name__icontains='done') | Q(column__name__icontains='complete')
-        ).count()
+        # Task breakdown - use progress instead of column name
+        completed_tasks = tasks.filter(progress=100).count()
         total_tasks = tasks.count()
         
         # Cost per task
@@ -180,11 +178,9 @@ class BudgetAnalyzer:
         task_costs = TaskCost.objects.filter(task__column__board=board)
         total_cost = sum([tc.get_total_actual_cost() for tc in task_costs]) if task_costs else Decimal('0.00')
         
-        # Task metrics
+        # Task metrics - use progress instead of column name
         tasks = Task.objects.filter(column__board=board)
-        completed_tasks = tasks.filter(
-            Q(column__name__icontains='done') | Q(column__name__icontains='complete')
-        ).count()
+        completed_tasks = tasks.filter(progress=100).count()
         total_tasks = tasks.count()
         
         # Calculate ROI
@@ -458,11 +454,9 @@ class ROICalculator:
         task_costs = TaskCost.objects.filter(task__column__board=board)
         total_cost = sum([tc.get_total_actual_cost() for tc in task_costs])
         
-        # Task metrics
+        # Task metrics - use progress instead of column name
         tasks = Task.objects.filter(column__board=board)
-        completed_tasks = tasks.filter(
-            Q(column__name__icontains='done') | Q(column__name__icontains='complete')
-        ).count()
+        completed_tasks = tasks.filter(progress=100).count()
         total_tasks = tasks.count()
         
         # Calculate ROI

@@ -150,9 +150,10 @@ for board_name, board in demo_boards.items():
     print(f"✓ Created {time_entries_created} time entries")
     
     # 3. Create ROI Snapshot
+    # Use progress instead of column name for completed tasks
     completed_tasks = Task.objects.filter(
         column__board=board,
-        column__name__in=['Done', 'Completed', 'Closed', 'Deployed']
+        progress=100
     ).count()
     
     total_tasks = Task.objects.filter(column__board=board).count()
