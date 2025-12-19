@@ -229,6 +229,12 @@
                     <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>ROI Trend</h5>
                 </div>
                 <div class="card-body">
+                    {% if roi_snapshots|length < 2 %}
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Tip:</strong> ROI trends become more meaningful with multiple snapshots over time. Create additional snapshots to track your ROI progress.
+                    </div>
+                    {% endif %}
                     <canvas id="roiTrendChart" height="80"></canvas>
                 </div>
             </div>
