@@ -567,7 +567,16 @@ def _generate_trend_analysis(board):
 
 @login_required
 def retrospective_export(request, board_id, retro_id):
-    """Export retrospective as JSON or PDF"""
+    """Export retrospective as PDF"""
+    from reportlab.lib.pagesizes import letter, A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+    from io import BytesIO
+    from django.http import HttpResponse
+    
     board = get_object_or_404(Board, id=board_id)
     retrospective = get_object_or_404(ProjectRetrospective, id=retro_id, board=board)
     
@@ -575,39 +584,202 @@ def retrospective_export(request, board_id, retro_id):
     if not (request.user == board.created_by or request.user in board.members.all()):
         return HttpResponseForbidden("You don't have access to this board")
     
-    export_format = request.GET.get('format', 'json')
+    # Get related data
+    lessons = retrospective.lessons.all().order_by('-priority', '-created_at')
+    action_items = retrospective.action_items.all().order_by('-priority', 'target_completion_date')
     
-    if export_format == 'json':
-        import json
-        from django.http import HttpResponse
-        
-        data = {
-            'title': retrospective.title,
-            'period': {
-                'start': str(retrospective.period_start),
-                'end': str(retrospective.period_end),
-            },
-            'type': retrospective.retrospective_type,
-            'status': retrospective.status,
-            'what_went_well': retrospective.what_went_well,
-            'what_needs_improvement': retrospective.what_needs_improvement,
-            'lessons_learned': retrospective.lessons_learned,
-            'key_achievements': retrospective.key_achievements,
-            'challenges_faced': retrospective.challenges_faced,
-            'improvement_recommendations': retrospective.improvement_recommendations,
-            'metrics': retrospective.metrics_snapshot,
-            'sentiment_score': float(retrospective.overall_sentiment_score) if retrospective.overall_sentiment_score else None,
-            'team_morale': retrospective.team_morale_indicator,
-            'performance_trend': retrospective.performance_trend,
-        }
-        
-        response = HttpResponse(
-            json.dumps(data, indent=2),
-            content_type='application/json'
-        )
-        response['Content-Disposition'] = f'attachment; filename="retrospective_{retro_id}.json"'
-        return response
+    # Create PDF in memory
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72,
+                           topMargin=72, bottomMargin=18)
     
-    else:
-        messages.error(request, "Export format not supported yet")
-        return redirect('retrospective_detail', board_id=board_id, retro_id=retro_id)
+    # Container for the 'Flowable' objects
+    elements = []
+    
+    # Define styles
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        textColor=colors.HexColor('#1f77b4'),
+        spaceAfter=30,
+        alignment=TA_CENTER
+    )
+    
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading2'],
+        fontSize=16,
+        textColor=colors.HexColor('#2c3e50'),
+        spaceAfter=12,
+        spaceBefore=12,
+        leftIndent=0
+    )
+    
+    subheading_style = ParagraphStyle(
+        'CustomSubHeading',
+        parent=styles['Heading3'],
+        fontSize=12,
+        textColor=colors.HexColor('#34495e'),
+        spaceAfter=6,
+        spaceBefore=6
+    )
+    
+    body_style = ParagraphStyle(
+        'CustomBody',
+        parent=styles['BodyText'],
+        fontSize=10,
+        alignment=TA_JUSTIFY,
+        spaceAfter=12
+    )
+    
+    # Title
+    elements.append(Paragraph(retrospective.title, title_style))
+    elements.append(Spacer(1, 0.2 * inch))
+    
+    # Header information
+    info_data = [
+        ['Board:', board.name],
+        ['Type:', retrospective.get_retrospective_type_display()],
+        ['Period:', f"{retrospective.period_start.strftime('%B %d, %Y')} - {retrospective.period_end.strftime('%B %d, %Y')}"],
+        ['Status:', retrospective.get_status_display()],
+        ['Generated:', retrospective.ai_generated_at.strftime('%B %d, %Y at %I:%M %p') if retrospective.ai_generated_at else 'N/A'],
+    ]
+    
+    if retrospective.team_morale_indicator:
+        info_data.append(['Team Morale:', retrospective.get_team_morale_indicator_display()])
+    
+    if retrospective.overall_sentiment_score:
+        sentiment_pct = float(retrospective.overall_sentiment_score) * 100
+        info_data.append(['Sentiment Score:', f"{sentiment_pct:.1f}%"])
+    
+    info_table = Table(info_data, colWidths=[1.5*inch, 4.5*inch])
+    info_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#ecf0f1')),
+        ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+        ('ALIGN', (1, 0), (1, -1), 'LEFT'),
+        ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (1, 0), (1, -1), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (-1, -1), 10),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 10),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 10),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 0.3 * inch))
+    
+    # Key Metrics
+    if retrospective.metrics_snapshot:
+        elements.append(Paragraph("Key Metrics", heading_style))
+        metrics = retrospective.metrics_snapshot
+        
+        metrics_data = [['Metric', 'Value']]
+        if 'total_tasks' in metrics:
+            metrics_data.append(['Total Tasks', str(metrics.get('total_tasks', 0))])
+        if 'completed_tasks' in metrics:
+            metrics_data.append(['Completed Tasks', str(metrics.get('completed_tasks', 0))])
+        if 'completion_rate' in metrics:
+            metrics_data.append(['Completion Rate', f"{metrics.get('completion_rate', 0):.1f}%"])
+        if 'average_completion_time' in metrics:
+            metrics_data.append(['Avg Completion Time', f"{metrics.get('average_completion_time', 0):.1f} days"])
+        if 'team_velocity' in metrics:
+            metrics_data.append(['Team Velocity', f"{metrics.get('team_velocity', 0):.1f} tasks"])
+        
+        metrics_table = Table(metrics_data, colWidths=[3*inch, 3*inch])
+        metrics_table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498db')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 11),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('TOPPADDING', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+        ]))
+        elements.append(metrics_table)
+        elements.append(Spacer(1, 0.3 * inch))
+    
+    # What Went Well
+    if retrospective.what_went_well:
+        elements.append(Paragraph("✅ What Went Well", heading_style))
+        elements.append(Paragraph(retrospective.what_went_well.replace('\n', '<br/>'), body_style))
+        elements.append(Spacer(1, 0.2 * inch))
+    
+    # What Needs Improvement
+    if retrospective.what_needs_improvement:
+        elements.append(Paragraph("⚠️ What Needs Improvement", heading_style))
+        elements.append(Paragraph(retrospective.what_needs_improvement.replace('\n', '<br/>'), body_style))
+        elements.append(Spacer(1, 0.2 * inch))
+    
+    # Lessons Learned
+    if lessons.exists():
+        elements.append(Paragraph("🎓 Lessons Learned", heading_style))
+        
+        for i, lesson in enumerate(lessons, 1):
+            lesson_text = f"<b>{i}. {lesson.title}</b><br/>"
+            if lesson.description and lesson.description != lesson.title:
+                lesson_text += f"{lesson.description}<br/>"
+            lesson_text += f"<i>Category: {lesson.get_category_display()} | Priority: {lesson.get_priority_display()}"
+            if not lesson.ai_suggested:
+                lesson_text += " | Manual Entry"
+            lesson_text += "</i>"
+            elements.append(Paragraph(lesson_text, body_style))
+        
+        elements.append(Spacer(1, 0.2 * inch))
+    
+    # Action Items
+    if action_items.exists():
+        elements.append(Paragraph("📋 Action Items", heading_style))
+        
+        for i, action in enumerate(action_items, 1):
+            action_text = f"<b>{i}. {action.title}</b><br/>"
+            if action.description and action.description != action.title:
+                action_text += f"{action.description}<br/>"
+            action_text += f"<i>Priority: {action.get_priority_display()} | "
+            action_text += f"Target: {action.target_completion_date.strftime('%B %d, %Y')} | "
+            action_text += f"Status: {action.get_status_display()}"
+            if action.assigned_to:
+                action_text += f" | Assigned to: {action.assigned_to.get_full_name() or action.assigned_to.username}"
+            if not action.ai_suggested:
+                action_text += " | Manual Entry"
+            action_text += "</i>"
+            elements.append(Paragraph(action_text, body_style))
+        
+        elements.append(Spacer(1, 0.2 * inch))
+    
+    # Footer
+    elements.append(Spacer(1, 0.3 * inch))
+    footer_style = ParagraphStyle(
+        'Footer',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=colors.grey,
+        alignment=TA_CENTER
+    )
+    elements.append(Paragraph(
+        f"Generated on {timezone.now().strftime('%B %d, %Y at %I:%M %p')} | PrizMAI Project Management",
+        footer_style
+    ))
+    
+    # Build PDF
+    doc.build(elements)
+    
+    # Get PDF from buffer
+    pdf = buffer.getvalue()
+    buffer.close()
+    
+    # Create response
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="retrospective_{board.name.replace(" ", "_")}_{retrospective.period_start}.pdf"'
+    response.write(pdf)
+    
+    return response
