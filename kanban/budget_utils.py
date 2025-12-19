@@ -189,18 +189,42 @@ class BudgetAnalyzer:
         
         # Calculate ROI
         roi_percentage = None
+        expected_value = Decimal('0.00')
+        realized_value = Decimal('0.00')
+        
         if latest_roi:
-            value = latest_roi.realized_value or latest_roi.expected_value or Decimal('0.00')
+            expected_value = latest_roi.expected_value or Decimal('0.00')
+            realized_value = latest_roi.realized_value or Decimal('0.00')
+            value = realized_value or expected_value
             if total_cost > 0 and value > 0:
                 roi_percentage = float(((value - total_cost) / total_cost) * 100)
         
+        # Calculate completion rate
+        completion_rate = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
+        
+        # Calculate cost efficiency (budget vs actual cost)
+        cost_efficiency = 0
+        if budget.allocated_budget > 0:
+            cost_efficiency = (float(total_cost) / float(budget.allocated_budget)) * 100
+        
+        # Calculate value delivery (realized vs expected)
+        value_delivery = 0
+        if expected_value > 0:
+            value_delivery = (float(realized_value) / float(expected_value)) * 100
+        
         return {
+            'budget': budget,
             'total_investment': float(total_cost),
-            'expected_value': float(latest_roi.expected_value) if latest_roi and latest_roi.expected_value else None,
-            'realized_value': float(latest_roi.realized_value) if latest_roi and latest_roi.realized_value else 0,
+            'expected_value': float(expected_value),
+            'realized_value': float(realized_value),
+            'roi_percent': round(roi_percentage, 2) if roi_percentage else 0,
             'roi_percentage': round(roi_percentage, 2) if roi_percentage else None,
+            'tasks_completed': completed_tasks,
             'completed_tasks': completed_tasks,
             'total_tasks': total_tasks,
+            'completion_rate': round(completion_rate, 1),
+            'cost_efficiency': round(cost_efficiency, 2),
+            'value_delivery': round(value_delivery, 2),
             'cost_per_task': float(total_cost / completed_tasks) if completed_tasks > 0 else 0,
             'last_analysis_date': latest_roi.snapshot_date.isoformat() if latest_roi else None,
         }

@@ -157,7 +157,7 @@
             <div class="card">
                 <div class="card-body">
                     <h6 class="text-muted mb-2">Value Delivery</h6>
-                    <h3>{{ roi_metrics.value_delivery_rate|floatformat:2 }}%</h3>
+                    <h3>{{ roi_metrics.value_delivery|floatformat:2 }}%</h3>
                     <small class="text-muted">Realized vs Expected value</small>
                 </div>
             </div>
@@ -189,23 +189,27 @@
                             <tbody>
                                 {% for snapshot in roi_snapshots %}
                                 <tr class="snapshot-card">
-                                    <td>{{ snapshot.recorded_at|date:"M d, Y" }}</td>
+                                    <td>{{ snapshot.snapshot_date|date:"M d, Y" }}</td>
                                     <td>
-                                        <span class="{% if snapshot.roi_percent > 0 %}roi-positive{% elif snapshot.roi_percent < 0 %}roi-negative{% else %}roi-neutral{% endif %}">
-                                            <strong>{{ snapshot.roi_percent|floatformat:1 }}%</strong>
+                                        <span class="{% if snapshot.roi_percentage > 0 %}roi-positive{% elif snapshot.roi_percentage < 0 %}roi-negative{% else %}roi-neutral{% endif %}">
+                                            <strong>{{ snapshot.roi_percentage|floatformat:1 }}%</strong>
                                         </span>
                                     </td>
-                                    <td>{{ budget.currency }} {{ snapshot.total_investment|floatformat:2 }}</td>
+                                    <td>{{ budget.currency }} {{ snapshot.total_cost|floatformat:2 }}</td>
                                     <td>{{ budget.currency }} {{ snapshot.expected_value|floatformat:2 }}</td>
                                     <td>{{ budget.currency }} {{ snapshot.realized_value|floatformat:2 }}</td>
                                     <td>
+                                        {% if snapshot.total_tasks > 0 %}
                                         <div class="progress" style="height: 20px; width: 100px;">
-                                            <div class="progress-bar bg-info" style="width: {{ snapshot.completion_rate }}%">
-                                                {{ snapshot.completion_rate|floatformat:0 }}%
+                                            <div class="progress-bar bg-info" style="width: {% widthratio snapshot.completed_tasks snapshot.total_tasks 100 %}%">
+                                                {% widthratio snapshot.completed_tasks snapshot.total_tasks 100 %}%
                                             </div>
                                         </div>
+                                        {% else %}
+                                        0%
+                                        {% endif %}
                                     </td>
-                                    <td>{{ snapshot.notes|default:"-" }}</td>
+                                    <td>-</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -266,8 +270,8 @@
 <script>
     {% if has_budget and roi_snapshots %}
     // ROI Trend Chart
-    const roiDates = [{% for snapshot in roi_snapshots %}'{{ snapshot.recorded_at|date:"M d" }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
-    const roiValues = [{% for snapshot in roi_snapshots %}{{ snapshot.roi_percent }}{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const roiDates = [{% for snapshot in roi_snapshots %}'{{ snapshot.snapshot_date|date:"M d" }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const roiValues = [{% for snapshot in roi_snapshots %}{{ snapshot.roi_percentage|default:0 }}{% if not forloop.last %}, {% endif %}{% endfor %}];
     
     new Chart(document.getElementById('roiTrendChart'), {
         type: 'line',
@@ -302,7 +306,7 @@
     });
 
     // Cost vs Value Chart
-    const investments = [{% for snapshot in roi_snapshots %}{{ snapshot.total_investment }}{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const investments = [{% for snapshot in roi_snapshots %}{{ snapshot.total_cost }}{% if not forloop.last %}, {% endif %}{% endfor %}];
     const realizedValues = [{% for snapshot in roi_snapshots %}{{ snapshot.realized_value }}{% if not forloop.last %}, {% endif %}{% endfor %}];
     
     new Chart(document.getElementById('costValueChart'), {
