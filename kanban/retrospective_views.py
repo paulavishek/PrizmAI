@@ -26,6 +26,44 @@ from api.ai_usage_utils import track_ai_request, check_ai_quota
 logger = logging.getLogger(__name__)
 
 
+def _add_manual_lessons(retrospective, board, lessons_list):
+    """Add manually entered lessons learned"""
+    for lesson_text in lessons_list:
+        try:
+            LessonLearned.objects.create(
+                retrospective=retrospective,
+                board=board,
+                title=lesson_text[:100],
+                description=lesson_text,
+                category='team_process',
+                priority='medium',
+                ai_suggested=False,
+                status='identified'
+            )
+        except Exception as e:
+            logger.error(f"Error creating manual lesson: {e}")
+
+
+def _add_manual_actions(retrospective, board, actions_list):
+    """Add manually entered action items"""
+    for action_text in actions_list:
+        try:
+            target_date = timezone.now().date() + timedelta(days=30)
+            RetrospectiveActionItem.objects.create(
+                retrospective=retrospective,
+                board=board,
+                title=action_text[:100],
+                description=action_text,
+                action_type='process_improvement',
+                priority='medium',
+                target_completion_date=target_date,
+                ai_suggested=False,
+                status='pending'
+            )
+        except Exception as e:
+            logger.error(f"Error creating manual action: {e}")
+
+
 @login_required
 def retrospective_list(request, board_id):
     """List all retrospectives for a board"""
@@ -169,12 +207,26 @@ def retrospective_create(request, board_id):
                 messages.error(request, "End date cannot be in the future")
                 return redirect('retrospective_create', board_id=board_id)
             
+            # Get manual inputs (if provided)
+            manual_lessons = request.POST.getlist('manual_lessons[]')
+            manual_actions = request.POST.getlist('manual_actions[]')
+            
+            # Filter out empty entries
+            manual_lessons = [lesson.strip() for lesson in manual_lessons if lesson.strip()]
+            manual_actions = [action.strip() for action in manual_actions if action.strip()]
+            
             # Generate retrospective
             generator = RetrospectiveGenerator(board, period_start, period_end)
             retrospective = generator.create_retrospective(
                 created_by=request.user,
                 retrospective_type=retrospective_type
             )
+            
+            # Add manual lessons and actions
+            if manual_lessons:
+                _add_manual_lessons(retrospective, board, manual_lessons)
+            if manual_actions:
+                _add_manual_actions(retrospective, board, manual_actions)
             
             # Track successful AI request
             response_time_ms = int((time.time() - start_time) * 1000)

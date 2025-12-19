@@ -10,16 +10,20 @@
             <h2><i class="fas fa-chart-line"></i> Improvement Dashboard - {{ board.name }}</h2>
             <p class="text-muted">Track organizational learning and continuous improvement over time</p>
         </div>
-        <div class="col-md-4 text-end">
-            <a href="{% url 'board_detail' board.id %}" class="btn btn-secondary me-2">
-                <i class="fas fa-arrow-left"></i> Back to Board
-            </a>
-            <a href="{% url 'retrospective_list' board.id %}" class="btn btn-primary">
-                <i class="fas fa-list"></i> All Retrospectives
-            </a>
-            <a href="{% url 'lessons_learned_list' board.id %}" class="btn btn-info">
-                <i class="fas fa-graduation-cap"></i> All Lessons
-            </a>
+        <div class="col-md-4">
+            <div class="d-flex justify-content-end gap-2">
+                <a href="{% url 'retrospective_list' board.id %}" class="btn btn-primary">
+                    <i class="fas fa-list"></i> All Retrospectives
+                </a>
+                <a href="{% url 'lessons_learned_list' board.id %}" class="btn btn-info">
+                    <i class="fas fa-graduation-cap"></i> All Lessons
+                </a>
+            </div>
+            <div class="mt-2">
+                <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary w-100">
+                    <i class="fas fa-arrow-left"></i> Back to Board
+                </a>
+            </div>
         </div>
     </div>
 

@@ -38,6 +38,56 @@
                                    class="form-control" value="{{ suggested_end|date:'Y-m-d' }}" required>
                         </div>
 
+                        <!-- Optional Manual Input Section -->
+                        <div class="card mb-3 bg-light">
+                            <div class="card-header" style="cursor: pointer;" data-bs-toggle="collapse" data-bs-target="#manualInputSection">
+                                <i class="fas fa-pen"></i> <strong>Optional: Add Manual Insights</strong>
+                                <small class="text-muted">(Click to expand)</small>
+                            </div>
+                            <div id="manualInputSection" class="collapse">
+                                <div class="card-body">
+                                    <p class="text-muted small">
+                                        Add your own lessons learned and action items before AI generation. 
+                                        These will be included alongside AI-generated insights.
+                                    </p>
+
+                                    <!-- Manual Lessons Learned -->
+                                    <div class="mb-3">
+                                        <label class="form-label"><i class="fas fa-graduation-cap"></i> Lessons Learned</label>
+                                        <div id="lessonsContainer">
+                                            <div class="input-group mb-2 lesson-input">
+                                                <input type="text" name="manual_lessons[]" class="form-control" 
+                                                       placeholder="e.g., Daily standups improved team communication">
+                                                <button type="button" class="btn btn-outline-danger remove-lesson" style="display: none;">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" id="addLesson">
+                                            <i class="fas fa-plus"></i> Add Another Lesson
+                                        </button>
+                                    </div>
+
+                                    <!-- Manual Action Items -->
+                                    <div class="mb-3">
+                                        <label class="form-label"><i class="fas fa-tasks"></i> Action Items</label>
+                                        <div id="actionsContainer">
+                                            <div class="input-group mb-2 action-input">
+                                                <input type="text" name="manual_actions[]" class="form-control" 
+                                                       placeholder="e.g., Implement automated testing for API endpoints">
+                                                <button type="button" class="btn btn-outline-danger remove-action" style="display: none;">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" id="addAction">
+                                            <i class="fas fa-plus"></i> Add Another Action
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div class="alert alert-info">
                             <i class="fas fa-info-circle"></i> <strong>What will be analyzed:</strong>
                             <ul class="mb-0 mt-2">
@@ -106,6 +156,60 @@ document.addEventListener('DOMContentLoaded', function() {
     
     startInput.addEventListener('change', validateDates);
     endInput.addEventListener('change', validateDates);
+
+    // Handle adding/removing lessons
+    document.getElementById('addLesson').addEventListener('click', function() {
+        const container = document.getElementById('lessonsContainer');
+        const newInput = document.createElement('div');
+        newInput.className = 'input-group mb-2 lesson-input';
+        newInput.innerHTML = `
+            <input type="text" name="manual_lessons[]" class="form-control" 
+                   placeholder="e.g., Code reviews caught critical bugs early">
+            <button type="button" class="btn btn-outline-danger remove-lesson">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        container.appendChild(newInput);
+        updateRemoveButtons('lesson');
+    });
+
+    // Handle adding/removing actions
+    document.getElementById('addAction').addEventListener('click', function() {
+        const container = document.getElementById('actionsContainer');
+        const newInput = document.createElement('div');
+        newInput.className = 'input-group mb-2 action-input';
+        newInput.innerHTML = `
+            <input type="text" name="manual_actions[]" class="form-control" 
+                   placeholder="e.g., Schedule weekly code review sessions">
+            <button type="button" class="btn btn-outline-danger remove-action">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        container.appendChild(newInput);
+        updateRemoveButtons('action');
+    });
+
+    // Handle remove buttons
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.remove-lesson')) {
+            e.target.closest('.lesson-input').remove();
+            updateRemoveButtons('lesson');
+        }
+        if (e.target.closest('.remove-action')) {
+            e.target.closest('.action-input').remove();
+            updateRemoveButtons('action');
+        }
+    });
+
+    function updateRemoveButtons(type) {
+        const inputs = document.querySelectorAll(`.${type}-input`);
+        inputs.forEach((input, index) => {
+            const removeBtn = input.querySelector(`.remove-${type}`);
+            if (removeBtn) {
+                removeBtn.style.display = inputs.length > 1 ? 'block' : 'none';
+            }
+        });
+    }
 });
 </script>
 {% endblock %}
