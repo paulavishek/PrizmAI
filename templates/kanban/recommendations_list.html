@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}AI Recommendations - {{ board.name }} - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .recommendation-card {
+        border-left: 4px solid #6c757d;
+        transition: transform 0.2s;
+    }
+    
+    .recommendation-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .recommendation-card.priority-urgent { border-left-color: #dc3545; }
+    .recommendation-card.priority-high { border-left-color: #fd7e14; }
+    .recommendation-card.priority-medium { border-left-color: #ffc107; }
+    .recommendation-card.priority-low { border-left-color: #28a745; }
+    
+    .status-badge-pending { background-color: #ffc107; }
+    .status-badge-accepted { background-color: #28a745; }
+    .status-badge-rejected { background-color: #dc3545; }
+    .status-badge-implemented { background-color: #17a2b8; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-robot me-2"></i>AI Budget Recommendations</h2>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'budget_dashboard' board.id %}">Budget</a></li>
+                            <li class="breadcrumb-item active">Recommendations</li>
+                        </ol>
+                    </nav>
+                </div>
+                <div>
+                    <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Budget
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-3">
+                            <label for="status" class="form-label">Filter by Status</label>
+                            <select name="status" id="status" class="form-select" onchange="this.form.submit()">
+                                <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All</option>
+                                <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending Review</option>
+                                <option value="accepted" {% if status_filter == 'accepted' %}selected{% endif %}>Accepted</option>
+                                <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rejected</option>
+                                <option value="implemented" {% if status_filter == 'implemented' %}selected{% endif %}>Implemented</option>
+                            </select>
+                        </div>
+                        <div class="col-md-9">
+                            <label class="form-label d-block">&nbsp;</label>
+                            <span class="badge bg-primary me-2">Total: {{ recommendations.count }}</span>
+                            <span class="badge bg-warning me-2">Pending: {{ recommendations|length }}</span>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recommendations List -->
+    <div class="row">
+        <div class="col-md-12">
+            {% if recommendations %}
+                {% for rec in recommendations %}
+                <div class="recommendation-card priority-{{ rec.priority }} card mb-3">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                <div class="d-flex justify-content-between align-items-start mb-3">
+                                    <div>
+                                        <h5 class="mb-2">{{ rec.title }}</h5>
+                                        <span class="badge bg-secondary me-2">{{ rec.get_recommendation_type_display }}</span>
+                                        <span class="badge bg-{{ rec.priority }} me-2">{{ rec.priority|upper }}</span>
+                                        <span class="badge bg-info me-2">{{ rec.confidence_score }}% confidence</span>
+                                        <span class="badge status-badge-{{ rec.status }}">{{ rec.get_status_display }}</span>
+                                    </div>
+                                </div>
+                                
+                                <h6 class="text-muted mb-2">Description</h6>
+                                <p class="mb-3">{{ rec.description }}</p>
+                                
+                                {% if rec.ai_reasoning %}
+                                <h6 class="text-muted mb-2">AI Reasoning</h6>
+                                <p class="mb-3"><em>{{ rec.ai_reasoning }}</em></p>
+                                {% endif %}
+                                
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
+                                        <small class="text-muted">
+                                            <i class="fas fa-clock"></i> Created: {{ rec.created_at|date:"M d, Y H:i" }}
+                                        </small>
+                                    </div>
+                                    {% if rec.reviewed_at %}
+                                    <div class="col-md-6">
+                                        <small class="text-muted">
+                                            <i class="fas fa-user-check"></i> Reviewed: {{ rec.reviewed_at|date:"M d, Y H:i" }}
+                                            {% if rec.reviewed_by %}by {{ rec.reviewed_by.get_full_name|default:rec.reviewed_by.username }}{% endif %}
+                                        </small>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="col-md-4">
+                                <!-- Estimated Savings -->
+                                {% if rec.estimated_savings %}
+                                <div class="card bg-light mb-3">
+                                    <div class="card-body text-center">
+                                        <h6 class="text-muted mb-2">Estimated Savings</h6>
+                                        <h3 class="mb-0" style="color: #2c3e50;">
+                                            <i class="fas fa-piggy-bank text-success"></i>
+                                            {{ board.budget.currency }} {{ rec.estimated_savings|floatformat:2 }}
+                                        </h3>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                
+                                <!-- Actions -->
+                                {% if rec.status == 'pending' %}
+                                <div class="d-grid gap-2">
+                                    <form method="post" action="{% url 'recommendation_action' rec.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="accept">
+                                        <button type="submit" class="btn btn-success btn-sm w-100 mb-2">
+                                            <i class="fas fa-check"></i> Accept
+                                        </button>
+                                    </form>
+                                    <form method="post" action="{% url 'recommendation_action' rec.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="reject">
+                                        <button type="submit" class="btn btn-danger btn-sm w-100">
+                                            <i class="fas fa-times"></i> Reject
+                                        </button>
+                                    </form>
+                                </div>
+                                {% elif rec.status == 'accepted' %}
+                                <div class="d-grid gap-2">
+                                    <form method="post" action="{% url 'recommendation_action' rec.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="implement">
+                                        <button type="submit" class="btn btn-primary btn-sm w-100">
+                                            <i class="fas fa-check-double"></i> Mark Implemented
+                                        </button>
+                                    </form>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="card">
+                    <div class="card-body text-center py-5">
+                        <i class="fas fa-lightbulb fa-4x text-muted mb-4"></i>
+                        <h4 class="text-muted">No Recommendations Found</h4>
+                        <p class="text-muted">
+                            {% if status_filter != 'all' %}
+                                No recommendations with status "{{ status_filter }}".
+                            {% else %}
+                                No AI recommendations have been generated yet.
+                            {% endif %}
+                        </p>
+                        <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-primary mt-3">
+                            <i class="fas fa-arrow-left"></i> Back to Budget Dashboard
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Add confirmation for actions
+document.querySelectorAll('form[action*="recommendation_action"]').forEach(form => {
+    form.addEventListener('submit', function(e) {
+        const action = this.querySelector('input[name="action"]').value;
+        let message = '';
+        
+        switch(action) {
+            case 'accept':
+                message = 'Are you sure you want to accept this recommendation?';
+                break;
+            case 'reject':
+                message = 'Are you sure you want to reject this recommendation?';
+                break;
+            case 'implement':
+                message = 'Mark this recommendation as implemented?';
+                break;
+        }
+        
+        if (!confirm(message)) {
+            e.preventDefault();
+        }
+    });
+});
+</script>
+{% endblock %}
