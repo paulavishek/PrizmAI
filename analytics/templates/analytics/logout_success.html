@@ -186,7 +186,14 @@
             <p class="text-muted">Help us improve PrizmAI by sharing your thoughts.</p>
         </div>
         
-        <form id="feedback-form" class="feedback-form">
+        <!-- HubSpot Embedded Form -->
+        <div id="hubspot-form-container">
+            <script src="https://js-na2.hsforms.net/forms/embed/244661638.js" defer></script>
+            <div class="hs-form-frame" data-region="na2" data-form-id="0451cb1c-53b3-47d6-abf4-338f73832a88" data-portal-id="244661638"></div>
+        </div>
+        
+        <!-- Fallback: Custom Form (if HubSpot doesn't load) -->
+        <form id="feedback-form" class="feedback-form" style="display: none;">
             {% csrf_token %}
             
             <!-- Rating -->
@@ -282,96 +289,124 @@
 
 {% if show_feedback_form %}
 <script>
-    // Star rating functionality
+    // HubSpot form submission tracking
+    window.addEventListener('message', function(event) {
+        // Listen for HubSpot form submission
+        if (event.data.type === 'hsFormCallback' && event.data.eventName === 'onFormSubmit') {
+            console.log('HubSpot form submitted!');
+            
+            // Show success message
+            setTimeout(function() {
+                document.getElementById('hubspot-form-container').style.display = 'none';
+                document.getElementById('success-message').style.display = 'block';
+            }, 1000);
+            
+            // Track in Google Analytics if available
+            if (typeof gtag !== 'undefined') {
+                gtag('event', 'feedback_submitted', {
+                    'engagement_level': '{{ engagement_level }}',
+                    'session_duration': {{ session_stats.duration_minutes|default:0 }},
+                    'form_type': 'hubspot'
+                });
+            }
+        }
+    });
+    
+    // Fallback form - Star rating functionality
     const stars = document.querySelectorAll('.star');
     const ratingInput = document.getElementById('rating-input');
     let selectedRating = 0;
     
-    stars.forEach(star => {
-        star.addEventListener('click', function() {
-            selectedRating = this.getAttribute('data-rating');
-            ratingInput.value = selectedRating;
+    if (stars.length > 0) {
+        stars.forEach(star => {
+            star.addEventListener('click', function() {
+                selectedRating = this.getAttribute('data-rating');
+                ratingInput.value = selectedRating;
+                
+                // Update star display
+                stars.forEach((s, index) => {
+                    if (index < selectedRating) {
+                        s.classList.add('active');
+                    } else {
+                        s.classList.remove('active');
+                    }
+                });
+            });
             
-            // Update star display
-            stars.forEach((s, index) => {
-                if (index < selectedRating) {
-                    s.classList.add('active');
-                } else {
-                    s.classList.remove('active');
-                }
+            star.addEventListener('mouseenter', function() {
+                const rating = this.getAttribute('data-rating');
+                stars.forEach((s, index) => {
+                    if (index < rating) {
+                        s.style.color = '#fbbf24';
+                    } else {
+                        s.style.color = '#ddd';
+                    }
+                });
             });
         });
         
-        star.addEventListener('mouseenter', function() {
-            const rating = this.getAttribute('data-rating');
+        document.querySelector('.star-rating').addEventListener('mouseleave', function() {
             stars.forEach((s, index) => {
-                if (index < rating) {
+                if (index < selectedRating) {
                     s.style.color = '#fbbf24';
                 } else {
                     s.style.color = '#ddd';
                 }
             });
         });
-    });
+    }
     
-    document.querySelector('.star-rating').addEventListener('mouseleave', function() {
-        stars.forEach((s, index) => {
-            if (index < selectedRating) {
-                s.style.color = '#fbbf24';
-            } else {
-                s.style.color = '#ddd';
-            }
-        });
-    });
-    
-    // Form submission
+    // Fallback form submission
     const feedbackForm = document.getElementById('feedback-form');
     const successMessage = document.getElementById('success-message');
     
-    feedbackForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        
-        const formData = {
-            name: document.getElementById('name').value,
-            email: document.getElementById('email').value,
-            feedback: document.getElementById('feedback-text').value,
-            rating: ratingInput.value,
-            email_consent: document.getElementById('email-consent').checked,
-        };
-        
-        try {
-            const response = await fetch('{% url "analytics:submit_feedback_ajax" %}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                body: JSON.stringify(formData)
-            });
+    if (feedbackForm) {
+        feedbackForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
             
-            const result = await response.json();
+            const formData = {
+                name: document.getElementById('name').value,
+                email: document.getElementById('email').value,
+                feedback: document.getElementById('feedback-text').value,
+                rating: ratingInput.value,
+                email_consent: document.getElementById('email-consent').checked,
+            };
             
-            if (result.success) {
-                // Show success message
-                feedbackForm.style.display = 'none';
-                successMessage.style.display = 'block';
+            try {
+                const response = await fetch('{% url "analytics:submit_feedback_ajax" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify(formData)
+                });
                 
-                // Track event in Google Analytics if available
-                if (typeof gtag !== 'undefined') {
-                    gtag('event', 'feedback_submitted', {
-                        'engagement_level': '{{ engagement_level }}',
-                        'rating': formData.rating,
-                        'session_duration': {{ session_stats.duration_minutes|default:0 }}
-                    });
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Show success message
+                    feedbackForm.style.display = 'none';
+                    successMessage.style.display = 'block';
+                    
+                    // Track event in Google Analytics if available
+                    if (typeof gtag !== 'undefined') {
+                        gtag('event', 'feedback_submitted', {
+                            'engagement_level': '{{ engagement_level }}',
+                            'rating': formData.rating,
+                            'session_duration': {{ session_stats.duration_minutes|default:0 }},
+                            'form_type': 'fallback'
+                        });
+                    }
+                } else {
+                    alert('Error submitting feedback. Please try again.');
                 }
-            } else {
+            } catch (error) {
+                console.error('Error:', error);
                 alert('Error submitting feedback. Please try again.');
             }
-        } catch (error) {
-            console.error('Error:', error);
-            alert('Error submitting feedback. Please try again.');
-        }
-    });
+        });
+    }
 </script>
 {% endif %}
 {% endblock %}

@@ -518,10 +518,12 @@ AXES_RESET_COOL_OFF = True  # Automatically reset after cooloff period
 # Google Analytics 4
 GA4_MEASUREMENT_ID = os.getenv('GA4_MEASUREMENT_ID', '')  # e.g., 'G-XXXXXXXXXX'
 
-# HubSpot CRM Integration
-HUBSPOT_API_KEY = os.getenv('HUBSPOT_API_KEY', '')
+# HubSpot CRM Integration - Using Access Token (preferred method)
+HUBSPOT_ACCESS_TOKEN = os.getenv('HUBSPOT_ACCESS_TOKEN', '')  # Private app access token
+HUBSPOT_API_KEY = os.getenv('HUBSPOT_API_KEY', '')  # Legacy API key (fallback)
 HUBSPOT_PORTAL_ID = os.getenv('HUBSPOT_PORTAL_ID', '')
-HUBSPOT_FEEDBACK_FORM_ID = os.getenv('HUBSPOT_FEEDBACK_FORM_ID', '')
+HUBSPOT_FORM_ID = os.getenv('HUBSPOT_FORM_ID', '')
+HUBSPOT_REGION = os.getenv('HUBSPOT_REGION', 'na1')  # Region: na1, na2, eu1, etc.
 
 # Session tracking settings
 ANALYTICS_SESSION_TIMEOUT = 30  # Minutes of inactivity before session timeout

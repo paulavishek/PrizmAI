@@ -15,18 +15,28 @@ class HubSpotIntegration:
     """
     
     def __init__(self):
+        # Try access token first (preferred), fallback to API key
+        self.access_token = getattr(settings, 'HUBSPOT_ACCESS_TOKEN', None)
         self.api_key = getattr(settings, 'HUBSPOT_API_KEY', None)
         self.portal_id = getattr(settings, 'HUBSPOT_PORTAL_ID', None)
-        self.base_url = "https://api.hubapi.com"
+        self.region = getattr(settings, 'HUBSPOT_REGION', 'na1')
+        
+        # Use appropriate base URL based on region
+        self.base_url = f"https://api.hubapi.com"
+        
         self.headers = {
             'Content-Type': 'application/json',
         }
-        if self.api_key:
+        
+        # Prefer access token over API key
+        if self.access_token:
+            self.headers['Authorization'] = f'Bearer {self.access_token}'
+        elif self.api_key:
             self.headers['Authorization'] = f'Bearer {self.api_key}'
     
     def is_configured(self):
         """Check if HubSpot is properly configured"""
-        return bool(self.api_key and self.portal_id)
+        return bool((self.access_token or self.api_key) and self.portal_id)
     
     def create_or_update_contact(self, email, first_name='', last_name='', 
                                  company='', phone='', **custom_properties):

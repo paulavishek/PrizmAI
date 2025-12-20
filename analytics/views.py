@@ -95,7 +95,8 @@ class CustomLogoutView(View):
             'show_feedback_form': show_feedback_form,
             'user_info': user_info,
             'hubspot_portal_id': getattr(settings, 'HUBSPOT_PORTAL_ID', ''),
-            'hubspot_form_id': getattr(settings, 'HUBSPOT_FEEDBACK_FORM_ID', ''),
+            'hubspot_form_id': getattr(settings, 'HUBSPOT_FORM_ID', ''),
+            'hubspot_region': getattr(settings, 'HUBSPOT_REGION', 'na1'),
         }
         
         return render(request, self.template_name, context)
