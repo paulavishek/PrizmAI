@@ -73,6 +73,9 @@ class CustomLogoutView(View):
             min_engagement = getattr(settings, 'ANALYTICS_MIN_ENGAGEMENT_FOR_FEEDBACK', 2)
             show_feedback_form = session.duration_minutes >= min_engagement
             
+            logger.info(f"Logout - User: {session.user}, Duration: {session.duration_minutes}min, "
+                       f"Min Required: {min_engagement}min, Show Form: {show_feedback_form}")
+            
             # Create feedback prompt record
             if show_feedback_form:
                 try:
@@ -82,6 +85,9 @@ class CustomLogoutView(View):
                     )
                 except Exception as e:
                     logger.error(f"Error creating feedback prompt: {e}")
+        else:
+            logger.warning(f"Logout - No user_session found on request! "
+                          f"User: {request.user}, Session Key: {request.session.session_key}")
         
         # Get user info for pre-filling form
         user_info = {}
@@ -103,6 +109,8 @@ class CustomLogoutView(View):
             'hubspot_form_id': getattr(settings, 'HUBSPOT_FORM_ID', ''),
             'hubspot_region': getattr(settings, 'HUBSPOT_REGION', 'na1'),
         }
+        
+        logger.info(f"Logout - Rendering template with show_feedback_form={show_feedback_form}")
         
         return render(request, self.template_name, context)
 
