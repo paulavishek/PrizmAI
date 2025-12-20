@@ -476,14 +476,56 @@ CORS_ALLOW_HEADERS = [
 
 # CSP settings to prevent XSS and other injection attacks
 CSP_DEFAULT_SRC = ("'self'",)
-CSP_SCRIPT_SRC = ("'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://code.jquery.com")
-CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://fonts.googleapis.com", "https://cdnjs.cloudflare.com")
-CSP_IMG_SRC = ("'self'", "data:", "https:", "http:")
-CSP_FONT_SRC = ("'self'", "data:", "https://cdn.jsdelivr.net", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com")
-CSP_CONNECT_SRC = ("'self'", "wss:", "ws:", "https://cdn.jsdelivr.net")
+CSP_SCRIPT_SRC = (
+    "'self'", 
+    "'unsafe-inline'", 
+    "https://cdn.jsdelivr.net", 
+    "https://code.jquery.com",
+    "https://js.hsforms.net",  # HubSpot Forms
+    "https://www.googletagmanager.com",  # Google Analytics
+    "https://www.google-analytics.com",  # Google Analytics
+)
+CSP_STYLE_SRC = (
+    "'self'", 
+    "'unsafe-inline'", 
+    "https://cdn.jsdelivr.net", 
+    "https://fonts.googleapis.com", 
+    "https://cdnjs.cloudflare.com"
+)
+CSP_IMG_SRC = (
+    "'self'", 
+    "data:", 
+    "https:", 
+    "http:",
+    "https://www.google-analytics.com",  # Google Analytics tracking pixels
+)
+CSP_FONT_SRC = (
+    "'self'", 
+    "data:", 
+    "https://cdn.jsdelivr.net", 
+    "https://fonts.gstatic.com", 
+    "https://cdnjs.cloudflare.com"
+)
+CSP_CONNECT_SRC = (
+    "'self'", 
+    "wss:", 
+    "ws:", 
+    "https://cdn.jsdelivr.net",
+    "https://api.hsforms.com",  # HubSpot API
+    "https://forms.hsforms.com",  # HubSpot Forms
+    "https://www.google-analytics.com",  # Google Analytics
+    "https://analytics.google.com",  # Google Analytics 4
+)
+CSP_FRAME_SRC = (
+    "https://app.hubspot.com",  # HubSpot embeds
+    "https://share.hsforms.com",  # HubSpot forms
+)
 CSP_FRAME_ANCESTORS = ("'none'",)  # Prevent clickjacking
 CSP_BASE_URI = ("'self'",)
-CSP_FORM_ACTION = ("'self'",)
+CSP_FORM_ACTION = (
+    "'self'",
+    "https://api.hsforms.com",  # Allow HubSpot form submissions
+)
 CSP_UPGRADE_INSECURE_REQUESTS = not DEBUG  # Upgrade HTTP to HTTPS in production
 
 # Enable CSP reporting (optional - can be configured to send reports)
