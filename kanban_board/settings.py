@@ -393,6 +393,7 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True  # Fix Celery 6.0 deprecation warning
 
 # ============================================
 # REST FRAMEWORK CONFIGURATION

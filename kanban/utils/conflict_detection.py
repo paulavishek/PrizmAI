@@ -44,7 +44,7 @@ class ConflictDetectionService:
             from django.utils import timezone
             thirty_days_ago = timezone.now() - timedelta(days=30)
             boards = Board.objects.filter(
-                tasks__updated_at__gte=thirty_days_ago
+                columns__tasks__updated_at__gte=thirty_days_ago
             ).distinct()
         
         for board in boards:
