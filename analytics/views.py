@@ -70,7 +70,8 @@ class CustomLogoutView(View):
             
             # Show feedback form based on engagement
             # Don't show to very low engagement users (quick bounces)
-            show_feedback_form = session.duration_minutes >= 2
+            min_engagement = getattr(settings, 'ANALYTICS_MIN_ENGAGEMENT_FOR_FEEDBACK', 2)
+            show_feedback_form = session.duration_minutes >= min_engagement
             
             # Create feedback prompt record
             if show_feedback_form:

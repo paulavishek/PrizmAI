@@ -534,4 +534,4 @@ HUBSPOT_REGION = os.getenv('HUBSPOT_REGION', 'na1')  # Region: na1, na2, eu1, et
 # Session tracking settings
 ANALYTICS_SESSION_TIMEOUT = 30  # Minutes of inactivity before session timeout
 ANALYTICS_TRACK_ANONYMOUS = True  # Track anonymous users
-ANALYTICS_MIN_ENGAGEMENT_FOR_FEEDBACK = 2  # Minimum minutes before showing feedback form
+ANALYTICS_MIN_ENGAGEMENT_FOR_FEEDBACK = 0  # Minimum minutes before showing feedback form (0 = always show)

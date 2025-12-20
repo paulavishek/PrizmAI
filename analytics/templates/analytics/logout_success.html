@@ -189,9 +189,36 @@
         
         <!-- HubSpot Embedded Form -->
         <div id="hubspot-form-container">
-            <script src="https://js-na2.hsforms.net/forms/embed/244661638.js" defer></script>
-            <div class="hs-form-frame" data-region="na2" data-form-id="0451cb1c-53b3-47d6-abf4-338f73832a88" data-portal-id="244661638"></div>
+            <!-- HubSpot will inject the form here -->
         </div>
+        
+        <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
+        <script>
+            hbspt.forms.create({
+                region: "{{ hubspot_region|default:'na1' }}",
+                portalId: "{{ hubspot_portal_id|default:'244661638' }}",
+                formId: "{{ hubspot_form_id|default:'0451cb1c-53b3-47d6-abf4-338f73832a88' }}",
+                target: '#hubspot-form-container',
+                onFormSubmit: function($form) {
+                    console.log('HubSpot form submitted!');
+                    
+                    // Show success message after a short delay
+                    setTimeout(function() {
+                        document.getElementById('hubspot-form-container').style.display = 'none';
+                        document.getElementById('success-message').style.display = 'block';
+                    }, 1000);
+                    
+                    // Track in Google Analytics if available
+                    if (typeof gtag !== 'undefined') {
+                        gtag('event', 'feedback_submitted', {
+                            'engagement_level': '{{ engagement_level }}',
+                            'session_duration': {{ session_stats.duration_minutes|default:0 }},
+                            'form_type': 'hubspot'
+                        });
+                    }
+                }
+            });
+        </script>
         
         <!-- Fallback: Custom Form (if HubSpot doesn't load) -->
         <form id="feedback-form" class="feedback-form" style="display: none;">
@@ -290,29 +317,6 @@
 
 {% if show_feedback_form %}
 <script>
-    // HubSpot form submission tracking
-    window.addEventListener('message', function(event) {
-        // Listen for HubSpot form submission
-        if (event.data.type === 'hsFormCallback' && event.data.eventName === 'onFormSubmit') {
-            console.log('HubSpot form submitted!');
-            
-            // Show success message
-            setTimeout(function() {
-                document.getElementById('hubspot-form-container').style.display = 'none';
-                document.getElementById('success-message').style.display = 'block';
-            }, 1000);
-            
-            // Track in Google Analytics if available
-            if (typeof gtag !== 'undefined') {
-                gtag('event', 'feedback_submitted', {
-                    'engagement_level': '{{ engagement_level }}',
-                    'session_duration': {{ session_stats.duration_minutes|default:0 }},
-                    'form_type': 'hubspot'
-                });
-            }
-        }
-    });
-    
     // Fallback form - Star rating functionality
     const stars = document.querySelectorAll('.star');
     const ratingInput = document.getElementById('rating-input');
