@@ -482,6 +482,8 @@ CSP_SCRIPT_SRC = (
     "https://cdn.jsdelivr.net", 
     "https://code.jquery.com",
     "https://js.hsforms.net",  # HubSpot Forms
+    "https://js.hs-scripts.com",  # HubSpot Scripts
+    "https://js.hs-analytics.net",  # HubSpot Analytics
     "https://www.googletagmanager.com",  # Google Analytics
     "https://www.google-analytics.com",  # Google Analytics
 )
@@ -498,6 +500,8 @@ CSP_IMG_SRC = (
     "https:", 
     "http:",
     "https://www.google-analytics.com",  # Google Analytics tracking pixels
+    "https://forms.hsforms.com",  # HubSpot form images
+    "https://no-cache.hubspot.com",  # HubSpot tracking pixels
 )
 CSP_FONT_SRC = (
     "'self'", 
@@ -513,8 +517,16 @@ CSP_CONNECT_SRC = (
     "https://cdn.jsdelivr.net",
     "https://api.hsforms.com",  # HubSpot API
     "https://forms.hsforms.com",  # HubSpot Forms
+    "https://forms.na2.hsforms.com",  # HubSpot Forms NA2 region
+    "https://forms.na1.hsforms.com",  # HubSpot Forms NA1 region
+    "https://forms.eu1.hsforms.com",  # HubSpot Forms EU region
+    "https://hubspot-forms-static-embed.s3.amazonaws.com",  # HubSpot S3 CDN
+    "https://hubspot-forms-static-embed-na2-s3.amazonaws.com",  # HubSpot S3 CDN NA2
+    "https://*.hsforms.com",  # All HubSpot form domains
+    "https://*.amazonaws.com",  # AWS CDN for HubSpot
     "https://www.google-analytics.com",  # Google Analytics
     "https://analytics.google.com",  # Google Analytics 4
+    "https://www.googletagmanager.com",  # Google Tag Manager
 )
 CSP_FRAME_SRC = (
     "https://app.hubspot.com",  # HubSpot embeds
@@ -525,6 +537,8 @@ CSP_BASE_URI = ("'self'",)
 CSP_FORM_ACTION = (
     "'self'",
     "https://api.hsforms.com",  # Allow HubSpot form submissions
+    "https://forms.hsforms.com",  # HubSpot form submissions
+    "https://forms.na2.hsforms.com",  # HubSpot form submissions NA2
 )
 CSP_UPGRADE_INSECURE_REQUESTS = not DEBUG  # Upgrade HTTP to HTTPS in production
 
