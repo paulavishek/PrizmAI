@@ -25,6 +25,7 @@ urlpatterns = [
     path('stakeholder/', include('kanban.stakeholder_urls')),
     path('accounts/', include('accounts.urls')),
     path('accounts/', include('allauth.urls')),  # Add allauth URLs
+    path('analytics/', include('analytics.urls')),  # Analytics and feedback system
     path('assistant/', include('ai_assistant.urls')),  # AI Project Assistant URLs
     path('messaging/', include('messaging.urls')),  # Real-time messaging URLs
     path('wiki/', include('wiki.urls')),  # Wiki and Knowledge Base URLs

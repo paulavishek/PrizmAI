@@ -23,6 +23,33 @@
     <link rel="stylesheet" href="{% static 'css/ai_explainability.css' %}">
     
     {% block extra_css %}{% endblock %}
+    
+    <!-- Google Analytics 4 - Load only in production -->
+    {% if not debug and GA4_MEASUREMENT_ID %}
+    <script async src="https://www.googletagmanager.com/gtag/js?id={{ GA4_MEASUREMENT_ID }}"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      
+      gtag('config', '{{ GA4_MEASUREMENT_ID }}', {
+        'anonymize_ip': true,  /* GDPR compliance */
+        'cookie_flags': 'SameSite=None;Secure'
+      });
+      
+      /* Track authenticated user properties */
+      {% if user.is_authenticated %}
+      gtag('set', 'user_properties', {
+        'user_type': 'registered',
+        'user_id_hashed': '{{ user.id|stringformat:"s"|hash:"md5" }}'  /* Anonymized */
+      });
+      {% else %}
+      gtag('set', 'user_properties', {
+        'user_type': 'anonymous'
+      });
+      {% endif %}
+    </script>
+    {% endif %}
 </head>
 <body>
     <!-- Navigation -->

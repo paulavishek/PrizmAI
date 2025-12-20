@@ -101,6 +101,7 @@ INSTALLED_APPS = [
     'wiki',
     'api',  # RESTful API for external integrations
     'webhooks',  # Webhook system for event-driven integrations
+    'analytics',  # Analytics and user feedback system
 ]
 
 MIDDLEWARE = [
@@ -118,6 +119,9 @@ MIDDLEWARE = [
     # Security and audit logging middleware
     'kanban.audit_middleware.AuditLoggingMiddleware',
     'kanban.audit_middleware.APIRequestLoggingMiddleware',
+    # Analytics tracking middleware - Add before rate limiting
+    'analytics.middleware.SessionTrackingMiddleware',
+    # 'analytics.middleware.SessionTimeoutMiddleware',  # Optional: Auto-end inactive sessions
     'kanban.audit_middleware.SecurityMonitoringMiddleware',
     'axes.middleware.AxesMiddleware',  # Brute force protection
 ]
@@ -507,4 +511,19 @@ AXES_CACHE = 'default'
 # Additional rate limiting
 AXES_RESET_COOL_OFF = True  # Automatically reset after cooloff period
 
+# ============================================
+# ANALYTICS & FEEDBACK CONFIGURATION
+# ============================================
 
+# Google Analytics 4
+GA4_MEASUREMENT_ID = os.getenv('GA4_MEASUREMENT_ID', '')  # e.g., 'G-XXXXXXXXXX'
+
+# HubSpot CRM Integration
+HUBSPOT_API_KEY = os.getenv('HUBSPOT_API_KEY', '')
+HUBSPOT_PORTAL_ID = os.getenv('HUBSPOT_PORTAL_ID', '')
+HUBSPOT_FEEDBACK_FORM_ID = os.getenv('HUBSPOT_FEEDBACK_FORM_ID', '')
+
+# Session tracking settings
+ANALYTICS_SESSION_TIMEOUT = 30  # Minutes of inactivity before session timeout
+ANALYTICS_TRACK_ANONYMOUS = True  # Track anonymous users
+ANALYTICS_MIN_ENGAGEMENT_FOR_FEEDBACK = 2  # Minimum minutes before showing feedback form

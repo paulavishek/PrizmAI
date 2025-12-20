@@ -1,0 +1,377 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Thanks for trying PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .logout-container {
+        max-width: 900px;
+        margin: 50px auto;
+        padding: 20px;
+    }
+    
+    .session-summary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 40px;
+        margin-bottom: 30px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
+    
+    .stat-card {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border-radius: 10px;
+        padding: 20px;
+        text-align: center;
+        transition: transform 0.3s, background 0.3s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+        background: rgba(255, 255, 255, 0.2);
+    }
+    
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+    
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+    
+    .feedback-section {
+        background: white;
+        border-radius: 15px;
+        padding: 40px;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+    }
+    
+    .engagement-badge {
+        display: inline-block;
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        margin-left: 10px;
+    }
+    
+    .badge-very_high { background: #10b981; color: white; }
+    .badge-high { background: #3b82f6; color: white; }
+    .badge-medium { background: #f59e0b; color: white; }
+    .badge-low { background: #6b7280; color: white; }
+    
+    .star-rating {
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin: 20px 0;
+    }
+    
+    .star {
+        font-size: 2rem;
+        cursor: pointer;
+        color: #ddd;
+        transition: color 0.2s, transform 0.2s;
+    }
+    
+    .star:hover,
+    .star.active {
+        color: #fbbf24;
+        transform: scale(1.2);
+    }
+    
+    .feedback-form {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    
+    .btn-submit-feedback {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 12px 30px;
+        border-radius: 25px;
+        font-weight: 600;
+        transition: transform 0.3s, box-shadow 0.3s;
+    }
+    
+    .btn-submit-feedback:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        color: white;
+    }
+    
+    .success-message {
+        display: none;
+        background: #10b981;
+        color: white;
+        padding: 20px;
+        border-radius: 10px;
+        text-align: center;
+        margin-top: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="logout-container">
+    <!-- Session Summary -->
+    {% if session_stats %}
+    <div class="session-summary">
+        <div class="text-center mb-4">
+            <h2>👋 Thanks for exploring PrizmAI!</h2>
+            <p class="mb-0">
+                {% if engagement_level == 'very_high' %}
+                    Wow! You really dove deep into the features!
+                {% elif engagement_level == 'high' %}
+                    Great session! You explored several cool features.
+                {% elif engagement_level == 'medium' %}
+                    Nice! You got a good feel for PrizmAI.
+                {% else %}
+                    Thanks for checking out PrizmAI!
+                {% endif %}
+                <span class="engagement-badge badge-{{ engagement_level }}">
+                    {{ engagement_level|upper|replace:"_":" " }}
+                </span>
+            </p>
+        </div>
+        
+        <div class="row g-3 mt-3">
+            <div class="col-md-3 col-6">
+                <div class="stat-card">
+                    <div class="stat-number">{{ session_stats.duration_minutes }}</div>
+                    <div class="stat-label">Minutes</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="stat-card">
+                    <div class="stat-number">{{ session_stats.tasks_created }}</div>
+                    <div class="stat-label">Tasks Created</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="stat-card">
+                    <div class="stat-number">{{ session_stats.ai_features_used }}</div>
+                    <div class="stat-label">AI Features Used</div>
+                </div>
+            </div>
+            <div class="col-md-3 col-6">
+                <div class="stat-card">
+                    <div class="stat-number">{{ session_stats.boards_viewed }}</div>
+                    <div class="stat-label">Boards Viewed</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="session-summary">
+        <div class="text-center">
+            <h2>👋 Thanks for visiting PrizmAI!</h2>
+            <p>You've been logged out successfully.</p>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Feedback Form -->
+    {% if show_feedback_form %}
+    <div class="feedback-section">
+        <div class="text-center mb-4">
+            <h3>💭 We'd love your feedback!</h3>
+            <p class="text-muted">Help us improve PrizmAI by sharing your thoughts.</p>
+        </div>
+        
+        <form id="feedback-form" class="feedback-form">
+            {% csrf_token %}
+            
+            <!-- Rating -->
+            <div class="mb-4">
+                <label class="form-label text-center d-block">How would you rate your experience?</label>
+                <div class="star-rating" id="star-rating">
+                    <span class="star" data-rating="1">⭐</span>
+                    <span class="star" data-rating="2">⭐</span>
+                    <span class="star" data-rating="3">⭐</span>
+                    <span class="star" data-rating="4">⭐</span>
+                    <span class="star" data-rating="5">⭐</span>
+                </div>
+                <input type="hidden" id="rating-input" name="rating" value="">
+            </div>
+            
+            <!-- Feedback Text -->
+            <div class="mb-3">
+                <label for="feedback-text" class="form-label">Tell us more (optional):</label>
+                <textarea 
+                    class="form-control" 
+                    id="feedback-text" 
+                    name="feedback"
+                    rows="4" 
+                    placeholder="What did you like? What could be better? Any features you'd love to see?"
+                ></textarea>
+            </div>
+            
+            <!-- Contact Information -->
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="name" class="form-label">Name (optional):</label>
+                    <input 
+                        type="text" 
+                        class="form-control" 
+                        id="name" 
+                        name="name"
+                        value="{{ user_info.name|default:'' }}"
+                        placeholder="Your name"
+                    >
+                </div>
+                <div class="col-md-6">
+                    <label for="email" class="form-label">Email (optional):</label>
+                    <input 
+                        type="email" 
+                        class="form-control" 
+                        id="email" 
+                        name="email"
+                        value="{{ user_info.email|default:'' }}"
+                        placeholder="your@email.com"
+                    >
+                </div>
+            </div>
+            
+            <!-- Email Consent -->
+            <div class="form-check mb-4">
+                <input 
+                    class="form-check-input" 
+                    type="checkbox" 
+                    id="email-consent" 
+                    name="email_consent"
+                >
+                <label class="form-check-label" for="email-consent">
+                    I'd like to receive follow-up emails about PrizmAI updates
+                </label>
+            </div>
+            
+            <!-- Submit Button -->
+            <div class="text-center">
+                <button type="submit" class="btn btn-submit-feedback">
+                    <i class="fas fa-paper-plane me-2"></i>Submit Feedback
+                </button>
+            </div>
+        </form>
+        
+        <!-- Success Message -->
+        <div class="success-message" id="success-message">
+            <h4>✅ Thank you!</h4>
+            <p class="mb-0">Your feedback helps us make PrizmAI better for everyone.</p>
+        </div>
+    </div>
+    {% endif %}
+    
+    <!-- Back to Home -->
+    <div class="text-center mt-4">
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-primary">
+            <i class="fas fa-home me-2"></i>Back to Dashboard
+        </a>
+        <a href="{% url 'login' %}" class="btn btn-outline-secondary ms-2">
+            <i class="fas fa-sign-in-alt me-2"></i>Login Again
+        </a>
+    </div>
+</div>
+
+{% if show_feedback_form %}
+<script>
+    // Star rating functionality
+    const stars = document.querySelectorAll('.star');
+    const ratingInput = document.getElementById('rating-input');
+    let selectedRating = 0;
+    
+    stars.forEach(star => {
+        star.addEventListener('click', function() {
+            selectedRating = this.getAttribute('data-rating');
+            ratingInput.value = selectedRating;
+            
+            // Update star display
+            stars.forEach((s, index) => {
+                if (index < selectedRating) {
+                    s.classList.add('active');
+                } else {
+                    s.classList.remove('active');
+                }
+            });
+        });
+        
+        star.addEventListener('mouseenter', function() {
+            const rating = this.getAttribute('data-rating');
+            stars.forEach((s, index) => {
+                if (index < rating) {
+                    s.style.color = '#fbbf24';
+                } else {
+                    s.style.color = '#ddd';
+                }
+            });
+        });
+    });
+    
+    document.querySelector('.star-rating').addEventListener('mouseleave', function() {
+        stars.forEach((s, index) => {
+            if (index < selectedRating) {
+                s.style.color = '#fbbf24';
+            } else {
+                s.style.color = '#ddd';
+            }
+        });
+    });
+    
+    // Form submission
+    const feedbackForm = document.getElementById('feedback-form');
+    const successMessage = document.getElementById('success-message');
+    
+    feedbackForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const formData = {
+            name: document.getElementById('name').value,
+            email: document.getElementById('email').value,
+            feedback: document.getElementById('feedback-text').value,
+            rating: ratingInput.value,
+            email_consent: document.getElementById('email-consent').checked,
+        };
+        
+        try {
+            const response = await fetch('{% url "analytics:submit_feedback_ajax" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify(formData)
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+                // Show success message
+                feedbackForm.style.display = 'none';
+                successMessage.style.display = 'block';
+                
+                // Track event in Google Analytics if available
+                if (typeof gtag !== 'undefined') {
+                    gtag('event', 'feedback_submitted', {
+                        'engagement_level': '{{ engagement_level }}',
+                        'rating': formData.rating,
+                        'session_duration': {{ session_stats.duration_minutes|default:0 }}
+                    });
+                }
+            } else {
+                alert('Error submitting feedback. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Error submitting feedback. Please try again.');
+        }
+    });
+</script>
+{% endif %}
+{% endblock %}

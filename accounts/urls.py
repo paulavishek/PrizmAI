@@ -3,9 +3,12 @@ from django.contrib.auth import views as auth_views
 from . import views
 from .forms import CustomSetPasswordForm
 
+# Import analytics logout view to replace default logout
+from analytics.views import CustomLogoutView
+
 urlpatterns = [
     path('login/', views.login_view, name='login'),
-    path('logout/', views.logout_view, name='logout'),
+    path('logout/', CustomLogoutView.as_view(), name='logout'),  # Use analytics logout view
     path('register/', views.register_view, name='register'),
     path('register/<int:org_id>/', views.register_view, name='register_with_org'),
     path('organization-choice/', views.organization_choice, name='organization_choice'),
