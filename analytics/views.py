@@ -1,7 +1,9 @@
 """
 Analytics views for logout, feedback submission, and dashboard.
 """
+from django.conf import settings
 from django.contrib.auth import logout
+from django.contrib.auth.models import User
 from django.shortcuts import render, redirect
 from django.views import View
 from django.views.decorators.http import require_http_methods
@@ -10,12 +12,14 @@ from django.http import JsonResponse
 from django.utils import timezone
 from django.db.models import Count, Avg, Sum, Q
 from django.db.models.functions import TruncDate, TruncWeek
+from django.core.cache import cache
 from datetime import timedelta
 import json
 import logging
 
 from .models import UserSession, Feedback, FeedbackPrompt, AnalyticsEvent
 from .utils import HubSpotIntegration
+from .tasks import sync_feedback_to_hubspot_task
 
 logger = logging.getLogger(__name__)
 
@@ -106,9 +110,22 @@ class CustomLogoutView(View):
 def submit_feedback_ajax(request):
     """
     AJAX endpoint for feedback submission.
-    Syncs to HubSpot if configured.
+    Includes rate limiting and async HubSpot sync.
     """
     try:
+        # Rate limiting - prevent feedback spam
+        ip = request.META.get('REMOTE_ADDR')
+        cache_key = f'feedback_submit_{ip}'
+        
+        if cache.get(cache_key):
+            return JsonResponse({
+                'success': False,
+                'message': 'Please wait a few minutes before submitting more feedback.'
+            }, status=429)
+        
+        # Set 5-minute cooldown
+        cache.set(cache_key, True, 300)
+        
         data = json.loads(request.body)
         
         # Get session if available
@@ -140,15 +157,13 @@ def submit_feedback_ajax(request):
                 prompt_type='logout'
             ).update(submitted=True, interacted=True)
         
-        # Sync to HubSpot (async would be better in production)
-        hubspot = HubSpotIntegration()
-        if hubspot.is_configured() and feedback.email:
+        # Sync to HubSpot asynchronously using Celery
+        if feedback.email:
             try:
-                contact_id, engagement_id = hubspot.sync_feedback_to_hubspot(feedback)
-                if contact_id:
-                    logger.info(f"Feedback synced to HubSpot: {contact_id}")
+                sync_feedback_to_hubspot_task.delay(feedback.id)
+                logger.info(f"Queued HubSpot sync for feedback {feedback.id}")
             except Exception as e:
-                logger.error(f"Error syncing to HubSpot: {e}")
+                logger.error(f"Error queuing HubSpot sync task: {e}")
         
         return JsonResponse({
             'success': True,
@@ -337,7 +352,3 @@ def analytics_dashboard(request):
     }
     
     return render(request, 'analytics/dashboard.html', context)
-
-
-from django.conf import settings
-from django.contrib.auth.models import User

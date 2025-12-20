@@ -107,6 +107,10 @@ class SessionTrackingMiddleware(MiddlewareMixin):
         path = request.path.lower()
         method = request.method
         
+        # Initialize pending events list for bulk creation
+        if not hasattr(request, '_pending_events'):
+            request._pending_events = []
+        
         try:
             # Increment pages visited (for GET requests only)
             if method == 'GET':
@@ -121,12 +125,22 @@ class SessionTrackingMiddleware(MiddlewareMixin):
             # Track board creation (POST to board create endpoint)
             if 'board' in path and method == 'POST' and ('create' in path or path.endswith('/boards/')):
                 session.boards_created += 1
-                self.track_event(session, 'board_created', category='boards')
+                request._pending_events.append({
+                    'user_session': session,
+                    'event_name': 'board_created',
+                    'event_category': 'boards',
+                    'timestamp': timezone.now()
+                })
             
             # Track task creation
             if 'task' in path and method == 'POST':
                 session.tasks_created += 1
-                self.track_event(session, 'task_created', category='tasks')
+                request._pending_events.append({
+                    'user_session': session,
+                    'event_name': 'task_created',
+                    'event_category': 'tasks',
+                    'timestamp': timezone.now()
+                })
             
             # Track task completion (look for status updates)
             if 'task' in path and method in ['PUT', 'PATCH', 'POST']:
@@ -134,19 +148,25 @@ class SessionTrackingMiddleware(MiddlewareMixin):
                 # You might want to check request.POST or request.body
                 if 'complete' in path or 'done' in path:
                     session.tasks_completed += 1
-                    self.track_event(session, 'task_completed', category='tasks')
+                    request._pending_events.append({
+                        'user_session': session,
+                        'event_name': 'task_completed',
+                        'event_category': 'tasks',
+                        'timestamp': timezone.now()
+                    })
             
             # Track AI feature usage
             if any(ai_path in path for ai_path in self.AI_PATHS):
                 session.ai_features_used += 1
                 # Extract which AI feature
                 feature_name = next((ai for ai in self.AI_PATHS if ai in path), 'unknown')
-                self.track_event(
-                    session, 
-                    'ai_feature_used',
-                    category='ai_features',
-                    label=feature_name
-                )
+                request._pending_events.append({
+                    'user_session': session,
+                    'event_name': 'ai_feature_used',
+                    'event_category': 'ai_features',
+                    'event_label': feature_name,
+                    'timestamp': timezone.now()
+                })
             
             # Save updates (batch save for performance)
             session.save(update_fields=[
@@ -164,16 +184,28 @@ class SessionTrackingMiddleware(MiddlewareMixin):
         return None
     
     def process_response(self, request, response):
-        """Update session duration and engagement on response"""
+        """Update session duration and engagement on response, and bulk create events"""
+        # Bulk create pending events
+        if hasattr(request, '_pending_events') and request._pending_events:
+            try:
+                AnalyticsEvent.objects.bulk_create([
+                    AnalyticsEvent(**event_data) 
+                    for event_data in request._pending_events
+                ])
+            except Exception as e:
+                logger.error(f"Error bulk creating analytics events: {e}", exc_info=True)
+        
         if hasattr(request, 'user_session') and request.user_session:
             try:
                 session = request.user_session
                 session.update_duration()
                 
                 # Update engagement level periodically (not on every request)
-                # Only update if duration changed significantly
-                if session.duration_minutes % 5 == 0:  # Every 5 minutes
+                # Only update if duration changed significantly (every 5 minutes)
+                if session.duration_minutes - session.last_engagement_update >= 5:
                     session.update_engagement_level()
+                    session.last_engagement_update = session.duration_minutes
+                    session.save(update_fields=['last_engagement_update'])
             except Exception as e:
                 logger.error(f"Error updating session metrics: {e}", exc_info=True)
         
@@ -200,20 +232,6 @@ class SessionTrackingMiddleware(MiddlewareMixin):
             return 'desktop'
         else:
             return 'unknown'
-    
-    def track_event(self, user_session, event_name, category='', label='', value=None, data=None):
-        """Helper to create analytics events"""
-        try:
-            AnalyticsEvent.objects.create(
-                user_session=user_session,
-                event_name=event_name,
-                event_category=category,
-                event_label=label,
-                event_value=value,
-                event_data=data or {}
-            )
-        except Exception as e:
-            logger.error(f"Error creating analytics event: {e}", exc_info=True)
 
 
 class SessionTimeoutMiddleware(MiddlewareMixin):

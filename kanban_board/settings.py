@@ -119,9 +119,9 @@ MIDDLEWARE = [
     # Security and audit logging middleware
     'kanban.audit_middleware.AuditLoggingMiddleware',
     'kanban.audit_middleware.APIRequestLoggingMiddleware',
-    # Analytics tracking middleware - Add before rate limiting
+    # Analytics tracking middleware - SessionTrackingMiddleware must come before SessionTimeoutMiddleware
     'analytics.middleware.SessionTrackingMiddleware',
-    # 'analytics.middleware.SessionTimeoutMiddleware',  # Optional: Auto-end inactive sessions
+    'analytics.middleware.SessionTimeoutMiddleware',  # Auto-end inactive sessions
     'kanban.audit_middleware.SecurityMonitoringMiddleware',
     'axes.middleware.AxesMiddleware',  # Brute force protection
 ]
@@ -345,6 +345,11 @@ LOGGING = {
         'ai_assistant': {
             'handlers': ['file', 'console'],
             'level': os.getenv('LOG_LEVEL', 'INFO'),
+            'propagate': False,
+        },
+        'analytics': {
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
             'propagate': False,
         },
     },

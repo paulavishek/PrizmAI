@@ -49,6 +49,9 @@ class UserSession(models.Model):
     )
     engagement_score = models.IntegerField(default=0, help_text="Calculated score 0-12")
     
+    # Engagement update tracking
+    last_engagement_update = models.IntegerField(default=0, help_text="Duration minutes when engagement was last updated")
+    
     # Registration tracking
     registered_during_session = models.BooleanField(default=False)
     is_return_visit = models.BooleanField(default=False)
@@ -94,6 +97,13 @@ class UserSession(models.Model):
             models.Index(fields=['session_key', 'session_end']),
             models.Index(fields=['user', 'session_start']),
             models.Index(fields=['engagement_level']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user'],
+                condition=Q(session_end__isnull=True),
+                name='one_active_session_per_user'
+            )
         ]
         verbose_name = 'User Session'
         verbose_name_plural = 'User Sessions'
@@ -302,10 +312,10 @@ class Feedback(models.Model):
     
     def analyze_sentiment(self):
         """
-        Simple sentiment analysis based on rating and keywords.
-        Can be enhanced with NLP libraries like TextBlob or VADER.
+        Enhanced sentiment analysis using VADER for text and rating-based fallback.
         """
         if self.rating:
+            # Rating-based sentiment (quick and accurate for rated feedback)
             if self.rating >= 4:
                 self.sentiment = 'positive'
             elif self.rating >= 3:
@@ -313,20 +323,33 @@ class Feedback(models.Model):
             else:
                 self.sentiment = 'negative'
         else:
-            # Keyword-based sentiment (basic)
-            text_lower = self.feedback_text.lower()
-            positive_words = ['love', 'great', 'excellent', 'amazing', 'fantastic', 'helpful']
-            negative_words = ['hate', 'terrible', 'awful', 'confusing', 'bug', 'broken', 'issue']
-            
-            pos_count = sum(1 for word in positive_words if word in text_lower)
-            neg_count = sum(1 for word in negative_words if word in text_lower)
-            
-            if pos_count > neg_count:
-                self.sentiment = 'positive'
-            elif neg_count > pos_count:
-                self.sentiment = 'negative'
-            else:
-                self.sentiment = 'neutral'
+            # Use VADER for text analysis if available
+            try:
+                from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+                analyzer = SentimentIntensityAnalyzer()
+                scores = analyzer.polarity_scores(self.feedback_text)
+                
+                if scores['compound'] >= 0.05:
+                    self.sentiment = 'positive'
+                elif scores['compound'] <= -0.05:
+                    self.sentiment = 'negative'
+                else:
+                    self.sentiment = 'neutral'
+            except ImportError:
+                # Fallback to keyword-based sentiment if VADER not installed
+                text_lower = self.feedback_text.lower()
+                positive_words = ['love', 'great', 'excellent', 'amazing', 'fantastic', 'helpful', 'awesome', 'perfect']
+                negative_words = ['hate', 'terrible', 'awful', 'confusing', 'bug', 'broken', 'issue', 'poor', 'bad']
+                
+                pos_count = sum(1 for word in positive_words if word in text_lower)
+                neg_count = sum(1 for word in negative_words if word in text_lower)
+                
+                if pos_count > neg_count:
+                    self.sentiment = 'positive'
+                elif neg_count > pos_count:
+                    self.sentiment = 'negative'
+                else:
+                    self.sentiment = 'neutral'
         
         self.save(update_fields=['sentiment'])
 
