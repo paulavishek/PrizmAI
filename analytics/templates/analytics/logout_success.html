@@ -208,53 +208,59 @@
             </div>
         </div>
         
-        <script charset="utf-8" type="text/javascript" src="https://js.hsforms.net/forms/embed/v2.js"></script>
+        <script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
         <script>
             // Wait for HubSpot script to load, then create form
             window.addEventListener('load', function() {
                 console.log('Page loaded, initializing HubSpot form...');
                 
-                // Check if hbspt is available
-                if (typeof hbspt === 'undefined') {
-                    console.error('HubSpot script (hbspt) not loaded!');
-                    document.getElementById('hubspot-form-container').innerHTML = 
-                        '<div class="alert alert-warning">Unable to load feedback form. Please check your internet connection.</div>';
-                    return;
-                }
-                
-                try {
-                    hbspt.forms.create({
-                        region: "{{ hubspot_region|default:'na1' }}",
-                        portalId: "{{ hubspot_portal_id|default:'244661638' }}",
-                        formId: "{{ hubspot_form_id|default:'0451cb1c-53b3-47d6-abf4-338f73832a88' }}",
-                        target: '#hubspot-form-container',
-                        onFormReady: function($form) {
-                            console.log('HubSpot form loaded successfully!');
-                        },
-                        onFormSubmit: function($form) {
-                            console.log('HubSpot form submitted!');
-                            
-                            // Show success message after a short delay
-                            setTimeout(function() {
-                                document.getElementById('hubspot-form-container').style.display = 'none';
-                                document.getElementById('success-message').style.display = 'block';
-                            }, 1000);
-                            
-                            // Track in Google Analytics if available
-                            if (typeof gtag !== 'undefined') {
-                                gtag('event', 'feedback_submitted', {
-                                    'engagement_level': '{{ engagement_level }}',
-                                    'session_duration': {{ session_stats.duration_minutes|default:0 }},
-                                    'form_type': 'hubspot'
-                                });
+                // Add longer timeout for script to load
+                setTimeout(function() {
+                    // Check if hbspt is available
+                    if (typeof hbspt === 'undefined') {
+                        console.error('HubSpot script (hbspt) not loaded!');
+                        document.getElementById('hubspot-form-container').innerHTML = 
+                            '<div class="alert alert-warning">Unable to load feedback form. Please check your internet connection or try disabling ad blockers.</div>';
+                        return;
+                    }
+                    
+                    try {
+                        hbspt.forms.create({
+                            region: "{{ hubspot_region|default:'na1' }}",
+                            portalId: "{{ hubspot_portal_id|default:'244661638' }}",
+                            formId: "{{ hubspot_form_id|default:'0451cb1c-53b3-47d6-abf4-338f73832a88' }}",
+                            target: '#hubspot-form-container',
+                            onFormReady: function($form) {
+                                console.log('HubSpot form loaded successfully!');
+                            },
+                            onFormSubmit: function($form) {
+                                console.log('HubSpot form submitted!');
+                                
+                                // Show success message after a short delay
+                                setTimeout(function() {
+                                    document.getElementById('hubspot-form-container').style.display = 'none';
+                                    document.getElementById('success-message').style.display = 'block';
+                                }, 1000);
+                                
+                                // Track in Google Analytics if available
+                                if (typeof gtag !== 'undefined') {
+                                    gtag('event', 'feedback_submitted', {
+                                        'engagement_level': '{{ engagement_level }}',
+                                        'session_duration': {{ session_stats.duration_minutes|default:0 }},
+                                        'form_type': 'hubspot'
+                                    });
+                                }
+                            },
+                            onFormSubmitted: function() {
+                                console.log('HubSpot form submission confirmed!');
                             }
-                        }
-                    });
-                } catch (error) {
-                    console.error('Error creating HubSpot form:', error);
-                    document.getElementById('hubspot-form-container').innerHTML = 
-                        '<div class="alert alert-danger">Error loading feedback form. Please try refreshing the page.</div>';
-                }
+                        });
+                    } catch (error) {
+                        console.error('Error creating HubSpot form:', error);
+                        document.getElementById('hubspot-form-container').innerHTML = 
+                            '<div class="alert alert-danger">Error loading feedback form. Please try refreshing the page.</div>';
+                    }
+                }, 1000); // Give script time to load
             });
         </script>
         

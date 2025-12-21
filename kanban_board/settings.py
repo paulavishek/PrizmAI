@@ -479,18 +479,18 @@ CSP_DEFAULT_SRC = ("'self'",)
 CSP_SCRIPT_SRC = (
     "'self'", 
     "'unsafe-inline'",
-    "'unsafe-eval'",  # Required for some HubSpot form features
+    "'unsafe-eval'",  # Required for HubSpot forms
     "https://cdn.jsdelivr.net", 
     "https://code.jquery.com",
-    "https://cdn.hslive.net",  # HubSpot Live Chat CDN
-    "https://js.hsforms.net",  # HubSpot Forms
-    "https://js.hs-scripts.com",  # HubSpot Scripts
-    "https://js.hs-analytics.net",  # HubSpot Analytics
-    "https://js.hsadspixel.net",  # HubSpot Ads Pixel
-    "https://js.hscollectedforms.net",  # HubSpot Collected Forms
+    "https://js.hsforms.net",  # HubSpot Forms base
+    "https://js-na1.hsforms.net",  # HubSpot Forms NA1 region
+    "https://js-na2.hsforms.net",  # HubSpot Forms NA2 region
+    "https://js-eu1.hsforms.net",  # HubSpot Forms EU region
+    "https://*.hsforms.com",  # All HubSpot form domains
+    "https://*.hs-scripts.com",  # HubSpot Scripts
+    "https://*.hs-analytics.net",  # HubSpot Analytics
     "https://www.googletagmanager.com",  # Google Analytics
     "https://www.google-analytics.com",  # Google Analytics
-    "https://forms-na2.hsforms.com",  # HubSpot Forms NA2
 )
 CSP_STYLE_SRC = (
     "'self'", 
@@ -498,20 +498,11 @@ CSP_STYLE_SRC = (
     "https://cdn.jsdelivr.net", 
     "https://fonts.googleapis.com", 
     "https://cdnjs.cloudflare.com",
-    "https://cdn.hslive.net",  # HubSpot Live Chat styles
 )
 CSP_IMG_SRC = (
     "'self'", 
     "data:", 
-    "blob:",
-    "https:", 
-    "http:",
-    "https://www.google-analytics.com",  # Google Analytics tracking pixels
-    "https://forms.hsforms.com",  # HubSpot form images
-    "https://forms-na2.hsforms.com",  # HubSpot form images NA2
-    "https://no-cache.hubspot.com",  # HubSpot tracking pixels
-    "https://track.hubspot.com",  # HubSpot tracking
-    "https://cdn.hslive.net",  # HubSpot Live Chat
+    "https:",  # Allow all HTTPS images (required for HubSpot)
 )
 CSP_FONT_SRC = (
     "'self'", 
@@ -519,43 +510,33 @@ CSP_FONT_SRC = (
     "https://cdn.jsdelivr.net", 
     "https://fonts.gstatic.com", 
     "https://cdnjs.cloudflare.com",
-    "https://cdn.hslive.net",  # HubSpot Live Chat fonts
 )
 CSP_CONNECT_SRC = (
     "'self'", 
     "wss:", 
     "ws:", 
-    "https://cdn.jsdelivr.net",
-    "https://api.hsforms.com",  # HubSpot API
-    "https://forms.hsforms.com",  # HubSpot Forms
-    "https://forms.na2.hsforms.com",  # HubSpot Forms NA2 region
-    "https://forms-na2.hsforms.com",  # HubSpot Forms NA2 region (alternate)
-    "https://forms.na1.hsforms.com",  # HubSpot Forms NA1 region
-    "https://forms.eu1.hsforms.com",  # HubSpot Forms EU region
-    "https://hubspot-forms-static-embed.s3.amazonaws.com",  # HubSpot S3 CDN
-    "https://hubspot-forms-static-embed-na2-s3.amazonaws.com",  # HubSpot S3 CDN NA2
+    "https://forms.hubspot.com",  # HubSpot Forms (correct domain)
+    "https://forms-na1.hubspot.com",  # HubSpot Forms NA1
+    "https://forms-na2.hubspot.com",  # HubSpot Forms NA2
+    "https://forms-eu1.hubspot.com",  # HubSpot Forms EU
     "https://*.hsforms.com",  # All HubSpot form domains
-    "https://*.amazonaws.com",  # AWS CDN for HubSpot
-    "https://cdn.hslive.net",  # HubSpot Live Chat
-    "https://*.hslive.net",  # All HubSpot Live domains
+    "https://*.hs-analytics.net",  # HubSpot Analytics
     "https://www.google-analytics.com",  # Google Analytics
     "https://analytics.google.com",  # Google Analytics 4
     "https://www.googletagmanager.com",  # Google Tag Manager
 )
 CSP_FRAME_SRC = (
-    "https://app.hubspot.com",  # HubSpot embeds
-    "https://share.hsforms.com",  # HubSpot forms
-    "https://forms.hsforms.com",  # HubSpot forms
-    "https://forms-na2.hsforms.com",  # HubSpot forms NA2
+    "'self'",
+    "https://forms.hubspot.com",  # HubSpot forms
+    "https://share.hsforms.com",  # HubSpot forms sharing
 )
 CSP_FRAME_ANCESTORS = ("'none'",)  # Prevent clickjacking
 CSP_BASE_URI = ("'self'",)
 CSP_FORM_ACTION = (
     "'self'",
-    "https://api.hsforms.com",  # Allow HubSpot form submissions
-    "https://forms.hsforms.com",  # HubSpot form submissions
-    "https://forms.na2.hsforms.com",  # HubSpot form submissions NA2
-    "https://forms-na2.hsforms.com",  # HubSpot form submissions NA2 (alternate)
+    "https://forms.hubspot.com",  # HubSpot form submissions
+    "https://forms-na1.hubspot.com",  # HubSpot form submissions NA1
+    "https://forms-na2.hubspot.com",  # HubSpot form submissions NA2
 )
 CSP_UPGRADE_INSECURE_REQUESTS = not DEBUG  # Upgrade HTTP to HTTPS in production
 
