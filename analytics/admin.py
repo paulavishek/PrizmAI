@@ -193,9 +193,7 @@ class FeedbackAdmin(admin.ModelAdmin):
     feedback_preview.short_description = "Feedback"
     
     def hubspot_synced(self, obj):
-        if obj.synced_to_hubspot:
-            return format_html('<span style="color: green;">✓</span>')
-        return format_html('<span style="color: red;">✗</span>')
+        return obj.synced_to_hubspot
     hubspot_synced.short_description = "HubSpot"
     hubspot_synced.boolean = True
     
