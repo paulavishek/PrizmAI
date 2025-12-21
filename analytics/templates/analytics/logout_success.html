@@ -102,20 +102,35 @@
         transition: transform 0.3s, box-shadow 0.3s;
     }
     
-    .btn-submit-feedback:hover {
+    .btn-submit-feedback:hover:not(:disabled) {
         transform: translateY(-2px);
         box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
         color: white;
+    }
+    
+    .btn-submit-feedback:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
     }
     
     .success-message {
         display: none;
         background: #10b981;
         color: white;
-        padding: 20px;
+        padding: 30px;
         border-radius: 10px;
         text-align: center;
         margin-top: 20px;
+    }
+    
+    .error-message {
+        display: none;
+        background: #ef4444;
+        color: white;
+        padding: 15px;
+        border-radius: 10px;
+        text-align: center;
+        margin-top: 15px;
     }
 </style>
 {% endblock %}
@@ -187,95 +202,8 @@
             <p class="text-muted">Help us improve PrizmAI by sharing your thoughts.</p>
         </div>
         
-        <!-- Debug Info (remove in production) -->
-        {% if False %}
-        <div class="alert alert-info small">
-            <strong>Debug Info:</strong><br>
-            Portal ID: {{ hubspot_portal_id }}<br>
-            Form ID: {{ hubspot_form_id }}<br>
-            Region: {{ hubspot_region }}<br>
-            Show Form: {{ show_feedback_form }}
-        </div>
-        {% endif %}
-        
-        <!-- HubSpot Embedded Form -->
-        <div id="hubspot-form-container">
-            <div class="text-center py-4">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Loading form...</span>
-                </div>
-                <p class="text-muted mt-2">Loading feedback form...</p>
-            </div>
-        </div>
-        
-        <script charset="utf-8" type="text/javascript" src="https://js.hsforms.net/forms/embed/v2.js"></script>
-        <script>
-            // Wait for HubSpot script to load, then create form
-            window.addEventListener('load', function() {
-                console.log('Page loaded, initializing HubSpot form...');
-                
-                // Add longer timeout for script to load
-                setTimeout(function() {
-                    // Check if hbspt is available
-                    if (typeof hbspt === 'undefined') {
-                        console.error('HubSpot script (hbspt) not loaded!');
-                        document.getElementById('hubspot-form-container').innerHTML = 
-                            '<div class="alert alert-warning">Unable to load feedback form. Please check your internet connection or try disabling ad blockers.</div>';
-                        return;
-                    }
-                    
-                    try {
-                        console.log('Creating HubSpot form with config:', {
-                            region: "{{ hubspot_region|default:'na2' }}",
-                            portalId: "{{ hubspot_portal_id|default:'244661638' }}",
-                            formId: "{{ hubspot_form_id|default:'0451cb1c-53b3-47d6-abf4-338f73832a88' }}"
-                        });
-                        
-                        hbspt.forms.create({
-                            region: "{{ hubspot_region|default:'na2' }}",
-                            portalId: "{{ hubspot_portal_id|default:'244661638' }}",
-                            formId: "{{ hubspot_form_id|default:'0451cb1c-53b3-47d6-abf4-338f73832a88' }}",
-                            target: '#hubspot-form-container',
-                            onFormReady: function($form) {
-                                console.log('HubSpot form loaded successfully!');
-                            },
-                            onFormSubmit: function($form) {
-                                console.log('HubSpot form submitted!');
-                                
-                                // Show success message after a short delay
-                                setTimeout(function() {
-                                    document.getElementById('hubspot-form-container').style.display = 'none';
-                                    document.getElementById('success-message').style.display = 'block';
-                                }, 1000);
-                                
-                                // Track in Google Analytics if available
-                                if (typeof gtag !== 'undefined') {
-                                    gtag('event', 'feedback_submitted', {
-                                        'engagement_level': '{{ engagement_level }}',
-                                        'session_duration': {{ session_stats.duration_minutes|default:0 }},
-                                        'form_type': 'hubspot'
-                                    });
-                                }
-                            },
-                            onFormSubmitted: function() {
-                                console.log('HubSpot form submission confirmed!');
-                            }
-                        });
-                    } catch (error) {
-                        console.error('Error creating HubSpot form:', error);
-                        console.error('Error details:', {
-                            message: error.message,
-                            stack: error.stack
-                        });
-                        document.getElementById('hubspot-form-container').innerHTML = 
-                            '<div class="alert alert-danger">Error loading feedback form. Please try refreshing the page.<br><small>Error: ' + error.message + '</small></div>';
-                    }
-                }, 1000); // Give script time to load
-            });
-        </script>
-        
-        <!-- Fallback: Custom Form (if HubSpot doesn't load) -->
-        <form id="feedback-form" class="feedback-form" style="display: none;">
+        <!-- Django Feedback Form -->
+        <form id="feedback-form" class="feedback-form">
             {% csrf_token %}
             
             <!-- Rating -->
@@ -371,11 +299,19 @@
 
 {% if show_feedback_form %}
 <script>
-    // Fallback form - Star rating functionality
+    // Star rating functionality
     const stars = document.querySelectorAll('.star');
     const ratingInput = document.getElementById('rating-input');
+    const feedbackForm = document.getElementById('feedback-form');
+    const successMessage = document.getElementById('success-message');
+    const errorMessage = document.createElement('div');
+    errorMessage.className = 'error-message';
+    errorMessage.id = 'error-message';
+    feedbackForm.parentElement.appendChild(errorMessage);
+    
     let selectedRating = 0;
     
+    // Star rating interaction
     if (stars.length > 0) {
         stars.forEach(star => {
             star.addEventListener('click', function() {
@@ -415,13 +351,14 @@
         });
     }
     
-    // Fallback form submission
-    const feedbackForm = document.getElementById('feedback-form');
-    const successMessage = document.getElementById('success-message');
-    
+    // Form submission
     if (feedbackForm) {
         feedbackForm.addEventListener('submit', async function(e) {
             e.preventDefault();
+            
+            const submitButton = this.querySelector('.btn-submit-feedback');
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Submitting...';
             
             const formData = {
                 name: document.getElementById('name').value,
@@ -430,6 +367,15 @@
                 rating: ratingInput.value,
                 email_consent: document.getElementById('email-consent').checked,
             };
+            
+            // Validate rating
+            if (!formData.rating) {
+                errorMessage.textContent = 'Please select a rating before submitting.';
+                errorMessage.style.display = 'block';
+                submitButton.disabled = false;
+                submitButton.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Submit Feedback';
+                return;
+            }
             
             try {
                 const response = await fetch('{% url "analytics:submit_feedback_ajax" %}', {
@@ -444,25 +390,56 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    // Show success message
+                    // Hide form and show success message
                     feedbackForm.style.display = 'none';
+                    errorMessage.style.display = 'none';
                     successMessage.style.display = 'block';
                     
-                    // Track event in Google Analytics if available
+                    // Send comprehensive Google Analytics events
                     if (typeof gtag !== 'undefined') {
+                        // Event 1: Feedback Submitted
                         gtag('event', 'feedback_submitted', {
-                            'engagement_level': '{{ engagement_level }}',
-                            'rating': formData.rating,
-                            'session_duration': {{ session_stats.duration_minutes|default:0 }},
-                            'form_type': 'fallback'
+                            'event_category': 'engagement',
+                            'event_label': 'logout_feedback',
+                            'value': parseInt(formData.rating)
                         });
+                        
+                        // Event 2: Rating Given
+                        gtag('event', 'rating_given', {
+                            'event_category': 'satisfaction',
+                            'event_label': formData.rating + '_stars',
+                            'value': parseInt(formData.rating)
+                        });
+                        
+                        // Event 3: Session Completed
+                        gtag('event', 'session_completed', {
+                            'event_category': 'user_journey',
+                            'engagement_level': '{{ engagement_level }}',
+                            'session_duration': {{ session_stats.duration_minutes|default:0 }},
+                            'tasks_created': {{ session_stats.tasks_created|default:0 }},
+                            'ai_features_used': {{ session_stats.ai_features_used|default:0 }},
+                            'boards_viewed': {{ session_stats.boards_viewed|default:0 }}
+                        });
+                        
+                        console.log('Google Analytics events sent successfully');
+                    } else {
+                        console.warn('Google Analytics (gtag) not available');
                     }
+                    
+                    // Scroll to success message
+                    successMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 } else {
-                    alert('Error submitting feedback. Please try again.');
+                    errorMessage.textContent = result.message || 'Error submitting feedback. Please try again.';
+                    errorMessage.style.display = 'block';
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Submit Feedback';
                 }
             } catch (error) {
-                console.error('Error:', error);
-                alert('Error submitting feedback. Please try again.');
+                console.error('Feedback submission error:', error);
+                errorMessage.textContent = 'Network error. Please check your connection and try again.';
+                errorMessage.style.display = 'block';
+                submitButton.disabled = false;
+                submitButton.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Submit Feedback';
             }
         });
     }
