@@ -138,14 +138,18 @@ def submit_feedback_ajax(request):
         if hasattr(request, 'user_session'):
             user_session = request.user_session
         
-        # Create feedback
+        # Create feedback (convert rating to int)
+        rating = data.get('rating')
+        if rating:
+            rating = int(rating)
+        
         feedback = Feedback.objects.create(
             user_session=user_session,
             user=request.user if request.user.is_authenticated else None,
             name=data.get('name', ''),
             email=data.get('email', ''),
             feedback_text=data.get('feedback', ''),
-            rating=data.get('rating'),
+            rating=rating,
             email_consent=data.get('email_consent', False),
             ip_address=request.META.get('REMOTE_ADDR'),
         )
