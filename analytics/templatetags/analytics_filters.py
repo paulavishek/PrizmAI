@@ -39,3 +39,33 @@ def md5_hash(value):
     if value is None:
         return ''
     return hashlib.md5(str(value).encode()).hexdigest()
+
+
+@register.filter
+def multiply(value, arg):
+    """Multiply value by arg"""
+    try:
+        return float(value) * float(arg)
+    except (ValueError, TypeError):
+        return 0
+
+
+@register.filter
+def divide(value, arg):
+    """Divide value by arg"""
+    try:
+        if float(arg) == 0:
+            return 0
+        return float(value) / float(arg)
+    except (ValueError, TypeError):
+        return 0
+
+
+@register.filter
+def replace(value, args):
+    """Replace old with new in string"""
+    try:
+        old, new = args.split(',')
+        return str(value).replace(old, new)
+    except (ValueError, AttributeError):
+        return value
