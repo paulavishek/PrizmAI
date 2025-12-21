@@ -107,15 +107,13 @@ class FeedbackAdmin(admin.ModelAdmin):
         'sentiment_badge',
         'feedback_preview',
         'submitted_at',
-        'status',
-        'hubspot_synced'
+        'status'
     ]
     list_filter = [
         'rating',
         'sentiment',
         'feedback_type',
         'status',
-        'synced_to_hubspot',
         'email_consent',
         'submitted_at'
     ]
@@ -124,11 +122,7 @@ class FeedbackAdmin(admin.ModelAdmin):
         'user_session',
         'submitted_at',
         'ip_address',
-        'sentiment',
-        'hubspot_contact_id',
-        'hubspot_deal_id',
-        'synced_to_hubspot',
-        'hubspot_sync_date'
+        'sentiment'
     ]
     fieldsets = (
         ('User Information', {
@@ -143,16 +137,12 @@ class FeedbackAdmin(admin.ModelAdmin):
         ('Internal', {
             'fields': ('status', 'admin_notes')
         }),
-        ('HubSpot Integration', {
-            'fields': ('synced_to_hubspot', 'hubspot_contact_id', 'hubspot_deal_id', 'hubspot_sync_date'),
-            'classes': ('collapse',)
-        }),
         ('Metadata', {
             'fields': ('submitted_at', 'ip_address'),
             'classes': ('collapse',)
         }),
     )
-    actions = ['sync_to_hubspot', 'mark_as_reviewed', 'mark_as_resolved']
+    actions = ['mark_as_reviewed', 'mark_as_resolved']
     
     def user_display(self, obj):
         if obj.user:
@@ -191,31 +181,6 @@ class FeedbackAdmin(admin.ModelAdmin):
             preview += "..."
         return preview
     feedback_preview.short_description = "Feedback"
-    
-    def hubspot_synced(self, obj):
-        return obj.synced_to_hubspot
-    hubspot_synced.short_description = "HubSpot"
-    hubspot_synced.boolean = True
-    
-    def sync_to_hubspot(self, request, queryset):
-        from .utils import HubSpotIntegration
-        hubspot = HubSpotIntegration()
-        
-        if not hubspot.is_configured():
-            self.message_user(request, "HubSpot is not configured.", level='error')
-            return
-        
-        synced_count = 0
-        for feedback in queryset:
-            if feedback.email:
-                try:
-                    hubspot.sync_feedback_to_hubspot(feedback)
-                    synced_count += 1
-                except Exception as e:
-                    self.message_user(request, f"Error syncing {feedback.email}: {e}", level='error')
-        
-        self.message_user(request, f"Successfully synced {synced_count} feedback(s) to HubSpot.")
-    sync_to_hubspot.short_description = "Sync selected to HubSpot"
     
     def mark_as_reviewed(self, request, queryset):
         updated = queryset.update(status='reviewed')

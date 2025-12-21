@@ -1,43 +1,62 @@
 """
 Celery tasks for analytics operations.
-Async processing for HubSpot sync and other background jobs.
+Background jobs for analytics processing.
 """
 from celery import shared_task
-from .models import Feedback
-from .utils import HubSpotIntegration
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, max_retries=3, default_retry_delay=60)
-def sync_feedback_to_hubspot_task(self, feedback_id):
+@shared_task
+def cleanup_old_sessions():
     """
-    Async task to sync feedback to HubSpot.
-    Retries up to 3 times with 60 second delay between retries.
+    Clean up old user sessions from the database.
+    Run this periodically to keep database size manageable.
     """
-    try:
-        feedback = Feedback.objects.get(id=feedback_id)
-        hubspot = HubSpotIntegration()
-        
-        if hubspot.is_configured() and feedback.email:
-            contact_id, engagement_id = hubspot.sync_feedback_to_hubspot(feedback)
-            logger.info(f"Successfully synced feedback {feedback_id} to HubSpot")
-            return {
-                'success': True,
-                'feedback_id': feedback_id,
-                'contact_id': contact_id,
-                'engagement_id': engagement_id
-            }
-        else:
-            logger.warning(f"HubSpot not configured or no email for feedback {feedback_id}")
-            return {'success': False, 'reason': 'No HubSpot config or email'}
+    from .models import UserSession
+    from django.utils import timezone
+    from datetime import timedelta
     
-    except Feedback.DoesNotExist:
-        logger.error(f"Feedback {feedback_id} not found")
-        return {'success': False, 'reason': 'Feedback not found'}
+    # Delete sessions older than 90 days
+    cutoff_date = timezone.now() - timedelta(days=90)
+    deleted_count = UserSession.objects.filter(session_start__lt=cutoff_date).delete()[0]
     
-    except Exception as exc:
-        logger.error(f"Error syncing feedback {feedback_id} to HubSpot: {exc}")
-        # Retry the task
-        raise self.retry(exc=exc)
+    logger.info(f"Cleaned up {deleted_count} old sessions")
+    return deleted_count
+
+
+@shared_task
+def generate_daily_analytics_report():
+    """
+    Generate daily analytics summary.
+    Can be extended to send email reports.
+    """
+    from .models import UserSession, Feedback
+    from django.utils import timezone
+    from django.db.models import Avg
+    from datetime import timedelta
+    
+    yesterday = timezone.now() - timedelta(days=1)
+    start_of_day = yesterday.replace(hour=0, minute=0, second=0)
+    end_of_day = yesterday.replace(hour=23, minute=59, second=59)
+    
+    sessions = UserSession.objects.filter(
+        session_start__range=(start_of_day, end_of_day)
+    )
+    
+    feedback = Feedback.objects.filter(
+        submitted_at__range=(start_of_day, end_of_day)
+    )
+    
+    report = {
+        'date': yesterday.date(),
+        'total_sessions': sessions.count(),
+        'unique_users': sessions.values('user').distinct().count(),
+        'avg_duration': sessions.aggregate(avg=Avg('duration_minutes'))['avg'] or 0,
+        'total_feedback': feedback.count(),
+        'avg_rating': feedback.aggregate(avg=Avg('rating'))['avg'] or 0,
+    }
+    
+    logger.info(f"Daily report generated: {report}")
+    return report

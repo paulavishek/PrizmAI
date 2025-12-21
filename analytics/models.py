@@ -273,12 +273,6 @@ class Feedback(models.Model):
     submitted_at = models.DateTimeField(auto_now_add=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     
-    # CRM Integration
-    hubspot_contact_id = models.CharField(max_length=50, blank=True)
-    hubspot_deal_id = models.CharField(max_length=50, blank=True)
-    synced_to_hubspot = models.BooleanField(default=False)
-    hubspot_sync_date = models.DateTimeField(null=True, blank=True)
-    
     # Follow-up tracking
     follow_up_sent = models.BooleanField(default=False)
     follow_up_sent_at = models.DateTimeField(null=True, blank=True)
