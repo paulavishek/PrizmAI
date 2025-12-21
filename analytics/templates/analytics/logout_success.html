@@ -225,8 +225,14 @@
                     }
                     
                     try {
+                        console.log('Creating HubSpot form with config:', {
+                            region: "{{ hubspot_region|default:'na2' }}",
+                            portalId: "{{ hubspot_portal_id|default:'244661638' }}",
+                            formId: "{{ hubspot_form_id|default:'0451cb1c-53b3-47d6-abf4-338f73832a88' }}"
+                        });
+                        
                         hbspt.forms.create({
-                            region: "{{ hubspot_region|default:'na1' }}",
+                            region: "{{ hubspot_region|default:'na2' }}",
                             portalId: "{{ hubspot_portal_id|default:'244661638' }}",
                             formId: "{{ hubspot_form_id|default:'0451cb1c-53b3-47d6-abf4-338f73832a88' }}",
                             target: '#hubspot-form-container',
@@ -257,8 +263,12 @@
                         });
                     } catch (error) {
                         console.error('Error creating HubSpot form:', error);
+                        console.error('Error details:', {
+                            message: error.message,
+                            stack: error.stack
+                        });
                         document.getElementById('hubspot-form-container').innerHTML = 
-                            '<div class="alert alert-danger">Error loading feedback form. Please try refreshing the page.</div>';
+                            '<div class="alert alert-danger">Error loading feedback form. Please try refreshing the page.<br><small>Error: ' + error.message + '</small></div>';
                     }
                 }, 1000); // Give script time to load
             });

@@ -515,33 +515,60 @@ CSP_CONNECT_SRC = (
     "'self'", 
     "wss:", 
     "ws:", 
-    "https://forms.hubspot.com",  # HubSpot Forms (correct domain)
-    "https://forms-na1.hubspot.com",  # HubSpot Forms NA1
-    "https://forms-na2.hubspot.com",  # HubSpot Forms NA2
-    "https://forms-eu1.hubspot.com",  # HubSpot Forms EU
-    "https://*.hubspot.com",  # CRITICAL: Wildcard for all hubspot.com subdomains
-    "https://*.hsforms.com",  # All HubSpot form domains
-    "https://*.hsforms.net",  # HubSpot Forms scripts
-    "https://*.hs-analytics.net",  # HubSpot Analytics
-    "https://*.hs-scripts.com",  # HubSpot Scripts
-    "https://www.google-analytics.com",  # Google Analytics
-    "https://analytics.google.com",  # Google Analytics 4
-    "https://www.googletagmanager.com",  # Google Tag Manager
+    # HubSpot Forms - hubspot.com domains
+    "https://forms.hubspot.com",
+    "https://forms-na1.hubspot.com",
+    "https://forms-na2.hubspot.com",
+    "https://forms-eu1.hubspot.com",
+    "https://*.hubspot.com",
+    # HubSpot Forms - hsforms.com domains (critical!)
+    "https://forms-na2.hsforms.com",  # YOUR SPECIFIC REGION
+    "https://forms-na1.hsforms.com",
+    "https://forms-eu1.hsforms.com",
+    "https://api.hsforms.com",
+    "https://*.hsforms.com",
+    # HubSpot Forms - hsforms.net domains
+    "https://js-na2.hsforms.net",
+    "https://js-na1.hsforms.net",
+    "https://js-eu1.hsforms.net",
+    "https://*.hsforms.net",
+    # HubSpot Analytics & Scripts
+    "https://*.hs-analytics.net",
+    "https://*.hs-scripts.com",
+    # Google Analytics
+    "https://www.google-analytics.com",
+    "https://analytics.google.com",
+    "https://www.googletagmanager.com",
 )
 CSP_FRAME_SRC = (
     "'self'",
-    "https://forms.hubspot.com",  # HubSpot forms
-    "https://share.hsforms.com",  # HubSpot forms sharing
+    # HubSpot - hubspot.com domains
+    "https://forms.hubspot.com",
+    # HubSpot - hsforms.com domains
+    "https://forms-na2.hsforms.com",  # YOUR SPECIFIC REGION
+    "https://forms-na1.hsforms.com",
+    "https://forms-eu1.hsforms.com",
+    "https://share.hsforms.com",
+    "https://*.hsforms.com",
+    # HubSpot - hsforms.net domains
+    "https://js-na2.hsforms.net",
+    "https://*.hsforms.net",
 )
 CSP_FRAME_ANCESTORS = ("'none'",)  # Prevent clickjacking
 CSP_BASE_URI = ("'self'",)
 CSP_FORM_ACTION = (
     "'self'",
-    "https://forms.hubspot.com",  # HubSpot form submissions
-    "https://forms-na1.hubspot.com",  # HubSpot form submissions NA1
-    "https://forms-na2.hubspot.com",  # HubSpot form submissions NA2
-    "https://forms-eu1.hubspot.com",  # HubSpot form submissions EU
-    "https://*.hubspot.com",  # CRITICAL: Wildcard for all HubSpot form submissions
+    # HubSpot - hubspot.com domains
+    "https://forms.hubspot.com",
+    "https://forms-na1.hubspot.com",
+    "https://forms-na2.hubspot.com",
+    "https://forms-eu1.hubspot.com",
+    "https://*.hubspot.com",
+    # HubSpot - hsforms.com domains
+    "https://forms-na2.hsforms.com",  # YOUR SPECIFIC REGION
+    "https://forms-na1.hsforms.com",
+    "https://forms-eu1.hsforms.com",
+    "https://*.hsforms.com",
 )
 CSP_UPGRADE_INSECURE_REQUESTS = not DEBUG  # Upgrade HTTP to HTTPS in production
 
