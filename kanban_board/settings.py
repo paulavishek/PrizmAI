@@ -519,8 +519,11 @@ CSP_CONNECT_SRC = (
     "https://forms-na1.hubspot.com",  # HubSpot Forms NA1
     "https://forms-na2.hubspot.com",  # HubSpot Forms NA2
     "https://forms-eu1.hubspot.com",  # HubSpot Forms EU
+    "https://*.hubspot.com",  # CRITICAL: Wildcard for all hubspot.com subdomains
     "https://*.hsforms.com",  # All HubSpot form domains
+    "https://*.hsforms.net",  # HubSpot Forms scripts
     "https://*.hs-analytics.net",  # HubSpot Analytics
+    "https://*.hs-scripts.com",  # HubSpot Scripts
     "https://www.google-analytics.com",  # Google Analytics
     "https://analytics.google.com",  # Google Analytics 4
     "https://www.googletagmanager.com",  # Google Tag Manager
@@ -537,6 +540,8 @@ CSP_FORM_ACTION = (
     "https://forms.hubspot.com",  # HubSpot form submissions
     "https://forms-na1.hubspot.com",  # HubSpot form submissions NA1
     "https://forms-na2.hubspot.com",  # HubSpot form submissions NA2
+    "https://forms-eu1.hubspot.com",  # HubSpot form submissions EU
+    "https://*.hubspot.com",  # CRITICAL: Wildcard for all HubSpot form submissions
 )
 CSP_UPGRADE_INSECURE_REQUESTS = not DEBUG  # Upgrade HTTP to HTTPS in production
 
