@@ -1,229 +1,305 @@
-# HubSpot Form CSP Violation Fix
+# EXACT CSP FIX FOR HUBSPOT FORMS
+# Replace the CSP section in your kanban_board/settings.py with this
 
-## Problem
-The HubSpot embedded form is being blocked by Content Security Policy (CSP) headers. The console shows:
-```
-Failed to load resource: the server responded with a status of 403 ()
-Loading the script 'https://js-na2.hsforms.co/forms/embed/v2.js' violates the following Content Security Policy directive: "script-src 'self' 'unsafe-inline'"
-```
+# ============================================
+# CONTENT SECURITY POLICY (CSP) CONFIGURATION
+# ============================================
 
-## Solution
-Add HubSpot domains to your CSP configuration in Django settings.
-
-### Step 1: Update Django Settings
-
-Add or modify the CSP configuration in your `settings.py` (or wherever you configure middleware):
-
-```python
-# Content Security Policy for HubSpot Integration
+# CSP settings to prevent XSS and other injection attacks
 CSP_DEFAULT_SRC = ("'self'",)
+
 CSP_SCRIPT_SRC = (
-    "'self'",
-    "'unsafe-inline'",  # Required for inline scripts
-    "'unsafe-eval'",    # Required by some HubSpot scripts
+    "'self'", 
+    "'unsafe-inline'",
+    "'unsafe-eval'",  # Required for HubSpot forms
+    "https://cdn.jsdelivr.net", 
+    "https://code.jquery.com",
     "https://js.hsforms.net",
     "https://js-na1.hsforms.net",
     "https://js-na2.hsforms.net",
     "https://js-eu1.hsforms.net",
     "https://*.hsforms.com",
+    "https://*.hsforms.net",  # Added wildcard
     "https://*.hs-scripts.com",
     "https://*.hs-analytics.net",
-    "https://www.googletagmanager.com",  # For GA4
-    "https://www.google-analytics.com",   # For GA4
+    "https://www.googletagmanager.com",
+    "https://www.google-analytics.com",
 )
+
+CSP_STYLE_SRC = (
+    "'self'", 
+    "'unsafe-inline'", 
+    "https://cdn.jsdelivr.net", 
+    "https://fonts.googleapis.com", 
+    "https://cdnjs.cloudflare.com",
+)
+
+CSP_IMG_SRC = (
+    "'self'", 
+    "data:", 
+    "https:",  # Allow all HTTPS images
+)
+
+CSP_FONT_SRC = (
+    "'self'", 
+    "data:", 
+    "https://cdn.jsdelivr.net", 
+    "https://fonts.gstatic.com", 
+    "https://cdnjs.cloudflare.com",
+)
+
+# CRITICAL FIX: This is where the issue was
 CSP_CONNECT_SRC = (
+    "'self'", 
+    "wss:", 
+    "ws:",
+    # HubSpot Forms - Explicit domains for your region
+    "https://forms-na2.hubspot.com",  # Your specific NA2 region
+    "https://forms.hubspot.com",
+    "https://forms-na1.hubspot.com",
+    "https://forms-eu1.hubspot.com",
+    # HubSpot wildcards - CRITICAL: Must include *.hubspot.com
+    "https://*.hubspot.com",  # THIS WAS MISSING - catches all hubspot.com subdomains
+    "https://*.hsforms.com",
+    "https://*.hsforms.net",
+    "https://*.hs-analytics.net",
+    "https://*.hs-scripts.com",
+    # Google Analytics
+    "https://www.google-analytics.com",
+    "https://analytics.google.com",
+    "https://www.googletagmanager.com",
+)
+
+CSP_FRAME_SRC = (
     "'self'",
     "https://forms.hubspot.com",
     "https://forms-na1.hubspot.com",
     "https://forms-na2.hubspot.com",
     "https://forms-eu1.hubspot.com",
-    "https://*.hsforms.com",
-    "https://*.hs-analytics.net",
-    "https://www.google-analytics.com",
-)
-CSP_FONT_SRC = (
-    "'self'",
-    "data:",
-    "https://fonts.gstatic.com",
-)
-CSP_STYLE_SRC = (
-    "'self'",
-    "'unsafe-inline'",
-    "https://fonts.googleapis.com",
-)
-CSP_IMG_SRC = (
-    "'self'",
-    "data:",
-    "https:",  # Allow images from HTTPS sources
-)
-CSP_FRAME_SRC = (
-    "'self'",
-    "https://forms.hubspot.com",
     "https://share.hsforms.com",
 )
 
-# If using django-csp package
-CSP_INCLUDE_NONCE_IN = ['script-src']
-```
+CSP_FRAME_ANCESTORS = ("'none'",)
 
-### Step 2: Install django-csp (if not already installed)
+CSP_BASE_URI = ("'self'",)
 
+# CRITICAL FIX: This also needed the wildcard
+CSP_FORM_ACTION = (
+    "'self'",
+    "https://forms-na2.hubspot.com",  # Your specific region
+    "https://forms.hubspot.com",
+    "https://forms-na1.hubspot.com",
+    "https://forms-eu1.hubspot.com",
+    "https://*.hubspot.com",  # CRITICAL: Wildcard for all HubSpot form submissions
+)
+
+CSP_UPGRADE_INSECURE_REQUESTS = not DEBUG
+
+CSP_REPORT_ONLY = False  # Set to True for testing without enforcement
+
+# ============================================
+# END OF CSP CONFIGURATION
+# ============================================
+
+
+# WHAT CHANGED:
+# 1. Added "https://*.hubspot.com" to CSP_CONNECT_SRC (line 54)
+# 2. Added "https://*.hsforms.net" to CSP_SCRIPT_SRC for completeness
+# 3. Added "https://*.hubspot.com" to CSP_FORM_ACTION (line 76)
+# 4. Made NA2 explicit first in lists since that's your region
+
+# WHY THIS FIXES IT:
+# The browser was blocking requests to forms-na2.hubspot.com because
+# while you had "https://*.hsforms.com", you didn't have "https://*.hubspot.com"
+# Note the difference: hsforms.com vs hubspot.com (different domains!)
+
+# HUBSPOT FORM CSP FIX - STEP BY STEP INSTRUCTIONS
+
+## The Problem
+Looking at your console errors, the requests to `forms-na2.hubspot.com` are being blocked by CSP.
+
+**Key Issue Identified:**
+Your settings.py has `https://*.hsforms.com` but is **MISSING** `https://*.hubspot.com`
+
+These are TWO DIFFERENT DOMAINS:
+- `hsforms.com` - for scripts
+- `hubspot.com` - for form submissions (this is what's blocked)
+
+## The Fix
+
+### Step 1: Open your settings.py file
 ```bash
-pip install django-csp
+# Navigate to your project
+cd /path/to/your/project
+nano kanban_board/settings.py
+# or use your preferred editor
 ```
 
-### Step 3: Add CSP Middleware
-
-In your `MIDDLEWARE` setting, add:
+### Step 2: Find the CSP_CONNECT_SRC section
+Look for this section (around line 450-470):
 
 ```python
+CSP_CONNECT_SRC = (
+    "'self'", 
+    "wss:", 
+    "ws:", 
+    "https://forms.hubspot.com",
+    "https://forms-na1.hubspot.com",
+    "https://forms-na2.hubspot.com",
+    "https://forms-eu1.hubspot.com",
+    "https://*.hsforms.com",  # ← You have this
+    # BUT YOU'RE MISSING: "https://*.hubspot.com"
+    ...
+)
+```
+
+### Step 3: Add the missing wildcard
+Add this line to CSP_CONNECT_SRC:
+```python
+"https://*.hubspot.com",  # ← ADD THIS LINE
+```
+
+The complete CSP_CONNECT_SRC should look like:
+```python
+CSP_CONNECT_SRC = (
+    "'self'", 
+    "wss:", 
+    "ws:",
+    # Explicit HubSpot domains
+    "https://forms-na2.hubspot.com",  # Your region
+    "https://forms.hubspot.com",
+    "https://forms-na1.hubspot.com",
+    "https://forms-eu1.hubspot.com",
+    # Wildcards - BOTH are needed
+    "https://*.hubspot.com",  # ← ADD THIS (catches hubspot.com subdomains)
+    "https://*.hsforms.com",   # ← Already have this (catches hsforms.com subdomains)
+    "https://*.hsforms.net",
+    "https://*.hs-analytics.net",
+    "https://*.hs-scripts.com",
+    # Google Analytics
+    "https://www.google-analytics.com",
+    "https://analytics.google.com",
+    "https://www.googletagmanager.com",
+)
+```
+
+### Step 4: Also update CSP_FORM_ACTION
+Find CSP_FORM_ACTION and add the same wildcard:
+
+```python
+CSP_FORM_ACTION = (
+    "'self'",
+    "https://forms-na2.hubspot.com",
+    "https://forms.hubspot.com",
+    "https://forms-na1.hubspot.com",
+    "https://forms-eu1.hubspot.com",
+    "https://*.hubspot.com",  # ← ADD THIS LINE
+)
+```
+
+### Step 5: Save and restart Django
+```bash
+# Save the file (Ctrl+O, Enter, Ctrl+X if using nano)
+
+# Restart Django server
+python manage.py runserver
+```
+
+### Step 6: Clear browser cache and test
+```bash
+# In your browser:
+# 1. Hard reload: Ctrl+Shift+R (Windows/Linux) or Cmd+Shift+R (Mac)
+# 2. Or clear cache completely
+# 3. Navigate to /analytics/logout/
+# 4. Check console - should see NO CSP violations
+# 5. Form should load and submit successfully
+```
+
+## Verification
+
+After the fix, your browser console should show:
+- ✅ "HubSpot form loaded successfully!"
+- ✅ No CSP violation errors mentioning hubspot.com
+- ✅ Form visible and interactive
+- ✅ Form submits successfully
+
+## Why This Works
+
+HubSpot uses multiple domains:
+1. **Script loading**: `js-na2.hsforms.net` (covered by `*.hsforms.net`)
+2. **Form submissions**: `forms-na2.hubspot.com` (needs `*.hubspot.com`)
+3. **Analytics**: `*.hs-analytics.net` (already covered)
+
+The wildcard `*.hsforms.com` does NOT match `*.hubspot.com` - they're different domains!
+
+## Quick Copy-Paste
+
+If you want to just copy-paste, here are the TWO critical additions:
+
+**Add to CSP_CONNECT_SRC:**
+```python
+"https://*.hubspot.com",
+```
+
+**Add to CSP_FORM_ACTION:**
+```python
+"https://*.hubspot.com",
+```
+
+## Still Not Working?
+
+If it still doesn't work after this fix:
+
+### Option 1: Temporarily disable CSP for testing
+```python
+# At the top of settings.py
+if DEBUG:
+    CSP_DEFAULT_SRC = None  # Disables CSP in development
+```
+
+### Option 2: Use report-only mode
+```python
+CSP_REPORT_ONLY = True  # Logs violations but doesn't block
+```
+
+### Option 3: Check django-csp is installed
+```bash
+pip install django-csp
+pip freeze | grep django-csp  # Should show: django-csp==x.x.x
+```
+
+### Option 4: Verify middleware order
+In MIDDLEWARE, ensure CSPMiddleware comes after SecurityMiddleware:
+```python
 MIDDLEWARE = [
-    # ... other middleware ...
-    'csp.middleware.CSPMiddleware',
-    # ... other middleware ...
+    'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
+    # ...
+    'csp.middleware.CSPMiddleware',  # ← Should be here
+    # ...
 ]
 ```
 
-### Alternative: Using Meta Tag (Quick Fix)
-
-If you don't want to use django-csp middleware, add this meta tag to your `base.html` template:
-
-```html
-<head>
-    <meta http-equiv="Content-Security-Policy" content="
-        default-src 'self';
-        script-src 'self' 'unsafe-inline' 'unsafe-eval' 
-            https://js.hsforms.net 
-            https://js-na1.hsforms.net 
-            https://js-na2.hsforms.net 
-            https://js-eu1.hsforms.net
-            https://*.hsforms.com
-            https://*.hs-scripts.com
-            https://www.googletagmanager.com
-            https://www.google-analytics.com;
-        connect-src 'self' 
-            https://forms.hubspot.com
-            https://forms-na1.hubspot.com
-            https://forms-na2.hubspot.com
-            https://*.hsforms.com
-            https://*.hs-analytics.net
-            https://www.google-analytics.com;
-        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-        font-src 'self' data: https://fonts.gstatic.com;
-        img-src 'self' data: https:;
-        frame-src 'self' https://forms.hubspot.com https://share.hsforms.com;
-    ">
-</head>
-```
-
-### Step 4: Update logout_success.html Template
-
-Update the HubSpot form initialization to handle CSP better:
-
-```html
-<!-- In logout_success.html -->
-<script charset="utf-8" type="text/javascript" src="//js.hsforms.net/forms/embed/v2.js"></script>
-<script>
-    window.addEventListener('load', function() {
-        console.log('Page loaded, initializing HubSpot form...');
-        
-        // Add longer timeout for script to load
-        setTimeout(function() {
-            if (typeof hbspt === 'undefined') {
-                console.error('HubSpot script (hbspt) not loaded!');
-                document.getElementById('hubspot-form-container').innerHTML = 
-                    '<div class="alert alert-warning">Unable to load feedback form. Please check your internet connection or try disabling ad blockers.</div>';
-                return;
-            }
-            
-            try {
-                hbspt.forms.create({
-                    region: "{{ hubspot_region|default:'na1' }}",
-                    portalId: "{{ hubspot_portal_id|default:'244661638' }}",
-                    formId: "{{ hubspot_form_id|default:'0451cb1c-53b3-47d6-abf4-338f73832a88' }}",
-                    target: '#hubspot-form-container',
-                    onFormReady: function($form) {
-                        console.log('HubSpot form loaded successfully!');
-                    },
-                    onFormSubmit: function($form) {
-                        console.log('HubSpot form submitted!');
-                        setTimeout(function() {
-                            document.getElementById('hubspot-form-container').style.display = 'none';
-                            document.getElementById('success-message').style.display = 'block';
-                        }, 1000);
-                        
-                        if (typeof gtag !== 'undefined') {
-                            gtag('event', 'feedback_submitted', {
-                                'engagement_level': '{{ engagement_level }}',
-                                'session_duration': {{ session_stats.duration_minutes|default:0 }},
-                                'form_type': 'hubspot'
-                            });
-                        }
-                    },
-                    onFormSubmitted: function() {
-                        console.log('HubSpot form submission confirmed!');
-                    }
-                });
-            } catch (error) {
-                console.error('Error creating HubSpot form:', error);
-                document.getElementById('hubspot-form-container').innerHTML = 
-                    '<div class="alert alert-danger">Error loading feedback form. Please try refreshing the page.</div>';
-            }
-        }, 1000); // Give script time to load
-    });
-</script>
-```
-
-## Verification Steps
-
-1. **Check Browser Console**: After implementing, check for CSP violations
-2. **Test Form Loading**: Visit logout page and verify form loads
-3. **Test Form Submission**: Submit test feedback to ensure it works
-4. **Check Network Tab**: Verify all HubSpot resources load successfully
-
-## Common Issues
-
-### Issue 1: Still Getting CSP Errors
-- **Solution**: Clear browser cache and hard reload (Ctrl+Shift+R)
-- **Solution**: Check that CSP middleware is after SecurityMiddleware
-
-### Issue 2: Form Loads but Doesn't Submit
-- **Solution**: Check `connect-src` includes your HubSpot region's form endpoint
-- **Solution**: Verify your HubSpot Form ID is correct in settings
-
-### Issue 3: Ad Blockers
-- **Note**: Some ad blockers block HubSpot. Ask users to disable temporarily if needed
-- **Alternative**: Show the fallback form for these users
-
-## Security Considerations
-
-**Why 'unsafe-inline' and 'unsafe-eval'?**
-- HubSpot's embedded forms require these directives to function
-- This is a known limitation of embedded third-party forms
-- The risk is acceptable for a feedback form on a logout page
-- Consider implementing nonces for better security if needed
-
-**Minimize Risk:**
-1. Only use HubSpot forms on specific pages (logout)
-2. Implement Subresource Integrity (SRI) where possible
-3. Monitor CSP reports for violations
-4. Keep HubSpot domains whitelisted, not wildcards when possible
-
 ## Testing Checklist
 
-- [ ] CSP configuration added to settings
-- [ ] Middleware installed and configured
-- [ ] Template updated with error handling
-- [ ] Browser console shows no CSP violations
-- [ ] HubSpot form loads successfully
-- [ ] Form submission works
-- [ ] Fallback form still available
-- [ ] Google Analytics tracking works
+- [ ] Added `"https://*.hubspot.com"` to CSP_CONNECT_SRC
+- [ ] Added `"https://*.hubspot.com"` to CSP_FORM_ACTION  
+- [ ] Saved settings.py
+- [ ] Restarted Django server
+- [ ] Cleared browser cache
+- [ ] Navigated to logout page
+- [ ] Console shows no CSP violations
+- [ ] HubSpot form loads
+- [ ] Form accepts input
+- [ ] Form submits successfully
+- [ ] Success message appears
 
-## For Production
+## Final Note
 
-Remember to:
-1. Set appropriate CSP report-uri to monitor violations
-2. Test on staging environment first
-3. Document the CSP policy in your security docs
-4. Consider using CSP report-only mode initially
+The key insight: `*.hsforms.com` ≠ `*.hubspot.com`
+
+They are completely different domains, and you need BOTH for HubSpot forms to work:
+- `*.hsforms.com` - for form assets and scripts
+- `*.hubspot.com` - for form submission endpoints
+
+This is why even though you had hsforms wildcards, the form submissions were still blocked.
