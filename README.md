@@ -17,16 +17,17 @@ PrizmAI combines visual project management with AI that helps you work smarter�
 - ⚠️ **Conflict Detection** - Identifies resource, schedule, and dependency conflicts
 - 💰 **Budget & ROI Tracking** - Control finances with AI cost optimization
 - 🎓 **AI Coach** - Proactive suggestions to improve project management decisions
-- � **AI Usage Monitoring** - Track and manage your monthly AI feature consumption with quota limits
-- �🔍 **Explainable AI** - Every recommendation includes "why" for full transparency
+- 📈 **User Feedback & Behavior Tracking** - Comprehensive feedback collection, sentiment analysis, and user behavior analytics for continuous improvement
+- 🤖 **AI Usage Monitoring** - Track and manage your monthly AI feature consumption with quota limits
+- 🔍 **Explainable AI** - Every recommendation includes "why" for full transparency
 - 📚 **Knowledge Base & Wiki** - Markdown documentation with AI-assisted insights
 - 🔐 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
 - 🌐 **RESTful API** - 20+ endpoints for integrations (Slack, Teams, Jira-ready)
 - 📱 **Mobile PWA Support** - Progressive Web App with offline capabilities and mobile-first design
-- 📱 **Real-Time Collaboration** - WebSocket support for live updates and chat
+- 🔄 **Real-Time Collaboration** - WebSocket support for live updates and chat
 - 🔗 **Webhook Integration** - Event-driven automation with external apps
 
-**→ [See all 12 features in detail](FEATURES.md)**
+**→ [See all features in detail](FEATURES.md)**
 
 ---
 
@@ -104,16 +105,19 @@ This removes duplicate boards and migrates users to the official demo boards.
 | Document | Description |
 |----------|-------------|
 | **[📖 USER_GUIDE.md](USER_GUIDE.md)** | Practical usage, examples, and best practices |
-| **[✨ FEATURES.md](FEATURES.md)** | Detailed feature descriptions (12 major features) |
+| **[✨ FEATURES.md](FEATURES.md)** | Detailed feature descriptions and capabilities |
 | **[📅 DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md)** | Dynamic demo data system guide |
-| **[� MOBILE_PWA_BACKEND_SETUP.md](MOBILE_PWA_BACKEND_SETUP.md)** | **NEW!** Mobile PWA configuration and setup guide |
-| **[�📈 API_RATE_LIMITING_DASHBOARD.md](API_RATE_LIMITING_DASHBOARD.md)** | **NEW!** AI usage tracking and quota management |
+| **[📈 USER_FEEDBACK_ANALYTICS.md](USER_FEEDBACK_ANALYTICS.md)** | **NEW!** User feedback, sentiment analysis, and behavior tracking |
+| **[📊 API_RATE_LIMITING_DASHBOARD.md](API_RATE_LIMITING_DASHBOARD.md)** | AI usage tracking and quota management |
 | **[🔌 API_DOCUMENTATION.md](API_DOCUMENTATION.md)** | REST API reference with 20+ endpoints |
-| **[🔗 INTEGRATIONS.md](INTEGRATIONS.md)** | **NEW!** Complete integration guide (Slack, Zapier, Teams) with diagrams |
-| **[🪝 WEBHOOKS.md](WEBHOOKS.md)** | Webhook integration and automation guide |
+| **[🔗 INTEGRATIONS.md](INTEGRATIONS.md)** | Integration guide (Slack, Zapier, Teams) |
+| **[🪝 WEBHOOKS.md](WEBHOOKS.md)** | Webhook integration and automation |
+| **[🧑‍💼 SKILLS_MANAGEMENT_GUIDE.md](SKILLS_MANAGEMENT_GUIDE.md)** | Team skills and resource management |
+| **[🎯 RETROSPECTIVE_DEMO_SETUP.md](RETROSPECTIVE_DEMO_SETUP.md)** | AI-powered retrospectives setup |
+| **[📱 MOBILE_PWA_BACKEND_SETUP.md](MOBILE_PWA_BACKEND_SETUP.md)** | Mobile PWA configuration and setup |
 | **[🔒 SECURITY_OVERVIEW.md](SECURITY_OVERVIEW.md)** | Security features and compliance |
-| **[⚙️ SETUP.md](SETUP.md)** | Installation and configuration guide |
-| **[🤝 CONTRIBUTING.md](CONTRIBUTING.md)** | How to contribute to the project |
+| **[⚙️ SETUP.md](SETUP.md)** | Installation and configuration |
+| **[🤝 CONTRIBUTING.md](CONTRIBUTING.md)** | How to contribute |
 
 ---
 
