@@ -11,7 +11,8 @@ from django.http import JsonResponse, HttpResponseForbidden
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
-from django.db.models import Sum, Avg, Count
+from django.db.models import Sum, Avg, Count, Q
+from django.db import models
 import json
 
 from kanban.models import Board, Task
@@ -722,3 +723,397 @@ def _can_access_board(user, board):
         ).exists()
     
     return False
+
+
+# ============================================================================
+# TIME TRACKING VIEWS
+# ============================================================================
+
+@login_required
+def my_timesheet(request, board_id=None):
+    """
+    User's personal timesheet view with weekly grid for time entry
+    """
+    from datetime import datetime, timedelta
+    from django.db.models import Sum
+    
+    # Get week parameter or default to current week
+    week_offset = int(request.GET.get('week', 0))
+    today = timezone.now().date()
+    # Start of week (Monday)
+    start_of_week = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)
+    end_of_week = start_of_week + timedelta(days=6)
+    
+    # Get user's tasks
+    if board_id:
+        board = get_object_or_404(Board, id=board_id)
+        if not _can_access_board(request.user, board):
+            return HttpResponseForbidden("You don't have permission to access this board.")
+        tasks = Task.objects.filter(
+            column__board=board,
+            assigned_to=request.user
+        ).select_related('column', 'column__board')
+        boards = [board]
+    else:
+        # All boards user has access to
+        boards = Board.objects.filter(
+            models.Q(created_by=request.user) | models.Q(members=request.user)
+        ).distinct()
+        tasks = Task.objects.filter(
+            column__board__in=boards,
+            assigned_to=request.user
+        ).select_related('column', 'column__board')
+    
+    # Get time entries for the week
+    entries = TimeEntry.objects.filter(
+        user=request.user,
+        work_date__gte=start_of_week,
+        work_date__lte=end_of_week
+    ).select_related('task', 'task__column', 'task__column__board')
+    
+    # Organize entries by task and date
+    entries_by_task_date = {}
+    for entry in entries:
+        key = (entry.task.id, entry.work_date)
+        entries_by_task_date[key] = entry
+    
+    # Build week days
+    week_days = []
+    for i in range(7):
+        day = start_of_week + timedelta(days=i)
+        week_days.append({
+            'date': day,
+            'is_today': day == today,
+            'is_weekend': day.weekday() >= 5,
+            'day_name': day.strftime('%a'),
+        })
+    
+    # Build task rows with entries
+    task_rows = []
+    for task in tasks:
+        row = {
+            'task': task,
+            'entries': [],
+            'total_hours': Decimal('0.00'),
+        }
+        for day in week_days:
+            entry = entries_by_task_date.get((task.id, day['date']))
+            row['entries'].append({
+                'date': day['date'],
+                'entry': entry,
+                'hours': entry.hours_spent if entry else Decimal('0.00'),
+            })
+            if entry:
+                row['total_hours'] += entry.hours_spent
+        task_rows.append(row)
+    
+    # Calculate daily totals
+    daily_totals = []
+    for day in week_days:
+        total = entries.filter(work_date=day['date']).aggregate(
+            total=Sum('hours_spent')
+        )['total'] or Decimal('0.00')
+        daily_totals.append(total)
+    
+    week_total = sum(daily_totals, Decimal('0.00'))
+    
+    # Previous/next week dates
+    prev_week = week_offset - 1
+    next_week = week_offset + 1
+    
+    context = {
+        'board': board if board_id else None,
+        'boards': boards,
+        'tasks': tasks,
+        'task_rows': task_rows,
+        'week_days': week_days,
+        'daily_totals': daily_totals,
+        'week_total': week_total,
+        'start_of_week': start_of_week,
+        'end_of_week': end_of_week,
+        'prev_week': prev_week,
+        'next_week': next_week,
+        'week_offset': week_offset,
+    }
+    
+    return render(request, 'kanban/my_timesheet.html', context)
+
+
+@login_required
+def time_tracking_dashboard(request, board_id=None):
+    """
+    Time tracking dashboard with stats, recent entries, and quick actions
+    """
+    from datetime import timedelta
+    from django.db.models import Sum, Count, Avg
+    
+    # Filter by board if specified
+    if board_id:
+        board = get_object_or_404(Board, id=board_id)
+        if not _can_access_board(request.user, board):
+            return HttpResponseForbidden("You don't have permission to access this board.")
+        boards = [board]
+    else:
+        boards = Board.objects.filter(
+            models.Q(created_by=request.user) | models.Q(members=request.user)
+        ).distinct()
+        board = None
+    
+    # Get time entries
+    entries = TimeEntry.objects.filter(user=request.user)
+    if board_id:
+        entries = entries.filter(task__column__board=board)
+    
+    # Date ranges
+    today = timezone.now().date()
+    week_start = today - timedelta(days=today.weekday())
+    month_start = today.replace(day=1)
+    
+    # Calculate metrics
+    today_hours = entries.filter(work_date=today).aggregate(
+        total=Sum('hours_spent')
+    )['total'] or Decimal('0.00')
+    
+    week_hours = entries.filter(
+        work_date__gte=week_start,
+        work_date__lte=today
+    ).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
+    
+    month_hours = entries.filter(
+        work_date__gte=month_start,
+        work_date__lte=today
+    ).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
+    
+    total_hours = entries.aggregate(
+        total=Sum('hours_spent')
+    )['total'] or Decimal('0.00')
+    
+    # Recent entries
+    recent_entries = entries.select_related(
+        'task', 'task__column', 'task__column__board'
+    ).order_by('-work_date', '-created_at')[:10]
+    
+    # Tasks with time logged
+    tasks_with_time = Task.objects.filter(
+        time_entries__user=request.user
+    )
+    if board_id:
+        tasks_with_time = tasks_with_time.filter(column__board=board)
+    
+    tasks_with_time = tasks_with_time.annotate(
+        total_hours=Sum('time_entries__hours_spent')
+    ).order_by('-total_hours')[:10]
+    
+    # Daily chart data (last 14 days)
+    chart_data = []
+    for i in range(13, -1, -1):
+        date = today - timedelta(days=i)
+        daily_hours = entries.filter(work_date=date).aggregate(
+            total=Sum('hours_spent')
+        )['total'] or Decimal('0.00')
+        chart_data.append({
+            'date': date.strftime('%Y-%m-%d'),
+            'day': date.strftime('%a'),
+            'hours': float(daily_hours),
+        })
+    
+    # My tasks needing time entry (assigned and not done)
+    my_tasks = Task.objects.filter(
+        assigned_to=request.user,
+        progress__lt=100
+    )
+    if board_id:
+        my_tasks = my_tasks.filter(column__board=board)
+    
+    my_tasks = my_tasks.select_related('column', 'column__board')[:20]
+    
+    # Serialize chart data for JavaScript
+    import json
+    chart_data_json = json.dumps(chart_data)
+    
+    context = {
+        'board': board,
+        'boards': boards,
+        'today_hours': today_hours,
+        'week_hours': week_hours,
+        'month_hours': month_hours,
+        'total_hours': total_hours,
+        'recent_entries': recent_entries,
+        'tasks_with_time': tasks_with_time,
+        'chart_data': chart_data_json,
+        'my_tasks': my_tasks,
+    }
+    
+    return render(request, 'kanban/time_tracking_dashboard.html', context)
+
+
+@login_required
+def team_timesheet(request, board_id):
+    """
+    Team timesheet view for managers to see all team member time entries
+    """
+    from datetime import timedelta
+    from django.db.models import Sum
+    
+    board = get_object_or_404(Board, id=board_id)
+    
+    if not _can_access_board(request.user, board):
+        return HttpResponseForbidden("You don't have permission to access this board.")
+    
+    # Get week parameter
+    week_offset = int(request.GET.get('week', 0))
+    today = timezone.now().date()
+    start_of_week = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)
+    end_of_week = start_of_week + timedelta(days=6)
+    
+    # Get all time entries for this board in the week
+    entries = TimeEntry.objects.filter(
+        task__column__board=board,
+        work_date__gte=start_of_week,
+        work_date__lte=end_of_week
+    ).select_related('user', 'task')
+    
+    # Group by user
+    users_data = {}
+    for entry in entries:
+        if entry.user.id not in users_data:
+            users_data[entry.user.id] = {
+                'user': entry.user,
+                'total_hours': Decimal('0.00'),
+                'entries_count': 0,
+                'daily_hours': {},
+            }
+        users_data[entry.user.id]['total_hours'] += entry.hours_spent
+        users_data[entry.user.id]['entries_count'] += 1
+        
+        date_str = entry.work_date.isoformat()
+        if date_str not in users_data[entry.user.id]['daily_hours']:
+            users_data[entry.user.id]['daily_hours'][date_str] = Decimal('0.00')
+        users_data[entry.user.id]['daily_hours'][date_str] += entry.hours_spent
+    
+    # Build week days
+    week_days = []
+    for i in range(7):
+        day = start_of_week + timedelta(days=i)
+        week_days.append({
+            'date': day,
+            'is_today': day == today,
+            'is_weekend': day.weekday() >= 5,
+            'day_name': day.strftime('%a'),
+        })
+    
+    # Build user rows
+    user_rows = []
+    for user_data in sorted(users_data.values(), key=lambda x: x['total_hours'], reverse=True):
+        row = {
+            'user': user_data['user'],
+            'daily_hours': [],
+            'total_hours': user_data['total_hours'],
+            'entries_count': user_data['entries_count'],
+        }
+        for day in week_days:
+            date_str = day['date'].isoformat()
+            hours = user_data['daily_hours'].get(date_str, Decimal('0.00'))
+            row['daily_hours'].append(hours)
+        user_rows.append(row)
+    
+    # Calculate daily totals
+    daily_totals = []
+    for day in week_days:
+        total = entries.filter(work_date=day['date']).aggregate(
+            total=Sum('hours_spent')
+        )['total'] or Decimal('0.00')
+        daily_totals.append(total)
+    
+    week_total = sum(daily_totals, Decimal('0.00'))
+    
+    prev_week = week_offset - 1
+    next_week = week_offset + 1
+    
+    context = {
+        'board': board,
+        'user_rows': user_rows,
+        'week_days': week_days,
+        'daily_totals': daily_totals,
+        'week_total': week_total,
+        'start_of_week': start_of_week,
+        'end_of_week': end_of_week,
+        'prev_week': prev_week,
+        'next_week': next_week,
+        'week_offset': week_offset,
+    }
+    
+    return render(request, 'kanban/team_timesheet.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def quick_time_entry(request, task_id):
+    """
+    Quick time entry API for inline logging
+    """
+    task = get_object_or_404(Task, id=task_id)
+    board = task.column.board
+    
+    if not _can_access_board(request.user, board):
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+    
+    try:
+        hours = Decimal(request.POST.get('hours', '0'))
+        description = request.POST.get('description', '').strip()
+        work_date_str = request.POST.get('work_date', timezone.now().date().isoformat())
+        work_date = timezone.datetime.fromisoformat(work_date_str).date()
+        
+        if hours <= 0:
+            return JsonResponse({'success': False, 'error': 'Hours must be greater than 0'}, status=400)
+        
+        entry = TimeEntry.objects.create(
+            task=task,
+            user=request.user,
+            hours_spent=hours,
+            work_date=work_date,
+            description=description
+        )
+        
+        # Calculate total time logged on task
+        total_time = TimeEntry.objects.filter(task=task).aggregate(
+            total=Sum('hours_spent')
+        )['total'] or Decimal('0.00')
+        
+        return JsonResponse({
+            'success': True,
+            'entry_id': entry.id,
+            'hours': float(entry.hours_spent),
+            'total_time': float(total_time),
+            'message': f'{entry.hours_spent}h logged successfully'
+        })
+    except Exception as e:
+        logger.error(f"Error creating time entry: {e}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["DELETE"])
+def delete_time_entry(request, entry_id):
+    """
+    Delete a time entry
+    """
+    entry = get_object_or_404(TimeEntry, id=entry_id)
+    
+    # Check permissions - user can only delete their own entries
+    if entry.user != request.user:
+        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+    
+    task_id = entry.task.id
+    entry.delete()
+    
+    # Recalculate total
+    total_time = TimeEntry.objects.filter(task_id=task_id).aggregate(
+        total=Sum('hours_spent')
+    )['total'] or Decimal('0.00')
+    
+    return JsonResponse({
+        'success': True,
+        'total_time': float(total_time),
+        'message': 'Time entry deleted'
+    })

@@ -68,4 +68,33 @@ urlpatterns = [
     path('board/<int:board_id>/budget/api/metrics/', 
          budget_views.budget_api_metrics, 
          name='budget_api_metrics'),
+    
+    # Time Tracking Views
+    path('timesheet/', 
+         budget_views.my_timesheet, 
+         name='my_timesheet'),
+    
+    path('board/<int:board_id>/timesheet/', 
+         budget_views.my_timesheet, 
+         name='board_timesheet'),
+    
+    path('time-tracking/', 
+         budget_views.time_tracking_dashboard, 
+         name='time_tracking_dashboard'),
+    
+    path('board/<int:board_id>/time-tracking/', 
+         budget_views.time_tracking_dashboard, 
+         name='board_time_tracking'),
+    
+    path('board/<int:board_id>/team-timesheet/', 
+         budget_views.team_timesheet, 
+         name='team_timesheet'),
+    
+    path('task/<int:task_id>/time/quick-log/', 
+         budget_views.quick_time_entry, 
+         name='quick_time_entry'),
+    
+    path('time-entry/<int:entry_id>/delete/', 
+         budget_views.delete_time_entry, 
+         name='delete_time_entry'),
 ]

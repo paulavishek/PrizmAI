@@ -1,0 +1,265 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Team Timesheet - {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-users-clock"></i> Team Timesheet
+            <small class="text-muted">- {{ board.name }}</small>
+        </h1>
+        <div>
+            <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-dollar-sign"></i> Budget Dashboard
+            </a>
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-columns"></i> Back to Board
+            </a>
+        </div>
+    </div>
+
+    <!-- Week Navigation -->
+    <div class="card shadow mb-4">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    <a href="?week={{ prev_week }}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-chevron-left"></i> Previous Week
+                    </a>
+                </div>
+                <div class="col-md-4 text-center">
+                    <h5 class="mb-0">
+                        {{ start_of_week|date:"M d" }} - {{ end_of_week|date:"M d, Y" }}
+                    </h5>
+                    {% if week_offset == 0 %}
+                    <small class="text-muted">Current Week</small>
+                    {% endif %}
+                </div>
+                <div class="col-md-4 text-end">
+                    <a href="?week={{ next_week }}" class="btn btn-sm btn-outline-primary">
+                        Next Week <i class="fas fa-chevron-right"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Team Summary Stats -->
+    <div class="row mb-4">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Team Hours
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ week_total }}h</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Team Members
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ user_rows|length }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-users fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Avg Hours/Person
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">
+                                {% if user_rows %}
+                                    {% widthratio week_total 1 user_rows|length %}h
+                                {% else %}
+                                    0h
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-bar fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Days Tracked
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">7</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calendar-week fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Team Timesheet Grid -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-table"></i> Team Time Breakdown
+            </h6>
+        </div>
+        <div class="card-body">
+            {% if user_rows %}
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover" id="team-timesheet-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="min-width: 150px;">Team Member</th>
+                            {% for day in week_days %}
+                            <th class="text-center {% if day.is_today %}table-info{% elif day.is_weekend %}table-secondary{% endif %}" style="min-width: 90px;">
+                                <div>{{ day.day_name }}</div>
+                                <small class="text-muted">{{ day.date|date:"m/d" }}</small>
+                            </th>
+                            {% endfor %}
+                            <th class="text-center">Total</th>
+                            <th class="text-center">Entries</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in user_rows %}
+                        <tr>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2" 
+                                         style="width: 32px; height: 32px; font-size: 14px;">
+                                        {{ row.user.username|slice:":1"|upper }}
+                                    </div>
+                                    <strong>{{ row.user.username }}</strong>
+                                </div>
+                            </td>
+                            {% for hours in row.daily_hours %}
+                            <td class="text-center {% if hours > 0 %}has-time{% endif %}">
+                                {% if hours > 0 %}
+                                <span class="badge bg-primary">{{ hours }}h</span>
+                                {% else %}
+                                <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            <td class="text-center font-weight-bold">
+                                <strong>{{ row.total_hours }}h</strong>
+                            </td>
+                            <td class="text-center">
+                                <span class="badge bg-secondary">{{ row.entries_count }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        <tr class="table-light">
+                            <td><strong>Daily Total</strong></td>
+                            {% for total in daily_totals %}
+                            <td class="text-center"><strong>{{ total }}h</strong></td>
+                            {% endfor %}
+                            <td class="text-center"><strong class="text-primary">{{ week_total }}h</strong></td>
+                            <td></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5">
+                <i class="fas fa-clock fa-3x text-muted mb-3"></i>
+                <p class="text-muted">No time entries for this week yet.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Export Options -->
+    <div class="card shadow mb-4">
+        <div class="card-header py-3">
+            <h6 class="m-0 font-weight-bold text-primary">
+                <i class="fas fa-download"></i> Export & Reports
+            </h6>
+        </div>
+        <div class="card-body">
+            <p class="mb-3">Download team timesheet data for reporting and payroll.</p>
+            <div class="btn-group">
+                <button class="btn btn-outline-success" onclick="exportToCSV()">
+                    <i class="fas fa-file-csv"></i> Export to CSV
+                </button>
+                <button class="btn btn-outline-danger" onclick="exportToPDF()">
+                    <i class="fas fa-file-pdf"></i> Export to PDF
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.has-time {
+    background-color: #e7f3ff;
+}
+</style>
+
+<script>
+function exportToCSV() {
+    const table = document.getElementById('team-timesheet-table');
+    let csv = [];
+    
+    // Get headers
+    const headers = Array.from(table.querySelectorAll('thead th')).map(th => th.textContent.trim());
+    csv.push(headers.join(','));
+    
+    // Get rows
+    const rows = table.querySelectorAll('tbody tr');
+    rows.forEach(row => {
+        const cols = Array.from(row.querySelectorAll('td')).map(td => {
+            return '"' + td.textContent.trim().replace(/"/g, '""') + '"';
+        });
+        csv.push(cols.join(','));
+    });
+    
+    // Download
+    const csvContent = csv.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'team_timesheet_{{ start_of_week|date:"Y-m-d" }}.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+function exportToPDF() {
+    alert('PDF export feature coming soon! For now, you can use your browser\'s print function (Ctrl+P) to save as PDF.');
+    window.print();
+}
+</script>
+{% endblock %}

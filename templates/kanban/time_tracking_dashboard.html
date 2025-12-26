@@ -1,0 +1,318 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Time Tracking Dashboard{% if board %} - {{ board.name }}{% endif %}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-chart-line"></i> Time Tracking Dashboard
+            {% if board %}
+            <small class="text-muted">- {{ board.name }}</small>
+            {% endif %}
+        </h1>
+        <div>
+            <a href="{% url 'my_timesheet' %}" class="btn btn-primary">
+                <i class="fas fa-calendar-week"></i> My Timesheet
+            </a>
+            {% if board %}
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-columns"></i> Back to Board
+            </a>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="row">
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Today
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ today_hours }}h</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-clock fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                This Week
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ week_hours }}h</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calendar-week fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                This Month
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ month_hours }}h</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-calendar-alt fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Total Hours
+                            </div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_hours }}h</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-hourglass-half fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Daily Hours Chart -->
+        <div class="col-xl-8 col-lg-7">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Daily Hours (Last 14 Days)</h6>
+                </div>
+                <div class="card-body">
+                    <canvas id="dailyHoursChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Time Entry -->
+        <div class="col-xl-4 col-lg-5">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Quick Log Time</h6>
+                </div>
+                <div class="card-body">
+                    <form id="quickLogForm">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label class="form-label">Task <span class="text-danger">*</span></label>
+                            <select class="form-select" id="quick-task-select" required>
+                                <option value="">Select a task...</option>
+                                {% for task in my_tasks %}
+                                <option value="{{ task.id }}">{{ task.title|truncatechars:50 }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Hours <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" id="quick-hours" 
+                                   step="0.25" min="0.25" max="24" required>
+                            <small class="text-muted">Increments of 0.25</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Date</label>
+                            <input type="date" class="form-control" id="quick-date" 
+                                   value="{{ "now"|date:"Y-m-d" }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" id="quick-description" 
+                                      rows="2" placeholder="What did you work on?"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-plus"></i> Log Time
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Recent Time Entries -->
+        <div class="col-xl-6 mb-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Recent Entries</h6>
+                </div>
+                <div class="card-body">
+                    {% if recent_entries %}
+                    <div class="list-group list-group-flush">
+                        {% for entry in recent_entries %}
+                        <div class="list-group-item px-0">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1">
+                                        <a href="{% url 'task_detail' entry.task.id %}" class="text-decoration-none">
+                                            {{ entry.task.title|truncatechars:40 }}
+                                        </a>
+                                    </h6>
+                                    <small class="text-muted">
+                                        {{ entry.task.column.board.name }} • {{ entry.work_date|date:"M d, Y" }}
+                                    </small>
+                                    {% if entry.description %}
+                                    <p class="mb-0 mt-1"><small>{{ entry.description }}</small></p>
+                                    {% endif %}
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge bg-primary">{{ entry.hours_spent }}h</span>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center py-3">No time entries yet</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Tasks by Time Logged -->
+        <div class="col-xl-6 mb-4">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Top Tasks by Time</h6>
+                </div>
+                <div class="card-body">
+                    {% if tasks_with_time %}
+                    <div class="list-group list-group-flush">
+                        {% for task in tasks_with_time %}
+                        <div class="list-group-item px-0">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="flex-grow-1">
+                                    <a href="{% url 'task_detail' task.id %}" class="text-decoration-none">
+                                        {{ task.title|truncatechars:50 }}
+                                    </a>
+                                    <br>
+                                    <small class="text-muted">{{ task.column.board.name }}</small>
+                                </div>
+                                <span class="badge bg-info">{{ task.total_hours }}h</span>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted text-center py-3">No tasks with time logged yet</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Daily Hours Chart
+    const chartData = {{ chart_data|safe }};
+    const ctx = document.getElementById('dailyHoursChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: chartData.map(d => d.day + ' ' + d.date.substring(5)),
+            datasets: [{
+                label: 'Hours',
+                data: chartData.map(d => d.hours),
+                backgroundColor: 'rgba(13, 110, 253, 0.5)',
+                borderColor: 'rgba(13, 110, 253, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return value + 'h';
+                        }
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.parsed.y + ' hours';
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Quick log form
+    document.getElementById('quickLogForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const taskId = document.getElementById('quick-task-select').value;
+        const hours = document.getElementById('quick-hours').value;
+        const date = document.getElementById('quick-date').value;
+        const description = document.getElementById('quick-description').value;
+        
+        if (!taskId || !hours) {
+            alert('Please fill in all required fields');
+            return;
+        }
+        
+        const formData = new FormData();
+        formData.append('hours', hours);
+        formData.append('description', description);
+        formData.append('work_date', date);
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        fetch(`/task/${taskId}/time/quick-log/`, {
+            method: 'POST',
+            body: formData,
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'Failed to log time'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to log time. Please try again.');
+        });
+    });
+});
+</script>
+{% endblock %}

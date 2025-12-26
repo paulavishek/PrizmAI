@@ -797,6 +797,87 @@
             </div>
         </div>
 
+        <!-- Time Tracking Card -->
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                <h6 class="m-0 font-weight-bold text-primary">
+                    <i class="fas fa-clock"></i> Time Tracking
+                </h6>
+                <a href="{% url 'my_timesheet' %}" class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-calendar-week"></i> Timesheet
+                </a>
+            </div>
+            <div class="card-body">
+                <!-- Total Time Logged -->
+                <div class="mb-3 p-3 bg-light rounded text-center">
+                    <div class="text-muted mb-1">Total Time Logged</div>
+                    <h3 class="mb-0 text-primary" id="total-time-display">
+                        {{ total_time_logged|floatformat:2 }}h
+                    </h3>
+                </div>
+
+                <!-- Quick Time Entry Form -->
+                <form id="quick-time-log-form">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label small">Hours <span class="text-danger">*</span></label>
+                        <div class="input-group input-group-sm">
+                            <input type="number" class="form-control" id="time-hours" 
+                                   step="0.25" min="0.25" max="24" placeholder="0.00" required>
+                            <span class="input-group-text">hours</span>
+                        </div>
+                        <small class="text-muted">Increments of 0.25 (15 min)</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label small">Date</label>
+                        <input type="date" class="form-control form-control-sm" id="time-date" 
+                               value="{{ "now"|date:"Y-m-d" }}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label small">Description</label>
+                        <textarea class="form-control form-control-sm" id="time-description" 
+                                  rows="2" placeholder="What did you work on?"></textarea>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary btn-sm w-100">
+                        <i class="fas fa-plus"></i> Log Time
+                    </button>
+                </form>
+
+                <!-- Recent Entries -->
+                <div class="mt-3" id="recent-time-entries">
+                    <h6 class="text-muted small mb-2">Recent Entries</h6>
+                    {% if task.time_entries.all %}
+                    <div class="list-group list-group-flush">
+                        {% for entry in task.time_entries.all|slice:":5" %}
+                        <div class="list-group-item px-0 py-2" data-entry-id="{{ entry.id }}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <strong class="text-primary">{{ entry.hours_spent }}h</strong>
+                                    <small class="text-muted d-block">{{ entry.work_date|date:"M d, Y" }}</small>
+                                    {% if entry.description %}
+                                    <small class="text-muted">{{ entry.description|truncatechars:40 }}</small>
+                                    {% endif %}
+                                </div>
+                                {% if entry.user == user %}
+                                <button class="btn btn-sm btn-link text-danger delete-time-entry" 
+                                        data-entry-id="{{ entry.id }}" title="Delete">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted small text-center py-2 mb-0">No time logged yet</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
         <!-- Activity Log Card -->
         <div class="card shadow mb-4">
             <div class="card-header py-3">
@@ -1837,6 +1918,121 @@
         return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
                document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '';
     }
+
+    // ============================================================================
+    // TIME TRACKING FUNCTIONALITY
+    // ============================================================================
+    
+    // Quick time log form submission
+    const quickTimeLogForm = document.getElementById('quick-time-log-form');
+    if (quickTimeLogForm) {
+        quickTimeLogForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const hours = document.getElementById('time-hours').value;
+            const date = document.getElementById('time-date').value;
+            const description = document.getElementById('time-description').value;
+            const taskId = {{ task.id }};
+            
+            if (!hours || parseFloat(hours) <= 0) {
+                alert('Please enter valid hours');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('hours', hours);
+            formData.append('description', description);
+            formData.append('work_date', date);
+            formData.append('csrfmiddlewaretoken', getCsrfToken());
+            
+            // Disable button during submission
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Logging...';
+            
+            fetch(`/task/${taskId}/time/quick-log/`, {
+                method: 'POST',
+                body: formData,
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update total time display
+                    document.getElementById('total-time-display').textContent = data.total_time + 'h';
+                    
+                    // Clear form
+                    document.getElementById('time-hours').value = '';
+                    document.getElementById('time-description').value = '';
+                    
+                    // Show success message
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = 'alert alert-success alert-dismissible fade show mt-2';
+                    alertDiv.innerHTML = `
+                        <i class="fas fa-check-circle me-1"></i> ${data.message}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `;
+                    quickTimeLogForm.insertBefore(alertDiv, quickTimeLogForm.firstChild);
+                    
+                    // Auto-dismiss after 3 seconds
+                    setTimeout(() => alertDiv.remove(), 3000);
+                    
+                    // Reload to show new entry
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to log time'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to log time. Please try again.');
+            })
+            .finally(() => {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            });
+        });
+    }
+    
+    // Delete time entry
+    document.querySelectorAll('.delete-time-entry').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (!confirm('Delete this time entry?')) return;
+            
+            const entryId = this.dataset.entryId;
+            const entryElement = this.closest('.list-group-item');
+            
+            fetch(`/time-entry/${entryId}/delete/`, {
+                method: 'DELETE',
+                headers: {
+                    'X-CSRFToken': getCsrfToken(),
+                },
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update total time
+                    document.getElementById('total-time-display').textContent = data.total_time + 'h';
+                    
+                    // Remove entry element
+                    entryElement.remove();
+                    
+                    // If no entries left, show message
+                    const entriesList = document.querySelector('#recent-time-entries .list-group');
+                    if (entriesList && entriesList.children.length === 0) {
+                        entriesList.innerHTML = '<p class="text-muted small text-center py-2 mb-0">No time logged yet</p>';
+                    }
+                } else {
+                    alert('Error: ' + (data.error || 'Failed to delete entry'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to delete entry. Please try again.');
+            });
+        });
+    });
 </script>
 
 {% load static %}

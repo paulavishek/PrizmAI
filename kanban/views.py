@@ -3,7 +3,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileResponse
 from django.contrib import messages
-from django.db.models import Count, Q, Case, When, IntegerField, Max
+from django.db.models import Count, Q, Case, When, IntegerField, Max, Sum
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from datetime import timedelta
@@ -593,6 +593,12 @@ def task_detail(request, task_id):
                 'is_likely_late': is_likely_late
             }
     
+    # Get total time logged on this task
+    from kanban.budget_models import TimeEntry
+    total_time_logged = TimeEntry.objects.filter(task=task).aggregate(
+        total=Sum('hours_spent')
+    )['total'] or 0
+    
     return render(request, 'kanban/task_detail.html', {
         'task': task,
         'board': board,
@@ -603,6 +609,7 @@ def task_detail(request, task_id):
         'stakeholders': stakeholders,
         'wiki_links': wiki_links,
         'prediction': prediction_data,
+        'total_time_logged': total_time_logged,
     })
 
 @login_required
