@@ -439,6 +439,28 @@ def board_detail(request, board_id):
         status__in=['active', 'acknowledged']
     ).order_by('-detected_at')[:3]  # Show top 3 active alerts
     
+    # Get permission information for UI feedback
+    from kanban.permission_utils import (
+        get_user_board_membership, 
+        get_column_permissions_for_user,
+        user_has_board_permission
+    )
+    
+    user_membership = get_user_board_membership(request.user, board)
+    user_role_name = user_membership.role.name if user_membership else 'Viewer'
+    
+    # Get column permissions for visual feedback
+    column_permissions = {}
+    for column in columns:
+        perms = get_column_permissions_for_user(request.user, column)
+        if perms:
+            column_permissions[column.id] = perms
+    
+    # Check key permissions for UI elements
+    can_manage_members = user_has_board_permission(request.user, board, 'board.manage_members')
+    can_edit_board = user_has_board_permission(request.user, board, 'board.edit')
+    can_create_tasks = user_has_board_permission(request.user, board, 'task.create')
+    
     return render(request, 'kanban/board_detail.html', {
         'board': board,
         'columns': columns,
@@ -453,6 +475,11 @@ def board_detail(request, board_id):
         'scope_status': scope_status,  # Add scope tracking data
         'active_scope_alerts': active_scope_alerts,  # Add active alerts
         'is_demo_board': is_demo_board,  # Flag to show demo mode banner
+        'user_role_name': user_role_name,  # User's role on this board
+        'column_permissions': column_permissions,  # Column-level restrictions
+        'can_manage_members': can_manage_members,  # Permission flags for UI
+        'can_edit_board': can_edit_board,
+        'can_create_tasks': can_create_tasks,
     })
 
 @login_required

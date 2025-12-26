@@ -128,6 +128,12 @@
                                 <li><a class="dropdown-item" href="{% url 'profile' %}">Profile</a></li>
                                 {% if user.profile.is_admin %}
                                     <li><a class="dropdown-item" href="{% url 'organization_members' %}">Organization</a></li>
+                                    <li><a class="dropdown-item" href="{% url 'manage_roles' %}">
+                                        <i class="fas fa-user-shield me-1"></i> Manage Roles & Permissions
+                                    </a></li>
+                                    <li><a class="dropdown-item" href="{% url 'view_permission_audit_org' %}">
+                                        <i class="fas fa-history me-1"></i> Permission Audit Log
+                                    </a></li>
                                 {% endif %}
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{% url 'ai_usage:dashboard' %}">

@@ -198,7 +198,12 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
-        <h1 class="h3 mb-0 text-gray-800">{{ board.name }}</h1>
+        <h1 class="h3 mb-0 text-gray-800">
+            {{ board.name }}
+            <span class="badge bg-info ms-2" title="Your role on this board">
+                <i class="fas fa-user-shield"></i> {{ user_role_name }}
+            </span>
+        </h1>
         {% if board.description %}
             <p class="text-muted">{{ board.description }}</p>
         {% endif %}
@@ -247,6 +252,13 @@
                 <i class="fas fa-users me-2 text-primary"></i>Manage Stakeholders
             </a></li>
             <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}">
+                <i class="fas fa-user-shield me-2 text-success"></i>Manage Members & Roles
+            </a></li>
+            <li><a class="dropdown-item" href="{% url 'view_permission_audit' board.id %}">
+                <i class="fas fa-history me-2 text-info"></i>Permission Audit Log
+            </a></li>
+            <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}">Edit Board</a></li>
             <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#boardSettingsModal">Board Settings</a></li>
             <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}">
@@ -260,6 +272,48 @@
         </div>
     </div>
 </div>
+
+<!-- Permission & Role Info Banner -->
+{% if column_permissions %}
+<div class="alert alert-info alert-dismissible fade show mb-4" role="alert">
+    <div class="d-flex align-items-start">
+        <div class="me-3">
+            <i class="fas fa-shield-alt fa-2x"></i>
+        </div>
+        <div class="flex-grow-1">
+            <h6 class="alert-heading mb-2">
+                <i class="fas fa-info-circle me-2"></i>Workflow Permissions Active
+            </h6>
+            <p class="mb-2">
+                <strong>Your Role:</strong> {{ user_role_name }} | 
+                <strong>Column Restrictions:</strong> Some columns have permission restrictions to enforce workflow approval.
+            </p>
+            <div class="d-flex gap-2 flex-wrap mb-0">
+                {% for col_id, perms in column_permissions.items %}
+                    {% for column in columns %}
+                        {% if column.id == col_id %}
+                            {% if not perms.can_move_to %}
+                            <span class="badge bg-warning">
+                                <i class="fas fa-lock me-1"></i>Cannot move to "{{ column.name }}"
+                            </span>
+                            {% endif %}
+                            {% if not perms.can_create_in %}
+                            <span class="badge bg-secondary">
+                                <i class="fas fa-ban me-1"></i>Cannot create in "{{ column.name }}"
+                            </span>
+                            {% endif %}
+                        {% endif %}
+                    {% endfor %}
+                {% endfor %}
+                <a href="{% url 'manage_board_members' board.id %}" class="badge bg-primary text-decoration-none">
+                    <i class="fas fa-cog me-1"></i>Manage Permissions
+                </a>
+            </div>
+        </div>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
 
 <!-- Scope Creep Alerts -->
 {% if active_scope_alerts %}
@@ -523,6 +577,13 @@
                 <div>
                     <span class="column-position-badge">{{ column.position|add:1 }}</span>
                     <span>{{ column.name }}</span>
+                    {% if column.id in column_permissions %}
+                        {% if not column_permissions|get_item:column.id|get_item:'can_move_to' %}
+                        <span class="badge bg-warning ms-2" title="You cannot move tasks into this column">
+                            <i class="fas fa-lock"></i> Restricted
+                        </span>
+                        {% endif %}
+                    {% endif %}
                 </div>                <div class="column-actions">
                     {% if column.name|lower == 'to do' or column.name|lower == 'todo' %}
                         <!-- Quick Add Task button for To Do column -->
