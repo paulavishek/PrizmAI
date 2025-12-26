@@ -398,6 +398,87 @@ class ColumnPermission(models.Model):
     
     class Meta:
         unique_together = ['column', 'role']
+
+
+class PermissionAuditLog(models.Model):
+    """
+    Track permission changes and role assignments for audit purposes
+    """
+    ACTION_CHOICES = [
+        ('role_created', 'Role Created'),
+        ('role_updated', 'Role Updated'),
+        ('role_deleted', 'Role Deleted'),
+        ('member_added', 'Member Added'),
+        ('member_removed', 'Member Removed'),
+        ('member_role_changed', 'Member Role Changed'),
+        ('permission_granted', 'Permission Granted'),
+        ('permission_revoked', 'Permission Revoked'),
+        ('override_added', 'Permission Override Added'),
+        ('override_removed', 'Permission Override Removed'),
+        ('column_permission_set', 'Column Permission Set'),
+    ]
+    
+    # What happened
+    action = models.CharField(max_length=30, choices=ACTION_CHOICES, db_index=True)
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    
+    # Who did it
+    actor = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='permission_actions',
+        help_text="User who performed the action"
+    )
+    
+    # Where (context)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='permission_audit_logs',
+        null=True,
+        blank=True
+    )
+    board = models.ForeignKey(
+        Board,
+        on_delete=models.CASCADE,
+        related_name='permission_audit_logs',
+        null=True,
+        blank=True
+    )
+    
+    # Who was affected
+    affected_user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='permission_changes_received',
+        help_text="User who was affected by the action"
+    )
+    
+    # Details
+    details = models.JSONField(
+        default=dict,
+        help_text="Additional details about the change (old/new values, etc.)"
+    )
+    
+    # IP and user agent for security
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['-timestamp', 'organization']),
+            models.Index(fields=['actor', '-timestamp']),
+            models.Index(fields=['affected_user', '-timestamp']),
+        ]
+    
+    def __str__(self):
+        actor_name = self.actor.username if self.actor else 'System'
+        affected = f" affecting {self.affected_user.username}" if self.affected_user else ""
+        return f"{actor_name}: {self.get_action_display()}{affected} at {self.timestamp}"
     
     def __str__(self):
         return f"{self.role.name} permissions on {self.column.name}"

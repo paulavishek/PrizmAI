@@ -458,7 +458,7 @@ def board_detail(request, board_id):
 @login_required
 def task_detail(request, task_id):
     from django.db.models import Prefetch
-    from kanban.permission_utils import user_has_task_permission
+    from kanban.permission_utils import user_has_task_permission, user_can_edit_task_in_column
     from kanban.audit_utils import log_model_change, AuditLogContext
     
     # Optimize query with select_related and prefetch_related to avoid N+1 queries
@@ -488,9 +488,11 @@ def task_detail(request, task_id):
         return HttpResponseForbidden("You don't have permission to view this task.")
     
     if request.method == 'POST':
-        # Check edit permission
-        if not user_has_task_permission(request.user, task, 'task.edit'):
-            return HttpResponseForbidden("You don't have permission to edit this task.")
+        # Check edit permission with column-level restrictions
+        can_edit, error_msg = user_can_edit_task_in_column(request.user, task)
+        if not can_edit:
+            messages.error(request, error_msg)
+            return redirect('task_detail', task_id=task.id)
         
         form = TaskForm(request.POST, instance=task, board=board)
         if form.is_valid():
@@ -614,16 +616,22 @@ def task_detail(request, task_id):
 
 @login_required
 def create_task(request, board_id, column_id=None):
-    from kanban.permission_utils import user_has_board_permission
+    from kanban.permission_utils import user_has_board_permission, user_can_create_task_in_column
     from kanban.audit_utils import log_model_change
     
     board = get_object_or_404(Board, id=board_id)
     
-    # Check permission using RBAC
+    # Check basic permission using RBAC
     if not user_has_board_permission(request.user, board, 'task.create'):
         return HttpResponseForbidden("You don't have permission to create tasks on this board.")
+    
     if column_id:
         column = get_object_or_404(Column, id=column_id, board=board)
+        # Check column-level permission
+        can_create, error_msg = user_can_create_task_in_column(request.user, column)
+        if not can_create:
+            messages.error(request, error_msg)
+            return redirect('board_detail', board_id=board.id)
     else:
         # Try to get "To Do" column first, otherwise get the first available column
         column = Column.objects.filter(
@@ -992,7 +1000,7 @@ def gantt_chart(request, board_id):
 
 @login_required
 def move_task(request):
-    from kanban.permission_utils import user_has_task_permission
+    from kanban.permission_utils import user_has_task_permission, user_can_move_task_to_column
     from kanban.audit_utils import log_audit
     
     if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -1004,9 +1012,10 @@ def move_task(request):
         task = get_object_or_404(Task, id=task_id)
         new_column = get_object_or_404(Column, id=column_id)
         
-        # Check permission using RBAC
-        if not user_has_task_permission(request.user, task, 'task.move'):
-            return JsonResponse({'error': "You don't have permission to move this task."}, status=403)
+        # Check permission using RBAC with column-level restrictions
+        can_move, error_msg = user_can_move_task_to_column(request.user, task, new_column)
+        if not can_move:
+            return JsonResponse({'error': error_msg}, status=403)
         
         old_column = task.column
         task.column = new_column

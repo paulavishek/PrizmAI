@@ -397,3 +397,246 @@ def assign_default_role_to_user(user, board):
     )
     
     return membership
+
+
+def user_can_move_task_to_column(user, task, target_column):
+    """
+    Check if user can move a task to a specific column
+    Combines task.move permission with column-level restrictions
+    
+    Args:
+        user: User object
+        task: Task object
+        target_column: Column object (destination)
+    
+    Returns:
+        (Boolean, error_message)
+    """
+    from kanban.permission_models import ColumnPermission
+    
+    # First check if user has basic task.move permission
+    if not user_has_task_permission(user, task, 'task.move'):
+        return False, "You don't have permission to move tasks"
+    
+    # Check if user can move FROM source column
+    source_column = task.column
+    membership = get_user_board_membership(user, source_column.board)
+    if membership:
+        try:
+            source_perm = ColumnPermission.objects.get(
+                column=source_column,
+                role=membership.role
+            )
+            if not source_perm.can_move_from:
+                return False, f"Cannot move tasks out of '{source_column.name}'"
+        except ColumnPermission.DoesNotExist:
+            pass  # No restriction
+    
+    # Check if user can move TO target column
+    if membership:
+        try:
+            target_perm = ColumnPermission.objects.get(
+                column=target_column,
+                role=membership.role
+            )
+            if not target_perm.can_move_to:
+                return False, f"Cannot move tasks into '{target_column.name}'"
+        except ColumnPermission.DoesNotExist:
+            pass  # No restriction
+    
+    return True, None
+
+
+def user_can_create_task_in_column(user, column):
+    """
+    Check if user can create a task in a specific column
+    
+    Args:
+        user: User object
+        column: Column object
+    
+    Returns:
+        (Boolean, error_message)
+    """
+    from kanban.permission_models import ColumnPermission
+    
+    # First check if user has basic task.create permission
+    if not user_has_board_permission(user, column.board, 'task.create'):
+        return False, "You don't have permission to create tasks"
+    
+    # Check column-level restriction
+    membership = get_user_board_membership(user, column.board)
+    if membership:
+        try:
+            col_perm = ColumnPermission.objects.get(
+                column=column,
+                role=membership.role
+            )
+            if not col_perm.can_create_in:
+                return False, f"Cannot create tasks in '{column.name}'"
+        except ColumnPermission.DoesNotExist:
+            pass  # No restriction
+    
+    return True, None
+
+
+def user_can_edit_task_in_column(user, task):
+    """
+    Check if user can edit a task in its current column
+    
+    Args:
+        user: User object
+        task: Task object
+    
+    Returns:
+        (Boolean, error_message)
+    """
+    from kanban.permission_models import ColumnPermission
+    
+    # Check if user has edit permission (regular or own)
+    can_edit = user_has_task_permission(user, task, 'task.edit')
+    can_edit_own = user_has_task_permission(user, task, 'task.edit_own')
+    
+    if not (can_edit or can_edit_own):
+        return False, "You don't have permission to edit this task"
+    
+    # Check column-level restriction
+    column = task.column
+    membership = get_user_board_membership(user, column.board)
+    if membership:
+        try:
+            col_perm = ColumnPermission.objects.get(
+                column=column,
+                role=membership.role
+            )
+            if not col_perm.can_edit_in:
+                return False, f"Cannot edit tasks in '{column.name}'"
+        except ColumnPermission.DoesNotExist:
+            pass  # No restriction
+    
+    return True, None
+
+
+def filter_tasks_by_permission(user, queryset, permission='task.view'):
+    """
+    Filter task queryset based on user permissions
+    Handles task.view_own by only showing assigned/created tasks
+    
+    Args:
+        user: User object
+        queryset: Task queryset
+        permission: Permission to check (default: 'task.view')
+    
+    Returns:
+        Filtered queryset
+    """
+    from django.db.models import Q
+    
+    # Get all boards the queryset covers
+    boards = queryset.values_list('column__board', flat=True).distinct()
+    
+    accessible_tasks = []
+    restricted_boards = []
+    
+    for board_id in boards:
+        from kanban.models import Board
+        try:
+            board = Board.objects.get(id=board_id)
+            
+            # Check if user has full view permission
+            if user_has_board_permission(user, board, permission):
+                # User can see all tasks from this board
+                accessible_tasks.extend(
+                    queryset.filter(column__board=board).values_list('id', flat=True)
+                )
+            # Check if user has view_own permission
+            elif user_has_board_permission(user, board, f'{permission}_own'):
+                # User can only see their own tasks
+                restricted_boards.append(board_id)
+            # else: user has no access to this board
+            
+        except Board.DoesNotExist:
+            pass
+    
+    # Build final queryset
+    if restricted_boards:
+        own_tasks = queryset.filter(
+            column__board_id__in=restricted_boards
+        ).filter(
+            Q(assigned_to=user) | Q(created_by=user)
+        ).values_list('id', flat=True)
+        accessible_tasks.extend(own_tasks)
+    
+    return queryset.filter(id__in=accessible_tasks)
+
+
+def get_column_permissions_for_user(user, column):
+    """
+    Get all column permissions for a user
+    
+    Args:
+        user: User object
+        column: Column object
+    
+    Returns:
+        dict with permission flags or None if no restrictions
+    """
+    from kanban.permission_models import ColumnPermission
+    
+    membership = get_user_board_membership(user, column.board)
+    if not membership:
+        return None
+    
+    try:
+        col_perm = ColumnPermission.objects.get(
+            column=column,
+            role=membership.role
+        )
+        return {
+            'can_move_to': col_perm.can_move_to,
+            'can_move_from': col_perm.can_move_from,
+            'can_create_in': col_perm.can_create_in,
+            'can_edit_in': col_perm.can_edit_in,
+        }
+    except ColumnPermission.DoesNotExist:
+        # No restrictions - all allowed
+        return {
+            'can_move_to': True,
+            'can_move_from': True,
+            'can_create_in': True,
+            'can_edit_in': True,
+        }
+
+
+def bulk_assign_role(users, board, role, added_by=None):
+    """
+    Assign a role to multiple users on a board
+    
+    Args:
+        users: List of User objects
+        board: Board object
+        role: Role object
+        added_by: User who is adding members (optional)
+    
+    Returns:
+        (created_count, updated_count)
+    """
+    created = 0
+    updated = 0
+    
+    for user in users:
+        membership, was_created = BoardMembership.objects.update_or_create(
+            board=board,
+            user=user,
+            defaults={
+                'role': role,
+                'added_by': added_by,
+                'is_active': True
+            }
+        )
+        if was_created:
+            created += 1
+        else:
+            updated += 1
+    
+    return created, updated

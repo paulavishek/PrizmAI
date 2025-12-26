@@ -7,6 +7,7 @@ from . import retrospective_views
 from . import milestone_views
 from . import conflict_views
 from . import demo_views
+from . import permission_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -159,4 +160,16 @@ urlpatterns = [
     path('conflicts/trigger/<int:board_id>/', conflict_views.trigger_detection, name='trigger_detection_board'),
     path('conflicts/notifications/<int:notification_id>/acknowledge/', conflict_views.acknowledge_notification, name='acknowledge_notification'),
     path('conflicts/analytics/', conflict_views.conflict_analytics, name='conflict_analytics'),
+    
+    # Permission Management URLs - NEW ADVANCED FEATURES
+    path('permissions/roles/', permission_views.manage_roles, name='manage_roles'),
+    path('permissions/roles/create/', permission_views.create_role, name='create_role'),
+    path('permissions/roles/<int:role_id>/edit/', permission_views.edit_role, name='edit_role'),
+    path('permissions/roles/<int:role_id>/delete/', permission_views.delete_role, name='delete_role'),
+    path('board/<int:board_id>/members/manage/', permission_views.manage_board_members, name='manage_board_members'),
+    path('board/membership/<int:membership_id>/change-role/', permission_views.change_member_role, name='change_member_role'),
+    path('board/<int:board_id>/members/add/', permission_views.add_board_member_with_role, name='add_board_member_with_role'),
+    path('board/membership/<int:membership_id>/remove/', permission_views.remove_board_member_role, name='remove_board_member_role'),
+    path('permissions/audit/', permission_views.view_permission_audit, name='view_permission_audit_org'),
+    path('board/<int:board_id>/permissions/audit/', permission_views.view_permission_audit, name='view_permission_audit'),
 ]
