@@ -20,7 +20,8 @@ PrizmAI combines visual project management with AI that helps you work smarter�
 - 🎓 **AI Coach** - Proactive suggestions to improve project management decisions
 - 📈 **User Feedback & Behavior Tracking** - Comprehensive feedback collection, sentiment analysis, and user behavior analytics for continuous improvement
 - 🤖 **AI Usage Monitoring** - Track and manage your monthly AI feature consumption with quota limits
-- 🔍 **Explainable AI** - Every recommendation includes "why" for full transparency
+- � **Role-Based Access Control (RBAC)** - Advanced permissions with role management, approval workflows, column-level restrictions, and complete audit logging
+- �🔍 **Explainable AI** - Every recommendation includes "why" for full transparency
 - 📚 **Knowledge Base & Wiki** - Markdown documentation with AI-assisted insights
 - 🔐 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
 - 🌐 **RESTful API** - 20+ endpoints for integrations (Slack, Teams, Jira-ready)
@@ -109,7 +110,8 @@ This removes duplicate boards and migrates users to the official demo boards.
 | **[✨ FEATURES.md](FEATURES.md)** | Detailed feature descriptions and capabilities |
 | **[📅 DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md)** | Dynamic demo data system guide |
 | **[⏱️ TIME_TRACKING_IMPLEMENTATION_COMPLETE.md](TIME_TRACKING_IMPLEMENTATION_COMPLETE.md)** | **NEW!** Time tracking, timesheets, and labor cost tracking |
-| **[📈 USER_FEEDBACK_ANALYTICS.md](USER_FEEDBACK_ANALYTICS.md)** | User feedback, sentiment analysis, and behavior tracking |
+| **[� DEMO_RBAC_READY.md](DEMO_RBAC_READY.md)** | **NEW!** Role-based access control, approval workflows, and permission management |
+| **[�📈 USER_FEEDBACK_ANALYTICS.md](USER_FEEDBACK_ANALYTICS.md)** | User feedback, sentiment analysis, and behavior tracking |
 | **[📊 API_RATE_LIMITING_DASHBOARD.md](API_RATE_LIMITING_DASHBOARD.md)** | AI usage tracking and quota management |
 | **[🔌 API_DOCUMENTATION.md](API_DOCUMENTATION.md)** | REST API reference with 20+ endpoints |
 | **[🔗 INTEGRATIONS.md](INTEGRATIONS.md)** | Integration guide (Slack, Zapier, Teams) |
@@ -272,8 +274,8 @@ Open http://localhost:8080 on your mobile device and install the PWA!
 | **Scope Creep Detection** | ✅ Automated | Manual |
 | **Burndown Forecasting** | ✅ AI-powered | Basic/No |
 | **Conflict Detection** | ✅ Real-time | Limited |
-| **Time Tracking & Timesheets** | ✅ Full-featured | Limited/Paywall |
-| **Self-Hosted** | ✅ Yes | Limited |
+| **Time Tracking & Timesheets** | ✅ Full-featured | Limited/Paywall || **Role-Based Access Control** | ✅ Advanced with approval workflows | Limited/Paywall |
+| **Audit Logging** | ✅ Complete history with IP tracking | Limited || **Self-Hosted** | ✅ Yes | Limited |
 | **Open Source** | ✅ MIT License | No |
 | **Cost** | 🆓 Free | Paid |
 
