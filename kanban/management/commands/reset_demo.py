@@ -96,7 +96,7 @@ class Command(BaseCommand):
                 
                 # Step 4: Refresh dates
                 self.stdout.write('\n[4/4] Refreshing dates...')
-                call_command('refresh_demo_dates', '--no-confirm')
+                call_command('refresh_demo_dates')
                 self.stdout.write(self.style.SUCCESS('  ✓ Dates refreshed'))
 
             # Final stats
