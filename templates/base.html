@@ -25,34 +25,24 @@
     
     {% block extra_css %}{% endblock %}
     
-    <!-- Google Analytics 4 - Load only in production -->
-    {% if not debug and GA4_MEASUREMENT_ID %}
-    <script async src="https://www.googletagmanager.com/gtag/js?id={{ GA4_MEASUREMENT_ID }}"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      
-      gtag('config', '{{ GA4_MEASUREMENT_ID }}', {
-        'anonymize_ip': true,  /* GDPR compliance */
-        'cookie_flags': 'SameSite=None;Secure'
-      });
-      
-      /* Track authenticated user properties */
-      {% if user.is_authenticated %}
-      gtag('set', 'user_properties', {
-        'user_type': 'registered',
-        'user_id_hashed': '{{ user.id|stringformat:"s"|hash:"md5" }}'  /* Anonymized */
-      });
-      {% else %}
-      gtag('set', 'user_properties', {
-        'user_type': 'anonymous'
-      });
-      {% endif %}
-    </script>
+    <!-- Google Tag Manager - Load only in production -->
+    {% if not debug %}
+    <script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+    new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+    j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+    'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+    })(window,document,'script','dataLayer','GTM-N4RMZ4SN');</script>
+    <!-- End Google Tag Manager -->
     {% endif %}
 </head>
 <body>
+    <!-- Google Tag Manager (noscript) -->
+    {% if not debug %}
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-N4RMZ4SN"
+    height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+    {% endif %}
+    <!-- End Google Tag Manager (noscript) -->
+    
     <!-- Navigation -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
         <div class="container">
