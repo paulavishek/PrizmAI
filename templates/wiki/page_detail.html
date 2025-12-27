@@ -158,6 +158,10 @@
                             <button class="btn btn-outline-info" id="analyzeDocsBtn" onclick="processDocumentation()" style="display: none;">
                                 <i class="fas fa-robot"></i> Doc Assistant
                             </button>
+                            <!-- Import Transcript Button - for meeting notes -->
+                            <button class="btn btn-outline-warning" id="importTranscriptBtn" data-bs-toggle="modal" data-bs-target="#transcriptImportModal" style="display: none;">
+                                <i class="fas fa-file-import"></i> Import Transcript
+                            </button>
                             <a href="{% url 'wiki:page_delete' page.slug %}" class="btn btn-outline-danger" onclick="return confirm('Delete this page?')">
                                 <i class="fas fa-trash"></i> Delete
                             </a>
@@ -574,6 +578,97 @@
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" id="confirmCreateTasksBtn" onclick="confirmTaskCreation()">
                     <i class="fas fa-check"></i> Create Tasks
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Transcript Import Modal -->
+<div class="modal fade" id="transcriptImportModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning bg-opacity-10">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-import"></i> Import Meeting Transcript
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Import transcript from various sources</strong>
+                    <p class="mb-0 small">Paste a transcript from Fireflies.ai, Otter.ai, or any meeting recording tool. Our AI will analyze it and extract action items, decisions, and key points.</p>
+                </div>
+                
+                <!-- Source Selection -->
+                <div class="mb-3">
+                    <label class="form-label"><strong>Transcript Source</strong></label>
+                    <select class="form-select" id="transcriptSource">
+                        <option value="manual">Manual Paste / Other</option>
+                        <option value="fireflies">Fireflies.ai</option>
+                        <option value="otter">Otter.ai</option>
+                        <option value="teams">Microsoft Teams</option>
+                        <option value="zoom">Zoom</option>
+                        <option value="meet">Google Meet</option>
+                    </select>
+                </div>
+                
+                <!-- Optional Metadata -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Meeting Date (optional)</label>
+                        <input type="date" class="form-control" id="transcriptMeetingDate">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Duration (minutes, optional)</label>
+                        <input type="number" class="form-control" id="transcriptDuration" placeholder="e.g., 45">
+                    </div>
+                </div>
+                
+                <!-- Transcript Content -->
+                <div class="mb-3">
+                    <label class="form-label"><strong>Paste Transcript</strong></label>
+                    <textarea 
+                        class="form-control font-monospace" 
+                        id="transcriptContent" 
+                        rows="12" 
+                        placeholder="Paste your meeting transcript here...&#10;&#10;Example:&#10;Speaker 1: We need to review the Q4 roadmap today.&#10;Speaker 2: Sounds good. I'll start with the engineering updates.&#10;..."></textarea>
+                    <small class="text-muted">The AI will process this transcript and append it to your wiki page content.</small>
+                </div>
+                
+                <!-- Participants (optional) -->
+                <div class="mb-3">
+                    <label class="form-label">Participants (optional, comma-separated)</label>
+                    <input type="text" class="form-control" id="transcriptParticipants" 
+                           placeholder="e.g., John Smith, Sarah Johnson, Mike Chen">
+                </div>
+                
+                <!-- Processing Options -->
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="autoAnalyze" checked>
+                        <label class="form-check-label" for="autoAnalyze">
+                            <strong>Automatically run AI analysis after import</strong>
+                            <br>
+                            <small class="text-muted">AI will extract action items, decisions, and blockers immediately</small>
+                        </label>
+                    </div>
+                </div>
+                
+                <div id="transcriptImportProgress" style="display: none;">
+                    <div class="progress">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 100%"></div>
+                    </div>
+                    <p class="text-center mt-2 mb-0">Processing transcript...</p>
+                </div>
+                
+                <div id="transcriptImportResult" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" onclick="importTranscript()">
+                    <i class="fas fa-upload"></i> Import & Append to Page
                 </button>
             </div>
         </div>

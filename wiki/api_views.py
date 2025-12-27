@@ -547,3 +547,142 @@ def get_boards_for_organization(request):
     except Exception as e:
         logger.error(f"Error in get_boards_for_organization: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+@require_http_methods(["POST"])
+def import_transcript_to_wiki_page(request, wiki_page_id):
+    """
+    Import a meeting transcript into a wiki page
+    Supports various sources: Fireflies, Otter.ai, manual paste, etc.
+    Optionally runs AI analysis automatically
+    """
+    try:
+        # Get organization
+        if not hasattr(request.user, 'profile') or not request.user.profile.organization:
+            return JsonResponse({'error': 'No organization found'}, status=400)
+        
+        org = request.user.profile.organization
+        
+        # Get the wiki page
+        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id, organization=org)
+        
+        # Parse request body
+        data = json.loads(request.body)
+        transcript_content = data.get('transcript_content', '').strip()
+        source = data.get('source', 'manual')
+        meeting_date = data.get('meeting_date')
+        duration_minutes = data.get('duration_minutes')
+        participants = data.get('participants', [])
+        auto_analyze = data.get('auto_analyze', False)
+        
+        if not transcript_content:
+            return JsonResponse({'error': 'Transcript content is required'}, status=400)
+        
+        # Build transcript metadata
+        transcript_metadata = {
+            'source': source,
+            'imported_at': timezone.now().isoformat(),
+            'imported_by': request.user.username,
+        }
+        
+        if meeting_date:
+            transcript_metadata['meeting_date'] = meeting_date
+        if duration_minutes:
+            transcript_metadata['duration_minutes'] = duration_minutes
+        if participants:
+            transcript_metadata['participants'] = participants
+        
+        # Format transcript nicely for wiki page
+        transcript_section = f"\n\n---\n\n## 📝 Meeting Transcript\n\n"
+        
+        # Add metadata header
+        if meeting_date or participants:
+            transcript_section += "**Meeting Info:**\n"
+            if meeting_date:
+                transcript_section += f"- **Date:** {meeting_date}\n"
+            if duration_minutes:
+                transcript_section += f"- **Duration:** {duration_minutes} minutes\n"
+            if participants:
+                transcript_section += f"- **Participants:** {', '.join(participants)}\n"
+            transcript_section += f"- **Source:** {source.title()}\n\n"
+        
+        transcript_section += f"{transcript_content}\n\n"
+        transcript_section += f"*Imported from {source.title()} on {timezone.now().strftime('%B %d, %Y at %I:%M %p')}*\n"
+        
+        # Append to wiki page content
+        wiki_page.content += transcript_section
+        wiki_page.transcript_metadata = transcript_metadata
+        wiki_page.updated_by = request.user
+        wiki_page.version += 1
+        wiki_page.save()
+        
+        logger.info(f"Transcript imported to wiki page {wiki_page_id} from {source} by {request.user.username}")
+        
+        analysis_data = None
+        # Optionally run AI analysis
+        if auto_analyze:
+            try:
+                # Check AI quota
+                has_quota, quota, remaining = check_ai_quota(request.user)
+                if has_quota:
+                    # Get available boards
+                    available_boards = Board.objects.filter(organization=org).filter(
+                        models.Q(created_by=request.user) | models.Q(members=request.user)
+                    ).distinct()[:10]
+                    
+                    # Build wiki page context
+                    wiki_page_context = {
+                        'title': wiki_page.title,
+                        'created_at': wiki_page.created_at.isoformat(),
+                        'created_by': wiki_page.created_by.username,
+                        'tags': wiki_page.tags,
+                    }
+                    
+                    # Run AI analysis
+                    analysis_results = analyze_meeting_notes_from_wiki(
+                        wiki_content=wiki_page.content,
+                        wiki_page_context=wiki_page_context,
+                        organization=org,
+                        available_boards=list(available_boards)
+                    )
+                    
+                    if analysis_results:
+                        # Create analysis record
+                        analysis = WikiMeetingAnalysis.objects.create(
+                            wiki_page=wiki_page,
+                            organization=org,
+                            analysis_results=analysis_results,
+                            processed_by=request.user,
+                            processing_status='completed'
+                        )
+                        analysis.update_counts()
+                        
+                        # Track AI usage
+                        track_ai_request(
+                            user=request.user,
+                            request_type='wiki_transcript_analysis',
+                            tokens_used=1000,  # Estimate
+                            success=True
+                        )
+                        
+                        analysis_data = {
+                            'analysis_id': analysis.id,
+                            'action_items_count': len(analysis_results.get('action_items', []))
+                        }
+            except Exception as e:
+                logger.error(f"Error running auto-analysis: {str(e)}")
+                # Don't fail the whole import if analysis fails
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Transcript imported successfully',
+            'wiki_page_id': wiki_page.id,
+            'analyzed': auto_analyze and analysis_data is not None,
+            'analysis_data': analysis_data
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON in request body'}, status=400)
+    except Exception as e:
+        logger.error(f"Error in import_transcript_to_wiki_page: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)

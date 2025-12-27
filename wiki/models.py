@@ -69,6 +69,13 @@ class WikiPage(models.Model):
     tags = models.JSONField(default=list, blank=True, help_text='Tags for search and filtering')
     view_count = models.IntegerField(default=0)
     
+    # Transcript import support (optional)
+    transcript_metadata = models.JSONField(
+        default=dict, 
+        blank=True, 
+        help_text='Metadata about imported transcript: {"source": "fireflies|otter|manual", "imported_at": "...", "meeting_date": "...", "duration_minutes": 0, "participants": [...]}'
+    )
+    
     # Version control
     version = models.IntegerField(default=1)
     parent_page = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, 

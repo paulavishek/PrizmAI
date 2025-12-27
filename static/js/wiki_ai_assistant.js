@@ -15,6 +15,7 @@ let availableBoards = [];
 function detectPageTypeAndShowButton() {
     const meetingBtn = document.getElementById('analyzeMeetingBtn');
     const docsBtn = document.getElementById('analyzeDocsBtn');
+    const importTranscriptBtn = document.getElementById('importTranscriptBtn');
     
     if (!meetingBtn || !docsBtn) return;
     
@@ -23,17 +24,21 @@ function detectPageTypeAndShowButton() {
     if (categoryAiType === 'meeting') {
         meetingBtn.style.display = 'inline-block';
         docsBtn.style.display = 'none';
+        if (importTranscriptBtn) importTranscriptBtn.style.display = 'inline-block';
     } else if (categoryAiType === 'documentation') {
         meetingBtn.style.display = 'none';
         docsBtn.style.display = 'inline-block';
+        if (importTranscriptBtn) importTranscriptBtn.style.display = 'none';
     } else if (categoryAiType === 'none') {
         // No AI assistant for this category
         meetingBtn.style.display = 'none';
         docsBtn.style.display = 'none';
+        if (importTranscriptBtn) importTranscriptBtn.style.display = 'none';
     } else {
         // Fallback: if category type not set, use documentation as default
         meetingBtn.style.display = 'none';
         docsBtn.style.display = 'inline-block';
+        if (importTranscriptBtn) importTranscriptBtn.style.display = 'none';
     }
 }
 
@@ -599,6 +604,84 @@ function goBack() {
         window.history.back();
     } else {
         window.location.href = wikiListUrl;
+    }
+}
+
+// Import transcript functionality
+async function importTranscript() {
+    const transcriptContent = document.getElementById('transcriptContent').value.trim();
+    const source = document.getElementById('transcriptSource').value;
+    const meetingDate = document.getElementById('transcriptMeetingDate').value;
+    const duration = document.getElementById('transcriptDuration').value;
+    const participants = document.getElementById('transcriptParticipants').value;
+    const autoAnalyze = document.getElementById('autoAnalyze').checked;
+    
+    // Validation
+    if (!transcriptContent) {
+        alert('Please paste a transcript before importing.');
+        return;
+    }
+    
+    // Show progress
+    const progressDiv = document.getElementById('transcriptImportProgress');
+    const resultDiv = document.getElementById('transcriptImportResult');
+    progressDiv.style.display = 'block';
+    resultDiv.style.display = 'none';
+    
+    try {
+        const response = await fetch(`/wiki/api/wiki-page/${wikiPageId}/import-transcript/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                transcript_content: transcriptContent,
+                source: source,
+                meeting_date: meetingDate || null,
+                duration_minutes: duration ? parseInt(duration) : null,
+                participants: participants ? participants.split(',').map(p => p.trim()) : [],
+                auto_analyze: autoAnalyze
+            })
+        });
+        
+        const data = await response.json();
+        progressDiv.style.display = 'none';
+        
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i>
+                    <strong>Transcript imported successfully!</strong>
+                    <p class="mb-0 mt-2">The transcript has been appended to your wiki page content.</p>
+                    ${data.analyzed ? '<p class="mb-0"><small>✅ AI analysis completed</small></p>' : ''}
+                </div>
+            `;
+            resultDiv.style.display = 'block';
+            
+            // Reload page after 2 seconds to show updated content
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        } else {
+            resultDiv.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <strong>Import failed:</strong> ${data.error || 'Unknown error'}
+                </div>
+            `;
+            resultDiv.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Error importing transcript:', error);
+        progressDiv.style.display = 'none';
+        resultDiv.innerHTML = `
+            <div class="alert alert-danger">
+                <i class="fas fa-exclamation-circle"></i>
+                <strong>Error:</strong> Failed to import transcript. Please try again.
+            </div>
+        `;
+        resultDiv.style.display = 'block';
     }
 }
 
