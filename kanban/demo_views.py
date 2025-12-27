@@ -330,3 +330,58 @@ def demo_board_detail(request, board_id):
     }
     
     return render(request, 'kanban/demo_board_detail.html', context)
+
+
+@login_required
+def reset_demo_data(request):
+    """
+    Reset demo data to original state
+    Only accessible by superusers or organization admins
+    """
+    from django.contrib import messages
+    from django.core.management import call_command
+    from io import StringIO
+    import sys
+    
+    # Check if user has permission (superuser only for safety)
+    if not request.user.is_superuser:
+        messages.error(request, 'Only administrators can reset demo data.')
+        return redirect('demo_dashboard')
+    
+    if request.method == 'POST':
+        try:
+            # Capture command output
+            output = StringIO()
+            
+            # Call the reset_demo management command
+            call_command('reset_demo', '--no-confirm', stdout=output, stderr=output)
+            
+            # Get the output
+            command_output = output.getvalue()
+            
+            messages.success(request, 'Demo data has been successfully reset to its original state!')
+            messages.info(request, 'All user-created changes have been removed. Demo boards are now fresh.')
+            
+            return redirect('demo_dashboard')
+            
+        except Exception as e:
+            messages.error(request, f'Error resetting demo data: {str(e)}')
+            return redirect('demo_dashboard')
+    
+    # GET request - show confirmation page
+    # Get demo stats before reset
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+    demo_boards = Board.objects.filter(organization__in=demo_orgs)
+    
+    task_count = Task.objects.filter(column__board__in=demo_boards).count()
+    user_count = demo_boards.values('members').distinct().count()
+    
+    context = {
+        'demo_boards': demo_boards,
+        'task_count': task_count,
+        'user_count': user_count,
+        'demo_orgs': demo_orgs,
+    }
+    
+    return render(request, 'kanban/reset_demo_confirm.html', context)

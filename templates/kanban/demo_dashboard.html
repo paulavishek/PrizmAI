@@ -164,9 +164,16 @@
                 <h2><i class="fas fa-hands-helping me-2"></i>Welcome to Interactive Demo Mode</h2>
                 <p><strong>Learn by doing!</strong> Create, edit, and experiment with all features. This is your playground - try everything!</p>
             </div>
-            <a href="{% url 'dashboard' %}" class="btn btn-light btn-lg">
-                <i class="fas fa-arrow-left me-2"></i>Exit to My Dashboard
-            </a>
+            <div>
+                {% if request.user.is_superuser %}
+                <a href="{% url 'reset_demo' %}" class="btn btn-danger me-2">
+                    <i class="fas fa-redo me-2"></i>Reset Demo
+                </a>
+                {% endif %}
+                <a href="{% url 'dashboard' %}" class="btn btn-light btn-lg">
+                    <i class="fas fa-arrow-left me-2"></i>Exit to My Dashboard
+                </a>
+            </div>
         </div>
     </div>
 

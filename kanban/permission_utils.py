@@ -45,6 +45,10 @@ def user_has_board_permission(user, board, permission):
     Returns:
         Boolean
     """
+    # Superusers bypass all RBAC restrictions
+    if user.is_superuser:
+        return True
+    
     # Board creator always has full access
     if board.created_by == user:
         return True
@@ -109,6 +113,10 @@ def user_has_task_permission(user, task, permission):
     Returns:
         Boolean
     """
+    # Superusers bypass all RBAC restrictions
+    if user.is_superuser:
+        return True
+    
     board = task.column.board
     
     # For "own" permissions, check if task is assigned to user
@@ -135,6 +143,10 @@ def user_has_column_permission(user, column, action):
         Boolean
     """
     from kanban.permission_models import ColumnPermission
+    
+    # Superusers bypass all RBAC restrictions
+    if user.is_superuser:
+        return True
     
     membership = get_user_board_membership(user, column.board)
     if not membership:

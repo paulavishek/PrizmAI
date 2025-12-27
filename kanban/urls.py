@@ -23,6 +23,7 @@ urlpatterns = [
     # Demo Mode (New System)
     path('demo/', demo_views.demo_dashboard, name='demo_dashboard'),
     path('demo/board/<int:board_id>/', demo_views.demo_board_detail, name='demo_board_detail'),
+    path('demo/reset/', demo_views.reset_demo_data, name='reset_demo'),
     
     path('boards/', views.board_list, name='board_list'),
     path('boards/create/', views.create_board, name='create_board'),    path('boards/<int:board_id>/', views.board_detail, name='board_detail'),    path('boards/<int:board_id>/analytics/', views.board_analytics, name='board_analytics'),
