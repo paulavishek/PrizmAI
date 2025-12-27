@@ -9,9 +9,9 @@
 ### 2. Pre-populated Demo Users
 ```
 Admins:  admin
-Editors: user1, user2, user6, avishekpaul1310
+Editors: emily_chen, michael_brown, sarah_davis, james_wilson
 Members: john_doe, jane_smith, robert_johnson, alice_williams, 
-         bob_martinez, carol_anderson, david_taylor, user7
+         bob_martinez, carol_anderson, david_taylor
 ```
 
 ### 3. Reset Demo

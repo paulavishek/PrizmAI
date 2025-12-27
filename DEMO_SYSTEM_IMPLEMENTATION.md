@@ -26,8 +26,8 @@ Demo boards include pre-populated users with different roles:
 
 **Demo Users & Roles:**
 - **Admin Role (1 user):** `admin` - Full access, can manage everything
-- **Editor Role (4-5 users):** `user1`, `user2`, `user6`, `avishekpaul1310` - Can create/edit tasks
-- **Member Role (7+ users):** `john_doe`, `jane_smith`, `robert_johnson`, `alice_williams`, `bob_martinez`, `carol_anderson`, `david_taylor`, `user7` - Restricted access
+- **Editor Role (4-5 users):** `emily_chen`, `michael_brown`, `sarah_davis`, `james_wilson` - Can create/edit tasks
+- **Member Role (7+ users):** `john_doe`, `jane_smith`, `robert_johnson`, `alice_williams`, `bob_martinez`, `carol_anderson`, `david_taylor` - Restricted access
 
 **RBAC Features:**
 - ✅ Column-level restrictions (Review/Done columns locked for Members)

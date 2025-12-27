@@ -20,8 +20,8 @@ All three demo boards now have **complete RBAC functionality** that users can te
 
 **Your username determines your role:**
 - `admin`: Admin role
-- `user1, user2, user6, avishekpaul1310`: Editor role
-- `john_doe, jane_smith, robert_johnson, alice_williams, carol_anderson, david_taylor, user7`: Member role
+- `emily_chen, michael_brown, sarah_davis, james_wilson`: Editor role
+- `john_doe, jane_smith, robert_johnson, alice_williams, carol_anderson, david_taylor`: Member role
 
 ### 2. **Visual Indicators** ✅
 ✓ **Role Badge** in board header - shows your current role
@@ -87,7 +87,7 @@ All three demo boards now have **complete RBAC functionality** that users can te
 6. Error: "Cannot move tasks into 'Done'"
 
 #### **SCENARIO B: Full Access (as Editor)**
-1. Log in as: `user1`, `user2`, or `user6`
+1. Log in as: `emily_chen`, `michael_brown`, or `sarah_davis`
 2. Open same board
 3. See "Editor" role badge
 4. No restriction warnings
