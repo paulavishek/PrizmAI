@@ -16,6 +16,7 @@ PrizmAI combines visual project management with AI that helps you work smarter�
 - 🚨 **Scope Creep Detection** - Automatic alerts when project scope grows unexpectedly
 - ⚠️ **Conflict Detection** - Identifies resource, schedule, and dependency conflicts
 - 💰 **Budget & ROI Tracking** - Control finances with AI cost optimization
+- ⏱️ **Time Tracking & Timesheets** - Log hours, track team utilization, manage labor costs
 - 🎓 **AI Coach** - Proactive suggestions to improve project management decisions
 - 📈 **User Feedback & Behavior Tracking** - Comprehensive feedback collection, sentiment analysis, and user behavior analytics for continuous improvement
 - 🤖 **AI Usage Monitoring** - Track and manage your monthly AI feature consumption with quota limits
@@ -107,7 +108,8 @@ This removes duplicate boards and migrates users to the official demo boards.
 | **[📖 USER_GUIDE.md](USER_GUIDE.md)** | Practical usage, examples, and best practices |
 | **[✨ FEATURES.md](FEATURES.md)** | Detailed feature descriptions and capabilities |
 | **[📅 DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md)** | Dynamic demo data system guide |
-| **[📈 USER_FEEDBACK_ANALYTICS.md](USER_FEEDBACK_ANALYTICS.md)** | **NEW!** User feedback, sentiment analysis, and behavior tracking |
+| **[⏱️ TIME_TRACKING_IMPLEMENTATION_COMPLETE.md](TIME_TRACKING_IMPLEMENTATION_COMPLETE.md)** | **NEW!** Time tracking, timesheets, and labor cost tracking |
+| **[📈 USER_FEEDBACK_ANALYTICS.md](USER_FEEDBACK_ANALYTICS.md)** | User feedback, sentiment analysis, and behavior tracking |
 | **[📊 API_RATE_LIMITING_DASHBOARD.md](API_RATE_LIMITING_DASHBOARD.md)** | AI usage tracking and quota management |
 | **[🔌 API_DOCUMENTATION.md](API_DOCUMENTATION.md)** | REST API reference with 20+ endpoints |
 | **[🔗 INTEGRATIONS.md](INTEGRATIONS.md)** | Integration guide (Slack, Zapier, Teams) |
@@ -270,6 +272,7 @@ Open http://localhost:8080 on your mobile device and install the PWA!
 | **Scope Creep Detection** | ✅ Automated | Manual |
 | **Burndown Forecasting** | ✅ AI-powered | Basic/No |
 | **Conflict Detection** | ✅ Real-time | Limited |
+| **Time Tracking & Timesheets** | ✅ Full-featured | Limited/Paywall |
 | **Self-Hosted** | ✅ Yes | Limited |
 | **Open Source** | ✅ MIT License | No |
 | **Cost** | 🆓 Free | Paid |
