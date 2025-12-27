@@ -33,11 +33,15 @@
                                 <option value="override_added">Permission Override</option>
                             </select>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label">Date Range</label>
-                            <input type="date" name="start_date" class="form-control">
+                        <div class="col-md-2">
+                            <label class="form-label">Start Date</label>
+                            <input type="date" name="start_date" class="form-control" value="{{ request.GET.start_date }}">
                         </div>
-                        <div class="col-md-3 d-flex align-items-end">
+                        <div class="col-md-2">
+                            <label class="form-label">End Date</label>
+                            <input type="date" name="end_date" class="form-control" value="{{ request.GET.end_date }}">
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end">
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-filter"></i> Filter
                             </button>
