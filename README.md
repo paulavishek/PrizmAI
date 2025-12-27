@@ -23,7 +23,8 @@ PrizmAI combines visual project management with AI that helps you work smarter�
 - � **Role-Based Access Control (RBAC)** - Advanced permissions with role management, approval workflows, column-level restrictions, and complete audit logging
 - �🔍 **Explainable AI** - Every recommendation includes "why" for full transparency
 - 📚 **Knowledge Base & Wiki** - Markdown documentation with AI-assisted insights
-- 🔐 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
+- � **Transcript Import** - **NEW!** Import meeting transcripts from Fireflies, Otter, Zoom, Teams, Meet, or paste manually. AI automatically extracts action items, decisions, and blockers
+- �🔐 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
 - 🌐 **RESTful API** - 20+ endpoints for integrations (Slack, Teams, Jira-ready)
 - 📱 **Mobile PWA Support** - Progressive Web App with offline capabilities and mobile-first design
 - 🔄 **Real-Time Collaboration** - WebSocket support for live updates and chat
@@ -113,6 +114,9 @@ This removes duplicate boards and migrates users to the official demo boards.
 | **[� DEMO_RBAC_READY.md](DEMO_RBAC_READY.md)** | **NEW!** Role-based access control, approval workflows, and permission management |
 | **[�📈 USER_FEEDBACK_ANALYTICS.md](USER_FEEDBACK_ANALYTICS.md)** | User feedback, sentiment analysis, and behavior tracking |
 | **[📊 API_RATE_LIMITING_DASHBOARD.md](API_RATE_LIMITING_DASHBOARD.md)** | AI usage tracking and quota management |
+| **[📝 TRANSCRIPT_IMPORT_GUIDE.md](TRANSCRIPT_IMPORT_GUIDE.md)** | **NEW!** Import meeting transcripts from any source (Fireflies, Otter, Zoom, Teams, Meet) |
+| **[🔌 INTEGRATION_STRATEGY.md](INTEGRATION_STRATEGY.md)** | **NEW!** Phased approach to building integrations (Webhooks, GitHub, Slack, and beyond) |
+| **[🆚 FIREFLIES_COMPARISON.md](FIREFLIES_COMPARISON.md)** | **NEW!** Import-only vs Full API integration comparison |
 | **[🔌 API_DOCUMENTATION.md](API_DOCUMENTATION.md)** | REST API reference with 20+ endpoints |
 | **[🔗 INTEGRATIONS.md](INTEGRATIONS.md)** | Integration guide (Slack, Zapier, Teams) |
 | **[🪝 WEBHOOKS.md](WEBHOOKS.md)** | Webhook integration and automation |
