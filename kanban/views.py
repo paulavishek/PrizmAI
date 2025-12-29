@@ -1330,9 +1330,11 @@ def move_column(request, column_id, direction):
     
     return redirect('board_detail', board_id=board.id)
 
-@login_required
 def reorder_columns(request):
-    """Handle AJAX request to reorder columns via drag and drop"""
+    """
+    Handle AJAX request to reorder columns via drag and drop.
+    Supports both authenticated users and demo mode (including anonymous users).
+    """
     if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         data = json.loads(request.body)
         column_id = data.get('columnId')
@@ -1342,9 +1344,18 @@ def reorder_columns(request):
         column = get_object_or_404(Column, id=column_id)
         board = get_object_or_404(Board, id=board_id)
         
-        # Check if user has access to this board
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'error': "You don't have access to this board."}, status=403)
+        # Check if this is a demo board - demo boards allow all changes
+        is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
+        is_demo_mode = request.session.get('is_demo_mode', False)
+        
+        # For non-demo boards, require authentication and permission
+        if not (is_demo_board and is_demo_mode):
+            if not request.user.is_authenticated:
+                return JsonResponse({'error': 'Authentication required'}, status=401)
+            
+            # Check if user has access to this board
+            if not (board.created_by == request.user or request.user in board.members.all()):
+                return JsonResponse({'error': "You don't have access to this board."}, status=403)
         
         # Get all columns in order
         columns = list(Column.objects.filter(board=board).order_by('position'))
@@ -1369,9 +1380,11 @@ def reorder_columns(request):
     
     return JsonResponse({'error': 'Invalid request'}, status=400)
 
-@login_required
 def reorder_multiple_columns(request):
-    """Handle AJAX request to reorder multiple columns at once via the index-based approach"""
+    """
+    Handle AJAX request to reorder multiple columns at once via the index-based approach.
+    Supports both authenticated users and demo mode (including anonymous users).
+    """
     if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         try:
             data = json.loads(request.body)
@@ -1380,9 +1393,18 @@ def reorder_multiple_columns(request):
             
             board = get_object_or_404(Board, id=board_id)
             
-            # Check if user has access to this board
-            if not (board.created_by == request.user or request.user in board.members.all()):
-                return JsonResponse({'error': "You don't have access to this board."}, status=403)
+            # Check if this is a demo board - demo boards allow all changes
+            is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
+            is_demo_mode = request.session.get('is_demo_mode', False)
+            
+            # For non-demo boards, require authentication and permission
+            if not (is_demo_board and is_demo_mode):
+                if not request.user.is_authenticated:
+                    return JsonResponse({'error': 'Authentication required'}, status=401)
+                
+                # Check if user has access to this board
+                if not (board.created_by == request.user or request.user in board.members.all()):
+                    return JsonResponse({'error': "You don't have access to this board."}, status=403)
             
             # Create a dictionary to map column_id to position
             position_map = {item['columnId']: item['position'] for item in columns_data}
@@ -1450,21 +1472,30 @@ def delete_column(request, column_id):
         'board': board
     })
 
-@login_required
 def update_task_progress(request, task_id):
     """
     Update the progress percentage of a task through an AJAX request.
     Expects 'direction' parameter: 'increase' or 'decrease'.
     Increases or decreases by 10% increments.
+    Supports both authenticated users and demo mode.
     """
     if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         try:
             task = get_object_or_404(Task, id=task_id)
             board = task.column.board
             
-            # Check if user has access to this board
-            if not (board.created_by == request.user or request.user in board.members.all()):
-                return JsonResponse({'error': "You don't have access to this task."}, status=403)
+            # Check if this is a demo board - demo boards allow all changes
+            is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
+            is_demo_mode = request.session.get('is_demo_mode', False)
+            
+            # For non-demo boards, require authentication and permission
+            if not (is_demo_board and is_demo_mode):
+                if not request.user.is_authenticated:
+                    return JsonResponse({'error': 'Authentication required'}, status=401)
+                
+                # Check if user has access to this board
+                if not (board.created_by == request.user or request.user in board.members.all()):
+                    return JsonResponse({'error': "You don't have access to this task."}, status=403)
             
             data = json.loads(request.body)
             direction = data.get('direction')
@@ -1482,13 +1513,14 @@ def update_task_progress(request, task_id):
             # Save the updated task
             task.save()
             
-            # Record activity
-            TaskActivity.objects.create(
-                task=task,
-                user=request.user,
-                activity_type='updated',
-                description=f"Updated progress for '{task.title}' to {task.progress}%"
-            )
+            # Record activity (only for authenticated users)
+            if request.user.is_authenticated:
+                TaskActivity.objects.create(
+                    task=task,
+                    user=request.user,
+                    activity_type='updated',
+                    description=f"Updated progress for '{task.title}' to {task.progress}%"
+                )
             
             # Return the updated progress
             return JsonResponse({
