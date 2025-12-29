@@ -117,8 +117,8 @@ MIDDLEWARE = [
     'csp.middleware.CSPMiddleware',  # Content Security Policy
     'allauth.account.middleware.AccountMiddleware',  # Required for django-allauth
     # Demo session management - Must be after SessionMiddleware
-    'kanban.middleware.DemoSessionMiddleware',
-    'kanban.middleware.DemoAnalyticsMiddleware',
+    'kanban.middleware.demo_session.DemoSessionMiddleware',
+    'kanban.middleware.demo_session.DemoAnalyticsMiddleware',
     # Security and audit logging middleware
     'kanban.audit_middleware.AuditLoggingMiddleware',
     'kanban.audit_middleware.APIRequestLoggingMiddleware',
