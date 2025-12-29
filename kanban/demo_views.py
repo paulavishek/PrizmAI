@@ -13,6 +13,7 @@ from kanban.models import Board, Task, Column, Organization
 from messaging.models import ChatRoom, ChatMessage
 from kanban.conflict_models import ConflictDetection
 from wiki.models import WikiPage
+from kanban.utils.demo_permissions import DemoPermissions
 
 
 @login_required
@@ -373,6 +374,9 @@ def demo_dashboard(request):
         'message_count': message_count,
         'conflict_count': conflict_count,
         'wiki_count': wiki_count,
+        # Add permission context for role-based feature visibility
+        'permissions': DemoPermissions.get_permission_context(request),
+        'role_info': DemoPermissions.get_role_description(request.session.get('demo_role', 'admin')),
     }
     
     return render(request, 'kanban/demo_dashboard.html', context)
@@ -478,6 +482,9 @@ def demo_board_detail(request, board_id):
         'conflicts': conflicts,
         'wiki_pages': wiki_pages,
         'can_edit': False,  # Demo mode is read-only for safety
+        # Add permission context for role-based feature visibility
+        'permissions': DemoPermissions.get_permission_context(request),
+        'role_info': DemoPermissions.get_role_description(request.session.get('demo_role', 'admin')),
     }
     
     return render(request, 'kanban/demo_board_detail.html', context)

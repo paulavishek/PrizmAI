@@ -310,16 +310,262 @@
 
     .demo-role-menu-name i {
         font-size: 1.1rem;
+        color: #667eea;
+    }
+
+    .demo-role-menu-name .role-badge {
+        font-size: 0.7rem;
+        padding: 0.15rem 0.5rem;
+        border-radius: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .demo-role-menu-name .role-badge.admin {
+        background: #fef5e7;
+        color: #f39c12;
+    }
+
+    .demo-role-menu-name .role-badge.member {
+        background: #e8f5e9;
+        color: #4caf50;
+    }
+
+    .demo-role-menu-name .role-badge.viewer {
+        background: #e3f2fd;
+        color: #2196f3;
     }
 
     .demo-role-menu-desc {
         font-size: 0.85rem;
         color: #718096;
+        margin-left: 1.6rem;
     }
 
     .demo-role-check {
         color: #48bb78;
         margin-left: auto;
+        font-size: 1.2rem;
+    }
+
+    /* Role Switch Success Toast */
+    .role-switch-toast {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+        z-index: 10001;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        min-width: 300px;
+        animation: slideInUp 0.3s ease-out;
+    }
+
+    @keyframes slideInUp {
+        from {
+            transform: translateY(100px);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    .role-switch-toast.hiding {
+        animation: slideOutDown 0.3s ease-out forwards;
+    }
+
+    @keyframes slideOutDown {
+        from {
+            transform: translateY(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateY(100px);
+            opacity: 0;
+        }
+    }
+
+    .role-switch-toast-icon {
+        font-size: 1.5rem;
+    }
+
+    .role-switch-toast-content {
+        flex: 1;
+    }
+
+    .role-switch-toast-title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .role-switch-toast-message {
+        font-size: 0.9rem;
+        opacity: 0.95;
+    }
+
+    /* Mobile Bottom Sheet for Role Switching */
+    .mobile-role-sheet-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 10000;
+        animation: fadeIn 0.3s ease-out;
+        display: flex;
+        align-items: flex-end;
+    }
+
+    .mobile-role-sheet {
+        background: white;
+        width: 100%;
+        border-radius: 20px 20px 0 0;
+        max-height: 85vh;
+        overflow-y: auto;
+        animation: slideUp 0.3s ease-out;
+        box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+    }
+
+    @keyframes slideUp {
+        from {
+            transform: translateY(100%);
+        }
+        to {
+            transform: translateY(0);
+        }
+    }
+
+    .mobile-role-sheet.closing {
+        animation: slideDown 0.3s ease-out;
+    }
+
+    @keyframes slideDown {
+        from {
+            transform: translateY(0);
+        }
+        to {
+            transform: translateY(100%);
+        }
+    }
+
+    .mobile-role-sheet-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+        position: sticky;
+        top: 0;
+        background: white;
+        z-index: 1;
+    }
+
+    .mobile-role-sheet-handle {
+        width: 40px;
+        height: 4px;
+        background: #cbd5e0;
+        border-radius: 2px;
+        margin: 0 auto 0.5rem;
+    }
+
+    .mobile-role-sheet-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #2d3748;
+        margin: 0;
+    }
+
+    .mobile-role-sheet-close {
+        background: #f7fafc;
+        border: none;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #718096;
+        font-size: 1.2rem;
+        transition: all 0.2s;
+    }
+
+    .mobile-role-sheet-close:hover {
+        background: #e2e8f0;
+        color: #2d3748;
+    }
+
+    .mobile-role-sheet-content {
+        padding: 1rem 1.5rem 2rem;
+    }
+
+    .mobile-role-item {
+        padding: 1.25rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: white;
+    }
+
+    .mobile-role-item:active {
+        transform: scale(0.98);
+    }
+
+    .mobile-role-item.active {
+        border-color: #667eea;
+        background: #f7fafc;
+    }
+
+    .mobile-role-item-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .mobile-role-item-icon {
+        font-size: 1.5rem;
+        color: #667eea;
+        min-width: 32px;
+        text-align: center;
+    }
+
+    .mobile-role-item-name {
+        flex: 1;
+        font-weight: 600;
+        color: #2d3748;
+        font-size: 1.05rem;
+    }
+
+    .mobile-role-item-check {
+        color: #48bb78;
+        font-size: 1.3rem;
+    }
+
+    .mobile-role-item-badge {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.6rem;
+        border-radius: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .mobile-role-item-desc {
+        font-size: 0.9rem;
+        color: #718096;
+        margin-left: 2.5rem;
     }
 
     /* Expiry Warning */
@@ -364,26 +610,29 @@
                         <div class="demo-role-menu-item {% if current_demo_role == 'admin' %}active{% endif %}" data-role="admin">
                             <div class="demo-role-menu-name">
                                 <i class="fas fa-user-shield"></i>
-                                Alex Chen (Admin)
+                                Alex Chen
+                                <span class="role-badge admin">Admin</span>
                                 {% if current_demo_role == 'admin' %}<i class="fas fa-check demo-role-check"></i>{% endif %}
                             </div>
-                            <div class="demo-role-menu-desc">Full access to all features</div>
+                            <div class="demo-role-menu-desc">Full access to all features & settings</div>
                         </div>
                         <div class="demo-role-menu-item {% if current_demo_role == 'member' %}active{% endif %}" data-role="member">
                             <div class="demo-role-menu-name">
                                 <i class="fas fa-user"></i>
-                                Sam Rivera (Member)
+                                Sam Rivera
+                                <span class="role-badge member">Member</span>
                                 {% if current_demo_role == 'member' %}<i class="fas fa-check demo-role-check"></i>{% endif %}
                             </div>
-                            <div class="demo-role-menu-desc">Create & edit tasks, limited delete</div>
+                            <div class="demo-role-menu-desc">Create & edit tasks, limited delete access</div>
                         </div>
                         <div class="demo-role-menu-item {% if current_demo_role == 'viewer' %}active{% endif %}" data-role="viewer">
                             <div class="demo-role-menu-name">
                                 <i class="fas fa-eye"></i>
-                                Jordan Taylor (Viewer)
+                                Jordan Taylor
+                                <span class="role-badge viewer">Viewer</span>
                                 {% if current_demo_role == 'viewer' %}<i class="fas fa-check demo-role-check"></i>{% endif %}
                             </div>
-                            <div class="demo-role-menu-desc">View-only access</div>
+                            <div class="demo-role-menu-desc">View-only access, cannot modify data</div>
                         </div>
                     </div>
                 </div>
@@ -523,8 +772,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Switch Role Function
+// Switch Role Function with Enhanced UX
 function switchRole(newRole) {
+    // Close any open modals
+    const mobileModal = document.getElementById('mobileRoleModal');
+    if (mobileModal) {
+        closeMobileRoleSheet();
+    }
+    
+    // Close dropdown
+    const roleMenu = document.getElementById('roleMenu');
+    if (roleMenu) {
+        roleMenu.classList.remove('show');
+    }
+    
     // Show loading state
     const currentRoleName = document.getElementById('currentRoleName');
     if (currentRoleName) {
@@ -543,10 +804,15 @@ function switchRole(newRole) {
     .then(response => response.json())
     .then(data => {
         if (data.status === 'success') {
-            // Reload page to apply new role
-            location.reload();
+            // Show success toast
+            showRoleSwitchToast(data.role_display_name, data.new_role);
+            
+            // Update UI without full page reload
+            setTimeout(() => {
+                location.reload();
+            }, 1500); // Give time to see the toast
         } else {
-            alert('Failed to switch role: ' + (data.message || 'Unknown error'));
+            showErrorToast('Failed to switch role: ' + (data.message || 'Unknown error'));
             if (currentRoleName) {
                 currentRoleName.textContent = '{{ current_demo_role|title }}';
             }
@@ -554,11 +820,66 @@ function switchRole(newRole) {
     })
     .catch(error => {
         console.error('Error switching role:', error);
-        alert('Failed to switch role. Please try again.');
+        showErrorToast('Network error. Please check your connection and try again.');
         if (currentRoleName) {
             currentRoleName.textContent = '{{ current_demo_role|title }}';
         }
     });
+}
+
+// Show Role Switch Success Toast
+function showRoleSwitchToast(roleName, roleType) {
+    const toast = document.createElement('div');
+    toast.className = 'role-switch-toast';
+    
+    const roleIcons = {
+        'admin': 'fa-user-shield',
+        'member': 'fa-user',
+        'viewer': 'fa-eye'
+    };
+    
+    toast.innerHTML = `
+        <div class="role-switch-toast-icon">
+            <i class="fas ${roleIcons[roleType] || 'fa-user'}"></i>
+        </div>
+        <div class="role-switch-toast-content">
+            <div class="role-switch-toast-title">Role Switched!</div>
+            <div class="role-switch-toast-message">Now viewing as ${roleName}</div>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Auto remove after 3 seconds
+    setTimeout(() => {
+        toast.classList.add('hiding');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Show Error Toast
+function showErrorToast(message) {
+    const toast = document.createElement('div');
+    toast.className = 'role-switch-toast';
+    toast.style.background = 'linear-gradient(135deg, #e53e3e 0%, #c53030 100%)';
+    
+    toast.innerHTML = `
+        <div class="role-switch-toast-icon">
+            <i class="fas fa-exclamation-circle"></i>
+        </div>
+        <div class="role-switch-toast-content">
+            <div class="role-switch-toast-title">Error</div>
+            <div class="role-switch-toast-message">${message}</div>
+        </div>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        toast.classList.add('hiding');
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
 }
 
 // Reset Demo Function
@@ -600,37 +921,121 @@ function resetDemo() {
     }
 }
 
-// Mobile Role Selector
+// Enhanced Mobile Role Selector with Bottom Sheet
 function showMobileRoleSelector() {
-    // Create modal for mobile role selection
     const roles = [
-        { id: 'admin', name: 'Alex Chen (Admin)', desc: 'Full access to all features', icon: 'fa-user-shield' },
-        { id: 'member', name: 'Sam Rivera (Member)', desc: 'Create & edit tasks', icon: 'fa-user' },
-        { id: 'viewer', name: 'Jordan Taylor (Viewer)', desc: 'View-only access', icon: 'fa-eye' }
+        { 
+            id: 'admin', 
+            name: 'Alex Chen', 
+            badge: 'Admin',
+            badgeClass: 'admin',
+            desc: 'Full access to all features & settings', 
+            icon: 'fa-user-shield' 
+        },
+        { 
+            id: 'member', 
+            name: 'Sam Rivera', 
+            badge: 'Member',
+            badgeClass: 'member',
+            desc: 'Create & edit tasks, limited delete access', 
+            icon: 'fa-user' 
+        },
+        { 
+            id: 'viewer', 
+            name: 'Jordan Taylor', 
+            badge: 'Viewer',
+            badgeClass: 'viewer',
+            desc: 'View-only access, cannot modify data', 
+            icon: 'fa-eye' 
+        }
     ];
     
-    let html = '<div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 9999; display: flex; align-items: flex-end;" id="mobileRoleModal">';
-    html += '<div style="background: white; width: 100%; border-radius: 16px 16px 0 0; padding: 1.5rem; max-height: 80vh; overflow-y: auto;">';
-    html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">';
-    html += '<h4 style="margin: 0;">Choose Your Role</h4>';
-    html += '<button onclick="document.getElementById(\'mobileRoleModal\').remove()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">×</button>';
-    html += '</div>';
+    const currentRole = '{{ current_demo_role }}';
+    
+    // Create bottom sheet overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'mobile-role-sheet-overlay';
+    overlay.id = 'mobileRoleModal';
+    
+    // Create bottom sheet
+    const sheet = document.createElement('div');
+    sheet.className = 'mobile-role-sheet';
+    
+    // Build sheet content
+    let html = `
+        <div class="mobile-role-sheet-handle"></div>
+        <div class="mobile-role-sheet-header">
+            <h3 class="mobile-role-sheet-title">Choose Your Role</h3>
+            <button class="mobile-role-sheet-close" onclick="closeMobileRoleSheet()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="mobile-role-sheet-content">
+    `;
     
     roles.forEach(role => {
-        const isActive = role.id === '{{ current_demo_role }}';
-        html += `<div onclick="switchRole('${role.id}'); document.getElementById('mobileRoleModal').remove();" style="padding: 1rem; border: 2px solid ${isActive ? '#667eea' : '#e2e8f0'}; border-radius: 8px; margin-bottom: 0.75rem; cursor: pointer; background: ${isActive ? '#f7fafc' : 'white'};">`;
-        html += `<div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">`;
-        html += `<i class="fas ${role.icon}" style="font-size: 1.2rem; color: #667eea;"></i>`;
-        html += `<strong>${role.name}</strong>`;
-        if (isActive) html += `<i class="fas fa-check" style="color: #48bb78; margin-left: auto;"></i>`;
-        html += `</div>`;
-        html += `<div style="font-size: 0.9rem; color: #718096; margin-left: 2rem;">${role.desc}</div>`;
-        html += `</div>`;
+        const isActive = role.id === currentRole;
+        html += `
+            <div class="mobile-role-item ${isActive ? 'active' : ''}" 
+                 onclick="switchRole('${role.id}')">
+                <div class="mobile-role-item-header">
+                    <i class="fas ${role.icon} mobile-role-item-icon"></i>
+                    <div class="mobile-role-item-name">${role.name}</div>
+                    <span class="mobile-role-item-badge role-badge ${role.badgeClass}">${role.badge}</span>
+                    ${isActive ? '<i class="fas fa-check mobile-role-item-check"></i>' : ''}
+                </div>
+                <div class="mobile-role-item-desc">${role.desc}</div>
+            </div>
+        `;
     });
     
-    html += '</div></div>';
+    html += '</div>';
+    sheet.innerHTML = html;
     
-    document.body.insertAdjacentHTML('beforeend', html);
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+    
+    // Close on overlay click
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) {
+            closeMobileRoleSheet();
+        }
+    });
+    
+    // Close on swipe down (simple implementation)
+    let startY = 0;
+    sheet.addEventListener('touchstart', function(e) {
+        startY = e.touches[0].clientY;
+    });
+    
+    sheet.addEventListener('touchmove', function(e) {
+        const currentY = e.touches[0].clientY;
+        const diff = currentY - startY;
+        
+        if (diff > 100) { // Swipe down 100px
+            closeMobileRoleSheet();
+        }
+    });
+    
+    // Prevent body scroll when sheet is open
+    document.body.style.overflow = 'hidden';
+}
+
+// Close Mobile Role Sheet
+function closeMobileRoleSheet() {
+    const modal = document.getElementById('mobileRoleModal');
+    if (modal) {
+        const sheet = modal.querySelector('.mobile-role-sheet');
+        if (sheet) {
+            sheet.classList.add('closing');
+        }
+        modal.style.opacity = '0';
+        
+        setTimeout(() => {
+            modal.remove();
+            document.body.style.overflow = '';
+        }, 300);
+    }
 }
 
 // Get CSRF Token
