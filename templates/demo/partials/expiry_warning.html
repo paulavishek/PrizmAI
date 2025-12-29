@@ -1,0 +1,203 @@
+{% load tz %}
+
+{% if show_expiry_warning %}
+<div class="demo-expiry-warning alert alert-{{ expiry_warning_level }} alert-dismissible fade show sticky-top" 
+     role="alert"
+     id="expiryWarningBanner"
+     style="z-index: 1040; margin-bottom: 0; border-radius: 0;">
+    <div class="container-fluid d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center">
+            {% if expiry_warning_level == 'critical' %}
+                <i class="fas fa-exclamation-triangle me-2"></i>
+            {% elif expiry_warning_level == 'warning' %}
+                <i class="fas fa-clock me-2"></i>
+            {% else %}
+                <i class="fas fa-info-circle me-2"></i>
+            {% endif %}
+            <span>
+                <strong>{{ expiry_warning_message }}</strong>
+                {% if expiry_warning_level == 'critical' %}
+                    Create a free account now to save your work!
+                {% endif %}
+            </span>
+        </div>
+        
+        <div class="d-flex align-items-center gap-2">
+            {% if expiry_warning_level != 'critical' %}
+                <button type="button" 
+                        class="btn btn-sm btn-outline-{{ expiry_warning_level }} me-2"
+                        onclick="extendDemoSession()">
+                    <i class="fas fa-clock"></i> Extend Session
+                </button>
+            {% endif %}
+            
+            <a href="{% url 'register' %}" 
+               class="btn btn-sm btn-primary me-2"
+               onclick="trackConversionAttempt('expiry_warning')">
+                <i class="fas fa-user-plus"></i> Create Account
+            </a>
+            
+            <button type="button" 
+                    class="btn-close" 
+                    data-bs-dismiss="alert" 
+                    aria-label="Close"
+                    onclick="dismissExpiryWarning()"></button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function extendDemoSession() {
+        // Check if already extended too many times
+        const extensions = parseInt(sessionStorage.getItem('demo_extensions') || '0');
+        
+        if (extensions >= 3) {
+            alert('You have reached the maximum number of session extensions. Please create an account to continue using PrizmAI.');
+            window.location.href = "{% url 'register' %}";
+            return;
+        }
+        
+        // Make AJAX call to extend session
+        fetch("{% url 'extend_demo_session' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Update extension count
+                sessionStorage.setItem('demo_extensions', (extensions + 1).toString());
+                
+                // Hide warning banner
+                const banner = document.getElementById('expiryWarningBanner');
+                if (banner) {
+                    banner.classList.remove('show');
+                    setTimeout(() => banner.remove(), 150);
+                }
+                
+                // Show success message
+                showToast('Session extended by 1 hour!', 'success');
+                
+                // Track extension
+                trackAnalyticsEvent('demo_session_extended', {
+                    extensions: extensions + 1,
+                    time_remaining: data.new_expiry_time
+                });
+            } else {
+                showToast(data.message || 'Failed to extend session. Please try again.', 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error extending session:', error);
+            showToast('An error occurred. Please try again.', 'error');
+        });
+    }
+    
+    function dismissExpiryWarning() {
+        // Track dismissal
+        trackAnalyticsEvent('expiry_warning_dismissed', {
+            warning_level: '{{ expiry_warning_level }}',
+            time_remaining: {{ demo_hours_remaining|default:0 }}
+        });
+        
+        // Store dismissal in sessionStorage to prevent immediate re-show
+        sessionStorage.setItem('expiry_warning_dismissed', Date.now().toString());
+    }
+    
+    function trackConversionAttempt(source) {
+        // Track that user clicked to create account from expiry warning
+        trackAnalyticsEvent('conversion_attempt', {
+            source: source,
+            warning_level: '{{ expiry_warning_level }}',
+            time_remaining: {{ demo_hours_remaining|default:0 }}
+        });
+    }
+    
+    function showToast(message, type = 'info') {
+        // Simple toast notification
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type} position-fixed top-0 start-50 translate-middle-x mt-3`;
+        toast.style.cssText = 'z-index: 9999; min-width: 300px;';
+        toast.textContent = message;
+        
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.classList.add('fade');
+            setTimeout(() => toast.remove(), 150);
+        }, 3000);
+    }
+    
+    function trackAnalyticsEvent(eventType, eventData) {
+        // Send analytics event to server
+        fetch("{% url 'track_demo_event' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({
+                event_type: eventType,
+                event_data: eventData
+            })
+        }).catch(error => console.error('Analytics tracking error:', error));
+    }
+    
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+</script>
+
+<style>
+    .demo-expiry-warning {
+        animation: slideDown 0.3s ease-out;
+    }
+    
+    @keyframes slideDown {
+        from {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+    
+    .alert-critical {
+        background-color: #dc3545;
+        color: white;
+        border-color: #dc3545;
+    }
+    
+    .alert-critical .btn-close {
+        filter: brightness(0) invert(1);
+    }
+    
+    .alert-warning {
+        background-color: #ffc107;
+        color: #000;
+        border-color: #ffc107;
+    }
+    
+    .alert-info {
+        background-color: #0dcaf0;
+        color: #000;
+        border-color: #0dcaf0;
+    }
+</style>
+{% endif %}

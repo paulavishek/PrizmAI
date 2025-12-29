@@ -605,3 +605,132 @@ def reset_demo_data(request):
     }
     
     return render(request, 'kanban/reset_demo_confirm.html', context)
+
+
+@require_POST
+def extend_demo_session(request):
+    """
+    Extend demo session by 1 hour (max 3 extensions)
+    """
+    # Check if in demo mode
+    if not request.session.get('is_demo_mode'):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Not in demo mode'
+        }, status=403)
+    
+    try:
+        from analytics.models import DemoSession, DemoAnalytics
+        
+        # Get session
+        session_id = request.session.session_key
+        demo_session = DemoSession.objects.filter(session_id=session_id).first()
+        
+        if not demo_session:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Demo session not found'
+            }, status=404)
+        
+        # Check extension count
+        if demo_session.extensions_count >= 3:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Maximum extensions reached. Please create an account to continue.'
+            }, status=403)
+        
+        # Extend session
+        demo_session.expires_at = timezone.now() + timedelta(hours=1)
+        demo_session.extensions_count += 1
+        demo_session.save()
+        
+        # Update session variable
+        request.session['demo_expires_at'] = demo_session.expires_at.isoformat()
+        
+        # Track extension
+        DemoAnalytics.objects.create(
+            session_id=session_id,
+            event_type='session_extended',
+            event_data={
+                'extensions_count': demo_session.extensions_count,
+                'new_expiry': demo_session.expires_at.isoformat()
+            }
+        )
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Session extended by 1 hour',
+            'new_expiry_time': demo_session.expires_at.isoformat(),
+            'extensions_remaining': 3 - demo_session.extensions_count
+        })
+        
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Error extending session: {str(e)}'
+        }, status=500)
+
+
+@require_POST
+def track_demo_event(request):
+    """
+    Track custom demo events (aha moments, feature exploration, etc.)
+    """
+    import json
+    
+    # Check if in demo mode
+    if not request.session.get('is_demo_mode'):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Not in demo mode'
+        }, status=403)
+    
+    try:
+        from analytics.models import DemoAnalytics
+        
+        # Parse request body
+        data = json.loads(request.body)
+        event_type = data.get('event_type')
+        event_data = data.get('event_data', {})
+        
+        if not event_type:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'event_type is required'
+            }, status=400)
+        
+        # Create analytics event
+        DemoAnalytics.objects.create(
+            session_id=request.session.session_key,
+            event_type=event_type,
+            event_data=event_data
+        )
+        
+        # Update session tracking for specific events
+        if event_type == 'aha_moment':
+            aha_moments = request.session.get('aha_moments', [])
+            if event_data.get('moment_type') not in aha_moments:
+                aha_moments.append(event_data.get('moment_type'))
+                request.session['aha_moments'] = aha_moments
+        
+        elif event_type == 'feature_explored':
+            features = request.session.get('features_explored', [])
+            if event_data.get('feature') not in features:
+                features.append(event_data.get('feature'))
+                request.session['features_explored'] = features
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Event tracked'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Invalid JSON'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Error tracking event: {str(e)}'
+        }, status=500)

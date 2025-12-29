@@ -116,6 +116,9 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'csp.middleware.CSPMiddleware',  # Content Security Policy
     'allauth.account.middleware.AccountMiddleware',  # Required for django-allauth
+    # Demo session management - Must be after SessionMiddleware
+    'kanban.middleware.DemoSessionMiddleware',
+    'kanban.middleware.DemoAnalyticsMiddleware',
     # Security and audit logging middleware
     'kanban.audit_middleware.AuditLoggingMiddleware',
     'kanban.audit_middleware.APIRequestLoggingMiddleware',
@@ -141,6 +144,7 @@ TEMPLATES = [
                 'kanban_board.context_processors.static_version',
                 'kanban_board.context_processors.user_preferences',
                 'kanban.context_processors.conflict_count',
+                'kanban.context_processors.demo_context',  # Demo mode context
             ],
         },
     },

@@ -509,6 +509,7 @@ class DemoSession(models.Model):
     # Demo actions
     reset_count = models.IntegerField(default=0, help_text="Number of times demo was reset")
     role_switches = models.IntegerField(default=0, help_text="Number of role switches (Team mode)")
+    extensions_count = models.IntegerField(default=0, help_text="Number of times session was extended")
     
     # Device & metadata
     device_type = models.CharField(
