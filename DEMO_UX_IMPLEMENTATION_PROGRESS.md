@@ -7,10 +7,10 @@
 
 ## 📊 Executive Summary
 
-**Overall Progress:** 69% Complete (9 of 13 major tasks)
+**Overall Progress:** 85% Complete (11 of 13 major tasks)
 
-**Current Status:** ✅ Foundation, Data, Mode Selection, Demo Banner, Session Management, and Aha Moments Complete  
-**Next Phase:** Implement conversion nudge system  
+**Current Status:** ✅ Foundation, Data, Mode Selection, Demo Banner, Session Management, Aha Moments, and Conversion Nudges Complete  
+**Next Phase:** Role switching for Team mode (Step 12) and final testing (Step 13)  
 **Blockers:** None  
 **Risk Level:** Low
 
@@ -636,58 +636,231 @@ showAhaMoment('moment_type', customData);
 
 ---
 
-### **Step 11: Conversion Nudge System** 📋
-**Status:** Not Started  
+### **Step 11: Conversion Nudge System** ✅
+**Status:** Complete  
+**Date Completed:** Dec 29, 2025  
 **Priority:** MEDIUM  
 **Dependencies:** Steps 6, 8, 10
 
-**What Needs to Be Done:**
+**What Was Done:**
 
-**1. Nudge Tier System:**
-- **Soft Nudge** (3 min or 3 features): Dismissible toast
-- **Medium Nudge** (5 min or 1 aha): Soft modal
-- **Peak Nudge** (after aha): Contextual inline
-- **Exit Intent** (mouse leaves - desktop only): Prominent modal
-
-**2. Timing Logic:**
+**1. Created Nudge Timing Utility:**
 ```python
-# utils/nudge_timing.py
+# kanban/utils/nudge_timing.py
 class NudgeTiming:
-    def should_show_nudge(session):
-        """Determine which nudge to show based on session state"""
-        # Check time in demo
-        # Check features explored
-        # Check aha moments
-        # Check nudges already shown
-        # Return nudge type or None
+    """
+    Smart nudge timing based on user engagement and behavior
+    
+    Features:
+    - 4 nudge types: Soft, Medium, Peak, Exit Intent
+    - Time-based triggers (3 min, 5 min, 2 min)
+    - Feature exploration triggers
+    - Aha moment triggers
+    - Frequency capping (max 3 per session)
+    - Cooldown periods after dismissals
+    - Context-aware display logic
+    """
 ```
 
-**3. Frequency Capping:**
-- Maximum 3 nudges per session
-- If dismissed, wait longer before next
-- Track in session: `nudges_shown`, `nudges_dismissed`
+**2. Created 4 Nudge Templates:**
 
-**4. Create Nudge Templates:**
-```django
-{# templates/demo/nudges/soft.html #}
-{# templates/demo/nudges/medium.html #}
-{# templates/demo/nudges/peak.html #}
-{# templates/demo/nudges/exit_intent.html #}
+**Soft Nudge (`templates/demo/nudges/soft.html`):**
+- Unobtrusive toast notification (bottom-right)
+- Triggers: 3 minutes OR 3 features explored
+- Auto-dismisses after 10s (5s on mobile)
+- Minimal design with single CTA
+- Message: "Like what you see? Create free account →"
+
+**Medium Nudge (`templates/demo/nudges/medium.html`):**
+- Soft modal with overlay
+- Triggers: 5 minutes OR 1 aha moment
+- Value reinforcement with benefits list
+- Shows features explored count
+- Two CTAs: "Start Free Account" + "Keep Exploring"
+
+**Peak Nudge (`templates/demo/nudges/peak.html`):**
+- Contextual modal triggered by aha moments
+- Capitalizes on positive emotion
+- Immediate display (within 3s of aha)
+- Future-pacing message: "Imagine this for your real projects!"
+- Shows 3 key benefits
+- Single strong CTA: "Start for Free"
+
+**Exit Intent Nudge (`templates/demo/nudges/exit_intent.html`):**
+- Prominent modal with strong overlay
+- Triggers: Mouse leaves screen (desktop only) + 2 min in demo
+- Last-chance messaging: "Before you go..."
+- Lists save progress + unlock features benefits
+- Time commitment shown: "Takes just 30 seconds"
+- Risk removal: "no credit card required"
+- Two CTAs: "Create Account (Free)" + "Continue Demo"
+
+**3. Styling & Animations:**
+- All nudges fully responsive (desktop + mobile)
+- Beautiful gradient backgrounds (#667eea to #764ba2)
+- Smooth entrance animations (slide, scale, bounce, fade)
+- Exit animations for dismissals
+- Touch-friendly buttons (44x44px minimum on mobile)
+- Proper z-indexing (9998-10000)
+- Mobile adaptations:
+  - Collapsed layouts for small screens
+  - Snackbar for soft nudge
+  - Bottom sheets for modals
+  - Shorter auto-dismiss times
+
+**4. Client-Side Nudge System:**
+```javascript
+// static/js/conversion_nudges.js
+Features:
+- Periodic checks for time-based nudges (every 30 seconds)
+- Exit intent detection (mouse tracking)
+- Session state synchronization
+- Frequency cap enforcement (max 3 nudges)
+- Cooldown tracking after dismissals
+- Auto-dismiss for soft nudge
+- Event listeners for CTAs and dismissals
+- Integration with aha moment system
 ```
 
-**5. Mobile Adaptations:**
-- No exit intent (unreliable on mobile)
-- Shorter auto-dismiss (5s vs 10s)
-- Bottom-anchored snackbars
-- Larger touch targets
+**5. Server-Side Integration:**
+
+**New Endpoints in `demo_views.py`:**
+```python
+@login_required
+def check_nudge(request):
+    """Check if nudge should show based on session state"""
+    # Returns nudge_type and context if conditions met
+
+@login_required
+@require_POST
+def track_nudge(request):
+    """Track nudge events (shown, clicked, dismissed)"""
+    # Updates DemoAnalytics and DemoSession
+```
+
+**URL Routes Added:**
+- `/demo/check-nudge/` - GET endpoint for timing checks
+- `/demo/track-nudge/` - POST endpoint for event tracking
 
 **6. Analytics Tracking:**
-- Track nudge shown
-- Track nudge clicked
-- Track nudge dismissed
-- Update DemoSession.nudges_shown
 
-**Estimated Effort:** 6-8 hours
+**Database Changes:**
+- Added `nudges_dismissed` field to `DemoSession` model
+- Migration created and applied: `0006_add_nudges_dismissed_field.py`
+
+**Tracked Events:**
+- `nudge_shown` - When nudge displays
+- `nudge_clicked` - When CTA clicked
+- `nudge_dismissed` - When user dismisses
+
+**Session Variables Updated:**
+- `nudges_shown` - List of shown nudge types
+- `nudges_dismissed` - Dict of dismissals with timestamps
+
+**7. Aha Moment Integration:**
+- Modified `aha_moment_celebration.html` to trigger peak nudges
+- Calls `window.nudgeSystem.showPeakNudgeForAha(momentType)` after tracking
+- 3-second delay after aha celebration before showing peak nudge
+- Prevents duplicate peak nudges for same moment type
+
+**8. Template Integration:**
+- Added all 4 nudge templates to `demo_dashboard.html`
+- Added all 4 nudge templates to `demo_board_detail.html`
+- Loaded `conversion_nudges.js` on both demo pages
+- Integrated with existing aha moment system
+
+**9. Nudge Timing Logic:**
+
+**Soft Nudge:**
+- Condition: (3 min in demo) OR (3 features explored)
+- Display: Toast, bottom-right
+- Auto-dismiss: 10s (desktop), 5s (mobile)
+- Cooldown: 2 minutes after dismissal
+
+**Medium Nudge:**
+- Condition: (5 min in demo) OR (1 aha moment)
+- Display: Soft modal with overlay
+- Cooldown: 3 minutes after dismissal
+
+**Peak Nudge:**
+- Condition: Immediately after aha moment
+- Display: Contextual modal
+- Unique per aha type (can show multiple)
+- No cooldown (event-driven)
+
+**Exit Intent:**
+- Condition: Mouse leaves + (2 min in demo)
+- Display: Prominent modal
+- Desktop only (mobile uses medium nudge at 7-8 min)
+- Only shows once per session
+
+**10. Frequency Capping:**
+- Maximum 3 nudges per session enforced
+- Progressive escalation: Soft → Medium → Peak/Exit
+- Respects dismissals with cooldowns
+- Tracks in session storage for persistence
+
+**11. Context Data Provided:**
+- Time in demo (seconds)
+- Features explored count
+- Aha moments count
+- Nudges already shown
+- Nudges dismissed with timestamps
+- Can show more (frequency cap check)
+- Next nudge type to show
+
+**12. Mobile Optimizations:**
+- No exit intent detection (unreliable)
+- Shorter auto-dismiss times
+- Bottom-anchored snackbars
+- Collapsed modal layouts
+- Touch-friendly buttons (minimum 44px)
+- Swipe-to-dismiss gestures
+- Responsive typography
+
+**Files Created:**
+- `kanban/utils/nudge_timing.py` (422 lines)
+- `templates/demo/nudges/soft.html` (130 lines)
+- `templates/demo/nudges/medium.html` (235 lines)
+- `templates/demo/nudges/peak.html` (238 lines)
+- `templates/demo/nudges/exit_intent.html` (270 lines)
+- `static/js/conversion_nudges.js` (348 lines)
+- `analytics/migrations/0006_add_nudges_dismissed_field.py`
+
+**Files Modified:**
+- `kanban/demo_views.py` - Added check_nudge() and track_nudge() views
+- `kanban/urls.py` - Added 2 new URL routes
+- `analytics/models.py` - Added nudges_dismissed field
+- `templates/demo/partials/aha_moment_celebration.html` - Added peak nudge integration
+- `templates/kanban/demo_dashboard.html` - Included nudge templates and JS
+- `templates/kanban/demo_board_detail.html` - Included nudge templates and JS
+
+**Testing Completed:**
+- ✅ Django check passed (no errors)
+- ✅ Migration applied successfully
+- ✅ Nudge timing logic verified
+- ✅ All 4 nudge templates render correctly
+- ✅ Event tracking endpoints working
+- ✅ Session state synchronization working
+- ✅ Frequency capping enforced
+- ✅ Mobile responsive design verified
+
+**Expected User Flow:**
+1. User enters demo → After 3 min or 3 features → Soft nudge (toast)
+2. If dismissed → After 5 min or 1 aha → Medium nudge (modal)
+3. On any aha moment → Peak nudge (contextual)
+4. On exit attempt (desktop) → Exit intent nudge (prominent modal)
+5. Max 3 nudges total per session
+
+**Analytics Insights:**
+- Track which nudges convert best
+- Measure time-to-conversion by nudge type
+- Identify optimal timing for each user segment
+- A/B test nudge messages and designs
+- Monitor dismissal rates
+
+**Estimated Effort:** 6-8 hours  
+**Actual Effort:** ~7 hours
 
 ---
 
@@ -797,7 +970,7 @@ Toast: "✓ Now viewing as Sam Rivera (Member)"
 
 ## 📈 Overall Progress Tracking
 
-### **Completed (7 tasks):**
+### **Completed (11 tasks):**
 ✅ Step 1: Verification  
 ✅ Step 2: Analytics Models  
 ✅ Step 3: Model Fields  
@@ -805,22 +978,24 @@ Toast: "✓ Now viewing as Sam Rivera (Member)"
 ✅ Step 5: Demo Tasks  
 ✅ Step 6: Mode Selection View  
 ✅ Step 7: Demo Banner (with role switching & reset)  
+✅ Step 8: Session Management  
+✅ Step 9: Reset Demo (completed in Step 7)  
+✅ Step 10: Aha Moment Detection  
+✅ Step 11: Conversion Nudge System  
 
 ### **In Progress (0 tasks):**
 (None currently)
 
-### **Not Started (6 tasks):**
-📋 Step 8: Session Management  
-📋 Step 9: Aha Moments (Step 10 renamed)  
-📋 Step 10: Conversion Nudges (Step 11 renamed)  
-📋 Step 11: Testing (Step 13 renamed)  
+### **Not Started (2 tasks):**
+📋 Step 12: Role Switching Enhancements (Team Mode)  
+📋 Step 13: Testing & Bug Fixes  
 
-**Note:** Steps 9 (Reset) and 12 (Role Switching) were completed as part of Step 7 (Demo Banner implementation).
+**Note:** Steps 9 (Reset) and basic Role Switching were completed as part of Step 7 (Demo Banner implementation). Step 12 focuses on enhancements for Team mode.
 
 ### **Total Estimated Remaining Effort:**
-- Steps 8-10: 16-20 hours
-- Step 11: 8-10 hours
-- **Total: 24-30 hours** (~3-4 full working days)
+- Step 12: 3-4 hours (basic role switching already done, only enhancements needed)
+- Step 13: 8-10 hours
+- **Total: 11-14 hours** (~1.5-2 full working days)
 
 ---
 
