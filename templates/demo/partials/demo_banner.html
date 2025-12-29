@@ -1,0 +1,651 @@
+{% load static %}
+
+<style>
+    /* Demo Banner Styles */
+    .demo-mode-banner {
+        position: sticky;
+        top: 0;
+        z-index: 1050;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem 0;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        animation: slideDown 0.3s ease-out;
+    }
+
+    @keyframes slideDown {
+        from {
+            transform: translateY(-100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateY(0);
+            opacity: 1;
+        }
+    }
+
+    .demo-banner-content {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 0 1rem;
+    }
+
+    .demo-banner-desktop {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1.5rem;
+    }
+
+    .demo-banner-mobile {
+        display: none;
+    }
+
+    .demo-banner-info {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        flex: 1;
+    }
+
+    .demo-banner-title {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin: 0;
+    }
+
+    .demo-mode-badge {
+        background: rgba(255, 255, 255, 0.2);
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .demo-role-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 1rem;
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        backdrop-filter: blur(10px);
+    }
+
+    .demo-role-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+
+    .demo-role-value {
+        font-weight: 600;
+        font-size: 1rem;
+    }
+
+    .demo-role-dropdown {
+        position: relative;
+    }
+
+    .demo-role-button {
+        background: rgba(255, 255, 255, 0.25);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .demo-role-button:hover {
+        background: rgba(255, 255, 255, 0.35);
+        transform: translateY(-1px);
+    }
+
+    .demo-role-button i {
+        font-size: 0.8rem;
+    }
+
+    .demo-banner-notice {
+        font-size: 0.9rem;
+        opacity: 0.9;
+        font-style: italic;
+    }
+
+    .demo-banner-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .demo-action-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        padding: 0.5rem 1.25rem;
+        border-radius: 6px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+        transition: all 0.2s;
+        text-decoration: none;
+        font-size: 0.95rem;
+        white-space: nowrap;
+    }
+
+    .demo-action-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        color: white;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .demo-action-btn.primary {
+        background: white;
+        color: #667eea;
+        border-color: white;
+    }
+
+    .demo-action-btn.primary:hover {
+        background: #f7fafc;
+        color: #5568d3;
+    }
+
+    .demo-action-btn i {
+        font-size: 0.9rem;
+    }
+
+    /* Mobile Styles */
+    @media (max-width: 992px) {
+        .demo-banner-desktop {
+            display: none;
+        }
+
+        .demo-banner-mobile {
+            display: block;
+        }
+
+        .demo-banner-mobile-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .demo-banner-mobile-title {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .demo-banner-mobile-title h5 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
+        }
+
+        .demo-mobile-toggle {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
+        }
+
+        .demo-banner-mobile-expanded {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            display: none;
+        }
+
+        .demo-banner-mobile-expanded.show {
+            display: block;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .demo-mobile-info {
+            margin-bottom: 1rem;
+        }
+
+        .demo-mobile-info-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+        }
+
+        .demo-mobile-actions {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .demo-mobile-actions .demo-action-btn {
+            justify-content: center;
+            padding: 0.75rem 1rem;
+        }
+
+        .demo-mobile-actions .demo-action-btn.full-width {
+            grid-column: 1 / -1;
+        }
+    }
+
+    /* Role Dropdown Menu */
+    .demo-role-menu {
+        position: absolute;
+        top: 100%;
+        right: 0;
+        margin-top: 0.5rem;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+        min-width: 280px;
+        display: none;
+        z-index: 1060;
+        animation: slideDown 0.2s ease-out;
+    }
+
+    .demo-role-menu.show {
+        display: block;
+    }
+
+    .demo-role-menu-header {
+        padding: 1rem;
+        border-bottom: 1px solid #e2e8f0;
+        font-weight: 600;
+        color: #2d3748;
+    }
+
+    .demo-role-menu-item {
+        padding: 1rem;
+        cursor: pointer;
+        transition: background 0.2s;
+        border-bottom: 1px solid #f7fafc;
+    }
+
+    .demo-role-menu-item:hover {
+        background: #f7fafc;
+    }
+
+    .demo-role-menu-item.active {
+        background: #edf2f7;
+    }
+
+    .demo-role-menu-item:last-child {
+        border-bottom: none;
+        border-radius: 0 0 8px 8px;
+    }
+
+    .demo-role-menu-name {
+        font-weight: 600;
+        color: #2d3748;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .demo-role-menu-name i {
+        font-size: 1.1rem;
+    }
+
+    .demo-role-menu-desc {
+        font-size: 0.85rem;
+        color: #718096;
+    }
+
+    .demo-role-check {
+        color: #48bb78;
+        margin-left: auto;
+    }
+
+    /* Expiry Warning */
+    .demo-expiry-warning {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: rgba(255, 193, 7, 0.2);
+        border: 1px solid rgba(255, 193, 7, 0.4);
+        border-radius: 6px;
+        font-size: 0.9rem;
+    }
+
+    .demo-expiry-warning i {
+        color: #ffc107;
+    }
+</style>
+
+<!-- Desktop Demo Banner -->
+<div class="demo-mode-banner">
+    <div class="demo-banner-content">
+        <!-- Desktop View -->
+        <div class="demo-banner-desktop">
+            <div class="demo-banner-info">
+                <div class="demo-banner-title">
+                    <i class="fas fa-graduation-cap"></i>
+                    Demo Mode
+                    <span class="demo-mode-badge">{{ demo_mode_type|upper }}</span>
+                </div>
+
+                {% if demo_mode_type == 'team' %}
+                <div class="demo-role-dropdown" id="roleDropdown">
+                    <button class="demo-role-button" id="roleDropdownBtn">
+                        <span>Viewing as: <strong id="currentRoleName">{{ current_demo_role|title }}</strong></span>
+                        <i class="fas fa-chevron-down"></i>
+                    </button>
+                    
+                    <!-- Role Selection Dropdown -->
+                    <div class="demo-role-menu" id="roleMenu">
+                        <div class="demo-role-menu-header">Switch Role</div>
+                        <div class="demo-role-menu-item {% if current_demo_role == 'admin' %}active{% endif %}" data-role="admin">
+                            <div class="demo-role-menu-name">
+                                <i class="fas fa-user-shield"></i>
+                                Alex Chen (Admin)
+                                {% if current_demo_role == 'admin' %}<i class="fas fa-check demo-role-check"></i>{% endif %}
+                            </div>
+                            <div class="demo-role-menu-desc">Full access to all features</div>
+                        </div>
+                        <div class="demo-role-menu-item {% if current_demo_role == 'member' %}active{% endif %}" data-role="member">
+                            <div class="demo-role-menu-name">
+                                <i class="fas fa-user"></i>
+                                Sam Rivera (Member)
+                                {% if current_demo_role == 'member' %}<i class="fas fa-check demo-role-check"></i>{% endif %}
+                            </div>
+                            <div class="demo-role-menu-desc">Create & edit tasks, limited delete</div>
+                        </div>
+                        <div class="demo-role-menu-item {% if current_demo_role == 'viewer' %}active{% endif %}" data-role="viewer">
+                            <div class="demo-role-menu-name">
+                                <i class="fas fa-eye"></i>
+                                Jordan Taylor (Viewer)
+                                {% if current_demo_role == 'viewer' %}<i class="fas fa-check demo-role-check"></i>{% endif %}
+                            </div>
+                            <div class="demo-role-menu-desc">View-only access</div>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="demo-role-info">
+                    <span class="demo-role-label">Exploring as:</span>
+                    <span class="demo-role-value">Alex Chen (Admin)</span>
+                </div>
+                {% endif %}
+
+                <div class="demo-banner-notice">
+                    <i class="fas fa-info-circle"></i>
+                    All changes are temporary
+                </div>
+            </div>
+
+            <div class="demo-banner-actions">
+                <button class="demo-action-btn" onclick="resetDemo()">
+                    <i class="fas fa-redo"></i>
+                    Reset
+                </button>
+                {% if demo_mode_type == 'solo' %}
+                <a href="{% url 'demo_mode_selection' %}" class="demo-action-btn">
+                    <i class="fas fa-users"></i>
+                    Try Team Mode
+                </a>
+                {% endif %}
+                <a href="{% url 'register' %}" class="demo-action-btn primary">
+                    <i class="fas fa-user-plus"></i>
+                    Create Account
+                </a>
+                <a href="{% url 'dashboard' %}" class="demo-action-btn">
+                    <i class="fas fa-sign-out-alt"></i>
+                    Exit Demo
+                </a>
+            </div>
+        </div>
+
+        <!-- Mobile View -->
+        <div class="demo-banner-mobile">
+            <div class="demo-banner-mobile-header">
+                <div class="demo-banner-mobile-title">
+                    <i class="fas fa-graduation-cap"></i>
+                    <h5>Demo Mode</h5>
+                    <span class="demo-mode-badge">{{ demo_mode_type|upper }}</span>
+                </div>
+                <button class="demo-mobile-toggle" id="mobileBannerToggle">
+                    <i class="fas fa-bars"></i>
+                    <span>Menu</span>
+                </button>
+            </div>
+
+            <div class="demo-banner-mobile-expanded" id="mobileBannerExpanded">
+                <div class="demo-mobile-info">
+                    <div class="demo-mobile-info-item">
+                        <span>Role:</span>
+                        <strong>{{ current_demo_role|title }}</strong>
+                    </div>
+                    <div class="demo-mobile-info-item">
+                        <span>Status:</span>
+                        <strong>Temporary Data</strong>
+                    </div>
+                </div>
+
+                <div class="demo-mobile-actions">
+                    <button class="demo-action-btn" onclick="resetDemo()">
+                        <i class="fas fa-redo"></i>
+                        Reset
+                    </button>
+                    {% if demo_mode_type == 'team' %}
+                    <button class="demo-action-btn" id="mobileRoleSwitcher">
+                        <i class="fas fa-user-friends"></i>
+                        Switch Role
+                    </button>
+                    {% endif %}
+                    <a href="{% url 'register' %}" class="demo-action-btn primary full-width">
+                        <i class="fas fa-user-plus"></i>
+                        Create Real Account
+                    </a>
+                    <a href="{% url 'dashboard' %}" class="demo-action-btn full-width">
+                        <i class="fas fa-sign-out-alt"></i>
+                        Exit Demo
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Desktop Role Dropdown
+document.addEventListener('DOMContentLoaded', function() {
+    const roleDropdownBtn = document.getElementById('roleDropdownBtn');
+    const roleMenu = document.getElementById('roleMenu');
+    const roleMenuItems = document.querySelectorAll('.demo-role-menu-item');
+    
+    // Toggle dropdown
+    if (roleDropdownBtn) {
+        roleDropdownBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            roleMenu.classList.toggle('show');
+        });
+    }
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(e) {
+        if (roleMenu && !roleMenu.contains(e.target) && e.target !== roleDropdownBtn) {
+            roleMenu.classList.remove('show');
+        }
+    });
+    
+    // Handle role selection
+    roleMenuItems.forEach(item => {
+        item.addEventListener('click', function() {
+            const newRole = this.getAttribute('data-role');
+            switchRole(newRole);
+        });
+    });
+    
+    // Mobile banner toggle
+    const mobileBannerToggle = document.getElementById('mobileBannerToggle');
+    const mobileBannerExpanded = document.getElementById('mobileBannerExpanded');
+    
+    if (mobileBannerToggle) {
+        mobileBannerToggle.addEventListener('click', function() {
+            mobileBannerExpanded.classList.toggle('show');
+        });
+    }
+    
+    // Mobile role switcher
+    const mobileRoleSwitcher = document.getElementById('mobileRoleSwitcher');
+    if (mobileRoleSwitcher) {
+        mobileRoleSwitcher.addEventListener('click', function() {
+            // Show role selection modal for mobile
+            showMobileRoleSelector();
+        });
+    }
+});
+
+// Switch Role Function
+function switchRole(newRole) {
+    // Show loading state
+    const currentRoleName = document.getElementById('currentRoleName');
+    if (currentRoleName) {
+        currentRoleName.textContent = 'Switching...';
+    }
+    
+    // Make AJAX request to switch role
+    fetch('/demo/switch-role/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': getCookie('csrftoken')
+        },
+        body: 'role=' + newRole
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            // Reload page to apply new role
+            location.reload();
+        } else {
+            alert('Failed to switch role: ' + (data.message || 'Unknown error'));
+            if (currentRoleName) {
+                currentRoleName.textContent = '{{ current_demo_role|title }}';
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error switching role:', error);
+        alert('Failed to switch role. Please try again.');
+        if (currentRoleName) {
+            currentRoleName.textContent = '{{ current_demo_role|title }}';
+        }
+    });
+}
+
+// Reset Demo Function
+function resetDemo() {
+    if (confirm('Reset demo to clean state?\n\nThis will:\n• Delete all your test data\n• Restore original demo boards\n• Keep you in demo mode')) {
+        // Show loading
+        const resetBtns = document.querySelectorAll('.demo-action-btn');
+        resetBtns.forEach(btn => {
+            if (btn.textContent.includes('Reset')) {
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resetting...';
+                btn.disabled = true;
+            }
+        });
+        
+        // Make AJAX request to reset
+        fetch('/demo/reset/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': getCookie('csrftoken')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Show success message and reload
+                alert('✅ Demo reset successfully!');
+                location.reload();
+            } else {
+                alert('Failed to reset demo: ' + (data.message || 'Unknown error'));
+                location.reload(); // Reload anyway to reset UI
+            }
+        })
+        .catch(error => {
+            console.error('Error resetting demo:', error);
+            alert('Failed to reset demo. Please try again.');
+            location.reload();
+        });
+    }
+}
+
+// Mobile Role Selector
+function showMobileRoleSelector() {
+    // Create modal for mobile role selection
+    const roles = [
+        { id: 'admin', name: 'Alex Chen (Admin)', desc: 'Full access to all features', icon: 'fa-user-shield' },
+        { id: 'member', name: 'Sam Rivera (Member)', desc: 'Create & edit tasks', icon: 'fa-user' },
+        { id: 'viewer', name: 'Jordan Taylor (Viewer)', desc: 'View-only access', icon: 'fa-eye' }
+    ];
+    
+    let html = '<div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 9999; display: flex; align-items: flex-end;" id="mobileRoleModal">';
+    html += '<div style="background: white; width: 100%; border-radius: 16px 16px 0 0; padding: 1.5rem; max-height: 80vh; overflow-y: auto;">';
+    html += '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">';
+    html += '<h4 style="margin: 0;">Choose Your Role</h4>';
+    html += '<button onclick="document.getElementById(\'mobileRoleModal\').remove()" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;">×</button>';
+    html += '</div>';
+    
+    roles.forEach(role => {
+        const isActive = role.id === '{{ current_demo_role }}';
+        html += `<div onclick="switchRole('${role.id}'); document.getElementById('mobileRoleModal').remove();" style="padding: 1rem; border: 2px solid ${isActive ? '#667eea' : '#e2e8f0'}; border-radius: 8px; margin-bottom: 0.75rem; cursor: pointer; background: ${isActive ? '#f7fafc' : 'white'};">`;
+        html += `<div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">`;
+        html += `<i class="fas ${role.icon}" style="font-size: 1.2rem; color: #667eea;"></i>`;
+        html += `<strong>${role.name}</strong>`;
+        if (isActive) html += `<i class="fas fa-check" style="color: #48bb78; margin-left: auto;"></i>`;
+        html += `</div>`;
+        html += `<div style="font-size: 0.9rem; color: #718096; margin-left: 2rem;">${role.desc}</div>`;
+        html += `</div>`;
+    });
+    
+    html += '</div></div>';
+    
+    document.body.insertAdjacentHTML('beforeend', html);
+}
+
+// Get CSRF Token
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+</script>

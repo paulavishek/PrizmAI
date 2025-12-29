@@ -23,6 +23,7 @@ urlpatterns = [
     # Demo Mode (New System)
     path('demo/', demo_views.demo_dashboard, name='demo_dashboard'),
     path('demo/start/', demo_views.demo_mode_selection, name='demo_mode_selection'),
+    path('demo/switch-role/', demo_views.switch_demo_role, name='demo_switch_role'),
     path('demo/board/<int:board_id>/', demo_views.demo_board_detail, name='demo_board_detail'),
     path('demo/reset/', demo_views.reset_demo_data, name='reset_demo'),
     

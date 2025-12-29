@@ -77,6 +77,83 @@ def demo_mode_selection(request):
     return render(request, 'demo/mode_selection.html')
 
 
+@login_required
+@require_POST
+def switch_demo_role(request):
+    """
+    Switch between demo roles (Admin/Member/Viewer) in Team mode
+    """
+    # Check if in demo mode
+    if not request.session.get('is_demo_mode'):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Not in demo mode'
+        }, status=403)
+    
+    # Check if in team mode
+    if request.session.get('demo_mode') != 'team':
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Role switching only available in Team mode'
+        }, status=403)
+    
+    # Get new role
+    new_role = request.POST.get('role', '').lower()
+    valid_roles = ['admin', 'member', 'viewer']
+    
+    if new_role not in valid_roles:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Invalid role. Must be one of: {", ".join(valid_roles)}'
+        }, status=400)
+    
+    # Update session
+    old_role = request.session.get('demo_role', 'admin')
+    request.session['demo_role'] = new_role
+    request.session.modified = True
+    
+    # Track role switch (if analytics models exist)
+    try:
+        from analytics.models import DemoSession, DemoAnalytics
+        
+        # Update DemoSession
+        demo_session = DemoSession.objects.filter(
+            session_id=request.session.session_key
+        ).first()
+        
+        if demo_session:
+            demo_session.current_role = new_role
+            demo_session.role_switches = (demo_session.role_switches or 0) + 1
+            demo_session.save()
+        
+        # Track role switch event
+        DemoAnalytics.objects.create(
+            session_id=request.session.session_key,
+            event_type='role_switched',
+            event_data={
+                'from_role': old_role,
+                'to_role': new_role
+            }
+        )
+    except Exception as e:
+        # Analytics tracking failed - that's OK
+        pass
+    
+    # Get role display name
+    role_names = {
+        'admin': 'Alex Chen (Admin)',
+        'member': 'Sam Rivera (Member)',
+        'viewer': 'Jordan Taylor (Viewer)'
+    }
+    
+    return JsonResponse({
+        'status': 'success',
+        'message': f'Switched to {role_names.get(new_role, new_role)}',
+        'new_role': new_role,
+        'role_display_name': role_names.get(new_role, new_role)
+    })
+
+
 def _ensure_user_in_demo_boards(user, demo_boards):
     """
     Helper function to automatically add user as member to demo boards
@@ -389,6 +466,9 @@ def demo_board_detail(request, board_id):
     
     context = {
         'demo_mode': True,
+        'demo_mode_type': request.session.get('demo_mode', 'solo'),
+        'current_demo_role': request.session.get('demo_role', 'admin'),
+        'demo_expires_at': request.session.get('demo_expires_at'),
         'board': board,
         'columns': columns,
         'tasks_by_column': tasks_by_column,
@@ -407,52 +487,121 @@ def demo_board_detail(request, board_id):
 def reset_demo_data(request):
     """
     Reset demo data to original state
-    Only accessible by superusers or organization admins
+    Supports both AJAX (POST with JSON response) and regular form requests
     """
     from django.contrib import messages
-    from django.core.management import call_command
-    from io import StringIO
-    import sys
     
-    # Check if user has permission (superuser only for safety)
-    if not request.user.is_superuser:
+    # Check if user is in demo mode (for session-based reset)
+    is_demo_user = request.session.get('is_demo_mode', False)
+    
+    # Superusers can reset anytime, demo users can reset their session
+    if not (request.user.is_superuser or is_demo_user):
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Only demo users or administrators can reset demo data.'
+            }, status=403)
         messages.error(request, 'Only administrators can reset demo data.')
         return redirect('demo_dashboard')
     
     if request.method == 'POST':
         try:
-            # Capture command output
+            # Get demo boards
+            demo_org = Organization.objects.filter(is_demo=True).first()
+            if not demo_org:
+                raise Exception('Demo organization not found')
+            
+            demo_boards = Board.objects.filter(
+                organization=demo_org,
+                is_official_demo_board=True
+            )
+            
+            # Delete session-created content (if any)
+            session_id = request.session.get('demo_session_id')
+            if session_id:
+                # Delete tasks created by this session
+                Task.objects.filter(
+                    created_by_session=session_id,
+                    column__board__organization=demo_org
+                ).delete()
+                
+                # Delete boards created by this session
+                Board.objects.filter(
+                    created_by_session=session_id,
+                    organization=demo_org,
+                    is_official_demo_board=False
+                ).delete()
+            
+            # Reset official demo boards' tasks to default state
+            # For now, we'll just clear and repopulate
+            # In production, you might want to restore from a baseline
+            for board in demo_boards:
+                # Clear existing tasks
+                Task.objects.filter(column__board=board).delete()
+            
+            # Repopulate demo data
+            from django.core.management import call_command
+            from io import StringIO
             output = StringIO()
+            call_command('populate_demo_data', '--reset', stdout=output, stderr=output)
             
-            # Call the reset_demo management command
-            call_command('reset_demo', '--no-confirm', stdout=output, stderr=output)
+            # Track reset event
+            try:
+                from analytics.models import DemoSession, DemoAnalytics
+                
+                demo_session = DemoSession.objects.filter(
+                    session_id=request.session.session_key
+                ).first()
+                
+                if demo_session:
+                    demo_session.reset_count = (demo_session.reset_count or 0) + 1
+                    demo_session.save()
+                
+                DemoAnalytics.objects.create(
+                    session_id=request.session.session_key,
+                    event_type='demo_reset',
+                    event_data={'success': True}
+                )
+            except:
+                pass
             
-            # Get the output
-            command_output = output.getvalue()
+            # Return JSON for AJAX requests
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Demo reset successfully!'
+                })
             
+            # Regular request
             messages.success(request, 'Demo data has been successfully reset to its original state!')
             messages.info(request, 'All user-created changes have been removed. Demo boards are now fresh.')
-            
             return redirect('demo_dashboard')
             
         except Exception as e:
-            messages.error(request, f'Error resetting demo data: {str(e)}')
+            error_msg = f'Error resetting demo data: {str(e)}'
+            
+            # Return JSON for AJAX requests
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'status': 'error',
+                    'message': error_msg
+                }, status=500)
+            
+            messages.error(request, error_msg)
             return redirect('demo_dashboard')
     
     # GET request - show confirmation page
-    # Get demo stats before reset
-    demo_org_names = ['Dev Team', 'Marketing Team']
-    demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-    demo_boards = Board.objects.filter(organization__in=demo_orgs)
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    demo_boards = Board.objects.filter(organization=demo_org, is_official_demo_board=True) if demo_org else []
     
-    task_count = Task.objects.filter(column__board__in=demo_boards).count()
-    user_count = demo_boards.values('members').distinct().count()
+    task_count = Task.objects.filter(column__board__in=demo_boards).count() if demo_boards else 0
+    user_count = demo_boards.values('members').distinct().count() if demo_boards else 0
     
     context = {
         'demo_boards': demo_boards,
         'task_count': task_count,
         'user_count': user_count,
-        'demo_orgs': demo_orgs,
+        'demo_org': demo_org,
     }
     
     return render(request, 'kanban/reset_demo_confirm.html', context)
