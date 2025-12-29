@@ -1903,6 +1903,20 @@ def welcome(request):
     Welcome page view that will be shown to users who are not logged in.
     Logged in users will be redirected to the dashboard.
     """
+    # Clear demo session if user is exiting demo mode
+    if request.session.get('is_demo_mode'):
+        request.session.pop('is_demo_mode', None)
+        request.session.pop('demo_mode', None)
+        request.session.pop('demo_role', None)
+        request.session.pop('demo_session_id', None)
+        request.session.pop('demo_started_at', None)
+        request.session.pop('demo_expires_at', None)
+        request.session.pop('features_explored', None)
+        request.session.pop('aha_moments', None)
+        request.session.pop('nudges_shown', None)
+        request.session.pop('is_anonymous_demo', None)
+        request.session.modified = True
+    
     if request.user.is_authenticated:
         return redirect('dashboard')
     

@@ -664,7 +664,7 @@
                     <i class="fas fa-user-plus"></i>
                     Create Account
                 </a>
-                <a href="{% url 'dashboard' %}" class="demo-action-btn">
+                <a href="{% url 'welcome' %}" class="demo-action-btn" onclick="clearDemoSession()">
                     <i class="fas fa-sign-out-alt"></i>
                     Exit Demo
                 </a>
@@ -712,7 +712,7 @@
                         <i class="fas fa-user-plus"></i>
                         Create Real Account
                     </a>
-                    <a href="{% url 'dashboard' %}" class="demo-action-btn full-width">
+                    <a href="{% url 'welcome' %}" class="demo-action-btn full-width" onclick="clearDemoSession()">
                         <i class="fas fa-sign-out-alt"></i>
                         Exit Demo
                     </a>
@@ -1052,5 +1052,18 @@ function getCookie(name) {
         }
     }
     return cookieValue;
+}
+
+// Clear Demo Session
+function clearDemoSession() {
+    // Clear demo-related session storage
+    if (typeof(Storage) !== "undefined") {
+        sessionStorage.removeItem('demo_mode');
+        sessionStorage.removeItem('demo_role');
+        sessionStorage.removeItem('is_demo_mode');
+    }
+    
+    // Let the link navigate naturally to welcome page
+    return true;
 }
 </script>
