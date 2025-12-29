@@ -1391,6 +1391,9 @@ def reorder_multiple_columns(request):
             columns_data = data.get('columns', [])
             board_id = data.get('boardId')
             
+            if not board_id:
+                return JsonResponse({'error': 'Board ID is required'}, status=400)
+            
             board = get_object_or_404(Board, id=board_id)
             
             # Check if this is a demo board - demo boards allow all changes
@@ -1407,17 +1410,23 @@ def reorder_multiple_columns(request):
                     return JsonResponse({'error': "You don't have access to this board."}, status=403)
             
             # Create a dictionary to map column_id to position
-            position_map = {item['columnId']: item['position'] for item in columns_data}
+            # Handle both string and int column IDs
+            position_map = {}
+            for item in columns_data:
+                col_id = str(item.get('columnId', ''))
+                position = item.get('position', 0)
+                position_map[col_id] = position
             
             # Get all columns for this board
-            db_columns = Column.objects.filter(board=board)
+            db_columns = list(Column.objects.filter(board=board))
             
-            # Update positions in bulk
+            # Update positions based on the map
             for column in db_columns:
-                if str(column.id) in position_map:
-                    column.position = position_map[str(column.id)]
+                col_id_str = str(column.id)
+                if col_id_str in position_map:
+                    column.position = position_map[col_id_str]
             
-            # Ensure positions are sequential (0, 1, 2, ...) by sorting and reassigning
+            # Sort by the new positions and reassign sequentially to ensure no gaps
             sorted_columns = sorted(db_columns, key=lambda col: col.position)
             for index, column in enumerate(sorted_columns):
                 column.position = index

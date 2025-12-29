@@ -535,7 +535,19 @@ function updateColumnPositionsOnServer(columnsInOrder) {
         };
     });
     
-    const boardId = window.location.pathname.split('/').filter(Boolean)[1];
+    // Extract board ID from URL - handle both /boards/ID/ and /demo/board/ID/ patterns
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    let boardId;
+    
+    // Find the numeric ID after 'board' or 'boards' in the path
+    for (let i = 0; i < pathParts.length; i++) {
+        if (pathParts[i] === 'board' || pathParts[i] === 'boards') {
+            boardId = pathParts[i + 1];
+            break;
+        }
+    }
+    
+    console.log('[Column DnD] Board ID:', boardId);
     
     fetch('/columns/reorder-multiple/', {
         method: 'POST',
