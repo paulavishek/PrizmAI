@@ -447,7 +447,6 @@ def demo_board_detail(request, board_id):
         if not user_has_org_access:
             # Auto-grant access when user clicks on a demo board
             from kanban.permission_models import BoardMembership, Role
-            from messaging.models import ChatRoom
             
             # Add user to this board
             board.members.add(request.user)
