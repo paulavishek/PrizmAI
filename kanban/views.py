@@ -1025,8 +1025,11 @@ def gantt_chart(request, board_id):
     
     return render(request, 'kanban/gantt_chart.html', context)
 
-@login_required
 def move_task(request):
+    """
+    Move a task to a different column via drag-and-drop.
+    Supports both authenticated users and demo mode (including anonymous users).
+    """
     from kanban.permission_utils import user_has_task_permission, user_can_move_task_to_column
     from kanban.audit_utils import log_audit
     
@@ -1038,11 +1041,21 @@ def move_task(request):
         
         task = get_object_or_404(Task, id=task_id)
         new_column = get_object_or_404(Column, id=column_id)
+        board = new_column.board
         
-        # Check permission using RBAC with column-level restrictions
-        can_move, error_msg = user_can_move_task_to_column(request.user, task, new_column)
-        if not can_move:
-            return JsonResponse({'error': error_msg}, status=403)
+        # Check if this is a demo board - demo boards allow all changes
+        is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
+        is_demo_mode = request.session.get('is_demo_mode', False)
+        
+        # For non-demo boards, require authentication
+        if not (is_demo_board and is_demo_mode):
+            if not request.user.is_authenticated:
+                return JsonResponse({'error': 'Authentication required'}, status=401)
+            
+            # Check permission using RBAC with column-level restrictions
+            can_move, error_msg = user_can_move_task_to_column(request.user, task, new_column)
+            if not can_move:
+                return JsonResponse({'error': error_msg}, status=403)
         
         old_column = task.column
         task.column = new_column
@@ -1055,29 +1068,30 @@ def move_task(request):
         
         task.save()
         
-        # Record activity
-        TaskActivity.objects.create(
-            task=task,
-            user=request.user,
-            activity_type='moved',
-            description=f"Moved task '{task.title}' from '{old_column.name}' to '{new_column.name}'"
-        )
-        
-        # Log to audit trail
-        log_audit('task.moved', user=request.user, request=request,
-                  object_type='task', object_id=task.id, object_repr=task.title,
-                  board_id=new_column.board.id,
-                  changes={'column': {'old': old_column.name, 'new': new_column.name}})
-        
-        # If progress was set to 100% automatically, record that too
-        column_name_lower = new_column.name.lower()
-        if ('done' in column_name_lower or 'complete' in column_name_lower) and task.progress == 100:
+        # Record activity (only for authenticated users)
+        if request.user.is_authenticated:
             TaskActivity.objects.create(
                 task=task,
                 user=request.user,
-                activity_type='updated',
-                description=f"Automatically updated progress for '{task.title}' to 100% ({new_column.name})"
+                activity_type='moved',
+                description=f"Moved task '{task.title}' from '{old_column.name}' to '{new_column.name}'"
             )
+            
+            # Log to audit trail
+            log_audit('task.moved', user=request.user, request=request,
+                      object_type='task', object_id=task.id, object_repr=task.title,
+                      board_id=new_column.board.id,
+                      changes={'column': {'old': old_column.name, 'new': new_column.name}})
+            
+            # If progress was set to 100% automatically, record that too
+            column_name_lower = new_column.name.lower()
+            if ('done' in column_name_lower or 'complete' in column_name_lower) and task.progress == 100:
+                TaskActivity.objects.create(
+                    task=task,
+                    user=request.user,
+                    activity_type='updated',
+                    description=f"Automatically updated progress for '{task.title}' to 100% ({new_column.name})"
+                )
         
         # Reorder tasks in the column
         tasks_to_reorder = Task.objects.filter(column=new_column).exclude(id=task_id)

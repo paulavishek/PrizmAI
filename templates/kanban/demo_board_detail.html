@@ -35,6 +35,10 @@
     overflow-y: auto;
 }
 
+.kanban-column-tasks {
+    min-height: 200px;
+}
+
 .kanban-column-header {
     font-weight: 600;
     font-size: 1.1rem;
@@ -46,20 +50,29 @@
     align-items: center;
 }
 
-.kanban-task-card {
+.kanban-task {
     background: white;
     border-radius: 6px;
     padding: 12px;
     margin-bottom: 10px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-    cursor: pointer;
+    cursor: grab;
     transition: all 0.2s;
     border-left: 3px solid #667eea;
 }
 
-.kanban-task-card:hover {
+.kanban-task:hover {
     box-shadow: 0 4px 8px rgba(0,0,0,0.15);
     transform: translateY(-2px);
+}
+
+.kanban-task:active {
+    cursor: grabbing;
+}
+
+.kanban-task.dragging {
+    opacity: 0.5;
+    transform: rotate(2deg);
 }
 
 .task-title {
@@ -184,15 +197,16 @@
         </h6>
     </div>
     <div class="card-body">
-        <div class="kanban-board">
+        <div class="kanban-board" id="kanban-board">
             {% for column in columns %}
-            <div class="kanban-column">
+            <div class="kanban-column" id="column-{{ column.id }}" data-column-id="{{ column.id }}">
                 <div class="kanban-column-header">
                     <span>{{ column.name }}</span>
                     <span class="badge bg-secondary">{{ tasks_by_column|get_item:column.id|length }}</span>
                 </div>
+                <div class="kanban-column-tasks" data-column-id="{{ column.id }}">
                 {% for task in tasks_by_column|get_item:column.id %}
-                <div class="kanban-task-card">
+                <div class="kanban-task" id="task-{{ task.id }}" draggable="true">
                     <div class="task-title">{{ task.title }}</div>
                     <div class="task-meta">
                         {% if task.priority %}
@@ -224,6 +238,7 @@
                     <small>No tasks</small>
                 </div>
                 {% endfor %}
+                </div>
             </div>
             {% endfor %}
         </div>
@@ -354,6 +369,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/kanban.js' %}?v={{ board.id }}_{% now 'U' %}" id="kanban-script"></script>
 <script src="{% static 'js/aha_moment_detection.js' %}"></script>
 <script src="{% static 'js/conversion_nudges.js' %}"></script>
 <script>
