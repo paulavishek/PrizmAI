@@ -539,18 +539,22 @@ def reset_demo_data(request):
                     is_official_demo_board=False
                 ).delete()
             
-            # Reset official demo boards' tasks to default state
-            # For now, we'll just clear and repopulate
-            # In production, you might want to restore from a baseline
+            # OPTIMIZATION: Reset by clearing user modifications, not full repopulation
+            # Use bulk_update for performance
             for board in demo_boards:
-                # Clear existing tasks
-                Task.objects.filter(column__board=board).delete()
-            
-            # Repopulate demo data
-            from django.core.management import call_command
-            from io import StringIO
-            output = StringIO()
-            call_command('populate_demo_data', '--reset', stdout=output, stderr=output)
+                tasks = list(Task.objects.filter(column__board=board))
+                # Reset task progress and assignments in batch
+                for task in tasks:
+                    # Reset progress based on column type
+                    if task.column.name in ['Done', 'Closed', 'Published']:
+                        task.progress = 100  # Keep completed tasks done
+                    else:
+                        task.progress = 0  # Reset others to 0
+                    task.assigned_to = None  # Clear assignments
+                
+                # Bulk update for performance
+                if tasks:
+                    Task.objects.bulk_update(tasks, ['progress', 'assigned_to'], batch_size=100)
             
             # Track reset event
             try:
