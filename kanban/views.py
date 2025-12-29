@@ -482,7 +482,6 @@ def board_detail(request, board_id):
         'can_create_tasks': can_create_tasks,
     })
 
-@login_required
 def task_detail(request, task_id):
     from django.db.models import Prefetch
     from kanban.permission_utils import user_has_task_permission, user_can_edit_task_in_column
@@ -510,33 +509,64 @@ def task_detail(request, task_id):
     )
     board = task.column.board
     
-    # Check permission using RBAC
-    if not user_has_task_permission(request.user, task, 'task.view'):
-        return HttpResponseForbidden("You don't have permission to view this task.")
+    # Check if this is a demo board
+    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
+    
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check permission using RBAC
+        if not user_has_task_permission(request.user, task, 'task.view'):
+            return HttpResponseForbidden("You don't have permission to view this task.")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_view_board'):
+            return HttpResponseForbidden("You don't have permission to view this task in your current demo role.")
     
     if request.method == 'POST':
-        # Check edit permission with column-level restrictions
-        can_edit, error_msg = user_can_edit_task_in_column(request.user, task)
-        if not can_edit:
-            messages.error(request, error_msg)
-            return redirect('task_detail', task_id=task.id)
+        # Check edit permission
+        if not (is_demo_board and is_demo_mode):
+            # Non-demo boards: use RBAC
+            can_edit, error_msg = user_can_edit_task_in_column(request.user, task)
+            if not can_edit:
+                messages.error(request, error_msg)
+                return redirect('task_detail', task_id=task.id)
+        elif demo_mode_type == 'team':
+            # Demo team mode: check role-based permissions
+            from kanban.utils.demo_permissions import DemoPermissions
+            if not DemoPermissions.can_perform_action(request, 'can_edit_tasks'):
+                messages.error(request, "You don't have permission to edit tasks in your current demo role.")
+                return redirect('task_detail', task_id=task.id)
+        # Solo demo mode: no restrictions, allow all edits
         
         form = TaskForm(request.POST, instance=task, board=board)
         if form.is_valid():
-            # Track changes automatically
-            with AuditLogContext(task, request.user, request, 'task.updated'):
-                task = form.save(commit=False)
-                # Store who made the change for signal handler
-                task._changed_by_user = request.user
-                task.save()
+            # Track changes automatically (only for authenticated users)
+            if request.user.is_authenticated:
+                with AuditLogContext(task, request.user, request, 'task.updated'):
+                    task = form.save(commit=False)
+                    # Store who made the change for signal handler
+                    task._changed_by_user = request.user
+                    task.save()
+                
+                # Record activity
+                TaskActivity.objects.create(
+                    task=task,
+                    user=request.user,
+                    activity_type='updated',
+                    description=f"Updated task details for '{task.title}'"
+                )
+            else:
+                # Demo mode - just save without audit trail
+                task = form.save()
             
-            # Record activity
-            TaskActivity.objects.create(
-                task=task,
-                user=request.user,
-                activity_type='updated',
-                description=f"Updated task details for '{task.title}'"
-            )
             messages.success(request, 'Task updated successfully!')
             return redirect('task_detail', task_id=task.id)
     else:
@@ -545,26 +575,42 @@ def task_detail(request, task_id):
     # Handle comments
     if request.method == 'POST' and 'content' in request.POST:
         # Check comment permission
-        if not user_has_task_permission(request.user, task, 'comment.create'):
-            return HttpResponseForbidden("You don't have permission to add comments.")
+        if not (is_demo_board and is_demo_mode):
+            # Non-demo boards: use RBAC
+            if not user_has_task_permission(request.user, task, 'comment.create'):
+                return HttpResponseForbidden("You don't have permission to add comments.")
+        elif demo_mode_type == 'team':
+            # Demo team mode: check role-based permissions
+            from kanban.utils.demo_permissions import DemoPermissions
+            if not DemoPermissions.can_perform_action(request, 'can_add_comments'):
+                messages.error(request, "You don't have permission to add comments in your current demo role.")
+                return redirect('task_detail', task_id=task.id)
+        # Solo demo mode: no restrictions, allow all comments
         
         comment_form = CommentForm(request.POST)
         if comment_form.is_valid():
             comment = comment_form.save(commit=False)
             comment.task = task
-            comment.user = request.user
+            # For demo mode, use a demo user or allow anonymous
+            if request.user.is_authenticated:
+                comment.user = request.user
+            else:
+                # For demo sessions, assign to the demo admin user
+                from django.contrib.auth.models import User
+                comment.user = User.objects.filter(username='demo_admin').first()
             comment.save()
             
-            # Log comment creation
-            log_model_change('comment.created', comment, request.user, request)
-            
-            # Record activity
-            TaskActivity.objects.create(
-                task=task,
-                user=request.user,
-                activity_type='commented',
-                description=f"Commented on '{task.title}'"
-            )
+            # Log comment creation (only for authenticated users)
+            if request.user.is_authenticated:
+                log_model_change('comment.created', comment, request.user, request)
+                
+                # Record activity
+                TaskActivity.objects.create(
+                    task=task,
+                    user=request.user,
+                    activity_type='commented',
+                    description=f"Commented on '{task.title}'"
+                )
             
             messages.success(request, 'Comment added successfully!')
             return redirect('task_detail', task_id=task.id)
@@ -641,16 +687,33 @@ def task_detail(request, task_id):
         'total_time_logged': total_time_logged,
     })
 
-@login_required
 def create_task(request, board_id, column_id=None):
     from kanban.permission_utils import user_has_board_permission, user_can_create_task_in_column
     from kanban.audit_utils import log_model_change
     
     board = get_object_or_404(Board, id=board_id)
     
-    # Check basic permission using RBAC
-    if not user_has_board_permission(request.user, board, 'task.create'):
-        return HttpResponseForbidden("You don't have permission to create tasks on this board.")
+    # Check if this is a demo board
+    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
+    
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check basic permission using RBAC
+        if not user_has_board_permission(request.user, board, 'task.create'):
+            return HttpResponseForbidden("You don't have permission to create tasks on this board.")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_create_tasks'):
+            return HttpResponseForbidden("You don't have permission to create tasks in your current demo role.")
+    # Solo demo mode: no restrictions, allow all task creation
     
     if column_id:
         column = get_object_or_404(Column, id=column_id, board=board)
@@ -712,7 +775,6 @@ def create_task(request, board_id, column_id=None):
         'column': column
     })
 
-@login_required
 def delete_task(request, task_id):
     from kanban.permission_utils import user_has_task_permission
     from kanban.audit_utils import log_audit
@@ -720,9 +782,27 @@ def delete_task(request, task_id):
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
-    # Check permission using RBAC
-    if not user_has_task_permission(request.user, task, 'task.delete'):
-        return HttpResponseForbidden("You don't have permission to delete this task.")
+    # Check if this is a demo board
+    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
+    
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check permission using RBAC
+        if not user_has_task_permission(request.user, task, 'task.delete'):
+            return HttpResponseForbidden("You don't have permission to delete this task.")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_delete_tasks'):
+            return HttpResponseForbidden("You don't have permission to delete tasks in your current demo role.")
+    # Solo demo mode: no restrictions, allow all deletes
     
     if request.method == 'POST':
         board_id = task.column.board.id
@@ -740,16 +820,33 @@ def delete_task(request, task_id):
     
     return render(request, 'kanban/delete_task.html', {'task': task})
 
-@login_required
 def create_column(request, board_id):
     from kanban.permission_utils import user_has_board_permission
     from kanban.audit_utils import log_model_change
     
     board = get_object_or_404(Board, id=board_id)
     
-    # Check permission using RBAC
-    if not user_has_board_permission(request.user, board, 'column.create'):
-        return HttpResponseForbidden("You don't have permission to create columns on this board.")
+    # Check if this is a demo board
+    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
+    
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check permission using RBAC
+        if not user_has_board_permission(request.user, board, 'column.create'):
+            return HttpResponseForbidden("You don't have permission to create columns on this board.")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_create_columns'):
+            return HttpResponseForbidden("You don't have permission to create columns in your current demo role.")
+    # Solo demo mode: no restrictions, allow all column creation
     
     if request.method == 'POST':
         form = ColumnForm(request.POST)
@@ -1043,9 +1140,10 @@ def move_task(request):
         new_column = get_object_or_404(Column, id=column_id)
         board = new_column.board
         
-        # Check if this is a demo board - demo boards allow all changes
+        # Check if this is a demo board
         is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
         is_demo_mode = request.session.get('is_demo_mode', False)
+        demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
         
         # For non-demo boards, require authentication
         if not (is_demo_board and is_demo_mode):
@@ -1056,6 +1154,13 @@ def move_task(request):
             can_move, error_msg = user_can_move_task_to_column(request.user, task, new_column)
             if not can_move:
                 return JsonResponse({'error': error_msg}, status=403)
+        
+        # For demo boards in team mode, check role-based permissions
+        elif demo_mode_type == 'team':
+            from kanban.utils.demo_permissions import DemoPermissions
+            if not DemoPermissions.can_perform_action(request, 'can_move_tasks'):
+                return JsonResponse({'error': "You don't have permission to move tasks in your current demo role."}, status=403)
+        # Solo demo mode: no restrictions, allow all moves
         
         old_column = task.column
         task.column = new_column
@@ -1106,15 +1211,32 @@ def move_task(request):
     
     return JsonResponse({'error': 'Invalid request'}, status=400)
 
-@login_required
 def add_board_member(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if user is the board creator, superuser, or has access to the board
-    if not (board.created_by == request.user or 
-            request.user.is_superuser or 
-            request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have permission to add members to this board.")
+    # Check if this is a demo board
+    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
+    
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check if user is the board creator, superuser, or has access to the board
+        if not (board.created_by == request.user or 
+                request.user.is_superuser or 
+                request.user in board.members.all()):
+            return HttpResponseForbidden("You don't have permission to add members to this board.")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_add_board_members'):
+            return HttpResponseForbidden("You don't have permission to add members in your current demo role.")
+    # Solo demo mode: no restrictions, allow adding members
     
     if request.method == 'POST':
         user_id = request.POST.get('user_id')
@@ -1193,25 +1315,42 @@ def remove_board_member(request, board_id, user_id):
     
     return redirect('board_detail', board_id=board.id)
 
-@login_required
 def delete_board(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if user has permission to delete this board
-    # Allow deletion if user is:
-    # 1. Board creator
-    # 2. Organization admin (if they have access to the board)
-    # 3. Organization creator
-    user_profile = getattr(request.user, 'profile', None)
-    has_permission = (
-        board.created_by == request.user or  # Board creator
-        (user_profile and user_profile.is_admin and 
-         (request.user in board.members.all() or board.created_by == request.user)) or  # Organization admin with board access
-        (user_profile and request.user == board.organization.created_by)  # Organization creator
-    )
+    # Check if this is a demo board
+    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
     
-    if not has_permission:
-        return HttpResponseForbidden("You don't have permission to delete this board.")
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check if user has permission to delete this board
+        # Allow deletion if user is:
+        # 1. Board creator
+        # 2. Organization admin (if they have access to the board)
+        # 3. Organization creator
+        user_profile = getattr(request.user, 'profile', None)
+        has_permission = (
+            board.created_by == request.user or  # Board creator
+            (user_profile and user_profile.is_admin and 
+             (request.user in board.members.all() or board.created_by == request.user)) or  # Organization admin with board access
+            (user_profile and request.user == board.organization.created_by)  # Organization creator
+        )
+        
+        if not has_permission:
+            return HttpResponseForbidden("You don't have permission to delete this board.")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_delete_board'):
+            return HttpResponseForbidden("You don't have permission to delete boards in your current demo role.")
+    # Solo demo mode: no restrictions, allow board deletion
     
     # Delete the board
     if request.method == 'POST':
