@@ -6,11 +6,75 @@ from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q, Count
 from django.utils import timezone
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 from datetime import timedelta
 from kanban.models import Board, Task, Column, Organization
 from messaging.models import ChatRoom, ChatMessage
 from kanban.conflict_models import ConflictDetection
 from wiki.models import WikiPage
+
+
+@login_required
+def demo_mode_selection(request):
+    """
+    Demo mode selection screen - choose between Solo or Team mode
+    This is the entry point for the new demo experience
+    """
+    if request.method == 'POST':
+        mode = request.POST.get('mode', 'solo')  # 'solo' or 'team'
+        selection_method = request.POST.get('selection_method', 'selected')  # 'selected' or 'skipped'
+        
+        # Initialize demo session
+        request.session['is_demo_mode'] = True
+        request.session['demo_mode'] = mode
+        request.session['demo_mode_selected'] = True
+        request.session['demo_role'] = 'admin'  # Start as admin in both modes
+        request.session['demo_session_id'] = request.session.session_key
+        request.session['demo_started_at'] = timezone.now().isoformat()
+        request.session['demo_expires_at'] = (timezone.now() + timedelta(hours=48)).isoformat()
+        request.session['features_explored'] = []
+        request.session['aha_moments'] = []
+        request.session['nudges_shown'] = []
+        
+        # Create DemoSession record (if models exist)
+        try:
+            from analytics.models import DemoSession, DemoAnalytics
+            
+            # Create or update demo session
+            demo_session, created = DemoSession.objects.get_or_create(
+                session_id=request.session.session_key,
+                defaults={
+                    'demo_mode': mode,
+                    'current_role': 'admin',
+                    'expires_at': timezone.now() + timedelta(hours=48),
+                    'selection_method': selection_method,
+                }
+            )
+            
+            if not created:
+                # Update existing session
+                demo_session.demo_mode = mode
+                demo_session.selection_method = selection_method
+                demo_session.save()
+            
+            # Track selection event
+            DemoAnalytics.objects.create(
+                session_id=request.session.session_key,
+                event_type='demo_mode_selected',
+                event_data={
+                    'mode': mode,
+                    'selection_method': selection_method
+                }
+            )
+        except Exception as e:
+            # Analytics models may not exist yet - that's OK
+            pass
+        
+        return redirect('demo_dashboard')
+    
+    # GET request - show selection screen
+    return render(request, 'demo/mode_selection.html')
 
 
 def _ensure_user_in_demo_boards(user, demo_boards):
@@ -60,6 +124,10 @@ def demo_dashboard(request):
     
     IMPORTANT: Automatically adds users as members when they access demo mode
     """
+    # Check if demo mode has been selected
+    if not request.session.get('demo_mode_selected'):
+        return redirect('demo_mode_selection')
+    
     # Get the demo organizations
     demo_org_names = ['Dev Team', 'Marketing Team']
     demo_orgs = Organization.objects.filter(name__in=demo_org_names)
@@ -215,6 +283,9 @@ def demo_dashboard(request):
     context = {
         'demo_available': True,
         'demo_mode': True,
+        'demo_mode_type': request.session.get('demo_mode', 'solo'),
+        'current_demo_role': request.session.get('demo_role', 'admin'),
+        'demo_expires_at': request.session.get('demo_expires_at'),
         'demo_boards': boards_with_stats,
         'task_count': task_count,
         'completed_count': completed_count,

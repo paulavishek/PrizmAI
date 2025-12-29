@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Choose Demo Mode - PrizmAI{% endblock %}
+
+{% block extra_head %}
+<style>
+    .demo-selection-container {
+        min-height: 80vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1rem;
+    }
+
+    .demo-selection-modal {
+        max-width: 800px;
+        width: 100%;
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        padding: 3rem 2rem;
+    }
+
+    .demo-selection-modal h2 {
+        font-size: 2rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        color: #1a202c;
+        text-align: center;
+    }
+
+    .demo-selection-subtitle {
+        text-align: center;
+        color: #718096;
+        margin-bottom: 2.5rem;
+        font-size: 1.1rem;
+    }
+
+    .mode-option {
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 1.5rem;
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+    }
+
+    .mode-option:hover {
+        border-color: #0066cc;
+        box-shadow: 0 4px 12px rgba(0, 102, 204, 0.15);
+        transform: translateY(-2px);
+    }
+
+    .mode-option-header {
+        display: flex;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .mode-icon {
+        font-size: 2rem;
+        margin-right: 1rem;
+    }
+
+    .mode-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #1a202c;
+        margin: 0;
+    }
+
+    .mode-duration {
+        font-size: 0.9rem;
+        color: #718096;
+        margin-left: auto;
+    }
+
+    .mode-description {
+        color: #4a5568;
+        margin-bottom: 1.25rem;
+        font-size: 1.05rem;
+    }
+
+    .mode-features {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 1.5rem 0;
+    }
+
+    .mode-features li {
+        padding: 0.5rem 0;
+        color: #2d3748;
+        display: flex;
+        align-items: flex-start;
+    }
+
+    .mode-features li:before {
+        content: "✓";
+        color: #48bb78;
+        font-weight: bold;
+        margin-right: 0.75rem;
+        font-size: 1.2rem;
+    }
+
+    .mode-button {
+        width: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 1rem 2rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .mode-button:hover {
+        transform: translateX(4px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .mode-button i {
+        margin-left: 0.5rem;
+    }
+
+    .skip-section {
+        text-align: center;
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid #e2e8f0;
+        color: #718096;
+    }
+
+    .skip-link {
+        color: #0066cc;
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.2s;
+    }
+
+    .skip-link:hover {
+        color: #004499;
+        text-decoration: underline;
+    }
+
+    .help-text {
+        font-size: 0.95rem;
+        color: #718096;
+        margin-top: 0.5rem;
+    }
+
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+        .demo-selection-modal {
+            padding: 2rem 1.5rem;
+        }
+
+        .demo-selection-modal h2 {
+            font-size: 1.5rem;
+        }
+
+        .mode-option {
+            padding: 1.5rem;
+        }
+
+        .mode-title {
+            font-size: 1.25rem;
+        }
+
+        .mode-button {
+            padding: 0.875rem 1.5rem;
+            font-size: 1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="demo-selection-container">
+    <div class="demo-selection-modal">
+        <h2>How do you want to explore PrizmAI?</h2>
+        <p class="demo-selection-subtitle">Choose the experience that fits your needs</p>
+
+        <form id="demo-selection-form" method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="selection_method" id="selection_method" value="selected">
+
+            <!-- Solo Mode Option -->
+            <div class="mode-option" onclick="selectMode('solo', this)">
+                <div class="mode-option-header">
+                    <span class="mode-icon">🚀</span>
+                    <h3 class="mode-title">Explore Solo</h3>
+                    <span class="mode-duration">~5 minutes</span>
+                </div>
+                <p class="mode-description">
+                    <strong>Full access to all features</strong> — Perfect for individual users testing the platform
+                </p>
+                <ul class="mode-features">
+                    <li>Create and manage tasks with AI assistance</li>
+                    <li>View burndown forecasting and analytics</li>
+                    <li>Track time and manage projects</li>
+                    <li>Full admin access — try everything!</li>
+                </ul>
+                <button type="button" class="mode-button" onclick="submitMode('solo')">
+                    Start Solo Exploration <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>
+
+            <!-- Team Mode Option -->
+            <div class="mode-option" onclick="selectMode('team', this)">
+                <div class="mode-option-header">
+                    <span class="mode-icon">👥</span>
+                    <h3 class="mode-title">Try as a Team</h3>
+                    <span class="mode-duration">~10 minutes</span>
+                </div>
+                <p class="mode-description">
+                    <strong>Experience real team workflows</strong> — Perfect for team leads evaluating for teams
+                </p>
+                <ul class="mode-features">
+                    <li>Switch between Admin, Member, and Viewer roles</li>
+                    <li>See permission restrictions in action</li>
+                    <li>Experience approval workflows</li>
+                    <li>Understand team collaboration features</li>
+                </ul>
+                <button type="button" class="mode-button" onclick="submitMode('team')">
+                    Try Team Mode <i class="fas fa-arrow-right"></i>
+                </button>
+            </div>
+
+            <!-- Skip Option -->
+            <div class="skip-section">
+                <p class="help-text">
+                    💡 Not sure? Most users start with <strong>Solo mode</strong>
+                </p>
+                <p>
+                    Already know what you want? 
+                    <a href="#" class="skip-link" onclick="skipSelection('solo'); return false;">
+                        Skip selection and start exploring →
+                    </a>
+                </p>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+let selectedMode = null;
+
+function selectMode(mode, element) {
+    selectedMode = mode;
+    // Visual feedback (optional - modes can be selected by button click directly)
+    document.querySelectorAll('.mode-option').forEach(el => {
+        el.style.borderColor = '#e2e8f0';
+    });
+    element.style.borderColor = '#0066cc';
+}
+
+function submitMode(mode) {
+    const form = document.getElementById('demo-selection-form');
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'mode';
+    input.value = mode;
+    form.appendChild(input);
+    
+    document.getElementById('selection_method').value = 'selected';
+    
+    // Track selection time (optional - for analytics)
+    const now = new Date().getTime();
+    if (window.demoSelectionStartTime) {
+        const deliberationTime = now - window.demoSelectionStartTime;
+        const timeInput = document.createElement('input');
+        timeInput.type = 'hidden';
+        timeInput.name = 'deliberation_time';
+        timeInput.value = deliberationTime;
+        form.appendChild(timeInput);
+    }
+    
+    form.submit();
+}
+
+function skipSelection(mode) {
+    const form = document.getElementById('demo-selection-form');
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'mode';
+    input.value = mode;
+    form.appendChild(input);
+    
+    document.getElementById('selection_method').value = 'skipped';
+    form.submit();
+}
+
+// Track page load time for analytics
+window.demoSelectionStartTime = new Date().getTime();
+</script>
+{% endblock %}
