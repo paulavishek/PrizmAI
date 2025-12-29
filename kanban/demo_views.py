@@ -474,13 +474,18 @@ def demo_board_detail(request, board_id):
     # Get columns and tasks
     columns = Column.objects.filter(board=board).order_by('position')
     
-    # Get all tasks with related data
+    # Get all tasks with related data (same as real board_detail view)
+    tasks = Task.objects.filter(column__board=board).select_related(
+        'assigned_to', 'assigned_to__profile', 'created_by', 'column'
+    ).prefetch_related('labels', 'dependencies', 'dependent_tasks').order_by('position')
+    
+    # Also keep tasks_by_column for compatibility with other parts
     tasks_by_column = {}
     for column in columns:
-        tasks = Task.objects.filter(column=column).select_related(
+        column_tasks = Task.objects.filter(column=column).select_related(
             'assigned_to', 'created_by'
         ).prefetch_related('labels', 'dependencies', 'dependent_tasks')
-        tasks_by_column[column.id] = tasks
+        tasks_by_column[column.id] = column_tasks
     
     # Get board statistics
     total_tasks = Task.objects.filter(column__board=board).count()
@@ -512,12 +517,14 @@ def demo_board_detail(request, board_id):
         'demo_expires_at': request.session.get('demo_expires_at'),
         'board': board,
         'columns': columns,
+        'tasks': tasks,  # Add this for the new template structure
         'tasks_by_column': tasks_by_column,
         'total_tasks': total_tasks,
         'completed_tasks': completed_tasks,
         'chat_rooms': chat_rooms,
         'conflicts': conflicts,
         'wiki_pages': wiki_pages,
+        'now': timezone.now(),  # Add this for date comparisons
         'can_edit': False,  # Demo mode is read-only for safety
         # Add permission context for role-based feature visibility
         'permissions': DemoPermissions.get_permission_context(request),
