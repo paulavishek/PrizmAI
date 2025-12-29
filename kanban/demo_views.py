@@ -16,6 +16,11 @@ from wiki.models import WikiPage
 from kanban.utils.demo_permissions import DemoPermissions
 
 
+# Demo configuration constants - update these to match your database
+DEMO_ORG_NAMES = ['Demo - Acme Corporation']
+DEMO_BOARD_NAMES = ['Software Development', 'Bug Tracking', 'Marketing Campaign']
+
+
 @login_required
 def demo_mode_selection(request):
     """
@@ -206,9 +211,8 @@ def demo_dashboard(request):
     if not request.session.get('demo_mode_selected'):
         return redirect('demo_mode_selection')
     
-    # Get the demo organizations
-    demo_org_names = ['Dev Team', 'Marketing Team']
-    demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+    # Get the demo organization - using constants
+    demo_orgs = Organization.objects.filter(name__in=DEMO_ORG_NAMES)
     
     if not demo_orgs.exists():
         # No demo data available
@@ -219,11 +223,10 @@ def demo_dashboard(request):
         }
         return render(request, 'kanban/demo_dashboard.html', context)
     
-    # Get demo boards - these are visible to ALL users
-    demo_board_names = ['Software Project', 'Bug Tracking', 'Marketing Campaign']
+    # Get demo boards - these are visible to ALL users (using constants)
     demo_boards = Board.objects.filter(
         organization__in=demo_orgs,
-        name__in=demo_board_names
+        name__in=DEMO_BOARD_NAMES
     ).prefetch_related('members')
     
     if not demo_boards.exists():
@@ -237,7 +240,7 @@ def demo_dashboard(request):
     # Auto-grant access: First time user visits demo, automatically add them to demo boards
     # This provides seamless access to demo data without explicit "Load Demo Data" button
     user_demo_orgs = Organization.objects.filter(
-        name__in=demo_org_names,
+        name__in=DEMO_ORG_NAMES,
         boards__members=request.user
     ).distinct()
     
@@ -271,7 +274,7 @@ def demo_dashboard(request):
         
         # Refresh the query to include newly added organizations
         user_demo_orgs = Organization.objects.filter(
-            name__in=demo_org_names,
+            name__in=DEMO_ORG_NAMES,
             boards__members=request.user
         ).distinct()
     
@@ -390,9 +393,8 @@ def demo_board_detail(request, board_id):
     
     IMPORTANT: Automatically adds users as members when they access demo boards
     """
-    # Get the demo organizations
-    demo_org_names = ['Dev Team', 'Marketing Team']
-    demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+    # Get the demo organization - using constants
+    demo_orgs = Organization.objects.filter(name__in=DEMO_ORG_NAMES)
     
     # Get the board - must be a demo board
     board = get_object_or_404(
