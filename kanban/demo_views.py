@@ -833,3 +833,138 @@ def check_aha_moment_triggers(request):
         pass
     
     return triggered_moments
+
+
+@login_required
+def check_nudge(request):
+    """
+    Check if a nudge should be shown based on current session state
+    Called periodically by client-side JavaScript
+    
+    Returns JSON with nudge_type and context if nudge should show
+    """
+    from kanban.utils.nudge_timing import NudgeTiming, NudgeType
+    
+    # Check if in demo mode
+    if not request.session.get('is_demo_mode'):
+        return JsonResponse({
+            'show_nudge': False,
+            'reason': 'Not in demo mode'
+        })
+    
+    # Check for specific nudge type (for exit intent)
+    nudge_type = request.GET.get('type')
+    
+    if nudge_type == 'exit_intent':
+        should_show = NudgeTiming.should_show_exit_intent_nudge(request.session)
+        if should_show:
+            context = NudgeTiming.get_nudge_context(request.session)
+            return JsonResponse({
+                'show_nudge': True,
+                'nudge_type': NudgeType.EXIT_INTENT,
+                'context': context
+            })
+        else:
+            return JsonResponse({
+                'show_nudge': False,
+                'reason': 'Exit intent conditions not met'
+            })
+    
+    # Get next nudge to show
+    next_nudge = NudgeTiming.get_next_nudge(request.session)
+    
+    if next_nudge:
+        context = NudgeTiming.get_nudge_context(request.session)
+        return JsonResponse({
+            'show_nudge': True,
+            'nudge_type': next_nudge,
+            'context': context
+        })
+    else:
+        return JsonResponse({
+            'show_nudge': False,
+            'reason': 'No nudge conditions met yet'
+        })
+
+
+@login_required
+@require_POST
+def track_nudge(request):
+    """
+    Track nudge events (shown, clicked, dismissed)
+    """
+    import json
+    from kanban.utils.nudge_timing import NudgeTiming
+    
+    # Check if in demo mode
+    if not request.session.get('is_demo_mode'):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Not in demo mode'
+        }, status=403)
+    
+    try:
+        # Parse request body
+        data = json.loads(request.body)
+        event_type = data.get('event_type')  # 'shown', 'clicked', 'dismissed'
+        nudge_type = data.get('nudge_type')
+        
+        if not event_type or not nudge_type:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'event_type and nudge_type are required'
+            }, status=400)
+        
+        # Track in analytics
+        try:
+            from analytics.models import DemoAnalytics, DemoSession
+            
+            # Create analytics event
+            DemoAnalytics.objects.create(
+                session_id=request.session.session_key,
+                event_type=f'nudge_{event_type}',
+                event_data={
+                    'nudge_type': nudge_type,
+                    'timestamp': data.get('timestamp', timezone.now().isoformat())
+                }
+            )
+            
+            # Update DemoSession nudge counts
+            session_id = request.session.session_key
+            demo_session = DemoSession.objects.filter(session_id=session_id).first()
+            
+            if demo_session:
+                if event_type == 'shown':
+                    demo_session.nudges_shown += 1
+                    # Update session variable
+                    NudgeTiming.mark_nudge_shown(request.session, nudge_type)
+                    
+                elif event_type == 'clicked':
+                    demo_session.nudges_clicked += 1
+                    
+                elif event_type == 'dismissed':
+                    demo_session.nudges_dismissed += 1
+                    # Update session variable
+                    NudgeTiming.mark_nudge_dismissed(request.session, nudge_type)
+                
+                demo_session.save()
+        
+        except ImportError:
+            # Analytics models don't exist - that's OK
+            pass
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': f'Nudge {event_type} tracked'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Invalid JSON'
+        }, status=400)
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': f'Error tracking nudge: {str(e)}'
+        }, status=500)

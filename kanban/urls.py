@@ -26,6 +26,8 @@ urlpatterns = [
     path('demo/switch-role/', demo_views.switch_demo_role, name='demo_switch_role'),
     path('demo/extend/', demo_views.extend_demo_session, name='extend_demo_session'),
     path('demo/track-event/', demo_views.track_demo_event, name='track_demo_event'),
+    path('demo/check-nudge/', demo_views.check_nudge, name='check_nudge'),
+    path('demo/track-nudge/', demo_views.track_nudge, name='track_nudge'),
     path('demo/board/<int:board_id>/', demo_views.demo_board_detail, name='demo_board_detail'),
     path('demo/reset/', demo_views.reset_demo_data, name='reset_demo'),
     

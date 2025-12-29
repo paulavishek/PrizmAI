@@ -496,6 +496,7 @@ class DemoSession(models.Model):
     )
     nudges_shown = models.IntegerField(default=0, help_text="Count of conversion nudges shown")
     nudges_clicked = models.IntegerField(default=0, help_text="Count of nudge CTAs clicked")
+    nudges_dismissed = models.IntegerField(default=0, help_text="Count of nudges dismissed by user")
     
     # Conversion tracking
     converted_to_signup = models.BooleanField(default=False)
