@@ -260,7 +260,7 @@
         </div>
         {% for board_data in demo_boards %}
         <div class="col-md-4 mb-4">
-            <div class="card demo-board-card" onclick="window.location.href='{% url 'board_detail' board_data.board.id %}'">
+            <div class="card demo-board-card" onclick="window.location.href='{% url 'demo_board_detail' board_data.board.id %}'">
                 <div class="card-body">
                     <h5 class="demo-board-title">
                         <i class="fas fa-folder-open me-2"></i>{{ board_data.board.name }}
