@@ -44,8 +44,8 @@ grpcio-status==1.71.2
 proto-plus==1.26.1
 protobuf==5.29.5
 
-# Pydantic (AI dependencies)
-pydantic==1.10.24
+# Pydantic (AI dependencies) - V2 for Python 3.14+ compatibility
+pydantic>=2.0.0
 pydantic_core==2.41.4
 
 # Machine Learning

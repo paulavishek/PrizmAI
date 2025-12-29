@@ -92,6 +92,8 @@ body {
     gap: 15px; /* Increased gap for better spacing */
     /* Ensure columns are properly contained */
     position: relative;
+    /* Prevent initial layout shift/vibration */
+    will-change: auto;
 }
 
 .kanban-column {
@@ -109,6 +111,10 @@ body {
     border: 1px solid var(--border-light);
     position: relative; /* Ensure proper containment */
     overflow: visible; /* Allow content to be visible but contain scroll elements */
+    /* Prevent initial layout shift/vibration */
+    backface-visibility: hidden;
+    transform: translateZ(0);
+    will-change: auto;
 }
 
 .kanban-column.dragging {
