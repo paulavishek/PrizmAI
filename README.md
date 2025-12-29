@@ -8,6 +8,28 @@ PrizmAI combines visual project management with AI that helps you work smarter�
 
 ---
 
+## 🎉 What's New
+
+### 🎮 Interactive Demo Mode (December 2025)
+- **Try without signup!** Anonymous users can now explore all features instantly
+- **Choose your path:** Solo Mode (5 min) or Team Mode (10 min)
+- **Full feature access:** AI, burndown charts, time tracking, RBAC demo
+- **Session-based:** 48-hour sessions with reset capability
+
+### 📊 Anonymous Demo Analytics
+- **100% tracking coverage** using hybrid analytics (server + client-side)
+- **Privacy-compliant:** Session-based, no PII required
+- **Conversion insights:** Track aha moments, feature exploration, and signup rates
+- **Analytics dashboard:** `python manage.py demo_analytics_report`
+
+### 🔄 Improved User Flow
+```
+Landing Page → Try Demo (instant) → Explore → Convert to Account (when ready)
+             ↘ Sign Up (traditional) → Full Access
+```
+
+---
+
 ## ✨ Key Features
 
 - ✅ **Visual Kanban Boards** - Drag & drop task management with smart column suggestions
@@ -18,7 +40,9 @@ PrizmAI combines visual project management with AI that helps you work smarter�
 - 💰 **Budget & ROI Tracking** - Control finances with AI cost optimization
 - ⏱️ **Time Tracking & Timesheets** - Log hours, track team utilization, manage labor costs
 - 🎓 **AI Coach** - Proactive suggestions to improve project management decisions
+- 🎮 **Interactive Demo Mode** - **NEW!** Try all features without signup (Solo or Team mode)
 - 📈 **User Feedback & Behavior Tracking** - Comprehensive feedback collection, sentiment analysis, and user behavior analytics for continuous improvement
+- 📊 **Anonymous Demo Analytics** - **NEW!** Track user behavior with 100% coverage (session-based, privacy-compliant)
 - 🤖 **AI Usage Monitoring** - Track and manage your monthly AI feature consumption with quota limits
 - � **Role-Based Access Control (RBAC)** - Advanced permissions with role management, approval workflows, column-level restrictions, and complete audit logging
 - �🔍 **Explainable AI** - Every recommendation includes "why" for full transparency
@@ -70,6 +94,144 @@ python manage.py runserver
 
 **Open http://localhost:8000** and start creating boards!
 
+---
+
+## 🎮 Try Demo Mode (No Signup Required!)
+
+**NEW:** Experience PrizmAI instantly without creating an account!
+
+### User Flow Options:
+
+```
+Landing Page (/)
+    ↓
+    ├─→ "Try Demo" (NO registration) ← Instant access!
+    │   ↓
+    │   Choose Demo Mode:
+    │   • Solo Mode (5 min) - Full access, explore independently
+    │   • Team Mode (10 min) - Switch roles, experience RBAC
+    │   ↓
+    │   Explore Features:
+    │   • 3 demo boards with 1000+ tasks
+    │   • AI features, burndown charts, time tracking
+    │   • Role-based permissions (Team mode)
+    │   ↓
+    │   Convert to Account (when ready):
+    │   • Click "Create Account" in demo
+    │   • Keep exploring or save your progress
+    │
+    └─→ "Get Started" (Traditional signup)
+        ↓
+        Register → Organization Setup → Full Access
+```
+
+### Demo Features:
+
+**Anonymous Users Can:**
+- ✅ Access demo instantly (no login)
+- ✅ Choose Solo or Team mode
+- ✅ Explore all features and boards
+- ✅ Switch roles in Team mode
+- ✅ Reset demo to clean state
+- ✅ Session lasts 48 hours
+- ❌ Data not saved permanently
+
+**Authenticated Users Get:**
+- ✅ Everything above, PLUS:
+- ✅ Persistent board membership
+- ✅ Data saved beyond demo
+- ✅ Chat room access
+- ✅ Full account features
+
+### Demo URLs:
+
+```bash
+# Landing page with "Try Demo" button
+http://localhost:8000/
+
+# Direct demo access
+http://localhost:8000/demo/start/
+
+# Demo dashboard (after mode selection)
+http://localhost:8000/demo/
+```
+
+---
+
+## 📊 Demo Analytics (Track User Behavior)
+
+**NEW:** Comprehensive tracking of anonymous and authenticated demo users!
+
+### Hybrid Analytics Strategy:
+
+**Server-Side Tracking (100% Coverage):**
+- Session-based identification (works for anonymous users)
+- Cannot be blocked by ad-blockers
+- Tracks: features explored, aha moments, conversions
+- Privacy-compliant (no PII required)
+
+**Client-Side Google Analytics (65-70% Coverage):**
+- Rich behavioral insights
+- ~30% blocked by ad-blockers
+- Optional but recommended
+
+### What Gets Tracked:
+
+```python
+# Demo Session Data
+{
+    'session_id': 'xyz789',
+    'user': None,                     # NULL for anonymous
+    'demo_mode': 'solo',              # Solo or Team
+    'device_type': 'mobile',          # Desktop/Mobile/Tablet
+    'duration_seconds': 420,          # 7 minutes in demo
+    'features_explored': 5,           # AI, burndown, etc.
+    'aha_moments': 2,                 # Value recognition
+    'nudges_shown': 3,                # Conversion prompts
+    'nudges_clicked': 1,              # CTA clicks
+    'converted_to_signup': False,     # Did they convert?
+}
+```
+
+### View Analytics Report:
+
+```bash
+# Generate comprehensive demo analytics
+python manage.py demo_analytics_report --days 7
+
+# Output includes:
+# • Anonymous vs authenticated conversion rates
+# • Aha moment impact on conversion
+# • Top features explored
+# • Device breakdown (mobile vs desktop)
+# • Nudge effectiveness
+# • Key insights and recommendations
+```
+
+### Key Metrics Tracked:
+
+**Entry & Engagement:**
+- Demo entry rate (% who try demo)
+- Mode selection (Solo vs Team)
+- Features explored (which and how many)
+- Time spent in demo
+- Device type (mobile/desktop/tablet)
+
+**Value Recognition:**
+- Aha moments experienced
+- Triggers (AI suggestions, burndown forecasts, RBAC)
+- Correlation with conversion
+
+**Conversion Events:**
+- Nudge impressions and clicks
+- Demo → Signup conversion rate
+- Time to conversion
+- Exit points (where users leave)
+
+**→ [Complete Analytics Guide](ANONYMOUS_DEMO_TRACKING_GUIDE.md)**
+
+---
+
 **💡 Dynamic Demo Data:** Demo data is intelligently designed with dates relative to the current date, so tasks and milestones will always appear fresh and relevant. The system automatically:
 - Creates **3 official demo boards** with **1000+ tasks** in dedicated demo organizations
 - Distributes tasks across past, present, and future based on their status
@@ -109,14 +271,16 @@ This removes duplicate boards and migrates users to the official demo boards.
 |----------|-------------|
 | **[📖 USER_GUIDE.md](USER_GUIDE.md)** | Practical usage, examples, and best practices |
 | **[✨ FEATURES.md](FEATURES.md)** | Detailed feature descriptions and capabilities |
+| **[🎮 Improving Demo UX.md](Improving%20Demo%20UX.md)** | **NEW!** Demo experience design guide with conversion optimization |
+| **[📊 ANONYMOUS_DEMO_TRACKING_GUIDE.md](ANONYMOUS_DEMO_TRACKING_GUIDE.md)** | **NEW!** Complete guide to tracking anonymous users and analytics |
 | **[📅 DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md)** | Dynamic demo data system guide |
-| **[⏱️ TIME_TRACKING_IMPLEMENTATION_COMPLETE.md](TIME_TRACKING_IMPLEMENTATION_COMPLETE.md)** | **NEW!** Time tracking, timesheets, and labor cost tracking |
-| **[� DEMO_RBAC_READY.md](DEMO_RBAC_READY.md)** | **NEW!** Role-based access control, approval workflows, and permission management |
+| **[⏱️ TIME_TRACKING_IMPLEMENTATION_COMPLETE.md](TIME_TRACKING_IMPLEMENTATION_COMPLETE.md)** | Time tracking, timesheets, and labor cost tracking |
+| **[� DEMO_RBAC_READY.md](DEMO_RBAC_READY.md)** | Role-based access control, approval workflows, and permission management |
 | **[�📈 USER_FEEDBACK_ANALYTICS.md](USER_FEEDBACK_ANALYTICS.md)** | User feedback, sentiment analysis, and behavior tracking |
 | **[📊 API_RATE_LIMITING_DASHBOARD.md](API_RATE_LIMITING_DASHBOARD.md)** | AI usage tracking and quota management |
-| **[📝 TRANSCRIPT_IMPORT_GUIDE.md](TRANSCRIPT_IMPORT_GUIDE.md)** | **NEW!** Import meeting transcripts from any source (Fireflies, Otter, Zoom, Teams, Meet) |
-| **[🔌 INTEGRATION_STRATEGY.md](INTEGRATION_STRATEGY.md)** | **NEW!** Phased approach to building integrations (Webhooks, GitHub, Slack, and beyond) |
-| **[🆚 FIREFLIES_COMPARISON.md](FIREFLIES_COMPARISON.md)** | **NEW!** Import-only vs Full API integration comparison |
+| **[📝 TRANSCRIPT_IMPORT_GUIDE.md](TRANSCRIPT_IMPORT_GUIDE.md)** | Import meeting transcripts from any source (Fireflies, Otter, Zoom, Teams, Meet) |
+| **[🔌 INTEGRATION_STRATEGY.md](INTEGRATION_STRATEGY.md)** | Phased approach to building integrations (Webhooks, GitHub, Slack, and beyond) |
+| **[🆚 FIREFLIES_COMPARISON.md](FIREFLIES_COMPARISON.md)** | Import-only vs Full API integration comparison |
 | **[🔌 API_DOCUMENTATION.md](API_DOCUMENTATION.md)** | REST API reference with 20+ endpoints |
 | **[🔗 INTEGRATIONS.md](INTEGRATIONS.md)** | Integration guide (Slack, Zapier, Teams) |
 | **[🪝 WEBHOOKS.md](WEBHOOKS.md)** | Webhook integration and automation |
@@ -275,11 +439,15 @@ Open http://localhost:8080 on your mobile device and install the PWA!
 |---------|---------|--------|
 | **AI Recommendations** | ✅ Yes | Limited/No |
 | **Explainable AI** | ✅ Full transparency | N/A |
+| **Try Without Signup** | ✅ Anonymous demo mode | Signup required |
+| **Demo Analytics** | ✅ 100% tracking coverage | Limited/None |
 | **Scope Creep Detection** | ✅ Automated | Manual |
 | **Burndown Forecasting** | ✅ AI-powered | Basic/No |
 | **Conflict Detection** | ✅ Real-time | Limited |
-| **Time Tracking & Timesheets** | ✅ Full-featured | Limited/Paywall || **Role-Based Access Control** | ✅ Advanced with approval workflows | Limited/Paywall |
-| **Audit Logging** | ✅ Complete history with IP tracking | Limited || **Self-Hosted** | ✅ Yes | Limited |
+| **Time Tracking & Timesheets** | ✅ Full-featured | Limited/Paywall |
+| **Role-Based Access Control** | ✅ Advanced with approval workflows | Limited/Paywall |
+| **Audit Logging** | ✅ Complete history with IP tracking | Limited |
+| **Self-Hosted** | ✅ Yes | Limited |
 | **Open Source** | ✅ MIT License | No |
 | **Cost** | 🆓 Free | Paid |
 
@@ -354,10 +522,12 @@ Perfect for developers building their portfolio or evaluating production-ready P
 
 ## 🚀 Ready to Get Started?
 
-1. **[Install PrizmAI](SETUP.md)** - Follow the setup guide
-2. **[Explore Features](FEATURES.md)** - Learn what PrizmAI can do
-3. **[Read User Guide](USER_GUIDE.md)** - See practical examples
-4. **Create Your First Board** - Start managing projects with AI
+1. **[Try Demo Mode](http://localhost:8000/)** - No signup required! Experience PrizmAI instantly
+2. **[Install PrizmAI](SETUP.md)** - Follow the setup guide for local installation
+3. **[Explore Features](FEATURES.md)** - Learn what PrizmAI can do
+4. **[Read User Guide](USER_GUIDE.md)** - See practical examples
+5. **[View Analytics](ANONYMOUS_DEMO_TRACKING_GUIDE.md)** - Understand user behavior tracking
+6. **Create Your First Board** - Start managing projects with AI
 
 ---
 
