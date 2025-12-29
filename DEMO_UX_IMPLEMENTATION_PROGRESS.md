@@ -658,30 +658,30 @@ Toast: "✓ Now viewing as Sam Rivera (Member)"
 
 ## 📈 Overall Progress Tracking
 
-### **Completed (6 tasks):**
+### **Completed (7 tasks):**
 ✅ Step 1: Verification  
 ✅ Step 2: Analytics Models  
 ✅ Step 3: Model Fields  
 ✅ Step 4: Demo Organization  
 ✅ Step 5: Demo Tasks  
 ✅ Step 6: Mode Selection View  
+✅ Step 7: Demo Banner (with role switching & reset)  
 
 ### **In Progress (0 tasks):**
 (None currently)
 
-### **Not Started (7 tasks):**
-📋 Step 7: Demo Banner  
+### **Not Started (6 tasks):**
 📋 Step 8: Session Management  
-📋 Step 9: Reset Feature  
-📋 Step 10: Aha Moments  
-📋 Step 11: Conversion Nudges  
-📋 Step 12: Role Switching  
-📋 Step 13: Testing  
+📋 Step 9: Aha Moments (Step 10 renamed)  
+📋 Step 10: Conversion Nudges (Step 11 renamed)  
+📋 Step 11: Testing (Step 13 renamed)  
+
+**Note:** Steps 9 (Reset) and 12 (Role Switching) were completed as part of Step 7 (Demo Banner implementation).
 
 ### **Total Estimated Remaining Effort:**
-- Steps 7-12: 30-39 hours
-- Step 13: 8-10 hours
-- **Total: 38-49 hours** (~5-6 full working days)
+- Steps 8-10: 16-20 hours
+- Step 11: 8-10 hours
+- **Total: 24-30 hours** (~3-4 full working days)
 
 ---
 
