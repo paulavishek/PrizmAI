@@ -365,6 +365,11 @@
         .then(response => response.json())
         .then(data => {
             console.log('Aha moment tracked:', momentType);
+            
+            // Trigger peak nudge after aha moment (if nudge system is available)
+            if (typeof window.nudgeSystem !== 'undefined' && window.nudgeSystem.showPeakNudgeForAha) {
+                window.nudgeSystem.showPeakNudgeForAha(momentType);
+            }
         })
         .catch(error => {
             console.error('Error tracking aha moment:', error);
