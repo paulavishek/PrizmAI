@@ -423,3 +423,278 @@ class AnalyticsEvent(models.Model):
     
     def __str__(self):
         return f"{self.event_name} - {self.timestamp.strftime('%Y-%m-%d %H:%M')}"
+
+
+# ============================================================================
+# DEMO MODE ANALYTICS MODELS
+# ============================================================================
+
+class DemoSession(models.Model):
+    """
+    Track demo sessions separately from regular user sessions.
+    Supports hybrid analytics (server-side + client-side tracking).
+    """
+    # Session identification
+    session_id = models.CharField(max_length=255, unique=True, db_index=True)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='demo_sessions',
+        help_text="User who started demo (null if demo led to signup)"
+    )
+    
+    # Demo configuration
+    demo_mode = models.CharField(
+        max_length=20,
+        choices=[
+            ('solo', 'Solo Exploration'),
+            ('team', 'Team Collaboration'),
+        ],
+        help_text="Demo mode selected by user"
+    )
+    selection_method = models.CharField(
+        max_length=20,
+        choices=[
+            ('selected', 'Explicitly Selected'),
+            ('skipped', 'Skipped Selection'),
+        ],
+        default='selected',
+        help_text="How user entered demo mode"
+    )
+    current_role = models.CharField(
+        max_length=20,
+        choices=[
+            ('admin', 'Administrator'),
+            ('member', 'Team Member'),
+            ('viewer', 'Viewer'),
+        ],
+        default='admin',
+        help_text="Current persona role (for Team mode)"
+    )
+    
+    # Session timing
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(help_text="Session expiration (48 hours default)")
+    last_activity = models.DateTimeField(auto_now=True)
+    session_end = models.DateTimeField(null=True, blank=True)
+    duration_seconds = models.IntegerField(default=0, help_text="Total time in demo")
+    
+    # Engagement metrics
+    features_explored = models.IntegerField(default=0, help_text="Count of features with meaningful interaction")
+    features_list = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of features explored: ['ai_generator', 'burndown', etc.]"
+    )
+    aha_moments = models.IntegerField(default=0, help_text="Count of aha moments experienced")
+    aha_moments_list = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of aha moment triggers"
+    )
+    nudges_shown = models.IntegerField(default=0, help_text="Count of conversion nudges shown")
+    nudges_clicked = models.IntegerField(default=0, help_text="Count of nudge CTAs clicked")
+    
+    # Conversion tracking
+    converted_to_signup = models.BooleanField(default=False)
+    conversion_timestamp = models.DateTimeField(null=True, blank=True)
+    time_to_conversion_seconds = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Time from demo start to signup"
+    )
+    
+    # Demo actions
+    reset_count = models.IntegerField(default=0, help_text="Number of times demo was reset")
+    role_switches = models.IntegerField(default=0, help_text="Number of role switches (Team mode)")
+    
+    # Device & metadata
+    device_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('desktop', 'Desktop'),
+            ('mobile', 'Mobile'),
+            ('tablet', 'Tablet'),
+            ('unknown', 'Unknown'),
+        ],
+        default='unknown'
+    )
+    user_agent = models.TextField(blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    
+    # Analytics tracking flags
+    has_ga4_data = models.BooleanField(
+        default=False,
+        help_text="Whether GA4 successfully tracked this session"
+    )
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['session_id']),
+            models.Index(fields=['created_at', 'expires_at']),
+            models.Index(fields=['demo_mode']),
+            models.Index(fields=['converted_to_signup']),
+        ]
+        verbose_name = 'Demo Session'
+        verbose_name_plural = 'Demo Sessions'
+    
+    def __str__(self):
+        return f"Demo Session {self.session_id[:8]} - {self.demo_mode}"
+    
+    def is_expired(self):
+        """Check if session has expired"""
+        return timezone.now() > self.expires_at
+    
+    def calculate_duration(self):
+        """Calculate and update session duration"""
+        if self.session_end:
+            delta = self.session_end - self.created_at
+        else:
+            delta = self.last_activity - self.created_at
+        
+        self.duration_seconds = int(delta.total_seconds())
+        self.save(update_fields=['duration_seconds'])
+        return self.duration_seconds
+    
+    def record_conversion(self):
+        """Record successful conversion to signup"""
+        self.converted_to_signup = True
+        self.conversion_timestamp = timezone.now()
+        self.time_to_conversion_seconds = int(
+            (self.conversion_timestamp - self.created_at).total_seconds()
+        )
+        self.save(update_fields=[
+            'converted_to_signup',
+            'conversion_timestamp',
+            'time_to_conversion_seconds'
+        ])
+
+
+class DemoAnalytics(models.Model):
+    """
+    Server-side event tracking for demo mode.
+    Provides 100% coverage (cannot be blocked by ad-blockers).
+    """
+    # Session reference
+    session_id = models.CharField(max_length=255, db_index=True)
+    demo_session = models.ForeignKey(
+        DemoSession,
+        on_delete=models.CASCADE,
+        related_name='analytics_events',
+        null=True,
+        blank=True
+    )
+    
+    # Event details
+    event_type = models.CharField(
+        max_length=100,
+        db_index=True,
+        help_text="Event name: 'demo_mode_selected', 'feature_explored', 'aha_moment', etc."
+    )
+    event_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Event-specific data and metadata"
+    )
+    
+    # Timing
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    
+    # Context
+    page_path = models.CharField(max_length=500, blank=True)
+    device_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('desktop', 'Desktop'),
+            ('mobile', 'Mobile'),
+            ('tablet', 'Tablet'),
+            ('unknown', 'Unknown'),
+        ],
+        default='unknown'
+    )
+    user_agent = models.TextField(blank=True)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['session_id', 'event_type']),
+            models.Index(fields=['event_type', 'timestamp']),
+            models.Index(fields=['demo_session', 'event_type']),
+        ]
+        verbose_name = 'Demo Analytics Event'
+        verbose_name_plural = 'Demo Analytics Events'
+    
+    def __str__(self):
+        return f"{self.event_type} - {self.timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+
+
+class DemoConversion(models.Model):
+    """
+    Detailed tracking of demo-to-signup conversions.
+    Used for conversion optimization and attribution analysis.
+    """
+    # Session reference
+    session_id = models.CharField(max_length=255, unique=True, db_index=True)
+    demo_session = models.OneToOneField(
+        DemoSession,
+        on_delete=models.CASCADE,
+        related_name='conversion_details'
+    )
+    
+    # User who converted
+    converted_user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='demo_conversion'
+    )
+    
+    # Conversion metrics
+    time_in_demo_seconds = models.IntegerField(help_text="Total time spent in demo before signup")
+    features_explored = models.IntegerField(default=0)
+    features_list = models.JSONField(default=list, blank=True)
+    aha_moments = models.IntegerField(default=0)
+    aha_moments_list = models.JSONField(default=list, blank=True)
+    
+    # Attribution
+    last_nudge_seen = models.CharField(max_length=50, blank=True)
+    nudge_clicks = models.IntegerField(default=0)
+    conversion_source = models.CharField(
+        max_length=50,
+        choices=[
+            ('demo', 'Demo CTA'),
+            ('nudge_soft', 'Soft Nudge'),
+            ('nudge_medium', 'Medium Nudge'),
+            ('nudge_peak', 'Peak Moment Nudge'),
+            ('nudge_exit', 'Exit Intent Nudge'),
+            ('banner', 'Demo Banner'),
+            ('direct', 'Direct Signup'),
+        ],
+        default='demo'
+    )
+    
+    # Demo activity
+    reset_count = models.IntegerField(default=0)
+    role_switches = models.IntegerField(default=0)
+    demo_mode = models.CharField(max_length=20)
+    
+    # Timing
+    timestamp = models.DateTimeField(auto_now_add=True)
+    
+    # Device
+    device_type = models.CharField(max_length=20)
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['converted_user']),
+            models.Index(fields=['conversion_source']),
+            models.Index(fields=['timestamp']),
+        ]
+        verbose_name = 'Demo Conversion'
+        verbose_name_plural = 'Demo Conversions'
+    
+    def __str__(self):
+        return f"Conversion: {self.converted_user.username} - {self.timestamp.strftime('%Y-%m-%d')}"

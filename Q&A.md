@@ -928,3 +928,632 @@ python manage.py populate_demo_data --mvp
 - List file changes needed
 - Include mobile-specific UX patterns
 ```
+
+
+
+
+Excellent question! This is a critical architecture decision that affects data isolation, user experience, and implementation complexity. Let me analyze both options thoroughly.
+
+---
+
+## 🏗️ **Architecture Analysis: Demo Organization Structure**
+
+### **TL;DR Recommendation: Option B (1 Organization, 3 Boards)** ✅
+
+**Why:** Simpler, matches real-world usage, easier role management, cleaner UX
+
+---
+
+## 📊 **Detailed Comparison**
+
+### **Option A: 3 Organizations, 1 Board Each**
+
+```
+Demo - Software Development (Org)
+├── Alex Chen (Admin)
+├── Sam Rivera (Member)  
+├── Jordan Taylor (Viewer)
+└── Software Project Board
+
+Demo - Marketing Campaign (Org)
+├── Alex Chen (Admin)
+├── Sam Rivera (Member)
+├── Jordan Taylor (Viewer)  
+└── Marketing Campaign Board
+
+Demo - Bug Tracking (Org)
+├── Alex Chen (Admin)
+├── Sam Rivera (Member)
+├── Jordan Taylor (Viewer)
+└── Bug Tracking Board
+```
+
+**Pros:**
+- ✅ **Data isolation** - Each "team" completely separate
+- ✅ **Realistic scenario** - Mimics multi-org enterprises
+
+**Cons:**
+- ❌ **Complexity** - 9 user memberships to manage (3 personas × 3 orgs)
+- ❌ **Navigation confusion** - Users must switch between orgs to see all boards
+- ❌ **Role switching complexity** - Must switch role in 3 orgs separately
+- ❌ **Unclear UX** - "Why are these separate organizations?"
+- ❌ **Data duplication** - Same 3 personas repeated 3 times
+- ❌ **Reset complexity** - Must reset 3 orgs separately
+
+---
+
+### **Option B: 1 Organization, 3 Boards** ✅
+
+```
+Demo Organization (Org)
+├── Alex Chen (Admin)
+├── Sam Rivera (Member)
+├── Jordan Taylor (Viewer)
+├── Software Project Board
+├── Marketing Campaign Board
+└── Bug Tracking Board
+```
+
+**Pros:**
+- ✅ **Simplicity** - 3 user memberships total (3 personas × 1 org)
+- ✅ **Realistic** - Most companies have multiple boards in one workspace
+- ✅ **Seamless navigation** - All boards visible in one dashboard
+- ✅ **Single role switch** - Change role once, applies everywhere
+- ✅ **Clear mental model** - "One demo workspace with different project types"
+- ✅ **Easy reset** - Reset one org, affects all boards
+- ✅ **Matches product UX** - PrizmAI likely designed for multi-board orgs
+
+**Cons:**
+- ⚠️ **Less isolation** - Can't demonstrate "multi-org enterprises" (edge case)
+
+---
+
+## 🎯 **Recommendation: Option B with Strategic Naming**
+
+### **Implementation:**
+
+**Organization Name:**
+```python
+{
+    'name': 'Demo - Acme Corporation',  # Single demo org
+    'description': 'Explore PrizmAI with realistic project examples',
+    'is_demo': True
+}
+```
+
+**Board Names:**
+```python
+DEMO_BOARDS = [
+    {
+        'name': 'Software Development',  # No "Demo -" prefix on boards
+        'description': 'Track features, sprints, and releases',
+        'organization': demo_org,
+        'is_official_demo_board': True
+    },
+    {
+        'name': 'Marketing Campaign',
+        'description': 'Plan and execute marketing initiatives', 
+        'organization': demo_org,
+        'is_official_demo_board': True
+    },
+    {
+        'name': 'Bug Tracking',
+        'description': 'Triage and resolve product issues',
+        'organization': demo_org,
+        'is_official_demo_board': True
+    }
+]
+```
+
+**Personas (3 members of 1 org):**
+```python
+DEMO_PERSONAS = [
+    {
+        'email': 'alex.chen@demo.prizmai.local',
+        'first_name': 'Alex',
+        'last_name': 'Chen',
+        'organization_role': 'admin',  # Admin of demo org
+        'title': 'Project Manager'
+    },
+    {
+        'email': 'sam.rivera@demo.prizmai.local',
+        'first_name': 'Sam',
+        'last_name': 'Rivera', 
+        'organization_role': 'member',  # Member of demo org
+        'title': 'Team Member'
+    },
+    {
+        'email': 'jordan.taylor@demo.prizmai.local',
+        'first_name': 'Jordan',
+        'last_name': 'Taylor',
+        'organization_role': 'viewer',  # Viewer of demo org
+        'title': 'Stakeholder'
+    }
+]
+```
+
+---
+
+## 🔧 **Implementation Code**
+
+### **Management Command: `create_demo_organization.py`**
+
+```python
+# demo_analytics/management/commands/create_demo_organization.py
+
+from django.core.management.base import BaseCommand
+from django.contrib.auth import get_user_model
+from boards.models import Organization, Board, OrganizationMembership
+from django.utils import timezone
+from datetime import timedelta
+
+User = get_user_model()
+
+class Command(BaseCommand):
+    help = 'Create demo organization with boards and personas'
+    
+    def handle(self, *args, **kwargs):
+        self.stdout.write('Creating demo organization...')
+        
+        # Step 1: Create single demo organization
+        demo_org, created = Organization.objects.get_or_create(
+            name='Demo - Acme Corporation',
+            defaults={
+                'description': 'Explore PrizmAI with realistic project examples',
+                'is_demo': True,
+                'created_at': timezone.now()
+            }
+        )
+        
+        if created:
+            self.stdout.write(self.style.SUCCESS(f'✓ Created organization: {demo_org.name}'))
+        else:
+            self.stdout.write(self.style.WARNING(f'! Organization already exists: {demo_org.name}'))
+        
+        # Step 2: Create 3 demo personas
+        personas = self.create_personas(demo_org)
+        
+        # Step 3: Create 3 demo boards
+        boards = self.create_boards(demo_org)
+        
+        # Step 4: Add board memberships
+        self.assign_board_members(boards, personas)
+        
+        self.stdout.write(self.style.SUCCESS('✓ Demo organization setup complete!'))
+        self.stdout.write(f'  - Organization: {demo_org.name}')
+        self.stdout.write(f'  - Boards: {len(boards)}')
+        self.stdout.write(f'  - Personas: {len(personas)}')
+    
+    def create_personas(self, demo_org):
+        """Create 3 demo personas as members of the demo org"""
+        
+        personas_data = [
+            {
+                'email': 'alex.chen@demo.prizmai.local',
+                'first_name': 'Alex',
+                'last_name': 'Chen',
+                'role': 'admin',
+                'title': 'Project Manager',
+                'bio': 'Experienced PM leading cross-functional teams'
+            },
+            {
+                'email': 'sam.rivera@demo.prizmai.local',
+                'first_name': 'Sam',
+                'last_name': 'Rivera',
+                'role': 'member',
+                'title': 'Senior Developer',
+                'bio': 'Full-stack developer with 5+ years experience'
+            },
+            {
+                'email': 'jordan.taylor@demo.prizmai.local',
+                'first_name': 'Jordan',
+                'last_name': 'Taylor',
+                'role': 'viewer',
+                'title': 'Executive Stakeholder',
+                'bio': 'C-level executive overseeing strategic initiatives'
+            }
+        ]
+        
+        personas = []
+        
+        for persona_data in personas_data:
+            # Create user
+            user, created = User.objects.get_or_create(
+                email=persona_data['email'],
+                defaults={
+                    'first_name': persona_data['first_name'],
+                    'last_name': persona_data['last_name'],
+                    'is_active': True,
+                    'email_verified': True,  # Skip verification for demo
+                    'is_demo_user': True  # Flag as demo user
+                }
+            )
+            
+            if created:
+                user.set_unusable_password()  # Demo users can't login directly
+                user.save()
+                self.stdout.write(self.style.SUCCESS(f'  ✓ Created persona: {user.get_full_name()}'))
+            else:
+                self.stdout.write(self.style.WARNING(f'  ! Persona already exists: {user.get_full_name()}'))
+            
+            # Add to organization
+            membership, _ = OrganizationMembership.objects.get_or_create(
+                user=user,
+                organization=demo_org,
+                defaults={
+                    'role': persona_data['role'],
+                    'title': persona_data['title'],
+                    'bio': persona_data['bio'],
+                    'joined_at': timezone.now()
+                }
+            )
+            
+            personas.append(user)
+        
+        return personas
+    
+    def create_boards(self, demo_org):
+        """Create 3 demo boards in the demo org"""
+        
+        boards_data = [
+            {
+                'name': 'Software Development',
+                'description': 'Track features, sprints, and releases for our product',
+                'columns': ['Backlog', 'In Progress', 'In Review', 'Done'],
+                'color': '#4285F4'  # Blue
+            },
+            {
+                'name': 'Marketing Campaign',
+                'description': 'Plan and execute Q1 2025 marketing initiatives',
+                'columns': ['Ideas', 'Planning', 'In Progress', 'Published'],
+                'color': '#EA4335'  # Red
+            },
+            {
+                'name': 'Bug Tracking',
+                'description': 'Triage and resolve customer-reported issues',
+                'columns': ['New', 'Investigating', 'In Progress', 'Closed'],
+                'color': '#FBBC04'  # Yellow
+            }
+        ]
+        
+        boards = []
+        
+        for board_data in boards_data:
+            board, created = Board.objects.get_or_create(
+                name=board_data['name'],
+                organization=demo_org,
+                defaults={
+                    'description': board_data['description'],
+                    'is_official_demo_board': True,
+                    'created_at': timezone.now()
+                }
+            )
+            
+            if created:
+                self.stdout.write(self.style.SUCCESS(f'  ✓ Created board: {board.name}'))
+                
+                # Create columns
+                for order, column_name in enumerate(board_data['columns']):
+                    Column.objects.create(
+                        board=board,
+                        name=column_name,
+                        order=order
+                    )
+            else:
+                self.stdout.write(self.style.WARNING(f'  ! Board already exists: {board.name}'))
+            
+            boards.append(board)
+        
+        return boards
+    
+    def assign_board_members(self, boards, personas):
+        """Assign personas to boards (all personas can access all boards)"""
+        
+        for board in boards:
+            for persona in personas:
+                # Get their org role
+                membership = OrganizationMembership.objects.get(
+                    user=persona,
+                    organization=board.organization
+                )
+                
+                # Add to board (inherits org-level role by default)
+                board.members.add(persona)
+        
+        self.stdout.write(self.style.SUCCESS(f'  ✓ Assigned {len(personas)} personas to {len(boards)} boards'))
+```
+
+---
+
+## 📋 **Database Schema Updates**
+
+### **Add Demo Flags to Models:**
+
+```python
+# models.py
+
+class Organization(models.Model):
+    name = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    is_demo = models.BooleanField(
+        default=False,
+        help_text="Flag for demo organizations"
+    )
+    # ... other fields
+
+class Board(models.Model):
+    name = models.CharField(max_length=255)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE)
+    is_official_demo_board = models.BooleanField(
+        default=False,
+        help_text="Official demo boards cannot be deleted by users"
+    )
+    created_by_session = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Session ID if board was created during demo"
+    )
+    # ... other fields
+
+class User(AbstractUser):
+    # ... existing fields
+    is_demo_user = models.BooleanField(
+        default=False,
+        help_text="Flag for demo personas (can't login directly)"
+    )
+```
+
+---
+
+## 🎨 **UX Impact: How It Looks to Users**
+
+### **Option B User Experience:**
+
+**1. Demo Dashboard View:**
+```
+┌────────────────────────────────────────────────┐
+│ 🎯 Demo Mode - Acme Corporation               │
+│ Viewing as: Alex Chen (Admin)    [Switch ▼]   │
+│ [Reset Demo] [Create Account]                  │
+├────────────────────────────────────────────────┤
+│                                                │
+│ Your Boards:                                   │
+│                                                │
+│ 📊 Software Development        15 tasks       │
+│    Track features and releases                 │
+│    [Open Board →]                              │
+│                                                │
+│ 📢 Marketing Campaign          12 tasks        │
+│    Q1 2025 marketing initiatives               │
+│    [Open Board →]                              │
+│                                                │
+│ 🐛 Bug Tracking               8 tasks          │
+│    Customer-reported issues                    │
+│    [Open Board →]                              │
+│                                                │
+└────────────────────────────────────────────────┘
+```
+
+**2. Role Switching (Single Org):**
+```
+Click [Switch ▼] →
+
+┌──────────────────────────────┐
+│ Switch Role                  │
+├──────────────────────────────┤
+│ 🎯 Alex Chen (Admin) ✓       │
+│    Full access               │
+│                              │
+│ 👤 Sam Rivera (Member)       │
+│    Create & edit tasks       │
+│                              │
+│ 👁️ Jordan Taylor (Viewer)    │
+│    View only                 │
+└──────────────────────────────┘
+
+Changes role ACROSS ALL 3 BOARDS instantly
+```
+
+**3. Navigation:**
+- All boards visible in one place
+- No org-switching required
+- Seamless experience
+
+---
+
+### **Option A User Experience (What We're Avoiding):**
+
+**1. Demo Dashboard:**
+```
+┌────────────────────────────────────────────────┐
+│ 🎯 Demo Mode                                   │
+│ Current Org: Demo - Software Development       │
+│ [Switch Organization ▼]                        │
+├────────────────────────────────────────────────┤
+│ Your Boards in this Organization:              │
+│                                                │
+│ 📊 Software Project                            │
+│    [Open Board →]                              │
+│                                                │
+│ ⚠️ Want to see other demos?                    │
+│ [Switch to Marketing Demo]                     │
+│ [Switch to Bug Tracking Demo]                  │
+└────────────────────────────────────────────────┘
+```
+
+**Problems:**
+- ❌ Users must switch orgs to see different boards
+- ❌ Confusing: "Why are these separate organizations?"
+- ❌ Role changes must be done 3× (once per org)
+- ❌ Reset must be done 3× (once per org)
+
+---
+
+## ✅ **Final Implementation Guidance**
+
+### **What Your Friends Should Implement:**
+
+**1. Create Single Demo Organization:**
+```bash
+python manage.py create_demo_organization
+```
+
+**This creates:**
+- ✅ 1 organization: "Demo - Acme Corporation"
+- ✅ 3 boards: Software Development, Marketing Campaign, Bug Tracking
+- ✅ 3 personas: Alex Chen (Admin), Sam Rivera (Member), Jordan Taylor (Viewer)
+- ✅ All personas are members of the single org
+- ✅ All personas can access all 3 boards
+
+**2. Demo Session Logic:**
+```python
+# views.py
+
+def demo_dashboard(request):
+    """Show all boards from demo organization"""
+    
+    # Get THE demo organization (singular)
+    demo_org = Organization.objects.get(
+        is_demo=True,
+        name='Demo - Acme Corporation'
+    )
+    
+    # Get all boards in this org
+    demo_boards = Board.objects.filter(
+        organization=demo_org,
+        is_official_demo_board=True
+    )
+    
+    # Get current demo persona
+    current_role = request.session.get('demo_role', 'admin')
+    persona = get_demo_persona(current_role)  # Alex/Sam/Jordan
+    
+    context = {
+        'organization': demo_org,
+        'boards': demo_boards,  # All 3 boards
+        'current_persona': persona,
+        'current_role': current_role
+    }
+    
+    return render(request, 'demo/dashboard.html', context)
+```
+
+**3. Role Switching:**
+```python
+def switch_demo_role(request):
+    """Switch role - applies to entire demo org"""
+    
+    new_role = request.POST.get('role')  # 'admin', 'member', or 'viewer'
+    
+    # Update session
+    request.session['demo_role'] = new_role
+    
+    # Track switch
+    track_demo_event('role_switched', {
+        'to': new_role,
+        'session_id': request.session.session_key
+    })
+    
+    return JsonResponse({
+        'status': 'success',
+        'new_role': new_role,
+        'persona': get_demo_persona(new_role)
+    })
+
+def get_demo_persona(role):
+    """Get demo persona by role"""
+    
+    role_map = {
+        'admin': 'alex.chen@demo.prizmai.local',
+        'member': 'sam.rivera@demo.prizmai.local',
+        'viewer': 'jordan.taylor@demo.prizmai.local'
+    }
+    
+    email = role_map.get(role)
+    return User.objects.get(email=email)
+```
+
+---
+
+## 🚀 **Migration Path if Already Implemented Option A**
+
+**If your friends already created 3 separate orgs:**
+
+```python
+# migration_script.py
+
+from boards.models import Organization, Board, User
+
+# Step 1: Create single demo org
+demo_org = Organization.objects.create(
+    name='Demo - Acme Corporation',
+    is_demo=True
+)
+
+# Step 2: Get all demo personas (currently duplicated)
+alex = User.objects.get(email='alex.chen@demo.prizmai.local')
+sam = User.objects.get(email='sam.rivera@demo.prizmai.local')
+jordan = User.objects.get(email='jordan.taylor@demo.prizmai.local')
+
+# Step 3: Move all boards to single org
+old_orgs = Organization.objects.filter(name__startswith='Demo -').exclude(id=demo_org.id)
+
+for old_org in old_orgs:
+    # Move boards
+    Board.objects.filter(organization=old_org).update(organization=demo_org)
+
+# Step 4: Add personas to new org (single membership each)
+for user in [alex, sam, jordan]:
+    OrganizationMembership.objects.create(
+        user=user,
+        organization=demo_org,
+        role=get_user_role(user)  # Based on persona
+    )
+
+# Step 5: Delete old orgs
+old_orgs.delete()
+
+print("✓ Migrated to single demo organization")
+```
+
+---
+
+## 📊 **Summary Table**
+
+| Factor | Option A (3 Orgs) | Option B (1 Org) |
+|--------|------------------|------------------|
+| **Simplicity** | ❌ Complex | ✅ Simple |
+| **Navigation** | ❌ Must switch orgs | ✅ All boards visible |
+| **Role Switching** | ❌ 3× (once per org) | ✅ 1× (applies everywhere) |
+| **Reset** | ❌ 3× | ✅ 1× |
+| **Realism** | ⚠️ Multi-org enterprises | ✅ Multi-board workspace |
+| **User Confusion** | ❌ High | ✅ Low |
+| **Implementation** | ❌ 9 memberships | ✅ 3 memberships |
+| **Maintenance** | ❌ Complex | ✅ Simple |
+
+---
+
+## ✅ **Final Answer:**
+
+**Implement Option B: 1 Organization, 3 Boards**
+
+**Why:**
+- ✅ Matches how real users use PrizmAI (multiple projects in one workspace)
+- ✅ Simpler to implement and maintain
+- ✅ Better UX (no confusing org-switching)
+- ✅ Single role switch affects all boards
+- ✅ Single reset clears entire demo
+- ✅ Easier to explain in demo
+
+**Implementation:**
+```bash
+# Single command creates everything
+python manage.py create_demo_organization
+
+# Result:
+# - 1 demo org: "Demo - Acme Corporation"
+# - 3 boards: Software Dev, Marketing, Bug Tracking  
+# - 3 personas: Alex (Admin), Sam (Member), Jordan (Viewer)
+# - All personas can access all boards
+```

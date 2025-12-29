@@ -43,6 +43,18 @@ class Board(models.Model):
                                        related_name='baseline_boards',
                                        help_text="User who set the baseline")
     
+    # Demo Mode Support
+    is_official_demo_board = models.BooleanField(
+        default=False,
+        help_text="Official demo boards cannot be deleted by demo users"
+    )
+    created_by_session = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Session ID if created in demo mode (for cleanup)"
+    )
+    
     def __str__(self):
         return self.name
     
@@ -402,6 +414,14 @@ class Task(models.Model):
         blank=True,
         null=True,
         help_text="When prediction was last calculated"
+    )
+    
+    # Demo Mode Support
+    created_by_session = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        help_text="Session ID if created in demo mode (for cleanup)"
     )
     
     class Meta:

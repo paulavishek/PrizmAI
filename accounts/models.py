@@ -17,6 +17,12 @@ class Organization(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_organizations')
     
+    # Demo Mode Support
+    is_demo = models.BooleanField(
+        default=False,
+        help_text="Whether this is a demo organization (for demo mode)"
+    )
+    
     def __str__(self):
         return self.name
 
