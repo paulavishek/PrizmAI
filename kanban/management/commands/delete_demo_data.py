@@ -22,6 +22,12 @@ from messaging.models import (
     FileAttachment, TaskThreadComment
 )
 from wiki.models import WikiCategory, WikiPage, WikiAttachment, MeetingNotes
+from ai_assistant.models import AIAssistantSession, AIAssistantMessage, ProjectKnowledgeBase
+from kanban.coach_models import CoachingSuggestion, CoachingFeedback, PMMetrics, CoachingInsight
+from kanban.resource_leveling_models import (
+    UserPerformanceProfile, TaskAssignmentHistory, ResourceLevelingSuggestion
+)
+from analytics.models import UserSession, Feedback, FeedbackPrompt, AnalyticsEvent
 
 
 class Command(BaseCommand):
@@ -104,9 +110,37 @@ class Command(BaseCommand):
         
         # User profiles
         profiles_count = UserProfile.objects.filter(user__in=demo_users).count()
+        
+        # AI Assistant data
+        ai_sessions_count = AIAssistantSession.objects.filter(user__in=demo_users).count()
+        ai_messages_count = AIAssistantMessage.objects.filter(session__user__in=demo_users).count()
+        knowledge_base_count = ProjectKnowledgeBase.objects.filter(board__in=demo_boards).count()
+        
+        # AI Coach data
+        coaching_suggestions_count = CoachingSuggestion.objects.filter(board__in=demo_boards).count()
+        coaching_feedback_count = CoachingFeedback.objects.filter(suggestion__board__in=demo_boards).count()
+        pm_metrics_count = PMMetrics.objects.filter(board__in=demo_boards).count()
+        coaching_insights_count = CoachingInsight.objects.all().count()  # Global insights, not board-specific
+        
+        # Resource Leveling data
+        performance_profiles_count = UserPerformanceProfile.objects.filter(
+            user__in=demo_users, organization__in=demo_orgs
+        ).count()
+        assignment_history_count = TaskAssignmentHistory.objects.filter(
+            task__column__board__in=demo_boards
+        ).count()
+        leveling_suggestions_count = ResourceLevelingSuggestion.objects.filter(
+            organization__in=demo_orgs
+        ).count()
+        
+        # Analytics data
+        user_sessions_count = UserSession.objects.filter(user__in=demo_users).count()
+        user_feedback_count = Feedback.objects.filter(user__in=demo_users).count()
+        feedback_prompts_count = FeedbackPrompt.objects.filter(user_session__user__in=demo_users).count()
+        analytics_events_count = AnalyticsEvent.objects.filter(user_session__user__in=demo_users).count()
 
         # Display summary
-        self.stdout.write(self.style.NOTICE('📊 DELETION SUMMARY:'))
+        self.stdout.write(self.style.NOTICE('DELETION SUMMARY:'))
         self.stdout.write('')
         self.stdout.write(f'  Users:                    {demo_users.count()}')
         self.stdout.write(f'  Organizations:            {demo_orgs.count()}')
@@ -138,6 +172,25 @@ class Command(BaseCommand):
         self.stdout.write('')
         self.stdout.write(f'  Meeting Notes:            {meeting_notes_count}')
         self.stdout.write('')
+        self.stdout.write(self.style.NOTICE('AI FEATURES DATA:'))
+        self.stdout.write(f'  AI Assistant Sessions:    {ai_sessions_count}')
+        self.stdout.write(f'  AI Assistant Messages:    {ai_messages_count}')
+        self.stdout.write(f'  Knowledge Base Entries:   {knowledge_base_count}')
+        self.stdout.write('')
+        self.stdout.write(f'  Coaching Suggestions:     {coaching_suggestions_count}')
+        self.stdout.write(f'  Coaching Feedback:        {coaching_feedback_count}')
+        self.stdout.write(f'  PM Metrics:               {pm_metrics_count}')
+        self.stdout.write(f'  Coaching Insights:        {coaching_insights_count}')
+        self.stdout.write('')
+        self.stdout.write(f'  Performance Profiles:     {performance_profiles_count}')
+        self.stdout.write(f'  Task Assignment History:  {assignment_history_count}')
+        self.stdout.write(f'  Leveling Suggestions:     {leveling_suggestions_count}')
+        self.stdout.write('')
+        self.stdout.write(f'  User Sessions:            {user_sessions_count}')
+        self.stdout.write(f'  User Feedback:            {user_feedback_count}')
+        self.stdout.write(f'  Feedback Prompts:         {feedback_prompts_count}')
+        self.stdout.write(f'  Analytics Events:         {analytics_events_count}')
+        self.stdout.write('')
 
         total_items = (
             demo_users.count() + demo_orgs.count() + profiles_count +
@@ -146,7 +199,12 @@ class Command(BaseCommand):
             recommendations_count + stakeholders_count + involvement_count +
             engagement_count + chat_rooms_count + chat_messages_count +
             thread_comments_count + notifications_count + wiki_categories_count +
-            wiki_pages_count + wiki_attachments_count + meeting_notes_count
+            wiki_pages_count + wiki_attachments_count + meeting_notes_count +
+            ai_sessions_count + ai_messages_count + knowledge_base_count +
+            coaching_suggestions_count + coaching_feedback_count + pm_metrics_count +
+            coaching_insights_count + performance_profiles_count + assignment_history_count +
+            leveling_suggestions_count + user_sessions_count + user_feedback_count +
+            feedback_prompts_count + analytics_events_count
         )
 
         self.stdout.write(self.style.WARNING(f'  TOTAL ITEMS TO DELETE:    {total_items}'))
@@ -154,33 +212,33 @@ class Command(BaseCommand):
 
         # Safety check - prevent deletion if no demo data found
         if demo_users.count() == 0 and demo_orgs.count() == 0:
-            self.stdout.write(self.style.SUCCESS('✅ No demo data found. Database is already clean!'))
+            self.stdout.write(self.style.SUCCESS('No demo data found. Database is already clean!'))
             return
 
         # List users and orgs that will be deleted
-        self.stdout.write(self.style.NOTICE('👥 Demo Users to Delete:'))
+        self.stdout.write(self.style.NOTICE('Demo Users to Delete:'))
         for user in demo_users:
             self.stdout.write(f'  - {user.username} ({user.email})')
         self.stdout.write('')
 
-        self.stdout.write(self.style.NOTICE('🏢 Demo Organizations to Delete:'))
+        self.stdout.write(self.style.NOTICE('Demo Organizations to Delete:'))
         for org in demo_orgs:
             self.stdout.write(f'  - {org.name} ({org.domain})')
         self.stdout.write('')
 
         # Confirmation prompt (unless --no-confirm flag is used)
         if not dry_run and not no_confirm:
-            self.stdout.write(self.style.ERROR('⚠️  WARNING: This action cannot be undone!'))
+            self.stdout.write(self.style.ERROR('WARNING: This action cannot be undone!'))
             self.stdout.write('')
             confirm = input('Type "DELETE" to confirm deletion: ')
             
             if confirm != 'DELETE':
-                self.stdout.write(self.style.SUCCESS('❌ Deletion cancelled.'))
+                self.stdout.write(self.style.SUCCESS('Deletion cancelled.'))
                 return
 
         if dry_run:
             self.stdout.write(self.style.SUCCESS(''))
-            self.stdout.write(self.style.SUCCESS('✅ DRY RUN COMPLETE - No data was deleted'))
+            self.stdout.write(self.style.SUCCESS('DRY RUN COMPLETE - No data was deleted'))
             self.stdout.write(self.style.SUCCESS('   Run without --dry-run to actually delete the data'))
             return
 
@@ -188,7 +246,7 @@ class Command(BaseCommand):
         try:
             with transaction.atomic():
                 self.stdout.write('')
-                self.stdout.write(self.style.NOTICE('🗑️  Starting deletion process...'))
+                self.stdout.write(self.style.NOTICE('Starting deletion process...'))
                 self.stdout.write('')
 
                 # Delete in correct order to respect foreign key constraints
@@ -213,7 +271,52 @@ class Command(BaseCommand):
                 self.stdout.write('  Deleting chat rooms...')
                 ChatRoom.objects.filter(board__in=demo_boards).delete()
 
-                # 2. Delete wiki and knowledge base data (depends on organizations)
+                # 2. Delete AI features data (depends on users and boards)
+                self.stdout.write('  Deleting AI Assistant messages...')
+                AIAssistantMessage.objects.filter(session__user__in=demo_users).delete()
+                
+                self.stdout.write('  Deleting AI Assistant sessions...')
+                AIAssistantSession.objects.filter(user__in=demo_users).delete()
+                
+                self.stdout.write('  Deleting project knowledge base...')
+                ProjectKnowledgeBase.objects.filter(board__in=demo_boards).delete()
+                
+                self.stdout.write('  Deleting coaching feedback...')
+                CoachingFeedback.objects.filter(suggestion__board__in=demo_boards).delete()
+                
+                self.stdout.write('  Deleting coaching suggestions...')
+                CoachingSuggestion.objects.filter(board__in=demo_boards).delete()
+                
+                self.stdout.write('  Deleting PM metrics...')
+                PMMetrics.objects.filter(board__in=demo_boards).delete()
+                
+                self.stdout.write('  Deleting coaching insights...')
+                # Only delete insights if you want to clear all learned patterns
+                # CoachingInsight.objects.all().delete()  # Commented out to preserve learned insights
+                
+                self.stdout.write('  Deleting task assignment history...')
+                TaskAssignmentHistory.objects.filter(task__column__board__in=demo_boards).delete()
+                
+                self.stdout.write('  Deleting resource leveling suggestions...')
+                ResourceLevelingSuggestion.objects.filter(organization__in=demo_orgs).delete()
+                
+                self.stdout.write('  Deleting user performance profiles...')
+                UserPerformanceProfile.objects.filter(user__in=demo_users, organization__in=demo_orgs).delete()
+                
+                # 3. Delete analytics data (depends on users and sessions)
+                self.stdout.write('  Deleting analytics events...')
+                AnalyticsEvent.objects.filter(user_session__user__in=demo_users).delete()
+                
+                self.stdout.write('  Deleting feedback prompts...')
+                FeedbackPrompt.objects.filter(user_session__user__in=demo_users).delete()
+                
+                self.stdout.write('  Deleting user feedback...')
+                Feedback.objects.filter(user__in=demo_users).delete()
+                
+                self.stdout.write('  Deleting user sessions...')
+                UserSession.objects.filter(user__in=demo_users).delete()
+
+                # 4. Delete wiki and knowledge base data (depends on organizations)
                 self.stdout.write('  Deleting wiki attachments...')
                 WikiAttachment.objects.filter(page__organization__in=demo_orgs).delete()
                 
@@ -223,11 +326,11 @@ class Command(BaseCommand):
                 self.stdout.write('  Deleting wiki categories...')
                 WikiCategory.objects.filter(organization__in=demo_orgs).delete()
                 
-                # 3. Delete meeting notes (depends on organizations)
+                # 5. Delete meeting notes (depends on organizations)
                 self.stdout.write('  Deleting meeting notes...')
                 MeetingNotes.objects.filter(organization__in=demo_orgs).delete()
 
-                # 4. Delete stakeholder data (depends on boards and tasks)
+                # 6. Delete stakeholder data (depends on boards and tasks)
                 self.stdout.write('  Deleting stakeholder engagement records...')
                 StakeholderEngagementRecord.objects.filter(stakeholder__board__in=demo_boards).delete()
                 
@@ -243,7 +346,7 @@ class Command(BaseCommand):
                 self.stdout.write('  Deleting stakeholders...')
                 ProjectStakeholder.objects.filter(board__in=demo_boards).delete()
 
-                # 5. Delete resource management data (depends on boards)
+                # 7. Delete resource management data (depends on boards)
                 self.stdout.write('  Deleting workload recommendations...')
                 WorkloadDistributionRecommendation.objects.filter(board__in=demo_boards).delete()
                 
@@ -253,7 +356,7 @@ class Command(BaseCommand):
                 self.stdout.write('  Deleting resource forecasts...')
                 ResourceDemandForecast.objects.filter(board__in=demo_boards).delete()
 
-                # 6. Delete task-related data
+                # 8. Delete task-related data
                 self.stdout.write('  Deleting task files...')
                 TaskFile.objects.filter(task__column__board__in=demo_boards).delete()
                 
@@ -266,7 +369,7 @@ class Command(BaseCommand):
                 self.stdout.write('  Deleting tasks...')
                 Task.objects.filter(column__board__in=demo_boards).delete()
 
-                # 7. Delete board structure
+                # 9. Delete board structure
                 self.stdout.write('  Deleting task labels...')
                 TaskLabel.objects.filter(board__in=demo_boards).delete()
                 
@@ -276,37 +379,37 @@ class Command(BaseCommand):
                 self.stdout.write('  Deleting boards...')
                 demo_boards.delete()
 
-                # 8. Delete user profiles (depends on users and orgs)
+                # 10. Delete user profiles (depends on users and orgs)
                 self.stdout.write('  Deleting user profiles...')
                 UserProfile.objects.filter(user__in=demo_users).delete()
 
-                # 9. Delete organizations
+                # 11. Delete organizations
                 self.stdout.write('  Deleting organizations...')
                 demo_orgs.delete()
 
-                # 10. Finally delete users
+                # 12. Finally delete users
                 self.stdout.write('  Deleting users...')
                 demo_users.delete()
 
                 self.stdout.write('')
                 self.stdout.write(self.style.SUCCESS('='*70))
-                self.stdout.write(self.style.SUCCESS('✅ DEMO DATA DELETION COMPLETE!'))
+                self.stdout.write(self.style.SUCCESS('DEMO DATA DELETION COMPLETE!'))
                 self.stdout.write(self.style.SUCCESS('='*70))
                 self.stdout.write('')
                 self.stdout.write(self.style.SUCCESS(f'Successfully deleted {total_items} items from the database.'))
                 self.stdout.write('')
-                self.stdout.write(self.style.NOTICE('ℹ️  The database is now clean and ready for new demo data.'))
+                self.stdout.write(self.style.NOTICE('The database is now clean and ready for new demo data.'))
                 self.stdout.write(self.style.NOTICE('   Run "python manage.py populate_test_data" to create new demo data.'))
                 self.stdout.write('')
 
         except Exception as e:
             self.stdout.write('')
             self.stdout.write(self.style.ERROR('='*70))
-            self.stdout.write(self.style.ERROR('❌ ERROR DURING DELETION'))
+            self.stdout.write(self.style.ERROR('ERROR DURING DELETION'))
             self.stdout.write(self.style.ERROR('='*70))
             self.stdout.write(self.style.ERROR(f'Error: {str(e)}'))
             self.stdout.write('')
-            self.stdout.write(self.style.WARNING('⚠️  Transaction rolled back - No data was deleted.'))
+            self.stdout.write(self.style.WARNING('Transaction rolled back - No data was deleted.'))
             self.stdout.write(self.style.NOTICE('   The database remains unchanged.'))
             self.stdout.write('')
             raise
