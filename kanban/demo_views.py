@@ -21,15 +21,19 @@ DEMO_ORG_NAMES = ['Demo - Acme Corporation']
 DEMO_BOARD_NAMES = ['Software Development', 'Bug Tracking', 'Marketing Campaign']
 
 
-@login_required
 def demo_mode_selection(request):
     """
     Demo mode selection screen - choose between Solo or Team mode
     This is the entry point for the new demo experience
+    ANONYMOUS ACCESS: No login required for demo mode
     """
     if request.method == 'POST':
         mode = request.POST.get('mode', 'solo')  # 'solo' or 'team'
         selection_method = request.POST.get('selection_method', 'selected')  # 'selected' or 'skipped'
+        
+        # Ensure session key exists for anonymous users
+        if not request.session.session_key:
+            request.session.create()
         
         # Initialize demo session
         request.session['is_demo_mode'] = True
@@ -37,6 +41,7 @@ def demo_mode_selection(request):
         request.session['demo_mode_selected'] = True
         request.session['demo_role'] = 'admin'  # Start as admin in both modes
         request.session['demo_session_id'] = request.session.session_key
+        request.session['is_anonymous_demo'] = not request.user.is_authenticated
         request.session['demo_started_at'] = timezone.now().isoformat()
         request.session['demo_expires_at'] = (timezone.now() + timedelta(hours=48)).isoformat()
         request.session['features_explored'] = []
@@ -47,14 +52,34 @@ def demo_mode_selection(request):
         try:
             from analytics.models import DemoSession, DemoAnalytics
             
+            # Detect device type
+            user_agent = request.META.get('HTTP_USER_AGENT', '').lower()
+            if 'mobile' in user_agent or 'android' in user_agent or 'iphone' in user_agent:
+                device_type = 'mobile'
+            elif 'tablet' in user_agent or 'ipad' in user_agent:
+                device_type = 'tablet'
+            else:
+                device_type = 'desktop'
+            
+            # Get IP address
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                ip_address = x_forwarded_for.split(',')[0]
+            else:
+                ip_address = request.META.get('REMOTE_ADDR')
+            
             # Create or update demo session
             demo_session, created = DemoSession.objects.get_or_create(
                 session_id=request.session.session_key,
                 defaults={
+                    'user': request.user if request.user.is_authenticated else None,
                     'demo_mode': mode,
                     'current_role': 'admin',
                     'expires_at': timezone.now() + timedelta(hours=48),
                     'selection_method': selection_method,
+                    'device_type': device_type,
+                    'user_agent': request.META.get('HTTP_USER_AGENT', ''),
+                    'ip_address': ip_address,
                 }
             )
             
@@ -62,16 +87,22 @@ def demo_mode_selection(request):
                 # Update existing session
                 demo_session.demo_mode = mode
                 demo_session.selection_method = selection_method
+                demo_session.user = request.user if request.user.is_authenticated else None
                 demo_session.save()
             
-            # Track selection event
+            # Track selection event with anonymous flag
             DemoAnalytics.objects.create(
                 session_id=request.session.session_key,
+                demo_session=demo_session,
                 event_type='demo_mode_selected',
                 event_data={
                     'mode': mode,
-                    'selection_method': selection_method
-                }
+                    'selection_method': selection_method,
+                    'is_anonymous': not request.user.is_authenticated,
+                    'user_id': request.user.id if request.user.is_authenticated else None,
+                },
+                device_type=device_type,
+                user_agent=request.META.get('HTTP_USER_AGENT', ''),
             )
         except Exception as e:
             # Analytics models may not exist yet - that's OK
@@ -83,11 +114,11 @@ def demo_mode_selection(request):
     return render(request, 'demo/mode_selection.html')
 
 
-@login_required
 @require_POST
 def switch_demo_role(request):
     """
     Switch between demo roles (Admin/Member/Viewer) in Team mode
+    ANONYMOUS ACCESS: Works for both logged-in and anonymous users
     """
     # Check if in demo mode
     if not request.session.get('is_demo_mode'):
@@ -199,13 +230,13 @@ def _ensure_user_in_demo_boards(user, demo_boards):
                 room.members.add(user)
 
 
-@login_required
 def demo_dashboard(request):
     """
-    Demo dashboard - shows demo boards to ALL authenticated users
+    Demo dashboard - shows demo boards to ALL users (including anonymous)
     This bypasses RBAC and provides a consistent tutorial environment
     
-    IMPORTANT: Automatically adds users as members when they access demo mode
+    ANONYMOUS ACCESS: No login required for demo mode
+    Note: Anonymous users won't have board membership, but can view demo data
     """
     # Check if demo mode has been selected
     if not request.session.get('demo_mode_selected'):
@@ -237,49 +268,51 @@ def demo_dashboard(request):
         }
         return render(request, 'kanban/demo_dashboard.html', context)
     
-    # Auto-grant access: First time user visits demo, automatically add them to demo boards
-    # This provides seamless access to demo data without explicit "Load Demo Data" button
-    user_demo_orgs = Organization.objects.filter(
-        name__in=DEMO_ORG_NAMES,
-        boards__members=request.user
-    ).distinct()
-    
-    if not user_demo_orgs.exists():
-        # User doesn't have access yet - grant it automatically
-        from kanban.permission_models import BoardMembership, Role
-        from messaging.models import ChatRoom
-        
-        for demo_board in demo_boards:
-            # Add user to board members
-            demo_board.members.add(request.user)
-            
-            # Create BoardMembership with Editor role
-            editor_role = Role.objects.filter(
-                organization=demo_board.organization,
-                name='Editor'
-            ).first()
-            
-            if editor_role:
-                BoardMembership.objects.get_or_create(
-                    board=demo_board,
-                    user=request.user,
-                    defaults={'role': editor_role}
-                )
-            
-            # Add user to all chat rooms for this board
-            chat_rooms = ChatRoom.objects.filter(board=demo_board)
-            for room in chat_rooms:
-                if request.user not in room.members.all():
-                    room.members.add(request.user)
-        
-        # Refresh the query to include newly added organizations
+    # Auto-grant access for authenticated users only
+    # Anonymous users can view demo boards without membership
+    if request.user.is_authenticated:
         user_demo_orgs = Organization.objects.filter(
             name__in=DEMO_ORG_NAMES,
             boards__members=request.user
         ).distinct()
-    
-    # Filter to show boards only from organizations user has access to
-    demo_boards = demo_boards.filter(organization__in=user_demo_orgs)
+        
+        if not user_demo_orgs.exists():
+            # User doesn't have access yet - grant it automatically
+            from kanban.permission_models import BoardMembership, Role
+            from messaging.models import ChatRoom
+            
+            for demo_board in demo_boards:
+                # Add user to board members
+                demo_board.members.add(request.user)
+                
+                # Create BoardMembership with Editor role
+                editor_role = Role.objects.filter(
+                    organization=demo_board.organization,
+                    name='Editor'
+                ).first()
+                
+                if editor_role:
+                    BoardMembership.objects.get_or_create(
+                        board=demo_board,
+                        user=request.user,
+                        defaults={'role': editor_role}
+                    )
+                
+                # Add user to all chat rooms for this board
+                chat_rooms = ChatRoom.objects.filter(board=demo_board)
+                for room in chat_rooms:
+                    if request.user not in room.members.all():
+                        room.members.add(request.user)
+            
+            # Refresh the query to include newly added organizations
+            user_demo_orgs = Organization.objects.filter(
+                name__in=DEMO_ORG_NAMES,
+                boards__members=request.user
+            ).distinct()
+        
+        # Filter to show boards only from organizations user has access to
+        demo_boards = demo_boards.filter(organization__in=user_demo_orgs)
+    # else: Anonymous users see all demo boards without membership
     
     # Calculate analytics for demo boards
     task_count = Task.objects.filter(column__board__in=demo_boards).count()
@@ -385,13 +418,13 @@ def demo_dashboard(request):
     return render(request, 'kanban/demo_dashboard.html', context)
 
 
-@login_required
 def demo_board_detail(request, board_id):
     """
-    Demo board detail - shows a demo board to ALL authenticated users
+    Demo board detail - shows a demo board to ALL users (including anonymous)
     This bypasses RBAC checks completely
     
-    IMPORTANT: Automatically adds users as members when they access demo boards
+    ANONYMOUS ACCESS: No login required for demo mode
+    Authenticated users get automatic board membership
     """
     # Get the demo organization - using constants
     demo_orgs = Organization.objects.filter(name__in=DEMO_ORG_NAMES)
@@ -403,38 +436,41 @@ def demo_board_detail(request, board_id):
         organization__in=demo_orgs
     )
     
-    # Organization-level access check: user must have access to at least one board in this org
-    user_has_org_access = Board.objects.filter(
-        organization=board.organization,
-        members=request.user
-    ).exists()
-    
-    if not user_has_org_access:
-        # Auto-grant access when user clicks on a demo board
-        from kanban.permission_models import BoardMembership, Role
-        from messaging.models import ChatRoom
-        
-        # Add user to this board
-        board.members.add(request.user)
-        
-        # Create BoardMembership with Editor role
-        editor_role = Role.objects.filter(
+    # Auto-grant access for authenticated users only
+    if request.user.is_authenticated:
+        # Organization-level access check: user must have access to at least one board in this org
+        user_has_org_access = Board.objects.filter(
             organization=board.organization,
-            name='Editor'
-        ).first()
+            members=request.user
+        ).exists()
         
-        if editor_role:
-            BoardMembership.objects.get_or_create(
-                board=board,
-                user=request.user,
-                defaults={'role': editor_role}
-            )
-        
-        # Add user to all chat rooms for this board
-        chat_rooms = ChatRoom.objects.filter(board=board)
-        for room in chat_rooms:
-            if request.user not in room.members.all():
-                room.members.add(request.user)
+        if not user_has_org_access:
+            # Auto-grant access when user clicks on a demo board
+            from kanban.permission_models import BoardMembership, Role
+            from messaging.models import ChatRoom
+            
+            # Add user to this board
+            board.members.add(request.user)
+            
+            # Create BoardMembership with Editor role
+            editor_role = Role.objects.filter(
+                organization=board.organization,
+                name='Editor'
+            ).first()
+            
+            if editor_role:
+                BoardMembership.objects.get_or_create(
+                    board=board,
+                    user=request.user,
+                    defaults={'role': editor_role}
+                )
+            
+            # Add user to all chat rooms for this board
+            chat_rooms = ChatRoom.objects.filter(board=board)
+            for room in chat_rooms:
+                if request.user not in room.members.all():
+                    room.members.add(request.user)
+    # else: Anonymous users can view demo board without membership
     
     # Get columns and tasks
     columns = Column.objects.filter(board=board).order_by('position')
@@ -492,19 +528,20 @@ def demo_board_detail(request, board_id):
     return render(request, 'kanban/demo_board_detail.html', context)
 
 
-@login_required
 def reset_demo_data(request):
     """
     Reset demo data to original state
     Supports both AJAX (POST with JSON response) and regular form requests
+    ANONYMOUS ACCESS: Works for both logged-in and anonymous users
     """
     from django.contrib import messages
     
     # Check if user is in demo mode (for session-based reset)
     is_demo_user = request.session.get('is_demo_mode', False)
     
-    # Superusers can reset anytime, demo users can reset their session
-    if not (request.user.is_superuser or is_demo_user):
+    # Superusers can reset anytime, demo users (including anonymous) can reset their session
+    is_superuser = request.user.is_authenticated and request.user.is_superuser
+    if not (is_superuser or is_demo_user):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({
                 'status': 'error',
@@ -848,12 +885,12 @@ def check_aha_moment_triggers(request):
     return triggered_moments
 
 
-@login_required
 def check_nudge(request):
     """
     Check if a nudge should be shown based on current session state
     Called periodically by client-side JavaScript
     
+    ANONYMOUS ACCESS: Works for both logged-in and anonymous users
     Returns JSON with nudge_type and context if nudge should show
     """
     from kanban.utils.nudge_timing import NudgeTiming, NudgeType
@@ -900,11 +937,11 @@ def check_nudge(request):
         })
 
 
-@login_required
 @require_POST
 def track_nudge(request):
     """
     Track nudge events (shown, clicked, dismissed)
+    ANONYMOUS ACCESS: Works for both logged-in and anonymous users
     """
     import json
     from kanban.utils.nudge_timing import NudgeTiming
