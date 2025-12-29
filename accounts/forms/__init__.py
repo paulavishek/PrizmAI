@@ -5,7 +5,11 @@ from django.core.exceptions import ValidationError
 from ..models import Organization, UserProfile
 
 class LoginForm(AuthenticationForm):
-    username = forms.CharField(widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Username'}))
+    username = forms.CharField(widget=forms.TextInput(attrs={
+        'class': 'form-control', 
+        'placeholder': 'Username',
+        'autocomplete': 'off'  # Disable browser autocomplete for username
+    }))
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={
             'class': 'form-control', 
