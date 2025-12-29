@@ -734,3 +734,102 @@ def track_demo_event(request):
             'status': 'error',
             'message': f'Error tracking event: {str(e)}'
         }, status=500)
+
+
+def trigger_aha_moment_server_side(request, moment_type, event_data=None):
+    """
+    Helper function to trigger aha moments from server-side code
+    Call this when detecting aha moments in view logic
+    
+    Args:
+        request: Django request object
+        moment_type: String identifier for aha moment type
+        event_data: Optional dict of additional data to track
+    
+    Returns:
+        bool: True if aha moment was recorded, False if already triggered
+    """
+    if not request.session.get('is_demo_mode'):
+        return False
+    
+    # Get aha moments list from session
+    aha_moments = request.session.get('aha_moments', [])
+    
+    # Check if already triggered
+    if moment_type in aha_moments:
+        return False
+    
+    # Add to session
+    aha_moments.append(moment_type)
+    request.session['aha_moments'] = aha_moments
+    request.session.modified = True
+    
+    # Track in analytics
+    try:
+        from analytics.models import DemoAnalytics, DemoSession
+        
+        # Create analytics event
+        DemoAnalytics.objects.create(
+            session_id=request.session.session_key,
+            event_type='aha_moment',
+            event_data={
+                'moment_type': moment_type,
+                'timestamp': timezone.now().isoformat(),
+                **(event_data or {})
+            }
+        )
+        
+        # Update DemoSession
+        session_id = request.session.session_key
+        demo_session = DemoSession.objects.filter(session_id=session_id).first()
+        if demo_session:
+            demo_session.aha_moments += 1
+            if moment_type not in demo_session.aha_moments_list:
+                demo_session.aha_moments_list.append(moment_type)
+            demo_session.save(update_fields=['aha_moments', 'aha_moments_list'])
+    
+    except Exception as e:
+        # Fail silently - analytics shouldn't break functionality
+        pass
+    
+    return True
+
+
+def check_aha_moment_triggers(request):
+    """
+    Check for aha moment triggers based on user activity
+    Called periodically from views to detect server-side aha moments
+    
+    Returns:
+        list: List of newly triggered aha moment types
+    """
+    if not request.session.get('is_demo_mode'):
+        return []
+    
+    triggered_moments = []
+    
+    # Check time in demo (for engagement-based moments)
+    try:
+        from analytics.models import DemoSession
+        session_id = request.session.session_key
+        demo_session = DemoSession.objects.filter(session_id=session_id).first()
+        
+        if demo_session:
+            # Check if user has been active for 5+ minutes
+            time_in_demo = demo_session.time_in_demo or 0
+            if time_in_demo >= 300:  # 5 minutes
+                # Check features explored
+                features_explored = len(demo_session.features_list)
+                
+                # Trigger "power user" moment if explored 5+ features
+                if features_explored >= 5:
+                    if trigger_aha_moment_server_side(request, 'power_user_exploration', {
+                        'features_count': features_explored,
+                        'time_in_demo': time_in_demo
+                    }):
+                        triggered_moments.append('power_user_exploration')
+    
+    except Exception as e:
+        pass
+    
+    return triggered_moments

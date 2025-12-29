@@ -363,5 +363,12 @@
         </div>
     </div>
     </div> <!-- End container-fluid -->
+    
+    <!-- Aha Moment Celebration Component -->
+    {% include 'demo/partials/aha_moment_celebration.html' %}
 {% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/aha_moment_detection.js' %}"></script>
 {% endblock %}

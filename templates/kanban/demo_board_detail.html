@@ -342,9 +342,13 @@
     </div>
 </div>
 </div> <!-- End container-fluid -->
+
+<!-- Aha Moment Celebration Component -->
+{% include 'demo/partials/aha_moment_celebration.html' %}
 {% endblock %}
 
 {% block extra_js %}
+<script src="{% static 'js/aha_moment_detection.js' %}"></script>
 <script>
 // Add custom template filter for dict access
 document.addEventListener('DOMContentLoaded', function() {

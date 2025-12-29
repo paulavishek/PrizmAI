@@ -1,0 +1,402 @@
+{% load static %}
+
+<!-- Aha Moment Celebration Component -->
+<div id="ahaMomentContainer" style="display: none;"></div>
+
+<style>
+    .aha-moment-toast {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.8);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2rem 3rem;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(102, 126, 234, 0.4);
+        z-index: 9999;
+        min-width: 400px;
+        max-width: 600px;
+        text-align: center;
+        opacity: 0;
+        animation: ahaMomentAppear 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55) forwards;
+    }
+    
+    @keyframes ahaMomentAppear {
+        0% {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.8);
+        }
+        100% {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+    }
+    
+    .aha-moment-toast.hiding {
+        animation: ahaMomentDisappear 0.3s ease-out forwards;
+    }
+    
+    @keyframes ahaMomentDisappear {
+        0% {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        100% {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.8);
+        }
+    }
+    
+    .aha-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        animation: ahaBounce 0.8s ease-in-out;
+    }
+    
+    @keyframes ahaBounce {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.2); }
+    }
+    
+    .aha-title {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .aha-description {
+        font-size: 1rem;
+        opacity: 0.95;
+        margin-bottom: 1.5rem;
+        line-height: 1.5;
+    }
+    
+    .aha-cta {
+        display: inline-block;
+        background: white;
+        color: #667eea;
+        padding: 0.75rem 2rem;
+        border-radius: 8px;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    
+    .aha-cta:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+        color: #764ba2;
+    }
+    
+    .aha-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 9998;
+        opacity: 0;
+        animation: backdropFadeIn 0.3s ease-out forwards;
+    }
+    
+    @keyframes backdropFadeIn {
+        to { opacity: 1; }
+    }
+    
+    .aha-backdrop.hiding {
+        animation: backdropFadeOut 0.3s ease-out forwards;
+    }
+    
+    @keyframes backdropFadeOut {
+        to { opacity: 0; }
+    }
+    
+    .aha-confetti {
+        position: absolute;
+        width: 10px;
+        height: 10px;
+        background: white;
+        opacity: 0;
+        animation: confettiFall 2s ease-out;
+    }
+    
+    @keyframes confettiFall {
+        0% {
+            opacity: 1;
+            transform: translateY(0) rotate(0deg);
+        }
+        100% {
+            opacity: 0;
+            transform: translateY(400px) rotate(360deg);
+        }
+    }
+    
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+        .aha-moment-toast {
+            min-width: 90%;
+            padding: 1.5rem 2rem;
+        }
+        
+        .aha-icon {
+            font-size: 3rem;
+        }
+        
+        .aha-title {
+            font-size: 1.5rem;
+        }
+        
+        .aha-description {
+            font-size: 0.9rem;
+        }
+    }
+</style>
+
+<script>
+    // Aha Moment definitions
+    const AHA_MOMENTS = {
+        ai_suggestion_accepted: {
+            icon: '🤖',
+            title: 'AI-Powered Productivity!',
+            description: 'You just experienced how PrizmAI uses artificial intelligence to make project management effortless. This saves hours of manual work!',
+            cta: 'See More AI Features',
+            ctaUrl: '#features'
+        },
+        burndown_viewed: {
+            icon: '📊',
+            title: 'Data-Driven Insights!',
+            description: 'You discovered the power of real-time analytics. Track progress, predict deadlines, and make informed decisions instantly.',
+            cta: 'Explore Analytics',
+            ctaUrl: '#analytics'
+        },
+        rbac_workflow: {
+            icon: '🔐',
+            title: 'Enterprise-Grade Security!',
+            description: 'You just experienced role-based access control in action. Manage team permissions with precision and confidence.',
+            cta: 'Learn About Security',
+            ctaUrl: '#security'
+        },
+        time_tracking_used: {
+            icon: '⏱️',
+            title: 'Time Mastery Unlocked!',
+            description: 'Track every minute, understand team capacity, and optimize workflows. You\'re now seeing the full picture of productivity.',
+            cta: 'See Time Reports',
+            ctaUrl: '#time-tracking'
+        },
+        dependency_created: {
+            icon: '🔗',
+            title: 'Smart Task Management!',
+            description: 'Dependencies help you visualize project flow and prevent bottlenecks. You\'re managing complexity like a pro!',
+            cta: 'View Gantt Chart',
+            ctaUrl: '#gantt'
+        },
+        gantt_viewed: {
+            icon: '📅',
+            title: 'Project Timeline Mastery!',
+            description: 'The Gantt chart shows you the complete project timeline with dependencies. Plan and execute with confidence!',
+            cta: 'Explore Planning',
+            ctaUrl: '#planning'
+        },
+        skill_gap_viewed: {
+            icon: '🎯',
+            title: 'Team Optimization Discovery!',
+            description: 'You found the skill gap analysis! Identify missing skills and make smarter hiring and training decisions.',
+            cta: 'See Team Skills',
+            ctaUrl: '#skills'
+        },
+        conflict_detected: {
+            icon: '⚡',
+            title: 'Conflict Prevention!',
+            description: 'PrizmAI detected a potential conflict before it became a problem. Stay ahead of issues automatically!',
+            cta: 'Learn More',
+            ctaUrl: '#conflicts'
+        }
+    };
+    
+    // Track shown aha moments in session
+    let shownAhaMoments = new Set();
+    
+    // Load previously shown moments from sessionStorage
+    try {
+        const stored = sessionStorage.getItem('aha_moments_shown');
+        if (stored) {
+            shownAhaMoments = new Set(JSON.parse(stored));
+        }
+    } catch (e) {
+        console.error('Error loading aha moments:', e);
+    }
+    
+    /**
+     * Show aha moment celebration
+     * @param {string} momentType - Type of aha moment
+     * @param {object} customData - Optional custom data for the moment
+     */
+    function showAhaMoment(momentType, customData = {}) {
+        // Check if in demo mode
+        if (!isInDemoMode()) {
+            return;
+        }
+        
+        // Check if already shown
+        if (shownAhaMoments.has(momentType)) {
+            console.log('Aha moment already shown:', momentType);
+            return;
+        }
+        
+        // Get moment definition
+        const moment = AHA_MOMENTS[momentType];
+        if (!moment) {
+            console.error('Unknown aha moment type:', momentType);
+            return;
+        }
+        
+        // Mark as shown
+        shownAhaMoments.add(momentType);
+        try {
+            sessionStorage.setItem('aha_moments_shown', JSON.stringify([...shownAhaMoments]));
+        } catch (e) {
+            console.error('Error saving aha moment:', e);
+        }
+        
+        // Track on server
+        trackAhaMoment(momentType, customData);
+        
+        // Show celebration UI
+        displayAhaCelebration(moment, momentType);
+    }
+    
+    /**
+     * Display aha moment celebration UI
+     */
+    function displayAhaCelebration(moment, momentType) {
+        const container = document.getElementById('ahaMomentContainer');
+        if (!container) return;
+        
+        // Create backdrop
+        const backdrop = document.createElement('div');
+        backdrop.className = 'aha-backdrop';
+        
+        // Create toast
+        const toast = document.createElement('div');
+        toast.className = 'aha-moment-toast';
+        toast.innerHTML = `
+            <div class="aha-icon">${moment.icon}</div>
+            <div class="aha-title">${moment.title}</div>
+            <div class="aha-description">${moment.description}</div>
+            ${moment.cta ? `<a href="${moment.ctaUrl}" class="aha-cta">${moment.cta}</a>` : ''}
+        `;
+        
+        // Add confetti
+        addConfetti(toast);
+        
+        // Append to DOM
+        container.appendChild(backdrop);
+        container.appendChild(toast);
+        container.style.display = 'block';
+        
+        // Auto-hide after 6 seconds
+        setTimeout(() => {
+            hideAhaCelebration(backdrop, toast, container);
+        }, 6000);
+        
+        // Click backdrop to dismiss
+        backdrop.addEventListener('click', () => {
+            hideAhaCelebration(backdrop, toast, container);
+        });
+    }
+    
+    /**
+     * Hide aha celebration with animation
+     */
+    function hideAhaCelebration(backdrop, toast, container) {
+        backdrop.classList.add('hiding');
+        toast.classList.add('hiding');
+        
+        setTimeout(() => {
+            backdrop.remove();
+            toast.remove();
+            if (container.children.length === 0) {
+                container.style.display = 'none';
+            }
+        }, 300);
+    }
+    
+    /**
+     * Add confetti animation
+     */
+    function addConfetti(toast) {
+        for (let i = 0; i < 20; i++) {
+            const confetti = document.createElement('div');
+            confetti.className = 'aha-confetti';
+            confetti.style.left = `${Math.random() * 100}%`;
+            confetti.style.top = `${Math.random() * 50}%`;
+            confetti.style.background = ['#ff6b6b', '#4ecdc4', '#ffe66d', '#a8e6cf'][Math.floor(Math.random() * 4)];
+            confetti.style.animationDelay = `${Math.random() * 0.5}s`;
+            toast.appendChild(confetti);
+            
+            // Remove after animation
+            setTimeout(() => confetti.remove(), 2000);
+        }
+    }
+    
+    /**
+     * Track aha moment on server
+     */
+    function trackAhaMoment(momentType, customData) {
+        fetch("{% url 'track_demo_event' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({
+                event_type: 'aha_moment',
+                event_data: {
+                    moment_type: momentType,
+                    timestamp: new Date().toISOString(),
+                    ...customData
+                }
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Aha moment tracked:', momentType);
+        })
+        .catch(error => {
+            console.error('Error tracking aha moment:', error);
+        });
+    }
+    
+    /**
+     * Check if user is in demo mode
+     */
+    function isInDemoMode() {
+        // Check for demo mode context variable or session
+        return {{ is_demo_mode|default:false|lower }};
+    }
+    
+    /**
+     * Get CSRF token from cookie
+     */
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    // Export for global use
+    window.showAhaMoment = showAhaMoment;
+</script>
