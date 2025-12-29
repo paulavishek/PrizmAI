@@ -479,7 +479,7 @@ def demo_board_detail(request, board_id):
     for column in columns:
         tasks = Task.objects.filter(column=column).select_related(
             'assigned_to', 'created_by'
-        ).prefetch_related('labels', 'dependencies', 'dependents')
+        ).prefetch_related('labels', 'dependencies', 'dependent_tasks')
         tasks_by_column[column.id] = tasks
     
     # Get board statistics
