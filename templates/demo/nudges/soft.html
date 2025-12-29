@@ -1,0 +1,152 @@
+{% comment %}
+Soft Nudge - Low-pressure toast notification
+Shows after 3 minutes OR 3 features explored
+Auto-dismisses after 10 seconds (5s on mobile)
+{% endcomment %}
+
+<div id="soft-nudge" class="demo-nudge demo-nudge-soft" style="display: none;" data-nudge-type="soft">
+    <div class="nudge-content">
+        <div class="nudge-icon">💡</div>
+        <div class="nudge-text">
+            <span class="nudge-message">Like what you see?</span>
+        </div>
+        <div class="nudge-actions">
+            <a href="{% url 'accounts:register' %}" class="nudge-cta-primary" data-action="signup">
+                Create free account →
+            </a>
+            <button class="nudge-dismiss" data-action="dismiss" aria-label="Dismiss">
+                ✕
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Soft Nudge Styles - Toast Notification */
+.demo-nudge-soft {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    padding: 16px 20px;
+    max-width: 400px;
+    z-index: 9998;
+    animation: slideInUp 0.4s ease-out;
+}
+
+.demo-nudge-soft .nudge-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.demo-nudge-soft .nudge-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+}
+
+.demo-nudge-soft .nudge-text {
+    flex: 1;
+}
+
+.demo-nudge-soft .nudge-message {
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+.demo-nudge-soft .nudge-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.demo-nudge-soft .nudge-cta-primary {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+    white-space: nowrap;
+    backdrop-filter: blur(10px);
+}
+
+.demo-nudge-soft .nudge-cta-primary:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-1px);
+}
+
+.demo-nudge-soft .nudge-dismiss {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 18px;
+    cursor: pointer;
+    padding: 4px;
+    line-height: 1;
+    transition: color 0.2s;
+}
+
+.demo-nudge-soft .nudge-dismiss:hover {
+    color: white;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .demo-nudge-soft {
+        bottom: 10px;
+        right: 10px;
+        left: 10px;
+        max-width: none;
+        padding: 12px 16px;
+    }
+    
+    .demo-nudge-soft .nudge-content {
+        gap: 10px;
+    }
+    
+    .demo-nudge-soft .nudge-icon {
+        font-size: 20px;
+    }
+    
+    .demo-nudge-soft .nudge-message {
+        font-size: 14px;
+    }
+    
+    .demo-nudge-soft .nudge-cta-primary {
+        padding: 6px 12px;
+        font-size: 13px;
+    }
+}
+
+@keyframes slideInUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Fade out animation */
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+.demo-nudge-soft.nudge-hiding {
+    animation: fadeOut 0.3s ease-out forwards;
+}
+</style>

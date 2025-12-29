@@ -1,0 +1,284 @@
+{% comment %}
+Medium Nudge - Value reinforcement modal
+Shows after 5 minutes OR 1 aha moment
+Soft overlay, still dismissible
+{% endcomment %}
+
+<div id="medium-nudge" class="demo-nudge demo-nudge-medium" style="display: none;" data-nudge-type="medium">
+    <div class="nudge-overlay" data-action="dismiss"></div>
+    <div class="nudge-modal">
+        <div class="nudge-modal-content">
+            <div class="nudge-header">
+                <div class="nudge-icon">🎯</div>
+                <h3 class="nudge-title">
+                    You've explored <span class="features-count">{{ features_explored_count }}</span> features!
+                </h3>
+            </div>
+            
+            <div class="nudge-body">
+                <p class="nudge-subtitle">Ready to create your own workspace?</p>
+                
+                <ul class="nudge-benefits">
+                    <li>
+                        <span class="benefit-icon">✓</span>
+                        Unlimited projects
+                    </li>
+                    <li>
+                        <span class="benefit-icon">✓</span>
+                        All features you just tried
+                    </li>
+                    <li>
+                        <span class="benefit-icon">✓</span>
+                        Free to start, no credit card needed
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="nudge-actions">
+                <a href="{% url 'accounts:register' %}" class="nudge-cta-primary" data-action="signup">
+                    Start Free Account →
+                </a>
+                <button class="nudge-cta-secondary" data-action="dismiss">
+                    Keep Exploring
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Medium Nudge Styles - Soft Modal */
+.demo-nudge-medium {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.demo-nudge-medium .nudge-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.3s ease-out;
+}
+
+.demo-nudge-medium .nudge-modal {
+    position: relative;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    max-width: 480px;
+    width: 100%;
+    animation: scaleIn 0.3s ease-out;
+}
+
+.demo-nudge-medium .nudge-modal-content {
+    padding: 32px;
+}
+
+.demo-nudge-medium .nudge-header {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.demo-nudge-medium .nudge-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+.demo-nudge-medium .nudge-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #2d3748;
+    margin: 0;
+    line-height: 1.3;
+}
+
+.demo-nudge-medium .nudge-title .features-count {
+    color: #667eea;
+}
+
+.demo-nudge-medium .nudge-body {
+    margin-bottom: 28px;
+}
+
+.demo-nudge-medium .nudge-subtitle {
+    font-size: 16px;
+    color: #4a5568;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+.demo-nudge-medium .nudge-benefits {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.demo-nudge-medium .nudge-benefits li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    font-size: 15px;
+    color: #2d3748;
+}
+
+.demo-nudge-medium .benefit-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: #48bb78;
+    color: white;
+    border-radius: 50%;
+    font-size: 14px;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+.demo-nudge-medium .nudge-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.demo-nudge-medium .nudge-cta-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 14px 24px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+    transition: all 0.2s;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+}
+
+.demo-nudge-medium .nudge-cta-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+}
+
+.demo-nudge-medium .nudge-cta-secondary {
+    background: transparent;
+    color: #718096;
+    padding: 12px 24px;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    font-size: 15px;
+    font-weight: 500;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+}
+
+.demo-nudge-medium .nudge-cta-secondary:hover {
+    background: #f7fafc;
+    border-color: #cbd5e0;
+    color: #2d3748;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+    .demo-nudge-medium {
+        padding: 15px;
+    }
+    
+    .demo-nudge-medium .nudge-modal-content {
+        padding: 24px;
+    }
+    
+    .demo-nudge-medium .nudge-icon {
+        font-size: 40px;
+        margin-bottom: 12px;
+    }
+    
+    .demo-nudge-medium .nudge-title {
+        font-size: 20px;
+    }
+    
+    .demo-nudge-medium .nudge-subtitle {
+        font-size: 15px;
+    }
+    
+    .demo-nudge-medium .nudge-benefits li {
+        font-size: 14px;
+        padding: 8px 0;
+    }
+    
+    .demo-nudge-medium .nudge-cta-primary {
+        padding: 12px 20px;
+        font-size: 15px;
+    }
+    
+    .demo-nudge-medium .nudge-cta-secondary {
+        padding: 10px 20px;
+        font-size: 14px;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Fade out animations */
+.demo-nudge-medium.nudge-hiding .nudge-overlay {
+    animation: fadeOut 0.3s ease-out forwards;
+}
+
+.demo-nudge-medium.nudge-hiding .nudge-modal {
+    animation: scaleOut 0.3s ease-out forwards;
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes scaleOut {
+    from {
+        transform: scale(1);
+        opacity: 1;
+    }
+    to {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+}
+</style>
