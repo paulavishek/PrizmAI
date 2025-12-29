@@ -7,10 +7,10 @@
 
 ## 📊 Executive Summary
 
-**Overall Progress:** 54% Complete (7 of 13 major tasks)
+**Overall Progress:** 62% Complete (8 of 13 major tasks)
 
-**Current Status:** ✅ Foundation, Data, Mode Selection, and Demo Banner Complete  
-**Next Phase:** Implement session management middleware and remaining engagement features  
+**Current Status:** ✅ Foundation, Data, Mode Selection, Demo Banner, and Session Management Complete  
+**Next Phase:** Implement aha moment detection and conversion nudge system  
 **Blockers:** None  
 **Risk Level:** Low
 
@@ -339,59 +339,133 @@ Session variables set:
 
 ---
 
-### **Step 8: Demo Session Management** 📋
-**Status:** Not Started  
+### **Step 8: Demo Session Management** ✅
+**Status:** Complete  
+**Date Completed:** Dec 29, 2025  
 **Priority:** MEDIUM  
 **Dependencies:** Steps 6, 7
 
-**What Needs to Be Done:**
+**What Was Done:**
 
 **1. Session Tracking Middleware:**
 ```python
 # kanban/middleware/demo_session.py
 class DemoSessionMiddleware:
-    """Update last_activity, check expiry, enforce limits"""
+    """
+    - Updates last_activity on every request
+    - Calculates time_in_demo
+    - Tracks current_page
+    - Checks for session expiry
+    - Redirects expired sessions to selection screen
+    """
+
+class DemoAnalyticsMiddleware:
+    """
+    - Server-side pageview tracking (ad-blocker proof)
+    - Only tracks demo-related pages
+    - Filters out static files and admin pages
+    - Device type detection
+    """
 ```
 
 **2. Expiry Warnings:**
-- 4 hours before: First warning
-- 1 hour before: Second warning
-- 15 minutes before: Final warning
-- JavaScript polling or WebSocket
+- Created `expiry_warning.html` template component
+- 3 warning levels:
+  - 4 hours before: Info-level warning
+  - 1 hour before: Warning-level alert
+  - 15 minutes before: Critical alert with urgent CTA
+- Sticky banner with "Extend Session" and "Create Account" buttons
+- Animated slide-down effect
+- Auto-dismissible with tracking
 
 **3. Session Extension:**
-- "Extend Session" button (+24 hours)
-- Limit: 3 extensions maximum
-- After 3 extensions: Must create account
+- `extend_demo_session()` API endpoint
+- Extends by 1 hour per extension
+- Maximum 3 extensions enforced
+- Updates both DemoSession and session variables
+- Tracks extension events in analytics
+- Shows remaining extensions to user
 
 **4. Auto-Cleanup:**
-- Management command: `cleanup_expired_demos.py`
-- Runs daily via cron/scheduled task
-- Deletes expired demo sessions
-- Removes user-created demo content
+- Management command: `cleanup_demo_sessions.py`
+- Features:
+  - `--dry-run` flag for testing
+  - `--keep-analytics` flag to preserve data
+  - Deletes expired DemoSession records
+  - Removes session-created content (tasks, boards, comments)
+  - Optionally clears analytics data
+- Ready for cron/scheduled task integration
 
 **5. Context Processor:**
 ```python
-# context_processors.py
+# kanban/context_processors.py
 def demo_context(request):
-    """Add demo session info to all templates"""
-    return {
-        'is_demo_mode': request.session.get('is_demo_mode'),
-        'demo_expires_at': request.session.get('demo_expires_at'),
-        # ... other demo vars
-    }
+    """
+    Adds to all templates:
+    - is_demo_mode, demo_mode, demo_mode_type
+    - current_demo_role, demo_role_display
+    - demo_expires_at, demo_time_remaining
+    - show_expiry_warning, expiry_warning_level
+    - features_explored, aha_moments, nudges_shown
+    - is_team_mode, can_switch_roles
+    """
 ```
 
-**Estimated Effort:** 5-6 hours
+**6. Additional API Endpoints:**
+- `/demo/extend/` - Extend session by 1 hour (max 3x)
+- `/demo/track-event/` - Track custom events (aha moments, feature exploration)
+- Both endpoints validate demo mode and return JSON responses
+
+**7. Middleware Configuration:**
+- Registered in `settings.py` MIDDLEWARE after SessionMiddleware
+- DemoSessionMiddleware runs first (session management)
+- DemoAnalyticsMiddleware runs second (tracking)
+- Both fail silently if analytics models don't exist
+
+**8. Model Updates:**
+- Added `extensions_count` field to DemoSession model
+- Migration created and applied
+- Tracks how many times session was extended
+
+**Integration:**
+- Expiry warning included in demo_dashboard.html
+- Expiry warning included in demo_board_detail.html
+- Context processor registered in settings.py
+- All demo variables now globally available
+
+**Files Created:**
+- `kanban/middleware/__init__.py`
+- `kanban/middleware/demo_session.py`
+- `kanban/management/commands/cleanup_demo_sessions.py`
+- `templates/demo/partials/expiry_warning.html`
+
+**Files Modified:**
+- `kanban/context_processors.py` - Added demo_context()
+- `kanban/demo_views.py` - Added extend_demo_session(), track_demo_event()
+- `kanban/urls.py` - Added /demo/extend/ and /demo/track-event/ routes
+- `kanban_board/settings.py` - Registered middleware and context processor
+- `analytics/models.py` - Added extensions_count field
+- `templates/kanban/demo_dashboard.html` - Included expiry warning
+- `templates/kanban/demo_board_detail.html` - Included expiry warning
+
+**Testing:**
+- Middleware tracks activity without errors
+- Context processor provides variables globally
+- Expiry warnings show at correct thresholds
+- Session extension works with proper limits
+- Cleanup command ready for scheduled execution
+
+**Estimated Effort:** 5-6 hours  
+**Actual Effort:** ~6 hours
 
 ---
 
 ### **Step 9: Reset Demo Feature** 📋
-**Status:** Not Started  
+**Status:** Completed in Step 7 (already functional)  
 **Priority:** MEDIUM  
 **Dependencies:** Steps 6, 7, 8
 
-**What Needs to Be Done:**
+**What Was Done in Step 7:**
 
 **1. Reset API Endpoint:**
 ```python
