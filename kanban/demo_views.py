@@ -498,7 +498,7 @@ def demo_board_detail(request, board_id):
     conflicts = ConflictDetection.objects.filter(
         board=board,
         status='active'
-    ).select_related('task1', 'task2')
+    ).prefetch_related('tasks', 'affected_users')
     
     # Get wiki pages
     wiki_pages = WikiPage.objects.filter(
