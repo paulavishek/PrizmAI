@@ -613,6 +613,11 @@ Format the response with clear sections using the headers above.
         """Create LessonLearned records from AI insights"""
         from kanban.retrospective_models import LessonLearned
         
+        # If no lessons from AI, create some basic ones from patterns
+        if not lessons_data:
+            logger.warning("No lessons from AI, generating basic lessons from data")
+            lessons_data = self._generate_fallback_lessons()
+        
         for lesson in lessons_data:
             try:
                 LessonLearned.objects.create(
@@ -632,6 +637,11 @@ Format the response with clear sections using the headers above.
     def _create_action_items(self, retrospective, recommendations_data):
         """Create RetrospectiveActionItem records from recommendations"""
         from kanban.retrospective_models import RetrospectiveActionItem
+        
+        # If no recommendations from AI, create some basic ones
+        if not recommendations_data:
+            logger.warning("No recommendations from AI, generating basic action items")
+            recommendations_data = self._generate_fallback_actions()
         
         for rec in recommendations_data:
             try:
@@ -710,3 +720,103 @@ Format the response with clear sections using the headers above.
                 )
             except Exception as e:
                 logger.error(f"Error creating improvement metric: {e}")
+    
+    def _generate_fallback_lessons(self):
+        """Generate basic lessons when AI doesn't provide them"""
+        lessons = []
+        
+        # Collect metrics for lesson generation
+        metrics = self.collect_metrics()
+        
+        # Generate lessons based on data
+        if metrics['completion_rate'] >= 70:
+            lessons.append({
+                'title': 'Good task completion rate achieved',
+                'description': f"Team successfully completed {metrics['completed_tasks']} out of {metrics['total_tasks']} tasks ({metrics['completion_rate']:.1f}% completion rate).",
+                'category': 'team_performance',
+                'priority': 'medium',
+                'recommended_action': 'Continue current practices and identify factors contributing to success'
+            })
+        elif metrics['completion_rate'] < 50:
+            lessons.append({
+                'title': 'Low completion rate needs attention',
+                'description': f"Only {metrics['completion_rate']:.1f}% of tasks were completed. Investigate blockers and capacity issues.",
+                'category': 'process',
+                'priority': 'high',
+                'recommended_action': 'Review task assignments and identify bottlenecks'
+            })
+        
+        if metrics['overdue_tasks'] > metrics['total_tasks'] * 0.2:
+            lessons.append({
+                'title': 'Too many overdue tasks',
+                'description': f"{metrics['overdue_tasks']} tasks are overdue. This suggests estimation or capacity issues.",
+                'category': 'planning',
+                'priority': 'high',
+                'recommended_action': 'Review estimation process and team capacity planning'
+            })
+        
+        if metrics['unassigned_tasks'] > 0:
+            lessons.append({
+                'title': 'Unassigned tasks detected',
+                'description': f"{metrics['unassigned_tasks']} tasks remain unassigned, which may cause delays.",
+                'category': 'teamwork',
+                'priority': 'medium',
+                'recommended_action': 'Implement clear task assignment process'
+            })
+        
+        # Always add at least one generic lesson
+        if not lessons:
+            lessons.append({
+                'title': 'Team made progress during this period',
+                'description': f"The team worked on {metrics['total_tasks']} tasks and showed engagement.",
+                'category': 'team_performance',
+                'priority': 'low',
+                'recommended_action': 'Continue monitoring progress and team dynamics'
+            })
+        
+        return lessons
+    
+    def _generate_fallback_actions(self):
+        """Generate basic action items when AI doesn't provide them"""
+        actions = []
+        
+        metrics = self.collect_metrics()
+        
+        if metrics['completion_rate'] < 70:
+            actions.append({
+                'title': 'Improve task completion rate',
+                'description': 'Identify and remove blockers preventing task completion',
+                'action_type': 'process_improvement',
+                'priority': 'high',
+                'expected_impact': 'Increase completion rate by 20%'
+            })
+        
+        if metrics['overdue_tasks'] > 0:
+            actions.append({
+                'title': 'Address overdue tasks',
+                'description': 'Review and reprioritize overdue tasks, adjust estimates if needed',
+                'action_type': 'planning',
+                'priority': 'high',
+                'expected_impact': 'Reduce overdue tasks to zero'
+            })
+        
+        if metrics['unassigned_tasks'] > 0:
+            actions.append({
+                'title': 'Assign all tasks to team members',
+                'description': 'Ensure every task has a clear owner',
+                'action_type': 'teamwork',
+                'priority': 'medium',
+                'expected_impact': 'Improve accountability and task completion'
+            })
+        
+        # Always add at least one generic action
+        if not actions:
+            actions.append({
+                'title': 'Continue monitoring team performance',
+                'description': 'Track key metrics and adjust processes as needed',
+                'action_type': 'process_improvement',
+                'priority': 'low',
+                'expected_impact': 'Maintain or improve current performance levels'
+            })
+        
+        return actions
