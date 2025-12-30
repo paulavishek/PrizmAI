@@ -921,17 +921,35 @@ def delete_label(request, label_id):
     
     return redirect('create_label', board_id=board.id)
 
-@login_required
 def board_analytics(request, board_id):
+    """
+    Board analytics dashboard
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
+    """
     board = get_object_or_404(Board, id=board_id)
     
     # Check if this is a demo board (for display purposes only)
     demo_org_names = ['Dev Team', 'Marketing Team']
     is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
     
-    # Check if user has access to this board - all boards require membership
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board.")
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check if user has access to this board - all boards require membership
+        if not (board.created_by == request.user or request.user in board.members.all()):
+            return HttpResponseForbidden("You don't have access to this board.")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_view_analytics'):
+            return HttpResponseForbidden("You don't have permission to view analytics in your current demo role.")
+    # Solo demo mode: full access, no restrictions
     
     # Get columns for this board
     columns = Column.objects.filter(board=board)

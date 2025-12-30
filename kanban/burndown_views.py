@@ -21,21 +21,67 @@ from kanban.burndown_models import (
 from kanban.utils.burndown_predictor import BurndownPredictor
 
 
-@login_required
+def check_board_access_for_demo(request, board):
+    """
+    Helper function to check board access supporting demo mode
+    Returns (has_access: bool, error_response: HttpResponse or None)
+    """
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')
+    
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return False, redirect_to_login(request.get_full_path())
+        
+        # Check access - all boards require membership
+        if not (board.created_by == request.user or request.user in board.members.all()):
+            return False, None
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_view_analytics'):
+            return False, None
+    # Solo demo mode: full access, no restrictions
+    
+    return True, None
+
+
 def burndown_dashboard(request, board_id):
     """
     Main burndown dashboard with predictions and confidence intervals
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
     # Check if this is a demo board (for display purposes only)
     demo_org_names = ['Dev Team', 'Marketing Team']
     is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
     
-    # Check access - all boards require membership
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        messages.error(request, "You don't have access to this board.")
-        return redirect('dashboard')
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check access - all boards require membership
+        if not (board.created_by == request.user or request.user in board.members.all()):
+            messages.error(request, "You don't have access to this board.")
+            return redirect('dashboard')
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_view_analytics'):
+            messages.error(request, "You don't have permission to view analytics in your current demo role.")
+            return redirect('demo_dashboard')
+    # Solo demo mode: full access, no restrictions
     
     # Get or generate latest prediction
     predictor = BurndownPredictor()
@@ -87,16 +133,32 @@ def burndown_dashboard(request, board_id):
     return render(request, 'kanban/burndown_dashboard.html', context)
 
 
-@login_required
 def generate_burndown_prediction(request, board_id):
     """
     Generate a new burndown prediction
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
-    # Check access
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
+    # Check if this is a demo board
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')
+    
+    # For non-demo boards, require authentication and check access
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+        if not (board.created_by == request.user or request.user in board.members.all()):
+            return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_view_analytics'):
+            return JsonResponse({'success': False, 'error': 'Permission denied in current demo role'}, status=403)
+    # Solo demo mode: full access, no restrictions
     
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST required'}, status=400)
@@ -148,15 +210,18 @@ def generate_burndown_prediction(request, board_id):
         }, status=400)
 
 
-@login_required
 def burndown_chart_data(request, board_id):
     """
     API endpoint for burndown chart data with confidence bands
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
     # Check access
-    if not (board.created_by == request.user or request.user in board.members.all()):
+    has_access, error_response = check_board_access_for_demo(request, board)
+    if not has_access:
+        if error_response:
+            return error_response
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     # Get latest prediction
@@ -191,15 +256,18 @@ def burndown_chart_data(request, board_id):
     return JsonResponse(chart_data)
 
 
-@login_required
 def velocity_chart_data(request, board_id):
     """
     API endpoint for velocity history chart
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
     # Check access
-    if not (board.created_by == request.user or request.user in board.members.all()):
+    has_access, error_response = check_board_access_for_demo(request, board)
+    if not has_access:
+        if error_response:
+            return error_response
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     # Get velocity snapshots
@@ -227,16 +295,19 @@ def velocity_chart_data(request, board_id):
     return JsonResponse(velocity_data)
 
 
-@login_required
 def acknowledge_burndown_alert(request, board_id, alert_id):
     """
     Acknowledge a burndown alert
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     alert = get_object_or_404(BurndownAlert, id=alert_id, board=board)
     
     # Check access
-    if not (board.created_by == request.user or request.user in board.members.all()):
+    has_access, error_response = check_board_access_for_demo(request, board)
+    if not has_access:
+        if error_response:
+            return error_response
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     if request.method == 'POST':
@@ -254,17 +325,24 @@ def acknowledge_burndown_alert(request, board_id, alert_id):
     return JsonResponse({'success': False, 'error': 'POST required'}, status=400)
 
 
-@login_required
 def resolve_burndown_alert(request, board_id, alert_id):
     """
     Resolve a burndown alert
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     alert = get_object_or_404(BurndownAlert, id=alert_id, board=board)
     
-    # Check access - only board creator or assigned person
-    if not (board.created_by == request.user or request.user == alert.acknowledged_by):
-        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
+    # Check access - demo mode has full access
+    is_demo_board = board.organization.name in ['Dev Team', 'Marketing Team']
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
+        # Check access - only board creator or assigned person
+        if not (board.created_by == request.user or request.user == alert.acknowledged_by):
+            return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     if request.method == 'POST':
         alert.status = 'resolved'
@@ -280,15 +358,18 @@ def resolve_burndown_alert(request, board_id, alert_id):
     return JsonResponse({'success': False, 'error': 'POST required'}, status=400)
 
 
-@login_required
 def manage_milestones(request, board_id):
     """
     Manage project milestones
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
     # Check access
-    if not (board.created_by == request.user or request.user in board.members.all()):
+    has_access, error_response = check_board_access_for_demo(request, board)
+    if not has_access:
+        if error_response:
+            return error_response
         messages.error(request, "You don't have access to this board.")
         return redirect('dashboard')
     
@@ -306,15 +387,18 @@ def manage_milestones(request, board_id):
     return render(request, 'kanban/manage_milestones.html', context)
 
 
-@login_required
 def prediction_history(request, board_id):
     """
     View historical predictions and accuracy
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
     # Check access
-    if not (board.created_by == request.user or request.user in board.members.all()):
+    has_access, error_response = check_board_access_for_demo(request, board)
+    if not has_access:
+        if error_response:
+            return error_response
         messages.error(request, "You don't have access to this board.")
         return redirect('dashboard')
     
@@ -330,15 +414,18 @@ def prediction_history(request, board_id):
     return render(request, 'kanban/prediction_history.html', context)
 
 
-@login_required
 def actionable_suggestions_api(request, board_id):
     """
     Get actionable suggestions from latest prediction
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
     # Check access
-    if not (board.created_by == request.user or request.user in board.members.all()):
+    has_access, error_response = check_board_access_for_demo(request, board)
+    if not has_access:
+        if error_response:
+            return error_response
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     # Get latest prediction

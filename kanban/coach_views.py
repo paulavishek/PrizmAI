@@ -30,21 +30,67 @@ from kanban.utils.feedback_learning import FeedbackLearningSystem
 logger = logging.getLogger(__name__)
 
 
-@login_required
+def check_board_access_for_demo(request, board):
+    """
+    Helper function to check board access supporting demo mode
+    Returns (has_access: bool, error_response: HttpResponse or None)
+    """
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')
+    
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return False, redirect_to_login(request.get_full_path())
+        
+        # Check access - all boards require membership
+        if request.user not in board.members.all() and board.created_by != request.user:
+            return False, None
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
+            return False, None
+    # Solo demo mode: full access, no restrictions
+    
+    return True, None
+
+
 def coach_dashboard(request, board_id):
     """
     Main coaching dashboard showing suggestions and insights
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
     # Check if this is a demo board (for display purposes only)
     demo_org_names = ['Dev Team', 'Marketing Team']
     is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
     
-    # Check access - all boards require membership
-    if request.user not in board.members.all() and board.created_by != request.user:
-        messages.error(request, "You don't have access to this board.")
-        return redirect('kanban:board_list')
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check access - all boards require membership
+        if request.user not in board.members.all() and board.created_by != request.user:
+            messages.error(request, "You don't have access to this board.")
+            return redirect('kanban:board_list')
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
+            messages.error(request, "You don't have permission to use AI Coach in your current demo role.")
+            return redirect('demo_dashboard')
+    # Solo demo mode: full access, no restrictions
     
     # Get active suggestions
     active_suggestions = CoachingSuggestion.objects.filter(
@@ -91,12 +137,33 @@ def coach_dashboard(request, board_id):
     return render(request, 'kanban/coach_dashboard.html', context)
 
 
-@login_required
 def suggestion_detail(request, suggestion_id):
     """
     Detailed view of a coaching suggestion
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     suggestion = get_object_or_404(CoachingSuggestion, id=suggestion_id)
+    board = suggestion.board
+    
+    # Check if this is a demo board
+    demo_org_names = ['Dev Team', 'Marketing Team']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')
+    
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
+            messages.error(request, "You don't have permission to view AI Coach suggestions in your current demo role.")
+            return redirect('demo_dashboard')
+    # Solo demo mode: full access, no restrictions
     
     # Check access
     board = suggestion.board
@@ -116,16 +183,19 @@ def suggestion_detail(request, suggestion_id):
     return render(request, 'kanban/coach_suggestion_detail.html', context)
 
 
-@login_required
 @require_POST
 def generate_suggestions(request, board_id):
     """
     Generate new coaching suggestions for a board
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
     # Check access
-    if request.user not in board.members.all() and board.created_by != request.user:
+    has_access, error_response = check_board_access_for_demo(request, board)
+    if not has_access:
+        if error_response:
+            return error_response
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     try:
@@ -211,17 +281,19 @@ def generate_suggestions(request, board_id):
         }, status=500)
 
 
-@login_required
 @require_POST
 def acknowledge_suggestion(request, suggestion_id):
     """
     Mark a suggestion as acknowledged
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     suggestion = get_object_or_404(CoachingSuggestion, id=suggestion_id)
     
     # Check access
-    if request.user not in suggestion.board.members.all() and \
-       suggestion.board.created_by != request.user:
+    has_access, error_response = check_board_access_for_demo(request, suggestion.board)
+    if not has_access:
+        if error_response:
+            return error_response
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     try:
@@ -240,17 +312,19 @@ def acknowledge_suggestion(request, suggestion_id):
         }, status=500)
 
 
-@login_required
 @require_POST
 def dismiss_suggestion(request, suggestion_id):
     """
     Dismiss a suggestion
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     suggestion = get_object_or_404(CoachingSuggestion, id=suggestion_id)
     
     # Check access
-    if request.user not in suggestion.board.members.all() and \
-       suggestion.board.created_by != request.user:
+    has_access, error_response = check_board_access_for_demo(request, suggestion.board)
+    if not has_access:
+        if error_response:
+            return error_response
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     try:
@@ -280,17 +354,19 @@ def dismiss_suggestion(request, suggestion_id):
         }, status=500)
 
 
-@login_required
 @require_POST
 def submit_feedback(request, suggestion_id):
     """
     Submit detailed feedback on a suggestion
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     suggestion = get_object_or_404(CoachingSuggestion, id=suggestion_id)
     
     # Check access
-    if request.user not in suggestion.board.members.all() and \
-       suggestion.board.created_by != request.user:
+    has_access, error_response = check_board_access_for_demo(request, suggestion.board)
+    if not has_access:
+        if error_response:
+            return error_response
         messages.error(request, "You don't have access to this suggestion.")
         return redirect('board_list')
     
@@ -350,11 +426,11 @@ def submit_feedback(request, suggestion_id):
             return redirect('coach_suggestion_detail', suggestion_id=suggestion.id)
 
 
-@login_required
 @require_http_methods(["GET", "POST"])
 def ask_coach(request, board_id):
     """
     Ask the AI coach a question
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     from api.ai_usage_utils import check_ai_quota, track_ai_request
     import time
@@ -362,7 +438,10 @@ def ask_coach(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
     # Check access
-    if request.user not in board.members.all() and board.created_by != request.user:
+    has_access, error_response = check_board_access_for_demo(request, board)
+    if not has_access:
+        if error_response:
+            return error_response
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     if request.method == 'POST':
@@ -455,15 +534,18 @@ def ask_coach(request, board_id):
     return render(request, 'kanban/coach_ask.html', context)
 
 
-@login_required
 def coaching_analytics(request, board_id):
     """
     Analytics view for coaching effectiveness
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
     # Check access
-    if request.user not in board.members.all() and board.created_by != request.user:
+    has_access, error_response = check_board_access_for_demo(request, board)
+    if not has_access:
+        if error_response:
+            return error_response
         messages.error(request, "You don't have access to this board.")
         return redirect('kanban:board_list')
     
@@ -525,15 +607,18 @@ def coaching_analytics(request, board_id):
     return render(request, 'kanban/coach_analytics.html', context)
 
 
-@login_required
 def get_suggestions_api(request, board_id):
     """
     API endpoint to get coaching suggestions
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
     # Check access
-    if request.user not in board.members.all() and board.created_by != request.user:
+    has_access, error_response = check_board_access_for_demo(request, board)
+    if not has_access:
+        if error_response:
+            return error_response
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     # Get filter parameters
