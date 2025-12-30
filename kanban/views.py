@@ -717,11 +717,12 @@ def create_task(request, board_id, column_id=None):
     
     if column_id:
         column = get_object_or_404(Column, id=column_id, board=board)
-        # Check column-level permission
-        can_create, error_msg = user_can_create_task_in_column(request.user, column)
-        if not can_create:
-            messages.error(request, error_msg)
-            return redirect('board_detail', board_id=board.id)
+        # Check column-level permission (skip for demo boards)
+        if not (is_demo_board and is_demo_mode):
+            can_create, error_msg = user_can_create_task_in_column(request.user, column)
+            if not can_create:
+                messages.error(request, error_msg)
+                return redirect('board_detail', board_id=board.id)
     else:
         # Try to get "To Do" column first, otherwise get the first available column
         column = Column.objects.filter(
@@ -743,26 +744,34 @@ def create_task(request, board_id, column_id=None):
         if form.is_valid():
             task = form.save(commit=False)
             task.column = column
-            task.created_by = request.user
+            # For demo mode, use demo_admin if user is anonymous
+            if request.user.is_authenticated:
+                task.created_by = request.user
+            else:
+                # For demo sessions, assign to the demo admin user
+                from django.contrib.auth.models import User
+                task.created_by = User.objects.filter(username='demo_admin').first()
             # Set position to be at the end of the column
             last_position = Task.objects.filter(column=column).order_by('-position').first()
             task.position = (last_position.position + 1) if last_position else 0
             # Store who created the task for signal handler
-            task._changed_by_user = request.user
+            task._changed_by_user = task.created_by
             task.save()
             # Save many-to-many relationships
             form.save_m2m()
             
-            # Record activity
-            TaskActivity.objects.create(
-                task=task,
-                user=request.user,
-                activity_type='created',
-                description=f"Created task '{task.title}'"
-            )
+            # Record activity (only for authenticated users)
+            if request.user.is_authenticated:
+                TaskActivity.objects.create(
+                    task=task,
+                    user=request.user,
+                    activity_type='created',
+                    description=f"Created task '{task.title}'"
+                )
             
-            # Log to audit trail
-            log_model_change('task.created', task, request.user, request)
+            # Log to audit trail (only for authenticated users)
+            if request.user.is_authenticated:
+                log_model_change('task.created', task, request.user, request)
             
             messages.success(request, 'Task created successfully!')
             return redirect('board_detail', board_id=board.id)
