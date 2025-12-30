@@ -238,28 +238,38 @@ def suggest_lss_classification_api(request):
         )
         return JsonResponse({'error': str(e)}, status=500)
 
-@login_required
 @require_http_methods(["GET"])
 def summarize_board_analytics_api(request, board_id):
     """
     API endpoint to summarize board analytics using AI
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     start_time = time.time()
     try:
-        # Check AI quota
-        has_quota, quota, remaining = check_ai_quota(request.user)
-        if not has_quota:
-            return JsonResponse({
-                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
-                'quota_exceeded': True
-            }, status=429)
-        
-        # Get the board and verify user access
+        # Get the board
         board = get_object_or_404(Board, id=board_id)
         
-        # Check if user has access to this board
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Check if this is a demo board (for display purposes only)
+        demo_org_names = ['Demo - Acme Corporation']
+        is_demo_board = board.organization.name in demo_org_names
+        is_demo_mode = request.session.get('is_demo_mode', False)
+        
+        # For non-demo boards, require authentication
+        if not (is_demo_board and is_demo_mode):
+            if not request.user.is_authenticated:
+                return JsonResponse({'error': 'Authentication required'}, status=401)
+            
+            # Check if user has access to this board
+            if not (board.created_by == request.user or request.user in board.members.all()):
+                return JsonResponse({'error': 'Access denied'}, status=403)
+            
+            # Check AI quota for authenticated users
+            has_quota, quota, remaining = check_ai_quota(request.user)
+            if not has_quota:
+                return JsonResponse({
+                    'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                    'quota_exceeded': True
+                }, status=429)
         
         # Gather analytics data (same as in board_analytics view)
         from django.db.models import Count, Q
@@ -389,40 +399,45 @@ def summarize_board_analytics_api(request, board_id):
         
         if not summary:
             response_time_ms = int((time.time() - start_time) * 1000)
+            # Track AI request only if user is authenticated
+            if request.user.is_authenticated:
+                track_ai_request(
+                    user=request.user,
+                    feature='board_analytics',
+                    request_type='summarize',
+                    board_id=board.id,
+                    success=False,
+                    error_message='Failed to generate analytics summary',
+                    response_time_ms=response_time_ms
+                )
+            return JsonResponse({'error': 'Failed to generate analytics summary'}, status=500)
+        
+        # Track successful request (only if user is authenticated)
+        response_time_ms = int((time.time() - start_time) * 1000)
+        if request.user.is_authenticated:
             track_ai_request(
                 user=request.user,
                 feature='board_analytics',
                 request_type='summarize',
                 board_id=board.id,
-                success=False,
-                error_message='Failed to generate analytics summary',
+                success=True,
                 response_time_ms=response_time_ms
             )
-            return JsonResponse({'error': 'Failed to generate analytics summary'}, status=500)
-        
-        # Track successful request
-        response_time_ms = int((time.time() - start_time) * 1000)
-        track_ai_request(
-            user=request.user,
-            feature='board_analytics',
-            request_type='summarize',
-            board_id=board.id,
-            success=True,
-            response_time_ms=response_time_ms
-        )
             
         return JsonResponse({'summary': summary})
     except Exception as e:
         response_time_ms = int((time.time() - start_time) * 1000)
-        track_ai_request(
-            user=request.user,
-            feature='board_analytics',
-            request_type='summarize',
-            board_id=board_id if 'board' in locals() else None,
-            success=False,
-            error_message=str(e),
-            response_time_ms=response_time_ms
-        )
+        # Track AI request only if user is authenticated
+        if request.user.is_authenticated:
+            track_ai_request(
+                user=request.user,
+                feature='board_analytics',
+                request_type='summarize',
+                board_id=board_id if 'board' in locals() else None,
+                success=False,
+                error_message=str(e),
+                response_time_ms=response_time_ms
+            )
         return JsonResponse({'error': str(e)}, status=500)
 
 @login_required

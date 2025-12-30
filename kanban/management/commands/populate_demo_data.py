@@ -119,6 +119,11 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('\n🔗 Creating task dependencies...\n'))
         self.create_dependencies(software_tasks, marketing_tasks, bug_tasks)
 
+        # Create and assign Lean Six Sigma labels
+        self.stdout.write(self.style.SUCCESS('\n🏷️  Creating Lean Six Sigma labels...\n'))
+        self.create_lean_labels(software_board, marketing_board, bug_board)
+        self.assign_lean_labels(software_tasks, marketing_tasks, bug_tasks)
+
         self.stdout.write(self.style.SUCCESS('\n' + '='*70))
         self.stdout.write(self.style.SUCCESS('✅ DEMO DATA POPULATION COMPLETE'))
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))
@@ -1307,3 +1312,120 @@ class Command(BaseCommand):
             # Must investigate before fixing
             bug_tasks[20].dependencies.add(bug_tasks[10])  # Fix depends on investigation
             self.stdout.write('   ✅ Created 1 dependency in Bug Tracking')
+
+    def create_lean_labels(self, *boards):
+        """Create Lean Six Sigma labels for demo boards"""
+        lean_labels = [
+            {'name': 'Value-Added', 'color': '#28a745', 'category': 'lean'},  # Green
+            {'name': 'Necessary NVA', 'color': '#ffc107', 'category': 'lean'},  # Yellow
+            {'name': 'Waste/Eliminate', 'color': '#dc3545', 'category': 'lean'}  # Red
+        ]
+        
+        labels_created = 0
+        for board in boards:
+            for label_data in lean_labels:
+                # Check if label already exists
+                if not TaskLabel.objects.filter(
+                    name=label_data['name'],
+                    board=board,
+                    category='lean'
+                ).exists():
+                    TaskLabel.objects.create(
+                        name=label_data['name'],
+                        color=label_data['color'],
+                        category='lean',
+                        board=board
+                    )
+                    labels_created += 1
+        
+        self.stdout.write(f'   ✅ Created {labels_created} Lean Six Sigma labels')
+
+    def assign_lean_labels(self, software_tasks, marketing_tasks, bug_tasks):
+        """Assign Lean Six Sigma labels to tasks based on their characteristics"""
+        all_tasks = software_tasks + marketing_tasks + bug_tasks
+        
+        # Get labels from the first task's board (they should all exist now)
+        if not all_tasks:
+            return
+        
+        sample_board = all_tasks[0].column.board
+        value_added_label = TaskLabel.objects.filter(
+            name='Value-Added',
+            board=sample_board,
+            category='lean'
+        ).first()
+        
+        necessary_nva_label = TaskLabel.objects.filter(
+            name='Necessary NVA',
+            board=sample_board,
+            category='lean'
+        ).first()
+        
+        waste_label = TaskLabel.objects.filter(
+            name='Waste/Eliminate',
+            board=sample_board,
+            category='lean'
+        ).first()
+        
+        # Categorize tasks intelligently based on keywords and priority
+        value_added_count = 0
+        necessary_count = 0
+        waste_count = 0
+        
+        for task in all_tasks:
+            # Value-Added: Core features, user-facing functionality, high-priority items
+            value_keywords = ['implement', 'build', 'create', 'develop', 'design', 'api', 'authentication', 
+                            'feature', 'landing page', 'campaign', 'video', 'content']
+            
+            # Necessary NVA: Testing, documentation, reviews, planning, meetings
+            necessary_keywords = ['test', 'review', 'document', 'plan', 'meeting', 'research', 
+                                'analyze', 'investigate', 'fix bug', 'setup', 'configure']
+            
+            # Waste: Rework, redundant work, low priority items
+            waste_keywords = ['rework', 'redo', 'duplicate', 'unnecessary', 'redundant', 
+                            'refactor old', 'update deprecated']
+            
+            title_lower = task.title.lower()
+            desc_lower = (task.description or '').lower()
+            
+            # Get labels for this task's board
+            board = task.column.board
+            board_value_label = TaskLabel.objects.filter(
+                name='Value-Added', board=board, category='lean'
+            ).first()
+            board_necessary_label = TaskLabel.objects.filter(
+                name='Necessary NVA', board=board, category='lean'
+            ).first()
+            board_waste_label = TaskLabel.objects.filter(
+                name='Waste/Eliminate', board=board, category='lean'
+            ).first()
+            
+            # Categorize based on keywords (check waste first, then necessary, then value-added as default)
+            if any(keyword in title_lower or keyword in desc_lower for keyword in waste_keywords):
+                if board_waste_label:
+                    task.labels.add(board_waste_label)
+                    waste_count += 1
+            elif any(keyword in title_lower or keyword in desc_lower for keyword in necessary_keywords):
+                if board_necessary_label:
+                    task.labels.add(board_necessary_label)
+                    necessary_count += 1
+            elif any(keyword in title_lower or keyword in desc_lower for keyword in value_keywords):
+                if board_value_label:
+                    task.labels.add(board_value_label)
+                    value_added_count += 1
+            else:
+                # Default: High/Urgent priority = Value-Added, Low = Necessary NVA
+                if task.priority in ['high', 'urgent']:
+                    if board_value_label:
+                        task.labels.add(board_value_label)
+                        value_added_count += 1
+                else:
+                    if board_necessary_label:
+                        task.labels.add(board_necessary_label)
+                        necessary_count += 1
+        
+        self.stdout.write(f'   ✅ Assigned labels to {len(all_tasks)} tasks:')
+        self.stdout.write(f'      • Value-Added: {value_added_count}')
+        self.stdout.write(f'      • Necessary NVA: {necessary_count}')
+        self.stdout.write(f'      • Waste/Eliminate: {waste_count}')
+
