@@ -247,11 +247,16 @@ def retrospective_create(request, board_id):
     else:  # POST
         start_time = time.time()
         try:
-            # Check AI quota
-            has_quota, quota, remaining = check_ai_quota(request.user)
-            if not has_quota:
-                messages.error(request, "AI usage quota exceeded. Please upgrade or wait for quota reset.")
-                return redirect('retrospective_create', board_id=board_id)
+            # Check AI quota (skip for anonymous demo users)
+            if request.user.is_authenticated:
+                has_quota, quota, remaining = check_ai_quota(request.user)
+                if not has_quota:
+                    messages.error(request, "AI usage quota exceeded. Please upgrade or wait for quota reset.")
+                    return redirect('retrospective_create', board_id=board_id)
+            else:
+                # For anonymous demo users, no quota restrictions
+                quota = None
+                remaining = float('inf')
             
             # Get form data
             period_start = datetime.strptime(request.POST.get('period_start'), '%Y-%m-%d').date()
@@ -277,8 +282,19 @@ def retrospective_create(request, board_id):
             
             # Generate retrospective
             generator = RetrospectiveGenerator(board, period_start, period_end)
+            # For anonymous users in demo mode, use a demo user
+            if request.user.is_authenticated:
+                created_by = request.user
+            else:
+                # Get or create a demo admin user for anonymous retrospectives
+                from django.contrib.auth.models import User
+                created_by = User.objects.filter(username='demo_admin').first()
+                if not created_by:
+                    # Fallback: create a demo admin user if it doesn't exist
+                    created_by = User.objects.create_user(username='demo_admin', email='demo@example.com')
+            
             retrospective = generator.create_retrospective(
-                created_by=request.user,
+                created_by=created_by,
                 retrospective_type=retrospective_type
             )
             
@@ -288,16 +304,17 @@ def retrospective_create(request, board_id):
             if manual_actions:
                 _add_manual_actions(retrospective, board, manual_actions)
             
-            # Track successful AI request
-            response_time_ms = int((time.time() - start_time) * 1000)
-            track_ai_request(
-                user=request.user,
-                feature='retrospective_generation',
-                request_type='generate',
-                board_id=board.id,
-                success=True,
-                response_time_ms=response_time_ms
-            )
+            # Track successful AI request (only for authenticated users)
+            if request.user.is_authenticated:
+                response_time_ms = int((time.time() - start_time) * 1000)
+                track_ai_request(
+                    user=request.user,
+                    feature='retrospective_generation',
+                    request_type='generate',
+                    board_id=board.id,
+                    success=True,
+                    response_time_ms=response_time_ms
+                )
             
             messages.success(
                 request,
@@ -306,16 +323,18 @@ def retrospective_create(request, board_id):
             return redirect('retrospective_detail', board_id=board_id, retro_id=retrospective.id)
             
         except Exception as e:
-            response_time_ms = int((time.time() - start_time) * 1000)
-            track_ai_request(
-                user=request.user,
-                feature='retrospective_generation',
-                request_type='generate',
-                board_id=board.id,
-                success=False,
-                error_message=str(e),
-                response_time_ms=response_time_ms
-            )
+            # Track failed request (only for authenticated users, doesn't count against quota)
+            if request.user.is_authenticated:
+                response_time_ms = int((time.time() - start_time) * 1000)
+                track_ai_request(
+                    user=request.user,
+                    feature='retrospective_generation',
+                    request_type='generate',
+                    board_id=board.id,
+                    success=False,
+                    error_message=str(e),
+                    response_time_ms=response_time_ms
+                )
             logger.error(f"Error creating retrospective: {e}")
             messages.error(request, f"Error generating retrospective: {str(e)}")
             return redirect('retrospective_create', board_id=board_id)
