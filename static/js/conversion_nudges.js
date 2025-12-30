@@ -224,8 +224,34 @@ function showNudge(nudgeType, context = {}) {
 function updateNudgeContext(nudgeElement, context) {
     // Update features count if present
     const featuresCount = nudgeElement.querySelector('.features-count');
-    if (featuresCount && context.features_explored_count) {
-        featuresCount.textContent = context.features_explored_count;
+    const featuresTried = nudgeElement.querySelector('#features-tried-text');
+    const nudgeTitle = nudgeElement.querySelector('#medium-nudge-title');
+    
+    if (featuresCount && context.features_explored_count !== undefined) {
+        const count = context.features_explored_count;
+        featuresCount.textContent = count;
+        
+        // Update title text contextually for medium nudge
+        if (nudgeTitle) {
+            if (count === 0) {
+                nudgeTitle.innerHTML = 'Enjoying the demo so far?';
+            } else if (count === 1) {
+                nudgeTitle.innerHTML = 'You\'ve explored <span class="features-count">' + count + '</span> feature!';
+            } else {
+                nudgeTitle.innerHTML = 'You\'ve explored <span class="features-count">' + count + '</span> features!';
+            }
+        }
+        
+        // Update "features tried" text contextually
+        if (featuresTried) {
+            if (count === 0) {
+                featuresTried.textContent = 'All features available';
+            } else if (count === 1) {
+                featuresTried.textContent = 'The feature you tried + all others';
+            } else {
+                featuresTried.textContent = 'All ' + count + ' features you tried + more';
+            }
+        }
     }
     
     // Add any other dynamic context updates here

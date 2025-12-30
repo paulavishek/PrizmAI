@@ -175,6 +175,7 @@ class NudgeTiming:
         
         Conditions:
         - 3 minutes in demo OR 3 features explored
+        - At least 1 feature explored (don't show if 0 engagement)
         - Not already shown
         - Not in cooldown
         - Haven't hit frequency cap
@@ -202,6 +203,11 @@ class NudgeTiming:
         time_in_demo = NudgeTiming.get_time_in_demo(session)
         features_count = NudgeTiming.get_features_explored_count(session)
         
+        # IMPORTANT: Require at least 1 feature explored
+        # Don't show conversion nudge if user hasn't engaged at all
+        if features_count < 1:
+            return False
+        
         return (time_in_demo >= NudgeTiming.SOFT_MIN_TIME or 
                 features_count >= NudgeTiming.SOFT_MIN_FEATURES)
     
@@ -212,6 +218,7 @@ class NudgeTiming:
         
         Conditions:
         - 5 minutes in demo OR 1 aha moment experienced
+        - At least 1 feature explored (don't show if 0 engagement)
         - Not already shown
         - Not in cooldown
         - Haven't hit frequency cap
@@ -233,6 +240,12 @@ class NudgeTiming:
         
         # Check cooldown
         if NudgeTiming.is_in_cooldown(session, NudgeType.MEDIUM):
+            return False
+        
+        # IMPORTANT: Require at least 1 feature explored
+        # Don't show conversion nudge if user hasn't engaged at all
+        features_count = NudgeTiming.get_features_explored_count(session)
+        if features_count < 1:
             return False
         
         # Check time or aha threshold

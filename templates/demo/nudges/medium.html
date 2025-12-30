@@ -10,8 +10,8 @@ Soft overlay, still dismissible
         <div class="nudge-modal-content">
             <div class="nudge-header">
                 <div class="nudge-icon">🎯</div>
-                <h3 class="nudge-title">
-                    You've explored <span class="features-count">{{ features_explored_count }}</span> features!
+                <h3 class="nudge-title" id="medium-nudge-title">
+                    <span class="features-count">{{ features_explored_count }}</span>
                 </h3>
             </div>
             
@@ -25,7 +25,7 @@ Soft overlay, still dismissible
                     </li>
                     <li>
                         <span class="benefit-icon">✓</span>
-                        All features you just tried
+                        <span id="features-tried-text">All features available</span>
                     </li>
                     <li>
                         <span class="benefit-icon">✓</span>
