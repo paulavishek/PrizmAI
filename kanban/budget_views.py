@@ -120,7 +120,8 @@ def budget_create_or_edit(request, board_id):
     
     # In demo mode, redirect to budget dashboard (view only)
     if is_demo_board and is_demo_mode:
-        messages.info(request, 'Budget creation/editing is disabled in demo mode. You can view the existing demo budget.')\n        return redirect('budget_dashboard', board_id=board.id)
+        messages.info(request, 'Budget creation/editing is disabled in demo mode. You can view the existing demo budget.')
+        return redirect('budget_dashboard', board_id=board.id)
     
     # For non-demo boards, require authentication
     if not request.user.is_authenticated:
