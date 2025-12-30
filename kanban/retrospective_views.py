@@ -340,16 +340,36 @@ def retrospective_create(request, board_id):
             return redirect('retrospective_create', board_id=board_id)
 
 
-@login_required
 @require_http_methods(["POST"])
 def retrospective_finalize(request, board_id, retro_id):
-    """Finalize a retrospective"""
+    """Finalize a retrospective
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
+    """
     board = get_object_or_404(Board, id=board_id)
     retrospective = get_object_or_404(ProjectRetrospective, id=retro_id, board=board)
     
-    # Check permissions (only board owner or creator)
-    if not (request.user == board.created_by or request.user == retrospective.created_by):
-        return HttpResponseForbidden("You don't have permission to finalize this retrospective")
+    # Check if this is a demo board
+    demo_org_names = ['Demo - Acme Corporation']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')
+    
+    # For non-demo boards, require authentication and check permissions
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check permissions (only board owner or creator)
+        if not (request.user == board.created_by or request.user == retrospective.created_by):
+            return HttpResponseForbidden("You don't have permission to finalize this retrospective")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
+            return HttpResponseForbidden("You don't have permission to finalize retrospectives in your current demo role.")
+    # Solo demo mode: full access, no restrictions
     
     # Add team notes if provided
     team_notes = request.POST.get('team_notes', '')
@@ -462,16 +482,32 @@ def retrospective_dashboard(request, board_id):
     return render(request, 'kanban/retrospective_dashboard.html', context)
 
 
-@login_required
 @require_http_methods(["POST"])
 def lesson_update_status(request, board_id, lesson_id):
-    """Update lesson learned status"""
+    """Update lesson learned status
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
+    """
     board = get_object_or_404(Board, id=board_id)
     lesson = get_object_or_404(LessonLearned, id=lesson_id, board=board)
     
-    # Check permissions
-    if not (request.user == board.created_by or request.user in board.members.all()):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
+    # Check if this is a demo board
+    demo_org_names = ['Demo - Acme Corporation']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')
+    
+    # For non-demo boards, require authentication and check permissions
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            return JsonResponse({'error': 'Authentication required'}, status=401)
+        if not (request.user == board.created_by or request.user in board.members.all()):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_edit_tasks'):
+            return JsonResponse({'error': 'Permission denied in current demo role'}, status=403)
+    # Solo demo mode: full access, no restrictions
     
     new_status = request.POST.get('status')
     if new_status not in dict(LessonLearned.STATUS_CHOICES):
@@ -493,16 +529,32 @@ def lesson_update_status(request, board_id, lesson_id):
     })
 
 
-@login_required
 @require_http_methods(["POST"])
 def action_update_status(request, board_id, action_id):
-    """Update action item status"""
+    """Update action item status
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
+    """
     board = get_object_or_404(Board, id=board_id)
     action = get_object_or_404(RetrospectiveActionItem, id=action_id, board=board)
     
-    # Check permissions
-    if not (request.user == board.created_by or request.user in board.members.all()):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
+    # Check if this is a demo board
+    demo_org_names = ['Demo - Acme Corporation']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')
+    
+    # For non-demo boards, require authentication and check permissions
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            return JsonResponse({'error': 'Authentication required'}, status=401)
+        if not (request.user == board.created_by or request.user in board.members.all()):
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_edit_tasks'):
+            return JsonResponse({'error': 'Permission denied in current demo role'}, status=403)
+    # Solo demo mode: full access, no restrictions
     
     new_status = request.POST.get('status')
     progress = request.POST.get('progress')
@@ -680,9 +732,10 @@ def _generate_trend_analysis(board):
     return trend
 
 
-@login_required
 def retrospective_export(request, board_id, retro_id):
-    """Export retrospective as PDF"""
+    """Export retrospective as PDF
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
+    """
     from reportlab.lib.pagesizes import letter, A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
@@ -695,9 +748,25 @@ def retrospective_export(request, board_id, retro_id):
     board = get_object_or_404(Board, id=board_id)
     retrospective = get_object_or_404(ProjectRetrospective, id=retro_id, board=board)
     
-    # Check permissions
-    if not (request.user == board.created_by or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board")
+    # Check if this is a demo board
+    demo_org_names = ['Demo - Acme Corporation']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')
+    
+    # For non-demo boards, require authentication and check permissions
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        if not (request.user == board.created_by or request.user in board.members.all()):
+            return HttpResponseForbidden("You don't have access to this board")
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_view_analytics'):
+            return HttpResponseForbidden("You don't have permission to export in your current demo role.")
+    # Solo demo mode: full access, no restrictions
     
     # Get related data
     lessons = retrospective.lessons.all().order_by('-priority', '-created_at')
