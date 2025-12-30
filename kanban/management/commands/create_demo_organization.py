@@ -35,11 +35,11 @@ class Command(BaseCommand):
         self.stdout.write('='*80)
         
         try:
+            # Step 1: Handle reset if requested (OUTSIDE transaction)
+            if options['reset']:
+                self.reset_demo_data()
+            
             with transaction.atomic():
-                # Step 1: Handle reset if requested
-                if options['reset']:
-                    self.reset_demo_data()
-                
                 # Step 2: Create demo organization
                 demo_org = self.create_demo_organization()
                 
@@ -82,8 +82,8 @@ class Command(BaseCommand):
         if demo_org:
             self.stdout.write(f'  Deleting demo organization: {demo_org.name}')
             
-            # First, update all demo personas to point to no organization
-            # This prevents foreign key constraint errors
+            # Delete demo users entirely (including their profiles)
+            # This must be done first as Users may have references
             demo_emails = [
                 'alex.chen@demo.prizmai.local',
                 'sam.rivera@demo.prizmai.local',
@@ -93,13 +93,13 @@ class Command(BaseCommand):
             for email in demo_emails:
                 try:
                     user = User.objects.get(email=email)
-                    if hasattr(user, 'profile'):
-                        user.profile.organization = None
-                        user.profile.save()
+                    self.stdout.write(f'  Deleting user: {user.email}')
+                    user.delete()
                 except User.DoesNotExist:
                     pass
             
-            # Now safe to delete organization (will cascade to boards, tasks, etc.)
+            # Now delete organization (will cascade to boards, tasks, etc.)
+            self.stdout.write(f'  Deleting organization and all related data...')
             demo_org.delete()
             
             self.stdout.write(self.style.SUCCESS('  ✓ Demo data reset complete'))
