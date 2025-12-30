@@ -337,6 +337,237 @@ kbd {
 {% include 'demo/partials/expiry_warning.html' %}
 
 <div class="container-fluid" style="margin-top: 2rem;">
+
+<!-- Board Header with Title and Feature Buttons -->
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h3 mb-0 text-gray-800">
+            {{ board.name }}
+            <span class="badge bg-info ms-2" title="Your role on this board">
+                <i class="fas fa-user-shield"></i> {{ user_role_name|default:"Admin" }}
+            </span>
+        </h1>
+        {% if board.description %}
+            <p class="text-muted">{{ board.description }}</p>
+        {% endif %}
+    </div>
+    <div class="btn-group">
+        <button onclick="goBack()" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Back
+        </button>
+        <a href="{% url 'board_analytics' board.id %}" class="btn btn-outline-primary">
+            <i class="fas fa-chart-pie me-1"></i> Analytics
+        </a>
+        <a href="{% url 'burndown_dashboard' board.id %}" class="btn btn-outline-success">
+            <i class="fas fa-chart-line me-1"></i> Burndown
+        </a>
+        <a href="{% url 'coach_dashboard' board.id %}" class="btn btn-outline-purple" style="border-color: #667eea; color: #667eea;">
+            <i class="fas fa-user-graduate me-1"></i> AI Coach
+        </a>
+        <a href="{% url 'skill_gap_dashboard' board.id %}" class="btn btn-outline-warning">
+            <i class="fas fa-brain me-1"></i> Skill Gaps
+        </a>
+        <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-info">
+            <i class="fas fa-chart-gantt me-1"></i> Gantt Chart
+        </a>
+        <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-outline-success">
+            <i class="fas fa-dollar-sign me-1"></i> Budget & ROI
+        </a>
+        <a href="{% url 'retrospective_dashboard' board.id %}" class="btn btn-outline-secondary">
+            <i class="fas fa-history me-1"></i> Retrospectives
+        </a>
+        <div class="btn-group">
+            <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-file-export me-1"></i> Export
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=json">Export as JSON</a></li>
+                <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=csv">Export as CSV</a></li>
+            </ul>
+        </div>
+        <div class="btn-group">
+            <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <i class="fas fa-cog"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="{% url 'create_column' board.id %}">Add Column</a></li>
+            <li><a class="dropdown-item" href="{% url 'create_label' board.id %}">Manage Labels</a></li>
+            <li><a class="dropdown-item" href="{% url 'stakeholder:stakeholder_list' board.id %}">
+                <i class="fas fa-users me-2 text-primary"></i>Manage Stakeholders
+            </a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}">
+                <i class="fas fa-user-shield me-2 text-success"></i>Manage Members & Roles
+            </a></li>
+            <li><a class="dropdown-item" href="{% url 'view_permission_audit' board.id %}">
+                <i class="fas fa-history me-2 text-info"></i>Permission Audit Log
+            </a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}">Edit Board</a></li>
+            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#boardSettingsModal">Board Settings</a></li>
+            <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}">
+                <i class="fas fa-plug me-2 text-info"></i>Webhooks & Integrations
+            </a></li>
+            <li><hr class="dropdown-divider"></li>
+            {% if board.created_by == request.user or request.user.profile.is_admin or request.user == board.organization.created_by %}
+            <li><a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#deleteBoardModal">Delete Board</a></li>
+            {% endif %}
+        </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Permission & Role Info Banner (TEAM MODE ONLY) -->
+{% if demo_mode_type == 'team' and column_permissions %}
+<div class="alert alert-info alert-dismissible fade show mb-4" role="alert">
+    <div class="d-flex align-items-start">
+        <div class="me-3">
+            <i class="fas fa-shield-alt fa-2x"></i>
+        </div>
+        <div class="flex-grow-1">
+            <h6 class="alert-heading mb-2">
+                <i class="fas fa-info-circle me-2"></i>Workflow Permissions Active
+            </h6>
+            <p class="mb-2">
+                <strong>Your Role:</strong> {{ user_role_name|default:"Admin" }} | 
+                <strong>Column Restrictions:</strong> Some columns have permission restrictions to enforce workflow approval.
+            </p>
+            <div class="d-flex gap-2 flex-wrap mb-0">
+                {% for col_id, perms in column_permissions.items %}
+                    {% for column in columns %}
+                        {% if column.id == col_id %}
+                            {% if not perms.can_move_to %}
+                            <span class="badge bg-warning">
+                                <i class="fas fa-lock me-1"></i>Cannot move to "{{ column.name }}"
+                            </span>
+                            {% endif %}
+                            {% if not perms.can_create_in %}
+                            <span class="badge bg-secondary">
+                                <i class="fas fa-ban me-1"></i>Cannot create in "{{ column.name }}"
+                            </span>
+                            {% endif %}
+                        {% endif %}
+                    {% endfor %}
+                {% endfor %}
+                <a href="{% url 'manage_board_members' board.id %}" class="badge bg-primary text-decoration-none">
+                    <i class="fas fa-cog me-1"></i>Manage Permissions
+                </a>
+            </div>
+        </div>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<!-- Scope Creep Alerts -->
+{% if active_scope_alerts %}
+<div class="alert alert-dismissible fade show mb-4" role="alert" 
+     style="border-left: 4px solid 
+     {% if active_scope_alerts.0.severity == 'critical' %}#dc3545{% elif active_scope_alerts.0.severity == 'warning' %}#ffc107{% else %}#17a2b8{% endif %};">
+    <div class="d-flex align-items-start">
+        <div class="me-3">
+            {% if active_scope_alerts.0.severity == 'critical' %}
+                <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
+            {% elif active_scope_alerts.0.severity == 'warning' %}
+                <i class="fas fa-exclamation-circle fa-2x text-warning"></i>
+            {% else %}
+                <i class="fas fa-info-circle fa-2x text-info"></i>
+            {% endif %}
+        </div>
+        <div class="flex-grow-1">
+            <h5 class="alert-heading mb-2">
+                <i class="fas fa-chart-line me-2"></i>Scope Creep Detected
+            </h5>
+            <p class="mb-2">
+                <strong>{{ active_scope_alerts.0.get_severity_display }}</strong>: 
+                Scope has increased by <strong>{{ active_scope_alerts.0.scope_increase_percentage|floatformat:1 }}%</strong>
+                {% if active_scope_alerts.0.tasks_added %}
+                    ({{ active_scope_alerts.0.tasks_added }} tasks added)
+                {% endif %}
+            </p>
+            {% if active_scope_alerts.0.predicted_delay_days %}
+            <p class="mb-2">
+                <i class="fas fa-clock me-2"></i>
+                <strong>Predicted Impact:</strong> {{ active_scope_alerts.0.predicted_delay_days }} day{{ active_scope_alerts.0.predicted_delay_days|pluralize }} delay
+            </p>
+            {% endif %}
+            {% if active_scope_alerts.0.ai_summary %}
+            <p class="mb-2 text-muted small">{{ active_scope_alerts.0.ai_summary }}</p>
+            {% endif %}
+            {% if active_scope_alerts.0.recommendations %}
+            <div class="mt-2">
+                <strong>Recommendations:</strong>
+                <ul class="mb-2 small">
+                    {% for rec in active_scope_alerts.0.recommendations|slice:":3" %}
+                    <li>{{ rec }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            <div class="mt-2">
+                <a href="{% url 'scope_tracking_dashboard' board.id %}" 
+                   class="btn btn-sm btn-outline-primary">
+                    <i class="fas fa-chart-line me-1"></i>View Scope Dashboard
+                </a>
+                {% if active_scope_alerts|length > 1 %}
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#allScopeAlertsModal">
+                    <i class="fas fa-list me-1"></i>View All Alerts ({{ active_scope_alerts|length }})
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
+{% endif %}
+
+<!-- Scope Status Widget (if baseline set) -->
+{% if scope_status %}
+<div class="card mb-4 border-0 shadow-sm">
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-md-2 text-center">
+                <i class="fas fa-chart-area fa-3x 
+                   {% if scope_status.scope_change_percentage > 30 %}text-danger
+                   {% elif scope_status.scope_change_percentage > 15 %}text-warning
+                   {% elif scope_status.scope_change_percentage > 5 %}text-info
+                   {% else %}text-success{% endif %}"></i>
+            </div>
+            <div class="col-md-10">
+                <div class="row">
+                    <div class="col-md-3">
+                        <h6 class="text-muted mb-1">Baseline</h6>
+                        <h4 class="mb-0">{{ scope_status.baseline_tasks }} tasks</h4>
+                        <small class="text-muted">{{ scope_status.baseline_complexity }} pts</small>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted mb-1">Current</h6>
+                        <h4 class="mb-0">{{ scope_status.current_tasks }} tasks</h4>
+                        <small class="text-muted">{{ scope_status.current_complexity }} pts</small>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted mb-1">Change</h6>
+                        <h4 class="mb-0 {% if scope_status.scope_change_percentage > 15 %}text-danger{% elif scope_status.scope_change_percentage > 5 %}text-warning{% else %}text-success{% endif %}">
+                            {{ scope_status.scope_change_percentage|floatformat:1 }}%
+                        </h4>
+                        <small class="text-muted">
+                            {% if scope_status.tasks_added > 0 %}+{{ scope_status.tasks_added }}{% endif %}
+                            {% if scope_status.tasks_removed > 0 %}-{{ scope_status.tasks_removed }}{% endif %}
+                            tasks
+                        </small>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{% url 'scope_tracking_dashboard' board.id %}" class="btn btn-outline-primary w-100">
+                            <i class="fas fa-chart-line me-1"></i>View Details
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Board Stats -->
 <div class="board-stats">
     <div class="stat-item">

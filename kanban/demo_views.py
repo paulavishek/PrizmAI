@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from datetime import timedelta
-from kanban.models import Board, Task, Column, Organization
+from kanban.models import Board, Task, Column, Organization, TaskLabel
 from messaging.models import ChatRoom, ChatMessage
 from kanban.conflict_models import ConflictDetection
 from wiki.models import WikiPage
@@ -510,6 +510,78 @@ def demo_board_detail(request, board_id):
         organization=board.organization
     )[:5]  # Show first 5
     
+    # Get permission information for UI feedback (same as real board)
+    # BUT only apply RBAC restrictions in TEAM mode, not SOLO mode
+    from kanban.permission_utils import (
+        get_user_board_membership, 
+        get_column_permissions_for_user,
+        user_has_board_permission
+    )
+    
+    demo_mode_type = request.session.get('demo_mode', 'solo')
+    user_membership = None
+    user_role_name = 'Admin'  # Default for demo mode
+    column_permissions = {}
+    can_manage_members = True
+    can_edit_board = True
+    can_create_tasks = True
+    
+    # Only apply RBAC restrictions in TEAM mode
+    if demo_mode_type == 'team' and request.user.is_authenticated:
+        user_membership = get_user_board_membership(request.user, board)
+        user_role_name = user_membership.role.name if user_membership else 'Admin'
+        
+        # Get column permissions for visual feedback
+        for column in columns:
+            perms = get_column_permissions_for_user(request.user, column)
+            if perms:
+                column_permissions[column.id] = perms
+        
+        # Check key permissions for UI elements
+        can_manage_members = user_has_board_permission(request.user, board, 'board.manage_members')
+        can_edit_board = user_has_board_permission(request.user, board, 'board.edit')
+        can_create_tasks = user_has_board_permission(request.user, board, 'task.create')
+    # Solo mode: Full admin access, no restrictions
+    
+    # Get board members - same logic as real board
+    if request.user.is_authenticated:
+        try:
+            # For demo boards: show only users from the viewer's REAL organization
+            user_org = request.user.profile.organization
+            # Get users from viewer's real org who are also members of this demo board
+            from accounts.models import UserProfile
+            board_member_profiles = UserProfile.objects.filter(
+                organization=user_org,
+                user__in=board.members.all()
+            )
+            # For adding new members: show other users from viewer's real organization
+            board_member_ids = board_member_profiles.values_list('user_id', flat=True)
+            available_org_members = UserProfile.objects.filter(
+                organization=user_org
+            ).exclude(user_id__in=board_member_ids)
+        except:
+            board_member_profiles = []
+            available_org_members = []
+    else:
+        board_member_profiles = []
+        available_org_members = []
+    
+    # Get linked wiki pages for this board
+    from wiki.models import WikiLink
+    wiki_links = WikiLink.objects.filter(board=board).select_related('wiki_page')
+    
+    # Get scope creep data (same as real board)
+    # Show scope tracking in both modes (educational value)
+    from kanban.models import ScopeCreepAlert
+    scope_status = board.get_current_scope_status()
+    active_scope_alerts = ScopeCreepAlert.objects.filter(
+        board=board,
+        status__in=['active', 'acknowledged']
+    ).order_by('-detected_at')[:3]  # Show top 3 active alerts
+    
+    # Get all labels for this board (for filtering/display)
+    labels = TaskLabel.objects.filter(board=board)
+    
     context = {
         'demo_mode': True,
         'demo_mode_type': request.session.get('demo_mode', 'solo'),
@@ -529,6 +601,19 @@ def demo_board_detail(request, board_id):
         # Add permission context for role-based feature visibility
         'permissions': DemoPermissions.get_permission_context(request),
         'role_info': DemoPermissions.get_role_description(request.session.get('demo_role', 'admin')),
+        # NEW: Add context variables to match real board_detail view
+        'user_role_name': user_role_name,
+        'column_permissions': column_permissions,
+        'can_manage_members': can_manage_members,
+        'can_edit_board': can_edit_board,
+        'can_create_tasks': can_create_tasks,
+        'board_member_profiles': board_member_profiles,
+        'available_org_members': available_org_members,
+        'wiki_links': wiki_links,
+        'scope_status': scope_status,
+        'active_scope_alerts': active_scope_alerts,
+        'labels': labels,
+        'is_demo_board': True,  # Flag to indicate demo board
     }
     
     return render(request, 'kanban/demo_board_detail.html', context)
