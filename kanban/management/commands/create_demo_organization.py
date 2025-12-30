@@ -82,7 +82,24 @@ class Command(BaseCommand):
         if demo_org:
             self.stdout.write(f'  Deleting demo organization: {demo_org.name}')
             
-            # Delete will cascade to boards, tasks, etc.
+            # First, update all demo personas to point to no organization
+            # This prevents foreign key constraint errors
+            demo_emails = [
+                'alex.chen@demo.prizmai.local',
+                'sam.rivera@demo.prizmai.local',
+                'jordan.taylor@demo.prizmai.local'
+            ]
+            
+            for email in demo_emails:
+                try:
+                    user = User.objects.get(email=email)
+                    if hasattr(user, 'profile'):
+                        user.profile.organization = None
+                        user.profile.save()
+                except User.DoesNotExist:
+                    pass
+            
+            # Now safe to delete organization (will cascade to boards, tasks, etc.)
             demo_org.delete()
             
             self.stdout.write(self.style.SUCCESS('  ✓ Demo data reset complete'))
