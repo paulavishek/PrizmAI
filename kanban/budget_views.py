@@ -105,12 +105,27 @@ def budget_dashboard(request, board_id):
     return render(request, 'kanban/budget_dashboard.html', context)
 
 
-@login_required
 def budget_create_or_edit(request, board_id):
     """
     Create or edit project budget
+    Note: In SOLO demo mode, users should only view budgets, not create/edit them.
+    Budget creation is disabled in demo mode.
     """
     board = get_object_or_404(Board, id=board_id)
+    
+    # Check if this is a demo board
+    demo_org_names = ['Demo - Acme Corporation']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    
+    # In demo mode, redirect to budget dashboard (view only)
+    if is_demo_board and is_demo_mode:
+        messages.info(request, 'Budget creation/editing is disabled in demo mode. You can view the existing demo budget.')\n        return redirect('budget_dashboard', board_id=board.id)
+    
+    # For non-demo boards, require authentication
+    if not request.user.is_authenticated:
+        from django.contrib.auth.views import redirect_to_login
+        return redirect_to_login(request.get_full_path())
     
     if not _can_access_board(request.user, board):
         return HttpResponseForbidden("You don't have permission to access this board.")

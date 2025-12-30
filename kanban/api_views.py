@@ -2766,18 +2766,35 @@ def analyze_skill_gaps_api(request, board_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required
-@require_http_methods(["GET"])
 def get_team_skill_profile_api(request, board_id):
     """
     Get comprehensive skill inventory for a board's team
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
         board = get_object_or_404(Board, pk=board_id)
         
-        # Check access
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Check if this is a demo board
+        demo_org_names = ['Demo - Acme Corporation']
+        is_demo_board = board.organization.name in demo_org_names
+        is_demo_mode = request.session.get('is_demo_mode', False)
+        demo_mode_type = request.session.get('demo_mode', 'solo')
+        
+        # For non-demo boards, require authentication
+        if not (is_demo_board and is_demo_mode):
+            if not request.user.is_authenticated:
+                return JsonResponse({'error': 'Authentication required'}, status=401)
+            
+            # Check access
+            if request.user not in board.members.all() and board.created_by != request.user:
+                return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # For demo boards in team mode, check role-based permissions
+        elif demo_mode_type == 'team':
+            from kanban.utils.demo_permissions import DemoPermissions
+            if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
+        # Solo demo mode: full access, no restrictions
         
         from kanban.utils.skill_analysis import build_team_skill_profile, update_team_skill_profile_model
         
@@ -2971,18 +2988,35 @@ def create_skill_development_plan_api(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required
-@require_http_methods(["GET"])
 def get_skill_gaps_list_api(request, board_id):
     """
     Get list of active skill gaps for a board
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
         board = get_object_or_404(Board, pk=board_id)
         
-        # Check access
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Check if this is a demo board
+        demo_org_names = ['Demo - Acme Corporation']
+        is_demo_board = board.organization.name in demo_org_names
+        is_demo_mode = request.session.get('is_demo_mode', False)
+        demo_mode_type = request.session.get('demo_mode', 'solo')
+        
+        # For non-demo boards, require authentication
+        if not (is_demo_board and is_demo_mode):
+            if not request.user.is_authenticated:
+                return JsonResponse({'error': 'Authentication required'}, status=401)
+            
+            # Check access
+            if request.user not in board.members.all() and board.created_by != request.user:
+                return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # For demo boards in team mode, check role-based permissions
+        elif demo_mode_type == 'team':
+            from kanban.utils.demo_permissions import DemoPermissions
+            if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
+        # Solo demo mode: full access, no restrictions
         
         from kanban.models import SkillGap
         
@@ -3019,18 +3053,35 @@ def get_skill_gaps_list_api(request, board_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required
-@require_http_methods(["GET"])
 def get_development_plans_api(request, board_id):
     """
     Get skill development plans for a board
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
         board = get_object_or_404(Board, pk=board_id)
         
-        # Check access
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Check if this is a demo board
+        demo_org_names = ['Demo - Acme Corporation']
+        is_demo_board = board.organization.name in demo_org_names
+        is_demo_mode = request.session.get('is_demo_mode', False)
+        demo_mode_type = request.session.get('demo_mode', 'solo')
+        
+        # For non-demo boards, require authentication
+        if not (is_demo_board and is_demo_mode):
+            if not request.user.is_authenticated:
+                return JsonResponse({'error': 'Authentication required'}, status=401)
+            
+            # Check access
+            if request.user not in board.members.all() and board.created_by != request.user:
+                return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # For demo boards in team mode, check role-based permissions
+        elif demo_mode_type == 'team':
+            from kanban.utils.demo_permissions import DemoPermissions
+            if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
+                return JsonResponse({'error': 'Permission denied'}, status=403)
+        # Solo demo mode: full access, no restrictions
         
         from kanban.models import SkillDevelopmentPlan
         
