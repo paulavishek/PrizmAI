@@ -445,18 +445,23 @@ def ask_coach(request, board_id):
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     if request.method == 'POST':
-        # Check AI quota before processing
-        has_quota, quota, remaining = check_ai_quota(request.user)
-        
-        if not has_quota:
-            days_until_reset = quota.get_days_until_reset()
-            return JsonResponse({
-                'success': False,
-                'error': 'AI usage quota exceeded',
-                'quota_exceeded': True,
-                'message': f'You have reached your monthly AI usage limit of {quota.monthly_quota} requests. '
-                           f'Your quota will reset in {days_until_reset} days.'
-            }, status=429)
+        # Check AI quota before processing (skip for anonymous demo users)
+        if request.user.is_authenticated:
+            has_quota, quota, remaining = check_ai_quota(request.user)
+            
+            if not has_quota:
+                days_until_reset = quota.get_days_until_reset()
+                return JsonResponse({
+                    'success': False,
+                    'error': 'AI usage quota exceeded',
+                    'quota_exceeded': True,
+                    'message': f'You have reached your monthly AI usage limit of {quota.monthly_quota} requests. '
+                               f'Your quota will reset in {days_until_reset} days.'
+                }, status=429)
+        else:
+            # For anonymous demo users, no quota restrictions
+            quota = None
+            remaining = float('inf')
         
         start_time = time.time()
         try:
@@ -471,46 +476,50 @@ def ask_coach(request, board_id):
             
             # Get AI coaching advice
             ai_coach = AICoachService()
-            advice = ai_coach.generate_coaching_advice(board, request.user, question)
+            # For anonymous demo users, pass a demo user or handle None
+            user_for_advice = request.user if request.user.is_authenticated else None
+            advice = ai_coach.generate_coaching_advice(board, user_for_advice, question)
             
-            # Track successful AI request
-            response_time_ms = int((time.time() - start_time) * 1000)
-            track_ai_request(
-                user=request.user,
-                feature='ai_coach',
-                request_type='question',
-                board_id=board_id,
-                success=True,
-                response_time_ms=response_time_ms
-            )
-            
-            # Get updated remaining count
-            _, _, remaining = check_ai_quota(request.user)
+            # Track successful AI request (only for authenticated users)
+            if request.user.is_authenticated:
+                response_time_ms = int((time.time() - start_time) * 1000)
+                track_ai_request(
+                    user=request.user,
+                    feature='ai_coach',
+                    request_type='question',
+                    board_id=board_id,
+                    success=True,
+                    response_time_ms=response_time_ms
+                )
+                
+                # Get updated remaining count
+                _, _, remaining = check_ai_quota(request.user)
             
             return JsonResponse({
                 'success': True,
                 'advice': advice,
                 'question': question,
                 'ai_usage': {
-                    'remaining': remaining,
-                    'used': quota.requests_used + 1
+                    'remaining': remaining if request.user.is_authenticated else None,
+                    'used': quota.requests_used + 1 if quota else None
                 }
             })
             
         except Exception as e:
             logger.error(f"Error getting coaching advice: {e}")
             
-            # Track failed request (doesn't count against quota)
-            response_time_ms = int((time.time() - start_time) * 1000)
-            track_ai_request(
-                user=request.user,
-                feature='ai_coach',
-                request_type='question',
-                board_id=board_id,
-                success=False,
-                error_message=str(e),
-                response_time_ms=response_time_ms
-            )
+            # Track failed request (doesn't count against quota) - only for authenticated users
+            if request.user.is_authenticated:
+                response_time_ms = int((time.time() - start_time) * 1000)
+                track_ai_request(
+                    user=request.user,
+                    feature='ai_coach',
+                    request_type='question',
+                    board_id=board_id,
+                    success=False,
+                    error_message=str(e),
+                    response_time_ms=response_time_ms
+                )
             
             return JsonResponse({
                 'success': False,
@@ -518,17 +527,28 @@ def ask_coach(request, board_id):
             }, status=500)
     
     # GET request - show ask coach page with quota info
-    from api.ai_usage_utils import get_or_create_quota
-    quota = get_or_create_quota(request.user)
-    
-    context = {
-        'board': board,
-        'ai_quota': {
+    if request.user.is_authenticated:
+        from api.ai_usage_utils import get_or_create_quota
+        quota = get_or_create_quota(request.user)
+        
+        ai_quota_info = {
             'used': quota.requests_used,
             'limit': quota.monthly_quota,
             'remaining': quota.get_remaining_requests(),
             'percentage': quota.get_usage_percent()
         }
+    else:
+        # For anonymous demo users, show unlimited quota
+        ai_quota_info = {
+            'used': 0,
+            'limit': None,
+            'remaining': None,
+            'percentage': 0
+        }
+    
+    context = {
+        'board': board,
+        'ai_quota': ai_quota_info
     }
     
     return render(request, 'kanban/coach_ask.html', context)

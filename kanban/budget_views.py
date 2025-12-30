@@ -108,8 +108,8 @@ def budget_dashboard(request, board_id):
 def budget_create_or_edit(request, board_id):
     """
     Create or edit project budget
-    Note: In SOLO demo mode, users should only view budgets, not create/edit them.
-    Budget creation is disabled in demo mode.
+    Note: Budget creation is disabled in TEAM demo mode only.
+    SOLO demo mode has full access.
     """
     board = get_object_or_404(Board, id=board_id)
     
@@ -117,10 +117,12 @@ def budget_create_or_edit(request, board_id):
     demo_org_names = ['Demo - Acme Corporation']
     is_demo_board = board.organization.name in demo_org_names
     is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')
     
-    # In demo mode, redirect to budget dashboard (view only)
-    if is_demo_board and is_demo_mode:
-        messages.info(request, 'Budget creation/editing is disabled in demo mode. You can view the existing demo budget.')
+    # In TEAM demo mode only, redirect to budget dashboard (view only)
+    # Solo demo mode has full access
+    if is_demo_board and is_demo_mode and demo_mode_type == 'team':
+        messages.info(request, 'Budget creation/editing is disabled in team demo mode. You can view the existing demo budget.')
         return redirect('budget_dashboard', board_id=board.id)
     
     # For non-demo boards, require authentication

@@ -1124,7 +1124,6 @@ def board_analytics(request, board_id):
         'total_categorized': total_categorized,
     })
 
-@login_required
 def gantt_chart(request, board_id):
     """Display Gantt chart view for a board
     ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
@@ -1155,6 +1154,9 @@ def gantt_chart(request, board_id):
         if not DemoPermissions.can_perform_action(request, 'can_view_board'):
             return HttpResponseForbidden("You don't have permission to view Gantt chart in your current demo role.")
     # Solo demo mode: full access, no restrictions
+    
+    # Get tasks for this board
+    tasks = Task.objects.filter(column__board=board).select_related('column', 'assigned_to').order_by('due_date', 'created_at')
     
     context = {
         'board': board,
