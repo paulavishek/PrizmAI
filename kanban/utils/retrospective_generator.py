@@ -58,11 +58,11 @@ class RetrospectiveGenerator:
             completed_at__lt=period_start_dt
         )
         
-        # Get completed tasks (completed during this period)
-        completed_tasks = tasks.filter(
-            progress=100, 
-            completed_at__isnull=False,
-            completed_at__range=(period_start_dt, period_end_dt)
+        # Get completed tasks - tasks with progress=100 that were completed (or marked as done) during this period
+        # Include tasks with progress=100 even if completed_at is not set
+        completed_tasks = tasks.filter(progress=100).filter(
+            Q(completed_at__range=(period_start_dt, period_end_dt)) | 
+            Q(completed_at__isnull=True)  # Include tasks marked as 100% even without completed_at
         )
         
         # Calculate metrics
