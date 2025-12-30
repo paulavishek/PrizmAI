@@ -929,7 +929,7 @@ def board_analytics(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
     # Check if this is a demo board (for display purposes only)
-    demo_org_names = ['Dev Team', 'Marketing Team']
+    demo_org_names = ['Demo - Acme Corporation']
     is_demo_board = board.organization.name in demo_org_names
     is_demo_mode = request.session.get('is_demo_mode', False)
     demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'

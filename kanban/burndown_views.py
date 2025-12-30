@@ -26,7 +26,7 @@ def check_board_access_for_demo(request, board):
     Helper function to check board access supporting demo mode
     Returns (has_access: bool, error_response: HttpResponse or None)
     """
-    demo_org_names = ['Dev Team', 'Marketing Team']
+    demo_org_names = ['Demo - Acme Corporation']
     is_demo_board = board.organization.name in demo_org_names
     is_demo_mode = request.session.get('is_demo_mode', False)
     demo_mode_type = request.session.get('demo_mode', 'solo')
@@ -59,7 +59,7 @@ def burndown_dashboard(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
     # Check if this is a demo board (for display purposes only)
-    demo_org_names = ['Dev Team', 'Marketing Team']
+    demo_org_names = ['Demo - Acme Corporation']
     is_demo_board = board.organization.name in demo_org_names
     is_demo_mode = request.session.get('is_demo_mode', False)
     demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
@@ -334,7 +334,7 @@ def resolve_burndown_alert(request, board_id, alert_id):
     alert = get_object_or_404(BurndownAlert, id=alert_id, board=board)
     
     # Check access - demo mode has full access
-    is_demo_board = board.organization.name in ['Dev Team', 'Marketing Team']
+    is_demo_board = board.organization.name in ['Demo - Acme Corporation']
     is_demo_mode = request.session.get('is_demo_mode', False)
     
     if not (is_demo_board and is_demo_mode):
