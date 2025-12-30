@@ -129,7 +129,7 @@ class Command(BaseCommand):
         tasks = []
         now = timezone.now()
 
-        # Backlog tasks (15)
+        # To Do tasks (15)
         backlog_tasks = [
             {
                 'title': 'Implement user authentication system',
@@ -240,7 +240,7 @@ class Command(BaseCommand):
 
         for i, task_data in enumerate(backlog_tasks):
             task = Task.objects.create(
-                column=columns['Backlog'],
+                column=columns['To Do'],
                 title=task_data['title'],
                 description=task_data['description'],
                 priority=task_data['priority'],
@@ -516,7 +516,7 @@ class Command(BaseCommand):
 
         for task_data in in_review_tasks:
             task = Task.objects.create(
-                column=columns['In Review'],
+                column=columns['In Progress'],
                 title=task_data['title'],
                 description=task_data['description'],
                 priority=task_data['priority'],
@@ -594,7 +594,7 @@ class Command(BaseCommand):
         tasks = []
         now = timezone.now()
 
-        # Ideas tasks (12)
+        # To Do tasks (12)
         ideas_tasks = [
             {
                 'title': 'Launch product video campaign',
@@ -684,7 +684,7 @@ class Command(BaseCommand):
 
         for task_data in ideas_tasks:
             task = Task.objects.create(
-                column=columns['Ideas'],
+                column=columns['To Do'],
                 title=task_data['title'],
                 description=task_data['description'],
                 priority=task_data['priority'],
@@ -696,7 +696,7 @@ class Command(BaseCommand):
             )
             tasks.append(task)
 
-        # Planning tasks (15)
+        # In Progress tasks (15)
         planning_tasks = [
             {
                 'title': 'Q2 content calendar planning',
@@ -822,7 +822,7 @@ class Command(BaseCommand):
 
         for task_data in planning_tasks:
             task = Task.objects.create(
-                column=columns['Planning'],
+                column=columns['In Progress'],
                 title=task_data['title'],
                 description=task_data['description'],
                 priority=task_data['priority'],
@@ -962,7 +962,7 @@ class Command(BaseCommand):
 
         for task_data in published_tasks:
             task = Task.objects.create(
-                column=columns['Published'],
+                column=columns['Done'],
                 title=task_data['title'],
                 description=task_data['description'],
                 priority=task_data['priority'],
@@ -982,7 +982,7 @@ class Command(BaseCommand):
         tasks = []
         now = timezone.now()
 
-        # New tasks (10)
+        # To Do tasks (10)
         new_tasks = [
             {
                 'title': 'Login button not working on mobile Safari',
@@ -1058,7 +1058,7 @@ class Command(BaseCommand):
 
         for task_data in new_tasks:
             task = Task.objects.create(
-                column=columns['New'],
+                column=columns['To Do'],
                 title=task_data['title'],
                 description=task_data['description'],
                 priority=task_data['priority'],
@@ -1070,7 +1070,7 @@ class Command(BaseCommand):
             )
             tasks.append(task)
 
-        # Investigating tasks (12)
+        # In Progress tasks (12)
         investigating_tasks = [
             {
                 'title': 'Intermittent 504 timeout errors',
@@ -1172,7 +1172,7 @@ class Command(BaseCommand):
 
         for task_data in investigating_tasks:
             task = Task.objects.create(
-                column=columns['Investigating'],
+                column=columns['In Progress'],
                 title=task_data['title'],
                 description=task_data['description'],
                 priority=task_data['priority'],
@@ -1272,7 +1272,7 @@ class Command(BaseCommand):
 
         for task_data in closed_tasks:
             task = Task.objects.create(
-                column=columns['Closed'],
+                column=columns['Done'],
                 title=task_data['title'],
                 description=task_data['description'],
                 priority=task_data['priority'],

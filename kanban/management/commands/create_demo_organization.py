@@ -229,17 +229,17 @@ class Command(BaseCommand):
             {
                 'name': 'Software Development',
                 'description': 'Track features, sprints, and releases for our product. Showcase AI-powered task management and burndown forecasting.',
-                'columns': ['Backlog', 'In Progress', 'In Review', 'Done'],
+                'columns': ['To Do', 'In Progress', 'Done'],
             },
             {
                 'name': 'Marketing Campaign',
                 'description': 'Plan and execute Q1 2025 marketing initiatives. Demonstrate collaboration and approval workflows.',
-                'columns': ['Ideas', 'Planning', 'In Progress', 'Published'],
+                'columns': ['To Do', 'In Progress', 'Done'],
             },
             {
                 'name': 'Bug Tracking',
                 'description': 'Triage and resolve customer-reported issues. Highlight priority management and resource leveling.',
-                'columns': ['New', 'Investigating', 'In Progress', 'Closed'],
+                'columns': ['To Do', 'In Progress', 'Done'],
             }
         ]
         
