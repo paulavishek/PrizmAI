@@ -24,6 +24,7 @@ urlpatterns = [
     path('demo/', demo_views.demo_dashboard, name='demo_dashboard'),
     path('demo/start/', demo_views.demo_mode_selection, name='demo_mode_selection'),
     path('demo/switch-role/', demo_views.switch_demo_role, name='demo_switch_role'),
+    path('demo/exit/', demo_views.exit_demo, name='exit_demo'),
     path('demo/extend/', demo_views.extend_demo_session, name='extend_demo_session'),
     path('demo/track-event/', demo_views.track_demo_event, name='track_demo_event'),
     path('demo/check-nudge/', demo_views.check_nudge, name='check_nudge'),

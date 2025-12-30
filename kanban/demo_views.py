@@ -1,6 +1,11 @@
 """
 Demo Mode Views
 Provides a consistent demo environment for all users without RBAC restrictions
+
+ARCHITECTURE:
+- SOLO MODE: Users are logged in as a virtual admin user (demo_admin_solo)
+             This gives them full access everywhere without view-level checks
+- TEAM MODE: Users stay as themselves or anonymous, RBAC applies via DemoPermissions
 """
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
@@ -14,6 +19,10 @@ from messaging.models import ChatRoom, ChatMessage
 from kanban.conflict_models import ConflictDetection
 from wiki.models import WikiPage
 from kanban.utils.demo_permissions import DemoPermissions
+from kanban.utils.demo_admin import login_as_demo_admin, logout_demo_admin, is_demo_admin_user
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # Demo configuration constants - update these to match your database
@@ -26,10 +35,25 @@ def demo_mode_selection(request):
     Demo mode selection screen - choose between Solo or Team mode
     This is the entry point for the new demo experience
     ANONYMOUS ACCESS: No login required for demo mode
+    
+    SOLO MODE: User is logged in as virtual admin → full access everywhere
+    TEAM MODE: User stays as themselves → RBAC applies via session role
     """
     if request.method == 'POST':
         mode = request.POST.get('mode', 'solo')  # 'solo' or 'team'
         selection_method = request.POST.get('selection_method', 'selected')  # 'selected' or 'skipped'
+        
+        # Track if user was authenticated before starting demo
+        was_authenticated = request.user.is_authenticated
+        original_user_id = request.user.id if was_authenticated else None
+        
+        # For SOLO mode: Log in as virtual demo admin for full access
+        if mode == 'solo':
+            success = login_as_demo_admin(request)
+            if success:
+                logger.info(f"Solo demo: User logged in as virtual admin")
+            else:
+                logger.warning(f"Solo demo: Failed to login as virtual admin, continuing with session-based access")
         
         # Ensure session exists and force cycle to generate new session key
         if not request.session.session_key:
@@ -41,20 +65,27 @@ def demo_mode_selection(request):
         request.session['demo_mode_selected'] = True
         request.session['demo_role'] = 'admin'  # Start as admin in both modes
         request.session['demo_session_id'] = request.session.session_key
-        request.session['is_anonymous_demo'] = not request.user.is_authenticated
+        request.session['is_anonymous_demo'] = not was_authenticated
         request.session['demo_started_at'] = timezone.now().isoformat()
         request.session['demo_expires_at'] = (timezone.now() + timedelta(hours=48)).isoformat()
         request.session['features_explored'] = []
         request.session['aha_moments'] = []
         request.session['nudges_shown'] = []
         
+        # Store original user info for restoration on exit
+        if was_authenticated and original_user_id:
+            request.session['original_user_id'] = original_user_id
+            request.session['was_authenticated_before_demo'] = True
+        
+        # Mark if this is a solo demo with virtual admin login
+        if mode == 'solo':
+            request.session['demo_admin_logged_in'] = True
+        
         # Mark session as modified to ensure it's saved
         request.session.modified = True
         
         # Debug logging
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info(f"demo_mode_selection POST: mode={mode}, session_key={request.session.session_key}, is_demo_mode={request.session.get('is_demo_mode')}, cookie_in_request={request.COOKIES.get('sessionid', 'NO COOKIE')}")
+        logger.info(f"demo_mode_selection POST: mode={mode}, session_key={request.session.session_key}, is_demo_mode={request.session.get('is_demo_mode')}, demo_admin_logged_in={request.session.get('demo_admin_logged_in', False)}")
         
         # Create DemoSession record (if models exist)
         try:
@@ -200,6 +231,77 @@ def switch_demo_role(request):
         'new_role': new_role,
         'role_display_name': role_names.get(new_role, new_role)
     })
+
+
+def exit_demo(request):
+    """
+    Exit demo mode and clean up session.
+    
+    For SOLO mode: Logs out the virtual admin and restores original user if any
+    For TEAM mode: Just clears session variables
+    
+    ANONYMOUS ACCESS: Works for both logged-in and anonymous users
+    """
+    # Check if in demo mode
+    if not request.session.get('is_demo_mode'):
+        # Not in demo mode, just redirect to welcome
+        return redirect('welcome')
+    
+    demo_mode = request.session.get('demo_mode', 'solo')
+    demo_admin_logged_in = request.session.get('demo_admin_logged_in', False)
+    
+    # Track demo exit (if analytics models exist)
+    try:
+        from analytics.models import DemoSession, DemoAnalytics
+        
+        demo_session = DemoSession.objects.filter(
+            session_id=request.session.session_key
+        ).first()
+        
+        if demo_session:
+            demo_session.is_active = False
+            demo_session.save()
+        
+        DemoAnalytics.objects.create(
+            session_id=request.session.session_key,
+            event_type='demo_exited',
+            event_data={
+                'mode': demo_mode,
+                'was_virtual_admin': demo_admin_logged_in
+            }
+        )
+    except Exception as e:
+        logger.debug(f"Analytics tracking on exit failed: {e}")
+    
+    # For SOLO mode with virtual admin login: logout and restore original user
+    if demo_mode == 'solo' and demo_admin_logged_in:
+        logout_demo_admin(request)
+    else:
+        # For TEAM mode: just clear the demo session variables
+        demo_keys = [
+            'is_demo_mode',
+            'demo_mode',
+            'demo_mode_selected',
+            'demo_role',
+            'demo_session_id',
+            'is_anonymous_demo',
+            'demo_started_at',
+            'demo_expires_at',
+            'features_explored',
+            'aha_moments',
+            'nudges_shown',
+            'demo_admin_logged_in',
+        ]
+        
+        for key in demo_keys:
+            if key in request.session:
+                del request.session[key]
+        
+        request.session.modified = True
+    
+    logger.info(f"User exited demo mode: {demo_mode}")
+    
+    return redirect('welcome')
 
 
 def _ensure_user_in_demo_boards(user, demo_boards):
