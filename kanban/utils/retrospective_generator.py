@@ -41,15 +41,29 @@ class RetrospectiveGenerator:
         """
         from kanban.models import Task, Comment, TaskActivity
         from kanban.burndown_models import TeamVelocitySnapshot
+        from django.utils.timezone import make_aware
+        from datetime import datetime, time
         
-        # Get tasks within the period
+        # Convert dates to timezone-aware datetime objects for proper comparison
+        period_start_dt = make_aware(datetime.combine(self.period_start, time.min))
+        period_end_dt = make_aware(datetime.combine(self.period_end, time.max))
+        
+        # Get tasks that were ACTIVE during the period (created before or during, and not completed before period start)
+        # This is more useful for retrospectives than just tasks created during the period
         tasks = Task.objects.filter(
             column__board=self.board,
-            created_at__range=(self.period_start, self.period_end)
+            created_at__lte=period_end_dt
+        ).exclude(
+            # Exclude tasks that were completed before the period started
+            completed_at__lt=period_start_dt
         )
         
-        # Get completed tasks
-        completed_tasks = tasks.filter(progress=100, completed_at__isnull=False)
+        # Get completed tasks (completed during this period)
+        completed_tasks = tasks.filter(
+            progress=100, 
+            completed_at__isnull=False,
+            completed_at__range=(period_start_dt, period_end_dt)
+        )
         
         # Calculate metrics
         metrics = {
@@ -95,7 +109,7 @@ class RetrospectiveGenerator:
             # Activity level
             'total_activities': TaskActivity.objects.filter(
                 task__in=tasks,
-                created_at__range=(self.period_start, self.period_end)
+                created_at__range=(period_start_dt, period_end_dt)
             ).count(),
             
             # Team metrics
@@ -123,7 +137,7 @@ class RetrospectiveGenerator:
         from kanban.models import ScopeChangeSnapshot
         scope_snapshots = ScopeChangeSnapshot.objects.filter(
             board=self.board,
-            snapshot_date__range=(self.period_start, self.period_end)
+            snapshot_date__range=(period_start_dt, period_end_dt)
         ).order_by('snapshot_date')
         
         if scope_snapshots.count() >= 2:
@@ -167,10 +181,19 @@ class RetrospectiveGenerator:
             dict: Pattern analysis
         """
         from kanban.models import Task
+        from django.utils.timezone import make_aware
+        from datetime import datetime, time
         
+        # Convert dates to timezone-aware datetime objects
+        period_start_dt = make_aware(datetime.combine(self.period_start, time.min))
+        period_end_dt = make_aware(datetime.combine(self.period_end, time.max))
+        
+        # Use the same logic as collect_metrics - tasks that were active during the period
         tasks = Task.objects.filter(
             column__board=self.board,
-            created_at__range=(self.period_start, self.period_end)
+            created_at__lte=period_end_dt
+        ).exclude(
+            completed_at__lt=period_start_dt
         )
         
         patterns = {
