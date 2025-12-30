@@ -1126,25 +1126,35 @@ def board_analytics(request, board_id):
 
 @login_required
 def gantt_chart(request, board_id):
-    """Display Gantt chart view for a board"""
+    """Display Gantt chart view for a board
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
+    """
     from kanban.permission_utils import user_has_board_permission
     
     board = get_object_or_404(Board, id=board_id)
     
-    # Check permission using RBAC
-    if not user_has_board_permission(request.user, board, 'board.view'):
-        return HttpResponseForbidden("You don't have permission to view this board.")
-    
-    # Get all tasks for this board with dates, ordered by start_date for proper display
-    tasks = Task.objects.filter(
-        column__board=board,
-        start_date__isnull=False,
-        due_date__isnull=False
-    ).select_related('assigned_to', 'column').prefetch_related('dependencies').order_by('start_date', 'id')
-    
-    # Check if demo board
-    demo_org_names = ['Dev Team', 'Marketing Team']
+    # Check if this is a demo board
+    demo_org_names = ['Demo - Acme Corporation']
     is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
+    
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check permission using RBAC
+        if not user_has_board_permission(request.user, board, 'board.view'):
+            return HttpResponseForbidden("You don't have permission to view this board.")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_view_board'):
+            return HttpResponseForbidden("You don't have permission to view Gantt chart in your current demo role.")
+    # Solo demo mode: full access, no restrictions
     
     context = {
         'board': board,
@@ -2385,21 +2395,36 @@ def list_task_files(request, task_id):
     })
 
 
-@login_required
 def skill_gap_dashboard(request, board_id):
     """
     Skill Gap Analysis Dashboard
     Shows team skill inventory, identified gaps, and development plans
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
     # Check if this is a demo board (for display purposes only)
-    demo_org_names = ['Dev Team', 'Marketing Team']
+    demo_org_names = ['Demo - Acme Corporation']
     is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
     
-    # Check if user has access to this board - all boards require membership
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board.")
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check access - all boards require membership
+        if not (board.created_by == request.user or request.user in board.members.all()):
+            return HttpResponseForbidden("You don't have access to this board.")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
+            return HttpResponseForbidden("You don't have permission to view skill gaps in your current demo role.")
+    # Solo demo mode: full access, no restrictions
     
     # Get skill gaps and development plans
     from .models import SkillGap, SkillDevelopmentPlan, TeamSkillProfile

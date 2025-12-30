@@ -31,16 +31,35 @@ from api.ai_usage_utils import track_ai_request, check_ai_quota
 logger = logging.getLogger(__name__)
 
 
-@login_required
 def budget_dashboard(request, board_id):
     """
     Main budget dashboard showing overview, metrics, and AI insights
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
-    # Check permissions
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
+    # Check if this is a demo board
+    demo_org_names = ['Demo - Acme Corporation']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')
+    
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check access - all boards require membership
+        if not (board.created_by == request.user or request.user in board.members.all()):
+            return HttpResponseForbidden("You don't have permission to access this board.")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
+            return HttpResponseForbidden("You don't have permission to view budget in your current demo role.")
+    # Solo demo mode: full access, no restrictions
     
     # Get or create budget
     try:
@@ -206,15 +225,35 @@ def time_entry_create(request, task_id):
     return render(request, 'kanban/time_entry_form.html', context)
 
 
-@login_required
 def budget_analytics(request, board_id):
     """
     Detailed budget analytics and reports
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
+    # Check if this is a demo board
+    demo_org_names = ['Demo - Acme Corporation']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')
+    
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check access - all boards require membership
+        if not (board.created_by == request.user or request.user in board.members.all()):
+            return HttpResponseForbidden("You don't have permission to access this board.")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
+            return HttpResponseForbidden("You don't have permission to view budget analytics in your current demo role.")
+    # Solo demo mode: full access, no restrictions
     
     try:
         budget = ProjectBudget.objects.get(board=board)
@@ -275,15 +314,35 @@ def budget_analytics(request, board_id):
     return render(request, 'kanban/budget_analytics.html', context)
 
 
-@login_required
 def roi_dashboard(request, board_id):
     """
     ROI tracking and analysis dashboard
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
+    # Check if this is a demo board
+    demo_org_names = ['Demo - Acme Corporation']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')
+    
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check access - all boards require membership
+        if not (board.created_by == request.user or request.user in board.members.all()):
+            return HttpResponseForbidden("You don't have permission to access this board.")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
+            return HttpResponseForbidden("You don't have permission to view ROI dashboard in your current demo role.")
+    # Solo demo mode: full access, no restrictions
     
     # Check if budget exists
     try:
@@ -707,13 +766,18 @@ def budget_api_metrics(request, board_id):
 def _can_access_board(user, board):
     """
     Check if user can access the board - requires board membership or demo org access
+    Note: This function assumes the user is authenticated. For demo mode, check before calling this.
     """
+    # If user is not authenticated, return False (demo mode should be checked before calling this)
+    if not user.is_authenticated:
+        return False
+    
     # Direct membership or creator
     if board.created_by == user or user in board.members.all():
         return True
     
     # Demo boards: organization-level access
-    demo_org_names = ['Dev Team', 'Marketing Team']
+    demo_org_names = ['Demo - Acme Corporation']
     if board.organization.name in demo_org_names:
         # Check if user has access to any board in this demo organization
         from kanban.models import Board as BoardModel
