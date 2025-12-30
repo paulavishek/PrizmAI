@@ -452,7 +452,21 @@ function generateAISummary(boardId) {
             'Content-Type': 'application/json',
         },
     })
-    .then(response => response.json())
+    .then(response => {
+        // Handle different status codes
+        if (response.status === 429) {
+            // Quota exceeded
+            return response.json().then(data => {
+                throw new Error(data.error || 'API quota exceeded. Please wait and try again.');
+            });
+        }
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.error || 'Failed to generate AI summary');
+            });
+        }
+        return response.json();
+    })
     .then(data => {
         if (data.error) {
             throw new Error(data.error);
@@ -474,7 +488,12 @@ function generateAISummary(boardId) {
     })
     .catch(error => {
         console.error('Error generating AI summary:', error);
-        textElement.innerHTML = '<div class="alert alert-danger">Failed to generate AI summary. Please try again.</div>';
+        const errorMessage = error.message || 'Failed to generate AI summary. Please try again.';
+        textElement.innerHTML = `<div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>Unable to generate AI summary</strong><br>
+            ${errorMessage}
+        </div>`;
         placeholder.classList.add('d-none');
         container.classList.remove('d-none');
     })

@@ -410,7 +410,9 @@ def summarize_board_analytics_api(request, board_id):
                     error_message='Failed to generate analytics summary',
                     response_time_ms=response_time_ms
                 )
-            return JsonResponse({'error': 'Failed to generate analytics summary'}, status=500)
+            return JsonResponse({
+                'error': 'Failed to generate AI summary. This may be due to API quota limits. Please try again in a few moments.'
+            }, status=500)
         
         # Track successful request (only if user is authenticated)
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -438,7 +440,15 @@ def summarize_board_analytics_api(request, board_id):
                 error_message=str(e),
                 response_time_ms=response_time_ms
             )
-        return JsonResponse({'error': str(e)}, status=500)
+        
+        # Check for quota exceeded error
+        error_message = str(e)
+        if '429' in error_message or 'quota' in error_message.lower() or 'rate limit' in error_message.lower():
+            return JsonResponse({
+                'error': 'AI service quota exceeded. Please wait a moment and try again, or contact support to upgrade your plan.'
+            }, status=429)
+        
+        return JsonResponse({'error': 'An unexpected error occurred while generating the summary.'}, status=500)
 
 @login_required
 @require_http_methods(["GET"])
