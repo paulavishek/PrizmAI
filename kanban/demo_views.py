@@ -31,9 +31,9 @@ def demo_mode_selection(request):
         mode = request.POST.get('mode', 'solo')  # 'solo' or 'team'
         selection_method = request.POST.get('selection_method', 'selected')  # 'selected' or 'skipped'
         
-        # Ensure session key exists for anonymous users
+        # Ensure session exists and force cycle to generate new session key
         if not request.session.session_key:
-            request.session.create()
+            request.session.cycle_key()
         
         # Initialize demo session
         request.session['is_demo_mode'] = True
@@ -50,6 +50,11 @@ def demo_mode_selection(request):
         
         # Mark session as modified to ensure it's saved
         request.session.modified = True
+        
+        # Debug logging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"demo_mode_selection POST: mode={mode}, session_key={request.session.session_key}, is_demo_mode={request.session.get('is_demo_mode')}, cookie_in_request={request.COOKIES.get('sessionid', 'NO COOKIE')}")
         
         # Create DemoSession record (if models exist)
         try:

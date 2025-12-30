@@ -934,6 +934,11 @@ def board_analytics(request, board_id):
     is_demo_mode = request.session.get('is_demo_mode', False)
     demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
     
+    # Debug logging
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"board_analytics: board={board.id}, org={board.organization.name}, is_demo_board={is_demo_board}, is_demo_mode={is_demo_mode}, session_key={request.session.session_key}, has_session_cookie={request.COOKIES.get('sessionid', 'NO COOKIE')}")
+    
     # For non-demo boards, require authentication
     if not (is_demo_board and is_demo_mode):
         if not request.user.is_authenticated:
