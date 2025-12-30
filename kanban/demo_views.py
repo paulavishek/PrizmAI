@@ -695,6 +695,12 @@ def demo_board_detail(request, board_id):
     # Get all labels for this board (for filtering/display)
     labels = TaskLabel.objects.filter(board=board)
     
+    # Ensure Solo mode never shows permission restrictions
+    # (column_permissions should already be empty from the RBAC section above,
+    # but we double-check here for safety)
+    if demo_mode_type != 'team':
+        column_permissions = {}  # Force empty for Solo mode
+    
     context = {
         'demo_mode': True,
         'demo_mode_type': request.session.get('demo_mode', 'solo'),
@@ -716,7 +722,7 @@ def demo_board_detail(request, board_id):
         'role_info': DemoPermissions.get_role_description(request.session.get('demo_role', 'admin')),
         # NEW: Add context variables to match real board_detail view
         'user_role_name': user_role_name,
-        'column_permissions': column_permissions,
+        'column_permissions': column_permissions,  # Empty for Solo mode, RBAC for Team mode
         'can_manage_members': can_manage_members,
         'can_edit_board': can_edit_board,
         'can_create_tasks': can_create_tasks,

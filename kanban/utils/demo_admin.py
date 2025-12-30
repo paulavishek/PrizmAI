@@ -20,8 +20,8 @@ logger = logging.getLogger(__name__)
 # Constants for the demo admin user
 DEMO_ADMIN_USERNAME = 'demo_admin_solo'
 DEMO_ADMIN_EMAIL = 'demo_admin@prizmaidemo.internal'
-DEMO_ADMIN_FIRST_NAME = 'Alex'
-DEMO_ADMIN_LAST_NAME = 'Chen'
+DEMO_ADMIN_FIRST_NAME = 'Demo'
+DEMO_ADMIN_LAST_NAME = 'Admin'
 
 
 def get_or_create_demo_admin():
