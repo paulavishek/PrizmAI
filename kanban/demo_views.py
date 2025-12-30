@@ -48,6 +48,9 @@ def demo_mode_selection(request):
         request.session['aha_moments'] = []
         request.session['nudges_shown'] = []
         
+        # Mark session as modified to ensure it's saved
+        request.session.modified = True
+        
         # Create DemoSession record (if models exist)
         try:
             from analytics.models import DemoSession, DemoAnalytics
@@ -107,6 +110,9 @@ def demo_mode_selection(request):
         except Exception as e:
             # Analytics models may not exist yet - that's OK
             pass
+        
+        # Explicitly save session to ensure it persists
+        request.session.save()
         
         return redirect('demo_dashboard')
     
