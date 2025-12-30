@@ -19,49 +19,8 @@
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-/* Kanban board styling - using same as real board */
-.kanban-board {
-    display: flex;
-    gap: 20px;
-    overflow-x: auto;
-    padding-bottom: 20px;
-    min-height: 500px;
-}
-
-.kanban-column {
-    flex: 0 0 300px;
-    background: #f8f9fa;
-    border-radius: 8px;
-    padding: 0;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    cursor: grab;
-    user-select: none;
-}
-
-.kanban-column:active {
-    cursor: grabbing;
-}
-
-.kanban-column.dragging {
-    opacity: 0.6;
-}
-
-.kanban-column-header {
-    padding: 12px 15px;
-    background-color: #e9ecef;
-    border-radius: 8px 8px 0 0;
-    border-bottom: 2px solid #dee2e6;
-    cursor: grab;
-}
-
-.kanban-column-header:active {
-    cursor: grabbing;
-}
-
-/* Allow column tasks to use scrolling from styles.css */
-.kanban-column-tasks {
-    padding: 15px;
-}
+/* Kanban board styling - using same as real board from styles.css */
+/* All kanban column styling is handled by styles.css to enable scrolling */
 
 .column-position-badge {
     background-color: #6c757d;

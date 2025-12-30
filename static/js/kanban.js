@@ -9,7 +9,7 @@ if (typeof priorityChart === 'undefined') {
 // Configuration for column scrolling
 if (typeof COLUMN_SCROLL_CONFIG === 'undefined') {
     var COLUMN_SCROLL_CONFIG = {
-        TASK_THRESHOLD: 5,        // Number of tasks before scroll appears (changed from 4 to 5)
+        TASK_THRESHOLD: 4,        // Number of tasks before scroll appears (show scroll when > 4 tasks, i.e., 5+)
         MAX_HEIGHT: 400,          // Maximum height in pixels when scrollable
         MIN_HEIGHT: 200,          // Minimum height in pixels for empty columns
         ENABLE_INDICATORS: true   // Show scroll indicators
