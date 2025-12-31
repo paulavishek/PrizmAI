@@ -360,9 +360,15 @@ function initColumnOrdering() {
 // Reset column positions to default sequential order
 function resetColumnPositions() {
     const positionInputs = document.querySelectorAll('.column-position-input');
+    
+    // Reset input values to sequential order
     positionInputs.forEach((input, index) => {
         input.value = index + 1;
     });
+    
+    // Trigger the rearrange function to apply the reset
+    rearrangeColumns();
+    
     showNotification('Column positions reset to default order', 'success');
 }
 
