@@ -386,9 +386,8 @@ function resetColumnPositions() {
     });
     
     // Trigger the rearrange function to apply the reset
+    // Note: Success message will be shown by saveColumnPositions callback
     rearrangeColumns();
-    
-    showNotification('Column positions reset to default order', 'success');
 }
 
 // Rearrange columns based on position inputs
