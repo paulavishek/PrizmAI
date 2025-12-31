@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model
 from datetime import timedelta, date
 from kanban.models import Board, Column, Task, TaskLabel, Organization
+from kanban.permission_models import Role
 import random
 
 User = get_user_model()
@@ -201,6 +202,11 @@ class Command(BaseCommand):
                 '❌ Demo organization not found. Please run: python manage.py create_demo_organization'
             ))
             return
+
+        # Create default roles for demo organization if they don't exist
+        self.stdout.write('🔐 Setting up roles and permissions...')
+        roles = Role.create_default_roles(demo_org)
+        self.stdout.write(self.style.SUCCESS(f'   ✅ Created/verified {len(roles)} system roles\n'))
 
         # Get demo personas
         alex = User.objects.filter(email='alex.chen@demo.prizmai.local').first()

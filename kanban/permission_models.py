@@ -153,6 +153,18 @@ class Role(models.Model):
     @classmethod
     def create_default_roles(cls, organization):
         """Create default system roles for an organization"""
+        # Owner Role (highest level)
+        owner_role, _ = cls.objects.get_or_create(
+            organization=organization,
+            name='Owner',
+            defaults={
+                'description': 'Organization owner with full control over all aspects',
+                'permissions': ['admin.full'],
+                'is_system_role': True,
+                'is_default': False
+            }
+        )
+        
         # Admin Role
         admin_role, _ = cls.objects.get_or_create(
             organization=organization,
@@ -222,7 +234,7 @@ class Role(models.Model):
             }
         )
         
-        return [admin_role, editor_role, member_role, viewer_role]
+        return [owner_role, admin_role, editor_role, member_role, viewer_role]
 
 
 class BoardMembership(models.Model):
