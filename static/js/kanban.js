@@ -567,12 +567,22 @@ function showNotification(message, type = 'info') {
     // Create notification element
     const notification = document.createElement('div');
     notification.className = `alert alert-${type === 'error' ? 'danger' : 'success'} alert-dismissible fade show position-fixed`;
-    notification.style.top = '20px';
+    notification.style.top = '80px';
     notification.style.right = '20px';
     notification.style.zIndex = '9999';
+    notification.style.minWidth = '300px';
+    notification.style.maxWidth = '400px';
+    notification.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    notification.style.fontWeight = '500';
+    notification.style.fontSize = '0.95rem';
+    
+    const icon = type === 'error' ? '❌' : '✅';
     
     notification.innerHTML = `
-        ${message}
+        <div class="d-flex align-items-center">
+            <span style="font-size: 1.2rem; margin-right: 10px;">${icon}</span>
+            <span>${message}</span>
+        </div>
         <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
     `;
     
