@@ -1,19 +1,185 @@
 """
 Management command to populate demo boards with realistic tasks
 Creates ~120 tasks across 3 demo boards with proper assignments, dates, dependencies, and skills
+Includes comprehensive demo data for all task fields including risk, skills, and collaboration
 """
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.contrib.auth import get_user_model
-from datetime import timedelta
+from datetime import timedelta, date
 from kanban.models import Board, Column, Task, TaskLabel, Organization
 import random
 
 User = get_user_model()
 
+# Skill pools for different task categories
+SOFTWARE_SKILLS = [
+    {'name': 'Python', 'level': 'Advanced'},
+    {'name': 'JavaScript', 'level': 'Advanced'},
+    {'name': 'React', 'level': 'Intermediate'},
+    {'name': 'Django', 'level': 'Advanced'},
+    {'name': 'PostgreSQL', 'level': 'Intermediate'},
+    {'name': 'REST API Design', 'level': 'Advanced'},
+    {'name': 'Docker', 'level': 'Intermediate'},
+    {'name': 'AWS', 'level': 'Intermediate'},
+    {'name': 'CI/CD', 'level': 'Intermediate'},
+    {'name': 'Git', 'level': 'Advanced'},
+    {'name': 'TypeScript', 'level': 'Intermediate'},
+    {'name': 'Testing', 'level': 'Intermediate'},
+    {'name': 'Security', 'level': 'Intermediate'},
+    {'name': 'System Design', 'level': 'Advanced'},
+]
+
+MARKETING_SKILLS = [
+    {'name': 'Content Strategy', 'level': 'Advanced'},
+    {'name': 'SEO/SEM', 'level': 'Intermediate'},
+    {'name': 'Social Media Marketing', 'level': 'Advanced'},
+    {'name': 'Email Marketing', 'level': 'Intermediate'},
+    {'name': 'Analytics', 'level': 'Advanced'},
+    {'name': 'Copywriting', 'level': 'Advanced'},
+    {'name': 'Graphic Design', 'level': 'Intermediate'},
+    {'name': 'Video Production', 'level': 'Intermediate'},
+    {'name': 'Brand Management', 'level': 'Advanced'},
+    {'name': 'Market Research', 'level': 'Intermediate'},
+    {'name': 'Campaign Management', 'level': 'Advanced'},
+    {'name': 'Public Relations', 'level': 'Intermediate'},
+]
+
+BUG_TRACKING_SKILLS = [
+    {'name': 'Debugging', 'level': 'Advanced'},
+    {'name': 'Root Cause Analysis', 'level': 'Advanced'},
+    {'name': 'Testing', 'level': 'Intermediate'},
+    {'name': 'Log Analysis', 'level': 'Intermediate'},
+    {'name': 'Performance Profiling', 'level': 'Intermediate'},
+    {'name': 'Database Troubleshooting', 'level': 'Intermediate'},
+    {'name': 'Network Diagnostics', 'level': 'Intermediate'},
+    {'name': 'Security Analysis', 'level': 'Advanced'},
+    {'name': 'Code Review', 'level': 'Advanced'},
+    {'name': 'Documentation', 'level': 'Intermediate'},
+]
+
+# Risk indicators pool
+RISK_INDICATORS = [
+    'Monitor task progress weekly',
+    'Track team member availability',
+    'Review dependencies status',
+    'Check for scope changes',
+    'Verify resource allocation',
+    'Monitor technical blockers',
+    'Track stakeholder feedback',
+    'Review milestone deadlines',
+    'Check integration points',
+    'Monitor external dependencies',
+    'Track skill availability',
+    'Review budget constraints',
+]
+
+# Mitigation strategies pool
+MITIGATION_STRATEGIES = [
+    'Allocate additional resources if needed',
+    'Conduct technical review early',
+    'Break down into smaller subtasks',
+    'Schedule regular check-ins',
+    'Identify backup team members',
+    'Create contingency timeline',
+    'Document key decisions',
+    'Set up automated alerts',
+    'Plan for parallel work streams',
+    'Establish clear escalation path',
+    'Prepare fallback solutions',
+    'Schedule buffer time',
+]
+
 
 class Command(BaseCommand):
     help = 'Populate demo boards with realistic tasks for demonstration purposes'
+
+    def get_random_skills(self, skill_pool, min_skills=1, max_skills=3):
+        """Get random skills from a skill pool"""
+        num_skills = random.randint(min_skills, max_skills)
+        return random.sample(skill_pool, min(num_skills, len(skill_pool)))
+
+    def calculate_risk_data(self, complexity, priority, progress):
+        """Calculate comprehensive risk data based on task characteristics"""
+        # Base risk likelihood on complexity and priority
+        if priority in ['urgent', 'high'] and complexity >= 7:
+            likelihood = 3  # High
+        elif priority in ['urgent', 'high'] or complexity >= 6:
+            likelihood = 2  # Medium
+        else:
+            likelihood = 1  # Low
+
+        # Base risk impact on priority and complexity
+        if priority == 'urgent' or complexity >= 8:
+            impact = 3  # High
+        elif priority == 'high' or complexity >= 5:
+            impact = 2  # Medium
+        else:
+            impact = 1  # Low
+
+        # If task is mostly complete, reduce risk
+        if progress >= 80:
+            likelihood = max(1, likelihood - 1)
+            impact = max(1, impact - 1)
+
+        risk_score = likelihood * impact
+
+        # Determine risk level
+        if risk_score <= 2:
+            risk_level = 'low'
+        elif risk_score <= 4:
+            risk_level = 'medium'
+        elif risk_score <= 6:
+            risk_level = 'high'
+        else:
+            risk_level = 'critical'
+
+        # Select relevant risk indicators (2-4 indicators)
+        num_indicators = random.randint(2, 4)
+        indicators = random.sample(RISK_INDICATORS, num_indicators)
+
+        # Select mitigation strategies (2-3 strategies)
+        num_strategies = random.randint(2, 3)
+        strategies = random.sample(MITIGATION_STRATEGIES, num_strategies)
+
+        return {
+            'likelihood': likelihood,
+            'impact': impact,
+            'score': risk_score,
+            'level': risk_level,
+            'indicators': indicators,
+            'strategies': strategies,
+        }
+
+    def get_workload_impact(self, complexity, priority):
+        """Determine workload impact based on complexity and priority"""
+        if priority == 'urgent' or complexity >= 8:
+            return 'critical'
+        elif priority == 'high' or complexity >= 6:
+            return 'high'
+        elif complexity >= 4:
+            return 'medium'
+        else:
+            return 'low'
+
+    def get_skill_match_score(self, has_assignee, complexity):
+        """Generate a realistic skill match score"""
+        if not has_assignee:
+            return None
+        # Higher complexity tasks might have lower match scores
+        base_score = random.randint(60, 95)
+        complexity_penalty = max(0, (complexity - 5) * 3)
+        return max(50, base_score - complexity_penalty)
+
+    def should_require_collaboration(self, complexity, priority):
+        """Determine if task should require collaboration"""
+        # High complexity or urgent tasks more likely to need collaboration
+        if complexity >= 8 or priority == 'urgent':
+            return random.random() < 0.7  # 70% chance
+        elif complexity >= 6 or priority == 'high':
+            return random.random() < 0.4  # 40% chance
+        else:
+            return random.random() < 0.2  # 20% chance
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -123,6 +289,18 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('\n🏷️  Creating Lean Six Sigma labels...\n'))
         self.create_lean_labels(software_board, marketing_board, bug_board)
         self.assign_lean_labels(software_tasks, marketing_tasks, bug_tasks)
+
+        # Enhance tasks with comprehensive demo data
+        self.stdout.write(self.style.SUCCESS('\n📊 Enriching tasks with comprehensive demo data...\n'))
+        self.enhance_tasks_with_demo_data(software_tasks, SOFTWARE_SKILLS, 'software')
+        self.enhance_tasks_with_demo_data(marketing_tasks, MARKETING_SKILLS, 'marketing')
+        self.enhance_tasks_with_demo_data(bug_tasks, BUG_TRACKING_SKILLS, 'bug_tracking')
+
+        # Create related task relationships
+        self.stdout.write(self.style.SUCCESS('\n🔄 Creating related task relationships...\n'))
+        self.create_related_tasks(software_tasks)
+        self.create_related_tasks(marketing_tasks)
+        self.create_related_tasks(bug_tasks)
 
         self.stdout.write(self.style.SUCCESS('\n' + '='*70))
         self.stdout.write(self.style.SUCCESS('✅ DEMO DATA POPULATION COMPLETE'))
@@ -1429,3 +1607,138 @@ class Command(BaseCommand):
         self.stdout.write(f'      • Necessary NVA: {necessary_count}')
         self.stdout.write(f'      • Waste/Eliminate: {waste_count}')
 
+    def enhance_tasks_with_demo_data(self, tasks, skill_pool, task_type):
+        """
+        Enhance tasks with comprehensive demo data including:
+        - start_date
+        - required_skills
+        - skill_match_score
+        - collaboration_required
+        - workload_impact
+        - risk_likelihood, risk_impact, risk_score, risk_level
+        - risk_indicators
+        - mitigation_suggestions
+        """
+        now = timezone.now()
+        enhanced_count = 0
+
+        for task in tasks:
+            # Calculate start_date based on due_date and complexity
+            if task.due_date:
+                # Duration in days based on complexity (complexity * 2-3 days)
+                duration_days = task.complexity_score * random.randint(2, 3)
+                task.start_date = (task.due_date - timedelta(days=duration_days)).date()
+                
+                # Ensure start_date is not in the past for incomplete tasks
+                if task.progress < 100 and task.start_date < now.date():
+                    task.start_date = now.date() - timedelta(days=random.randint(1, 5))
+
+            # Add required skills (1-3 skills based on complexity)
+            min_skills = 1 if task.complexity_score < 5 else 2
+            max_skills = 2 if task.complexity_score < 7 else 3
+            task.required_skills = self.get_random_skills(skill_pool, min_skills, max_skills)
+
+            # Add skill match score for assigned tasks
+            task.skill_match_score = self.get_skill_match_score(
+                task.assigned_to is not None,
+                task.complexity_score
+            )
+
+            # Add collaboration required flag
+            task.collaboration_required = self.should_require_collaboration(
+                task.complexity_score,
+                task.priority
+            )
+
+            # Add workload impact
+            task.workload_impact = self.get_workload_impact(
+                task.complexity_score,
+                task.priority
+            )
+
+            # Calculate and add risk data
+            risk_data = self.calculate_risk_data(
+                task.complexity_score,
+                task.priority,
+                task.progress
+            )
+            task.risk_likelihood = risk_data['likelihood']
+            task.risk_impact = risk_data['impact']
+            task.risk_score = risk_data['score']
+            task.risk_level = risk_data['level']
+            task.risk_indicators = risk_data['indicators']
+            task.mitigation_suggestions = [
+                {
+                    'strategy': strategy,
+                    'priority': random.choice(['high', 'medium', 'low']),
+                    'estimated_effort': random.choice(['1 day', '2-3 days', '1 week'])
+                }
+                for strategy in risk_data['strategies']
+            ]
+
+            # Add risk analysis details
+            task.risk_analysis = {
+                'factors': self._get_risk_factors(task, task_type),
+                'assessment': self._get_risk_assessment(risk_data['level'], task.title),
+                'last_updated': now.isoformat(),
+                'analyzed_by': 'AI Risk Engine'
+            }
+            task.last_risk_assessment = now
+
+            task.save()
+            enhanced_count += 1
+
+        self.stdout.write(f'   ✅ Enhanced {enhanced_count} {task_type.replace("_", " ")} tasks')
+
+    def _get_risk_factors(self, task, task_type):
+        """Get relevant risk factors based on task type"""
+        common_factors = ['Timeline pressure', 'Resource availability', 'Dependencies']
+        
+        type_specific_factors = {
+            'software': ['Technical complexity', 'Integration risks', 'Code quality'],
+            'marketing': ['Market conditions', 'Brand consistency', 'Stakeholder alignment'],
+            'bug_tracking': ['Root cause identification', 'Regression risk', 'User impact']
+        }
+        
+        factors = common_factors + type_specific_factors.get(task_type, [])
+        return random.sample(factors, min(4, len(factors)))
+
+    def _get_risk_assessment(self, risk_level, task_title):
+        """Generate a human-readable risk assessment"""
+        assessments = {
+            'low': f'Task "{task_title[:30]}..." has minimal risk factors and is on track.',
+            'medium': f'Task "{task_title[:30]}..." has moderate risk. Regular monitoring recommended.',
+            'high': f'Task "{task_title[:30]}..." requires close attention due to elevated risk factors.',
+            'critical': f'Task "{task_title[:30]}..." has critical risk level. Immediate action may be required.'
+        }
+        return assessments.get(risk_level, 'Risk assessment pending.')
+
+    def create_related_tasks(self, tasks):
+        """Create related task relationships within a board"""
+        if len(tasks) < 3:
+            return
+
+        related_count = 0
+        
+        # Create logical relationships based on task content
+        for i, task in enumerate(tasks):
+            # Each task gets 1-3 related tasks
+            num_related = random.randint(1, 3)
+            
+            # Get potential related tasks (exclude self)
+            potential_related = [t for t in tasks if t.id != task.id]
+            
+            if potential_related:
+                # Select random related tasks
+                related_tasks = random.sample(
+                    potential_related,
+                    min(num_related, len(potential_related))
+                )
+                
+                for related in related_tasks:
+                    # Only add if not already related
+                    if not task.related_tasks.filter(id=related.id).exists():
+                        task.related_tasks.add(related)
+                        related_count += 1
+
+        self.stdout.write(f'   ✅ Created {related_count} related task connections')
