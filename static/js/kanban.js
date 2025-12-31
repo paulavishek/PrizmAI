@@ -412,6 +412,15 @@ function rearrangeColumns() {
         }
     });
     
+    // Update position badges immediately after DOM rearrangement
+    const reorderedColumns = document.querySelectorAll('.kanban-column');
+    reorderedColumns.forEach((column, index) => {
+        const badge = column.querySelector('.column-position-badge');
+        if (badge) {
+            badge.textContent = index + 1;
+        }
+    });
+    
     // Reorder the input badges in the Quick Column Reorder panel to match the new column order
     const orderingBadgesContainer = document.getElementById('column-ordering-badges');
     if (orderingBadgesContainer) {

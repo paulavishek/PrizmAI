@@ -603,10 +603,13 @@ kbd {
     <div class="kanban-column" id="column-{{ column.id }}" data-column-id="{{ column.id }}" draggable="true">
         <div class="kanban-column-header">
             <div class="d-flex justify-content-between align-items-center w-100">
-                <div>
+                <div class="d-flex align-items-center">
                     <span class="column-position-badge">{{ column.position|add:1 }}</span>
                     <span class="column-name-text">{{ column.name }}</span>
-                    <span class="column-task-count ms-1" style="font-size: 0.85rem; color: #6c757d;"></span>
+                    <span class="ms-2" style="font-size: 0.8rem; color: #6c757d;">
+                        <span style="font-weight: 500;">Tasks:</span>
+                        <span class="column-task-count"></span>
+                    </span>
                 </div>
                 <div class="column-actions">
                     {% if column.name|lower == 'to do' or column.name|lower == 'todo' %}
@@ -861,7 +864,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const countElement = column.querySelector('.column-task-count');
             if (taskContainer && countElement) {
                 const taskCount = taskContainer.querySelectorAll('.kanban-task').length;
-                countElement.textContent = taskCount > 0 ? `(${taskCount})` : '';
+                countElement.textContent = taskCount;
             }
         });
     }
