@@ -21,9 +21,17 @@
         margin: 40px auto;
         padding: 0 20px;
     }
+
+    .back-to-dashboard {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        z-index: 10;
+    }
     
     .page-header {
         margin-bottom: 32px;
+        position: relative;
     }
     
     .page-header h1 {
@@ -312,6 +320,17 @@
 
 {% block content %}
 <div class="ai-usage-container">
+    <!-- Back to Dashboard Button -->
+    {% if request.session.demo_mode %}
+    <a href="{% url 'demo_dashboard' %}" class="btn btn-outline-secondary back-to-dashboard">
+        <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
+    </a>
+    {% else %}
+    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary back-to-dashboard">
+        <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
+    </a>
+    {% endif %}
+    
     <!-- Page Header -->
     <div class="page-header">
         <h1><i class="fas fa-robot me-2" style="color: var(--primary-color);"></i>AI Usage</h1>
