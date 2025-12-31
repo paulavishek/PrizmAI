@@ -65,7 +65,7 @@ main {
     background-color: var(--navbar-bg) !important;
     color: var(--navbar-text);
     transition: background-color 0.3s ease;
-    z-index: 1000;
+    z-index: 1030;
     position: relative;
 }
 
@@ -81,9 +81,9 @@ main {
     opacity: 0.8;
 }
 
-/* Ensure navbar dropdowns stay below demo banner */
+/* Ensure navbar dropdowns appear above demo banner */
 .navbar .dropdown-menu {
-    z-index: 1010;
+    z-index: 1070;
 }
 
 /* Dropdown Menu Theme */
