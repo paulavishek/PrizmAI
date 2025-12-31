@@ -90,8 +90,9 @@
                                 <td>
                                     <div class="btn-group">
                                         {% if member.user != request.user and member.user != organization.created_by %}
-                                            {% if request.user == organization.created_by or not member.is_admin %}
-                                                {% if member.is_admin %}
+                                            {% if member.is_admin %}
+                                                {# Show Make Member button - disabled if current user is not owner #}
+                                                {% if request.user == organization.created_by %}
                                                 <a href="{% url 'toggle_admin' member.id %}" class="btn btn-outline-warning btn-sm" 
                                                    data-bs-toggle="tooltip" 
                                                    title="Demote {{ member.user.username }} to Member role"
@@ -99,13 +100,36 @@
                                                     <i class="fas fa-user-minus me-1"></i> Make Member
                                                 </a>
                                                 {% else %}
+                                                <button class="btn btn-outline-warning btn-sm" disabled
+                                                   data-bs-toggle="tooltip" 
+                                                   title="Only the Organization Owner ({{ organization.created_by.username }}) can demote admins">
+                                                    <i class="fas fa-user-minus me-1"></i> Make Member
+                                                </button>
+                                                {% endif %}
+                                                
+                                                {# Remove button - only owner can remove admins #}
+                                                {% if request.user == organization.created_by %}
+                                                <a href="{% url 'remove_member' member.id %}" class="btn btn-outline-danger btn-sm"
+                                                   data-bs-toggle="tooltip" 
+                                                   title="Remove {{ member.user.username }} from organization"
+                                                   onclick="return confirm('Are you sure you want to remove {{ member.user.username }} from the organization? They will lose access to all boards and data.')">
+                                                    <i class="fas fa-trash me-1"></i> Remove
+                                                </a>
+                                                {% else %}
+                                                <button class="btn btn-outline-danger btn-sm" disabled
+                                                   data-bs-toggle="tooltip" 
+                                                   title="Only the Organization Owner ({{ organization.created_by.username }}) can remove admins">
+                                                    <i class="fas fa-trash me-1"></i> Remove
+                                                </button>
+                                                {% endif %}
+                                            {% else %}
+                                                {# Member role - any admin can promote or remove #}
                                                 <a href="{% url 'toggle_admin' member.id %}" class="btn btn-outline-info btn-sm"
                                                    data-bs-toggle="tooltip" 
                                                    title="Promote {{ member.user.username }} to Admin role"
                                                    onclick="return confirm('Are you sure you want to promote {{ member.user.username }} to admin? They will gain full access to organization settings and member management.')">
                                                     <i class="fas fa-user-shield me-1"></i> Make Admin
                                                 </a>
-                                                {% endif %}
                                                 
                                                 <a href="{% url 'remove_member' member.id %}" class="btn btn-outline-danger btn-sm"
                                                    data-bs-toggle="tooltip" 
