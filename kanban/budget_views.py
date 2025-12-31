@@ -100,6 +100,8 @@ def budget_dashboard(request, board_id):
         'burn_rate': burn_rate,
         'recommendations': recommendations,
         'recent_entries': recent_entries,
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/budget_dashboard.html', context)
@@ -327,6 +329,8 @@ def budget_analytics(request, board_id):
         'cost_breakdown': cost_breakdown,
         'overruns': overruns,
         'trend_data': trend_data,
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/budget_analytics.html', context)
@@ -382,6 +386,8 @@ def roi_dashboard(request, board_id):
         'has_budget': has_budget,
         'roi_metrics': roi_metrics,
         'roi_snapshots': roi_snapshots,
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/roi_dashboard.html', context)

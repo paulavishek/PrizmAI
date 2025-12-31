@@ -132,6 +132,8 @@ def coach_dashboard(request, board_id):
         'effectiveness': effectiveness,
         'recommendations': recommendations,
         'total_active': active_suggestions.count(),
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/coach_dashboard.html', context)
@@ -178,6 +180,8 @@ def suggestion_detail(request, suggestion_id):
         'suggestion': suggestion,
         'board': board,
         'feedback_entries': feedback_entries,
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/coach_suggestion_detail.html', context)

@@ -528,7 +528,7 @@ function goBack() {
         window.history.back();
     } else {
         // Fallback to task detail if no history
-        window.location.href = '/tasks/{{ task.id }}/';
+        window.location.href = '{% url "task_detail" task.id %}';
     }
 }
 </script>

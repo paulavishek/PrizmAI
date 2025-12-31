@@ -39,8 +39,8 @@
                     <h2><i class="fas fa-chart-line me-2"></i>Budget Analytics</h2>
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb">
-                            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
-                            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+                            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}">{{ board.name }}</a></li>
                             <li class="breadcrumb-item"><a href="{% url 'budget_dashboard' board.id %}">Budget</a></li>
                             <li class="breadcrumb-item active">Analytics</li>
                         </ol>
@@ -142,7 +142,7 @@
                                 {% for task in cost_breakdown %}
                                 <tr class="cost-breakdown-card">
                                     <td>
-                                        <a href="{% url 'board_detail' board.id %}#task-{{ task.task_id }}" class="text-decoration-none">
+                                        <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}#task-{{ task.task_id }}" class="text-decoration-none">
                                             {{ task.task_title }}
                                         </a>
                                     </td>
@@ -208,7 +208,7 @@
                                 {% for overrun in overruns %}
                                 <tr>
                                     <td>
-                                        <a href="{% url 'board_detail' board.id %}#task-{{ overrun.task_id }}" class="text-decoration-none">
+                                        <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}#task-{{ overrun.task_id }}" class="text-decoration-none">
                                             {{ overrun.task_title }}
                                         </a>
                                     </td>

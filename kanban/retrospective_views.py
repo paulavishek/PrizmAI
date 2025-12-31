@@ -133,6 +133,8 @@ def retrospective_list(request, board_id):
         'stats': stats,
         'status_filter': status_filter,
         'type_filter': type_filter,
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/retrospective_list.html', context)
@@ -196,6 +198,8 @@ def retrospective_detail(request, board_id, retro_id):
         'action_items': action_items,
         'metrics': metrics,
         'stats': stats,
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/retrospective_detail.html', context)
@@ -241,6 +245,8 @@ def retrospective_create(request, board_id):
             'board': board,
             'suggested_start': suggested_start,
             'suggested_end': suggested_end,
+            'is_demo_mode': is_demo_mode,
+            'is_demo_board': is_demo_board,
         }
         return render(request, 'kanban/retrospective_create.html', context)
     
@@ -477,6 +483,8 @@ def retrospective_dashboard(request, board_id):
         'lessons_by_category': lessons_by_category,
         'urgent_actions': urgent_actions,
         'trend': trend,
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/retrospective_dashboard.html', context)
@@ -643,6 +651,8 @@ def lessons_learned_list(request, board_id):
         'categories': LessonLearned.CATEGORY_CHOICES,
         'statuses': LessonLearned.STATUS_CHOICES,
         'priorities': LessonLearned.PRIORITY_CHOICES,
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/lessons_learned_list.html', context)

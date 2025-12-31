@@ -66,9 +66,15 @@
             <p class="text-muted mb-0">{{ board.name }}</p>
         </div>
         <div class="btn-group">
+            {% if is_demo_mode %}
+            <a href="{% url 'demo_board_detail' board.id %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i>Back to Board
+            </a>
+            {% else %}
             <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
                 <i class="fas fa-arrow-left me-1"></i>Back to Board
             </a>
+            {% endif %}
             <a href="{% url 'board_analytics' board.id %}" class="btn btn-outline-primary">
                 <i class="fas fa-chart-pie me-1"></i>Analytics
             </a>

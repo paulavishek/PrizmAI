@@ -260,7 +260,7 @@
     <!-- Breadcrumb -->
     <nav aria-label="breadcrumb" class="mb-4">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}">{{ board.name }}</a></li>
             <li class="breadcrumb-item"><a href="{% url 'coach_dashboard' board.id %}">AI Coach</a></li>
             <li class="breadcrumb-item active">Suggestion Detail</li>
         </ol>
@@ -278,7 +278,7 @@
         <div class="suggestion-meta">
             <i class="fas fa-calendar-alt me-2"></i>Generated {{ suggestion.created_at|date:"F d, Y" }} at {{ suggestion.created_at|time:"g:i A" }}
             {% if suggestion.task %}
-            <span class="ms-3"><i class="fas fa-link me-2"></i>Related to: <a href="{% url 'board_detail' board.id %}">{{ suggestion.task.title }}</a></span>
+            <span class="ms-3"><i class="fas fa-link me-2"></i>Related to: <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}">{{ suggestion.task.title }}</a></span>
             {% endif %}
         </div>
 

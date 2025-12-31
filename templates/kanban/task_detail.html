@@ -39,9 +39,15 @@
                     <button onclick="goBack()" class="btn btn-sm btn-outline-secondary">
                         <i class="fas fa-arrow-left me-1"></i> Back
                     </button>
+                    {% if is_demo_mode %}
+                    <a href="{% url 'demo_board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-columns me-1"></i> View Board
+                    </a>
+                    {% else %}
                     <a href="{% url 'board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-primary">
                         <i class="fas fa-columns me-1"></i> View Board
                     </a>
+                    {% endif %}
                 </div>
             </div>
             <div class="card-body">
@@ -1333,8 +1339,12 @@
         if (document.referrer && document.referrer !== window.location.href) {
             window.history.back();
         } else {
-            // Fallback to board detail if no history
+            // Fallback to board detail if no history (demo-aware)
+            {% if is_demo_mode %}
+            window.location.href = '{% url "demo_board_detail" task.column.board.id %}';
+            {% else %}
             window.location.href = '{% url "board_detail" task.column.board.id %}';
+            {% endif %}
         }
     }
 

@@ -26,10 +26,17 @@ def forecast_dashboard(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
     
+    # Check if this is a demo board
+    demo_org_names = ['Demo - Acme Corporation']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    
     # Check board access
     if not (board.created_by == request.user or request.user in board.members.all()):
-        messages.error(request, "You don't have access to this board.")
-        return redirect('dashboard')
+        # Allow demo mode access for demo boards
+        if not (is_demo_board and is_demo_mode):
+            messages.error(request, "You don't have access to this board.")
+            return redirect('dashboard')
     
     # Generate fresh forecasts if needed
     service = DemandForecastingService()
@@ -57,6 +64,8 @@ def forecast_dashboard(request, board_id):
         'summary': summary,
         'period_start': forecast_data['period_start'],
         'period_end': forecast_data['period_end'],
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/forecast_dashboard.html', context)
@@ -104,10 +113,17 @@ def workload_recommendations(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
     
+    # Check if this is a demo board
+    demo_org_names = ['Demo - Acme Corporation']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    
     # Check access
     if not (board.created_by == request.user or request.user in board.members.all()):
-        messages.error(request, "You don't have access to this board.")
-        return redirect('dashboard')
+        # Allow demo mode access for demo boards
+        if not (is_demo_board and is_demo_mode):
+            messages.error(request, "You don't have access to this board.")
+            return redirect('dashboard')
     
     service = DemandForecastingService()
     recommendations = service.generate_workload_distribution_recommendations(board, period_days=21)
@@ -119,6 +135,8 @@ def workload_recommendations(request, board_id):
         'board': board,
         'recommendations': recommendations,
         'summary': summary,
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/workload_recommendations.html', context)

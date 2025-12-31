@@ -341,9 +341,15 @@
                 <p class="mb-0" style="font-size: 16px; opacity: 0.9;">Proactive guidance to improve your project</p>
             </div>
             <div class="text-end">
+                {% if is_demo_mode %}
+                <button onclick="location.href='{% url 'demo_board_detail' board.id %}'" class="btn btn-light">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Board
+                </button>
+                {% else %}
                 <button onclick="location.href='{% url 'board_detail' board.id %}'" class="btn btn-light">
                     <i class="fas fa-arrow-left me-2"></i>Back to Board
                 </button>
+                {% endif %}
                 <button onclick="generateSuggestions()" class="btn btn-generate ms-2">
                     <i class="fas fa-sync-alt me-2"></i>Refresh Suggestions
                 </button>
@@ -539,8 +545,12 @@ function goBack() {
     if (document.referrer && document.referrer !== window.location.href) {
         window.history.back();
     } else {
-        // Fallback to board detail if no history
+        // Fallback to board detail if no history (demo-aware)
+        {% if is_demo_mode %}
+        window.location.href = '{% url "demo_board_detail" board.id %}';
+        {% else %}
         window.location.href = '{% url "board_detail" board.id %}';
+        {% endif %}
     }
 }
 </script>

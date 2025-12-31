@@ -552,8 +552,12 @@ function goBack() {
     if (document.referrer && document.referrer !== window.location.href) {
         window.history.back();
     } else {
-        // Fallback to board detail if no history
+        // Fallback to board detail if no history (demo-aware)
+        {% if is_demo_mode %}
+        window.location.href = '{% url "demo_board_detail" board.id %}';
+        {% else %}
         window.location.href = '{% url "board_detail" board.id %}';
+        {% endif %}
     }
 }
 </script>

@@ -57,7 +57,7 @@
                         Milestones
                     </h2>
                     <p class="text-muted mb-0">
-                        <a href="{% url 'board_detail' board.id %}" class="text-decoration-none">{{ board.name }}</a>
+                        <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="text-decoration-none">{{ board.name }}</a>
                         <i class="fas fa-chevron-right mx-2"></i>
                         Milestone Management
                     </p>

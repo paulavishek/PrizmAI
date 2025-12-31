@@ -128,6 +128,8 @@ def burndown_dashboard(request, board_id):
         'alerts': active_alerts,
         'critical_alerts': active_alerts.filter(severity='critical'),
         'warning_alerts': active_alerts.filter(severity='warning'),
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/burndown_dashboard.html', context)
@@ -373,6 +375,11 @@ def manage_milestones(request, board_id):
         messages.error(request, "You don't have access to this board.")
         return redirect('dashboard')
     
+    # Get demo mode status
+    demo_org_names = ['Demo - Acme Corporation']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    
     # Get all milestones for this board
     milestones = Milestone.objects.filter(board=board).order_by('target_date')
     
@@ -382,6 +389,8 @@ def manage_milestones(request, board_id):
         'upcoming_milestones': milestones.filter(is_completed=False, target_date__gte=timezone.now().date()),
         'completed_milestones': milestones.filter(is_completed=True),
         'overdue_milestones': milestones.filter(is_completed=False, target_date__lt=timezone.now().date()),
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/manage_milestones.html', context)

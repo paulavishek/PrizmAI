@@ -685,6 +685,8 @@ def task_detail(request, task_id):
         'wiki_links': wiki_links,
         'prediction': prediction_data,
         'total_time_logged': total_time_logged,
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     })
 
 def create_task(request, board_id, column_id=None):
@@ -1122,6 +1124,8 @@ def board_analytics(request, board_id):
         # Lean Six Sigma metrics
         'value_added_percentage': round(value_added_percentage, 1),
         'total_categorized': total_categorized,
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     })
 
 def gantt_chart(request, board_id):
@@ -1162,6 +1166,7 @@ def gantt_chart(request, board_id):
         'board': board,
         'tasks': tasks,
         'is_demo_board': is_demo_board,
+        'is_demo_mode': is_demo_mode,
     }
     
     return render(request, 'kanban/gantt_chart.html', context)
@@ -2471,6 +2476,8 @@ def skill_gap_dashboard(request, board_id):
         'active_plans': active_plans,
         'proposed_plans': proposed_plans,
         'completed_plans': completed_plans,
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/skill_gap_dashboard.html', context)
@@ -2487,9 +2494,16 @@ def scope_tracking_dashboard(request, board_id):
     
     board = get_object_or_404(Board, id=board_id)
     
+    # Check if this is a demo board
+    demo_org_names = ['Demo - Acme Corporation']
+    is_demo_board = board.organization.name in demo_org_names
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    
     # Check if user has access to this board
     if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board.")
+        # Allow demo mode access for demo boards
+        if not (is_demo_board and is_demo_mode):
+            return HttpResponseForbidden("You don't have access to this board.")
     
     # Get current scope status
     scope_status = board.get_current_scope_status()
@@ -2530,6 +2544,8 @@ def scope_tracking_dashboard(request, board_id):
         'warning_count': warning_count,
         'info_count': info_count,
         'latest_snapshot': latest_snapshot,
+        'is_demo_mode': is_demo_mode,
+        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/scope_tracking_dashboard.html', context)

@@ -926,7 +926,11 @@ function getCsrfToken() {
 
 // Back button functionality
 function goBack() {
-    window.history.back();
+    if (document.referrer && document.referrer !== window.location.href) {
+        window.history.back();
+    } else {
+        window.location.href = '{% url "demo_dashboard" %}';
+    }
 }
 </script>
 {% endblock %}

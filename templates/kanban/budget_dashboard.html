@@ -50,13 +50,23 @@
                     <h2><i class="fas fa-dollar-sign me-2"></i>Budget Dashboard</h2>
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb">
+                            {% if is_demo_mode %}
+                            <li class="breadcrumb-item"><a href="{% url 'demo_dashboard' %}">Demo Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'demo_board_detail' board.id %}">{{ board.name }}</a></li>
+                            {% else %}
                             <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
                             <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+                            {% endif %}
                             <li class="breadcrumb-item active">Budget</li>
                         </ol>
                     </nav>
                 </div>
                 <div>
+                    {% if is_demo_mode %}
+                    <a href="{% url 'demo_board_detail' board.id %}" class="btn btn-outline-secondary me-2">
+                        <i class="fas fa-arrow-left me-1"></i> Back to Board
+                    </a>
+                    {% endif %}
                     {% if has_budget %}
                         <a href="{% url 'budget_analytics' board.id %}" class="btn btn-info me-2">
                             <i class="fas fa-chart-line"></i> Analytics
@@ -364,8 +374,12 @@ function goBack() {
     if (document.referrer && document.referrer !== window.location.href) {
         window.history.back();
     } else {
-        // Fallback to board detail if no history
+        // Fallback to board detail if no history (demo-aware)
+        {% if is_demo_mode %}
+        window.location.href = '{% url "demo_board_detail" board.id %}';
+        {% else %}
         window.location.href = '{% url "board_detail" board.id %}';
+        {% endif %}
     }
 }
 </script>

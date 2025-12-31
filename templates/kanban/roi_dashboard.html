@@ -43,8 +43,8 @@
                     <h2><i class="fas fa-chart-bar me-2"></i>ROI Dashboard</h2>
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb">
-                            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
-                            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+                            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}">{{ board.name }}</a></li>
                             <li class="breadcrumb-item"><a href="{% url 'budget_dashboard' board.id %}">Budget</a></li>
                             <li class="breadcrumb-item active">ROI</li>
                         </ol>
