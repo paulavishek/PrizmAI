@@ -359,11 +359,30 @@ function initColumnOrdering() {
 
 // Reset column positions to default sequential order
 function resetColumnPositions() {
-    const positionInputs = document.querySelectorAll('.column-position-input');
+    // Get all columns in their current DOM order
+    const columns = document.querySelectorAll('.kanban-column');
     
-    // Reset input values to sequential order
-    positionInputs.forEach((input, index) => {
-        input.value = index + 1;
+    // Create an array with column IDs and their original order (by ID)
+    const columnData = [];
+    columns.forEach(column => {
+        const columnId = column.dataset.columnId;
+        if (columnId) {
+            columnData.push({
+                id: parseInt(columnId),
+                element: column
+            });
+        }
+    });
+    
+    // Sort by column ID to get the original database order
+    columnData.sort((a, b) => a.id - b.id);
+    
+    // Update input values based on the sorted (original) order
+    columnData.forEach((data, index) => {
+        const input = document.querySelector(`.column-position-input[data-column-id="${data.id}"]`);
+        if (input) {
+            input.value = index + 1;
+        }
     });
     
     // Trigger the rearrange function to apply the reset
