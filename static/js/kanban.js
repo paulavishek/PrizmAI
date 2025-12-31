@@ -444,8 +444,22 @@ function rearrangeColumns() {
         });
     }
     
-    // Get the board ID
-    const boardId = window.location.pathname.split('/').filter(Boolean)[1];
+    // Get the board ID - handle both /boards/ID/ and /demo/board/ID/ patterns
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+    let boardId;
+    
+    // Find the numeric ID after 'board' or 'boards' in the path
+    for (let i = 0; i < pathParts.length; i++) {
+        if (pathParts[i] === 'board' || pathParts[i] === 'boards') {
+            boardId = pathParts[i + 1];
+            break;
+        }
+    }
+    
+    if (!boardId) {
+        showNotification('Error: Could not determine board ID', 'error');
+        return;
+    }
     
     // Save the new positions to the server
     saveColumnPositions(columnPositions, boardId);
