@@ -412,6 +412,23 @@ function rearrangeColumns() {
         }
     });
     
+    // Reorder the input badges in the Quick Column Reorder panel to match the new column order
+    const orderingBadgesContainer = document.getElementById('column-ordering-badges');
+    if (orderingBadgesContainer) {
+        columnPositions.forEach((colPos, index) => {
+            const input = document.querySelector(`.column-position-input[data-column-id="${colPos.id}"]`);
+            if (input) {
+                const inputBadge = input.closest('.column-ordering-badge');
+                if (inputBadge) {
+                    // Update the input value to reflect the new position
+                    input.value = index + 1;
+                    // Move the badge to the correct position in the panel
+                    orderingBadgesContainer.appendChild(inputBadge);
+                }
+            }
+        });
+    }
+    
     // Get the board ID
     const boardId = window.location.pathname.split('/').filter(Boolean)[1];
     
