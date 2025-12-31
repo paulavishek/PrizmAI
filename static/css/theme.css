@@ -65,6 +65,8 @@ main {
     background-color: var(--navbar-bg) !important;
     color: var(--navbar-text);
     transition: background-color 0.3s ease;
+    z-index: 1000;
+    position: relative;
 }
 
 .navbar-dark .navbar-brand {
@@ -77,6 +79,11 @@ main {
 
 .navbar-dark .nav-link:hover {
     opacity: 0.8;
+}
+
+/* Ensure navbar dropdowns stay below demo banner */
+.navbar .dropdown-menu {
+    z-index: 1010;
 }
 
 /* Dropdown Menu Theme */
