@@ -220,7 +220,7 @@ def switch_demo_role(request):
     
     # Get role display name
     role_names = {
-        'admin': 'Alex Chen (Admin)',
+        'admin': 'Demo Admin (Solo)',
         'member': 'Sam Rivera (Member)',
         'viewer': 'Jordan Taylor (Viewer)'
     }

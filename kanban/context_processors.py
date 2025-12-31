@@ -67,7 +67,7 @@ def demo_context(request):
         
         # Role display names
         role_names = {
-            'admin': 'Alex Chen (Admin)',
+            'admin': 'Demo Admin (Solo)',
             'member': 'Sam Rivera (Member)',
             'viewer': 'Jordan Taylor (Viewer)'
         }
