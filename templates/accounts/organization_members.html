@@ -10,6 +10,9 @@
             <div class="card-header py-3 d-flex justify-content-between align-items-center">
                 <h6 class="m-0 font-weight-bold text-primary">{{ organization.name }} - Members</h6>
                 <div>
+                    <button class="btn btn-outline-secondary btn-sm me-2" data-bs-toggle="modal" data-bs-target="#roleInfoModal">
+                        <i class="fas fa-info-circle me-1"></i> Role Permissions
+                    </button>
                     <a href="{% url 'organization_settings' %}" class="btn btn-outline-primary btn-sm">
                         <i class="fas fa-cog me-1"></i> Organization Settings
                     </a>
@@ -19,6 +22,27 @@
                 </div>
             </div>
             <div class="card-body">
+                <!-- Role Info Alert -->
+                <div class="alert alert-light border mb-3">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-shield-alt text-primary me-3" style="font-size: 1.5rem;"></i>
+                        <div class="flex-grow-1">
+                            <strong>Organization Roles:</strong>
+                            <span class="badge bg-primary ms-2">Owner</span> Full control · 
+                            <span class="badge bg-info ms-1">Admin</span> 
+                            <span class="text-muted small" data-bs-toggle="tooltip" title="Can manage members, settings, and all organization features">
+                                Manage members & settings
+                            </span> · 
+                            <span class="badge bg-secondary ms-1">Member</span> 
+                            <span class="text-muted small" data-bs-toggle="tooltip" title="Can work on assigned boards and tasks">
+                                Work on boards & tasks
+                            </span>
+                            <button class="btn btn-link btn-sm p-0 ms-2" data-bs-toggle="modal" data-bs-target="#roleInfoModal">
+                                <i class="fas fa-question-circle"></i> Details
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-bordered table-hover" id="membersTable">
                         <thead>
@@ -69,17 +93,24 @@
                                             {% if request.user == organization.created_by or not member.is_admin %}
                                                 {% if member.is_admin %}
                                                 <a href="{% url 'toggle_admin' member.id %}" class="btn btn-outline-warning btn-sm" 
-                                                   onclick="return confirm('Are you sure you want to demote {{ member.user.username }} from admin?')">
-                                                    <i class="fas fa-user-minus me-1"></i> Demote
+                                                   data-bs-toggle="tooltip" 
+                                                   title="Demote {{ member.user.username }} to Member role"
+                                                   onclick="return confirm('Are you sure you want to demote {{ member.user.username }} from admin? They will lose access to organization settings and member management.')">
+                                                    <i class="fas fa-user-minus me-1"></i> Make Member
                                                 </a>
                                                 {% else %}
-                                                <a href="{% url 'toggle_admin' member.id %}" class="btn btn-outline-info btn-sm">
+                                                <a href="{% url 'toggle_admin' member.id %}" class="btn btn-outline-info btn-sm"
+                                                   data-bs-toggle="tooltip" 
+                                                   title="Promote {{ member.user.username }} to Admin role"
+                                                   onclick="return confirm('Are you sure you want to promote {{ member.user.username }} to admin? They will gain full access to organization settings and member management.')">
                                                     <i class="fas fa-user-shield me-1"></i> Make Admin
                                                 </a>
                                                 {% endif %}
                                                 
                                                 <a href="{% url 'remove_member' member.id %}" class="btn btn-outline-danger btn-sm"
-                                                   onclick="return confirm('Are you sure you want to remove {{ member.user.username }} from the organization?')">
+                                                   data-bs-toggle="tooltip" 
+                                                   title="Remove {{ member.user.username }} from organization"
+                                                   onclick="return confirm('Are you sure you want to remove {{ member.user.username }} from the organization? They will lose access to all boards and data.')">
                                                     <i class="fas fa-trash me-1"></i> Remove
                                                 </a>
                                             {% endif %}
@@ -124,6 +155,144 @@
     </div>
 </div>
 
+<!-- Role Information Modal -->
+<div class="modal fade" id="roleInfoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-shield-alt me-2"></i>Organization Role Permissions</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-4">
+                    Understanding the different roles and their capabilities within your organization.
+                </p>
+                
+                <!-- Owner Role -->
+                <div class="card mb-3 border-primary">
+                    <div class="card-header bg-primary text-white">
+                        <h6 class="mb-0"><i class="fas fa-crown me-2"></i>Owner</h6>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-2"><strong>Who:</strong> The person who created the organization ({{ organization.created_by.username }})</p>
+                        <p class="mb-2"><strong>Capabilities:</strong></p>
+                        <ul class="mb-0">
+                            <li>All Admin permissions</li>
+                            <li>Can promote and demote any member (including other Admins)</li>
+                            <li>Can remove any member from the organization</li>
+                            <li>Can delete the entire organization</li>
+                            <li>Cannot be removed or demoted by anyone</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Admin Role -->
+                <div class="card mb-3 border-info">
+                    <div class="card-header bg-info text-white">
+                        <h6 class="mb-0"><i class="fas fa-user-shield me-2"></i>Admin</h6>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-2"><strong>Who:</strong> Promoted by the Owner or other Admins</p>
+                        <p class="mb-2"><strong>Capabilities:</strong></p>
+                        <ul class="mb-0">
+                            <li>Access organization settings</li>
+                            <li>View and manage all organization members</li>
+                            <li>Promote regular Members to Admin</li>
+                            <li>Invite new members to the organization</li>
+                            <li>Remove regular Members (not other Admins)</li>
+                            <li>Manage roles and permissions</li>
+                            <li>Create, edit, and delete boards</li>
+                            <li>Full access to all board features and tasks</li>
+                            <li>View permission audit logs</li>
+                        </ul>
+                        <div class="alert alert-warning mt-3 mb-0">
+                            <small><i class="fas fa-info-circle me-1"></i><strong>Note:</strong> Only the Owner can demote an Admin or remove them from the organization.</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Member Role -->
+                <div class="card mb-3 border-secondary">
+                    <div class="card-header bg-secondary text-white">
+                        <h6 class="mb-0"><i class="fas fa-user me-2"></i>Member</h6>
+                    </div>
+                    <div class="card-body">
+                        <p class="mb-2"><strong>Who:</strong> Default role for new organization members</p>
+                        <p class="mb-2"><strong>Capabilities:</strong></p>
+                        <ul class="mb-0">
+                            <li>View boards they are added to</li>
+                            <li>Create and manage tasks on their boards</li>
+                            <li>Comment on tasks and collaborate</li>
+                            <li>Upload and manage files</li>
+                            <li>Edit their own profile</li>
+                            <li>Use AI features and analytics</li>
+                        </ul>
+                        <div class="alert alert-secondary mt-3 mb-0">
+                            <small><i class="fas fa-info-circle me-1"></i><strong>Note:</strong> Members cannot access organization settings, manage other members, or delete boards.</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Comparison Table -->
+                <h6 class="mt-4 mb-3">Quick Comparison</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Permission</th>
+                                <th class="text-center">Owner</th>
+                                <th class="text-center">Admin</th>
+                                <th class="text-center">Member</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>Work on boards & tasks</td>
+                                <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                            </tr>
+                            <tr>
+                                <td>Create & delete boards</td>
+                                <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                            </tr>
+                            <tr>
+                                <td>Manage organization settings</td>
+                                <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                            </tr>
+                            <tr>
+                                <td>Promote Members to Admin</td>
+                                <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                            </tr>
+                            <tr>
+                                <td>Demote/Remove Admins</td>
+                                <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                                <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                            </tr>
+                            <tr>
+                                <td>Delete organization</td>
+                                <td class="text-center"><i class="fas fa-check text-success"></i></td>
+                                <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                                <td class="text-center"><i class="fas fa-times text-danger"></i></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 function copyInviteLink() {
     var copyText = document.getElementById("inviteLink");
@@ -131,5 +300,13 @@ function copyInviteLink() {
     document.execCommand("copy");
     alert("Invite link copied to clipboard!");
 }
+
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
 </script>
 {% endblock %}
