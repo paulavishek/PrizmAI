@@ -128,6 +128,26 @@
                                         <strong>Reason:</strong> {{ log.details.reason }}
                                         {% endif %}
                                     </div>
+                                    {% elif log.action == 'org_member_promoted' %}
+                                    <div class="alert alert-success mb-0">
+                                        <i class="fas fa-arrow-up me-2"></i>
+                                        <strong>{{ log.details.username }}</strong> promoted from 
+                                        <span class="badge bg-secondary">{{ log.details.old_role }}</span> to 
+                                        <span class="badge bg-info">{{ log.details.new_role }}</span>
+                                    </div>
+                                    {% elif log.action == 'org_member_demoted' %}
+                                    <div class="alert alert-warning mb-0">
+                                        <i class="fas fa-arrow-down me-2"></i>
+                                        <strong>{{ log.details.username }}</strong> demoted from 
+                                        <span class="badge bg-info">{{ log.details.old_role }}</span> to 
+                                        <span class="badge bg-secondary">{{ log.details.new_role }}</span>
+                                    </div>
+                                    {% elif log.action == 'org_member_removed' %}
+                                    <div class="alert alert-danger mb-0">
+                                        <i class="fas fa-user-times me-2"></i>
+                                        <strong>{{ log.details.username }}</strong> removed from organization 
+                                        (was <span class="badge bg-secondary">{{ log.details.role }}</span>)
+                                    </div>
                                     {% else %}
                                     <div class="alert alert-light mb-0">
                                         <pre class="mb-0">{{ log.details|safe }}</pre>

@@ -5,6 +5,7 @@ from django.contrib import messages
 from django.contrib.auth.models import User
 from .forms import LoginForm, RegistrationForm, OrganizationForm, UserProfileForm, OrganizationSettingsForm, JoinOrganizationForm
 from .models import Organization, UserProfile
+from kanban.permission_audit import log_permission_change
 
 def login_view(request):
     if request.user.is_authenticated:
@@ -223,8 +224,24 @@ def toggle_admin(request, profile_id):
             return redirect('organization_members')
             
         # Toggle admin status
+        old_status = target_profile.is_admin
         target_profile.is_admin = not target_profile.is_admin
         target_profile.save()
+        
+        # Log the permission change
+        action_type = "org_member_promoted" if target_profile.is_admin else "org_member_demoted"
+        log_permission_change(
+            action=action_type,
+            actor=request.user,
+            organization=target_profile.organization,
+            affected_user=target_profile.user,
+            details={
+                'old_role': 'Admin' if old_status else 'Member',
+                'new_role': 'Admin' if target_profile.is_admin else 'Member',
+                'username': target_profile.user.username,
+            },
+            request=request
+        )
         
         action = "promoted to admin" if target_profile.is_admin else "demoted from admin"
         messages.success(request, f'User {target_profile.user.username} {action} successfully.')
@@ -259,8 +276,24 @@ def remove_member(request, profile_id):
             messages.error(request, 'Only the organization creator can remove admins.')
             return redirect('organization_members')
         
-        # Actually delete the user's profile
+        # Log the removal before deleting
         username = target_profile.user.username
+        user_role = 'Admin' if target_profile.is_admin else 'Member'
+        organization = target_profile.organization
+        
+        log_permission_change(
+            action="org_member_removed",
+            actor=request.user,
+            organization=organization,
+            affected_user=target_profile.user,
+            details={
+                'username': username,
+                'role': user_role,
+            },
+            request=request
+        )
+        
+        # Actually delete the user's profile
         target_profile.delete()
         
         messages.success(request, f'User {username} has been removed from the organization.')

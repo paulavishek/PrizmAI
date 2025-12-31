@@ -416,6 +416,9 @@ class PermissionAuditLog(models.Model):
         ('override_added', 'Permission Override Added'),
         ('override_removed', 'Permission Override Removed'),
         ('column_permission_set', 'Column Permission Set'),
+        ('org_member_promoted', 'Organization Member Promoted to Admin'),
+        ('org_member_demoted', 'Organization Admin Demoted to Member'),
+        ('org_member_removed', 'Organization Member Removed'),
     ]
     
     # What happened
