@@ -872,6 +872,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('taskMoved', function() {
         console.log('Task moved event detected, updating counts...');
         updateColumnTaskCounts();
+        
+        // Track as feature explored when user drags a task
+        trackDemoFeature('kanban_drag_drop');
     });
     
     // Observe DOM changes to update counts when tasks are added/removed
@@ -882,7 +885,44 @@ document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('.kanban-column-tasks').forEach(container => {
         observer.observe(container, { childList: true });
     });
+    
+    // Track board view as a feature explored (after brief delay to confirm engagement)
+    setTimeout(function() {
+        trackDemoFeature('board_view');
+    }, 5000);
 });
+
+// Track demo feature for nudge system
+function trackDemoFeature(featureName) {
+    fetch('/demo/track-event/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({
+            event_type: 'feature_explored',
+            event_data: {
+                feature: featureName,
+                page: window.location.pathname,
+                timestamp: new Date().toISOString()
+            }
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('📊 Feature tracked:', featureName);
+    })
+    .catch(error => {
+        console.error('Error tracking feature:', error);
+    });
+}
+
+// Get CSRF token helper
+function getCsrfToken() {
+    const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
+    return cookie ? cookie.split('=')[1] : '';
+}
 
 // Back button functionality
 function goBack() {

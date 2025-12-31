@@ -379,4 +379,44 @@
 {% block extra_js %}
 <script src="{% static 'js/aha_moment_detection.js' %}"></script>
 <script src="{% static 'js/conversion_nudges.js' %}"></script>
+<script>
+// Track demo dashboard view as a feature explored (after brief delay to confirm engagement)
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(function() {
+        trackDemoFeature('dashboard_view');
+    }, 5000);
+});
+
+// Track demo feature for nudge system
+function trackDemoFeature(featureName) {
+    fetch('/demo/track-event/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({
+            event_type: 'feature_explored',
+            event_data: {
+                feature: featureName,
+                page: window.location.pathname,
+                timestamp: new Date().toISOString()
+            }
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('📊 Feature tracked:', featureName);
+    })
+    .catch(error => {
+        console.error('Error tracking feature:', error);
+    });
+}
+
+// Get CSRF token helper
+function getCsrfToken() {
+    const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
+    return cookie ? cookie.split('=')[1] : '';
+}
+</script>
 {% endblock %}

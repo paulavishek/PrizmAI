@@ -426,22 +426,69 @@
                 // Check if recommendations are pending
                 const pendingCount = data.gaps.filter(g => g.recommendations_pending).length;
                 if (pendingCount > 0) {
-                    showToast(`Analysis complete! AI generating ${pendingCount} recommendation(s) in background...`, 'info');
-                    // Auto-refresh after a delay to show completed recommendations
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 15000); // 15 seconds - enough time for most recommendations to complete
+                    showToast(`Analysis complete! AI generating ${pendingCount} recommendation(s)...`, 'info');
+                    // Poll for completion instead of fixed wait
+                    pollForRecommendations(data.gaps.filter(g => g.recommendations_pending).map(g => g.id));
                 } else {
-                    showToast('Analysis complete! Reloading page...', 'success');
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 1500);
+                    showToast('Analysis complete!', 'success');
+                    // Update UI immediately without reload
+                    updateGapsDisplay(data.gaps);
                 }
             }).catch(error => {
                 hideLoadingOverlay();
                 showToast('Failed to run analysis: ' + error.message, 'error');
             });
         }
+    }
+
+    // Poll for recommendation completion (max 5 attempts, 2 seconds apart)
+    async function pollForRecommendations(gapIds, attempt = 1, maxAttempts = 5) {
+        if (attempt > maxAttempts) {
+            showToast('Recommendations still generating. Refresh page later to see them.', 'info');
+            updateGapsDisplay(window.skillGapAnalyzer.gaps);
+            return;
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+        
+        try {
+            // Check if recommendations are ready
+            const response = await fetch(`/api/skill-gaps/list/${boardId}/`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                }
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                const stillPending = data.gaps.filter(g => 
+                    gapIds.includes(g.id) && (!g.ai_recommendations || g.ai_recommendations.length === 0)
+                );
+                
+                if (stillPending.length === 0) {
+                    showToast('All recommendations ready!', 'success');
+                    updateGapsDisplay(data.gaps);
+                } else {
+                    showToast(`Waiting for ${stillPending.length} recommendation(s)... (${attempt}/${maxAttempts})`, 'info');
+                    pollForRecommendations(gapIds, attempt + 1, maxAttempts);
+                }
+            }
+        } catch (error) {
+            console.error('Error polling for recommendations:', error);
+            updateGapsDisplay(window.skillGapAnalyzer.gaps);
+        }
+    }
+
+    // Update gaps display without page reload
+    function updateGapsDisplay(gaps) {
+        window.skillGapAnalyzer.gaps = gaps;
+        window.skillGapAnalyzer.renderGapsSection();
+        // Also reload the page content for server-rendered sections
+        setTimeout(() => {
+            window.location.reload();
+        }, 500);
     }
 
     window.viewGapDetails = async function(gapId) {
@@ -936,5 +983,29 @@
             window.location.href = '{% url "board_detail" board.id %}';
         }
     }
+    
+    // Track skill gap analysis page view as a feature (for demo nudges)
+    {% if is_demo_mode %}
+    setTimeout(function() {
+        fetch('/demo/track-event/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                event_type: 'feature_explored',
+                event_data: {
+                    feature: 'skill_gap_analysis',
+                    page: window.location.pathname,
+                    timestamp: new Date().toISOString()
+                }
+            })
+        })
+        .then(response => response.json())
+        .then(data => console.log('📊 Feature tracked: skill_gap_analysis'))
+        .catch(error => console.error('Error tracking feature:', error));
+    }, 3000); // Track after 3 seconds of viewing
+    {% endif %}
 </script>
 {% endblock %}

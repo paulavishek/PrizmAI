@@ -347,6 +347,19 @@
      * Track aha moment on server
      */
     function trackAhaMoment(momentType, customData) {
+        // Map aha moment types to feature names for tracking
+        const momentToFeature = {
+            'ai_suggestion_accepted': 'ai_suggestions',
+            'burndown_viewed': 'burndown_analytics',
+            'rbac_workflow': 'rbac_permissions',
+            'time_tracked': 'time_tracking',
+            'dependency_created': 'task_dependencies',
+            'gantt_viewed': 'gantt_chart',
+            'skill_gap_viewed': 'skill_gap_analysis',
+            'conflict_detected': 'conflict_detection'
+        };
+        
+        // Track as aha moment
         fetch("{% url 'track_demo_event' %}", {
             method: 'POST',
             headers: {
@@ -373,6 +386,31 @@
         })
         .catch(error => {
             console.error('Error tracking aha moment:', error);
+        });
+        
+        // Also track as feature explored (to enable nudges)
+        const featureName = momentToFeature[momentType] || momentType;
+        fetch("{% url 'track_demo_event' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify({
+                event_type: 'feature_explored',
+                event_data: {
+                    feature: featureName,
+                    trigger: 'aha_moment',
+                    timestamp: new Date().toISOString()
+                }
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            console.log('Feature tracked:', featureName);
+        })
+        .catch(error => {
+            console.error('Error tracking feature:', error);
         });
     }
     

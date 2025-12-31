@@ -76,13 +76,13 @@ function saveNudgeState() {
  * Start periodic checks for time-based nudges
  */
 function startNudgeChecks() {
-    // Check every 30 seconds for time-based triggers
+    // Check every 15 seconds for time-based triggers (was 30 seconds)
     nudgeState.checkInterval = setInterval(() => {
         checkForNudges();
-    }, 30000); // 30 seconds
+    }, 15000); // 15 seconds
     
-    // Also check immediately
-    setTimeout(() => checkForNudges(), 5000); // After 5 seconds on page
+    // Also check immediately after a short delay
+    setTimeout(() => checkForNudges(), 3000); // After 3 seconds on page
 }
 
 /**
