@@ -505,9 +505,23 @@ def conflict_analytics(request):
         # Get all conflicts for the boards
         all_conflicts = ConflictDetection.objects.filter(board__in=boards)
         
-        # Get conflicts resolved per day (within 30-day window)
+        # Count new detections per day (conflicts that entered the system)
+        detected_by_date = {}
+        detection_trend = all_conflicts.filter(
+            detected_at__gte=thirty_days_ago
+        ).annotate(
+            date=TruncDate('detected_at')
+        ).values('date').annotate(
+            count=Count('id')
+        ).order_by('date')
+        
+        for item in detection_trend:
+            if item['date']:
+                detected_by_date[item['date'].strftime('%Y-%m-%d')] = item['count']
+        
+        # Count resolutions per day (conflicts that left the system)
         resolved_by_date = {}
-        resolved_trend = all_conflicts.filter(
+        resolution_trend = all_conflicts.filter(
             status='resolved',
             resolved_at__isnull=False,
             resolved_at__gte=thirty_days_ago
@@ -517,32 +531,31 @@ def conflict_analytics(request):
             count=Count('id')
         ).order_by('date')
         
-        for item in resolved_trend:
+        for item in resolution_trend:
             if item['date']:
                 resolved_by_date[item['date'].strftime('%Y-%m-%d')] = item['count']
         
-        # Generate complete 30-day range
+        # Generate complete 30-day range with cumulative counts
         import json
         trend_labels = []
-        trend_detected = []  # Will show active conflicts on each day
-        trend_resolved = []
+        trend_detected = []  # Cumulative: total conflicts detected (running total)
+        trend_resolved = []  # Cumulative: total conflicts resolved (running total)
+        
+        cumulative_detected = 0
+        cumulative_resolved = 0
         
         for i in range(30):
             date = thirty_days_ago + timedelta(days=i)
             date_str = date.strftime('%Y-%m-%d')
-            date_end = date.replace(hour=23, minute=59, second=59)
             label = date.strftime('%b %d').replace(' 0', ' ')
             
-            # Count active conflicts on this day: detected before or on this day, not yet resolved or resolved after this day
-            active_count = all_conflicts.filter(
-                detected_at__lte=date_end
-            ).filter(
-                Q(status='active') | Q(resolved_at__gt=date_end)
-            ).count()
+            # Add daily counts to cumulative totals
+            cumulative_detected += detected_by_date.get(date_str, 0)
+            cumulative_resolved += resolved_by_date.get(date_str, 0)
             
             trend_labels.append(label)
-            trend_detected.append(active_count)
-            trend_resolved.append(resolved_by_date.get(date_str, 0))
+            trend_detected.append(cumulative_detected)
+            trend_resolved.append(cumulative_resolved)
         
         context = {
             'patterns': patterns,
