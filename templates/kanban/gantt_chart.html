@@ -59,21 +59,20 @@
         opacity: 1;
     }
 
-    /* Completely hide default frappe-gantt arrow heads */
+    /* Completely hide default frappe-gantt arrow heads - ALL polygons */
+    .gantt polygon,
+    .gantt svg polygon,
+    #gantt polygon,
+    svg#gantt polygon,
     .gantt .arrow-head,
     .gantt polygon.arrow-head,
     .gantt path.arrow-head,
     svg .arrow-head,
-    g .arrow-head,
-    .gantt svg polygon,
-    .gantt svg path[class*="arrow"][d*="Z"] {
+    g .arrow-head {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
-        fill: transparent !important;
-        stroke: transparent !important;
-        width: 0 !important;
-        height: 0 !important;
+        pointer-events: none !important;
     }
 
     /* Custom arrow container for better visibility */
@@ -696,76 +695,86 @@
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
 
-        // Aggressive removal of all arrow-head elements (they might have different class names)
+        // Super aggressive removal of ALL polygons (frappe-gantt uses polygons for arrow heads)
         const removeArrowHeads = () => {
-            const selectors = [
-                '.arrow-head',
-                'polygon.arrow-head',
-                'path.arrow-head',
-                '[class*="arrow-head"]',
-                'polygon[class=""]',  // frappe-gantt sometimes creates polygons without classes
-            ];
+            // Remove ALL polygons - frappe-gantt creates arrow heads as polygon elements
+            const allPolygons = ganttSvg.querySelectorAll('polygon');
+            allPolygons.forEach(polygon => {
+                polygon.remove();
+            });
             
-            selectors.forEach(selector => {
-                const elements = ganttSvg.querySelectorAll(selector);
-                elements.forEach(el => {
-                    // Check if this is actually an arrow head (small polygon near arrows)
-                    const bbox = el.getBBox ? el.getBBox() : null;
-                    if (!bbox || (bbox.width < 20 && bbox.height < 20)) {
-                        el.remove();
+            // Also remove paths with specific arrow-head patterns
+            const allPaths = ganttSvg.querySelectorAll('path');
+            allPaths.forEach(path => {
+                const d = path.getAttribute('d');
+                // If it's a small triangular path (not a curved arrow line), remove it
+                if (d && d.includes('Z') && !d.includes('C') && !d.includes('Q')) {
+                    const bbox = path.getBBox();
+                    if (bbox.width < 20 && bbox.height < 20) {
+                        path.remove();
                     }
-                });
+                }
             });
         };
 
-        // Remove immediately
-        removeArrowHeads();
-        
-        // Also remove after a short delay (in case they render async)
-        setTimeout(removeArrowHeads, 100);
-        setTimeout(removeArrowHeads, 300);
-
-        // Add custom arrowhead marker definition
+        // Add custom arrowhead marker definition FIRST
         let defs = ganttSvg.querySelector('defs');
         if (!defs) {
             defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
             ganttSvg.insertBefore(defs, ganttSvg.firstChild);
         }
 
-        // Remove any existing custom markers
+        // Remove any existing markers
         const existingMarker = defs.querySelector('#simple-arrow');
         if (existingMarker) existingMarker.remove();
 
-        // Create a clean arrowhead marker with proper sizing
+        // Create a clean, simple arrowhead marker
         const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
         marker.setAttribute('id', 'simple-arrow');
         marker.setAttribute('viewBox', '0 0 10 10');
-        marker.setAttribute('refX', '10');
+        marker.setAttribute('refX', '9');
         marker.setAttribute('refY', '5');
-        marker.setAttribute('markerWidth', '6');
-        marker.setAttribute('markerHeight', '6');
+        marker.setAttribute('markerWidth', '5');
+        marker.setAttribute('markerHeight', '5');
         marker.setAttribute('orient', 'auto');
 
-        // Simple solid triangle - single gray color
-        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
-        path.setAttribute('fill', '#9ca3af');
-        path.setAttribute('stroke', 'none');
-        marker.appendChild(path);
+        // Simple solid triangle - single color only
+        const triangle = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        triangle.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+        triangle.setAttribute('fill', '#9ca3af');
+        triangle.setAttribute('stroke', 'none');
+        marker.appendChild(triangle);
         defs.appendChild(marker);
 
-        // Apply custom marker to all arrows and remove default markers
-        const arrows = ganttSvg.querySelectorAll('.arrow, path.arrow');
+        // Apply custom marker to all arrow paths
+        const arrows = ganttSvg.querySelectorAll('path.arrow, .arrow');
         arrows.forEach(arrow => {
-            // Remove any existing marker attributes
-            arrow.removeAttribute('marker-start');
-            arrow.removeAttribute('marker-mid');
-            
-            // Set our custom marker
-            arrow.setAttribute('marker-end', 'url(#simple-arrow)');
+            // Only process if it's actually an arrow line (has curves)
+            const d = arrow.getAttribute('d');
+            if (d && (d.includes('C') || d.includes('Q'))) {
+                arrow.setAttribute('marker-end', 'url(#simple-arrow)');
+                arrow.removeAttribute('marker-start');
+                arrow.removeAttribute('marker-mid');
+            }
         });
 
-        console.log(`Enhanced ${arrows.length} dependency arrows`);
+        // Remove arrow heads immediately
+        removeArrowHeads();
+        
+        // Set up a MutationObserver to continuously remove arrow heads as they're created
+        const observer = new MutationObserver((mutations) => {
+            removeArrowHeads();
+        });
+        
+        observer.observe(ganttSvg, {
+            childList: true,
+            subtree: true
+        });
+        
+        // Also do periodic cleanup
+        setInterval(removeArrowHeads, 500);
+
+        console.log(`Enhanced ${arrows.length} dependency arrows with continuous cleanup`);
     }
 
     // Add tooltip functionality for task bars
