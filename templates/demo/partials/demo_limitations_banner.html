@@ -1,0 +1,303 @@
+{% load static %}
+
+<!-- Demo Limitations Banner - Highlights key restrictions to drive conversion -->
+<style>
+    .demo-limitations-banner {
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        color: white;
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 15px rgba(245, 87, 108, 0.3);
+        border: 2px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .demo-limitations-title {
+        font-size: 1.2rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .demo-limitations-title i {
+        font-size: 1.4rem;
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+
+    .demo-limitations-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+    }
+
+    .demo-limitation-item {
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        padding: 1rem;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        transition: all 0.3s;
+    }
+
+    .demo-limitation-item:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: translateY(-2px);
+    }
+
+    .demo-limitation-icon {
+        font-size: 1.8rem;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+
+    .demo-limitation-label {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        margin-bottom: 0.25rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 500;
+    }
+
+    .demo-limitation-value {
+        font-size: 1.3rem;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .demo-limitation-desc {
+        font-size: 0.85rem;
+        opacity: 0.85;
+        line-height: 1.4;
+    }
+
+    .demo-limitation-urgent {
+        border: 2px solid #ffc107;
+        background: rgba(255, 193, 7, 0.2);
+    }
+
+    .demo-limitation-warning {
+        border: 2px solid #ff6b6b;
+        background: rgba(255, 107, 107, 0.2);
+    }
+
+    .demo-cta-section {
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.3);
+        text-align: center;
+    }
+
+    .demo-cta-text {
+        font-size: 1rem;
+        margin-bottom: 0.75rem;
+        font-weight: 500;
+    }
+
+    .demo-upgrade-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: white;
+        color: #f5576c;
+        padding: 0.75rem 2rem;
+        border-radius: 25px;
+        font-weight: 600;
+        font-size: 1rem;
+        text-decoration: none;
+        transition: all 0.3s;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .demo-upgrade-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        color: #d63a52;
+    }
+
+    .demo-upgrade-btn i {
+        font-size: 1.2rem;
+    }
+
+    /* Progress bar for projects */
+    .demo-progress-bar {
+        height: 8px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 4px;
+        overflow: hidden;
+        margin-top: 0.5rem;
+    }
+
+    .demo-progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #4CAF50, #8BC34A);
+        transition: width 0.3s;
+        border-radius: 4px;
+    }
+
+    .demo-progress-fill.warning {
+        background: linear-gradient(90deg, #ff9800, #ffc107);
+    }
+
+    .demo-progress-fill.danger {
+        background: linear-gradient(90deg, #f44336, #ff5722);
+    }
+
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+        .demo-limitations-banner {
+            padding: 1rem;
+        }
+
+        .demo-limitations-title {
+            font-size: 1rem;
+        }
+
+        .demo-limitations-grid {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+        }
+
+        .demo-limitation-item {
+            padding: 0.75rem;
+        }
+
+        .demo-limitation-icon {
+            font-size: 1.5rem;
+        }
+
+        .demo-limitation-value {
+            font-size: 1.1rem;
+        }
+
+        .demo-upgrade-btn {
+            padding: 0.6rem 1.5rem;
+            font-size: 0.9rem;
+        }
+    }
+</style>
+
+<div class="demo-limitations-banner">
+    <div class="demo-limitations-title">
+        <i class="fas fa-info-circle"></i>
+        <span>Demo Mode Limitations</span>
+    </div>
+
+    <div class="demo-limitations-grid">
+        <!-- Time Limitation -->
+        <div class="demo-limitation-item {% if demo_hours_remaining|default:48 < 24 %}demo-limitation-urgent{% endif %}">
+            <span class="demo-limitation-icon">⏰</span>
+            <div class="demo-limitation-label">Data Reset Timer</div>
+            <div class="demo-limitation-value">
+                {{ demo_hours_remaining|default:"48" }} hours
+                {% if demo_hours_remaining|default:48 < 24 %}
+                <span style="font-size: 0.8rem; color: #ffc107;">⚠️</span>
+                {% endif %}
+            </div>
+            <div class="demo-limitation-desc">
+                Your demo data will reset to clean state. Create a free account to save your work permanently!
+            </div>
+        </div>
+
+        <!-- Project Limitation -->
+        <div class="demo-limitation-item {% if demo_projects_remaining|default:2 == 0 %}demo-limitation-warning{% endif %}">
+            <span class="demo-limitation-icon">📁</span>
+            <div class="demo-limitation-label">Project Limit</div>
+            <div class="demo-limitation-value">
+                {{ demo_projects_created|default:"0" }}/{{ demo_projects_max|default:"2" }} used
+                {% if demo_projects_remaining|default:2 == 0 %}
+                <span style="font-size: 0.8rem; color: #ff6b6b;">🔒</span>
+                {% endif %}
+            </div>
+            <div class="demo-limitation-desc">
+                {% if demo_projects_remaining|default:2 > 0 %}
+                Create {{ demo_projects_remaining }} more project{{ demo_projects_remaining|pluralize }}. Get unlimited projects with a free account.
+                {% else %}
+                Limit reached! Create a free account for unlimited projects.
+                {% endif %}
+            </div>
+            <!-- Progress bar -->
+            <div class="demo-progress-bar">
+                {% widthratio demo_projects_created|default:0 demo_projects_max|default:2 100 as progress_percent %}
+                <div class="demo-progress-fill {% if progress_percent >= 100 %}danger{% elif progress_percent >= 50 %}warning{% endif %}" 
+                     style="width: {{ progress_percent }}%"></div>
+            </div>
+        </div>
+
+        <!-- AI Limitation -->
+        <div class="demo-limitation-item">
+            <span class="demo-limitation-icon">🤖</span>
+            <div class="demo-limitation-label">AI Generations</div>
+            <div class="demo-limitation-value">
+                {{ demo_ai_uses|default:"0" }}/{{ demo_ai_max|default:"20" }} used
+            </div>
+            <div class="demo-limitation-desc">
+                AI task suggestions & insights limited to 20 uses. Get unlimited AI with a free account.
+            </div>
+            <!-- Progress bar -->
+            <div class="demo-progress-bar">
+                {% widthratio demo_ai_uses|default:0 demo_ai_max|default:20 100 as ai_progress %}
+                <div class="demo-progress-fill {% if ai_progress >= 100 %}danger{% elif ai_progress >= 75 %}warning{% endif %}" 
+                     style="width: {{ ai_progress }}%"></div>
+            </div>
+        </div>
+
+        <!-- Export Limitation -->
+        <div class="demo-limitation-item">
+            <span class="demo-limitation-icon">🚫</span>
+            <div class="demo-limitation-label">Export Blocked</div>
+            <div class="demo-limitation-value">
+                Not Available
+            </div>
+            <div class="demo-limitation-desc">
+                PDF, CSV, and JSON exports are disabled. Create a free account to export your data anytime.
+            </div>
+        </div>
+    </div>
+
+    <!-- Call-to-Action -->
+    <div class="demo-cta-section">
+        <div class="demo-cta-text">
+            🎉 Create a free account to unlock all features and save your work forever!
+        </div>
+        <a href="{% url 'register' %}" class="demo-upgrade-btn" onclick="trackLimitationBannerClick()">
+            <i class="fas fa-rocket"></i>
+            <span>Create Free Account</span>
+        </a>
+    </div>
+</div>
+
+<script>
+// Track when user clicks CTA from limitations banner
+function trackLimitationBannerClick() {
+    // Track with analytics if available
+    if (typeof DemoAnalyticsTracker !== 'undefined') {
+        DemoAnalyticsTracker.trackEvent('limitation_banner_clicked', {
+            source: 'dashboard_banner',
+            projects_used: {{ demo_projects_created|default:0 }},
+            ai_used: {{ demo_ai_uses|default:0 }},
+            hours_remaining: {{ demo_hours_remaining|default:48 }}
+        });
+    }
+    
+    // GA4 tracking
+    if (typeof gtag !== 'undefined') {
+        gtag('event', 'upgrade_intent', {
+            'event_category': 'conversion',
+            'event_label': 'limitations_banner_dashboard',
+            'projects_used': {{ demo_projects_created|default:0 }},
+            'ai_used': {{ demo_ai_uses|default:0 }}
+        });
+    }
+}
+</script>
