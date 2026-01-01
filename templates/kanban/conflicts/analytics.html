@@ -102,7 +102,9 @@
                 <i class="fas fa-clock text-primary fa-2x mb-2"></i>
                 <p class="metric-value text-primary">
                     {% if avg_resolution_time %}
-                        {{ avg_resolution_time.days }}d {{ avg_resolution_time.seconds|div:3600 }}h
+                        {% with days=avg_resolution_time.days hours=avg_resolution_time.seconds|divisibleby:3600 %}
+                            {% if days > 0 %}{{ days }}d {% endif %}{% widthratio avg_resolution_time.seconds 3600 1 %}h
+                        {% endwith %}
                     {% else %}
                         N/A
                     {% endif %}
@@ -401,24 +403,10 @@
 // Resolution Trends Chart
 const ctx = document.getElementById('resolutionTrendsChart');
 if (ctx) {
-    // Generate last 30 days of data
-    const today = new Date();
-    const labels = [];
-    const detectedData = [];
-    const resolvedData = [];
-    
-    for (let i = 29; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-        
-        // Simulate data pattern: more conflicts earlier, more resolutions later
-        const baseDetected = Math.floor(Math.random() * 3) + (i > 20 ? 2 : 0);
-        const baseResolved = Math.floor(Math.random() * 3) + (i < 10 ? 1 : 0);
-        
-        detectedData.push(baseDetected);
-        resolvedData.push(baseResolved);
-    }
+    // Use real data from backend
+    const labels = {{ trend_labels_json|safe }};
+    const detectedData = {{ trend_detected_json|safe }};
+    const resolvedData = {{ trend_resolved_json|safe }};
     
     new Chart(ctx, {
         type: 'line',

@@ -494,6 +494,54 @@ def conflict_analytics(request):
             Avg('resolution_effectiveness')
         )['resolution_effectiveness__avg']
         
+        # Get trend data for last 30 days
+        from datetime import timedelta
+        from django.utils import timezone
+        from django.db.models import Count, Q
+        from django.db.models.functions import TruncDate
+        
+        thirty_days_ago = timezone.now() - timedelta(days=30)
+        
+        # Get conflicts detected per day
+        detected_trend = ConflictDetection.objects.filter(
+            board__in=boards,
+            detected_at__gte=thirty_days_ago
+        ).annotate(
+            date=TruncDate('detected_at')
+        ).values('date').annotate(
+            count=Count('id')
+        ).order_by('date')
+        
+        # Get conflicts resolved per day
+        resolved_trend = ConflictDetection.objects.filter(
+            board__in=boards,
+            status='resolved',
+            resolved_at__gte=thirty_days_ago
+        ).annotate(
+            date=TruncDate('resolved_at')
+        ).values('date').annotate(
+            count=Count('id')
+        ).order_by('date')
+        
+        # Convert to dictionaries for easy lookup
+        detected_by_date = {item['date'].strftime('%Y-%m-%d'): item['count'] for item in detected_trend}
+        resolved_by_date = {item['date'].strftime('%Y-%m-%d'): item['count'] for item in resolved_trend}
+        
+        # Generate complete 30-day range
+        import json
+        trend_labels = []
+        trend_detected = []
+        trend_resolved = []
+        
+        for i in range(30):
+            date = thirty_days_ago + timedelta(days=i)
+            date_str = date.strftime('%Y-%m-%d')
+            label = date.strftime('%b %d').replace(' 0', ' ')  # Remove leading zero for single-digit days
+            
+            trend_labels.append(label)
+            trend_detected.append(detected_by_date.get(date_str, 0))
+            trend_resolved.append(resolved_by_date.get(date_str, 0))
+        
         context = {
             'patterns': patterns,
             'total_resolved': total_resolved,
@@ -501,6 +549,9 @@ def conflict_analytics(request):
             'avg_effectiveness': avg_effectiveness,
             'rated_count': rated_conflicts.count(),
             'is_demo_mode': is_demo_mode,
+            'trend_labels_json': json.dumps(trend_labels),
+            'trend_detected_json': json.dumps(trend_detected),
+            'trend_resolved_json': json.dumps(trend_resolved),
         }
         
         return render(request, 'kanban/conflicts/analytics.html', context)
