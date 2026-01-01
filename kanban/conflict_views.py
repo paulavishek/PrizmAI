@@ -502,74 +502,46 @@ def conflict_analytics(request):
         
         thirty_days_ago = timezone.now() - timedelta(days=30)
         
-        # Get conflicts detected per day
-        # Include all conflicts that were active or created in this period
-        detected_trend = ConflictDetection.objects.filter(
-            board__in=boards,
-            detected_at__gte=thirty_days_ago
-        ).annotate(
-            date=TruncDate('detected_at')
-        ).values('date').annotate(
-            count=Count('id')
-        ).order_by('date')
+        # Get all conflicts for the boards
+        all_conflicts = ConflictDetection.objects.filter(board__in=boards)
         
-        # Get conflicts resolved per day
-        # Also include these in the detected count if they weren't already counted
-        resolved_trend = ConflictDetection.objects.filter(
-            board__in=boards,
+        # Get conflicts resolved per day (within 30-day window)
+        resolved_by_date = {}
+        resolved_trend = all_conflicts.filter(
             status='resolved',
-            resolved_at__isnull=False
+            resolved_at__isnull=False,
+            resolved_at__gte=thirty_days_ago
         ).annotate(
             date=TruncDate('resolved_at')
         ).values('date').annotate(
             count=Count('id')
         ).order_by('date')
         
-        # Convert to dictionaries for easy lookup
-        detected_by_date = {}
-        for item in detected_trend:
-            if item['date']:
-                detected_by_date[item['date'].strftime('%Y-%m-%d')] = item['count']
-        
-        resolved_by_date = {}
         for item in resolved_trend:
             if item['date']:
                 resolved_by_date[item['date'].strftime('%Y-%m-%d')] = item['count']
         
-        # Add resolved conflicts to detected count on their detection date
-        # This ensures we count all conflicts that exist in the system
-        all_resolved_with_dates = ConflictDetection.objects.filter(
-            board__in=boards,
-            status='resolved',
-            resolved_at__isnull=False,
-            detected_at__isnull=False
-        ).annotate(
-            date=TruncDate('detected_at')
-        ).values('date').annotate(
-            count=Count('id')
-        ).order_by('date')
-        
-        # Add these to detected_by_date
-        for item in all_resolved_with_dates:
-            if item['date']:
-                date_str = item['date'].strftime('%Y-%m-%d')
-                if date_str not in detected_by_date:
-                    detected_by_date[date_str] = 0
-                detected_by_date[date_str] += item['count']
-        
         # Generate complete 30-day range
         import json
         trend_labels = []
-        trend_detected = []
+        trend_detected = []  # Will show active conflicts on each day
         trend_resolved = []
         
         for i in range(30):
             date = thirty_days_ago + timedelta(days=i)
             date_str = date.strftime('%Y-%m-%d')
-            label = date.strftime('%b %d').replace(' 0', ' ')  # Remove leading zero for single-digit days
+            date_end = date.replace(hour=23, minute=59, second=59)
+            label = date.strftime('%b %d').replace(' 0', ' ')
+            
+            # Count active conflicts on this day: detected before or on this day, not yet resolved or resolved after this day
+            active_count = all_conflicts.filter(
+                detected_at__lte=date_end
+            ).filter(
+                Q(status='active') | Q(resolved_at__gt=date_end)
+            ).count()
             
             trend_labels.append(label)
-            trend_detected.append(detected_by_date.get(date_str, 0))
+            trend_detected.append(active_count)
             trend_resolved.append(resolved_by_date.get(date_str, 0))
         
         context = {
