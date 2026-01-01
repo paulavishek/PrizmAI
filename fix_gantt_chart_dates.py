@@ -33,77 +33,90 @@ def fix_gantt_dates():
         print("❌ Demo - Acme Corporation not found!")
         return
     
-    # Get the Software Development board
-    try:
-        board = Board.objects.get(name='Software Development', organization=org)
-    except Board.DoesNotExist:
-        print("❌ Software Development board not found!")
-        return
+    # Get all demo boards
+    boards = Board.objects.filter(organization=org)
     
-    print(f"\n📊 Processing Board: {board.name}")
+    for board in boards:
+        print(f"\n📊 Processing Board: {board.name}")
+        
+        # Get all tasks with dates
+        tasks = Task.objects.filter(
+            column__board=board,
+            start_date__isnull=False,
+            due_date__isnull=False
+        ).select_related('column').order_by('id')
+        
+        print(f"   Found {tasks.count()} tasks with dates")
+        
+        if tasks.count() == 0:
+            print("   No tasks to update!")
+            continue
+        
+        task_list = list(tasks)
+        
+        # Update dates for this board
+        update_board_dates(board.name, task_list)
+        
+        # Fix dependencies
+        fix_dependencies(board, task_list)
     
-    # Get all tasks with dates
-    tasks = Task.objects.filter(
-        column__board=board,
-        start_date__isnull=False,
-        due_date__isnull=False
-    ).select_related('column').order_by('id')
+    print("\n" + "=" * 70)
+    print("✅ All Gantt Chart Data Fixed Successfully!")
+    print("=" * 70)
+
+
+def update_board_dates(board_name, task_list):
+    """Update task dates for a specific board."""
     
-    print(f"   Found {tasks.count()} tasks with dates")
-    
-    # Base date - use a fixed reference point (today)
     base_date = timezone.now().date()
-    
-    # Create a staggered timeline that looks impressive
-    # We'll spread tasks across 8 weeks with proper overlap
-    
-    # Define task schedule: (task_id_offset, start_offset_days, duration_days)
-    # This creates a waterfall-like effect with some parallel work
-    
-    task_list = list(tasks)
     total_tasks = len(task_list)
-    
-    if total_tasks == 0:
-        print("   No tasks to update!")
-        return
     
     print(f"\n📅 Updating {total_tasks} task dates...")
     
-    # Organize tasks into logical phases
-    # Phase 1: Foundation (past - completed)
-    # Phase 2: Development (ongoing)  
-    # Phase 3: Testing & Review (upcoming)
-    # Phase 4: Deployment & Future (future)
-    
-    phase_configs = [
-        # Phase 1: Foundation (25% of tasks) - Completed work (past)
-        {'name': 'Foundation', 'start_offset': -42, 'task_gap': 3, 'duration_range': (4, 8)},
-        # Phase 2: Development (35% of tasks) - Current work (past to present)
-        {'name': 'Development', 'start_offset': -21, 'task_gap': 2, 'duration_range': (5, 14)},
-        # Phase 3: Testing (25% of tasks) - Near future
-        {'name': 'Testing', 'start_offset': 7, 'task_gap': 2, 'duration_range': (3, 7)},
-        # Phase 4: Deployment (15% of tasks) - Future
-        {'name': 'Deployment', 'start_offset': 28, 'task_gap': 3, 'duration_range': (4, 10)},
-    ]
+    # Different configurations for different boards
+    if board_name == 'Software Development':
+        phase_configs = [
+            {'name': 'Foundation', 'start_offset': -42, 'task_gap': 3, 'duration_range': (4, 8)},
+            {'name': 'Development', 'start_offset': -21, 'task_gap': 2, 'duration_range': (5, 14)},
+            {'name': 'Testing', 'start_offset': 7, 'task_gap': 2, 'duration_range': (3, 7)},
+            {'name': 'Deployment', 'start_offset': 28, 'task_gap': 3, 'duration_range': (4, 10)},
+        ]
+        phase_ratios = [0.25, 0.35, 0.25, 0.15]
+    elif board_name == 'Bug Tracking':
+        phase_configs = [
+            {'name': 'Critical', 'start_offset': -21, 'task_gap': 2, 'duration_range': (2, 4)},
+            {'name': 'High Priority', 'start_offset': -10, 'task_gap': 2, 'duration_range': (3, 5)},
+            {'name': 'Medium', 'start_offset': 3, 'task_gap': 2, 'duration_range': (2, 5)},
+            {'name': 'Low', 'start_offset': 14, 'task_gap': 3, 'duration_range': (3, 6)},
+        ]
+        phase_ratios = [0.20, 0.30, 0.30, 0.20]
+    elif board_name == 'Marketing Campaign':
+        phase_configs = [
+            {'name': 'Planning', 'start_offset': -35, 'task_gap': 3, 'duration_range': (5, 10)},
+            {'name': 'Content Creation', 'start_offset': -14, 'task_gap': 2, 'duration_range': (4, 8)},
+            {'name': 'Launch', 'start_offset': 7, 'task_gap': 2, 'duration_range': (3, 7)},
+            {'name': 'Analysis', 'start_offset': 21, 'task_gap': 3, 'duration_range': (4, 8)},
+        ]
+        phase_ratios = [0.25, 0.35, 0.25, 0.15]
+    else:
+        # Default configuration
+        phase_configs = [
+            {'name': 'Phase 1', 'start_offset': -28, 'task_gap': 3, 'duration_range': (3, 7)},
+            {'name': 'Phase 2', 'start_offset': -7, 'task_gap': 2, 'duration_range': (4, 8)},
+            {'name': 'Phase 3', 'start_offset': 14, 'task_gap': 3, 'duration_range': (3, 6)},
+        ]
+        phase_ratios = [0.35, 0.40, 0.25]
     
     # Calculate task distribution
-    phase_task_counts = [
-        int(total_tasks * 0.25),  # Foundation
-        int(total_tasks * 0.35),  # Development
-        int(total_tasks * 0.25),  # Testing
-        total_tasks - int(total_tasks * 0.25) - int(total_tasks * 0.35) - int(total_tasks * 0.25),  # Remaining
-    ]
+    phase_task_counts = [max(1, int(total_tasks * r)) for r in phase_ratios]
     
-    # Ensure we have at least 1 task per phase
-    for i in range(len(phase_task_counts)):
-        if phase_task_counts[i] < 1:
-            phase_task_counts[i] = 1
-    
-    # Adjust if we have too many tasks assigned
+    # Adjust if we have too many/few tasks
     while sum(phase_task_counts) > total_tasks:
         for i in range(len(phase_task_counts) - 1, -1, -1):
             if phase_task_counts[i] > 1 and sum(phase_task_counts) > total_tasks:
                 phase_task_counts[i] -= 1
+    while sum(phase_task_counts) < total_tasks:
+        phase_task_counts[-1] += 1
     
     # Assign tasks to phases
     task_index = 0
@@ -121,16 +134,15 @@ def fix_gantt_dates():
             
             task = task_list[task_index]
             
-            # Calculate duration based on position in phase (varying durations)
+            # Calculate duration
             duration = min_dur + ((max_dur - min_dur) * (i % 3)) // 2
             
-            # Add some stagger - tasks don't all start on the same day
+            # Stagger - with some overlap for parallel work
             stagger = (i * config['task_gap'])
             
-            # For parallel work effect in Development phase, create overlapping tasks
-            if config['name'] == 'Development' and i > 0:
-                # Some tasks start before the previous one ends
-                stagger = max(1, stagger - 3)
+            # Add some overlap in middle phases
+            if phase_idx in [1, 2] and i > 0:
+                stagger = max(1, stagger - 2)
             
             start_date = base_date + timedelta(days=current_offset + stagger)
             end_date = start_date + timedelta(days=duration)
@@ -148,13 +160,6 @@ def fix_gantt_dates():
             updated_count += 1
     
     print(f"\n✅ Updated {updated_count} task dates")
-    
-    # Now fix dependencies to create a logical flow
-    fix_dependencies(board, task_list)
-    
-    print("\n" + "=" * 70)
-    print("✅ Gantt Chart Data Fixed Successfully!")
-    print("=" * 70)
 
 def fix_dependencies(board, task_list):
     """Create logical dependencies between tasks."""

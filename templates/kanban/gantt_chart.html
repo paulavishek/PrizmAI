@@ -48,26 +48,21 @@
     /* Main arrow path styling */
     .gantt .arrow {
         fill: none;
-        stroke: #94a3b8;
+        stroke: #9ca3af;
         stroke-width: 1.5px;
-        opacity: 0.7;
-        stroke-linecap: round;
-        stroke-linejoin: round;
+        opacity: 0.8;
         transition: all 0.2s ease;
     }
 
     .gantt .arrow:hover {
-        stroke: #3b82f6;
+        stroke: #6b7280;
         stroke-width: 2px;
         opacity: 1;
-        filter: drop-shadow(0 1px 2px rgba(59, 130, 246, 0.3));
     }
 
-    /* Arrow head (triangle) styling */
+    /* Arrow head (triangle) styling - hide default, we use custom markers */
     .gantt .arrow-head {
-        fill: #94a3b8;
-        stroke: none;
-        transition: all 0.2s ease;
+        display: none;
     }
 
     .gantt .arrow:hover + .arrow-head,
@@ -705,20 +700,20 @@
 
         // Check if marker already exists
         if (!defs.querySelector('#custom-arrowhead')) {
-            // Create a sleek, professional arrowhead marker (smaller triangle)
+            // Create a simple, clean arrowhead marker (small solid triangle)
             const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
             marker.setAttribute('id', 'custom-arrowhead');
-            marker.setAttribute('markerWidth', '6');
-            marker.setAttribute('markerHeight', '6');
-            marker.setAttribute('refX', '5');
-            marker.setAttribute('refY', '3');
+            marker.setAttribute('markerWidth', '8');
+            marker.setAttribute('markerHeight', '8');
+            marker.setAttribute('refX', '7');
+            marker.setAttribute('refY', '4');
             marker.setAttribute('orient', 'auto');
-            marker.setAttribute('markerUnits', 'strokeWidth');
+            marker.setAttribute('markerUnits', 'userSpaceOnUse');
 
+            // Simple solid triangle arrow
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', 'M 0 0 L 6 3 L 0 6 Z');  // Sleek filled triangle
-            path.setAttribute('fill', '#64748b');
-            path.setAttribute('class', 'custom-arrow-head');
+            path.setAttribute('d', 'M 0 1 L 7 4 L 0 7 Z');
+            path.setAttribute('fill', '#9ca3af');
             marker.appendChild(path);
             defs.appendChild(marker);
 
