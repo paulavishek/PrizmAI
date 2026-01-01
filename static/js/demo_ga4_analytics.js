@@ -180,14 +180,6 @@
 
         trackServerEvent('workaround_attempt', eventData);
     };
-        };
-
-        if (typeof gtag !== 'undefined') {
-            gtag('event', 'power_user_action', eventData);
-        }
-
-        trackServerEvent('power_user_action', eventData);
-    };
 
     /**
      * Track traffic source quality

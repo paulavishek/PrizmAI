@@ -554,6 +554,35 @@
     
     console.log('Raw tasks data:', tasks);
     
+    // Validate and fix task dates to prevent negative width errors
+    // frappe-gantt requires end date >= start date
+    tasks.forEach(task => {
+        const startDate = new Date(task.start);
+        const endDate = new Date(task.end);
+        
+        // Check for invalid dates
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            console.warn(`Task ${task.id} has invalid dates, using today as fallback`);
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            task.start = today.toISOString().split('T')[0];
+            task.end = tomorrow.toISOString().split('T')[0];
+        } else if (endDate < startDate) {
+            // If end date is before start date, swap them
+            console.warn(`Task ${task.id} has end date before start date, swapping`);
+            const temp = task.start;
+            task.start = task.end;
+            task.end = temp;
+        } else if (endDate.getTime() === startDate.getTime()) {
+            // If dates are the same, add 1 day to end date to ensure visible bar width
+            console.warn(`Task ${task.id} has same start and end date, extending by 1 day`);
+            const newEnd = new Date(endDate);
+            newEnd.setDate(newEnd.getDate() + 1);
+            task.end = newEnd.toISOString().split('T')[0];
+        }
+    });
+    
     // Validate and clean up dependencies
     tasks.forEach(task => {
         if (task.dependencies) {
@@ -875,9 +904,23 @@
             const bar = barWrapper.querySelector('.bar');
             if (!bar) return;
 
-            const barRect = bar.getBBox();
+            // Safely get bounding box - getBBox() can throw or return invalid values
+            let barRect;
+            try {
+                barRect = bar.getBBox();
+            } catch (e) {
+                console.warn(`Could not get bounding box for task ${task.id}:`, e);
+                return;
+            }
+            
+            // Validate dimensions - skip if invalid (negative or zero)
             const barWidth = barRect.width;
             const barHeight = barRect.height;
+            
+            if (barWidth <= 0 || barHeight <= 0 || !isFinite(barWidth) || !isFinite(barHeight)) {
+                console.warn(`Invalid bar dimensions for task ${task.id}: width=${barWidth}, height=${barHeight}`);
+                return;
+            }
 
             // Find and modify the existing label to show truncated name ONLY - INSIDE the bar
             const existingLabel = barWrapper.querySelector('.bar-label');
