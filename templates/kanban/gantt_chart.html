@@ -167,6 +167,28 @@
         transform: translateY(-1px);
     }
 
+    /* Hide resize handles - they're misleading since drag is disabled */
+    .gantt .handle,
+    .gantt .bar-handle,
+    .gantt .handle.left,
+    .gantt .handle.right,
+    .gantt .bar-wrapper .handle,
+    rect.handle {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+
+    /* Remove resize cursor on bar edges */
+    .gantt .bar-wrapper:hover {
+        cursor: pointer !important;
+    }
+    
+    .gantt .bar:hover {
+        cursor: pointer !important;
+    }
+
     /* Empty state styling */
     .empty-state {
         text-align: center;
