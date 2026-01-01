@@ -158,6 +158,38 @@
     };
 
     /**
+     * Track potential workaround attempts
+     * Called when user tries to game the limitation system
+     * @param {string} workaroundType - Type of workaround attempted
+     * @param {object} context - Additional context data
+     */
+    DemoAnalytics.trackWorkaroundAttempt = function(workaroundType, context = {}) {
+        const eventData = {
+            'workaround_type': workaroundType,
+            'boards_remaining': context.boards_remaining || 0,
+            'total_created': context.total_created || 0,
+            'success': context.success || false,
+            'time_in_session_minutes': getDemoSessionDuration()
+        };
+
+        // Send to GA4
+        if (typeof gtag !== 'undefined') {
+            gtag('event', 'workaround_attempt', eventData);
+            console.log('📊 GA4: workaround_attempt', eventData);
+        }
+
+        trackServerEvent('workaround_attempt', eventData);
+    };
+        };
+
+        if (typeof gtag !== 'undefined') {
+            gtag('event', 'power_user_action', eventData);
+        }
+
+        trackServerEvent('power_user_action', eventData);
+    };
+
+    /**
      * Track traffic source quality
      * Called on demo start
      */

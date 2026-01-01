@@ -1439,6 +1439,32 @@ def delete_board(request, board_id):
     # Delete the board
     if request.method == 'POST':
         board_name = board.name
+        
+        # Track demo board deletion for analytics (workaround detection)
+        if is_demo_mode:
+            try:
+                from kanban.utils.demo_limits import get_demo_session
+                from analytics.models import DemoAnalytics
+                
+                demo_session = get_demo_session(request)
+                if demo_session:
+                    # Check if user has hit project limit (potential workaround attempt)
+                    at_limit = demo_session.projects_created_in_demo >= 2
+                    
+                    DemoAnalytics.objects.create(
+                        session_id=request.session.session_key,
+                        demo_session=demo_session,
+                        event_type='board_deleted_in_demo',
+                        event_data={
+                            'board_name': board_name,
+                            'total_created': demo_session.projects_created_in_demo,
+                            'at_project_limit': at_limit,
+                            'potential_workaround': at_limit,  # If at limit, might be trying workaround
+                        }
+                    )
+            except Exception as e:
+                pass  # Analytics should not block deletion
+        
         board.delete()
         messages.success(request, f'Board "{board_name}" has been deleted.')
         return redirect('board_list')
