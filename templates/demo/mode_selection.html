@@ -4,6 +4,7 @@
 {% block title %}Choose Demo Mode - PrizmAI{% endblock %}
 
 {% block extra_head %}
+<!-- UPDATED VERSION 2026-01-01 v2.0 -->
 <style>
     :root {
         --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -14,7 +15,7 @@
     }
 
     body {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%) !important;
         min-height: 100vh;
     }
 
@@ -431,6 +432,13 @@
             display: none;
         }
     }
+
+    /* Hide navbar background to show gradient */
+    .navbar.navbar-dark.bg-primary {
+        background: rgba(15, 12, 41, 0.95) !important;
+        backdrop-filter: blur(20px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
 </style>
 {% endblock %}
 
@@ -574,3 +582,4 @@ function skipSelection(mode) {
 window.demoSelectionStartTime = new Date().getTime();
 </script>
 {% endblock %}
+
