@@ -497,7 +497,7 @@ def conflict_analytics(request):
         # Get trend data for last 30 days
         from datetime import timedelta
         from django.utils import timezone
-        from django.db.models import Count, Q
+        from django.db.models import Count
         from django.db.models.functions import TruncDate
         
         thirty_days_ago = timezone.now() - timedelta(days=30)
