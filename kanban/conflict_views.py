@@ -516,19 +516,25 @@ def conflict_analytics(request):
                 start_date = min(conflict.detected_at, conflict.resolved_at)
                 end_date = max(conflict.detected_at, conflict.resolved_at)
                 
+                # Normalize to date only (remove time component) for consistent comparison
+                start_date_only = start_date.date()
+                end_date_only = end_date.date()
+                thirty_days_ago_date = thirty_days_ago.date()
+                
                 # Count as detection on the earlier date
-                if start_date >= thirty_days_ago:
-                    date_key = start_date.strftime('%Y-%m-%d')
+                if start_date_only >= thirty_days_ago_date:
+                    date_key = start_date_only.strftime('%Y-%m-%d')
                     detected_by_date[date_key] = detected_by_date.get(date_key, 0) + 1
                 
                 # Count as resolution on the later date (only if resolved)
-                if conflict.status == 'resolved' and end_date >= thirty_days_ago:
-                    date_key = end_date.strftime('%Y-%m-%d')
+                if conflict.status == 'resolved' and end_date_only >= thirty_days_ago_date:
+                    date_key = end_date_only.strftime('%Y-%m-%d')
                     resolved_by_date[date_key] = resolved_by_date.get(date_key, 0) + 1
             else:
                 # No resolution, just count detection
-                if conflict.detected_at >= thirty_days_ago:
-                    date_key = conflict.detected_at.strftime('%Y-%m-%d')
+                detected_date_only = conflict.detected_at.date()
+                if detected_date_only >= thirty_days_ago.date():
+                    date_key = detected_date_only.strftime('%Y-%m-%d')
                     detected_by_date[date_key] = detected_by_date.get(date_key, 0) + 1
         
         # Generate complete 30-day range with cumulative counts
@@ -540,14 +546,18 @@ def conflict_analytics(request):
         cumulative_detected = 0
         cumulative_resolved = 0
         
-        for i in range(30):
-            date = thirty_days_ago + timedelta(days=i)
+        # Use 31 days to ensure we capture data from today
+        for i in range(31):
+            date = (thirty_days_ago + timedelta(days=i)).date()
             date_str = date.strftime('%Y-%m-%d')
             label = date.strftime('%b %d').replace(' 0', ' ')
             
             # Add daily counts to cumulative totals
-            cumulative_detected += detected_by_date.get(date_str, 0)
-            cumulative_resolved += resolved_by_date.get(date_str, 0)
+            daily_detected = detected_by_date.get(date_str, 0)
+            daily_resolved = resolved_by_date.get(date_str, 0)
+            
+            cumulative_detected += daily_detected
+            cumulative_resolved += daily_resolved
             
             trend_labels.append(label)
             trend_detected.append(cumulative_detected)
