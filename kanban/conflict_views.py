@@ -26,16 +26,27 @@ def conflict_dashboard(request):
     """
     Main dashboard showing all conflicts for user's boards.
     Optional board_id parameter to filter by specific board.
+    Supports demo mode - shows demo boards when in demo mode.
     """
     try:
+        # Check if user is in demo mode
+        is_demo_mode = request.session.get('is_demo_mode', False)
+        
         profile = request.user.profile
         organization = profile.organization
         
         # Get boards user has access to
-        boards = Board.objects.filter(
-            Q(organization=organization) &
-            (Q(created_by=request.user) | Q(members=request.user))
-        ).distinct()
+        if is_demo_mode:
+            # In demo mode, only show demo organization boards
+            demo_org_names = ['Demo - Acme Corporation']
+            from kanban.models import Organization
+            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+            boards = Board.objects.filter(organization__in=demo_orgs).distinct()
+        else:
+            boards = Board.objects.filter(
+                Q(organization=organization) &
+                (Q(created_by=request.user) | Q(members=request.user))
+            ).distinct()
         
         # Check if filtering by specific board
         board_filter_id = request.GET.get('board_id')
@@ -93,6 +104,7 @@ def conflict_dashboard(request):
             'recent_resolutions': recent_resolutions,
             'boards': boards,
             'selected_board': selected_board,
+            'is_demo_mode': is_demo_mode,
         }
         
         return render(request, 'kanban/conflicts/dashboard.html', context)
@@ -107,24 +119,41 @@ def conflict_dashboard(request):
 def conflict_detail(request, conflict_id):
     """
     Detailed view of a specific conflict with resolution options.
+    Supports demo mode.
     """
     try:
+        # Check if user is in demo mode
+        is_demo_mode = request.session.get('is_demo_mode', False)
+        
         profile = request.user.profile
         organization = profile.organization
         
-        # Get conflict
-        conflict = get_object_or_404(
-            ConflictDetection.objects.select_related('board', 'chosen_resolution').prefetch_related(
-                'tasks', 'affected_users', 'resolutions'
-            ),
-            id=conflict_id,
-            board__organization=organization
-        )
+        # Get conflict - for demo mode, allow access to demo org conflicts
+        if is_demo_mode:
+            demo_org_names = ['Demo - Acme Corporation']
+            from kanban.models import Organization
+            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+            conflict = get_object_or_404(
+                ConflictDetection.objects.select_related('board', 'chosen_resolution').prefetch_related(
+                    'tasks', 'affected_users', 'resolutions'
+                ),
+                id=conflict_id,
+                board__organization__in=demo_orgs
+            )
+        else:
+            conflict = get_object_or_404(
+                ConflictDetection.objects.select_related('board', 'chosen_resolution').prefetch_related(
+                    'tasks', 'affected_users', 'resolutions'
+                ),
+                id=conflict_id,
+                board__organization=organization
+            )
         
-        # Check access
-        if not (conflict.board.created_by == request.user or 
-                request.user in conflict.board.members.all()):
-            return HttpResponseForbidden("You don't have access to this conflict")
+        # Check access (skip for demo mode)
+        if not is_demo_mode:
+            if not (conflict.board.created_by == request.user or 
+                    request.user in conflict.board.members.all()):
+                return HttpResponseForbidden("You don't have access to this conflict")
         
         # Get resolutions sorted by confidence
         resolutions = conflict.resolutions.all().order_by('-ai_confidence')
@@ -147,6 +176,7 @@ def conflict_detail(request, conflict_id):
             'resolutions': resolutions,
             'similar_conflicts': similar_conflicts,
             'can_resolve': True,  # Could add permission check here
+            'is_demo_mode': is_demo_mode,
         }
         
         return render(request, 'kanban/conflicts/detail.html', context)
@@ -408,16 +438,26 @@ def trigger_detection(request, board_id):
 def conflict_analytics(request):
     """
     Analytics view showing conflict patterns and resolution effectiveness.
+    Supports demo mode.
     """
     try:
+        # Check if user is in demo mode
+        is_demo_mode = request.session.get('is_demo_mode', False)
+        
         profile = request.user.profile
         organization = profile.organization
         
-        # Get boards
-        boards = Board.objects.filter(
-            Q(organization=organization) &
-            (Q(created_by=request.user) | Q(members=request.user))
-        ).distinct()
+        # Get boards - filter to demo boards if in demo mode
+        if is_demo_mode:
+            demo_org_names = ['Demo - Acme Corporation']
+            from kanban.models import Organization
+            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+            boards = Board.objects.filter(organization__in=demo_orgs).distinct()
+        else:
+            boards = Board.objects.filter(
+                Q(organization=organization) &
+                (Q(created_by=request.user) | Q(members=request.user))
+            ).distinct()
         
         # Get resolution patterns
         patterns = ResolutionPattern.objects.filter(
@@ -459,6 +499,7 @@ def conflict_analytics(request):
             'avg_resolution_time': avg_resolution_time,
             'avg_effectiveness': avg_effectiveness,
             'rated_count': rated_conflicts.count(),
+            'is_demo_mode': is_demo_mode,
         }
         
         return render(request, 'kanban/conflicts/analytics.html', context)

@@ -65,6 +65,11 @@
 {% endblock %}
 
 {% block content %}
+<!-- Demo Mode Banner -->
+{% if is_demo_mode %}
+    {% include 'demo/partials/demo_banner.html' %}
+{% endif %}
+
 <div class="container-fluid py-4">
     <!-- Header -->
     <div class="row mb-4">
