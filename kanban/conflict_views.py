@@ -505,35 +505,31 @@ def conflict_analytics(request):
         # Get all conflicts for the boards
         all_conflicts = ConflictDetection.objects.filter(board__in=boards)
         
-        # Count new detections per day (conflicts that entered the system)
+        # Handle potentially backwards dates in demo data
+        # Count by using the earlier date as "detection" and later as "resolution"
         detected_by_date = {}
-        detection_trend = all_conflicts.filter(
-            detected_at__gte=thirty_days_ago
-        ).annotate(
-            date=TruncDate('detected_at')
-        ).values('date').annotate(
-            count=Count('id')
-        ).order_by('date')
-        
-        for item in detection_trend:
-            if item['date']:
-                detected_by_date[item['date'].strftime('%Y-%m-%d')] = item['count']
-        
-        # Count resolutions per day (conflicts that left the system)
         resolved_by_date = {}
-        resolution_trend = all_conflicts.filter(
-            status='resolved',
-            resolved_at__isnull=False,
-            resolved_at__gte=thirty_days_ago
-        ).annotate(
-            date=TruncDate('resolved_at')
-        ).values('date').annotate(
-            count=Count('id')
-        ).order_by('date')
         
-        for item in resolution_trend:
-            if item['date']:
-                resolved_by_date[item['date'].strftime('%Y-%m-%d')] = item['count']
+        for conflict in all_conflicts.filter(detected_at__isnull=False):
+            # Determine which date is earlier (actual start) and later (actual end)
+            if conflict.resolved_at:
+                start_date = min(conflict.detected_at, conflict.resolved_at)
+                end_date = max(conflict.detected_at, conflict.resolved_at)
+                
+                # Count as detection on the earlier date
+                if start_date >= thirty_days_ago:
+                    date_key = start_date.strftime('%Y-%m-%d')
+                    detected_by_date[date_key] = detected_by_date.get(date_key, 0) + 1
+                
+                # Count as resolution on the later date (only if resolved)
+                if conflict.status == 'resolved' and end_date >= thirty_days_ago:
+                    date_key = end_date.strftime('%Y-%m-%d')
+                    resolved_by_date[date_key] = resolved_by_date.get(date_key, 0) + 1
+            else:
+                # No resolution, just count detection
+                if conflict.detected_at >= thirty_days_ago:
+                    date_key = conflict.detected_at.strftime('%Y-%m-%d')
+                    detected_by_date[date_key] = detected_by_date.get(date_key, 0) + 1
         
         # Generate complete 30-day range with cumulative counts
         import json
