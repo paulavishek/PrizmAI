@@ -470,13 +470,14 @@ def conflict_analytics(request):
             status='resolved'
         ).select_related('chosen_resolution')
         
+        # Import aggregation functions
+        from django.db.models import Avg, F, ExpressionWrapper, DurationField
+        
         # Calculate metrics
         total_resolved = resolved_conflicts.count()
         avg_resolution_time = None
         
         if total_resolved > 0:
-            from django.db.models import Avg, F, ExpressionWrapper, DurationField
-            
             avg_resolution_time = resolved_conflicts.annotate(
                 resolution_duration=ExpressionWrapper(
                     F('resolved_at') - F('detected_at'),
