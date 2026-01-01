@@ -436,6 +436,13 @@ class DemoSession(models.Model):
     """
     # Session identification
     session_id = models.CharField(max_length=255, unique=True, db_index=True)
+    browser_fingerprint = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Browser fingerprint to track demo across sessions"
+    )
     user = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -476,6 +483,11 @@ class DemoSession(models.Model):
     
     # Session timing
     created_at = models.DateTimeField(auto_now_add=True)
+    first_demo_start = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When user FIRST started demo (persists across logins)"
+    )
     expires_at = models.DateTimeField(help_text="Session expiration (48 hours default)")
     last_activity = models.DateTimeField(auto_now=True)
     session_end = models.DateTimeField(null=True, blank=True)

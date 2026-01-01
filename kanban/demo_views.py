@@ -59,6 +59,13 @@ def demo_mode_selection(request):
         if not request.session.session_key:
             request.session.cycle_key()
         
+        # Generate browser fingerprint for persistent tracking across sessions
+        import hashlib
+        user_agent = request.META.get('HTTP_USER_AGENT', '')
+        ip_address = request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0] or request.META.get('REMOTE_ADDR', '')
+        fingerprint_string = f"{user_agent}_{ip_address}"
+        browser_fingerprint = hashlib.sha256(fingerprint_string.encode()).hexdigest()[:64]
+        
         # Initialize demo session
         request.session['is_demo_mode'] = True
         request.session['demo_mode'] = mode
@@ -66,8 +73,29 @@ def demo_mode_selection(request):
         request.session['demo_role'] = 'admin'  # Start as admin in both modes
         request.session['demo_session_id'] = request.session.session_key
         request.session['is_anonymous_demo'] = not was_authenticated
-        request.session['demo_started_at'] = timezone.now().isoformat()
-        request.session['demo_expires_at'] = (timezone.now() + timedelta(hours=48)).isoformat()
+        request.session['browser_fingerprint'] = browser_fingerprint
+        
+        # Check if this browser has an existing demo session (within last 48h)
+        existing_demo_start = None
+        try:
+            from analytics.models import DemoSession
+            recent_session = DemoSession.objects.filter(
+                browser_fingerprint=browser_fingerprint,
+                first_demo_start__gte=timezone.now() - timedelta(hours=48)
+            ).order_by('-first_demo_start').first()
+            
+            if recent_session and recent_session.first_demo_start:
+                existing_demo_start = recent_session.first_demo_start
+                logger.info(f"Found existing demo session for browser, started at {existing_demo_start}")
+        except Exception as e:
+            logger.warning(f"Could not check for existing demo session: {e}")
+        
+        # Set demo start time (use existing if found, otherwise now)
+        demo_started_at = existing_demo_start or timezone.now()
+        demo_expires_at = demo_started_at + timedelta(hours=48)
+        
+        request.session['demo_started_at'] = demo_started_at.isoformat()
+        request.session['demo_expires_at'] = demo_expires_at.isoformat()
         request.session['features_explored'] = []
         request.session['aha_moments'] = []
         request.session['nudges_shown'] = []
@@ -114,7 +142,9 @@ def demo_mode_selection(request):
                     'user': request.user if request.user.is_authenticated else None,
                     'demo_mode': mode,
                     'current_role': 'admin',
-                    'expires_at': timezone.now() + timedelta(hours=48),
+                    'browser_fingerprint': browser_fingerprint,
+                    'first_demo_start': demo_started_at,
+                    'expires_at': demo_expires_at,
                     'selection_method': selection_method,
                     'device_type': device_type,
                     'user_agent': request.META.get('HTTP_USER_AGENT', ''),
