@@ -47,35 +47,63 @@ def demo_context(request):
             context['demo_export_allowed'] = False
             context['demo_data_reset_hours'] = 48
         
-        # Expiry information
+        # Expiry information - ensure demo_expires_at is always set
         expires_at_str = request.session.get('demo_expires_at')
-        if expires_at_str:
-            try:
-                from dateutil import parser
-                expires_at = parser.parse(expires_at_str)
-                context['demo_expires_at'] = expires_at
-                
-                # Calculate time remaining
-                time_remaining = expires_at - timezone.now()
+        
+        # If no expiry is set, initialize it now (48 hours from now)
+        if not expires_at_str:
+            from datetime import timedelta
+            expires_at = timezone.now() + timedelta(hours=48)
+            request.session['demo_expires_at'] = expires_at.isoformat()
+            expires_at_str = request.session['demo_expires_at']
+            request.session.modified = True
+        
+        try:
+            from dateutil import parser
+            expires_at = parser.parse(expires_at_str)
+            
+            # Ensure timezone awareness
+            if expires_at.tzinfo is None:
+                from django.utils.timezone import make_aware
+                expires_at = make_aware(expires_at)
+            
+            context['demo_expires_at'] = expires_at
+            
+            # Calculate time remaining
+            time_remaining = expires_at - timezone.now()
+            total_seconds = time_remaining.total_seconds()
+            
+            # Handle negative time (expired)
+            if total_seconds < 0:
+                context['demo_time_remaining'] = None
+                context['demo_hours_remaining'] = 0
+                context['demo_expired'] = True
+            else:
                 context['demo_time_remaining'] = time_remaining
-                context['demo_hours_remaining'] = round(time_remaining.total_seconds() / 3600, 1)
-                
-                # Check if warning should be shown
-                hours_remaining = time_remaining.total_seconds() / 3600
-                if hours_remaining <= 0.25:  # 15 minutes
-                    context['show_expiry_warning'] = True
-                    context['expiry_warning_level'] = 'critical'
-                    context['expiry_warning_message'] = f'Your demo session expires in {int(time_remaining.total_seconds() / 60)} minutes!'
-                elif hours_remaining <= 1:  # 1 hour
-                    context['show_expiry_warning'] = True
-                    context['expiry_warning_level'] = 'warning'
-                    context['expiry_warning_message'] = 'Your demo session expires in less than 1 hour.'
-                elif hours_remaining <= 4:  # 4 hours
-                    context['show_expiry_warning'] = True
-                    context['expiry_warning_level'] = 'info'
-                    context['expiry_warning_message'] = f'Your demo session expires in {int(hours_remaining)} hours.'
-            except:
-                pass
+                context['demo_hours_remaining'] = round(total_seconds / 3600, 1)
+                context['demo_expired'] = False
+            
+            # Check if warning should be shown
+            hours_remaining = max(0, total_seconds / 3600)
+            if hours_remaining <= 0.25:  # 15 minutes
+                context['show_expiry_warning'] = True
+                context['expiry_warning_level'] = 'critical'
+                minutes_left = max(1, int(total_seconds / 60))
+                context['expiry_warning_message'] = f'Demo session expires in {minutes_left} minutes! Data will be reset.'
+            elif hours_remaining <= 1:  # 1 hour
+                context['show_expiry_warning'] = True
+                context['expiry_warning_level'] = 'warning'
+                context['expiry_warning_message'] = 'Demo session expires in less than 1 hour. Create an account to save your work!'
+            elif hours_remaining <= 4:  # 4 hours
+                context['show_expiry_warning'] = True
+                context['expiry_warning_level'] = 'info'
+                context['expiry_warning_message'] = f'Demo session expires in {int(hours_remaining)} hours.'
+        except Exception as e:
+            # Fallback: set reasonable defaults
+            import logging
+            logging.getLogger(__name__).warning(f"Error parsing demo_expires_at: {e}")
+            context['demo_hours_remaining'] = 48
+            context['demo_expired'] = False
         
         # Track explored features
         features_explored = request.session.get('features_explored', [])

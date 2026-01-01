@@ -197,15 +197,19 @@
         <!-- Time Limitation -->
         <div class="demo-limitation-item {% if demo_hours_remaining|default:48 < 24 %}demo-limitation-urgent{% endif %}">
             <span class="demo-limitation-icon">⏰</span>
-            <div class="demo-limitation-label">Data Reset Timer</div>
+            <div class="demo-limitation-label">Session Timer</div>
             <div class="demo-limitation-value">
-                {{ demo_hours_remaining|default:"48" }} hours
+                {% if demo_expired %}Expired{% else %}{{ demo_hours_remaining|default:"48" }} hours remaining{% endif %}
                 {% if demo_hours_remaining|default:48 < 24 %}
                 <span style="font-size: 0.8rem; color: #ffc107;">⚠️</span>
                 {% endif %}
             </div>
             <div class="demo-limitation-desc">
-                Your demo data will reset to clean state. Create a free account to save your work permanently!
+                {% if demo_expired %}
+                Session expired! Start a new demo or create a free account.
+                {% else %}
+                When time runs out, demo data auto-resets. Create a free account to keep your work forever!
+                {% endif %}
             </div>
         </div>
 

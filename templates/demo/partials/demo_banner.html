@@ -656,9 +656,9 @@
                 </div>
                 {% endif %}
 
-                <div class="demo-banner-notice">
+                <div class="demo-banner-notice" title="When session expires, demo data resets and you'll need to start fresh">
                     <i class="fas fa-clock me-1"></i>
-                    Data resets in {{ demo_hours_remaining|default:"48" }}h
+                    {% if demo_expired %}Session Expired{% elif demo_hours_remaining %}Session: {{ demo_hours_remaining }}h left{% else %}Session: 48h limit{% endif %}
                 </div>
                 
                 <!-- Demo Limits Status -->

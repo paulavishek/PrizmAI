@@ -28,6 +28,21 @@ app.conf.beat_schedule = {
         'task': 'kanban.cleanup_resolved_conflicts',
         'schedule': crontab(hour=2, minute=0),  # Daily at 2:00 AM
     },
+    # Demo session cleanup - runs every hour to reset expired sessions
+    'cleanup-expired-demo-sessions': {
+        'task': 'kanban.cleanup_expired_demo_sessions',
+        'schedule': crontab(minute=30),  # Every hour at minute 30
+    },
+    # Demo expiry warnings - runs every 15 minutes to track expiring sessions
+    'demo-expiry-warnings': {
+        'task': 'kanban.send_demo_expiry_warning',
+        'schedule': crontab(minute='*/15'),  # Every 15 minutes
+    },
+    # Refresh demo dates - runs daily at 3 AM to keep demo data current
+    'refresh-demo-dates-daily': {
+        'task': 'kanban.refresh_demo_dates',
+        'schedule': crontab(hour=3, minute=0),  # Daily at 3:00 AM
+    },
 }
 
 
