@@ -10,21 +10,27 @@ PrizmAI combines visual project management with AI that helps you work smarter�
 
 ## 🎉 What's New
 
+### 🎯 Demo Limitations & Conversion Analytics (December 2025)
+- **Strategic limits:** Max 2 projects, export blocked, 20 AI generations per session
+- **Conversion tracking:** GA4 events for limitation encounters and upgrade CTAs
+- **Workaround prevention:** Cumulative counters prevent exploit loops
+- **→ [Full Guide](DEMO_LIMITATIONS_GUIDE.md)**
+
 ### 🎮 Interactive Demo Mode (December 2025)
 - **Try without signup!** Anonymous users can now explore all features instantly
 - **Choose your path:** Solo Mode (5 min) or Team Mode (10 min)
 - **Full feature access:** AI, burndown charts, time tracking, RBAC demo
-- **Session-based:** 48-hour sessions with reset capability
+- **Session-based:** 48-hour sessions with data reset warning in banner
 
 ### 📊 Anonymous Demo Analytics
 - **100% tracking coverage** using hybrid analytics (server + client-side)
 - **Privacy-compliant:** Session-based, no PII required
-- **Conversion insights:** Track aha moments, feature exploration, and signup rates
+- **Conversion insights:** Track aha moments, limitations hit, and signup rates
 - **Analytics dashboard:** `python manage.py demo_analytics_report`
 
 ### 🔄 Improved User Flow
 ```
-Landing Page → Try Demo (instant) → Explore → Convert to Account (when ready)
+Landing Page → Try Demo (instant) → Explore → Hit Limit → Convert to Account
              ↘ Sign Up (traditional) → Full Access
 ```
 
@@ -40,15 +46,15 @@ Landing Page → Try Demo (instant) → Explore → Convert to Account (when rea
 - 💰 **Budget & ROI Tracking** - Control finances with AI cost optimization
 - ⏱️ **Time Tracking & Timesheets** - Log hours, track team utilization, manage labor costs
 - 🎓 **AI Coach** - Proactive suggestions to improve project management decisions
-- 🎮 **Interactive Demo Mode** - **NEW!** Try all features without signup (Solo or Team mode)
-- 📈 **User Feedback & Behavior Tracking** - Comprehensive feedback collection, sentiment analysis, and user behavior analytics for continuous improvement
-- 📊 **Anonymous Demo Analytics** - **NEW!** Track user behavior with 100% coverage (session-based, privacy-compliant)
+- 🎮 **Interactive Demo Mode** - Try all features without signup with strategic limits for conversion
+- 📈 **User Feedback & Behavior Tracking** - Comprehensive feedback collection, sentiment analysis, and user behavior analytics
+- 📊 **Demo Analytics & Conversion Tracking** - GA4 events for limitation encounters and conversion optimization
 - 🤖 **AI Usage Monitoring** - Track and manage your monthly AI feature consumption with quota limits
-- � **Role-Based Access Control (RBAC)** - Advanced permissions with role management, approval workflows, column-level restrictions, and complete audit logging
-- �🔍 **Explainable AI** - Every recommendation includes "why" for full transparency
+- 🔐 **Role-Based Access Control (RBAC)** - Advanced permissions with role management, approval workflows, and audit logging
+- 🔍 **Explainable AI** - Every recommendation includes "why" for full transparency
 - 📚 **Knowledge Base & Wiki** - Markdown documentation with AI-assisted insights
-- � **Transcript Import** - **NEW!** Import meeting transcripts from Fireflies, Otter, Zoom, Teams, Meet, or paste manually. AI automatically extracts action items, decisions, and blockers
-- �🔐 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
+- 📝 **Transcript Import** - Import meeting transcripts from Fireflies, Otter, Zoom, Teams, Meet with AI extraction
+- 🔒 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
 - 🌐 **RESTful API** - 20+ endpoints for integrations (Slack, Teams, Jira-ready)
 - 📱 **Mobile PWA Support** - Progressive Web App with offline capabilities and mobile-first design
 - 🔄 **Real-Time Collaboration** - WebSocket support for live updates and chat
@@ -133,15 +139,18 @@ Landing Page (/)
 - ✅ Explore all features and boards
 - ✅ Switch roles in Team mode
 - ✅ Reset demo to clean state
-- ✅ Session lasts 48 hours
-- ❌ Data not saved permanently
+- ✅ Create up to 2 custom projects
+- ⚠️ Session lasts 48 hours (data resets)
+- ❌ Export blocked (upgrade to unlock)
+- ❌ AI limited to 20 generations
 
 **Authenticated Users Get:**
 - ✅ Everything above, PLUS:
-- ✅ Persistent board membership
-- ✅ Data saved beyond demo
+- ✅ Unlimited projects
+- ✅ Full export capabilities
+- ✅ Persistent data (never resets)
 - ✅ Chat room access
-- ✅ Full account features
+- ✅ Full AI access based on plan
 
 ### Demo URLs:
 
@@ -160,20 +169,21 @@ http://localhost:8000/demo/
 
 ## 📊 Demo Analytics (Track User Behavior)
 
-**NEW:** Comprehensive tracking of anonymous and authenticated demo users!
+Comprehensive tracking of anonymous and authenticated demo users with conversion optimization.
 
 ### Hybrid Analytics Strategy:
 
 **Server-Side Tracking (100% Coverage):**
 - Session-based identification (works for anonymous users)
 - Cannot be blocked by ad-blockers
-- Tracks: features explored, aha moments, conversions
+- Tracks: features explored, limitations hit, conversions
 - Privacy-compliant (no PII required)
 
-**Client-Side Google Analytics (65-70% Coverage):**
-- Rich behavioral insights
-- ~30% blocked by ad-blockers
-- Optional but recommended
+**Client-Side GA4 (65-70% Coverage):**
+- Rich behavioral insights via Google Analytics 4
+- Limitation encounter events: `limitation_encountered`, `demo_export_blocked`
+- Conversion events: `demo_conversion_initiated`
+- Workaround detection: `board_deleted_in_demo` with flags
 
 ### What Gets Tracked:
 
@@ -181,15 +191,12 @@ http://localhost:8000/demo/
 # Demo Session Data
 {
     'session_id': 'xyz789',
-    'user': None,                     # NULL for anonymous
     'demo_mode': 'solo',              # Solo or Team
-    'device_type': 'mobile',          # Desktop/Mobile/Tablet
-    'duration_seconds': 420,          # 7 minutes in demo
-    'features_explored': 5,           # AI, burndown, etc.
-    'aha_moments': 2,                 # Value recognition
-    'nudges_shown': 3,                # Conversion prompts
-    'nudges_clicked': 1,              # CTA clicks
-    'converted_to_signup': False,     # Did they convert?
+    'projects_created_in_demo': 2,    # Towards 2 max limit
+    'ai_generations_used': 12,        # Towards 20 limit
+    'export_attempts': 1,             # Blocked attempts
+    'limitations_hit': ['project_limit', 'export'],
+    'converted_to_signup': False,
 }
 ```
 
@@ -200,22 +207,19 @@ http://localhost:8000/demo/
 python manage.py demo_analytics_report --days 7
 
 # Output includes:
-# • Anonymous vs authenticated conversion rates
-# • Aha moment impact on conversion
-# • Top features explored
+# • Limitation encounter rates by type
+# • Conversion rate after hitting limits
+# • Most effective upgrade triggers
 # • Device breakdown (mobile vs desktop)
-# • Nudge effectiveness
-# • Key insights and recommendations
 ```
 
 ### Key Metrics Tracked:
 
-**Entry & Engagement:**
-- Demo entry rate (% who try demo)
-- Mode selection (Solo vs Team)
-- Features explored (which and how many)
-- Time spent in demo
-- Device type (mobile/desktop/tablet)
+**Limitation Events:**
+- Project limit encounters (at 2 boards)
+- Export block encounters
+- AI generation limit hits
+- Workaround attempt detection
 
 **Value Recognition:**
 - Aha moments experienced
@@ -223,12 +227,12 @@ python manage.py demo_analytics_report --days 7
 - Correlation with conversion
 
 **Conversion Events:**
-- Nudge impressions and clicks
+- Limitation-triggered upgrade CTAs
 - Demo → Signup conversion rate
-- Time to conversion
+- Which limitation drives most conversions
 - Exit points (where users leave)
 
-**→ [Complete Analytics Guide](ANONYMOUS_DEMO_TRACKING_GUIDE.md)**
+**→ [Demo Limitations Guide](DEMO_LIMITATIONS_GUIDE.md)** | **[Complete Analytics Guide](ANONYMOUS_DEMO_TRACKING_GUIDE.md)**
 
 ---
 
@@ -271,12 +275,13 @@ This removes duplicate boards and migrates users to the official demo boards.
 |----------|-------------|
 | **[📖 USER_GUIDE.md](USER_GUIDE.md)** | Practical usage, examples, and best practices |
 | **[✨ FEATURES.md](FEATURES.md)** | Detailed feature descriptions and capabilities |
-| **[🎮 Improving Demo UX.md](Improving%20Demo%20UX.md)** | **NEW!** Demo experience design guide with conversion optimization |
-| **[📊 ANONYMOUS_DEMO_TRACKING_GUIDE.md](ANONYMOUS_DEMO_TRACKING_GUIDE.md)** | **NEW!** Complete guide to tracking anonymous users and analytics |
+| **[🎯 DEMO_LIMITATIONS_GUIDE.md](DEMO_LIMITATIONS_GUIDE.md)** | **NEW!** Demo limits, conversion strategy, and GA4 tracking |
+| **[🎮 Improving Demo UX.md](Improving%20Demo%20UX.md)** | Demo experience design guide with conversion optimization |
+| **[📊 ANONYMOUS_DEMO_TRACKING_GUIDE.md](ANONYMOUS_DEMO_TRACKING_GUIDE.md)** | Complete guide to tracking anonymous users and analytics |
 | **[📅 DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md)** | Dynamic demo data system guide |
 | **[⏱️ TIME_TRACKING_IMPLEMENTATION_COMPLETE.md](TIME_TRACKING_IMPLEMENTATION_COMPLETE.md)** | Time tracking, timesheets, and labor cost tracking |
-| **[� DEMO_RBAC_READY.md](DEMO_RBAC_READY.md)** | Role-based access control, approval workflows, and permission management |
-| **[�📈 USER_FEEDBACK_ANALYTICS.md](USER_FEEDBACK_ANALYTICS.md)** | User feedback, sentiment analysis, and behavior tracking |
+| **[🔐 DEMO_RBAC_READY.md](DEMO_RBAC_READY.md)** | Role-based access control, approval workflows, and permission management |
+| **[📈 USER_FEEDBACK_ANALYTICS.md](USER_FEEDBACK_ANALYTICS.md)** | User feedback, sentiment analysis, and behavior tracking |
 | **[📊 API_RATE_LIMITING_DASHBOARD.md](API_RATE_LIMITING_DASHBOARD.md)** | AI usage tracking and quota management |
 | **[📝 TRANSCRIPT_IMPORT_GUIDE.md](TRANSCRIPT_IMPORT_GUIDE.md)** | Import meeting transcripts from any source (Fireflies, Otter, Zoom, Teams, Meet) |
 | **[🔌 INTEGRATION_STRATEGY.md](INTEGRATION_STRATEGY.md)** | Phased approach to building integrations (Webhooks, GitHub, Slack, and beyond) |
