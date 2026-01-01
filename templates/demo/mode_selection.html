@@ -5,52 +5,196 @@
 
 {% block extra_head %}
 <style>
+    :root {
+        --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        --accent-gradient: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        --success-gradient: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        --card-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        --hover-shadow: 0 25px 80px rgba(0, 0, 0, 0.2);
+    }
+
+    body {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+        min-height: 100vh;
+    }
+
+    /* Animated Background */
+    .demo-page-wrapper {
+        min-height: 100vh;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .demo-page-wrapper::before {
+        content: '';
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        background-image: 
+            radial-gradient(circle at 20% 50%, rgba(255, 255, 255, 0.1) 2px, transparent 2px),
+            radial-gradient(circle at 80% 80%, rgba(255, 255, 255, 0.1) 2px, transparent 2px),
+            radial-gradient(circle at 40% 20%, rgba(255, 255, 255, 0.1) 2px, transparent 2px);
+        background-size: 80px 80px, 120px 120px, 100px 100px;
+        animation: float 30s linear infinite;
+        opacity: 0.6;
+        pointer-events: none;
+    }
+
+    @keyframes float {
+        0% { transform: translateY(0); }
+        50% { transform: translateY(-20px); }
+        100% { transform: translateY(0); }
+    }
+
+    /* Floating Orbs */
+    .floating-orb {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(60px);
+        opacity: 0.4;
+        pointer-events: none;
+        animation: orbFloat 20s ease-in-out infinite;
+    }
+
+    .orb-1 {
+        width: 400px;
+        height: 400px;
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        top: -100px;
+        right: -100px;
+        animation-delay: 0s;
+    }
+
+    .orb-2 {
+        width: 300px;
+        height: 300px;
+        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        bottom: -50px;
+        left: -50px;
+        animation-delay: -5s;
+    }
+
+    .orb-3 {
+        width: 200px;
+        height: 200px;
+        background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        animation-delay: -10s;
+    }
+
+    @keyframes orbFloat {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        25% { transform: translate(30px, -30px) scale(1.05); }
+        50% { transform: translate(-20px, 20px) scale(0.95); }
+        75% { transform: translate(20px, 10px) scale(1.02); }
+    }
+
     .demo-selection-container {
-        min-height: 80vh;
+        min-height: 100vh;
         display: flex;
         align-items: center;
         justify-content: center;
         padding: 2rem 1rem;
+        position: relative;
+        z-index: 10;
     }
 
     .demo-selection-modal {
-        max-width: 800px;
+        max-width: 900px;
         width: 100%;
-        background: white;
-        border-radius: 16px;
-        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
-        padding: 3rem 2rem;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        border-radius: 24px;
+        box-shadow: var(--card-shadow);
+        padding: 3.5rem 3rem;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        animation: slideUp 0.6s ease-out;
+    }
+
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 
     .demo-selection-modal h2 {
-        font-size: 2rem;
-        font-weight: 700;
+        font-size: 2.5rem;
+        font-weight: 800;
         margin-bottom: 0.5rem;
-        color: #1a202c;
+        background: var(--primary-gradient);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
         text-align: center;
+        letter-spacing: -0.5px;
     }
 
     .demo-selection-subtitle {
         text-align: center;
-        color: #718096;
-        margin-bottom: 2.5rem;
-        font-size: 1.1rem;
+        color: #64748b;
+        margin-bottom: 3rem;
+        font-size: 1.15rem;
+        font-weight: 500;
+    }
+
+    .modes-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
     }
 
     .mode-option {
+        background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
         border: 2px solid #e2e8f0;
-        border-radius: 12px;
+        border-radius: 20px;
         padding: 2rem;
-        margin-bottom: 1.5rem;
-        transition: all 0.3s ease;
+        transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         cursor: pointer;
         position: relative;
+        overflow: hidden;
+    }
+
+    .mode-option::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: var(--primary-gradient);
+        transform: scaleX(0);
+        transition: transform 0.3s ease;
+    }
+
+    .mode-option:hover::before {
+        transform: scaleX(1);
     }
 
     .mode-option:hover {
-        border-color: #0066cc;
-        box-shadow: 0 4px 12px rgba(0, 102, 204, 0.15);
-        transform: translateY(-2px);
+        border-color: #667eea;
+        box-shadow: 0 15px 40px rgba(102, 126, 234, 0.2);
+        transform: translateY(-8px);
+    }
+
+    .mode-option.solo-mode:hover {
+        border-color: #667eea;
+        box-shadow: 0 15px 40px rgba(102, 126, 234, 0.25);
+    }
+
+    .mode-option.team-mode:hover {
+        border-color: #764ba2;
+        box-shadow: 0 15px 40px rgba(118, 75, 162, 0.25);
+    }
+
+    .mode-option.team-mode::before {
+        background: linear-gradient(135deg, #764ba2 0%, #f093fb 100%);
     }
 
     .mode-option-header {
@@ -60,27 +204,55 @@
     }
 
     .mode-icon {
-        font-size: 2rem;
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.75rem;
         margin-right: 1rem;
+        flex-shrink: 0;
+    }
+
+    .solo-mode .mode-icon {
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(79, 172, 254, 0.15) 100%);
+    }
+
+    .team-mode .mode-icon {
+        background: linear-gradient(135deg, rgba(118, 75, 162, 0.15) 0%, rgba(240, 147, 251, 0.15) 100%);
     }
 
     .mode-title {
-        font-size: 1.5rem;
-        font-weight: 600;
-        color: #1a202c;
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: #1e293b;
         margin: 0;
     }
 
     .mode-duration {
-        font-size: 0.9rem;
-        color: #718096;
+        font-size: 0.85rem;
+        color: #fff;
         margin-left: auto;
+        background: var(--primary-gradient);
+        padding: 0.35rem 0.85rem;
+        border-radius: 20px;
+        font-weight: 600;
+    }
+
+    .team-mode .mode-duration {
+        background: linear-gradient(135deg, #764ba2 0%, #f093fb 100%);
     }
 
     .mode-description {
-        color: #4a5568;
+        color: #475569;
         margin-bottom: 1.25rem;
-        font-size: 1.05rem;
+        font-size: 1rem;
+        line-height: 1.6;
+    }
+
+    .mode-description strong {
+        color: #1e293b;
     }
 
     .mode-features {
@@ -90,79 +262,150 @@
     }
 
     .mode-features li {
-        padding: 0.5rem 0;
-        color: #2d3748;
+        padding: 0.6rem 0;
+        color: #334155;
         display: flex;
         align-items: flex-start;
+        font-size: 0.95rem;
     }
 
-    .mode-features li:before {
+    .mode-features li::before {
         content: "✓";
-        color: #48bb78;
+        color: #fff;
         font-weight: bold;
         margin-right: 0.75rem;
-        font-size: 1.2rem;
+        font-size: 0.75rem;
+        background: var(--success-gradient);
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        margin-top: 2px;
     }
 
     .mode-button {
         width: 100%;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        background: var(--primary-gradient);
         color: white;
         border: none;
-        border-radius: 8px;
-        padding: 1rem 2rem;
-        font-size: 1.1rem;
-        font-weight: 600;
+        border-radius: 12px;
+        padding: 1rem 1.5rem;
+        font-size: 1.05rem;
+        font-weight: 700;
         cursor: pointer;
         transition: all 0.3s ease;
         display: flex;
         align-items: center;
         justify-content: center;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .mode-button::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+        transition: left 0.5s ease;
+    }
+
+    .mode-button:hover::before {
+        left: 100%;
     }
 
     .mode-button:hover {
-        transform: translateX(4px);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+    }
+
+    .team-mode .mode-button {
+        background: linear-gradient(135deg, #764ba2 0%, #f093fb 100%);
+        box-shadow: 0 4px 15px rgba(118, 75, 162, 0.3);
+    }
+
+    .team-mode .mode-button:hover {
+        box-shadow: 0 8px 25px rgba(118, 75, 162, 0.4);
     }
 
     .mode-button i {
-        margin-left: 0.5rem;
+        margin-left: 0.75rem;
+        transition: transform 0.3s ease;
+    }
+
+    .mode-button:hover i {
+        transform: translateX(4px);
     }
 
     .skip-section {
         text-align: center;
-        margin-top: 2rem;
+        margin-top: 2.5rem;
         padding-top: 2rem;
-        border-top: 1px solid #e2e8f0;
-        color: #718096;
+        border-top: 2px solid #e2e8f0;
+        color: #64748b;
     }
 
     .skip-link {
-        color: #0066cc;
+        color: #667eea;
         text-decoration: none;
-        font-weight: 500;
-        transition: color 0.2s;
+        font-weight: 600;
+        transition: all 0.2s;
+        display: inline-flex;
+        align-items: center;
     }
 
     .skip-link:hover {
-        color: #004499;
-        text-decoration: underline;
+        color: #764ba2;
+    }
+
+    .skip-link i {
+        margin-left: 0.5rem;
+        transition: transform 0.2s;
+    }
+
+    .skip-link:hover i {
+        transform: translateX(4px);
     }
 
     .help-text {
-        font-size: 0.95rem;
-        color: #718096;
-        margin-top: 0.5rem;
+        font-size: 1rem;
+        color: #64748b;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+
+    .help-text strong {
+        color: #667eea;
     }
 
     /* Mobile responsive */
     @media (max-width: 768px) {
+        .modes-grid {
+            grid-template-columns: 1fr;
+        }
+
         .demo-selection-modal {
             padding: 2rem 1.5rem;
+            margin: 1rem;
+            border-radius: 20px;
         }
 
         .demo-selection-modal h2 {
-            font-size: 1.5rem;
+            font-size: 1.75rem;
+        }
+
+        .demo-selection-subtitle {
+            font-size: 1rem;
+            margin-bottom: 2rem;
         }
 
         .mode-option {
@@ -170,82 +413,105 @@
         }
 
         .mode-title {
-            font-size: 1.25rem;
+            font-size: 1.2rem;
+        }
+
+        .mode-icon {
+            width: 48px;
+            height: 48px;
+            font-size: 1.5rem;
         }
 
         .mode-button {
-            padding: 0.875rem 1.5rem;
+            padding: 0.875rem 1.25rem;
             font-size: 1rem;
+        }
+
+        .floating-orb {
+            display: none;
         }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="demo-selection-container">
-    <div class="demo-selection-modal">
-        <h2>How do you want to explore PrizmAI?</h2>
-        <p class="demo-selection-subtitle">Choose the experience that fits your needs</p>
+<div class="demo-page-wrapper">
+    <!-- Floating Orbs for visual appeal -->
+    <div class="floating-orb orb-1"></div>
+    <div class="floating-orb orb-2"></div>
+    <div class="floating-orb orb-3"></div>
 
-        <form id="demo-selection-form" method="POST">
-            {% csrf_token %}
-            <input type="hidden" name="selection_method" id="selection_method" value="selected">
+    <div class="demo-selection-container">
+        <div class="demo-selection-modal">
+            <h2>How do you want to explore PrizmAI?</h2>
+            <p class="demo-selection-subtitle">Choose the experience that fits your needs</p>
 
-            <!-- Solo Mode Option -->
-            <div class="mode-option" onclick="selectMode('solo', this)">
-                <div class="mode-option-header">
-                    <span class="mode-icon">🚀</span>
-                    <h3 class="mode-title">Explore Solo</h3>
-                    <span class="mode-duration">~5 minutes</span>
+            <form id="demo-selection-form" method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="selection_method" id="selection_method" value="selected">
+
+                <div class="modes-grid">
+                    <!-- Solo Mode Option -->
+                    <div class="mode-option solo-mode" onclick="selectMode('solo', this)">
+                        <div class="mode-option-header">
+                            <div class="mode-icon">🚀</div>
+                            <div>
+                                <h3 class="mode-title">Explore Solo</h3>
+                            </div>
+                            <span class="mode-duration">~5 min</span>
+                        </div>
+                        <p class="mode-description">
+                            <strong>Full access to all features</strong> — Perfect for individual users testing the platform
+                        </p>
+                        <ul class="mode-features">
+                            <li>Create and manage tasks with AI assistance</li>
+                            <li>View burndown forecasting and analytics</li>
+                            <li>Track time and manage projects</li>
+                            <li>Full admin access — try everything!</li>
+                        </ul>
+                        <button type="button" class="mode-button" onclick="submitMode('solo')">
+                            Start Solo Exploration <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
+
+                    <!-- Team Mode Option -->
+                    <div class="mode-option team-mode" onclick="selectMode('team', this)">
+                        <div class="mode-option-header">
+                            <div class="mode-icon">👥</div>
+                            <div>
+                                <h3 class="mode-title">Try as a Team</h3>
+                            </div>
+                            <span class="mode-duration">~10 min</span>
+                        </div>
+                        <p class="mode-description">
+                            <strong>Experience real team workflows</strong> — Perfect for team leads evaluating for teams
+                        </p>
+                        <ul class="mode-features">
+                            <li>Switch between Admin, Member, and Viewer roles</li>
+                            <li>See permission restrictions in action</li>
+                            <li>Experience approval workflows</li>
+                            <li>Understand team collaboration features</li>
+                        </ul>
+                        <button type="button" class="mode-button" onclick="submitMode('team')">
+                            Try Team Mode <i class="fas fa-arrow-right"></i>
+                        </button>
+                    </div>
                 </div>
-                <p class="mode-description">
-                    <strong>Full access to all features</strong> — Perfect for individual users testing the platform
-                </p>
-                <ul class="mode-features">
-                    <li>Create and manage tasks with AI assistance</li>
-                    <li>View burndown forecasting and analytics</li>
-                    <li>Track time and manage projects</li>
-                    <li>Full admin access — try everything!</li>
-                </ul>
-                <button type="button" class="mode-button" onclick="submitMode('solo')">
-                    Start Solo Exploration <i class="fas fa-arrow-right"></i>
-                </button>
-            </div>
 
-            <!-- Team Mode Option -->
-            <div class="mode-option" onclick="selectMode('team', this)">
-                <div class="mode-option-header">
-                    <span class="mode-icon">👥</span>
-                    <h3 class="mode-title">Try as a Team</h3>
-                    <span class="mode-duration">~10 minutes</span>
+                <!-- Skip Option -->
+                <div class="skip-section">
+                    <p class="help-text">
+                        <span>💡</span> Not sure? Most users start with <strong>Solo mode</strong>
+                    </p>
+                    <p>
+                        Already know what you want? 
+                        <a href="#" class="skip-link" onclick="skipSelection('solo'); return false;">
+                            Skip selection and start exploring <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </p>
                 </div>
-                <p class="mode-description">
-                    <strong>Experience real team workflows</strong> — Perfect for team leads evaluating for teams
-                </p>
-                <ul class="mode-features">
-                    <li>Switch between Admin, Member, and Viewer roles</li>
-                    <li>See permission restrictions in action</li>
-                    <li>Experience approval workflows</li>
-                    <li>Understand team collaboration features</li>
-                </ul>
-                <button type="button" class="mode-button" onclick="submitMode('team')">
-                    Try Team Mode <i class="fas fa-arrow-right"></i>
-                </button>
-            </div>
-
-            <!-- Skip Option -->
-            <div class="skip-section">
-                <p class="help-text">
-                    💡 Not sure? Most users start with <strong>Solo mode</strong>
-                </p>
-                <p>
-                    Already know what you want? 
-                    <a href="#" class="skip-link" onclick="skipSelection('solo'); return false;">
-                        Skip selection and start exploring →
-                    </a>
-                </p>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -254,11 +520,18 @@ let selectedMode = null;
 
 function selectMode(mode, element) {
     selectedMode = mode;
-    // Visual feedback (optional - modes can be selected by button click directly)
+    // Visual feedback - highlight selected mode
     document.querySelectorAll('.mode-option').forEach(el => {
         el.style.borderColor = '#e2e8f0';
+        el.style.transform = 'translateY(0)';
     });
-    element.style.borderColor = '#0066cc';
+    
+    if (mode === 'solo') {
+        element.style.borderColor = '#667eea';
+    } else {
+        element.style.borderColor = '#764ba2';
+    }
+    element.style.transform = 'translateY(-8px)';
 }
 
 function submitMode(mode) {
