@@ -62,12 +62,18 @@
     /* Completely hide default frappe-gantt arrow heads */
     .gantt .arrow-head,
     .gantt polygon.arrow-head,
-    .gantt path.arrow-head {
+    .gantt path.arrow-head,
+    svg .arrow-head,
+    g .arrow-head,
+    .gantt svg polygon,
+    .gantt svg path[class*="arrow"][d*="Z"] {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
         fill: transparent !important;
         stroke: transparent !important;
+        width: 0 !important;
+        height: 0 !important;
     }
 
     /* Custom arrow container for better visibility */
@@ -690,44 +696,73 @@
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
 
-        // Remove all default arrow-head elements from frappe-gantt
-        const defaultArrowHeads = ganttSvg.querySelectorAll('.arrow-head');
-        defaultArrowHeads.forEach(el => el.remove());
+        // Aggressive removal of all arrow-head elements (they might have different class names)
+        const removeArrowHeads = () => {
+            const selectors = [
+                '.arrow-head',
+                'polygon.arrow-head',
+                'path.arrow-head',
+                '[class*="arrow-head"]',
+                'polygon[class=""]',  // frappe-gantt sometimes creates polygons without classes
+            ];
+            
+            selectors.forEach(selector => {
+                const elements = ganttSvg.querySelectorAll(selector);
+                elements.forEach(el => {
+                    // Check if this is actually an arrow head (small polygon near arrows)
+                    const bbox = el.getBBox ? el.getBBox() : null;
+                    if (!bbox || (bbox.width < 20 && bbox.height < 20)) {
+                        el.remove();
+                    }
+                });
+            });
+        };
 
-        // Add custom arrowhead marker definition if not exists
+        // Remove immediately
+        removeArrowHeads();
+        
+        // Also remove after a short delay (in case they render async)
+        setTimeout(removeArrowHeads, 100);
+        setTimeout(removeArrowHeads, 300);
+
+        // Add custom arrowhead marker definition
         let defs = ganttSvg.querySelector('defs');
         if (!defs) {
             defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
             ganttSvg.insertBefore(defs, ganttSvg.firstChild);
         }
 
-        // Remove any existing custom markers to avoid duplicates
+        // Remove any existing custom markers
         const existingMarker = defs.querySelector('#simple-arrow');
         if (existingMarker) existingMarker.remove();
 
-        // Create a simple, clean arrowhead marker
+        // Create a clean arrowhead marker with proper sizing
         const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
         marker.setAttribute('id', 'simple-arrow');
-        marker.setAttribute('markerWidth', '10');
-        marker.setAttribute('markerHeight', '10');
-        marker.setAttribute('refX', '9');
+        marker.setAttribute('viewBox', '0 0 10 10');
+        marker.setAttribute('refX', '10');
         marker.setAttribute('refY', '5');
+        marker.setAttribute('markerWidth', '6');
+        marker.setAttribute('markerHeight', '6');
         marker.setAttribute('orient', 'auto');
-        marker.setAttribute('markerUnits', 'userSpaceOnUse');
 
-        // Simple solid triangle - single color, no stroke
+        // Simple solid triangle - single gray color
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 Z');
+        path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
         path.setAttribute('fill', '#9ca3af');
+        path.setAttribute('stroke', 'none');
         marker.appendChild(path);
         defs.appendChild(marker);
 
-        // Apply custom marker to all arrows
-        const arrows = ganttSvg.querySelectorAll('.arrow');
+        // Apply custom marker to all arrows and remove default markers
+        const arrows = ganttSvg.querySelectorAll('.arrow, path.arrow');
         arrows.forEach(arrow => {
+            // Remove any existing marker attributes
+            arrow.removeAttribute('marker-start');
+            arrow.removeAttribute('marker-mid');
+            
+            // Set our custom marker
             arrow.setAttribute('marker-end', 'url(#simple-arrow)');
-            // Remove any inline styles that might conflict
-            arrow.style.removeProperty('stroke-width');
         });
 
         console.log(`Enhanced ${arrows.length} dependency arrows`);
