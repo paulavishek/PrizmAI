@@ -20,6 +20,33 @@ def demo_context(request):
         context['demo_mode_type'] = request.session.get('demo_mode', 'solo').title()
         context['current_demo_role'] = request.session.get('demo_role', 'admin')
         
+        # Demo limitations - import utility
+        try:
+            from kanban.utils.demo_limits import get_demo_status, DEMO_LIMITS
+            demo_status = get_demo_status(request)
+            
+            # Add limit info to context
+            context['demo_projects_created'] = demo_status['projects']['current']
+            context['demo_projects_max'] = demo_status['projects']['max']
+            context['demo_projects_remaining'] = demo_status['projects']['max'] - demo_status['projects']['current']
+            context['demo_can_create_project'] = demo_status['projects']['can_create']
+            
+            context['demo_ai_uses'] = demo_status['ai']['current']
+            context['demo_ai_max'] = demo_status['ai']['max']
+            context['demo_can_use_ai'] = demo_status['ai']['can_generate']
+            
+            context['demo_export_allowed'] = demo_status['export']['allowed']
+            context['demo_limitations_hit'] = demo_status.get('limitations_hit', [])
+            context['demo_data_reset_hours'] = DEMO_LIMITS['data_reset_hours']
+        except Exception as e:
+            # Fallback defaults if utility fails
+            context['demo_projects_created'] = 0
+            context['demo_projects_max'] = 2
+            context['demo_projects_remaining'] = 2
+            context['demo_can_create_project'] = True
+            context['demo_export_allowed'] = False
+            context['demo_data_reset_hours'] = 48
+        
         # Expiry information
         expires_at_str = request.session.get('demo_expires_at')
         if expires_at_str:
@@ -31,7 +58,7 @@ def demo_context(request):
                 # Calculate time remaining
                 time_remaining = expires_at - timezone.now()
                 context['demo_time_remaining'] = time_remaining
-                context['demo_hours_remaining'] = time_remaining.total_seconds() / 3600
+                context['demo_hours_remaining'] = round(time_remaining.total_seconds() / 3600, 1)
                 
                 # Check if warning should be shown
                 hours_remaining = time_remaining.total_seconds() / 3600

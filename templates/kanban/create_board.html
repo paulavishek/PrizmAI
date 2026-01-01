@@ -7,6 +7,36 @@
 <div class="container-fluid">
     <div class="row">
         <div class="col-md-8 offset-md-2">
+            <!-- Demo Project Limit Warning -->
+            {% if demo_limit_reached %}
+            <div class="alert alert-warning border-warning shadow-sm mb-4" role="alert">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <i class="fas fa-lock fa-2x text-warning me-3"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h5 class="alert-heading mb-1">Demo Project Limit Reached</h5>
+                        <p class="mb-2">{{ demo_limit_message }}</p>
+                        <div class="d-flex gap-2">
+                            <a href="{% url 'register' %}" class="btn btn-primary btn-sm" onclick="trackDemoConversion('project_limit')">
+                                <i class="fas fa-user-plus me-1"></i> Create Free Account
+                            </a>
+                            <a href="{% url 'demo_dashboard' %}" class="btn btn-outline-secondary btn-sm">
+                                <i class="fas fa-arrow-left me-1"></i> Back to Demo
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% elif demo_projects_remaining is not None %}
+            <div class="alert alert-info border-info mb-4" role="alert">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Demo Mode:</strong> You can create {{ demo_projects_remaining }} more project(s). 
+                <span class="text-muted">({{ demo_projects_created }}/{{ demo_projects_max }} used)</span>
+                <a href="{% url 'register' %}" class="alert-link ms-2">Create account for unlimited projects</a>
+            </div>
+            {% endif %}
+            
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                     <h6 class="m-0 font-weight-bold text-primary">Create New Board</h6>
@@ -20,6 +50,7 @@
                     </div>
                 </div>
                 <div class="card-body">
+                    {% if not demo_limit_reached %}
                     <form method="post">
                         {% csrf_token %}
                         {{ form|crispy }}
@@ -73,6 +104,19 @@
                             <a href="{% url 'board_list' %}" class="btn btn-outline-secondary ms-2">Cancel</a>
                         </div>
                     </form>
+                    {% else %}
+                    <!-- Demo limit reached - show upgrade message instead of form -->
+                    <div class="text-center py-5">
+                        <i class="fas fa-rocket fa-4x text-primary mb-4"></i>
+                        <h4>Ready for More?</h4>
+                        <p class="text-muted mb-4">
+                            You've explored the demo to its fullest! Create a free account to unlock unlimited projects and all premium features.
+                        </p>
+                        <a href="{% url 'register' %}" class="btn btn-primary btn-lg" onclick="trackDemoConversion('project_limit_form')">
+                            <i class="fas fa-user-plus me-2"></i> Create Free Account
+                        </a>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -93,6 +137,38 @@ function goBack() {
         // Fallback to board list if no history
         window.location.href = '{% url "board_list" %}';
     }
+}
+
+// Track demo conversion attempts
+function trackDemoConversion(source) {
+    if (typeof gtag !== 'undefined') {
+        gtag('event', 'demo_conversion_initiated', {
+            'event_category': 'conversion',
+            'conversion_source': source,
+            'limitation_type': 'project_limit'
+        });
+    }
+    
+    // Also track server-side
+    fetch('/demo/track-event/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCsrfToken(),
+        },
+        body: JSON.stringify({
+            event_type: 'conversion_initiated',
+            event_data: {
+                source: source,
+                limitation_type: 'project_limit'
+            }
+        })
+    }).catch(e => console.error('Tracking error:', e));
+}
+
+function getCsrfToken() {
+    const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
+    return cookie ? cookie.split('=')[1] : '';
 }
 </script>
 {% endblock %}

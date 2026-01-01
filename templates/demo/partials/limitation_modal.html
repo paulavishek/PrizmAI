@@ -1,0 +1,254 @@
+{% load static %}
+
+<!-- Demo Limitation Modal - Shown when users hit demo restrictions -->
+<div class="modal fade" id="demoLimitationModal" tabindex="-1" aria-labelledby="demoLimitationModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-gradient-primary text-white border-0">
+                <h5 class="modal-title" id="demoLimitationModalLabel">
+                    <i class="fas fa-lock me-2"></i>
+                    <span id="limitation-title">Demo Limit Reached</span>
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="text-center mb-4">
+                    <div class="limitation-icon mb-3">
+                        <i class="fas fa-rocket fa-3x text-primary"></i>
+                    </div>
+                    <h4 id="limitation-heading" class="mb-2">Unlock Unlimited Projects</h4>
+                    <p id="limitation-message" class="text-muted">
+                        You've explored the demo to its fullest! Create a free account to unlock unlimited projects and all premium features.
+                    </p>
+                </div>
+                
+                <!-- Benefits List -->
+                <div class="upgrade-benefits mb-4">
+                    <h6 class="text-primary mb-3"><i class="fas fa-gift me-2"></i>With a free account, you get:</h6>
+                    <ul class="list-unstyled">
+                        <li class="mb-2">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            <strong>Unlimited projects</strong> - Create as many boards as you need
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            <strong>Export to JSON/CSV</strong> - Download and backup your data
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            <strong>Unlimited AI features</strong> - AI task generation & insights
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            <strong>Permanent data storage</strong> - Your work is always saved
+                        </li>
+                        <li class="mb-2">
+                            <i class="fas fa-check-circle text-success me-2"></i>
+                            <strong>Team collaboration</strong> - Invite team members
+                        </li>
+                    </ul>
+                </div>
+                
+                <!-- Demo Stats (if available) -->
+                <div id="demo-stats-section" class="alert alert-light border mb-3" style="display: none;">
+                    <small class="text-muted d-block mb-2">Your demo activity:</small>
+                    <div class="d-flex justify-content-around text-center">
+                        <div>
+                            <div id="stat-projects" class="h5 mb-0 text-primary">0</div>
+                            <small class="text-muted">Projects</small>
+                        </div>
+                        <div>
+                            <div id="stat-ai-uses" class="h5 mb-0 text-success">0</div>
+                            <small class="text-muted">AI Uses</small>
+                        </div>
+                        <div>
+                            <div id="stat-time" class="h5 mb-0 text-info">0m</div>
+                            <small class="text-muted">Time Spent</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer border-0 bg-light">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" onclick="trackLimitationDismissed()">
+                    Continue Demo
+                </button>
+                <a href="{% url 'register' %}" class="btn btn-primary btn-lg" onclick="trackUpgradeClicked()">
+                    <i class="fas fa-user-plus me-2"></i>Create Free Account
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.bg-gradient-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.limitation-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
+
+.upgrade-benefits {
+    background: #f8f9fc;
+    padding: 1rem;
+    border-radius: 10px;
+}
+
+#demoLimitationModal .modal-content {
+    border-radius: 15px;
+    overflow: hidden;
+}
+</style>
+
+<script>
+// Demo limitation modal control
+const DemoLimitation = {
+    modal: null,
+    
+    init() {
+        const modalEl = document.getElementById('demoLimitationModal');
+        if (modalEl) {
+            this.modal = new bootstrap.Modal(modalEl);
+        }
+    },
+    
+    show(limitationType, context = {}) {
+        if (!this.modal) this.init();
+        if (!this.modal) return;
+        
+        // Update modal content based on limitation type
+        const config = this.getConfig(limitationType, context);
+        
+        document.getElementById('limitation-title').textContent = config.title;
+        document.getElementById('limitation-heading').textContent = config.heading;
+        document.getElementById('limitation-message').textContent = config.message;
+        
+        // Update icon
+        const iconContainer = document.querySelector('.limitation-icon i');
+        if (iconContainer) {
+            iconContainer.className = `fas ${config.icon} fa-3x text-primary`;
+        }
+        
+        // Update stats if available
+        if (context.projects || context.ai_uses || context.time_spent) {
+            document.getElementById('demo-stats-section').style.display = 'block';
+            document.getElementById('stat-projects').textContent = context.projects || 0;
+            document.getElementById('stat-ai-uses').textContent = context.ai_uses || 0;
+            document.getElementById('stat-time').textContent = (context.time_spent || 0) + 'm';
+        }
+        
+        // Track modal shown
+        this.trackEvent('limitation_modal_shown', {
+            limitation_type: limitationType,
+            ...context
+        });
+        
+        // Also send to GA4
+        if (typeof gtag !== 'undefined') {
+            gtag('event', 'limitation_encountered', {
+                'limitation_type': limitationType,
+                'demo_duration_minutes': context.time_spent || 0,
+                'projects_created': context.projects || 0,
+                'ai_uses': context.ai_uses || 0
+            });
+        }
+        
+        this.modal.show();
+    },
+    
+    getConfig(type, context = {}) {
+        const configs = {
+            'project_limit': {
+                title: 'Project Limit Reached',
+                heading: 'Unlock Unlimited Projects',
+                message: `You've created ${context.current || 2} of ${context.max || 2} demo projects. Create a free account to manage unlimited projects!`,
+                icon: 'fa-folder-plus'
+            },
+            'export_blocked': {
+                title: 'Export Not Available',
+                heading: 'Unlock Export Features',
+                message: 'Export to JSON/CSV is only available for registered users. Create a free account to download your data!',
+                icon: 'fa-file-export'
+            },
+            'ai_limit': {
+                title: 'AI Limit Reached',
+                heading: 'Unlock Unlimited AI',
+                message: `You've used ${context.current || 20} of ${context.max || 20} AI generations. Create a free account for unlimited AI features!`,
+                icon: 'fa-robot'
+            },
+            'time_expired': {
+                title: 'Demo Session Expiring',
+                heading: 'Save Your Progress',
+                message: 'Your demo session is about to expire. Create a free account to save your work and continue!',
+                icon: 'fa-clock'
+            }
+        };
+        
+        return configs[type] || configs['project_limit'];
+    },
+    
+    trackEvent(eventType, data) {
+        fetch('/demo/track-event/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken(),
+            },
+            body: JSON.stringify({
+                event_type: eventType,
+                event_data: data
+            })
+        }).catch(e => console.error('Tracking error:', e));
+    }
+};
+
+// Track when user dismisses limitation modal
+function trackLimitationDismissed() {
+    DemoLimitation.trackEvent('limitation_dismissed', {
+        modal: 'limitation_modal'
+    });
+    
+    if (typeof gtag !== 'undefined') {
+        gtag('event', 'limitation_dismissed', {
+            'event_category': 'demo',
+            'event_label': 'modal'
+        });
+    }
+}
+
+// Track when user clicks upgrade button
+function trackUpgradeClicked() {
+    DemoLimitation.trackEvent('upgrade_clicked', {
+        source: 'limitation_modal'
+    });
+    
+    if (typeof gtag !== 'undefined') {
+        gtag('event', 'demo_conversion_initiated', {
+            'event_category': 'conversion',
+            'conversion_source': 'limitation_modal'
+        });
+    }
+}
+
+// Helper function for CSRF token
+function getCsrfToken() {
+    const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
+    return cookie ? cookie.split('=')[1] : '';
+}
+
+// Initialize on DOM ready
+document.addEventListener('DOMContentLoaded', function() {
+    DemoLimitation.init();
+});
+
+// Expose globally for easy use
+window.DemoLimitation = DemoLimitation;
+</script>

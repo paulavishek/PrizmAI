@@ -498,6 +498,16 @@ class DemoSession(models.Model):
     nudges_clicked = models.IntegerField(default=0, help_text="Count of nudge CTAs clicked")
     nudges_dismissed = models.IntegerField(default=0, help_text="Count of nudges dismissed by user")
     
+    # Demo Limitations Tracking
+    projects_created_in_demo = models.IntegerField(default=0, help_text="Number of projects created in demo mode")
+    ai_generations_used = models.IntegerField(default=0, help_text="Number of AI generations used in demo")
+    export_attempts = models.IntegerField(default=0, help_text="Number of export attempts (blocked)")
+    limitations_hit = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of limitations encountered: ['project_limit', 'export_blocked', etc.]"
+    )
+    
     # Conversion tracking
     converted_to_signup = models.BooleanField(default=False)
     conversion_timestamp = models.DateTimeField(null=True, blank=True)

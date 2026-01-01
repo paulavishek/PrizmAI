@@ -220,12 +220,34 @@ def board_list(request):
 def create_board(request):
     from kanban.audit_utils import log_model_change
     from kanban.permission_utils import assign_default_role_to_user
+    from kanban.utils.demo_limits import check_project_limit, increment_project_count, record_limitation_hit
+    
+    # Check demo mode project limits
+    project_limit_status = check_project_limit(request)
+    if project_limit_status['is_demo'] and not project_limit_status['can_create']:
+        # Record limitation hit for analytics
+        record_limitation_hit(request, 'project_limit')
+        messages.warning(request, project_limit_status['message'])
+        return render(request, 'kanban/create_board.html', {
+            'form': BoardForm(),
+            'demo_limit_reached': True,
+            'demo_limit_message': project_limit_status['message'],
+            'demo_projects_created': project_limit_status['current_count'],
+            'demo_projects_max': project_limit_status['max_allowed'],
+        })
     
     try:
         profile = request.user.profile
         organization = profile.organization
         
         if request.method == 'POST':
+            # Re-check limit before processing (in case of race condition)
+            project_limit_status = check_project_limit(request)
+            if project_limit_status['is_demo'] and not project_limit_status['can_create']:
+                record_limitation_hit(request, 'project_limit')
+                messages.warning(request, project_limit_status['message'])
+                return redirect('board_list')
+            
             form = BoardForm(request.POST)
             if form.is_valid():
                 board = form.save(commit=False)
@@ -233,6 +255,9 @@ def create_board(request):
                 board.created_by = request.user
                 board.save()
                 board.members.add(request.user)
+                
+                # Increment demo project count if in demo mode
+                increment_project_count(request)
                 
                 # Assign creator as Admin in RBAC system
                 try:
@@ -286,8 +311,18 @@ def create_board(request):
         else:
             form = BoardForm()
         
+        # Pass demo status to template
+        demo_context = {}
+        if project_limit_status['is_demo']:
+            demo_context = {
+                'demo_projects_created': project_limit_status['current_count'],
+                'demo_projects_max': project_limit_status['max_allowed'],
+                'demo_projects_remaining': project_limit_status['max_allowed'] - project_limit_status['current_count'],
+            }
+        
         return render(request, 'kanban/create_board.html', {
-            'form': form
+            'form': form,
+            **demo_context
         })
     except UserProfile.DoesNotExist:
         return redirect('create_organization')
@@ -1745,6 +1780,23 @@ def get_progress_color_class(progress):
 @login_required
 def export_board(request, board_id):
     """Export a board's data to JSON or CSV format"""
+    from kanban.utils.demo_limits import check_export_allowed, record_export_attempt, record_limitation_hit
+    
+    # Check if export is allowed (blocked in demo mode)
+    export_status = check_export_allowed(request)
+    if export_status['is_demo'] and not export_status['allowed']:
+        record_export_attempt(request)
+        record_limitation_hit(request, 'export_blocked')
+        messages.warning(request, export_status['message'])
+        # Return JSON response for AJAX requests
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'error': 'demo_export_blocked',
+                'message': export_status['message'],
+                'upgrade_url': '/accounts/signup/'
+            }, status=403)
+        return redirect('board_detail', board_id=board_id)
+    
     board = get_object_or_404(Board, id=board_id)
     
     # Check if user has access to this board

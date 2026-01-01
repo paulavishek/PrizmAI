@@ -155,6 +155,11 @@
         </div>
     {% endif %}
 
+    <!-- Demo Limitation Modal (available globally for demo mode) -->
+    {% if request.session.is_demo_mode %}
+        {% include 'demo/partials/limitation_modal.html' %}
+    {% endif %}
+
     <!-- Main Content -->
     <main class="container my-4">
         {% block content %}{% endblock %}
@@ -235,6 +240,11 @@
     
     <!-- AI Explainability JS -->
     <script src="{% static 'js/ai_explainability.js' %}"></script>
+    
+    <!-- Demo Mode GA4 Analytics -->
+    {% if request.session.is_demo_mode %}
+    <script src="{% static 'js/demo_ga4_analytics.js' %}"></script>
+    {% endif %}
     
     <!-- Custom JS -->
     {% block extra_js %}{% endblock %}

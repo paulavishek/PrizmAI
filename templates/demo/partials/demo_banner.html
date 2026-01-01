@@ -153,6 +153,31 @@
         font-size: 0.9rem;
     }
 
+    /* Demo Limits Status */
+    .demo-limits-status {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.4rem 0.8rem;
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 6px;
+        font-size: 0.85rem;
+    }
+
+    .demo-limit-item {
+        display: flex;
+        align-items: center;
+        opacity: 0.9;
+    }
+
+    .demo-limit-item.warning {
+        color: #ffc107;
+    }
+
+    .demo-limit-item.limit-reached {
+        color: #ff6b6b;
+        font-weight: 600;
+    }
     /* Mobile Styles */
     @media (max-width: 992px) {
         .demo-banner-desktop {
@@ -632,8 +657,16 @@
                 {% endif %}
 
                 <div class="demo-banner-notice">
-                    <i class="fas fa-info-circle"></i>
-                    All changes are temporary
+                    <i class="fas fa-clock me-1"></i>
+                    Data resets in {{ demo_hours_remaining|default:"48" }}h
+                </div>
+                
+                <!-- Demo Limits Status -->
+                <div class="demo-limits-status">
+                    <span class="demo-limit-item" title="Projects created in demo">
+                        <i class="fas fa-folder-plus me-1"></i>
+                        {{ demo_projects_created|default:"0" }}/{{ demo_projects_max|default:"2" }} projects
+                    </span>
                 </div>
             </div>
 
