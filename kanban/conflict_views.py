@@ -524,8 +524,15 @@ def conflict_analytics(request):
         ).order_by('date')
         
         # Convert to dictionaries for easy lookup
-        detected_by_date = {item['date'].strftime('%Y-%m-%d'): item['count'] for item in detected_trend}
-        resolved_by_date = {item['date'].strftime('%Y-%m-%d'): item['count'] for item in resolved_trend}
+        detected_by_date = {}
+        for item in detected_trend:
+            if item['date']:
+                detected_by_date[item['date'].strftime('%Y-%m-%d')] = item['count']
+        
+        resolved_by_date = {}
+        for item in resolved_trend:
+            if item['date']:
+                resolved_by_date[item['date'].strftime('%Y-%m-%d')] = item['count']
         
         # Generate complete 30-day range
         import json
