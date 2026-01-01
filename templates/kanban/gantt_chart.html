@@ -48,9 +48,9 @@
     /* Main arrow path styling */
     .gantt .arrow {
         fill: none;
-        stroke: #64748b;
-        stroke-width: 2px;
-        opacity: 0.85;
+        stroke: #94a3b8;
+        stroke-width: 1.5px;
+        opacity: 0.7;
         stroke-linecap: round;
         stroke-linejoin: round;
         transition: all 0.2s ease;
@@ -58,16 +58,15 @@
 
     .gantt .arrow:hover {
         stroke: #3b82f6;
-        stroke-width: 2.5px;
+        stroke-width: 2px;
         opacity: 1;
-        filter: drop-shadow(0 2px 4px rgba(59, 130, 246, 0.3));
+        filter: drop-shadow(0 1px 2px rgba(59, 130, 246, 0.3));
     }
 
     /* Arrow head (triangle) styling */
     .gantt .arrow-head {
-        fill: #64748b;
-        stroke: #64748b;
-        stroke-width: 1px;
+        fill: #94a3b8;
+        stroke: none;
         transition: all 0.2s ease;
     }
 
@@ -706,18 +705,18 @@
 
         // Check if marker already exists
         if (!defs.querySelector('#custom-arrowhead')) {
-            // Create a professional arrowhead marker
+            // Create a sleek, professional arrowhead marker (smaller triangle)
             const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
             marker.setAttribute('id', 'custom-arrowhead');
-            marker.setAttribute('markerWidth', '10');
-            marker.setAttribute('markerHeight', '8');
-            marker.setAttribute('refX', '9');
-            marker.setAttribute('refY', '4');
+            marker.setAttribute('markerWidth', '6');
+            marker.setAttribute('markerHeight', '6');
+            marker.setAttribute('refX', '5');
+            marker.setAttribute('refY', '3');
             marker.setAttribute('orient', 'auto');
             marker.setAttribute('markerUnits', 'strokeWidth');
 
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            path.setAttribute('d', 'M 0 0 L 10 4 L 0 8 L 3 4 Z');
+            path.setAttribute('d', 'M 0 0 L 6 3 L 0 6 Z');  // Sleek filled triangle
             path.setAttribute('fill', '#64748b');
             path.setAttribute('class', 'custom-arrow-head');
             marker.appendChild(path);
@@ -925,37 +924,42 @@
             // Find and modify the existing label to show truncated name ONLY - INSIDE the bar
             const existingLabel = barWrapper.querySelector('.bar-label');
             if (existingLabel) {
-                // Adjust minimum width threshold based on view mode
-                let minWidth = 30;
+                // Adjust minimum width threshold based on view mode - more aggressive showing
+                let minWidth = 20;  // Show text for bars as small as 20px
                 if (currentViewMode === 'Month') {
-                    minWidth = 15; // More aggressive showing in month view
+                    minWidth = 12; // More aggressive showing in month view
                 } else if (currentViewMode === 'Day') {
-                    minWidth = 50; // Day view has larger bars
+                    minWidth = 40; // Day view has larger bars
                 }
 
                 // Show labels for bars wider than minimum width
                 if (barWidth > minWidth) {
-                    // Calculate how many characters can fit
-                    let charWidth = 6.5; // Approximate width per character at font-size 11px
-                    let fontSize = 11;
+                    // Calculate how many characters can fit - use smaller font for narrow bars
+                    let charWidth = 5.5; // Tighter character width estimate
+                    let fontSize = 10;
                     
-                    // Adjust font size and char width based on view mode
-                    if (currentViewMode === 'Month') {
-                        fontSize = 10; // Slightly smaller font for month view
-                        charWidth = 6;
-                        existingLabel.style.fontSize = fontSize + 'px';
+                    // Adjust font size based on bar width for better readability
+                    if (barWidth < 40) {
+                        fontSize = 8;
+                        charWidth = 4.5;
+                    } else if (barWidth < 80) {
+                        fontSize = 9;
+                        charWidth = 5;
+                    } else if (currentViewMode === 'Month') {
+                        fontSize = 9;
+                        charWidth = 5;
                     } else if (currentViewMode === 'Day') {
                         fontSize = 11;
-                        charWidth = 6.5;
-                        existingLabel.style.fontSize = fontSize + 'px';
+                        charWidth = 6;
                     } else {
                         // Week view
-                        fontSize = 11;
-                        charWidth = 6.5;
-                        existingLabel.style.fontSize = fontSize + 'px';
+                        fontSize = 10;
+                        charWidth = 5.5;
                     }
                     
-                    const availableWidth = barWidth - 8; // Minimal padding
+                    existingLabel.style.fontSize = fontSize + 'px';
+                    
+                    const availableWidth = barWidth - 6; // Tighter padding
                     const maxChars = Math.floor(availableWidth / charWidth);
 
                     let displayName = task.fullName;
