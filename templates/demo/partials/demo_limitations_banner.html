@@ -91,6 +91,19 @@
         background: rgba(255, 107, 107, 0.2);
     }
 
+    .demo-limit-countdown {
+        font-family: 'Courier New', monospace;
+        font-size: 1.4rem;
+        font-weight: 700;
+        letter-spacing: 1px;
+    }
+
+    .demo-timer-expired-large {
+        color: #ff6b6b;
+        font-weight: 700;
+        animation: pulse 1.5s ease-in-out infinite;
+    }
+
     .demo-cta-section {
         margin-top: 1.5rem;
         padding-top: 1rem;
@@ -195,12 +208,20 @@
 
     <div class="demo-limitations-grid">
         <!-- Time Limitation -->
-        <div class="demo-limitation-item {% if demo_hours_remaining|default:48 < 24 %}demo-limitation-urgent{% endif %}">
+        <div class="demo-limitation-item {% if demo_hours_remaining|default:48 < 24 %}demo-limitation-urgent{% endif %}" id="demoLimitTimerCard">
             <span class="demo-limitation-icon">⏰</span>
             <div class="demo-limitation-label">Session Timer</div>
             <div class="demo-limitation-value">
-                {% if demo_expired %}Expired{% else %}{{ demo_hours_remaining|default:"48" }} hours remaining{% endif %}
-                {% if demo_hours_remaining|default:48 < 24 %}
+                {% if demo_expired %}
+                    <span class="demo-timer-expired-large">Expired</span>
+                {% elif demo_expires_at %}
+                    <span class="demo-limit-countdown" id="demoLimitCountdown" data-expires="{{ demo_expires_at.isoformat }}">
+                        {{ demo_hours_remaining|default:"48" }} hours remaining
+                    </span>
+                {% else %}
+                    48 hours remaining
+                {% endif %}
+                {% if demo_hours_remaining|default:48 < 24 and not demo_expired %}
                 <span style="font-size: 0.8rem; color: #ffc107;">⚠️</span>
                 {% endif %}
             </div>
@@ -304,4 +325,50 @@ function trackLimitationBannerClick() {
         });
     }
 }
-</script>
+
+// Live Countdown Timer for Limitations Banner
+function initDemoLimitCountdown() {
+    const countdownElement = document.getElementById('demoLimitCountdown');
+    const cardElement = document.getElementById('demoLimitTimerCard');
+    
+    if (!countdownElement || !cardElement) return;
+    
+    const expiresAt = countdownElement.getAttribute('data-expires');
+    if (!expiresAt) return;
+    
+    const expiryDate = new Date(expiresAt);
+    
+    function updateCountdown() {
+        const now = new Date();
+        const diff = expiryDate - now;
+        
+        if (diff <= 0) {
+            countdownElement.innerHTML = '<span class="demo-timer-expired-large">Expired</span>';
+            cardElement.classList.add('demo-limitation-urgent');
+            clearInterval(countdownInterval);
+            return;
+        }
+        
+        const totalSeconds = Math.floor(diff / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        
+        // Format display
+        const formattedTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        countdownElement.textContent = formattedTime;
+        
+        // Update card state
+        cardElement.classList.remove('demo-limitation-warning', 'demo-limitation-urgent');
+        if (hours < 1) {
+            cardElement.classList.add('demo-limitation-urgent');
+        } else if (hours < 12) {
+            cardElement.classList.add('demo-limitation-warning');
+        }
+    }
+    
+    updateCountdown();
+    const countdownInterval = setInterval(updateCountdown, 1000);
+}
+
+document.addEventListener('DOMContentLoaded', initDemoLimitCountdown);
