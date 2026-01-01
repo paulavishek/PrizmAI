@@ -503,6 +503,7 @@ def conflict_analytics(request):
         thirty_days_ago = timezone.now() - timedelta(days=30)
         
         # Get conflicts detected per day
+        # Include all conflicts that were active or created in this period
         detected_trend = ConflictDetection.objects.filter(
             board__in=boards,
             detected_at__gte=thirty_days_ago
@@ -513,10 +514,11 @@ def conflict_analytics(request):
         ).order_by('date')
         
         # Get conflicts resolved per day
+        # Also include these in the detected count if they weren't already counted
         resolved_trend = ConflictDetection.objects.filter(
             board__in=boards,
             status='resolved',
-            resolved_at__gte=thirty_days_ago
+            resolved_at__isnull=False
         ).annotate(
             date=TruncDate('resolved_at')
         ).values('date').annotate(
@@ -533,6 +535,27 @@ def conflict_analytics(request):
         for item in resolved_trend:
             if item['date']:
                 resolved_by_date[item['date'].strftime('%Y-%m-%d')] = item['count']
+        
+        # Add resolved conflicts to detected count on their detection date
+        # This ensures we count all conflicts that exist in the system
+        all_resolved_with_dates = ConflictDetection.objects.filter(
+            board__in=boards,
+            status='resolved',
+            resolved_at__isnull=False,
+            detected_at__isnull=False
+        ).annotate(
+            date=TruncDate('detected_at')
+        ).values('date').annotate(
+            count=Count('id')
+        ).order_by('date')
+        
+        # Add these to detected_by_date
+        for item in all_resolved_with_dates:
+            if item['date']:
+                date_str = item['date'].strftime('%Y-%m-%d')
+                if date_str not in detected_by_date:
+                    detected_by_date[date_str] = 0
+                detected_by_date[date_str] += item['count']
         
         # Generate complete 30-day range
         import json
