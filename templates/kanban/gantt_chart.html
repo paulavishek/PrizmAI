@@ -6,182 +6,275 @@
 {% block extra_css %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.css">
 <style>
+    /* ============================================
+       PROFESSIONAL GANTT CHART STYLES
+       ============================================ */
+    
     .gantt-container {
-        padding: 20px;
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        padding: 24px;
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
         margin: 20px 0;
         overflow-x: auto;
+        border: 1px solid #e2e8f0;
     }
 
     .gantt-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 20px;
+        margin-bottom: 24px;
         flex-wrap: wrap;
-        gap: 15px;
+        gap: 16px;
+        padding-bottom: 16px;
+        border-bottom: 2px solid #e2e8f0;
     }
 
     .gantt-header h2 {
         margin: 0;
         font-size: 1.5rem;
+        font-weight: 600;
+        color: #1e293b;
+        display: flex;
+        align-items: center;
+        gap: 10px;
     }
 
-    /* Ensure dependency arrows are visible */
+    /* ============================================
+       PROFESSIONAL DEPENDENCY ARROWS
+       ============================================ */
+    
+    /* Main arrow path styling */
     .gantt .arrow {
         fill: none;
-        stroke: #666;
-        stroke-width: 1.4px;
-        opacity: 0.7;
+        stroke: #64748b;
+        stroke-width: 2px;
+        opacity: 0.85;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        transition: all 0.2s ease;
     }
 
     .gantt .arrow:hover {
-        stroke: #333;
-        stroke-width: 2px;
+        stroke: #3b82f6;
+        stroke-width: 2.5px;
         opacity: 1;
+        filter: drop-shadow(0 2px 4px rgba(59, 130, 246, 0.3));
     }
 
+    /* Arrow head (triangle) styling */
     .gantt .arrow-head {
-        fill: #666;
-        stroke: #666;
+        fill: #64748b;
+        stroke: #64748b;
+        stroke-width: 1px;
+        transition: all 0.2s ease;
     }
+
+    .gantt .arrow:hover + .arrow-head,
+    .gantt .arrow-head:hover {
+        fill: #3b82f6;
+        stroke: #3b82f6;
+    }
+
+    /* Custom arrow container for better visibility */
+    .gantt svg .arrow-group {
+        pointer-events: stroke;
+    }
+
+    /* ============================================
+       VIEW MODE BUTTONS
+       ============================================ */
 
     .view-buttons {
         display: flex;
-        gap: 8px;
+        gap: 4px;
+        background: #f1f5f9;
+        padding: 4px;
+        border-radius: 8px;
     }
 
     .view-buttons button {
-        padding: 8px 16px;
-        border: 1px solid #ddd;
-        background: white;
-        border-radius: 4px;
+        padding: 10px 20px;
+        border: none;
+        background: transparent;
+        border-radius: 6px;
         cursor: pointer;
-        transition: all 0.2s;
+        transition: all 0.2s ease;
+        font-weight: 500;
+        color: #64748b;
+        font-size: 0.875rem;
     }
 
     .view-buttons button:hover {
-        background: #f5f5f5;
+        background: #e2e8f0;
+        color: #334155;
     }
 
     .view-buttons button.active {
-        background: #0d6efd;
+        background: #3b82f6;
         color: white;
-        border-color: #0d6efd;
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
     }
 
-    /* Custom task colors based on priority */
+    /* ============================================
+       TASK BAR PRIORITY COLORS
+       ============================================ */
+
     .gantt .bar-wrapper .bar[data-priority="low"] {
-        fill: #6c757d !important;
+        fill: #94a3b8 !important;
+        rx: 6;
+        ry: 6;
     }
 
     .gantt .bar-wrapper .bar[data-priority="medium"] {
-        fill: #4c9aff !important;
+        fill: #3b82f6 !important;
+        rx: 6;
+        ry: 6;
     }
 
     .gantt .bar-wrapper .bar[data-priority="high"] {
-        fill: #ff9500 !important;
+        fill: #f59e0b !important;
+        rx: 6;
+        ry: 6;
     }
 
     .gantt .bar-wrapper .bar[data-priority="urgent"] {
-        fill: #ff5252 !important;
+        fill: #ef4444 !important;
+        rx: 6;
+        ry: 6;
     }
 
-    /* Hide progress overlay to prevent mixed colors */
+    /* Hide progress overlay for cleaner look */
     .gantt .bar-wrapper .bar-progress {
         display: none !important;
     }
 
-    /* Ensure bars have uniform color */
+    /* Ensure bars have uniform color and rounded corners */
     .gantt .bar-wrapper .bar {
         opacity: 1 !important;
+        rx: 6;
+        ry: 6;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+        transition: all 0.2s ease;
     }
 
-    /* Make bars clearly clickable */
+    /* Make bars clearly clickable with hover effects */
     .gantt .bar-wrapper {
         cursor: pointer !important;
     }
 
     .gantt .bar-wrapper:hover .bar {
-        opacity: 0.85;
-        filter: brightness(1.1);
+        filter: brightness(1.15) drop-shadow(0 4px 8px rgba(0,0,0,0.2));
+        transform: translateY(-1px);
     }
 
+    /* Empty state styling */
     .empty-state {
         text-align: center;
-        padding: 60px 20px;
-        color: #6c757d;
+        padding: 80px 20px;
+        color: #64748b;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border-radius: 12px;
+        border: 2px dashed #cbd5e1;
     }
 
     .empty-state i {
         font-size: 4rem;
-        margin-bottom: 20px;
-        opacity: 0.3;
+        margin-bottom: 24px;
+        opacity: 0.4;
+        color: #94a3b8;
     }
 
+    .empty-state h3 {
+        color: #475569;
+        margin-bottom: 12px;
+    }
+
+    /* Board navigation tabs */
     .board-tabs {
         margin-bottom: 20px;
-        border-bottom: 2px solid #dee2e6;
+        border-bottom: 2px solid #e2e8f0;
     }
 
     .board-tabs .nav-link {
-        color: #495057;
+        color: #64748b;
         border: none;
         border-bottom: 3px solid transparent;
         padding: 0.75rem 1.25rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
     }
 
     .board-tabs .nav-link:hover {
-        border-bottom-color: #dee2e6;
+        color: #3b82f6;
+        border-bottom-color: #bfdbfe;
     }
 
     .board-tabs .nav-link.active {
-        color: #0d6efd;
-        border-bottom-color: #0d6efd;
+        color: #3b82f6;
+        border-bottom-color: #3b82f6;
         background: none;
     }
 
+    /* ============================================
+       PROFESSIONAL LEGEND
+       ============================================ */
+
     .gantt-legend {
-        margin-top: 20px;
-        padding: 15px;
-        background: #f8f9fa;
-        border-radius: 4px;
+        margin-top: 24px;
+        padding: 16px 20px;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 24px;
+    }
+
+    .gantt-legend strong {
+        color: #475569;
+        font-size: 0.875rem;
+        margin-right: 8px;
     }
 
     .legend-item {
-        display: inline-block;
-        margin-right: 20px;
-        margin-bottom: 10px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 0.875rem;
+        color: #64748b;
     }
 
     .legend-color {
         display: inline-block;
-        width: 30px;
-        height: 15px;
-        margin-right: 5px;
-        border-radius: 2px;
-        vertical-align: middle;
+        width: 24px;
+        height: 12px;
+        border-radius: 4px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.15);
     }
 
-    /* Adaptive task labels - ALWAYS inside bars */
+    /* ============================================
+       TASK BAR LABELS
+       ============================================ */
+
     .gantt .bar-label {
         font-size: 11px;
-        font-weight: 500;
+        font-weight: 600;
         fill: white !important;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        text-shadow: 0 1px 3px rgba(0,0,0,0.4);
         pointer-events: none;
-        text-anchor: middle !important;  /* Center text horizontally */
-        dominant-baseline: middle !important;  /* Center text vertically */
+        text-anchor: middle !important;
+        dominant-baseline: middle !important;
+        letter-spacing: 0.02em;
     }
 
-    /* Override any outside positioning */
     .gantt .bar-label.outside-left,
     .gantt .bar-label.outside-right {
         fill: white !important;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.3) !important;
-        font-weight: 500;
+        text-shadow: 0 1px 3px rgba(0,0,0,0.4) !important;
+        font-weight: 600;
     }
 
     /* Task bar info overlay */
@@ -189,7 +282,7 @@
         pointer-events: none;
         font-size: 11px;
         fill: rgba(255, 255, 255, 0.95);
-        font-weight: 500;
+        font-weight: 600;
     }
 
     .assignee-avatar {
@@ -210,23 +303,125 @@
         transform: translateY(-50%);
     }
 
-    /* Custom tooltip for task bars */
+    /* ============================================
+       PROFESSIONAL TOOLTIP
+       ============================================ */
+
     .gantt-tooltip {
         position: fixed;
-        background: rgba(0, 0, 0, 0.9);
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
         color: white;
-        padding: 8px 12px;
-        border-radius: 6px;
-        font-size: 12px;
+        padding: 12px 16px;
+        border-radius: 10px;
+        font-size: 13px;
         pointer-events: none;
         z-index: 1000;
         white-space: nowrap;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.25);
         display: none;
+        border: 1px solid rgba(255,255,255,0.1);
+        max-width: 320px;
     }
 
     .gantt-tooltip.show {
         display: block;
+        animation: tooltipFadeIn 0.15s ease-out;
+    }
+
+    @keyframes tooltipFadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(4px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .gantt-tooltip strong {
+        color: #f8fafc;
+        display: block;
+        margin-bottom: 6px;
+        font-size: 14px;
+    }
+
+    .gantt-tooltip .tooltip-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin: 4px 0;
+        color: #cbd5e1;
+        font-size: 12px;
+    }
+
+    .gantt-tooltip .tooltip-row i {
+        width: 14px;
+        color: #94a3b8;
+    }
+
+    /* ============================================
+       GANTT GRID AND TIMELINE STYLING
+       ============================================ */
+
+    .gantt .grid-header {
+        fill: #f8fafc;
+        stroke: #e2e8f0;
+    }
+
+    .gantt .grid-row {
+        fill: transparent;
+    }
+
+    .gantt .grid-row:nth-child(even) {
+        fill: rgba(241, 245, 249, 0.5);
+    }
+
+    .gantt .row-line {
+        stroke: #e2e8f0;
+    }
+
+    .gantt .tick {
+        stroke: #e2e8f0;
+        stroke-width: 1;
+    }
+
+    .gantt .today-highlight {
+        fill: rgba(59, 130, 246, 0.08);
+        stroke: #3b82f6;
+        stroke-width: 2;
+        stroke-dasharray: 4, 4;
+    }
+
+    .gantt .lower-text, .gantt .upper-text {
+        fill: #64748b;
+        font-weight: 500;
+        font-size: 12px;
+    }
+
+    .gantt .upper-text {
+        fill: #475569;
+        font-weight: 600;
+    }
+
+    /* ============================================
+       DEPENDENCY ARROW ENHANCEMENTS
+       ============================================ */
+
+    .gantt .arrow-head {
+        fill: #64748b !important;
+        stroke: none !important;
+    }
+
+    /* Colored arrows based on task priority */
+    .gantt .bar-wrapper[data-priority="urgent"] ~ .arrow,
+    .arrow[data-from-priority="urgent"] {
+        stroke: #ef4444;
+    }
+
+    .gantt .bar-wrapper[data-priority="high"] ~ .arrow,
+    .arrow[data-from-priority="high"] {
+        stroke: #f59e0b;
     }
 </style>
 {% endblock %}
@@ -285,20 +480,31 @@
             <div class="gantt-legend">
                 <strong>Legend:</strong>
                 <div class="legend-item">
-                    <span class="legend-color" style="background: #6c757d;"></span>
+                    <span class="legend-color" style="background: #94a3b8;"></span>
                     <span>Low Priority</span>
                 </div>
                 <div class="legend-item">
-                    <span class="legend-color" style="background: #4c9aff;"></span>
+                    <span class="legend-color" style="background: #3b82f6;"></span>
                     <span>Medium Priority</span>
                 </div>
                 <div class="legend-item">
-                    <span class="legend-color" style="background: #ff9500;"></span>
+                    <span class="legend-color" style="background: #f59e0b;"></span>
                     <span>High Priority</span>
                 </div>
                 <div class="legend-item">
-                    <span class="legend-color" style="background: #ff5252;"></span>
+                    <span class="legend-color" style="background: #ef4444;"></span>
                     <span>Urgent Priority</span>
+                </div>
+                <div class="legend-item" style="margin-left: auto;">
+                    <svg width="40" height="12" style="vertical-align: middle;">
+                        <defs>
+                            <marker id="arrowhead-legend" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+                                <polygon points="0 0, 6 3, 0 6" fill="#64748b"/>
+                            </marker>
+                        </defs>
+                        <path d="M 2 6 L 30 6" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrowhead-legend)"/>
+                    </svg>
+                    <span>Dependency</span>
                 </div>
             </div>
         {% else %}
@@ -390,10 +596,10 @@
             
             ganttChart = new Gantt('#gantt', tasks, {
                 view_mode: viewMode,
-                bar_height: 30,
-                bar_corner_radius: 3,
-                arrow_curve: 5,
-                padding: 18,
+                bar_height: 32,
+                bar_corner_radius: 6,
+                arrow_curve: 8,
+                padding: 20,
                 date_format: 'YYYY-MM-DD',
                 language: 'en',
                 popup_trigger: 'none', // Disable popup entirely for cleaner navigation
@@ -432,6 +638,9 @@
             }
         });
 
+        // Enhance dependency arrows with better styling
+        enhanceDependencyArrows();
+
         // Add manual click handlers to all bars for better compatibility
         document.querySelectorAll('.bar-wrapper').forEach(barWrapper => {
             barWrapper.style.cursor = 'pointer';
@@ -454,6 +663,64 @@
         addTooltipHandlers();
     }
 
+    // Enhance dependency arrows with professional styling
+    function enhanceDependencyArrows() {
+        const ganttSvg = document.querySelector('#gantt');
+        if (!ganttSvg) return;
+
+        // Add custom arrowhead marker definition if not exists
+        let defs = ganttSvg.querySelector('defs');
+        if (!defs) {
+            defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            ganttSvg.insertBefore(defs, ganttSvg.firstChild);
+        }
+
+        // Check if marker already exists
+        if (!defs.querySelector('#custom-arrowhead')) {
+            // Create a professional arrowhead marker
+            const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+            marker.setAttribute('id', 'custom-arrowhead');
+            marker.setAttribute('markerWidth', '10');
+            marker.setAttribute('markerHeight', '8');
+            marker.setAttribute('refX', '9');
+            marker.setAttribute('refY', '4');
+            marker.setAttribute('orient', 'auto');
+            marker.setAttribute('markerUnits', 'strokeWidth');
+
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', 'M 0 0 L 10 4 L 0 8 L 3 4 Z');
+            path.setAttribute('fill', '#64748b');
+            path.setAttribute('class', 'custom-arrow-head');
+            marker.appendChild(path);
+            defs.appendChild(marker);
+
+            // Create colored variants for different priorities
+            const colors = {
+                'urgent': '#ef4444',
+                'high': '#f59e0b',
+                'medium': '#3b82f6'
+            };
+
+            for (const [priority, color] of Object.entries(colors)) {
+                const coloredMarker = marker.cloneNode(true);
+                coloredMarker.setAttribute('id', `arrowhead-${priority}`);
+                coloredMarker.querySelector('path').setAttribute('fill', color);
+                defs.appendChild(coloredMarker);
+            }
+        }
+
+        // Style all arrows with the custom marker
+        const arrows = ganttSvg.querySelectorAll('.arrow');
+        arrows.forEach(arrow => {
+            arrow.setAttribute('marker-end', 'url(#custom-arrowhead)');
+            arrow.style.strokeWidth = '2px';
+            arrow.style.strokeLinecap = 'round';
+            arrow.style.strokeLinejoin = 'round';
+        });
+
+        console.log(`Enhanced ${arrows.length} dependency arrows`);
+    }
+
     // Add tooltip functionality for task bars
     function addTooltipHandlers() {
         const tooltip = document.getElementById('gantt-tooltip');
@@ -468,6 +735,8 @@
             barWrapper.setAttribute('data-priority', task.priority);
             barWrapper.setAttribute('data-assigned-to', task.assigned_to);
             barWrapper.setAttribute('data-progress', task.progress);
+            barWrapper.setAttribute('data-start', task.start);
+            barWrapper.setAttribute('data-end', task.end);
 
             // Add mouseenter event
             barWrapper.addEventListener('mouseenter', function(e) {
@@ -475,12 +744,15 @@
                 const priority = this.getAttribute('data-priority');
                 const assignedTo = this.getAttribute('data-assigned-to');
                 const progress = this.getAttribute('data-progress');
+                const startDate = this.getAttribute('data-start');
+                const endDate = this.getAttribute('data-end');
 
-                // Build tooltip content
-                let tooltipContent = `<strong>${fullName}</strong><br>`;
-                tooltipContent += `Priority: ${priority.charAt(0).toUpperCase() + priority.slice(1)}<br>`;
-                tooltipContent += `Assigned: ${assignedTo}<br>`;
-                tooltipContent += `Progress: ${progress}%`;
+                // Build enhanced tooltip content
+                let tooltipContent = `<strong>${fullName}</strong>`;
+                tooltipContent += `<div class="tooltip-row"><i class="fas fa-flag"></i> Priority: ${priority.charAt(0).toUpperCase() + priority.slice(1)}</div>`;
+                tooltipContent += `<div class="tooltip-row"><i class="fas fa-user"></i> ${assignedTo}</div>`;
+                tooltipContent += `<div class="tooltip-row"><i class="fas fa-calendar"></i> ${formatDateDisplay(startDate)} - ${formatDateDisplay(endDate)}</div>`;
+                tooltipContent += `<div class="tooltip-row"><i class="fas fa-tasks"></i> Progress: ${progress}%</div>`;
 
                 tooltip.innerHTML = tooltipContent;
                 tooltip.classList.add('show');
@@ -740,6 +1012,14 @@
         const month = String(d.getMonth() + 1).padStart(2, '0');
         const day = String(d.getDate()).padStart(2, '0');
         return `${year}-${month}-${day}`;
+    }
+
+    // Helper function to format date for display in tooltips
+    function formatDateDisplay(dateStr) {
+        if (!dateStr) return 'N/A';
+        const d = new Date(dateStr);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
     }
 
     // Helper function to get CSRF token
