@@ -414,6 +414,7 @@ def demo_dashboard(request):
     # Auto-grant access for authenticated users only
     # Anonymous users can view demo boards without membership
     if request.user.is_authenticated:
+        # Check if user is already a member of any demo boards
         user_demo_orgs = Organization.objects.filter(
             name__in=DEMO_ORG_NAMES,
             boards__members=request.user
@@ -446,15 +447,12 @@ def demo_dashboard(request):
                 for room in chat_rooms:
                     if request.user not in room.members.all():
                         room.members.add(request.user)
-            
-            # Refresh the query to include newly added organizations
-            user_demo_orgs = Organization.objects.filter(
-                name__in=DEMO_ORG_NAMES,
-                boards__members=request.user
-            ).distinct()
         
-        # Filter to show boards only from organizations user has access to
-        demo_boards = demo_boards.filter(organization__in=user_demo_orgs)
+        # IMPORTANT: Don't filter boards in demo mode - all demo boards should be visible
+        # The membership grants above ensure proper RBAC, but visibility should be unrestricted
+        # This prevents the bug where filtering by user_demo_orgs returns empty results
+        # due to queryset caching/evaluation timing issues
+        # demo_boards queryset already contains all demo boards, no need to filter further
     # else: Anonymous users see all demo boards without membership
     
     # Calculate analytics for demo boards
