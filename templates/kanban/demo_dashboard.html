@@ -293,6 +293,14 @@
                 </div>
             </div>
         </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>No demo boards found!</strong> The demo_boards list is empty. 
+                This could indicate a data issue. Please run: <code>python manage.py populate_test_data</code>
+            </div>
+        </div>
         {% endfor %}
     </div>
 

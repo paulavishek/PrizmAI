@@ -387,9 +387,11 @@ def demo_dashboard(request):
     
     # Get the demo organization - using constants
     demo_orgs = Organization.objects.filter(name__in=DEMO_ORG_NAMES)
+    logger.info(f"demo_dashboard: DEMO_ORG_NAMES={DEMO_ORG_NAMES}, found {demo_orgs.count()} orgs")
     
     if not demo_orgs.exists():
         # No demo data available
+        logger.warning("demo_dashboard: No demo orgs found!")
         context = {
             'demo_available': False,
             'demo_boards': [],
@@ -402,8 +404,10 @@ def demo_dashboard(request):
         organization__in=demo_orgs,
         name__in=DEMO_BOARD_NAMES
     ).prefetch_related('members')
+    logger.info(f"demo_dashboard: DEMO_BOARD_NAMES={DEMO_BOARD_NAMES}, found {demo_boards.count()} boards")
     
     if not demo_boards.exists():
+        logger.warning("demo_dashboard: No demo boards found!")
         context = {
             'demo_available': False,
             'demo_boards': [],
@@ -534,6 +538,10 @@ def demo_dashboard(request):
             'completed_count': board_completed,
             'completion_rate': board_completion_rate
         })
+    
+    logger.info(f"demo_dashboard: boards_with_stats has {len(boards_with_stats)} boards")
+    for bws in boards_with_stats:
+        logger.info(f"  - {bws['board'].name}: {bws['task_count']} tasks")
     
     context = {
         'demo_available': True,
