@@ -150,48 +150,113 @@ def generate_ai_content(prompt: str, task_type='simple') -> Optional[str]:
         logger.error(f"Error generating AI content: {str(e)}")
         return None
 
-def generate_task_description(title: str) -> Optional[str]:
+def generate_task_description(title: str, context: Optional[Dict] = None) -> Optional[Dict]:
     """
     Generate a detailed task description and checklist from a task title.
     
+    Provides explainable AI output with confidence scores and reasoning.
+    
     Args:
         title: The title of the task
+        context: Optional context (board name, project type, etc.)
         
     Returns:
-        A generated description with a checklist or None if generation fails
+        A dictionary with generated description, checklist, and explainability data
+        or None if generation fails
     """
     try:
+        context_info = ""
+        if context:
+            context_info = f"""
+        ## Context:
+        - Board/Project: {context.get('board_name', 'Not specified')}
+        - Project Type: {context.get('project_type', 'General')}
+        - Team Size: {context.get('team_size', 'Unknown')}
+        """
+        
         prompt = f"""
         Based on this task title: "{title}", generate a detailed task description 
         with an objective and a checklist of smaller steps.
+        Provide comprehensive explainability for all generated content.
+        {context_info}
         
-        Format your response like this (in Markdown):
-        
-        **Objective:** [Brief description of what this task aims to accomplish]
-        
-        **Checklist:**
-        - [ ] First subtask
-        - [ ] Second subtask
-        - [ ] Third subtask
-        (and so on)
-        
-        Keep it concise but thorough. Include approximately 4-6 subtasks.
+        Format your response as JSON WITH FULL EXPLAINABILITY:
+        {{
+            "objective": "Clear description of what this task aims to accomplish",
+            "detailed_description": "2-3 paragraph detailed description of the task scope and approach",
+            "confidence_score": 0.XX,
+            "confidence_level": "high|medium|low",
+            "interpretation_reasoning": "How the task title was interpreted to generate this description",
+            "checklist": [
+                {{
+                    "item": "First subtask",
+                    "estimated_effort": "Time estimate",
+                    "why_included": "Why this step is necessary"
+                }}
+            ],
+            "suggested_priority": "low|medium|high|urgent",
+            "priority_reasoning": "Why this priority is suggested based on the task nature",
+            "estimated_total_effort": "Total time estimate for the full task",
+            "skill_requirements": [
+                {{
+                    "skill": "Required skill",
+                    "level": "beginner|intermediate|expert",
+                    "why_needed": "Why this skill is relevant"
+                }}
+            ],
+            "potential_blockers": [
+                "Potential blocker or dependency to consider"
+            ],
+            "success_criteria": [
+                "How to verify task is successfully completed"
+            ],
+            "assumptions": [
+                "Assumption 1 about scope or requirements",
+                "Assumption 2 about resources"
+            ],
+            "alternative_interpretations": [
+                {{
+                    "interpretation": "Alternative way to understand this task",
+                    "would_change": "How the description would differ"
+                }}
+            ],
+            "markdown_description": "**Objective:** [objective]\\n\\n**Checklist:**\\n- [ ] Item 1\\n- [ ] Item 2"
+        }}
         """
         
-        return generate_ai_content(prompt, task_type='task_description')
+        response_text = generate_ai_content(prompt, task_type='task_description')
+        if response_text:
+            # Handle code block formatting
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].strip()
+            
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError:
+                # Fallback: return the markdown as-is for backward compatibility
+                return {
+                    'markdown_description': response_text,
+                    'confidence_score': 0.5,
+                    'parsing_note': 'Returned plain markdown due to JSON parsing error'
+                }
+        return None
     except Exception as e:
         logger.error(f"Error generating task description: {str(e)}")
         return None
-
-def summarize_comments(comments: List[Dict]) -> Optional[str]:
+def summarize_comments(comments: List[Dict]) -> Optional[Dict]:
     """
-    Summarize a list of task comments.
+    Summarize a list of task comments with explainability.
+    
+    Provides structured analysis of comment thread including key decisions,
+    action items, and sentiment analysis.
     
     Args:
         comments: A list of comment dictionaries with 'user', 'content', and 'created_at'
         
     Returns:
-        A summary of the comments or None if summarization fails
+        A dictionary with summary and explainability data or None if summarization fails
     """
     try:
         if not comments:
@@ -204,15 +269,78 @@ def summarize_comments(comments: List[Dict]) -> Optional[str]:
         ])
         
         prompt = f"""
-        Summarize the following task comment thread concisely. Focus on key decisions,
-        assignments, deadlines, and important information:
+        Analyze and summarize the following task comment thread. Extract key information
+        and provide explainable insights.
         
         {formatted_comments}
         
-        Provide a brief summary (3-5 sentences).
+        Format your response as JSON WITH FULL EXPLAINABILITY:
+        {{
+            "summary": "Concise 3-5 sentence summary of the discussion",
+            "confidence_score": 0.XX,
+            "key_decisions": [
+                {{
+                    "decision": "What was decided",
+                    "made_by": "Who made or influenced the decision",
+                    "source_comment": "Brief excerpt from comment"
+                }}
+            ],
+            "action_items_mentioned": [
+                {{
+                    "action": "Action item described",
+                    "assignee": "Who was assigned or null",
+                    "deadline_mentioned": "Any deadline mentioned or null"
+                }}
+            ],
+            "discussion_highlights": [
+                {{
+                    "highlight": "Important point raised",
+                    "raised_by": "Who raised it",
+                    "significance": "Why this is important"
+                }}
+            ],
+            "participants_analysis": [
+                {{
+                    "user": "Username",
+                    "contribution_type": "decision_maker|contributor|questioner|observer",
+                    "comments_count": X
+                }}
+            ],
+            "sentiment_analysis": {{
+                "overall_sentiment": "positive|neutral|negative|mixed",
+                "concerns_raised": ["Concern 1", "Concern 2"],
+                "positive_aspects": ["Positive 1", "Positive 2"]
+            }},
+            "timeline_extracted": [
+                "Deadline or date mentioned in comments"
+            ],
+            "unresolved_questions": [
+                "Question that wasn't answered in the thread"
+            ],
+            "recommended_follow_ups": [
+                "Suggested follow-up action based on discussion"
+            ]
+        }}
         """
         
-        return generate_ai_content(prompt, task_type='comment_summary')
+        response_text = generate_ai_content(prompt, task_type='comment_summary')
+        if response_text:
+            # Handle code block formatting
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].strip()
+            
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError:
+                # Fallback to plain summary if JSON parsing fails
+                return {
+                    'summary': response_text,
+                    'confidence_score': 0.5,
+                    'parsing_note': 'Returned plain text summary due to JSON parsing error'
+                }
+        return None
     except Exception as e:
         logger.error(f"Error summarizing comments: {str(e)}")
         return None
@@ -221,38 +349,69 @@ def suggest_lean_classification(title: str, description: str) -> Optional[Dict]:
     """
     Suggest Lean Six Sigma classification for a task based on its title and description.
     
+    Provides explainable AI output including confidence scores, contributing factors,
+    and alternative classifications to support user decision-making.
+    
     Args:
         title: The task title
         description: The task description
         
     Returns:
-        A dictionary with suggested classification and justification or None if suggestion fails
+        A dictionary with suggested classification, justification, confidence,
+        and explainability data or None if suggestion fails
     """
     try:
         prompt = f"""
         Based on this task's title and description, suggest a Lean Six Sigma classification
-        (Value-Added, Necessary Non-Value-Added, or Waste/Eliminate) and briefly justify why.
+        (Value-Added, Necessary Non-Value-Added, or Waste/Eliminate) with full explainability.
         
         Task Title: {title}
         Task Description: {description or '(No description provided)'}
         
-        Consider:
+        Classification Definitions:
         - Value-Added (VA): Activities that transform the product/service in a way the customer values
         - Necessary Non-Value-Added (NNVA): Required activities that don't directly add value for the customer
         - Waste/Eliminate: Activities that consume resources without adding value
         
-        Format your response as JSON:
+        Analyze the task and provide a comprehensive, explainable recommendation.
+        
+        Format your response as JSON WITH FULL EXPLAINABILITY:
         {{
             "classification": "Value-Added|Necessary Non-Value-Added|Waste/Eliminate",
-            "justification": "1-2 sentences explaining why this classification fits"
+            "justification": "2-3 sentences explaining why this classification fits",
+            "confidence_score": 0.XX,
+            "confidence_level": "high|medium|low",
+            "contributing_factors": [
+                {{
+                    "factor": "Factor name (e.g., 'Customer Impact', 'Regulatory Requirement')",
+                    "contribution_percentage": XX,
+                    "description": "How this factor influenced the classification"
+                }}
+            ],
+            "classification_reasoning": {{
+                "value_added_indicators": ["List indicators that suggest Value-Added"],
+                "non_value_indicators": ["List indicators that suggest NNVA or Waste"],
+                "primary_driver": "The main reason for this classification"
+            }},
+            "alternative_classification": {{
+                "classification": "Second most likely classification",
+                "confidence_score": 0.XX,
+                "conditions": "Under what conditions this alternative would apply"
+            }},
+            "assumptions": [
+                "Key assumption 1 made during analysis",
+                "Key assumption 2 made during analysis"
+            ],
+            "improvement_suggestions": [
+                "If Waste/NNVA: How could this task be optimized or eliminated?",
+                "If VA: How to maximize the value delivery?"
+            ],
+            "lean_waste_type": "If Waste - specify type: Defects|Overproduction|Waiting|Non-utilized talent|Transportation|Inventory|Motion|Extra-processing (or null)"
         }}
         """
         
         response_text = generate_ai_content(prompt, task_type='lean_classification')
         if response_text:
-            # This is not perfect but extracting the response as if it's JSON
-            # In a production app, we'd want better error handling
-            
             # Handle the case where the AI might include code block formatting
             if "```json" in response_text:
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
@@ -265,15 +424,19 @@ def suggest_lean_classification(title: str, description: str) -> Optional[Dict]:
         logger.error(f"Error suggesting lean classification: {str(e)}")
         return None
 
-def summarize_board_analytics(analytics_data: Dict) -> Optional[str]:
+def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
     """
-    Generate an AI-powered summary of board analytics data.
+    Generate an AI-powered summary of board analytics data with full explainability.
+    
+    Provides structured insights with confidence scores, reasoning, and actionable
+    recommendations backed by data analysis.
     
     Args:
         analytics_data: A dictionary containing board analytics metrics
         
     Returns:
-        A comprehensive analytics summary or None if generation fails
+        A dictionary with comprehensive analytics summary and explainability data
+        or None if generation fails
     """
     try:
         # Extract key metrics from analytics data
@@ -297,6 +460,7 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[str]:
         prompt = f"""
         Analyze the following board analytics data and provide a comprehensive, actionable summary for a project manager. 
         Focus on insights, trends, recommendations, and areas that need attention.
+        Provide full explainability for all analysis and recommendations.
 
         ## Board Metrics Overview:
         - Total Tasks: {total_tasks}
@@ -317,18 +481,117 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[str]:
         Priority Distribution: {', '.join([f"{pri['priority']}: {pri['count']}" for pri in tasks_by_priority])}
         Assignee Workload: {', '.join([f"{user['username']}: {user['count']} tasks ({user['completion_rate']}% complete)" for user in tasks_by_user[:5]])}
 
-        Please provide:
-        1. **Overall Health Assessment** - Brief evaluation of project status
-        2. **Key Insights** - 2-3 most important observations from the data
-        3. **Areas of Concern** - Issues that need immediate attention
-        4. **Process Improvement Recommendations** - Specific actionable suggestions
-        5. **Lean Six Sigma Insights** - Analysis of value stream efficiency
-        6. **Team Performance Notes** - Observations about workload distribution and productivity
-
-        Keep the summary concise but comprehensive, aimed at helping the project manager make informed decisions.
+        Format your response as JSON WITH FULL EXPLAINABILITY:
+        {{
+            "executive_summary": "2-3 sentence overall summary for quick reading",
+            "confidence_score": 0.XX,
+            "analysis_quality": {{
+                "data_completeness": "high|medium|low",
+                "metrics_reliability": "high|medium|low",
+                "sample_size_adequacy": "sufficient|marginal|insufficient"
+            }},
+            "health_assessment": {{
+                "overall_score": "healthy|at_risk|critical",
+                "score_reasoning": "Why this health score was assigned",
+                "health_indicators": [
+                    {{
+                        "indicator": "Indicator name",
+                        "status": "positive|neutral|negative",
+                        "value": "Actual value",
+                        "benchmark": "Expected/ideal value",
+                        "impact_on_score": "How this affects overall health"
+                    }}
+                ]
+            }},
+            "key_insights": [
+                {{
+                    "insight": "The insight statement",
+                    "evidence": "Data points supporting this insight",
+                    "significance": "Why this matters",
+                    "confidence": "high|medium|low"
+                }}
+            ],
+            "areas_of_concern": [
+                {{
+                    "concern": "The concern description",
+                    "severity": "critical|high|medium|low",
+                    "root_cause_hypothesis": "Likely cause of this issue",
+                    "evidence": "Supporting data",
+                    "recommended_action": "What to do about it",
+                    "timeline": "When to address"
+                }}
+            ],
+            "process_improvement_recommendations": [
+                {{
+                    "recommendation": "Specific actionable suggestion",
+                    "rationale": "Why this is recommended based on data",
+                    "expected_impact": "What improvement to expect",
+                    "implementation_effort": "low|medium|high",
+                    "priority": 1,
+                    "success_metrics": ["How to measure improvement"]
+                }}
+            ],
+            "lean_analysis": {{
+                "value_stream_efficiency": "excellent|good|fair|poor",
+                "efficiency_reasoning": "Why this efficiency rating",
+                "waste_identification": [
+                    {{
+                        "waste_type": "Type of waste identified",
+                        "tasks_affected": X,
+                        "elimination_strategy": "How to reduce this waste"
+                    }}
+                ],
+                "value_optimization_suggestions": [
+                    "Specific suggestion to increase value-add percentage"
+                ]
+            }},
+            "team_performance": {{
+                "workload_balance": "balanced|slightly_imbalanced|severely_imbalanced",
+                "balance_analysis": "Detailed workload distribution analysis",
+                "top_performers": ["Team member highlights"],
+                "capacity_concerns": ["Any capacity issues identified"],
+                "collaboration_opportunities": ["Where team could work together better"]
+            }},
+            "trend_analysis": {{
+                "productivity_trend": "improving|stable|declining",
+                "trend_evidence": "Data supporting trend assessment",
+                "forecast": "What to expect in coming period"
+            }},
+            "action_items": [
+                {{
+                    "action": "Specific action to take",
+                    "owner": "Suggested owner role",
+                    "urgency": "immediate|this_week|this_month",
+                    "expected_outcome": "What this action will achieve"
+                }}
+            ],
+            "assumptions": [
+                "Assumption made in this analysis"
+            ],
+            "limitations": [
+                "Limitation of this analysis due to data constraints"
+            ]
+        }}
         """
         
-        return generate_ai_content(prompt, task_type='board_analytics_summary')
+        response_text = generate_ai_content(prompt, task_type='board_analytics_summary')
+        if response_text:
+            # Handle code block formatting
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].strip()
+            
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError:
+                # Fallback to plain text summary for backward compatibility
+                return {
+                    'executive_summary': response_text,
+                    'confidence_score': 0.5,
+                    'parsing_note': 'Returned plain text summary due to JSON parsing error'
+                }
+        return None
     except Exception as e:
         logger.error(f"Error summarizing board analytics: {str(e)}")
         return None
@@ -388,13 +651,42 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
         
         Available priority levels: low, medium, high, urgent
         
-        Format your response as JSON:
+        Format your response as JSON WITH FULL EXPLAINABILITY:
         {{
             "suggested_priority": "low|medium|high|urgent",
-            "confidence": "high|medium|low",
+            "confidence_score": 0.XX,
+            "confidence_level": "high|medium|low",
             "reasoning": "2-3 sentences explaining the priority suggestion",
-            "alternative_priority": "alternative priority if applicable or null",
-            "recommendations": ["up to 3 actionable recommendations"]
+            "contributing_factors": [
+                {{
+                    "factor": "Factor name (e.g., 'Due Date Proximity', 'Business Impact')",
+                    "contribution_percentage": XX,
+                    "description": "How this factor influenced the priority",
+                    "weight": "high|medium|low"
+                }}
+            ],
+            "priority_comparison": {{
+                "vs_low": "Why not low priority (if not suggested)",
+                "vs_medium": "Why not medium priority (if not suggested)",
+                "vs_high": "Why not high priority (if not suggested)",
+                "vs_urgent": "Why not urgent priority (if not suggested)"
+            }},
+            "alternative_priority": {{
+                "priority": "alternative priority level",
+                "confidence": 0.XX,
+                "when_applicable": "Under what conditions this alternative would apply"
+            }},
+            "workload_impact": {{
+                "current_distribution": "Assessment of current priority distribution",
+                "impact_of_suggestion": "How this suggestion affects workload balance"
+            }},
+            "recommendations": ["up to 3 actionable recommendations"],
+            "assumptions": [
+                "Assumption 1 about the task",
+                "Assumption 2 about the context"
+            ],
+            "urgency_indicators": ["Specific phrases or factors indicating urgency"],
+            "impact_indicators": ["Specific phrases or factors indicating business impact"]
         }}
         """
         
@@ -586,20 +878,44 @@ def recommend_board_columns(board_data: Dict) -> Optional[Dict]:
         
         Recommend 4-7 columns that would create an efficient workflow.
         
-        Format your response as JSON:
+        Format your response as JSON WITH FULL EXPLAINABILITY:
         {{
             "recommended_columns": [
                 {{
                     "name": "Column Name",
                     "description": "Brief description of what goes in this column",
                     "position": 1,
-                    "color_suggestion": "#hex_color"
+                    "color_suggestion": "#hex_color",
+                    "purpose": "Why this column is essential for the workflow",
+                    "typical_wip_limit": "Suggested WIP limit or null"
                 }}
             ],
             "workflow_type": "kanban|scrum|custom",
+            "confidence_score": 0.XX,
+            "confidence_level": "high|medium|low",
             "reasoning": "2-3 sentences explaining why this structure works",
+            "contributing_factors": [
+                {{
+                    "factor": "Factor name (e.g., 'Team Size', 'Project Complexity')",
+                    "contribution_percentage": XX,
+                    "description": "How this factor influenced the recommendation"
+                }}
+            ],
             "workflow_tips": ["up to 3 tips for using this column structure effectively"],
-            "customization_suggestions": ["up to 2 ways to adapt this structure"]
+            "customization_suggestions": ["up to 2 ways to adapt this structure"],
+            "alternative_workflow": {{
+                "type": "Alternative workflow type",
+                "columns": ["Column 1", "Column 2", "Column 3"],
+                "when_to_use": "Conditions when this alternative would be better"
+            }},
+            "assumptions": [
+                "Assumption 1 about the team or project",
+                "Assumption 2 about the workflow needs"
+            ],
+            "bottleneck_warnings": [
+                "Potential bottleneck 1 to watch for with this structure",
+                "Potential bottleneck 2 to monitor"
+            ]
         }}
         """
         
@@ -637,6 +953,7 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
         
         prompt = f"""
         Analyze this task and suggest a breakdown into smaller, manageable subtasks with dependencies.
+        Provide explainable AI output with confidence scores and factor analysis.
         
         ## Task Information:
         - Title: {title}
@@ -652,23 +969,56 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
         4. Consider risk mitigation subtasks for complex work
         5. Ensure subtasks are specific and actionable
         
-        Format your response as JSON:
+        Format your response as JSON WITH FULL EXPLAINABILITY:
         {{
             "is_breakdown_recommended": true|false,
             "complexity_score": 1-10,
-            "reasoning": "Why breakdown is or isn't recommended",
+            "confidence_score": 0.XX,
+            "confidence_level": "high|medium|low",
+            "reasoning": "2-3 sentences explaining why breakdown is or isn't recommended",
+            "complexity_factors": [
+                {{
+                    "factor": "Factor name (e.g., 'Technical Scope', 'Integration Points')",
+                    "contribution_percentage": XX,
+                    "description": "How this factor contributes to complexity"
+                }}
+            ],
             "subtasks": [
                 {{
                     "title": "Subtask title",
-                    "description": "Brief description",
+                    "description": "Brief description with clear deliverable",
                     "estimated_effort": "1-3 days",
                     "priority": "low|medium|high",
                     "dependencies": ["indices of dependent subtasks or empty array"],
-                    "order": 1
+                    "order": 1,
+                    "skill_requirements": ["skill1", "skill2"],
+                    "why_needed": "Brief explanation of why this subtask is essential"
                 }}
             ],
+            "critical_path": [
+                "List of subtask titles that form the critical path"
+            ],
+            "parallel_opportunities": [
+                "Subtasks that can be worked on simultaneously"
+            ],
             "workflow_suggestions": ["up to 3 suggestions for managing these subtasks"],
-            "risk_considerations": ["up to 2 potential risks to consider"]
+            "risk_considerations": [
+                {{
+                    "risk": "Risk description",
+                    "affected_subtasks": ["subtask titles"],
+                    "mitigation": "Suggested mitigation"
+                }}
+            ],
+            "alternative_approach": {{
+                "description": "Alternative way to break down this task",
+                "when_applicable": "Conditions when this alternative would be better"
+            }},
+            "assumptions": [
+                "Key assumption 1 about the task",
+                "Key assumption 2 about resources/skills"
+            ],
+            "total_estimated_effort": "Sum of all subtask efforts",
+            "effort_vs_original": "How this compares to original estimate (e.g., '20% more due to testing')"
         }}
         """
         
@@ -714,6 +1064,7 @@ def analyze_workflow_optimization(board_analytics: Dict) -> Optional[Dict]:
         
         prompt = f"""
         Analyze this Kanban board's workflow and suggest specific optimizations to improve efficiency and flow.
+        Provide comprehensive explainability with confidence scores and factor analysis.
         
         ## Board Analytics:
         - Total Active Tasks: {total_tasks}
@@ -736,15 +1087,29 @@ def analyze_workflow_optimization(board_analytics: Dict) -> Optional[Dict]:
         4. Flow inefficiencies
         5. Process improvement opportunities
         
-        Format your response as JSON:
+        Format your response as JSON WITH FULL EXPLAINABILITY:
         {{
             "overall_health_score": 1-10,
+            "confidence_score": 0.XX,
+            "confidence_level": "high|medium|low",
+            "health_factors": [
+                {{
+                    "factor": "Factor name (e.g., 'Task Flow', 'Team Utilization')",
+                    "score": 1-10,
+                    "contribution_percentage": XX,
+                    "description": "How this factor affects workflow health"
+                }}
+            ],
             "bottlenecks": [
                 {{
                     "type": "column|user|priority",
                     "location": "specific column/user name",
                     "severity": "low|medium|high",
-                    "description": "What's causing the bottleneck"
+                    "description": "What's causing the bottleneck",
+                    "confidence": 0.XX,
+                    "evidence": ["Data points that led to this conclusion"],
+                    "root_cause": "Underlying reason for this bottleneck",
+                    "impact_if_unaddressed": "What happens if this isn't fixed"
                 }}
             ],
             "optimization_recommendations": [
@@ -754,12 +1119,36 @@ def analyze_workflow_optimization(board_analytics: Dict) -> Optional[Dict]:
                     "description": "Detailed recommendation",
                     "impact": "high|medium|low",
                     "effort": "low|medium|high",
-                    "priority": 1-5
+                    "priority": 1-5,
+                    "confidence_score": 0.XX,
+                    "expected_improvement": "Quantified improvement (e.g., '15% faster cycle time')",
+                    "reasoning": "Why this recommendation will help",
+                    "implementation_steps": ["Step 1", "Step 2", "Step 3"],
+                    "success_metrics": ["How to measure if this worked"]
                 }}
             ],
-            "quick_wins": ["up to 3 immediate improvements that are easy to implement"],
+            "quick_wins": [
+                {{
+                    "action": "Specific quick win action",
+                    "expected_result": "What this will achieve",
+                    "timeframe": "How long to implement"
+                }}
+            ],
             "workflow_insights": "2-3 sentences about overall workflow patterns",
-            "next_steps": ["up to 3 specific actions to take next"]
+            "next_steps": ["up to 3 specific actions to take next"],
+            "assumptions": [
+                "Assumption 1 about the data or team",
+                "Assumption 2 about workflow patterns"
+            ],
+            "data_limitations": [
+                "Limitation 1 - what we couldn't analyze",
+                "Limitation 2 - data that would improve analysis"
+            ],
+            "trend_analysis": {{
+                "direction": "improving|stable|declining",
+                "key_drivers": ["Driver 1", "Driver 2"],
+                "forecast": "Prediction if current patterns continue"
+            }}
         }}
         """
         
@@ -809,10 +1198,12 @@ def analyze_critical_path(board_data: Dict) -> Optional[Dict]:
         prompt = f"""
         Analyze these project tasks to identify the critical path, calculate slack times, and assess schedule risks.
         Use project management principles similar to Gantt chart analysis.
+        Provide full explainability for the analysis methodology and all recommendations.
         
         ## Project Tasks:
         {chr(10).join(formatted_tasks)}
-          ## Analysis Required:
+        
+        ## Analysis Required:
         1. **Critical Path Identification**: Find the longest sequence of dependent tasks that determines project duration
         2. **Slack Time Calculation**: Calculate float time for each task (Latest Start - Earliest Start)
         3. **Schedule Risk Assessment**: Identify tasks at risk of delays
@@ -829,6 +1220,13 @@ def analyze_critical_path(board_data: Dict) -> Optional[Dict]:
         CRITICAL: Respond with ONLY valid JSON. No explanations, no additional text.
         
         {{
+            "confidence_score": 0.XX,
+            "analysis_methodology": {{
+                "approach": "Description of how critical path was determined",
+                "assumptions": ["Assumption 1 about task durations", "Assumption 2 about dependencies"],
+                "data_quality": "high|medium|low",
+                "limitations": ["Limitation 1 of this analysis"]
+            }},
             "critical_path": [
                 {{
                     "task_id": "task_id",
@@ -836,9 +1234,15 @@ def analyze_critical_path(board_data: Dict) -> Optional[Dict]:
                     "position_in_path": 1,
                     "duration_hours": 8,
                     "earliest_start": "2025-06-19 09:00",
-                    "earliest_finish": "2025-06-19 17:00"
+                    "earliest_finish": "2025-06-19 17:00",
+                    "why_critical": "Why this task is on the critical path"
                 }}
             ],
+            "critical_path_reasoning": {{
+                "path_explanation": "Why this sequence was identified as critical",
+                "alternative_paths": ["Other significant paths considered"],
+                "path_sensitivity": "How sensitive is the schedule to changes in this path"
+            }},
             "task_analysis": [
                 {{
                     "task_id": "task_id",
@@ -848,8 +1252,10 @@ def analyze_critical_path(board_data: Dict) -> Optional[Dict]:
                     "latest_start": "2025-06-19 09:00",
                     "latest_finish": "2025-06-19 17:00",
                     "slack_hours": 0,
+                    "slack_interpretation": "What this slack time means for planning",
                     "is_critical": true,
-                    "risk_level": "low",
+                    "risk_level": "low|medium|high",
+                    "risk_reasoning": "Why this risk level was assigned",
                     "risk_factors": ["factor1"]
                 }}
             ],
@@ -858,18 +1264,45 @@ def analyze_critical_path(board_data: Dict) -> Optional[Dict]:
                 "project_completion_date": "2025-07-15",
                 "critical_path_duration": 100,
                 "schedule_buffer_hours": 20,
+                "buffer_adequacy": "sufficient|marginal|insufficient",
+                "buffer_reasoning": "Why buffer is/isn't adequate",
                 "high_risk_tasks": 3,
-                "resource_conflicts": []
+                "resource_conflicts": [],
+                "schedule_confidence": "high|medium|low"
             }},
+            "bottleneck_analysis": [
+                {{
+                    "bottleneck": "Description of bottleneck",
+                    "affected_tasks": ["task1", "task2"],
+                    "impact_hours": X,
+                    "root_cause": "Why this bottleneck exists",
+                    "resolution_options": ["Option 1", "Option 2"]
+                }}
+            ],
             "recommendations": [
                 {{
-                    "type": "critical_path",
-                    "title": "Focus on Critical Tasks",
-                    "description": "Prioritize completion of critical path tasks to avoid project delays",
-                    "impact": "high",                    "effort": "medium",
+                    "type": "critical_path|resources|schedule|process",
+                    "title": "Recommendation title",
+                    "description": "Detailed recommendation",
+                    "reasoning": "Why this is recommended based on analysis",
+                    "expected_impact": "What improvement to expect",
+                    "implementation_steps": ["Step 1", "Step 2"],
+                    "impact": "high|medium|low",
+                    "effort": "high|medium|low",
                     "priority": 1
                 }}
-            ]
+            ],
+            "schedule_optimization": {{
+                "compression_potential": "high|medium|low|none",
+                "compression_strategies": [
+                    {{
+                        "strategy": "Fast-tracking or crashing option",
+                        "time_saved_hours": X,
+                        "cost_impact": "Description of cost/resource impact",
+                        "risk_impact": "How this affects risk"
+                    }}
+                ]
+            }}
         }}
         """
         
@@ -1025,6 +1458,7 @@ def predict_task_completion(task_data: Dict, historical_data: List[Dict] = None)
         prompt = f"""
         Predict the realistic completion date and provide confidence intervals for this task.
         Consider current progress, time spent, remaining work, and any historical patterns.
+        Provide full explainability for all predictions and assessments.
         
         ## Current Task:
         {task_info}
@@ -1039,32 +1473,83 @@ def predict_task_completion(task_data: Dict, historical_data: List[Dict] = None)
         5. **Historical Adjustment**: Apply lessons from similar tasks
         6. **Confidence Intervals**: Provide optimistic, realistic, and pessimistic scenarios
         
-        Format response as JSON:
+        Format response as JSON WITH FULL EXPLAINABILITY:
         {{
+            "confidence_score": 0.XX,
             "predictions": {{
                 "optimistic_completion": "YYYY-MM-DD HH:MM",
                 "realistic_completion": "YYYY-MM-DD HH:MM",
                 "pessimistic_completion": "YYYY-MM-DD HH:MM",
                 "confidence_level": "high|medium|low"
             }},
+            "prediction_reasoning": {{
+                "methodology": "How the prediction was calculated",
+                "key_factors": [
+                    {{
+                        "factor": "Factor name",
+                        "contribution_percentage": XX,
+                        "effect": "positive|neutral|negative",
+                        "description": "How this factor influenced the prediction"
+                    }}
+                ],
+                "historical_adjustment": "How historical data influenced the prediction (if applicable)",
+                "confidence_justification": "Why this confidence level was assigned"
+            }},
             "progress_analysis": {{
                 "current_velocity": "hours_per_day",
                 "expected_velocity": "hours_per_day",
                 "velocity_trend": "accelerating|steady|declining",
-                "remaining_effort_hours": 10
+                "trend_reasoning": "Why this velocity trend was identified",
+                "remaining_effort_hours": 10,
+                "effort_breakdown": [
+                    {{
+                        "phase": "Remaining work phase",
+                        "hours": X,
+                        "reasoning": "Why this effort estimate"
+                    }}
+                ]
             }},
             "risk_assessment": {{
                 "delay_probability": "low|medium|high",
-                "risk_factors": ["factor1", "factor2"],
+                "probability_reasoning": "Why this delay probability",
+                "risk_factors": [
+                    {{
+                        "factor": "Risk factor",
+                        "likelihood": "high|medium|low",
+                        "impact_days": X,
+                        "mitigation": "How to address this risk"
+                    }}
+                ],
                 "mitigation_suggestions": ["suggestion1", "suggestion2"]
+            }},
+            "scenario_analysis": {{
+                "optimistic_scenario": {{
+                    "assumptions": ["What must go right"],
+                    "probability": "XX%"
+                }},
+                "realistic_scenario": {{
+                    "assumptions": ["Most likely conditions"],
+                    "probability": "XX%"
+                }},
+                "pessimistic_scenario": {{
+                    "assumptions": ["What could go wrong"],
+                    "probability": "XX%"
+                }}
             }},
             "recommendations": [
                 {{
                     "type": "schedule|resource|scope|process",
                     "action": "specific action to take",
+                    "reasoning": "Why this action is recommended",
                     "impact": "expected impact",
                     "urgency": "low|medium|high"
                 }}
+            ],
+            "assumptions": [
+                "Key assumption made in this prediction"
+            ],
+            "limitations": [
+                "Limitation of this prediction"
             ]
         }}
         """
@@ -1077,7 +1562,15 @@ def predict_task_completion(task_data: Dict, historical_data: List[Dict] = None)
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
                 
-            return json.loads(response_text)
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError:
+                # Fallback with basic structure
+                return {
+                    'prediction_text': response_text,
+                    'confidence_score': 0.5,
+                    'parsing_note': 'Returned plain text due to JSON parsing error'
+                }
         return None
     except Exception as e:
         logger.error(f"Error predicting task completion: {str(e)}")
@@ -1102,6 +1595,7 @@ def generate_project_timeline(board_data: Dict) -> Optional[Dict]:
         prompt = f"""
         Create a comprehensive project timeline analysis for this Kanban board, providing insights 
         similar to what a Gantt chart would show but enhanced with AI intelligence.
+        Provide full explainability for all forecasts and recommendations.
         
         ## Board Information:
         Name: {board_info.get('name', 'Unknown')}
@@ -1128,8 +1622,15 @@ def generate_project_timeline(board_data: Dict) -> Optional[Dict]:
         5. **Risk Identification**: Highlight schedule risks and mitigation strategies
         6. **Optimization Opportunities**: Suggest timeline improvements
         
-        Format response as JSON:
+        Format response as JSON WITH FULL EXPLAINABILITY:
         {{
+            "confidence_score": 0.XX,
+            "analysis_methodology": {{
+                "approach": "How the timeline was constructed and analyzed",
+                "data_completeness": "high|medium|low",
+                "key_assumptions": ["Assumption about velocity", "Assumption about availability"],
+                "limitations": ["What couldn't be determined from available data"]
+            }},
             "timeline_phases": [
                 {{
                     "phase_name": "Phase 1: Foundation",
@@ -1138,13 +1639,18 @@ def generate_project_timeline(board_data: Dict) -> Optional[Dict]:
                     "tasks": ["task_id1", "task_id2"],
                     "key_milestones": ["milestone1"],
                     "phase_status": "not_started|in_progress|completed",
-                    "completion_confidence": "high|medium|low"
+                    "completion_confidence": "high|medium|low",
+                    "confidence_reasoning": "Why this confidence level for this phase",
+                    "phase_risks": ["Risk specific to this phase"],
+                    "dependencies_on_previous": "What must complete before this phase"
                 }}
             ],
             "resource_timeline": [
                 {{
                     "team_member": "member_name",
                     "utilization_percentage": 85,
+                    "utilization_assessment": "optimal|underutilized|overloaded",
+                    "assessment_reasoning": "Why this utilization assessment",
                     "workload_periods": [
                         {{
                             "start_date": "YYYY-MM-DD",
@@ -1153,7 +1659,8 @@ def generate_project_timeline(board_data: Dict) -> Optional[Dict]:
                             "task_count": 3
                         }}
                     ],
-                    "recommendations": ["specific suggestions for this person"]
+                    "recommendations": ["specific suggestions for this person"],
+                    "capacity_concerns": "Any capacity concerns identified"
                 }}
             ],
             "critical_milestones": [
@@ -1162,24 +1669,52 @@ def generate_project_timeline(board_data: Dict) -> Optional[Dict]:
                     "target_date": "YYYY-MM-DD",
                     "forecasted_date": "YYYY-MM-DD",
                     "confidence": "high|medium|low",
+                    "forecast_reasoning": "Why this forecast date was predicted",
                     "blocking_factors": ["factor1"],
-                    "impact_if_delayed": "description"
+                    "impact_if_delayed": "description",
+                    "mitigation_options": ["Option to reduce delay risk"]
                 }}
             ],
             "timeline_insights": {{
                 "project_duration_weeks": 12,
+                "duration_reasoning": "How duration was calculated",
                 "current_progress_percentage": 45,
+                "progress_assessment": "ahead|on_track|slightly_behind|significantly_behind",
                 "projected_completion": "YYYY-MM-DD",
+                "projection_confidence": "high|medium|low",
+                "projection_reasoning": "How completion date was projected",
                 "schedule_health": "on_track|at_risk|behind",
+                "health_factors": [
+                    {{
+                        "factor": "Factor affecting schedule health",
+                        "impact": "positive|neutral|negative",
+                        "evidence": "Supporting data"
+                    }}
+                ],
                 "bottleneck_periods": ["YYYY-MM-DD to YYYY-MM-DD"],
-                "optimization_potential": "high|medium|low"
+                "optimization_potential": "high|medium|low",
+                "optimization_reasoning": "Why this optimization potential"
             }},
+            "schedule_risks": [
+                {{
+                    "risk": "Description of schedule risk",
+                    "likelihood": "high|medium|low",
+                    "impact": "high|medium|low",
+                    "affected_phases": ["Phase 1"],
+                    "early_warning_signs": ["Sign to watch for"],
+                    "mitigation_strategy": "How to address this risk"
+                }}
+            ],
             "recommendations": [
                 {{
                     "category": "timeline|resources|dependencies|risks",
                     "title": "recommendation title",
                     "description": "detailed recommendation",
-                    "implementation_effort": "low|medium|high",                    "expected_impact": "description of expected impact",
+                    "rationale": "Why this is recommended based on analysis",
+                    "implementation_steps": ["Step 1", "Step 2"],
+                    "implementation_effort": "low|medium|high",
+                    "expected_impact": "description of expected impact",
+                    "success_metrics": ["How to measure if recommendation worked"],
                     "priority": 1
                 }}
             ]
@@ -1444,11 +1979,13 @@ def enhance_task_description(task_data: Dict) -> Optional[Dict]:
     """
     Enhance a task description using AI to provide detailed context and checklist.
     
+    Provides explainable AI output with confidence scores and reasoning for each suggestion.
+    
     Args:
         task_data: Dictionary containing task information
         
     Returns:
-        A dictionary with enhanced task description or None if enhancement fails
+        A dictionary with enhanced task description and explainability data or None if enhancement fails
     """
     try:
         title = task_data.get('title', '')
@@ -1458,6 +1995,7 @@ def enhance_task_description(task_data: Dict) -> Optional[Dict]:
         
         prompt = f"""
         Enhance this task with a detailed description and actionable checklist.
+        Provide comprehensive explainability for all suggestions.
         
         ## Task Information:
         - Title: {title}
@@ -1473,25 +2011,60 @@ def enhance_task_description(task_data: Dict) -> Optional[Dict]:
         
         Make it professional, specific, and actionable for a project management context.
         
-        Format your response as JSON:
+        Format your response as JSON WITH FULL EXPLAINABILITY:
         {{
             "enhanced_description": "Detailed description with clear objectives, requirements, and scope",
+            "confidence_score": 0.XX,
+            "confidence_level": "high|medium|low",
+            "enhancement_reasoning": "Why these enhancements were suggested based on the task title/context",
             "checklist_items": [
-                "Specific actionable item 1",
-                "Specific actionable item 2",
-                "Specific actionable item 3"
+                {{
+                    "item": "Specific actionable item",
+                    "why_needed": "Brief explanation of why this step is important",
+                    "estimated_effort": "Time estimate for this item"
+                }}
             ],
             "acceptance_criteria": [
-                "Clear criteria for task completion",
-                "Measurable outcomes expected"
+                {{
+                    "criterion": "Clear criteria for task completion",
+                    "verification_method": "How to verify this is met"
+                }}
             ],
             "considerations": [
-                "Important factors to consider",
-                "Potential dependencies or blockers"
+                {{
+                    "consideration": "Important factor to consider",
+                    "impact": "How this could affect the task",
+                    "recommendation": "What to do about it"
+                }}
             ],
             "estimated_duration": "rough time estimate (e.g., '2-4 hours', '1-2 days')",
-            "skill_requirements": ["skill1", "skill2"],
-            "priority_suggestion": "low|medium|high|urgent"
+            "duration_breakdown": {{
+                "planning": "XX%",
+                "execution": "XX%",
+                "testing_review": "XX%"
+            }},
+            "skill_requirements": [
+                {{
+                    "skill": "skill name",
+                    "level_needed": "beginner|intermediate|expert",
+                    "why_needed": "Why this skill is required"
+                }}
+            ],
+            "priority_suggestion": "low|medium|high|urgent",
+            "priority_reasoning": "Why this priority level is recommended",
+            "assumptions": [
+                "Assumption 1 made about the task scope",
+                "Assumption 2 made about resources or context"
+            ],
+            "alternative_approaches": [
+                {{
+                    "approach": "Alternative way to accomplish this task",
+                    "when_applicable": "When this approach would be better"
+                }}
+            ],
+            "risk_indicators": [
+                "Potential risk or blocker to watch for"
+            ]
         }}
         """
         
@@ -1820,9 +2393,9 @@ def assess_task_dependencies_and_risks(task_title: str, tasks_data: List[Dict]) 
         return None
 
 
-def summarize_task_details(task_data: Dict) -> Optional[str]:
+def summarize_task_details(task_data: Dict) -> Optional[Dict]:
     """
-    Generate a comprehensive AI-powered summary of a task including all its important aspects.
+    Generate a comprehensive AI-powered summary of a task with full explainability.
     
     This function analyzes:
     - Basic task information (title, description, status, priority, progress)
@@ -1837,7 +2410,8 @@ def summarize_task_details(task_data: Dict) -> Optional[str]:
         task_data: A dictionary containing comprehensive task information
         
     Returns:
-        A detailed AI-generated summary highlighting key insights and concerns
+        A dictionary with detailed AI-generated summary and explainability data
+        or None if summarization fails
     """
     try:
         # Extract all task information
@@ -1886,7 +2460,7 @@ def summarize_task_details(task_data: Dict) -> Optional[str]:
         # Build comprehensive prompt
         prompt = f"""
         You are an expert project manager analyzing a task in detail. Provide a comprehensive, insightful summary 
-        that addresses ALL important aspects of this task. Focus on actionable insights, risks, and recommendations.
+        that addresses ALL important aspects of this task with full explainability for every insight and recommendation.
 
         ## TASK OVERVIEW:
         **Title:** {title}
@@ -1987,50 +2561,103 @@ def summarize_task_details(task_data: Dict) -> Optional[str]:
         
         prompt += """
 
-        ## REQUIRED ANALYSIS SECTIONS:
-
-        Provide a comprehensive summary addressing these critical areas:
-
-        1. **Executive Summary** (2-3 sentences)
-           - Overall task health and status
-           - Most critical concern or highlight
-
-        2. **Risk & Blockers Analysis**
-           - Current risk assessment and validity
-           - Dependency blockers and timeline impact
-           - Recommended immediate actions
-
-        3. **Resource & Capacity Assessment**
-           - Assignee skill alignment and capacity
-           - Collaboration needs and team requirements
-           - Resource allocation recommendations
-
-        4. **Stakeholder Management**
-           - Stakeholder engagement status
-           - Satisfaction levels and feedback themes
-           - Communication recommendations
-
-        5. **Timeline & Priority Evaluation**
-           - Due date feasibility given dependencies and complexity
-           - Priority alignment with risk and impact
-           - Schedule optimization suggestions
-
-        6. **Process Efficiency (Lean Perspective)**
-           - Value-add classification appropriateness
-           - Waste identification opportunities
-           - Process improvement suggestions
-
-        7. **Key Action Items** (prioritized list)
-           - Top 3-5 immediate actions needed
-           - Owner assignments (if clear from context)
-           - Urgency indicators
-
-        Keep the summary concise but comprehensive. Use clear headings and bullet points. 
-        Highlight risks in **bold** and urgent items with ⚠️ emoji.
-        Focus on actionable insights rather than restating data.
+        Format your response as JSON WITH FULL EXPLAINABILITY:
+        {
+            "executive_summary": "2-3 sentence high-level summary of task status and key concerns",
+            "confidence_score": 0.XX,
+            "analysis_completeness": {
+                "data_quality": "high|medium|low",
+                "missing_information": ["Key info that would improve analysis"],
+                "analysis_confidence": "high|medium|low"
+            },
+            "task_health": {
+                "overall_status": "healthy|at_risk|critical",
+                "status_reasoning": "Why this health status was assigned",
+                "health_factors": [
+                    {
+                        "factor": "Factor name",
+                        "status": "positive|neutral|negative",
+                        "impact": "How this affects task health",
+                        "evidence": "Supporting data"
+                    }
+                ]
+            },
+            "risk_analysis": {
+                "risk_assessment_validity": "The current risk assessment is appropriate|needs review|underestimated|overestimated",
+                "validity_reasoning": "Why risk assessment accuracy was rated this way",
+                "top_risks": [
+                    {
+                        "risk": "Risk description",
+                        "likelihood": "high|medium|low",
+                        "impact": "high|medium|low",
+                        "current_mitigation": "What's in place",
+                        "recommended_action": "Additional action needed"
+                    }
+                ],
+                "blockers_impact": "Assessment of how blockers affect this task"
+            },
+            "resource_assessment": {
+                "assignee_fit": "good|adequate|poor",
+                "fit_reasoning": "Why assignee is/isn't well-suited",
+                "capacity_status": "available|stretched|overloaded",
+                "skill_gaps": ["Skills needed but potentially missing"],
+                "collaboration_needs": "Assessment of team coordination requirements"
+            },
+            "stakeholder_insights": {
+                "engagement_level": "engaged|neutral|disengaged",
+                "satisfaction_trend": "improving|stable|declining|unknown",
+                "key_concerns": ["Stakeholder concerns identified"],
+                "communication_recommendations": ["How to better engage stakeholders"]
+            },
+            "timeline_assessment": {
+                "deadline_feasibility": "achievable|at_risk|unlikely",
+                "feasibility_reasoning": "Why deadline is/isn't achievable",
+                "dependency_impact": "How dependencies affect timeline",
+                "suggested_adjustments": ["Timeline optimization suggestions"]
+            },
+            "lean_efficiency": {
+                "value_classification_appropriate": true,
+                "classification_reasoning": "Why classification is/isn't accurate",
+                "waste_indicators": ["Waste patterns observed"],
+                "efficiency_suggestions": ["How to improve value delivery"]
+            },
+            "prioritized_actions": [
+                {
+                    "action": "Specific action to take",
+                    "owner": "Who should do this",
+                    "urgency": "immediate|this_week|this_month",
+                    "reasoning": "Why this action is needed",
+                    "expected_outcome": "What this will achieve"
+                }
+            ],
+            "assumptions": [
+                "Key assumption made in this analysis"
+            ],
+            "limitations": [
+                "Limitation of this analysis"
+            ],
+            "markdown_summary": "**Executive Summary**\\n[summary]\\n\\n**Key Actions**\\n- Action 1\\n- Action 2"
+        }
         """
         
-        return generate_ai_content(prompt, task_type='simple')
+        response_text = generate_ai_content(prompt, task_type='simple')
+        if response_text:
+            # Handle code block formatting
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].strip()
+            
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError:
+                # Fallback to plain text for backward compatibility
+                return {
+                    'markdown_summary': response_text,
+                    'confidence_score': 0.5,
+                    'parsing_note': 'Returned plain text summary due to JSON parsing error'
+                }
+        return None
     except Exception as e:
         logger.error(f"Error summarizing task details: {str(e)}")
         return None

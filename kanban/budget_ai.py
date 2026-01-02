@@ -297,7 +297,59 @@ Please provide:
 4. **Immediate Actions**: 2-3 actions that should be taken immediately
 5. **Trend Analysis**: Based on the data, what trends do you observe?
 
-Format your response as JSON with keys: health_rating, health_explanation, risks (array), positive_indicators (array), immediate_actions (array), trends (array).
+Format your response as JSON WITH FULL EXPLAINABILITY:
+{{
+    "confidence_score": 0.XX,
+    "health_rating": "Excellent|Good|Concerning|Critical",
+    "health_explanation": "Detailed explanation of why this rating was assigned",
+    "health_factors": [
+        {{
+            "factor": "Factor name",
+            "status": "positive|neutral|negative",
+            "weight": "high|medium|low",
+            "evidence": "Data supporting this assessment"
+        }}
+    ],
+    "risks": [
+        {{
+            "risk": "Risk description",
+            "severity": "critical|high|medium|low",
+            "likelihood": "high|medium|low",
+            "evidence": "What data indicates this risk",
+            "potential_impact": "Financial/timeline impact if realized",
+            "mitigation": "Suggested action to address"
+        }}
+    ],
+    "positive_indicators": [
+        {{
+            "indicator": "What's going well",
+            "evidence": "Data supporting this observation",
+            "significance": "Why this matters"
+        }}
+    ],
+    "immediate_actions": [
+        {{
+            "action": "Specific action to take",
+            "rationale": "Why this action is needed now",
+            "expected_outcome": "What improvement to expect",
+            "owner_suggestion": "Who should own this action"
+        }}
+    ],
+    "trends": [
+        {{
+            "trend": "Observed pattern",
+            "direction": "improving|stable|declining",
+            "evidence": "Data showing this trend",
+            "forecast": "What to expect if trend continues"
+        }}
+    ],
+    "analysis_assumptions": [
+        "Key assumption made in this analysis"
+    ],
+    "analysis_limitations": [
+        "What data would improve this analysis"
+    ]
+}}
 """
         return prompt
     
@@ -332,9 +384,42 @@ Generate 3-7 specific, actionable recommendations. For each recommendation:
 3. Estimate potential cost savings
 4. Rate confidence (0-100)
 5. Set priority (low/medium/high/urgent)
-6. Explain AI reasoning
+6. Explain AI reasoning with full transparency
 
-Format as JSON array with objects containing: type, title, description, estimated_savings (number or null), confidence, priority, reasoning, patterns (object).
+Format as JSON array with objects containing FULL EXPLAINABILITY:
+[
+    {{
+        "type": "recommendation_type",
+        "title": "Clear recommendation title",
+        "description": "Detailed description of the recommendation",
+        "estimated_savings": 1000.00,
+        "confidence": 85,
+        "confidence_factors": [
+            {{
+                "factor": "What influences confidence",
+                "direction": "increases|decreases",
+                "explanation": "How this affects confidence"
+            }}
+        ],
+        "priority": "low|medium|high|urgent",
+        "priority_reasoning": "Why this priority level",
+        "reasoning": "Detailed explanation of why this is recommended based on data",
+        "implementation_steps": ["Step 1", "Step 2", "Step 3"],
+        "risks_of_implementation": ["Risk 1"],
+        "success_metrics": ["How to measure if this worked"],
+        "patterns": {{
+            "data_patterns_used": ["What patterns informed this recommendation"],
+            "historical_support": "Any historical data supporting this"
+        }},
+        "alternative_approaches": [
+            {{
+                "alternative": "Alternative approach",
+                "tradeoff": "What you gain/lose"
+            }}
+        ],
+        "assumptions": ["Key assumption for this recommendation"]
+    }}
+]
 """
         return prompt
     
@@ -362,7 +447,67 @@ Based on current trends, predict:
 4. Key contributing factors
 5. Confidence in prediction
 
-Format as JSON: {{"overrun_likelihood": number, "predicted_overrun_amount": number, "expected_date": "YYYY-MM-DD", "factors": array, "confidence": number, "risk_level": "low/medium/high/critical"}}
+Format as JSON WITH FULL EXPLAINABILITY:
+{{
+    "confidence_score": 0.XX,
+    "overrun_likelihood": 75,
+    "likelihood_reasoning": "Why this probability was calculated",
+    "predicted_overrun_amount": 5000.00,
+    "amount_calculation": "How the overrun amount was estimated",
+    "expected_date": "YYYY-MM-DD",
+    "date_calculation": "How the date was projected",
+    "factors": [
+        {{
+            "factor": "Contributing factor",
+            "contribution_percentage": 25,
+            "evidence": "Data supporting this factor",
+            "trajectory": "worsening|stable|improving"
+        }}
+    ],
+    "confidence": 80,
+    "confidence_factors": [
+        {{
+            "factor": "What affects prediction confidence",
+            "direction": "increases|decreases",
+            "explanation": "Why"
+        }}
+    ],
+    "risk_level": "low|medium|high|critical",
+    "risk_reasoning": "Why this risk level was assigned",
+    "scenario_analysis": {{
+        "best_case": {{
+            "overrun_amount": 0,
+            "probability": 20,
+            "conditions": "What must happen for this scenario"
+        }},
+        "most_likely": {{
+            "overrun_amount": 5000,
+            "probability": 55,
+            "conditions": "Expected conditions"
+        }},
+        "worst_case": {{
+            "overrun_amount": 15000,
+            "probability": 25,
+            "conditions": "What could make this happen"
+        }}
+    }},
+    "early_warning_indicators": [
+        {{
+            "indicator": "What to watch for",
+            "threshold": "When to be concerned",
+            "current_status": "Current value"
+        }}
+    ],
+    "mitigation_opportunities": [
+        {{
+            "action": "Action to reduce overrun risk",
+            "potential_savings": 2000,
+            "feasibility": "high|medium|low"
+        }}
+    ],
+    "assumptions": ["Key assumption in this prediction"],
+    "limitations": ["What would improve prediction accuracy"]
+}}
 """
         return prompt
     

@@ -180,22 +180,46 @@ For each resolution, provide:
 """
         
         prompt += """
-FORMAT YOUR RESPONSE AS JSON:
+FORMAT YOUR RESPONSE AS JSON WITH FULL EXPLAINABILITY:
 {
+  "confidence_score": 0.XX,
+  "conflict_analysis": {
+    "root_cause": "Primary cause of this conflict",
+    "contributing_factors": ["Factor 1", "Factor 2"],
+    "severity_assessment": "Why this severity level is appropriate"
+  },
   "resolutions": [
     {
       "type": "resolution_type",
       "title": "Short title",
       "description": "Detailed description",
       "confidence": 85,
-      "impact": "Impact description",
+      "confidence_reasoning": "Why this confidence level",
+      "impact": "Impact description with quantified improvements where possible",
+      "impact_timeline": "immediate|short_term|medium_term",
       "steps": ["Step 1", "Step 2", "Step 3"],
-      "reasoning": "Why this resolution is recommended"
+      "step_rationale": ["Why step 1 is needed", "Why step 2", "Why step 3"],
+      "reasoning": "Detailed explanation of why this resolution is recommended based on conflict analysis",
+      "risks": ["Risk of implementing this resolution"],
+      "risk_mitigation": ["How to mitigate the risks"],
+      "success_indicators": ["How to know if resolution worked"],
+      "alternative_if_fails": "Fallback approach if this doesn't work",
+      "assumptions": ["Key assumption for this resolution"]
     }
-  ]
+  ],
+  "resolution_comparison": {
+    "recommended_first": 1,
+    "recommendation_reasoning": "Why this resolution should be tried first",
+    "combined_approach": "How resolutions could work together"
+  },
+  "prevention_insights": {
+    "how_to_prevent_recurrence": ["Preventive measure 1", "Preventive measure 2"],
+    "process_improvement": "System/process change to prevent similar conflicts"
+  }
 }
 
 Provide practical, actionable suggestions that a project manager can implement immediately.
+Be transparent about your reasoning so the PM understands why each resolution is recommended.
 """
         
         return prompt
@@ -306,23 +330,41 @@ EXISTING SUGGESTIONS:
             prompt += f"\n{i}. {suggestion.title}\n   {suggestion.description}\n"
         
         prompt += """
-TASK: For each suggestion above, provide:
+TASK: For each suggestion above, provide enhanced analysis with full explainability:
 1. An assessment of its feasibility and potential issues
 2. Ways to improve the suggestion
 3. Additional context or considerations
 4. A revised confidence score (0-100)
 
-FORMAT AS JSON:
+FORMAT AS JSON WITH FULL EXPLAINABILITY:
 {
+  "analysis_confidence": 0.XX,
   "enhancements": [
     {
       "suggestion_number": 1,
-      "assessment": "Brief assessment",
-      "improvements": "Suggested improvements",
-      "considerations": "Important factors to consider",
-      "revised_confidence": 85
+      "assessment": "Detailed feasibility assessment",
+      "assessment_factors": [
+        {
+          "factor": "Factor evaluated",
+          "rating": "positive|neutral|negative",
+          "evidence": "What indicates this"
+        }
+      ],
+      "strengths": ["What's good about this suggestion"],
+      "weaknesses": ["Potential issues or gaps"],
+      "improvements": "Specific improvements to make this more effective",
+      "improvement_rationale": "Why these improvements would help",
+      "considerations": "Important factors to consider before implementing",
+      "prerequisites": ["What needs to be in place first"],
+      "revised_confidence": 85,
+      "confidence_reasoning": "Why this confidence level after analysis",
+      "implementation_tips": ["Practical tip 1", "Practical tip 2"],
+      "warning_signs": ["Signs that this isn't working"]
     }
-  ]
+  ],
+  "overall_assessment": "Summary of the suggestion set quality",
+  "gaps_identified": ["What the suggestions don't address"],
+  "additional_recommendations": ["Any additional actions to consider"]
 }
 """
         

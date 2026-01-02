@@ -82,6 +82,7 @@ def extract_tasks_from_transcript(transcript: str, meeting_context: Dict,
         prompt = f"""
         Analyze this meeting transcript and extract actionable tasks. Focus on clear action items, 
         decisions that require follow-up, and commitments made during the meeting.
+        Provide comprehensive explainability for all extracted tasks.
         
         ## Meeting Context:
         - Meeting Type: {meeting_context.get('meeting_type', 'General')}
@@ -101,44 +102,70 @@ def extract_tasks_from_transcript(transcript: str, meeting_context: Dict,
         6. Suggest realistic due dates if timeframes were mentioned
         7. Identify dependencies between tasks if any
         
-        Format your response as JSON:
+        Format your response as JSON WITH FULL EXPLAINABILITY:
         {{
             "extraction_summary": {{
                 "total_tasks_found": 0,
                 "meeting_summary": "Brief 2-3 sentence summary of key outcomes",
                 "confidence_level": "high|medium|low",
-                "processing_notes": "Any important context or limitations"
+                "confidence_score": 0.XX,
+                "processing_notes": "Any important context or limitations",
+                "extraction_quality": {{
+                    "transcript_clarity": "high|medium|low",
+                    "action_item_density": "high (many tasks)|medium|low (few clear tasks)",
+                    "context_completeness": "How much context was available for extraction"
+                }}
             }},
             "extracted_tasks": [
                 {{
                     "title": "Clear, actionable task title",
                     "description": "Detailed description with context from the meeting",
                     "priority": "low|medium|high|urgent",
+                    "priority_reasoning": "Why this priority level was assigned",
                     "suggested_assignee": "username or null",
                     "assignee_confidence": "high|medium|low",
+                    "assignee_reasoning": "Why this person was suggested (based on discussion context)",
                     "due_date_suggestion": "YYYY-MM-DD or relative like '+7 days' or null",
+                    "due_date_reasoning": "Why this date was suggested (based on timeline mentions)",
                     "estimated_effort": "1-3 days",
+                    "effort_reasoning": "Basis for this estimate",
                     "category": "action_item|follow_up|decision_implementation|research",
                     "source_context": "Relevant excerpt from transcript showing where this task came from",
+                    "extraction_confidence": 0.XX,
+                    "extraction_reasoning": "Why we're confident this is a valid task",
                     "dependencies": ["indices of other tasks this depends on"],
+                    "dependency_reasoning": "Why these dependencies exist",
                     "urgency_indicators": ["phrases from transcript indicating urgency"],
-                    "success_criteria": "How to know when this task is complete"
+                    "success_criteria": "How to know when this task is complete",
+                    "potential_blockers": ["Potential issues mentioned that could block this task"],
+                    "assumptions": ["Assumptions made when extracting this task"]
                 }}
             ],
             "suggested_follow_ups": [
                 {{
                     "type": "meeting|check_in|review",
                     "description": "What kind of follow-up is suggested",
-                    "timeframe": "When this follow-up should happen"
+                    "timeframe": "When this follow-up should happen",
+                    "reasoning": "Why this follow-up is needed based on discussion"
                 }}
             ],
             "unresolved_items": [
-                "Items mentioned but need clarification before becoming tasks"
-            ]
+                {{
+                    "item": "Item mentioned but needs clarification",
+                    "why_unresolved": "What information is missing",
+                    "clarification_needed": "What question should be asked to resolve"
+                }}
+            ],
+            "meeting_insights": {{
+                "key_decisions": ["Decision 1 made during meeting", "Decision 2"],
+                "concerns_raised": ["Concern 1 mentioned", "Concern 2"],
+                "positive_highlights": ["Positive outcome 1", "Progress noted"],
+                "overall_sentiment": "positive|neutral|concerning"
+            }}
         }}
         """
         
-        response_text = generate_ai_content(prompt, task_type='simple')
+        response_text = generate_ai_content(prompt, task_type='complex')
         if response_text:
             # Handle code block formatting
             if "```json" in response_text:

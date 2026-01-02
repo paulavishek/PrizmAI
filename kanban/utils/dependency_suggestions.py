@@ -73,11 +73,19 @@ class DependencyAnalyzer:
                 )
                 
                 if parent_score > 0.5:
+                    # Generate detailed reasoning for explainability
+                    parent_reasoning = DependencyAnalyzer._generate_parent_reasoning(
+                        task, other_task, parent_score
+                    )
                     parent_suggestions.append({
                         'task_id': other_task.id,
                         'task_title': other_task.title,
                         'confidence': round(parent_score, 2),
-                        'reason': 'Task appears to be a prerequisite'
+                        'confidence_level': 'high' if parent_score > 0.8 else 'medium' if parent_score > 0.6 else 'low',
+                        'reason': 'Task appears to be a prerequisite',
+                        'reasoning_details': parent_reasoning,
+                        'relationship_type': 'parent-child',
+                        'impact_if_linked': 'This task would need to complete before the current task can start'
                     })
                 
                 # Check for related tasks
@@ -86,11 +94,19 @@ class DependencyAnalyzer:
                 )
                 
                 if related_score > 0.6:
+                    # Generate detailed reasoning for explainability
+                    related_reasoning = DependencyAnalyzer._generate_relatedness_reasoning(
+                        task, other_task, related_score
+                    )
                     related_suggestions.append({
                         'task_id': other_task.id,
                         'task_title': other_task.title,
                         'confidence': round(related_score, 2),
-                        'reason': 'Tasks share similar context or requirements'
+                        'confidence_level': 'high' if related_score > 0.8 else 'medium' if related_score > 0.7 else 'low',
+                        'reason': 'Tasks share similar context or requirements',
+                        'reasoning_details': related_reasoning,
+                        'relationship_type': 'related',
+                        'impact_if_linked': 'Linking allows tracking related work and potential coordination'
                     })
                 
                 # Check for blocking relationships
@@ -99,11 +115,19 @@ class DependencyAnalyzer:
                 )
                 
                 if blocking_score > 0.6:
+                    # Generate detailed reasoning for explainability
+                    blocking_reasoning = DependencyAnalyzer._generate_blocking_reasoning(
+                        task, other_task, blocking_score
+                    )
                     blocking_suggestions.append({
                         'task_id': other_task.id,
                         'task_title': other_task.title,
                         'confidence': round(blocking_score, 2),
-                        'reason': 'This task may be blocked by or block the other task'
+                        'confidence_level': 'high' if blocking_score > 0.8 else 'medium' if blocking_score > 0.7 else 'low',
+                        'reason': 'This task may be blocked by or block the other task',
+                        'reasoning_details': blocking_reasoning,
+                        'relationship_type': 'blocking',
+                        'impact_if_linked': 'Creates a dependency chain that affects scheduling'
                     })
             
             # Sort by confidence and limit results
@@ -118,14 +142,42 @@ class DependencyAnalyzer:
                 [0]
             )
             
+            # Build explainability summary
+            explainability = {
+                'analysis_method': 'Keyword matching and semantic analysis',
+                'factors_analyzed': [
+                    'Task title and description similarity',
+                    'Dependency keywords (requires, depends on, after, etc.)',
+                    'Blocking keywords (blocks, waiting for, etc.)',
+                    'Column position in workflow',
+                    'Parent/child keyword patterns'
+                ],
+                'assumptions': [
+                    'Tasks in earlier workflow columns may be prerequisites',
+                    'Explicit dependency language indicates relationships',
+                    'Similar content suggests related work'
+                ],
+                'limitations': [
+                    'Analysis is based on text patterns, not semantic understanding',
+                    'May miss implicit dependencies not mentioned in descriptions',
+                    'Confidence decreases with sparse descriptions'
+                ]
+            }
+            
             return {
                 'parent_suggestions': parent_suggestions[:3],  # Top 3 suggestions
                 'related_suggestions': related_suggestions[:3],
                 'blocking_suggestions': blocking_suggestions[:3],
                 'confidence': round(overall_confidence, 2),
+                'confidence_level': 'high' if overall_confidence > 0.8 else 'medium' if overall_confidence > 0.6 else 'low',
                 'analysis': f"Found {len(parent_suggestions)} potential parent tasks, "
                           f"{len(related_suggestions)} related tasks, and "
-                          f"{len(blocking_suggestions)} potentially blocking tasks"
+                          f"{len(blocking_suggestions)} potentially blocking tasks",
+                'explainability': explainability,
+                'total_tasks_analyzed': other_tasks.count(),
+                'recommendations': DependencyAnalyzer._generate_recommendations(
+                    parent_suggestions, related_suggestions, blocking_suggestions
+                )
             }
         
         except Exception as e:
@@ -189,6 +241,126 @@ class DependencyAnalyzer:
                 score += 0.3
         
         return min(score, 1.0)
+    
+    @staticmethod
+    def _generate_parent_reasoning(task, parent_task, score) -> Dict:
+        """Generate detailed reasoning for parent relationship suggestion"""
+        factors = []
+        
+        # Check for keyword matches
+        task_desc = task.description.lower() if task.description else ''
+        parent_desc = parent_task.description.lower() if parent_task.description else ''
+        
+        if any(kw in task_desc for kw in DependencyAnalyzer.CHILD_KEYWORDS):
+            factors.append({
+                'factor': 'Child task indicators',
+                'contribution': 40,
+                'detail': 'Task contains keywords like "test", "validate", "fix" suggesting it follows another task'
+            })
+        
+        if any(kw in parent_desc for kw in DependencyAnalyzer.PARENT_KEYWORDS):
+            factors.append({
+                'factor': 'Parent task indicators',
+                'contribution': 30,
+                'detail': 'Suggested parent contains keywords like "implement", "setup", "design" suggesting prerequisite work'
+            })
+        
+        if task.column and parent_task.column and parent_task.column.position < task.column.position:
+            factors.append({
+                'factor': 'Workflow position',
+                'contribution': 20,
+                'detail': f'Parent task is in earlier column ({parent_task.column.name}) suggesting it should complete first'
+            })
+        
+        return {
+            'contributing_factors': factors,
+            'summary': f"This task appears to depend on '{parent_task.title}' based on {len(factors)} factor(s)",
+            'confidence_explanation': 'high' if score > 0.8 else 'medium' if score > 0.6 else 'low' + ' confidence based on keyword and workflow analysis'
+        }
+    
+    @staticmethod
+    def _generate_relatedness_reasoning(task, related_task, score) -> Dict:
+        """Generate detailed reasoning for related task suggestion"""
+        task_desc = task.description.lower() if task.description else ''
+        related_desc = related_task.description.lower() if related_task.description else ''
+        
+        words1 = set(task_desc.split())
+        words2 = set(related_desc.split())
+        common_words = words1.intersection(words2)
+        # Filter out common stop words
+        stop_words = {'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'to', 'of', 'and', 'or', 'for', 'in', 'on', 'at', 'by'}
+        meaningful_common = [w for w in common_words if w not in stop_words and len(w) > 2]
+        
+        return {
+            'contributing_factors': [
+                {
+                    'factor': 'Content similarity',
+                    'contribution': int(score * 100),
+                    'detail': f'Tasks share {len(meaningful_common)} meaningful terms: {", ".join(list(meaningful_common)[:5])}'
+                }
+            ],
+            'common_keywords': list(meaningful_common)[:10],
+            'summary': f"Tasks share similar context with {len(meaningful_common)} common keywords",
+            'confidence_explanation': f'{int(score * 100)}% text similarity detected between task descriptions'
+        }
+    
+    @staticmethod
+    def _generate_blocking_reasoning(task, blocking_task, score) -> Dict:
+        """Generate detailed reasoning for blocking relationship suggestion"""
+        task_desc = task.description.lower() if task.description else ''
+        
+        blocking_keywords_found = [kw for kw in DependencyAnalyzer.BLOCKING_KEYWORDS if kw in task_desc]
+        
+        return {
+            'contributing_factors': [
+                {
+                    'factor': 'Blocking keywords detected',
+                    'contribution': int(score * 100),
+                    'detail': f'Found blocking indicators: {", ".join(blocking_keywords_found)}' if blocking_keywords_found else 'Implicit blocking relationship detected'
+                }
+            ],
+            'keywords_found': blocking_keywords_found,
+            'summary': f"Task contains {len(blocking_keywords_found)} blocking indicator(s)",
+            'confidence_explanation': 'Explicit blocking language detected' if blocking_keywords_found else 'Implicit relationship inferred from context'
+        }
+    
+    @staticmethod
+    def _generate_recommendations(parent_suggestions, related_suggestions, blocking_suggestions) -> list:
+        """Generate actionable recommendations based on analysis"""
+        recommendations = []
+        
+        if parent_suggestions and parent_suggestions[0]['confidence'] > 0.7:
+            top_parent = parent_suggestions[0]
+            recommendations.append({
+                'action': 'Consider linking as parent task',
+                'target': top_parent['task_title'],
+                'confidence': top_parent['confidence'],
+                'reason': f"High confidence ({int(top_parent['confidence'] * 100)}%) that this is a prerequisite"
+            })
+        
+        if blocking_suggestions and blocking_suggestions[0]['confidence'] > 0.7:
+            top_blocker = blocking_suggestions[0]
+            recommendations.append({
+                'action': 'Review potential blocking relationship',
+                'target': top_blocker['task_title'],
+                'confidence': top_blocker['confidence'],
+                'reason': 'Blocking keywords suggest dependency chain'
+            })
+        
+        if related_suggestions and len(related_suggestions) >= 2:
+            recommendations.append({
+                'action': 'Consider grouping related tasks',
+                'target': f"{len(related_suggestions)} related tasks found",
+                'reason': 'Multiple related tasks may benefit from coordination'
+            })
+        
+        if not recommendations:
+            recommendations.append({
+                'action': 'No strong dependencies detected',
+                'reason': 'Consider adding more description details for better analysis'
+            })
+        
+        return recommendations
 
 
 class DependencyGraphGenerator:

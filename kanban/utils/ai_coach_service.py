@@ -84,8 +84,9 @@ class AICoachService:
             return suggestion_data
     
     def _build_enhancement_prompt(self, suggestion: Dict, context: Dict) -> str:
-        """Build prompt for AI enhancement"""
+        """Build prompt for AI enhancement with full explainability"""
         return f"""You are an experienced project management coach helping a PM improve their project.
+Your advice must be transparent and explainable so the PM understands your reasoning.
 
 ## Current Situation:
 {suggestion['message']}
@@ -104,25 +105,50 @@ class AICoachService:
 {json.dumps(suggestion.get('metrics_snapshot', {}), indent=2)}
 
 ## Task:
-As an expert PM coach, provide:
+As an expert PM coach, provide FULLY EXPLAINABLE coaching advice:
 
-1. **Reasoning**: Explain WHY this situation needs attention (2-3 sentences, focusing on root causes)
-
-2. **Recommended Actions**: List 3-5 specific, actionable steps the PM should take (be concrete and practical)
-
-3. **Expected Impact**: Describe the positive outcomes if these actions are taken (1-2 sentences)
-
-4. **Confidence**: Rate your confidence in this advice (0.0-1.0)
-
-Format your response as JSON:
+Format your response as JSON WITH FULL EXPLAINABILITY:
 {{
-  "reasoning": "Your explanation here",
-  "actions": ["Action 1", "Action 2", "Action 3"],
-  "impact": "Expected impact description",
-  "confidence": 0.85
+    "reasoning": "Detailed explanation of WHY this situation needs attention - identify root causes and their business impact",
+    "reasoning_factors": [
+        {{
+            "factor": "Key factor identified",
+            "weight": "high|medium|low",
+            "evidence": "What data supports this"
+        }}
+    ],
+    "actions": [
+        {{
+            "action": "Specific actionable step",
+            "rationale": "Why this action addresses the issue",
+            "expected_outcome": "What improvement to expect",
+            "implementation_hint": "How to implement this"
+        }}
+    ],
+    "impact": "Expected positive outcomes with quantifiable improvements where possible",
+    "impact_timeline": "short_term|medium_term|long_term",
+    "confidence": 0.XX,
+    "confidence_factors": [
+        {{
+            "factor": "What influences confidence",
+            "direction": "increases|decreases",
+            "explanation": "Why this affects confidence"
+        }}
+    ],
+    "assumptions": [
+        "Key assumption made in this advice"
+    ],
+    "alternative_approaches": [
+        {{
+            "approach": "Alternative strategy",
+            "tradeoff": "What you gain/lose with this approach"
+        }}
+    ],
+    "risk_of_inaction": "What happens if this advice is not followed"
 }}
 
 Focus on actionable advice that a PM can implement immediately. Consider the specific context and metrics provided.
+Be transparent about your reasoning so the PM can make an informed decision.
 """
     
     def _parse_ai_enhancement(self, ai_response: str) -> Dict:
@@ -262,6 +288,7 @@ Respond directly to their question with helpful guidance.
             
             # Build analysis prompt
             prompt = f"""You are an executive project management coach analyzing a PM's performance.
+Provide fully explainable insights so the PM understands your assessment methodology.
 
 ## PM Performance Data ({time_period_days} days):
 
@@ -278,22 +305,53 @@ Respond directly to their question with helpful guidance.
 - Team Size: {board.members.count()}
 
 ## Task:
-Provide a coaching analysis with:
-
-1. **Strengths**: What is this PM doing well? (2-3 points)
-2. **Improvement Areas**: Where can they grow? (2-3 points)
-3. **Recommendations**: Specific actions to improve (3-5 recommendations)
-4. **Overall Assessment**: Brief summary (1-2 sentences)
+Provide a comprehensive coaching analysis WITH FULL EXPLAINABILITY:
 
 Format as JSON:
 {{
-  "strengths": ["Strength 1", "Strength 2"],
-  "improvement_areas": ["Area 1", "Area 2"],
-  "recommendations": ["Rec 1", "Rec 2", "Rec 3"],
-  "overall_assessment": "Summary here"
+    "confidence_score": 0.XX,
+    "assessment_methodology": "How this assessment was derived from the data",
+    "data_quality_note": "Any limitations in the data that affect this assessment",
+    "strengths": [
+        {{
+            "strength": "What this PM does well",
+            "evidence": "Data supporting this observation",
+            "impact": "How this benefits the project"
+        }}
+    ],
+    "improvement_areas": [
+        {{
+            "area": "Where they can grow",
+            "evidence": "Data indicating this need",
+            "priority": "high|medium|low",
+            "impact_if_improved": "What improvement would bring"
+        }}
+    ],
+    "recommendations": [
+        {{
+            "recommendation": "Specific action to take",
+            "rationale": "Why this is recommended based on data",
+            "expected_outcome": "What to expect if implemented",
+            "implementation_tips": ["Tip 1", "Tip 2"],
+            "priority": 1
+        }}
+    ],
+    "performance_trend": {{
+        "direction": "improving|stable|declining",
+        "trend_evidence": "What data shows this trend",
+        "forecast": "What to expect if current patterns continue"
+    }},
+    "overall_assessment": "Summary assessment with key takeaways",
+    "assessment_confidence": {{
+        "level": "high|medium|low",
+        "factors": ["What influences this confidence level"]
+    }},
+    "comparative_context": "How this compares to typical PM performance (if inferrable)",
+    "coaching_focus_suggestion": "What the PM should focus on in the next period"
 }}
 
 Be constructive, specific, and actionable. Focus on growth and development.
+Make your reasoning transparent so the PM understands how you arrived at each conclusion.
 """
             
             # Get AI response
@@ -330,22 +388,65 @@ Be constructive, specific, and actionable. Focus on growth and development.
         
         try:
             prompt = f"""You are a project management educator creating training content.
+Make your teaching transparent by explaining WHY each concept matters.
 
 ## Topic: {topic}
 ## Audience Level: {pm_experience_level} project managers
 
 ## Task:
-Create concise educational content that includes:
+Create educational content WITH FULL EXPLAINABILITY. Respond in JSON format:
 
-1. **Key Concepts**: What this PM needs to understand (2-3 concepts)
-2. **Best Practices**: Industry-standard approaches (3-4 practices)
-3. **Common Pitfalls**: What to avoid (2-3 pitfalls)
-4. **Practical Tips**: Immediately actionable advice (3-4 tips)
+{{
+    "content_confidence": 0.XX,
+    "topic_overview": "Brief introduction to the topic and why it matters for PMs",
+    "key_concepts": [
+        {{
+            "concept": "Concept name",
+            "explanation": "What it means",
+            "why_important": "Why PMs need to understand this",
+            "real_world_example": "Practical example",
+            "common_misconception": "What people often get wrong"
+        }}
+    ],
+    "best_practices": [
+        {{
+            "practice": "The practice",
+            "rationale": "Why this works",
+            "how_to_implement": "Steps to apply this",
+            "evidence_base": "Where this practice comes from (methodology/research)"
+        }}
+    ],
+    "common_pitfalls": [
+        {{
+            "pitfall": "What to avoid",
+            "why_happens": "Why PMs fall into this trap",
+            "consequences": "What goes wrong",
+            "how_to_prevent": "Prevention strategies"
+        }}
+    ],
+    "practical_tips": [
+        {{
+            "tip": "Actionable advice",
+            "when_to_use": "Context where this applies",
+            "expected_benefit": "What improvement to expect"
+        }}
+    ],
+    "learning_path": {{
+        "immediate_actions": ["What to try today"],
+        "skill_building": ["How to develop deeper expertise"],
+        "resources": ["Suggested further reading or tools"]
+    }},
+    "self_assessment_questions": [
+        "Question to help PM evaluate their current practice"
+    ],
+    "content_assumptions": [
+        "What we assumed about the learner"
+    ]
+}}
 
-Keep it practical and relevant to day-to-day PM work.
-Aim for 300-400 words total.
-
+Make content practical and relevant to day-to-day PM work.
 Write in a clear, friendly, educational tone.
+Explain the 'why' behind every recommendation.
 """
             
             # Get AI response
