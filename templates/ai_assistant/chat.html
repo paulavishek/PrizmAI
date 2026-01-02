@@ -600,5 +600,23 @@
     loadSessions();
     loadMessages();
     setInterval(loadSessions, 30000); // Refresh sessions every 30 seconds
+    
+    // Handle initial query from URL parameter (e.g., from wiki quick queries)
+    {% if initial_query %}
+    document.addEventListener('DOMContentLoaded', function() {
+        const chatInput = document.getElementById('chat-input');
+        const initialQuery = "{{ initial_query|escapejs }}";
+        
+        if (initialQuery && chatInput) {
+            // Pre-fill the input with the query
+            chatInput.value = initialQuery;
+            
+            // Auto-send the message after a short delay to ensure chat is ready
+            setTimeout(() => {
+                sendMessage();
+            }, 500);
+        }
+    });
+    {% endif %}
 </script>
 {% endblock %}

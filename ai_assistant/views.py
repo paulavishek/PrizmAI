@@ -72,10 +72,14 @@ def chat_interface(request, session_id=None):
     else:
         user_boards = Board.objects.none()
     
+    # Get initial query from URL parameter (e.g., from wiki quick queries)
+    initial_query = request.GET.get('q', '')
+    
     context = {
         'session': session,
         'boards': user_boards,
         'user_preferences': user_pref,
+        'initial_query': initial_query,
     }
     return render(request, 'ai_assistant/chat.html', context)
 
