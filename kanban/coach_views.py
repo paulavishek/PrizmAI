@@ -437,6 +437,10 @@ def ask_coach(request, board_id):
     ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     from api.ai_usage_utils import check_ai_quota, track_ai_request
+    from kanban.utils.demo_limits import (
+        is_demo_mode, check_ai_generation_limit, 
+        increment_ai_generation_count, record_limitation_hit
+    )
     import time
     
     board = get_object_or_404(Board, id=board_id)
@@ -449,8 +453,21 @@ def ask_coach(request, board_id):
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     if request.method == 'POST':
-        # Check AI quota before processing (skip for anonymous demo users)
-        if request.user.is_authenticated:
+        # Check demo AI limit first (if in demo mode)
+        if is_demo_mode(request):
+            demo_ai_status = check_ai_generation_limit(request)
+            if not demo_ai_status['can_generate']:
+                record_limitation_hit(request, 'ai_limit')
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Demo AI limit reached',
+                    'quota_exceeded': True,
+                    'message': demo_ai_status['message'],
+                    'demo_limit': True
+                }, status=429)
+        
+        # Check AI quota before processing (for authenticated non-demo users)
+        if request.user.is_authenticated and not is_demo_mode(request):
             has_quota, quota, remaining = check_ai_quota(request.user)
             
             if not has_quota:
@@ -463,7 +480,7 @@ def ask_coach(request, board_id):
                                f'Your quota will reset in {days_until_reset} days.'
                 }, status=429)
         else:
-            # For anonymous demo users, no quota restrictions
+            # For demo users, quota is tracked via demo session
             quota = None
             remaining = float('inf')
         
@@ -498,6 +515,10 @@ def ask_coach(request, board_id):
                 
                 # Get updated remaining count
                 _, _, remaining = check_ai_quota(request.user)
+            
+            # Track demo AI usage (for demo limitation banner)
+            if is_demo_mode(request):
+                increment_ai_generation_count(request)
             
             return JsonResponse({
                 'success': True,

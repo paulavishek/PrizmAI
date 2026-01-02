@@ -119,19 +119,39 @@ def create_session(request):
 def send_message(request):
     """Send message to AI Assistant and get response"""
     from api.ai_usage_utils import check_ai_quota, track_ai_request
+    from kanban.utils.demo_limits import (
+        is_demo_mode, check_ai_generation_limit,
+        increment_ai_generation_count, record_limitation_hit
+    )
     import time
     
-    # Check AI quota before processing
-    has_quota, quota, remaining = check_ai_quota(request.user)
+    # Check demo AI limit first (if in demo mode)
+    if is_demo_mode(request):
+        demo_ai_status = check_ai_generation_limit(request)
+        if not demo_ai_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': 'Demo AI limit reached',
+                'quota_exceeded': True,
+                'message': demo_ai_status['message'],
+                'demo_limit': True
+            }, status=429)
     
-    if not has_quota:
-        days_until_reset = quota.get_days_until_reset()
-        return JsonResponse({
-            'error': 'AI usage quota exceeded',
-            'quota_exceeded': True,
-            'message': f'You have reached your monthly AI usage limit of {quota.monthly_quota} requests. '
-                       f'Your quota will reset in {days_until_reset} days.'
-        }, status=429)
+    # Check AI quota before processing (for non-demo authenticated users)
+    if not is_demo_mode(request):
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        
+        if not has_quota:
+            days_until_reset = quota.get_days_until_reset()
+            return JsonResponse({
+                'error': 'AI usage quota exceeded',
+                'quota_exceeded': True,
+                'message': f'You have reached your monthly AI usage limit of {quota.monthly_quota} requests. '
+                           f'Your quota will reset in {days_until_reset} days.'
+            }, status=429)
+    else:
+        quota = None
+        remaining = float('inf')
     
     start_time = time.time()
     
@@ -243,8 +263,23 @@ def send_message(request):
         except Exception as e:
             print(f"Error tracking AI request: {e}")
         
+        # Track demo AI usage (for demo limitation banner)
+        if is_demo_mode(request):
+            increment_ai_generation_count(request)
+        
         # Get updated remaining count
-        _, _, remaining = check_ai_quota(request.user)
+        if not is_demo_mode(request):
+            _, _, remaining = check_ai_quota(request.user)
+        
+        # For demo mode, get demo AI usage stats
+        demo_ai_info = None
+        if is_demo_mode(request):
+            demo_ai_status = check_ai_generation_limit(request)
+            demo_ai_info = {
+                'used': demo_ai_status['current_count'],
+                'max': demo_ai_status['max_allowed'],
+                'remaining': demo_ai_status['max_allowed'] - demo_ai_status['current_count']
+            }
         
         return JsonResponse({
             'status': 'success',
@@ -253,9 +288,9 @@ def send_message(request):
             'source': response.get('source', 'gemini'),
             'used_web_search': response.get('used_web_search', False),
             'search_sources': response.get('search_sources', []),
-            'ai_usage': {
+            'ai_usage': demo_ai_info if demo_ai_info else {
                 'remaining': remaining,
-                'used': quota.requests_used + 1
+                'used': quota.requests_used + 1 if quota else 0
             }
         })
     

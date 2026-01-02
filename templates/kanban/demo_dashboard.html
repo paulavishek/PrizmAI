@@ -259,8 +259,17 @@
 
     <!-- Demo Boards -->
     <div class="row mb-4">
-        <div class="col-12">
+        <div class="col-12 d-flex justify-content-between align-items-center">
             <h3 class="mb-3"><i class="fas fa-layer-group me-2"></i>Demo Boards</h3>
+            {% if demo_can_create_project %}
+            <a href="{% url 'create_board' %}" class="btn btn-success mb-3">
+                <i class="fas fa-plus me-1"></i>Create New Board ({{ demo_projects_remaining }} left)
+            </a>
+            {% else %}
+            <button class="btn btn-secondary mb-3" disabled title="Project limit reached">
+                <i class="fas fa-lock me-1"></i>Create Board Limit Reached
+            </button>
+            {% endif %}
         </div>
         {% for board_data in demo_boards %}
         <div class="col-md-4 mb-4">
