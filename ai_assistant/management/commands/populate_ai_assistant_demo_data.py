@@ -49,8 +49,17 @@ class Command(BaseCommand):
             self.stdout.write('  Please run: python manage.py create_demo_organization')
             return
 
-        # Get demo users
+        # Get demo users (including solo demo admin)
         demo_users = User.objects.filter(profile__organization=demo_org)
+        
+        # Also include demo_admin_solo if it exists (used for solo demo mode)
+        try:
+            demo_admin_solo = User.objects.get(username='demo_admin_solo')
+            demo_users = demo_users | User.objects.filter(pk=demo_admin_solo.pk)
+            self.stdout.write(f'  Including solo demo admin: {demo_admin_solo.username}')
+        except User.DoesNotExist:
+            pass
+        
         if not demo_users.exists():
             self.stdout.write(self.style.ERROR('✗ No demo users found!'))
             return
@@ -145,8 +154,10 @@ class Command(BaseCommand):
         """Create demo chat sessions with Q&A messages"""
         self.stdout.write('\n2. Creating Chat Sessions & Q&A...')
         
-        # Get the primary demo user (Alex Chen - admin)
-        primary_user = demo_users.filter(username='alex_chen_demo').first() or demo_users.first()
+        # Prioritize demo_admin_solo for solo demo mode, fall back to alex_chen_demo
+        primary_user = demo_users.filter(username='demo_admin_solo').first() or \
+                       demo_users.filter(username='alex_chen_demo').first() or \
+                       demo_users.first()
         secondary_user = demo_users.exclude(pk=primary_user.pk).first()
         
         # Get boards
@@ -311,12 +322,22 @@ Mitigation Strategies:
         AIAssistantAnalytics.objects.filter(user__in=demo_users).delete()
         
         count = 0
-        primary_user = demo_users.first()
+        # Prioritize demo_admin_solo for solo demo mode
+        primary_user = demo_users.filter(username='demo_admin_solo').first() or demo_users.first()
         boards_list = list(demo_boards)
+        
+        # Ensure demo_admin_solo is in the list if it exists
+        users_to_process = []
+        demo_admin_solo = demo_users.filter(username='demo_admin_solo').first()
+        if demo_admin_solo:
+            users_to_process.append(demo_admin_solo)
+        # Add other demo users (up to 2 more)
+        for user in demo_users.exclude(username='demo_admin_solo')[:2]:
+            users_to_process.append(user)
         
         # Create a single analytics record per user/board combination
         # (since date uses auto_now_add, we can only create "today" records)
-        for user in demo_users[:3]:  # Up to 3 users
+        for user in users_to_process:
             for board in boards_list:
                 # Calculate aggregate stats that would represent historical usage
                 is_primary = (user == primary_user)
@@ -340,7 +361,16 @@ Mitigation Strategies:
                 count += 1
         
         # Also create records without board context (general queries)
-        for user in demo_users[:2]:
+        # Prioritize demo_admin_solo first
+        users_for_general = []
+        if demo_admin_solo:
+            users_for_general.append(demo_admin_solo)
+        # Add one more user
+        other_user = demo_users.exclude(username='demo_admin_solo').first()
+        if other_user:
+            users_for_general.append(other_user)
+        
+        for user in users_for_general:
             analytics = AIAssistantAnalytics.objects.create(
                 user=user,
                 board=None,  # No specific board context
