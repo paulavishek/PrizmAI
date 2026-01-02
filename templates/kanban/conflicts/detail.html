@@ -286,13 +286,16 @@
                                 <div class="alert alert-light py-2 mb-2">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <small><strong><i class="bi bi-brain me-1"></i>Why this works:</strong></small>
+                                        {% if resolution.contributing_factors or resolution.assumptions or resolution.success_indicators %}
                                         <button type="button" class="btn btn-sm btn-link p-0" onclick="event.stopPropagation(); toggleResolutionExplain({{ resolution.id }})">
-                                            <small><i class="bi bi-lightbulb"></i> Details</small>
+                                            <small><i class="bi bi-lightbulb"></i> <span id="details-toggle-{{ resolution.id }}">Show Details</span></small>
                                         </button>
+                                        {% endif %}
                                     </div>
                                     <small class="d-block mt-1">{{ resolution.ai_reasoning }}</small>
                                     
                                     <!-- Enhanced Explainability Section -->
+                                    {% if resolution.contributing_factors or resolution.assumptions or resolution.success_indicators %}
                                     <div id="resolution-explain-{{ resolution.id }}" class="mt-2 pt-2 border-top" style="display: none;">
                                         {% if resolution.contributing_factors %}
                                         <div class="mb-2">
@@ -325,6 +328,7 @@
                                         </div>
                                         {% endif %}
                                     </div>
+                                    {% endif %}
                                 </div>
                                 {% endif %}
 
@@ -450,8 +454,15 @@ let appliedResolutionId = null;
 // Toggle resolution explainability section
 function toggleResolutionExplain(resolutionId) {
     const section = document.getElementById(`resolution-explain-${resolutionId}`);
+    const toggleText = document.getElementById(`details-toggle-${resolutionId}`);
     if (section) {
-        section.style.display = section.style.display === 'none' ? 'block' : 'none';
+        if (section.style.display === 'none') {
+            section.style.display = 'block';
+            if (toggleText) toggleText.textContent = 'Hide Details';
+        } else {
+            section.style.display = 'none';
+            if (toggleText) toggleText.textContent = 'Show Details';
+        }
     }
 }
 
