@@ -347,11 +347,29 @@
         z-index: 0;
     }
 
-    /* Features Section */
+    /* Features Section - Redesigned */
     .features-section {
-        padding: 120px 0;
-        background: linear-gradient(180deg, #f8f9ff 0%, #ffffff 100%);
+        padding: 100px 0;
+        background: linear-gradient(180deg, #f0f4ff 0%, #ffffff 50%, #f8faff 100%);
         position: relative;
+    }
+
+    .section-header {
+        text-align: center;
+        margin-bottom: 4rem;
+    }
+
+    .section-tag {
+        display: inline-block;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 0.5rem 1.5rem;
+        border-radius: 50px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 1.5rem;
     }
 
     .section-title {
@@ -367,12 +385,442 @@
 
     .section-subtitle {
         text-align: center;
-        font-size: 1.3rem;
+        font-size: 1.25rem;
         color: #6b7280;
-        margin-bottom: 4rem;
+        margin-bottom: 0;
         font-weight: 500;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
     }
 
+    /* Feature Categories */
+    .feature-categories {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 2rem;
+    }
+
+    @media (max-width: 992px) {
+        .feature-categories {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .feature-category {
+        background: white;
+        border-radius: 24px;
+        padding: 2rem;
+        box-shadow: 0 4px 24px rgba(102, 126, 234, 0.08);
+        border: 1px solid rgba(102, 126, 234, 0.1);
+        transition: all 0.4s ease;
+    }
+
+    .feature-category:hover {
+        box-shadow: 0 12px 40px rgba(102, 126, 234, 0.15);
+        transform: translateY(-5px);
+    }
+
+    .feature-category.highlight {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+    }
+
+    .feature-category.highlight .category-title,
+    .feature-category.highlight .category-desc,
+    .feature-category.highlight .mini-content h4,
+    .feature-category.highlight .mini-content p {
+        color: white;
+    }
+
+    .feature-category.highlight .mini-feature {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .category-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+        position: relative;
+    }
+
+    .category-icon-wrap {
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+        flex-shrink: 0;
+    }
+
+    .feature-category.highlight .category-icon-wrap {
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    .category-icon-wrap.ai-glow {
+        box-shadow: 0 0 20px rgba(167, 139, 250, 0.5);
+        animation: aiPulse 2s ease-in-out infinite;
+    }
+
+    @keyframes aiPulse {
+        0%, 100% { box-shadow: 0 0 20px rgba(167, 139, 250, 0.5); }
+        50% { box-shadow: 0 0 30px rgba(167, 139, 250, 0.8); }
+    }
+
+    .category-info {
+        flex: 1;
+    }
+
+    .category-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #1f2937;
+        margin-bottom: 0.25rem;
+    }
+
+    .category-desc {
+        font-size: 0.9rem;
+        color: #6b7280;
+        margin: 0;
+    }
+
+    .ai-badge {
+        position: absolute;
+        top: -8px;
+        right: 0;
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        color: #000;
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 0.25rem 0.75rem;
+        border-radius: 50px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .category-features {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+
+    @media (max-width: 576px) {
+        .category-features {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .mini-feature {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 1rem;
+        background: #f8faff;
+        border-radius: 12px;
+        border: 1px solid rgba(102, 126, 234, 0.08);
+        transition: all 0.3s ease;
+    }
+
+    .mini-feature:hover {
+        background: #f0f4ff;
+        border-color: rgba(102, 126, 234, 0.2);
+    }
+
+    .mini-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 0.9rem;
+        flex-shrink: 0;
+    }
+
+    .mini-icon.ai {
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        color: #000;
+    }
+
+    .feature-category.highlight .mini-icon {
+        background: rgba(255, 255, 255, 0.25);
+    }
+
+    .mini-content h4 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 0.25rem;
+    }
+
+    .mini-content p {
+        font-size: 0.8rem;
+        color: #6b7280;
+        margin: 0;
+        line-height: 1.4;
+    }
+
+    /* AI Section - Redesigned */
+    .ai-section {
+        padding: 100px 0;
+        background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 50%, #4c1d95 100%);
+        color: white;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .ai-section::before {
+        content: '';
+        position: absolute;
+        top: -30%;
+        right: -10%;
+        width: 800px;
+        height: 800px;
+        background: radial-gradient(circle, rgba(167, 139, 250, 0.15) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+
+    .ai-section::after {
+        content: '';
+        position: absolute;
+        bottom: -30%;
+        left: -10%;
+        width: 600px;
+        height: 600px;
+        background: radial-gradient(circle, rgba(96, 165, 250, 0.1) 0%, transparent 70%);
+        border-radius: 50%;
+    }
+
+    .ai-showcase {
+        position: relative;
+        z-index: 2;
+    }
+
+    .ai-showcase-header {
+        text-align: center;
+        margin-bottom: 4rem;
+    }
+
+    .gemini-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 0.5rem 1.25rem;
+        border-radius: 50px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        color: white;
+    }
+
+    .gemini-badge i {
+        color: #fbbf24;
+    }
+
+    .ai-showcase-title {
+        font-size: 2.75rem;
+        font-weight: 900;
+        margin-bottom: 1rem;
+        color: white;
+        line-height: 1.2;
+    }
+
+    .ai-showcase-subtitle {
+        font-size: 1.2rem;
+        color: rgba(255, 255, 255, 0.9);
+        max-width: 700px;
+        margin: 0 auto;
+        line-height: 1.6;
+    }
+
+    .ai-capabilities-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.5rem;
+        margin-bottom: 4rem;
+    }
+
+    @media (max-width: 992px) {
+        .ai-capabilities-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 576px) {
+        .ai-capabilities-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .ai-capability-card {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 20px;
+        padding: 1.75rem;
+        transition: all 0.3s ease;
+    }
+
+    .ai-capability-card:hover {
+        background: rgba(255, 255, 255, 0.15);
+        transform: translateY(-5px);
+        border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .capability-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+        color: #fbbf24;
+    }
+
+    .ai-capability-card h3 {
+        font-size: 1.15rem;
+        font-weight: 700;
+        margin-bottom: 0.75rem;
+        color: white;
+    }
+
+    .ai-capability-card > p {
+        font-size: 0.95rem;
+        color: rgba(255, 255, 255, 0.85);
+        line-height: 1.5;
+        margin-bottom: 1rem;
+    }
+
+    .capability-example {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+    }
+
+    .example-label {
+        display: block;
+        font-size: 0.7rem;
+        color: rgba(255, 255, 255, 0.6);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.25rem;
+    }
+
+    .example-text {
+        font-size: 0.85rem;
+        color: #a5f3fc;
+        font-style: italic;
+    }
+
+    .ai-cta-section {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 3rem;
+        background: rgba(255, 255, 255, 0.08);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 24px;
+        padding: 2.5rem 3rem;
+    }
+
+    @media (max-width: 768px) {
+        .ai-cta-section {
+            flex-direction: column;
+            text-align: center;
+            gap: 2rem;
+        }
+    }
+
+    .ai-brain-visual {
+        position: relative;
+        width: 100px;
+        height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .brain-pulse {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+        color: white;
+        position: relative;
+        z-index: 2;
+    }
+
+    .pulse-ring {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        border: 2px solid rgba(167, 139, 250, 0.4);
+        animation: pulseRing 2s ease-out infinite;
+    }
+
+    .pulse-ring.delay-1 { animation-delay: 0.5s; }
+    .pulse-ring.delay-2 { animation-delay: 1s; }
+
+    @keyframes pulseRing {
+        0% { transform: scale(0.8); opacity: 1; }
+        100% { transform: scale(1.8); opacity: 0; }
+    }
+
+    .ai-cta-content h3 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        color: white;
+    }
+
+    .ai-cta-content p {
+        font-size: 1rem;
+        color: rgba(255, 255, 255, 0.8);
+        margin-bottom: 1.25rem;
+    }
+
+    .btn-ai-demo {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+        color: #000;
+        padding: 0.875rem 2rem;
+        border-radius: 50px;
+        font-weight: 700;
+        font-size: 1rem;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        box-shadow: 0 8px 24px rgba(251, 191, 36, 0.3);
+    }
+
+    .btn-ai-demo:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 12px 32px rgba(251, 191, 36, 0.4);
+        color: #000;
+    }
+
+    /* Keep legacy styles for other potential usages */
     .feature-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -945,173 +1393,297 @@
     </div>
 </section>
 
-<!-- Features Section -->
+<!-- Features Section - Redesigned -->
 <section class="features-section" id="features">
     <div class="container">
-        <h2 class="section-title">Powerful Features for Modern Teams</h2>
-        <p class="section-subtitle">Everything you need to manage projects efficiently, all in one place</p>
+        <div class="section-header">
+            <span class="section-tag">Complete Platform</span>
+            <h2 class="section-title">Everything You Need to Succeed</h2>
+            <p class="section-subtitle">A unified platform combining project management, AI intelligence, and team collaboration</p>
+        </div>
         
-        <div class="feature-grid">
-            <!-- AI Assistant -->
-            <div class="feature-card ai">
-                <div class="feature-icon">
-                    <i class="fas fa-robot"></i>
+        <!-- Feature Categories -->
+        <div class="feature-categories">
+            
+            <!-- Category 1: Core Project Management -->
+            <div class="feature-category">
+                <div class="category-header">
+                    <div class="category-icon-wrap">
+                        <i class="fas fa-th-large"></i>
+                    </div>
+                    <div class="category-info">
+                        <h3 class="category-title">Core Project Management</h3>
+                        <p class="category-desc">Powerful tools for planning, tracking, and delivering projects</p>
+                    </div>
                 </div>
-                <h3 class="feature-title">🤖 AI Project Assistant</h3>
-                <p class="feature-description">Conversational AI powered by Google Gemini with RAG technology, real-time web search, and intelligent project insights at your fingertips.</p>
-                <span class="feature-badge badge-ai">AI-Powered</span>
-            </div>
-
-            <!-- Dual View Planning -->
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-project-diagram"></i>
+                <div class="category-features">
+                    <div class="mini-feature">
+                        <div class="mini-icon"><i class="fas fa-columns"></i></div>
+                        <div class="mini-content">
+                            <h4>Kanban Boards</h4>
+                            <p>Drag-and-drop task management with customizable columns and swimlanes</p>
+                        </div>
+                    </div>
+                    <div class="mini-feature">
+                        <div class="mini-icon"><i class="fas fa-project-diagram"></i></div>
+                        <div class="mini-content">
+                            <h4>Gantt Charts</h4>
+                            <p>Interactive timelines with dependencies and milestone tracking</p>
+                        </div>
+                    </div>
+                    <div class="mini-feature">
+                        <div class="mini-icon"><i class="fas fa-chart-line"></i></div>
+                        <div class="mini-content">
+                            <h4>Burndown Analytics</h4>
+                            <p>Sprint velocity tracking with AI-powered completion forecasts</p>
+                        </div>
+                    </div>
+                    <div class="mini-feature">
+                        <div class="mini-icon"><i class="fas fa-clock"></i></div>
+                        <div class="mini-content">
+                            <h4>Time Tracking</h4>
+                            <p>Built-in timesheets, dashboards, and productivity analytics</p>
+                        </div>
+                    </div>
                 </div>
-                <h3 class="feature-title">📊 Dual View Planning</h3>
-                <p class="feature-description">Interactive Kanban boards seamlessly integrated with Gantt chart timelines. Drag-and-drop scheduling with AI-suggested dependencies.</p>
-                <span class="feature-badge badge-core">Core Feature</span>
             </div>
-
-            <!-- Real-Time Collaboration -->
-            <div class="feature-card collaboration">
-                <div class="feature-icon">
-                    <i class="fas fa-comments"></i>
+            
+            <!-- Category 2: AI Intelligence -->
+            <div class="feature-category highlight">
+                <div class="category-header">
+                    <div class="category-icon-wrap ai-glow">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <div class="category-info">
+                        <h3 class="category-title">AI-Powered Intelligence</h3>
+                        <p class="category-desc">Google Gemini-powered AI that works alongside your team</p>
+                    </div>
+                    <span class="ai-badge">AI</span>
                 </div>
-                <h3 class="feature-title">💬 Real-Time Messaging</h3>
-                <p class="feature-description">Built-in chat rooms, task comments, @mentions, typing indicators, and instant notifications via WebSocket technology.</p>
-                <span class="feature-badge badge-collab">Collaboration</span>
-            </div>
-
-            <!-- Resource Leveling -->
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-balance-scale"></i>
+                <div class="category-features">
+                    <div class="mini-feature">
+                        <div class="mini-icon ai"><i class="fas fa-robot"></i></div>
+                        <div class="mini-content">
+                            <h4>AI Project Assistant</h4>
+                            <p>Natural language queries with RAG technology and web search</p>
+                        </div>
+                    </div>
+                    <div class="mini-feature">
+                        <div class="mini-icon ai"><i class="fas fa-graduation-cap"></i></div>
+                        <div class="mini-content">
+                            <h4>AI Coach</h4>
+                            <p>Proactive coaching with explainable recommendations</p>
+                        </div>
+                    </div>
+                    <div class="mini-feature">
+                        <div class="mini-icon ai"><i class="fas fa-magic"></i></div>
+                        <div class="mini-content">
+                            <h4>Smart Task Generation</h4>
+                            <p>Auto-generate tasks from meeting transcripts and descriptions</p>
+                        </div>
+                    </div>
+                    <div class="mini-feature">
+                        <div class="mini-icon ai"><i class="fas fa-balance-scale"></i></div>
+                        <div class="mini-content">
+                            <h4>Resource Optimization</h4>
+                            <p>Intelligent workload balancing and assignment suggestions</p>
+                        </div>
+                    </div>
                 </div>
-                <h3 class="feature-title">⚖️ AI Resource Leveling</h3>
-                <p class="feature-description">Intelligent resource optimization that balances team workload, suggests optimal task assignments, and predicts capacity constraints.</p>
-                <span class="feature-badge badge-core">Optimization</span>
             </div>
-
-            <!-- Risk & Conflict Detection -->
-            <div class="feature-card risk">
-                <div class="feature-icon">
-                    <i class="fas fa-shield-alt"></i>
+            
+            <!-- Category 3: Enterprise & Security -->
+            <div class="feature-category">
+                <div class="category-header">
+                    <div class="category-icon-wrap">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <div class="category-info">
+                        <h3 class="category-title">Enterprise & Security</h3>
+                        <p class="category-desc">Enterprise-grade controls and risk management</p>
+                    </div>
                 </div>
-                <h3 class="feature-title">🛡️ Smart Risk & Conflict Detection</h3>
-                <p class="feature-description">AI-powered risk assessment, automatic detection and resolution of resource/schedule/dependency conflicts with confidence scores.</p>
-                <span class="feature-badge badge-enterprise">Enterprise</span>
-            </div>
-
-            <!-- Scope & Budget Tracking -->
-            <div class="feature-card analytics">
-                <div class="feature-icon">
-                    <i class="fas fa-dollar-sign"></i>
+                <div class="category-features">
+                    <div class="mini-feature">
+                        <div class="mini-icon"><i class="fas fa-user-shield"></i></div>
+                        <div class="mini-content">
+                            <h4>RBAC Permissions</h4>
+                            <p>Role-based access control with approval workflows</p>
+                        </div>
+                    </div>
+                    <div class="mini-feature">
+                        <div class="mini-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                        <div class="mini-content">
+                            <h4>Conflict Detection</h4>
+                            <p>AI-powered resource, schedule, and dependency conflict resolution</p>
+                        </div>
+                    </div>
+                    <div class="mini-feature">
+                        <div class="mini-icon"><i class="fas fa-dollar-sign"></i></div>
+                        <div class="mini-content">
+                            <h4>Budget & ROI</h4>
+                            <p>Scope tracking, cost forecasting, and ROI analytics</p>
+                        </div>
+                    </div>
+                    <div class="mini-feature">
+                        <div class="mini-icon"><i class="fas fa-users-cog"></i></div>
+                        <div class="mini-content">
+                            <h4>Stakeholder Management</h4>
+                            <p>Engagement tracking and communication analytics</p>
+                        </div>
+                    </div>
                 </div>
-                <h3 class="feature-title">💰 Scope & Budget Tracking</h3>
-                <p class="feature-description">Monitor scope creep with AI-powered alerts, track project budgets, ROI metrics, and cost-to-complete forecasts in real-time.</p>
-                <span class="feature-badge badge-analytics">Financial</span>
             </div>
-
-            <!-- Burndown & Sprint Analytics -->
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-chart-line"></i>
+            
+            <!-- Category 4: Collaboration & Knowledge -->
+            <div class="feature-category">
+                <div class="category-header">
+                    <div class="category-icon-wrap">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div class="category-info">
+                        <h3 class="category-title">Collaboration & Knowledge</h3>
+                        <p class="category-desc">Real-time communication and organizational learning</p>
+                    </div>
                 </div>
-                <h3 class="feature-title">📈 Burndown & Sprint Analytics</h3>
-                <p class="feature-description">Statistical burndown charts with confidence intervals, velocity tracking, and predictive completion dates with AI-powered insights.</p>
-                <span class="feature-badge badge-core">Analytics</span>
-            </div>
-
-            <!-- AI Coach -->
-            <div class="feature-card ai">
-                <div class="feature-icon">
-                    <i class="fas fa-brain"></i>
+                <div class="category-features">
+                    <div class="mini-feature">
+                        <div class="mini-icon"><i class="fas fa-comments"></i></div>
+                        <div class="mini-content">
+                            <h4>Real-Time Messaging</h4>
+                            <p>WebSocket-powered chat with @mentions and notifications</p>
+                        </div>
+                    </div>
+                    <div class="mini-feature">
+                        <div class="mini-icon"><i class="fas fa-book"></i></div>
+                        <div class="mini-content">
+                            <h4>Wiki & Documentation</h4>
+                            <p>AI-enhanced knowledge base with meeting analysis</p>
+                        </div>
+                    </div>
+                    <div class="mini-feature">
+                        <div class="mini-icon"><i class="fas fa-lightbulb"></i></div>
+                        <div class="mini-content">
+                            <h4>AI Retrospectives</h4>
+                            <p>Auto-generated lessons learned and improvement tracking</p>
+                        </div>
+                    </div>
+                    <div class="mini-feature">
+                        <div class="mini-icon"><i class="fas fa-chart-bar"></i></div>
+                        <div class="mini-content">
+                            <h4>Skill Gap Analysis</h4>
+                            <p>Team capability mapping and training recommendations</p>
+                        </div>
+                    </div>
                 </div>
-                <h3 class="feature-title">🧠 AI Coach & Explainable AI</h3>
-                <p class="feature-description">Proactive coaching with transparent explanations. Understand why AI makes recommendations, confidence levels, and alternative suggestions.</p>
-                <span class="feature-badge badge-ai">Coaching</span>
             </div>
-
-            <!-- Knowledge & Retrospectives -->
-            <div class="feature-card">
-                <div class="feature-icon">
-                    <i class="fas fa-book"></i>
-                </div>
-                <h3 class="feature-title">📚 Knowledge Management & AI Retrospectives</h3>
-                <p class="feature-description">Wiki documentation, AI-generated retrospectives capturing lessons learned, meeting transcript analysis, and organizational knowledge base.</p>
-                <span class="feature-badge badge-core">Documentation</span>
-            </div>
+            
         </div>
     </div>
 </section>
 
-<!-- AI Intelligence Section -->
+<!-- AI Showcase Section - Redesigned -->
 <section class="ai-section" id="ai-intelligence">
     <div class="container">
-        <div class="row align-items-center">
-            <div class="col-lg-6 ai-content">
-                <h2 class="section-title text-white mb-4">AI-Powered Intelligence & Automation</h2>
-                <p class="lead mb-5" style="color: rgba(255,255,255,0.95); font-size: 1.3rem;">Leverage cutting-edge AI to automate insights, predict challenges, and optimize your team's workflow in real-time.</p>
+        <div class="ai-showcase">
+            <div class="ai-showcase-header">
+                <div class="gemini-badge">
+                    <i class="fas fa-robot"></i>
+                    <span>Powered by Google Gemini</span>
+                </div>
+                <h2 class="ai-showcase-title">AI That Actually Understands Your Projects</h2>
+                <p class="ai-showcase-subtitle">Not just another chatbot — a true AI partner that learns your workflow, anticipates challenges, and provides actionable insights with full transparency.</p>
+            </div>
+            
+            <div class="ai-capabilities-grid">
+                <div class="ai-capability-card">
+                    <div class="capability-icon">
+                        <i class="fas fa-comments"></i>
+                    </div>
+                    <h3>Natural Conversations</h3>
+                    <p>Ask anything about your projects in plain English. Get instant, context-aware answers with real-time web search integration.</p>
+                    <div class="capability-example">
+                        <span class="example-label">Try asking:</span>
+                        <span class="example-text">"What's blocking the mobile app release?"</span>
+                    </div>
+                </div>
                 
-                <div class="ai-feature-item">
-                    <div class="ai-icon">
-                        <i class="fas fa-brain"></i>
+                <div class="ai-capability-card">
+                    <div class="capability-icon">
+                        <i class="fas fa-crystal-ball"></i>
                     </div>
-                    <h4 class="ai-title">Conversational AI Assistant</h4>
-                    <p class="ai-description">Ask questions about your projects in natural language. Get instant insights with RAG-powered web search integration and explainable AI.</p>
+                    <h3>Predictive Intelligence</h3>
+                    <p>Forecast completion dates, predict bottlenecks, and receive proactive alerts before issues become critical.</p>
+                    <div class="capability-example">
+                        <span class="example-label">AI might say:</span>
+                        <span class="example-text">"Sprint at 78% probability of on-time delivery"</span>
+                    </div>
                 </div>
-
-                <div class="ai-feature-item">
-                    <div class="ai-icon">
-                        <i class="fas fa-magic"></i>
+                
+                <div class="ai-capability-card">
+                    <div class="capability-icon">
+                        <i class="fas fa-eye"></i>
                     </div>
-                    <h4 class="ai-title">Intelligent Task & Meeting Processing</h4>
-                    <p class="ai-description">AI-powered task generation from descriptions, meeting transcript analysis, automated action item extraction, and retrospective generation.</p>
+                    <h3>Explainable AI</h3>
+                    <p>Every recommendation includes the "why" — confidence scores, contributing factors, assumptions, and alternative options.</p>
+                    <div class="capability-example">
+                        <span class="example-label">You'll see:</span>
+                        <span class="example-text">"82% confident • Based on 12 similar projects"</span>
+                    </div>
                 </div>
-
-                <div class="ai-feature-item">
-                    <div class="ai-icon">
-                        <i class="fas fa-chart-bar"></i>
+                
+                <div class="ai-capability-card">
+                    <div class="capability-icon">
+                        <i class="fas fa-graduation-cap"></i>
                     </div>
-                    <h4 class="ai-title">Predictive & Prescriptive Intelligence</h4>
-                    <p class="ai-description">Forecast completion dates with confidence intervals, predict bottlenecks, resource constraints, and receive AI-generated optimization recommendations.</p>
+                    <h3>Proactive Coaching</h3>
+                    <p>Get real-time suggestions for improving team performance, preventing risks, and optimizing resource allocation.</p>
+                    <div class="capability-example">
+                        <span class="example-label">Coach suggests:</span>
+                        <span class="example-text">"Velocity dropping 30% — consider standup"</span>
+                    </div>
                 </div>
-
-                <div class="ai-feature-item">
-                    <div class="ai-icon">
-                        <i class="fas fa-robot"></i>
+                
+                <div class="ai-capability-card">
+                    <div class="capability-icon">
+                        <i class="fas fa-file-alt"></i>
                     </div>
-                    <h4 class="ai-title">Proactive AI Coach</h4>
-                    <p class="ai-description">Automated coaching suggestions based on project patterns, team dynamics, and risk convergence. Every recommendation includes transparent explanations and confidence levels.</p>
+                    <h3>Meeting Intelligence</h3>
+                    <p>Upload meeting transcripts and let AI extract action items, decisions, and create tasks automatically.</p>
+                    <div class="capability-example">
+                        <span class="example-label">Auto-creates:</span>
+                        <span class="example-text">"5 tasks extracted from 45-min meeting"</span>
+                    </div>
+                </div>
+                
+                <div class="ai-capability-card">
+                    <div class="capability-icon">
+                        <i class="fas fa-sync-alt"></i>
+                    </div>
+                    <h3>Continuous Learning</h3>
+                    <p>The system learns from your feedback and actions, improving recommendations over time for your specific team.</p>
+                    <div class="capability-example">
+                        <span class="example-label">Learns that:</span>
+                        <span class="example-text">"Your team prefers code reviews over pairing"</span>
+                    </div>
                 </div>
             </div>
-
-            <div class="col-lg-6 d-none d-lg-block">
-                <div class="ai-brain-container">
-                    <div class="ai-brain-circle">
-                        <i class="fas fa-brain brain-icon"></i>
-                        <div class="orbit-icon" style="top: 10%; left: 50%;">
-                            <i class="fas fa-lightbulb" style="color: #fbbf24;"></i>
-                        </div>
-                        <div class="orbit-icon" style="right: 10%; top: 50%;">
-                            <i class="fas fa-chart-line" style="color: #60a5fa;"></i>
-                        </div>
-                        <div class="orbit-icon" style="bottom: 10%; left: 50%;">
-                            <i class="fas fa-shield-alt" style="color: #f87171;"></i>
-                        </div>
-                        <div class="orbit-icon" style="left: 10%; top: 50%;">
-                            <i class="fas fa-users" style="color: #4ade80;"></i>
-                        </div>
+            
+            <div class="ai-cta-section">
+                <div class="ai-brain-visual">
+                    <div class="brain-pulse">
+                        <i class="fas fa-brain"></i>
                     </div>
+                    <div class="pulse-ring"></div>
+                    <div class="pulse-ring delay-1"></div>
+                    <div class="pulse-ring delay-2"></div>
                 </div>
-                <div class="text-center mt-5">
-                    <div style="display: flex; align-items: center; justify-content: center; gap: 1rem; margin-bottom: 1rem;">
-                        <div style="width: 60px; height: 60px; background: linear-gradient(135deg, #a78bfa 0%, #c4b5fd 100%); border-radius: 15px; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(167, 139, 250, 0.4);">
-                            <i class="fas fa-robot" style="font-size: 2rem; color: white;"></i>
-                        </div>
-                        <h5 class="text-white fw-bold mb-0" style="font-size: 1.4rem;">Powered by Google Gemini</h5>
-                    </div>
-                    <p class="text-white" style="opacity: 0.95; font-size: 1.05rem;">State-of-the-art language models for intelligent project management</p>
+                <div class="ai-cta-content">
+                    <h3>Experience the difference AI makes</h3>
+                    <p>Try our interactive demo and see how AI transforms project management</p>
+                    <a href="{% url 'demo_mode_selection' %}" class="btn-ai-demo">
+                        <i class="fas fa-play-circle me-2"></i>Try AI Features Now
+                    </a>
                 </div>
             </div>
         </div>
