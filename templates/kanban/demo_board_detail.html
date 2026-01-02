@@ -760,12 +760,21 @@ kbd {
             {% if conflicts %}
                 {% for conflict in conflicts %}
                 <div class="preview-item">
-                    <strong>{{ conflict.conflict_type|title }}</strong>
-                    <div class="small text-muted">
-                        Tasks: {{ conflict.task1.title }} vs {{ conflict.task2.title }}
+                    <strong>{{ conflict.get_conflict_type_display }}</strong>
+                    <div class="small">{{ conflict.title }}</div>
+                    <div class="small text-muted mt-1">
+                        {% with conflict.tasks.all as task_list %}
+                            {% if task_list|length > 0 %}
+                                Tasks: {% for task in task_list %}{{ task.title }}{% if not forloop.last %} vs {% endif %}{% endfor %}
+                            {% else %}
+                                {{ conflict.description|truncatewords:15 }}
+                            {% endif %}
+                        {% endwith %}
                     </div>
-                    <div class="small">
-                        <span class="badge bg-warning">{{ conflict.severity }}</span>
+                    <div class="small mt-1">
+                        <span class="badge bg-{% if conflict.severity == 'critical' %}danger{% elif conflict.severity == 'high' %}warning{% elif conflict.severity == 'medium' %}info{% else %}secondary{% endif %}">
+                            {{ conflict.get_severity_display }}
+                        </span>
                     </div>
                 </div>
                 {% endfor %}
