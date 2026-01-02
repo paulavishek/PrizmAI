@@ -304,66 +304,59 @@ Mitigation Strategies:
         return count
 
     def create_analytics(self, demo_users, demo_boards):
-        """Create analytics data for the past 30 days"""
+        """Create analytics data - summary records for past activity"""
         self.stdout.write('\n4. Creating Analytics Data...')
+        
+        # Delete existing analytics for demo users
+        AIAssistantAnalytics.objects.filter(user__in=demo_users).delete()
         
         count = 0
         primary_user = demo_users.first()
-        primary_board = demo_boards.first()
-        secondary_user = demo_users.exclude(pk=primary_user.pk).first()
+        boards_list = list(demo_boards)
         
-        # Delete existing analytics for demo users to avoid conflicts
-        AIAssistantAnalytics.objects.filter(user__in=demo_users).delete()
-        
-        # Create analytics for the past 30 days
-        for days_ago in range(30):
-            target_date = (timezone.now() - timedelta(days=days_ago)).date()
-            
-            # More activity on weekdays
-            is_weekday = target_date.weekday() < 5
-            base_activity = 3 if is_weekday else 1
-            
-            # Create analytics for primary user (project manager - more active)
-            analytics = AIAssistantAnalytics.objects.create(
-                user=primary_user,
-                board=primary_board,
-                sessions_created=random.randint(0, base_activity),
-                messages_sent=random.randint(base_activity, base_activity * 5),
-                gemini_requests=random.randint(base_activity, base_activity * 4),
-                web_searches_performed=random.randint(0, base_activity),
-                knowledge_base_queries=random.randint(1, base_activity * 2),
-                total_tokens_used=random.randint(500, 5000) * base_activity,
-                input_tokens=random.randint(100, 1000) * base_activity,
-                output_tokens=random.randint(400, 4000) * base_activity,
-                helpful_responses=random.randint(base_activity, base_activity * 3),
-                unhelpful_responses=random.randint(0, 1),
-                avg_response_time_ms=random.randint(800, 3000),
-            )
-            # Update date using raw SQL to bypass auto_now_add
-            AIAssistantAnalytics.objects.filter(pk=analytics.pk).update(date=target_date)
-            count += 1
-            
-            # Also create some analytics for secondary user (less active)
-            if secondary_user and days_ago % 3 == 0:  # Every 3 days
-                analytics2 = AIAssistantAnalytics.objects.create(
-                    user=secondary_user,
-                    board=primary_board,
-                    sessions_created=random.randint(0, 1),
-                    messages_sent=random.randint(1, 3),
-                    gemini_requests=random.randint(1, 2),
-                    web_searches_performed=random.randint(0, 1),
-                    knowledge_base_queries=random.randint(0, 1),
-                    total_tokens_used=random.randint(200, 1500),
-                    input_tokens=random.randint(50, 300),
-                    output_tokens=random.randint(150, 1200),
-                    helpful_responses=random.randint(1, 2),
-                    unhelpful_responses=0,
-                    avg_response_time_ms=random.randint(800, 2000),
+        # Create a single analytics record per user/board combination
+        # (since date uses auto_now_add, we can only create "today" records)
+        for user in demo_users[:3]:  # Up to 3 users
+            for board in boards_list:
+                # Calculate aggregate stats that would represent historical usage
+                is_primary = (user == primary_user)
+                multiplier = 30 if is_primary else 10  # 30 days of activity for primary
+                
+                analytics = AIAssistantAnalytics.objects.create(
+                    user=user,
+                    board=board,
+                    sessions_created=random.randint(5, 15) * (3 if is_primary else 1),
+                    messages_sent=random.randint(20, 100) * (3 if is_primary else 1),
+                    gemini_requests=random.randint(15, 80) * (3 if is_primary else 1),
+                    web_searches_performed=random.randint(5, 20),
+                    knowledge_base_queries=random.randint(10, 50),
+                    total_tokens_used=random.randint(10000, 50000) * (3 if is_primary else 1),
+                    input_tokens=random.randint(2000, 10000) * (3 if is_primary else 1),
+                    output_tokens=random.randint(8000, 40000) * (3 if is_primary else 1),
+                    helpful_responses=random.randint(15, 60) * (3 if is_primary else 1),
+                    unhelpful_responses=random.randint(0, 5),
+                    avg_response_time_ms=random.randint(800, 2500),
                 )
-                AIAssistantAnalytics.objects.filter(pk=analytics2.pk).update(date=target_date)
                 count += 1
-            if created:
-                count += 1
+        
+        # Also create records without board context (general queries)
+        for user in demo_users[:2]:
+            analytics = AIAssistantAnalytics.objects.create(
+                user=user,
+                board=None,  # No specific board context
+                sessions_created=random.randint(2, 8),
+                messages_sent=random.randint(10, 40),
+                gemini_requests=random.randint(8, 30),
+                web_searches_performed=random.randint(3, 15),
+                knowledge_base_queries=random.randint(5, 20),
+                total_tokens_used=random.randint(5000, 20000),
+                input_tokens=random.randint(1000, 5000),
+                output_tokens=random.randint(4000, 15000),
+                helpful_responses=random.randint(8, 30),
+                unhelpful_responses=random.randint(0, 2),
+                avg_response_time_ms=random.randint(900, 2200),
+            )
+            count += 1
         
         self.stdout.write(f'  Created {count} analytics records (30 days)')
         return count
