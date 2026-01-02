@@ -1,12 +1,16 @@
 """
 Demo Session Management Middleware
-Tracks demo sessions, updates activity, checks expiry, and provides warnings
+Tracks demo sessions, updates activity, checks expiry, and provides warnings.
+Automatically refreshes demo data dates to keep demo content fresh.
 """
 from django.utils import timezone
 from django.shortcuts import redirect
 from django.urls import reverse
 from datetime import timedelta
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class DemoSessionMiddleware:
@@ -17,6 +21,7 @@ class DemoSessionMiddleware:
     - Update DemoSession records
     - Provide expiry warnings
     - Handle session cleanup
+    - Automatically refresh demo data dates (once per day)
     """
     
     def __init__(self, get_response):
@@ -25,6 +30,9 @@ class DemoSessionMiddleware:
     def __call__(self, request):
         # Process request
         if request.session.get('is_demo_mode'):
+            # Refresh demo data dates if needed (once per day)
+            self.refresh_demo_dates_if_needed()
+            
             self.update_demo_session(request)
             
             # Check if session has expired
@@ -35,6 +43,25 @@ class DemoSessionMiddleware:
         response = self.get_response(request)
         
         return response
+    
+    def refresh_demo_dates_if_needed(self):
+        """
+        Check if demo data dates need to be refreshed and refresh them.
+        This runs once per day to keep demo data timelines dynamic.
+        """
+        try:
+            from kanban.utils.demo_date_refresh import (
+                should_refresh_demo_dates,
+                refresh_all_demo_dates
+            )
+            
+            if should_refresh_demo_dates():
+                logger.info("Refreshing demo data dates (daily automatic refresh)")
+                stats = refresh_all_demo_dates()
+                logger.info(f"Demo dates refreshed successfully: {stats}")
+        except Exception as e:
+            # Don't break the request if refresh fails
+            logger.warning(f"Error during automatic demo date refresh: {e}")
     
     def update_demo_session(self, request):
         """Update demo session activity and metadata"""

@@ -4,6 +4,25 @@
 
 PrizmAI's demo data system is designed to provide a realistic, always-fresh demonstration experience. All dates in the demo are **dynamically generated relative to the current date**, ensuring that no matter when you run the demo - today, next month, or next year - the data will appear current and relevant.
 
+## 🔄 Automatic Date Refresh (NEW!)
+
+**Demo data dates are automatically refreshed daily** when users access demo mode. This means:
+- ✅ Demo data always appears fresh and current
+- ✅ Users see the same experience whether they try the demo today or in a year
+- ✅ Metrics like overdue tasks, velocity, and burndown remain consistent
+- ✅ No manual intervention required
+- ✅ **User-created content is NOT affected** - only original demo data is refreshed
+
+The automatic refresh is handled by `DemoSessionMiddleware` which checks once per day and updates all date-related demo data relative to the current date.
+
+### Important: User-Created Content is Preserved
+
+The date refresh system distinguishes between:
+1. **Seed Demo Data** (original demo content) - dates ARE refreshed daily
+2. **User-Created Content** (tasks/boards users create in demo mode) - dates are NOT touched
+
+User-created content is identified by the `created_by_session` field. Content created by demo users is automatically cleaned up after 48 hours by the demo session expiry system.
+
 ## 🎯 Single Source of Truth: Official Demo Boards
 
 **IMPORTANT:** PrizmAI maintains a single set of official demo boards with **1000+ tasks** in dedicated demo organizations:
@@ -34,7 +53,26 @@ Demo data is automatically distributed across time periods based on task status:
 | **Backlog** | +15 to +60 days | Future planning |
 | **Historical (Analytics)** | Last 180 days | Training data for AI predictions |
 
-### 2. **Zero Configuration Required**
+### 2. **Comprehensive Coverage**
+
+The dynamic date refresh covers ALL demo data features:
+- ✅ Task due dates and start dates
+- ✅ Milestones (target and completion dates)
+- ✅ Sprint milestones
+- ✅ Time tracking entries
+- ✅ Retrospectives (period start/end)
+- ✅ Velocity snapshots
+- ✅ Coaching suggestions
+- ✅ Conflict detection timestamps
+- ✅ Wiki page dates
+- ✅ AI assistant sessions
+- ✅ Improvement metrics
+- ✅ Burndown predictions
+- ✅ Resource leveling suggestions
+- ✅ ROI snapshots
+- ✅ Stakeholder engagement records
+
+### 3. **Zero Configuration Required**
 
 The demo data automatically:
 - ✅ Uses `timezone.now()` for all date calculations
@@ -44,7 +82,7 @@ The demo data automatically:
 - ✅ Keeps completed tasks in the past
 - ✅ Schedules future work appropriately
 
-### 3. **Automatic Refresh on Creation**
+### 4. **Automatic Refresh on Creation**
 
 When you run `python manage.py populate_test_data`, the system automatically:
 1. Creates all demo data (users, boards, tasks, milestones, etc.)
@@ -54,15 +92,18 @@ When you run `python manage.py populate_test_data`, the system automatically:
 
 ## 🔄 Maintaining Fresh Demo Data
 
-### When to Refresh
+### Automatic Refresh (Recommended)
 
-You should refresh demo data dates when:
-- ✅ Revisiting the demo after several weeks
+Demo dates refresh automatically once per day when any user accesses demo mode. No action required!
+
+### Manual Refresh (Optional)
+
+You can manually trigger a refresh when:
 - ✅ Preparing for a stakeholder presentation
-- ✅ Notice many tasks appearing overdue
-- ✅ Demo hasn't been used in 1-2 months
+- ✅ Want to reset dates immediately after data changes
+- ✅ Testing the refresh mechanism
 
-### How to Refresh
+### How to Refresh Manually
 
 #### Option 1: Command Line
 ```bash
