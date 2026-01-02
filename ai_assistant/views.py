@@ -137,6 +137,14 @@ def send_message(request):
         message_text = data.get('message', '').strip()
         session_id = data.get('session_id')
         board_id = data.get('board_id')
+        # Sanitize board_id - convert empty string to None
+        if board_id is not None and (board_id == '' or board_id == 'null'):
+            board_id = None
+        elif board_id:
+            try:
+                board_id = int(board_id)
+            except (ValueError, TypeError):
+                board_id = None
         refresh_data = data.get('refresh_data', False)
         # Note: history is no longer used - each AI request is stateless to prevent token accumulation
         
@@ -216,17 +224,20 @@ def send_message(request):
         except Exception as e:
             print(f"Error updating analytics: {e}")
         
-        # Track AI usage
-        response_time_ms = int((time.time() - start_time) * 1000)
-        track_ai_request(
-            user=request.user,
-            feature='ai_assistant',
-            request_type='message',
-            board_id=board_id,
-            success=True,
-            tokens_used=response.get('tokens', 0),
-            response_time_ms=response_time_ms
-        )
+        # Track AI usage (wrap in try-except to not fail the response if tracking fails)
+        try:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='ai_assistant',
+                request_type='message',
+                board_id=board_id,
+                success=True,
+                tokens_used=response.get('tokens', 0),
+                response_time_ms=response_time_ms
+            )
+        except Exception as e:
+            print(f"Error tracking AI request: {e}")
         
         # Get updated remaining count
         _, _, remaining = check_ai_quota(request.user)
@@ -248,17 +259,23 @@ def send_message(request):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
     except Exception as e:
         # Track failed request (doesn't count against quota)
-        response_time_ms = int((time.time() - start_time) * 1000)
-        board_id_val = board_id if 'board_id' in locals() else None
-        track_ai_request(
-            user=request.user,
-            feature='ai_assistant',
-            request_type='message',
-            board_id=board_id_val,
-            success=False,
-            error_message=str(e),
-            response_time_ms=response_time_ms
-        )
+        try:
+            response_time_ms = int((time.time() - start_time) * 1000)
+            board_id_val = board_id if 'board_id' in locals() else None
+            # Ensure board_id_val is properly sanitized
+            if board_id_val is not None and board_id_val == '':
+                board_id_val = None
+            track_ai_request(
+                user=request.user,
+                feature='ai_assistant',
+                request_type='message',
+                board_id=board_id_val,
+                success=False,
+                error_message=str(e),
+                response_time_ms=response_time_ms
+            )
+        except Exception as track_error:
+            print(f"Error tracking failed AI request: {track_error}")
         return JsonResponse({'error': str(e)}, status=500)
 
 

@@ -73,6 +73,13 @@ def track_ai_request(user, feature, request_type='', board_id=None, ai_model='ge
     if success:
         quota.increment_usage()
     
+    # Sanitize board_id - convert empty strings to None
+    if board_id is not None:
+        if isinstance(board_id, str):
+            board_id = int(board_id) if board_id.strip() else None
+        elif not isinstance(board_id, int):
+            board_id = None
+    
     # Log the request
     log = AIRequestLog.objects.create(
         user=user,

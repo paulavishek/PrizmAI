@@ -32,8 +32,20 @@ class TaskFlowChatbotService:
     def __init__(self, user=None, board=None):
         self.user = user
         self.board = board
-        self.gemini_client = GeminiClient()
-        self.search_client = GoogleSearchClient()
+        
+        # Initialize clients with error handling
+        try:
+            self.gemini_client = GeminiClient()
+        except Exception as e:
+            logger.error(f"Failed to initialize GeminiClient: {e}")
+            self.gemini_client = None
+        
+        try:
+            self.search_client = GoogleSearchClient()
+        except Exception as e:
+            logger.warning(f"Failed to initialize GoogleSearchClient: {e}")
+            self.search_client = None
+        
         logger.debug(f"ChatbotService initialized for user: {user}, board: {board}")
     
     def get_taskflow_context(self, use_cache=True):
@@ -2221,6 +2233,18 @@ When context data is limited, acknowledge it briefly but still provide valuable 
         try:
             logger.debug(f"Processing prompt: {prompt[:100]}...")
             
+            # Check if Gemini client is available
+            if not self.gemini_client:
+                return {
+                    'response': "I apologize, but the AI service is temporarily unavailable. Please check that GEMINI_API_KEY is configured correctly and try again.",
+                    'source': 'error',
+                    'tokens': 0,
+                    'error': 'Gemini client not initialized',
+                    'used_web_search': False,
+                    'search_sources': [],
+                    'context': {}
+                }
+            
             # Detect query types
             is_search_query = self._is_search_query(prompt)
             is_strategic_query = self._is_strategic_query(prompt)
@@ -2384,7 +2408,7 @@ When context data is limited, acknowledge it briefly but still provide valuable 
             search_sources = []
             
             # Trigger web search for search queries OR strategic queries (how-to, best practices, etc.)
-            if (is_search_query or is_strategic_query) and getattr(settings, 'ENABLE_WEB_SEARCH', False):
+            if (is_search_query or is_strategic_query) and getattr(settings, 'ENABLE_WEB_SEARCH', False) and self.search_client:
                 try:
                     search_context = self.search_client.get_search_context(prompt, max_results=3)
                     if search_context:  # Only add if we got results (None = failed)
