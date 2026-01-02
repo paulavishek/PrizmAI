@@ -1797,8 +1797,8 @@ class TaskFlowChatbotService:
                 return context
             else:
                 # No matches found - list all available wiki pages
-                all_pages = wiki_pages[:10]
-                if all_pages.exists():
+                all_pages = list(wiki_pages[:10])
+                if all_pages:
                     context += "No direct matches found. Available wiki pages:\n\n"
                     for page in all_pages:
                         context += f"• {page.title} ({page.category.name})\n"
