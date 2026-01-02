@@ -64,7 +64,8 @@ class Command(BaseCommand):
                 self.stdout.write('Next steps:')
                 self.stdout.write('  1. Run: python manage.py populate_demo_data')
                 self.stdout.write('  2. Run: python manage.py populate_wiki_demo_data')
-                self.stdout.write('  3. Test demo mode: Visit /demo/ in your browser')
+                self.stdout.write('  3. Run: python manage.py populate_ai_assistant_demo_data')
+                self.stdout.write('  4. Test demo mode: Visit /demo/ in your browser')
                 self.stdout.write('')
                 
         except Exception as e:
