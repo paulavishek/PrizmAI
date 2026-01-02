@@ -7,8 +7,10 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from datetime import timedelta, date
+from decimal import Decimal
 from kanban.models import Board, Column, Task, TaskLabel, Organization
 from kanban.permission_models import Role
+from kanban.budget_models import TimeEntry
 import random
 
 User = get_user_model()
@@ -307,6 +309,11 @@ class Command(BaseCommand):
         self.create_related_tasks(software_tasks)
         self.create_related_tasks(marketing_tasks)
         self.create_related_tasks(bug_tasks)
+
+        # Create time tracking data for demo_admin_solo
+        self.stdout.write(self.style.SUCCESS('\n⏱️  Creating time tracking data...\n'))
+        all_tasks = software_tasks + marketing_tasks + bug_tasks
+        self.create_time_tracking_data(all_tasks)
 
         self.stdout.write(self.style.SUCCESS('\n' + '='*70))
         self.stdout.write(self.style.SUCCESS('✅ DEMO DATA POPULATION COMPLETE'))
@@ -1748,3 +1755,97 @@ class Command(BaseCommand):
                         related_count += 1
 
         self.stdout.write(f'   ✅ Created {related_count} related task connections')
+
+    def create_time_tracking_data(self, all_tasks):
+        """Create realistic time tracking entries for demo_admin_solo user"""
+        
+        # Get demo_admin_solo user
+        demo_admin = User.objects.filter(username='demo_admin_solo').first()
+        if not demo_admin:
+            self.stdout.write(self.style.WARNING('   ⚠️ demo_admin_solo user not found, skipping time tracking data'))
+            return
+        
+        # Sample descriptions for time entries
+        work_descriptions = [
+            'Implemented core functionality',
+            'Code review and testing',
+            'Fixed bugs and edge cases',
+            'Updated documentation',
+            'Refactored for better performance',
+            'Integration testing with external APIs',
+            'UI/UX improvements and polish',
+            'Database query optimization',
+            'Security enhancements and audit',
+            'REST API development',
+            'Unit test creation and coverage',
+            'Performance tuning and profiling',
+            'Debugging production issues',
+            'Requirements analysis and planning',
+            'Design mockups and prototyping',
+            'Client meeting and feedback session',
+            'Code deployment and release',
+            'Pair programming session',
+            'Research and spike work',
+            'Technical documentation update',
+            'Sprint planning and estimation',
+            'Backlog grooming session',
+        ]
+        
+        today = timezone.now().date()
+        time_entries_created = 0
+        tasks_assigned = 0
+        
+        # Assign 30-40% of tasks to demo_admin_solo
+        num_to_assign = max(15, len(all_tasks) // 3)
+        tasks_to_assign = random.sample(all_tasks, min(num_to_assign, len(all_tasks)))
+        
+        for task in tasks_to_assign:
+            # Assign task to demo_admin_solo if not already assigned
+            if task.assigned_to != demo_admin:
+                task.assigned_to = demo_admin
+                task.save()
+                tasks_assigned += 1
+            
+            # Create 2-5 time entries per task
+            num_entries = random.randint(2, 5)
+            
+            for i in range(num_entries):
+                # Random date within last 30 days (weighted towards recent)
+                if random.random() < 0.5:
+                    days_ago = random.randint(0, 7)  # 50% in last week
+                else:
+                    days_ago = random.randint(8, 30)  # 50% in last 3 weeks
+                
+                work_date = today - timedelta(days=days_ago)
+                
+                # Random hours between 0.5 and 6 hours
+                hours_values = [0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]
+                hours_spent = Decimal(str(random.choice(hours_values)))
+                
+                description = random.choice(work_descriptions)
+                
+                # Check if entry already exists for this exact task/date
+                if not TimeEntry.objects.filter(
+                    task=task, 
+                    user=demo_admin, 
+                    work_date=work_date
+                ).exists():
+                    TimeEntry.objects.create(
+                        task=task,
+                        user=demo_admin,
+                        hours_spent=hours_spent,
+                        work_date=work_date,
+                        description=description
+                    )
+                    time_entries_created += 1
+        
+        self.stdout.write(f'   ✅ Assigned {tasks_assigned} tasks to demo_admin_solo')
+        self.stdout.write(f'   ✅ Created {time_entries_created} time entries')
+        
+        # Calculate and display totals
+        from django.db.models import Sum
+        total_hours = TimeEntry.objects.filter(
+            user=demo_admin
+        ).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
+        
+        self.stdout.write(f'   📊 Total logged hours: {total_hours}h')
