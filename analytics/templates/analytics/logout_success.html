@@ -2,7 +2,7 @@
 {% load static %}
 {% load kanban_filters %}
 
-{% block title %}Thanks for trying PrizmAI{% endblock %}
+{% block title %}Thanks for trying Pri<span class="stylish-z">z</span>mAI{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -141,16 +141,16 @@
     {% if session_stats %}
     <div class="session-summary">
         <div class="text-center mb-4">
-            <h2>👋 Thanks for exploring PrizmAI!</h2>
+            <h2>👋 Thanks for exploring Pri<span class="stylish-z">z</span>mAI!</h2>
             <p class="mb-0">
                 {% if engagement_level == 'very_high' %}
                     Wow! You really dove deep into the features!
                 {% elif engagement_level == 'high' %}
                     Great session! You explored several cool features.
                 {% elif engagement_level == 'medium' %}
-                    Nice! You got a good feel for PrizmAI.
+                    Nice! You got a good feel for Pri<span class="stylish-z">z</span>mAI.
                 {% else %}
-                    Thanks for checking out PrizmAI!
+                    Thanks for checking out Pri<span class="stylish-z">z</span>mAI!
                 {% endif %}
                 <span class="engagement-badge badge-{{ engagement_level }}">
                     {{ engagement_level|upper|replace:"_, " }}
@@ -188,7 +188,7 @@
     {% else %}
     <div class="session-summary">
         <div class="text-center">
-            <h2>👋 Thanks for visiting PrizmAI!</h2>
+            <h2>👋 Thanks for visiting Pri<span class="stylish-z">z</span>mAI!</h2>
             <p>You've been logged out successfully.</p>
         </div>
     </div>
@@ -199,7 +199,7 @@
     <div class="feedback-section">
         <div class="text-center mb-4">
             <h3>💭 We'd love your feedback!</h3>
-            <p class="text-muted">Help us improve PrizmAI by sharing your thoughts.</p>
+            <p class="text-muted">Help us improve Pri<span class="stylish-z">z</span>mAI by sharing your thoughts.</p>
         </div>
         
         <!-- Django Feedback Form -->
@@ -266,7 +266,7 @@
                     name="email_consent"
                 >
                 <label class="form-check-label" for="email-consent">
-                    I'd like to receive follow-up emails about PrizmAI updates
+                    I'd like to receive follow-up emails about Pri<span class="stylish-z">z</span>mAI updates
                 </label>
             </div>
             
@@ -281,7 +281,7 @@
         <!-- Success Message -->
         <div class="success-message" id="success-message">
             <h4>✅ Thank you!</h4>
-            <p class="mb-0">Your feedback helps us make PrizmAI better for everyone.</p>
+            <p class="mb-0">Your feedback helps us make Pri<span class="stylish-z">z</span>mAI better for everyone.</p>
         </div>
     </div>
     {% endif %}
