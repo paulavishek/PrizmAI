@@ -81,11 +81,20 @@ class WikiPageListView(WikiBaseView, ListView):
         # Search functionality
         query = self.request.GET.get('q')
         if query:
-            queryset = queryset.filter(
-                Q(title__icontains=query) |
-                Q(content__icontains=query) |
-                Q(tags__contains=query)
-            )
+            # Build the query - avoid JSONField contains lookup for SQLite compatibility
+            search_query = Q(title__icontains=query) | Q(content__icontains=query)
+            
+            # Try to add tags search, but handle SQLite limitation
+            try:
+                # PostgreSQL/MySQL support: use contains lookup on JSONField
+                from django.db import connection
+                if connection.vendor != 'sqlite':
+                    search_query |= Q(tags__contains=query)
+            except Exception:
+                # If there's any issue, skip tags search
+                pass
+            
+            queryset = queryset.filter(search_query)
         
         return queryset.select_related('category', 'created_by').order_by('-is_pinned', '-updated_at')
     
