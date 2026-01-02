@@ -1014,33 +1014,37 @@ class TaskFlowChatbotService:
                 return None
             
             # Import Organization model
-            from accounts.models import Organization
+            from accounts.models import Organization, UserProfile
             
             context = "**Organization Information:**\n\n"
             
             # Get ALL organizations the user has access to
             # Priority order:
-            # 1. Organizations where user is member or creator
-            # 2. Organizations accessible through boards
-            # 3. User's primary organization from profile
+            # 1. Organizations where user is a member (via UserProfile)
+            # 2. Organizations where user is the creator
+            # 3. Organizations accessible through boards
             
-            orgs = Organization.objects.filter(
-                Q(created_by=self.user) | Q(members=self.user)
-            ).distinct()
+            # Get user's profile organization first
+            user_org = None
+            try:
+                if hasattr(self.user, 'profile') and self.user.profile.organization:
+                    user_org = self.user.profile.organization
+            except:
+                pass
+            
+            # Query organizations: user created OR user's profile belongs to
+            if user_org:
+                orgs = Organization.objects.filter(
+                    Q(id=user_org.id) | Q(created_by=self.user)
+                ).distinct()
+            else:
+                orgs = Organization.objects.filter(created_by=self.user).distinct()
             
             # If no direct membership, try to get from boards
             if not orgs.exists():
                 user_boards = self._get_user_boards()
                 if user_boards.exists():
                     orgs = Organization.objects.filter(boards__in=user_boards).distinct()
-            
-            # Final fallback: user's profile organization
-            if not orgs.exists():
-                try:
-                    if hasattr(self.user, 'profile') and self.user.profile.organization:
-                        orgs = Organization.objects.filter(id=self.user.profile.organization.id)
-                except:
-                    pass
             
             if not orgs.exists():
                 context += "**You currently have no organizations.**\n"
