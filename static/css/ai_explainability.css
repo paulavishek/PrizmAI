@@ -549,3 +549,698 @@
         display: block !important;
     }
 }
+
+/* ==================== NEW: Explainability Badge ==================== */
+.explainability-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background-color: #e9ecef;
+    color: #495057;
+    border: 1px solid transparent;
+}
+
+.explainability-badge:hover {
+    background-color: #dee2e6;
+    transform: scale(1.05);
+}
+
+.explainability-badge.badge-high {
+    background-color: #d4edda;
+    color: #155724;
+    border-color: #c3e6cb;
+}
+
+.explainability-badge.badge-medium {
+    background-color: #fff3cd;
+    color: #856404;
+    border-color: #ffeeba;
+}
+
+.explainability-badge.badge-low {
+    background-color: #f8d7da;
+    color: #721c24;
+    border-color: #f5c6cb;
+}
+
+/* ==================== NEW: Why This Section ==================== */
+.why-this-section {
+    border-left: 4px solid #0d6efd;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 1rem;
+    border-radius: 0 8px 8px 0;
+    margin: 1rem 0;
+}
+
+.why-this-section .why-this-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+}
+
+.why-this-section .why-this-header h6 {
+    margin: 0;
+    font-weight: 700;
+    color: #0d6efd;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.why-this-section .why-this-header .toggle-icon {
+    transition: transform 0.3s ease;
+}
+
+.why-this-section .why-this-header.collapsed .toggle-icon {
+    transform: rotate(-90deg);
+}
+
+.why-this-section .why-this-content {
+    margin-top: 1rem;
+    color: #212529;
+}
+
+.why-this-section .why-this-content.collapsed {
+    display: none;
+}
+
+/* ==================== NEW: Reasoning Section ==================== */
+.reasoning-card {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 1rem 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.reasoning-card-header {
+    background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%);
+    color: #ffffff;
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.reasoning-card-body {
+    padding: 1rem;
+    color: #212529;
+}
+
+.reasoning-methodology {
+    background: #f8f9fa;
+    padding: 0.75rem;
+    border-radius: 6px;
+    border-left: 3px solid #6c757d;
+    margin-bottom: 1rem;
+    font-style: italic;
+    color: #495057;
+}
+
+.reasoning-factor-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.reasoning-factor-table th,
+.reasoning-factor-table td {
+    padding: 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.reasoning-factor-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+}
+
+.reasoning-factor-table tr:hover td {
+    background: #f8f9fa;
+}
+
+/* ==================== NEW: Action Items ==================== */
+.action-items-section {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.action-item {
+    display: flex;
+    gap: 1rem;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    border-left: 4px solid #6c757d;
+    transition: all 0.2s ease;
+}
+
+.action-item:hover {
+    transform: translateX(4px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.action-item.urgency-high {
+    border-left-color: #dc3545;
+    background: #fff5f5;
+}
+
+.action-item.urgency-medium {
+    border-left-color: #ffc107;
+    background: #fffbf0;
+}
+
+.action-item.urgency-low {
+    border-left-color: #28a745;
+    background: #f0fff4;
+}
+
+.action-item-icon {
+    font-size: 1.25rem;
+    min-width: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.action-item-content {
+    flex: 1;
+}
+
+.action-item-title {
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 0.25rem;
+}
+
+.action-item-rationale {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+
+/* ==================== NEW: Alternatives Comparison ==================== */
+.alternatives-section {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.alternative-card {
+    display: flex;
+    align-items: stretch;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border-radius: 6px;
+    margin-bottom: 0.5rem;
+    border: 1px solid #e9ecef;
+    transition: all 0.2s ease;
+}
+
+.alternative-card:hover {
+    border-color: #0d6efd;
+    box-shadow: 0 2px 8px rgba(13, 110, 253, 0.15);
+}
+
+.alternative-rank {
+    width: 40px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #0d6efd;
+    background: #e7f1ff;
+    border-radius: 50%;
+    margin-right: 1rem;
+}
+
+.alternative-content {
+    flex: 1;
+}
+
+.alternative-title {
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 0.25rem;
+}
+
+.alternative-description {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-bottom: 0.25rem;
+}
+
+.alternative-tradeoffs {
+    font-size: 0.8rem;
+    color: #856404;
+    background: #fff3cd;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    display: inline-block;
+    margin-top: 0.25rem;
+}
+
+/* ==================== NEW: Scenario Analysis ==================== */
+.scenario-analysis {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.scenario-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.scenario-card {
+    padding: 1rem;
+    border-radius: 8px;
+    text-align: center;
+    transition: transform 0.2s ease;
+}
+
+.scenario-card:hover {
+    transform: translateY(-4px);
+}
+
+.scenario-card.scenario-optimistic {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    border: 1px solid #28a745;
+}
+
+.scenario-card.scenario-optimistic .scenario-icon {
+    color: #28a745;
+}
+
+.scenario-card.scenario-realistic {
+    background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+    border: 1px solid #17a2b8;
+}
+
+.scenario-card.scenario-realistic .scenario-icon {
+    color: #17a2b8;
+}
+
+.scenario-card.scenario-pessimistic {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+    border: 1px solid #dc3545;
+}
+
+.scenario-card.scenario-pessimistic .scenario-icon {
+    color: #dc3545;
+}
+
+.scenario-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.scenario-title {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+}
+
+.scenario-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #212529;
+    margin-bottom: 0.25rem;
+}
+
+.scenario-probability {
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+/* ==================== NEW: Health Assessment ==================== */
+.health-assessment {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+.health-status-indicator {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+}
+
+.health-status-indicator.health-healthy {
+    background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
+    border: 1px solid #28a745;
+}
+
+.health-status-indicator.health-at-risk {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeeba 100%);
+    border: 1px solid #ffc107;
+}
+
+.health-status-indicator.health-critical {
+    background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+    border: 1px solid #dc3545;
+}
+
+.health-icon {
+    font-size: 2.5rem;
+}
+
+.health-details {
+    flex: 1;
+}
+
+.health-title {
+    font-weight: 700;
+    font-size: 1.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.health-score {
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+.health-factors-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+}
+
+.health-factors-table th,
+.health-factors-table td {
+    padding: 0.5rem;
+    text-align: left;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.health-factors-table th {
+    background: #f8f9fa;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    color: #6c757d;
+}
+
+.health-trend {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: 600;
+}
+
+.health-trend.trend-up {
+    color: #28a745;
+}
+
+.health-trend.trend-down {
+    color: #dc3545;
+}
+
+.health-trend.trend-stable {
+    color: #6c757d;
+}
+
+/* ==================== NEW: AI Insight Card ==================== */
+.ai-insight-card {
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    margin: 1rem 0;
+}
+
+.ai-insight-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #ffffff;
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.ai-insight-header-icon {
+    font-size: 1.5rem;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+.ai-insight-header-title {
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+
+.ai-insight-header-badge {
+    margin-left: auto;
+    background: rgba(255, 255, 255, 0.2);
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.ai-insight-body {
+    padding: 1.25rem;
+    color: #212529;
+}
+
+.ai-insight-summary {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: #495057;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.ai-insight-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.ai-insight-section {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.ai-insight-section-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    margin-bottom: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* ==================== NEW: Explainability Modal ==================== */
+.explainability-modal .modal-content {
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.explainability-modal .modal-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #ffffff;
+    border-bottom: none;
+}
+
+.explainability-modal .modal-title {
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.explainability-modal .modal-body {
+    padding: 1.5rem;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.explainability-modal .btn-close {
+    filter: brightness(0) invert(1);
+}
+
+.explainability-modal .nav-tabs {
+    border-bottom: 2px solid #e9ecef;
+}
+
+.explainability-modal .nav-link {
+    color: #6c757d;
+    font-weight: 600;
+    border: none;
+    padding: 0.75rem 1rem;
+}
+
+.explainability-modal .nav-link.active {
+    color: #667eea;
+    border-bottom: 2px solid #667eea;
+    margin-bottom: -2px;
+}
+
+.explainability-modal .tab-content {
+    padding-top: 1rem;
+}
+
+/* ==================== NEW: Tooltip Content ==================== */
+.explainability-tooltip {
+    max-width: 300px;
+    padding: 0.75rem;
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    color: #212529;
+    font-size: 0.85rem;
+}
+
+.explainability-tooltip-header {
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.explainability-tooltip-confidence {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.explainability-tooltip-bar {
+    flex: 1;
+    height: 6px;
+    background: #e9ecef;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.explainability-tooltip-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.explainability-tooltip-factors {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.explainability-tooltip-factors li {
+    padding: 0.25rem 0;
+    color: #6c757d;
+    font-size: 0.8rem;
+}
+
+.explainability-tooltip-factors li::before {
+    content: "•";
+    color: #0d6efd;
+    font-weight: bold;
+    margin-right: 0.5rem;
+}
+
+/* ==================== Explainability Details Panel ==================== */
+.explainability-details {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.explainability-details h6 {
+    color: #495057;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+}
+
+.explainability-details .progress {
+    height: 6px;
+    border-radius: 3px;
+}
+
+/* Mobile responsiveness for new components */
+@media (max-width: 768px) {
+    .scenario-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .alternative-card {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .alternative-rank {
+        margin: 0 auto 0.5rem auto;
+    }
+    
+    .action-item {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .action-item-icon {
+        margin-bottom: 0.5rem;
+    }
+    
+    .health-status-indicator {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .ai-insight-header {
+        flex-wrap: wrap;
+    }
+    
+    .ai-insight-header-badge {
+        margin-left: 0;
+        margin-top: 0.5rem;
+        width: 100%;
+        text-align: center;
+    }
+}

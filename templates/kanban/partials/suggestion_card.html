@@ -9,9 +9,14 @@
                 <i class="far fa-clock me-1"></i>{{ suggestion.days_active }} day{{ suggestion.days_active|pluralize }} ago
             </span>
         </div>
-        <span class="badge bg-light text-dark">
-            {% widthratio suggestion.confidence_score 1 100 %}% confident
-        </span>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-light text-dark">
+                {% widthratio suggestion.confidence_score 1 100 %}% confident
+            </span>
+            <button type="button" class="btn btn-sm btn-outline-info" onclick="toggleExplainability({{ suggestion.id }})" title="Why this suggestion?">
+                <i class="fas fa-lightbulb"></i>
+            </button>
+        </div>
     </div>
 
     <h3 class="suggestion-title">{{ suggestion.title }}</h3>
@@ -24,6 +29,82 @@
         <p class="mb-0 mt-2">{{ suggestion.reasoning }}</p>
     </div>
     {% endif %}
+
+    <!-- Enhanced Explainability Section (Initially Hidden) -->
+    <div id="explainability-{{ suggestion.id }}" class="why-this-section" style="display: none;">
+        <div class="why-this-header" onclick="toggleExplainabilityContent({{ suggestion.id }})">
+            <h6><i class="bi bi-robot me-2"></i>How AI Made This Recommendation</h6>
+            <i class="bi bi-chevron-down toggle-icon"></i>
+        </div>
+        <div class="why-this-content" id="explainability-content-{{ suggestion.id }}">
+            <!-- Confidence Breakdown -->
+            <div class="mb-3">
+                <strong class="small text-muted"><i class="bi bi-speedometer2 me-1"></i>CONFIDENCE ANALYSIS</strong>
+                <div class="progress mt-2" style="height: 20px;">
+                    <div class="progress-bar {% if suggestion.confidence_score >= 0.75 %}bg-success{% elif suggestion.confidence_score >= 0.5 %}bg-warning{% else %}bg-danger{% endif %}" 
+                         role="progressbar" 
+                         style="width: {% widthratio suggestion.confidence_score 1 100 %}%"
+                         aria-valuenow="{% widthratio suggestion.confidence_score 1 100 %}" 
+                         aria-valuemin="0" 
+                         aria-valuemax="100">
+                        {% widthratio suggestion.confidence_score 1 100 %}%
+                    </div>
+                </div>
+                <small class="text-muted mt-1 d-block">
+                    {% if suggestion.confidence_score >= 0.75 %}
+                        <i class="bi bi-check-circle text-success me-1"></i>High confidence - based on strong historical patterns
+                    {% elif suggestion.confidence_score >= 0.5 %}
+                        <i class="bi bi-exclamation-triangle text-warning me-1"></i>Medium confidence - consider additional factors
+                    {% else %}
+                        <i class="bi bi-question-circle text-danger me-1"></i>Lower confidence - limited data available
+                    {% endif %}
+                </small>
+            </div>
+
+            {% if suggestion.contributing_factors %}
+            <div class="mb-3">
+                <strong class="small text-muted"><i class="bi bi-pie-chart me-1"></i>CONTRIBUTING FACTORS</strong>
+                <div class="mt-2">
+                    {% for factor in suggestion.contributing_factors %}
+                    <div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded">
+                        <span class="small">{{ factor.factor|default:factor }}</span>
+                        {% if factor.contribution_percentage %}
+                        <span class="badge bg-secondary">{{ factor.contribution_percentage }}%</span>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            {% if suggestion.assumptions %}
+            <div class="mb-3">
+                <strong class="small text-warning"><i class="bi bi-exclamation-triangle me-1"></i>ASSUMPTIONS MADE</strong>
+                <ul class="small mt-2 mb-0 ps-3">
+                    {% for assumption in suggestion.assumptions %}
+                    <li class="text-muted">{{ assumption }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if suggestion.alternative_approaches %}
+            <div class="mb-3">
+                <strong class="small text-info"><i class="bi bi-arrows-angle-expand me-1"></i>ALTERNATIVE APPROACHES</strong>
+                <div class="mt-2">
+                    {% for alt in suggestion.alternative_approaches %}
+                    <div class="mb-2 p-2 bg-light rounded border-start border-3 border-info">
+                        <strong class="small">{{ alt.approach|default:alt }}</strong>
+                        {% if alt.tradeoffs %}
+                        <small class="d-block text-muted">Trade-offs: {{ alt.tradeoffs }}</small>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
 
     {% if suggestion.recommended_actions %}
     <div class="mt-3">
@@ -66,3 +147,21 @@
         <div class="confidence-fill" style="width: {{ suggestion.confidence_score|floatformat:0 }}%"></div>
     </div>
 </div>
+
+<script>
+function toggleExplainability(suggestionId) {
+    const section = document.getElementById(`explainability-${suggestionId}`);
+    if (section) {
+        section.style.display = section.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
+function toggleExplainabilityContent(suggestionId) {
+    const content = document.getElementById(`explainability-content-${suggestionId}`);
+    const header = content.previousElementSibling;
+    if (content && header) {
+        content.classList.toggle('collapsed');
+        header.classList.toggle('collapsed');
+    }
+}
+</script>

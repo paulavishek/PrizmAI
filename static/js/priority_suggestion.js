@@ -81,7 +81,7 @@ class PrioritySuggestionWidget {
     }
     
     /**
-     * Display the suggestion in the UI
+     * Display the suggestion in the UI with enhanced explainability
      */
     _displaySuggestion() {
         if (!this.suggestion) return;
@@ -108,13 +108,13 @@ class PrioritySuggestionWidget {
                             <span class="badge bg-${label.class} ms-2">${confidence}% confident</span>
                         </h6>
                         
-                        <p class="mb-2 small">${this.suggestion.reasoning.explanation}</p>
+                        <p class="mb-2 small">${this.suggestion.reasoning.explanation || this.suggestion.reasoning}</p>
                         
                         ${this._renderTopFactors()}
                         
                         ${this._renderAlternatives()}
                         
-                        <div class="mt-3 d-flex gap-2">
+                        <div class="mt-3 d-flex flex-wrap gap-2">
                             <button type="button" class="btn btn-sm btn-${label.class}" onclick="event.preventDefault(); prioritySuggestion.acceptSuggestion()">
                                 <i class="fas fa-check"></i> Accept ${label.text}
                             </button>
@@ -122,7 +122,7 @@ class PrioritySuggestionWidget {
                                 <i class="fas fa-times"></i> Dismiss
                             </button>
                             <button type="button" class="btn btn-sm btn-outline-info" onclick="event.preventDefault(); prioritySuggestion.toggleDetails()">
-                                <i class="fas fa-info-circle"></i> Details
+                                <i class="fas fa-lightbulb"></i> Why This?
                             </button>
                         </div>
                     </div>
@@ -131,7 +131,7 @@ class PrioritySuggestionWidget {
                 </div>
                 
                 <div id="suggestion-details" class="mt-3 pt-3 border-top" style="display: none;">
-                    ${this._renderDetails()}
+                    ${this._renderEnhancedDetails()}
                 </div>
             </div>
         `;
@@ -141,19 +141,27 @@ class PrioritySuggestionWidget {
     }
     
     /**
-     * Render top influencing factors
+     * Render top influencing factors with enhanced explainability
      */
     _renderTopFactors() {
-        const factors = this.suggestion.reasoning.top_factors || [];
+        const factors = this.suggestion.reasoning?.top_factors || 
+                       this.suggestion.contributing_factors || [];
         if (factors.length === 0) return '';
         
-        const factorItems = factors.slice(0, 3).map(factor => 
-            `<li class="text-muted small">${factor.description}</li>`
-        ).join('');
+        const factorItems = factors.slice(0, 3).map(factor => {
+            const desc = factor.description || factor.factor || factor;
+            const pct = factor.contribution_percentage;
+            return `
+                <li class="text-muted small">
+                    ${desc}
+                    ${pct ? `<span class="badge bg-secondary ms-1">${pct}%</span>` : ''}
+                </li>
+            `;
+        }).join('');
         
         return `
             <div class="mb-2">
-                <strong class="small">Key factors:</strong>
+                <strong class="small"><i class="bi bi-pie-chart me-1"></i>Key factors:</strong>
                 <ul class="mb-0 ps-3">
                     ${factorItems}
                 </ul>
@@ -162,42 +170,136 @@ class PrioritySuggestionWidget {
     }
     
     /**
-     * Render alternative priorities
+     * Render alternative priorities with explainability
      */
     _renderAlternatives() {
-        const alternatives = this.suggestion.alternatives || [];
+        const alternatives = this.suggestion.alternatives || 
+                            this.suggestion.priority_comparison || [];
         if (alternatives.length === 0) return '';
         
         const altButtons = alternatives.map(alt => {
-            const conf = (alt.confidence * 100).toFixed(0);
+            const priority = alt.priority || alt.level;
+            const conf = alt.confidence ? (alt.confidence * 100).toFixed(0) : '';
+            const reason = alt.reason || alt.comparison || '';
             return `
-                <button class="btn btn-sm btn-outline-secondary me-1" 
-                        onclick="prioritySuggestion.selectAlternative('${alt.priority}')">
-                    ${alt.priority} (${conf}%)
+                <button class="btn btn-sm btn-outline-secondary me-1 mb-1" 
+                        onclick="prioritySuggestion.selectAlternative('${priority}')"
+                        title="${reason}">
+                    ${priority} ${conf ? `(${conf}%)` : ''}
                 </button>
             `;
         }).join('');
         
         return `
             <div class="small text-muted mb-2">
-                Alternatives: ${altButtons}
+                <i class="bi bi-arrows-angle-expand me-1"></i>Alternatives: ${altButtons}
             </div>
         `;
     }
     
     /**
-     * Render detailed information
+     * Render enhanced detailed information with full explainability
      */
-    _renderDetails() {
+    _renderEnhancedDetails() {
         const modelInfo = this.suggestion.is_ml_based 
             ? `<span class="badge bg-success">ML Model v${this.suggestion.model_version || 1}</span>`
-            : `<span class="badge bg-info">Rule-Based</span>`;
+            : `<span class="badge bg-info">AI Analysis</span>`;
+        
+        const reasoning = this.suggestion.reasoning || {};
+        const assumptions = this.suggestion.assumptions || reasoning.assumptions || [];
+        const factors = this.suggestion.contributing_factors || reasoning.top_factors || [];
+        const workloadImpact = this.suggestion.workload_impact;
+        const urgencyIndicators = this.suggestion.urgency_indicators;
+        const impactIndicators = this.suggestion.impact_indicators;
         
         return `
-            <div class="small">
-                <p><strong>Model:</strong> ${modelInfo}</p>
-                <p><strong>Confidence Level:</strong> ${this.suggestion.reasoning.confidence_level}</p>
-                <p class="mb-0"><strong>Method:</strong> ${this.suggestion.is_ml_based ? 'Machine Learning Classification' : 'Heuristic Rules'}</p>
+            <div class="explainability-details">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="small fw-bold text-muted mb-2">
+                            <i class="bi bi-gear me-1"></i>HOW IT WORKS
+                        </h6>
+                        <p class="small mb-2">${modelInfo}</p>
+                        <p class="small mb-2">
+                            <strong>Confidence Level:</strong> 
+                            ${this.suggestion.reasoning?.confidence_level || (this.suggestion.confidence >= 0.75 ? 'High' : this.suggestion.confidence >= 0.5 ? 'Medium' : 'Low')}
+                        </p>
+                        ${reasoning.methodology ? `
+                            <p class="small mb-2"><strong>Method:</strong> ${reasoning.methodology}</p>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="col-md-6">
+                        ${factors.length > 0 ? `
+                            <h6 class="small fw-bold text-muted mb-2">
+                                <i class="bi bi-bar-chart me-1"></i>FACTOR BREAKDOWN
+                            </h6>
+                            ${factors.map(f => `
+                                <div class="d-flex justify-content-between align-items-center small mb-1">
+                                    <span>${f.factor || f.description}</span>
+                                    ${f.contribution_percentage ? `
+                                        <div class="progress" style="width: 60px; height: 6px;">
+                                            <div class="progress-bar bg-${f.contribution_percentage > 25 ? 'danger' : 'secondary'}" 
+                                                 style="width: ${f.contribution_percentage}%"></div>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        ` : ''}
+                    </div>
+                </div>
+                
+                ${urgencyIndicators || impactIndicators ? `
+                    <div class="row mt-3">
+                        ${urgencyIndicators ? `
+                            <div class="col-md-6">
+                                <h6 class="small fw-bold text-danger mb-2">
+                                    <i class="bi bi-clock me-1"></i>URGENCY INDICATORS
+                                </h6>
+                                <ul class="small mb-0 ps-3">
+                                    ${Object.entries(urgencyIndicators).map(([k, v]) => 
+                                        `<li><strong>${k}:</strong> ${v}</li>`
+                                    ).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                        ${impactIndicators ? `
+                            <div class="col-md-6">
+                                <h6 class="small fw-bold text-primary mb-2">
+                                    <i class="bi bi-bullseye me-1"></i>IMPACT INDICATORS
+                                </h6>
+                                <ul class="small mb-0 ps-3">
+                                    ${Object.entries(impactIndicators).map(([k, v]) => 
+                                        `<li><strong>${k}:</strong> ${v}</li>`
+                                    ).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : ''}
+                
+                ${workloadImpact ? `
+                    <div class="mt-3">
+                        <h6 class="small fw-bold text-muted mb-2">
+                            <i class="bi bi-person-workspace me-1"></i>WORKLOAD IMPACT
+                        </h6>
+                        <p class="small mb-0">${typeof workloadImpact === 'string' ? workloadImpact : JSON.stringify(workloadImpact)}</p>
+                    </div>
+                ` : ''}
+                
+                ${assumptions.length > 0 ? `
+                    <div class="mt-3">
+                        <h6 class="small fw-bold text-warning mb-2">
+                            <i class="bi bi-exclamation-triangle me-1"></i>ASSUMPTIONS MADE
+                        </h6>
+                        <ul class="small mb-0 ps-3 text-muted">
+                            ${assumptions.map(a => `<li>${a}</li>`).join('')}
+                        </ul>
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
             </div>
         `;
     }

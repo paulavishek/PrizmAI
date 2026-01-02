@@ -224,7 +224,47 @@
 
                                 {% if resolution.ai_reasoning %}
                                 <div class="alert alert-light py-2 mb-2">
-                                    <small><strong>Why this works:</strong> {{ resolution.ai_reasoning }}</small>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <small><strong><i class="bi bi-brain me-1"></i>Why this works:</strong></small>
+                                        <button type="button" class="btn btn-sm btn-link p-0" onclick="event.stopPropagation(); toggleResolutionExplain({{ resolution.id }})">
+                                            <small><i class="bi bi-lightbulb"></i> Details</small>
+                                        </button>
+                                    </div>
+                                    <small class="d-block mt-1">{{ resolution.ai_reasoning }}</small>
+                                    
+                                    <!-- Enhanced Explainability Section -->
+                                    <div id="resolution-explain-{{ resolution.id }}" class="mt-2 pt-2 border-top" style="display: none;">
+                                        {% if resolution.contributing_factors %}
+                                        <div class="mb-2">
+                                            <small class="text-muted fw-bold"><i class="bi bi-pie-chart me-1"></i>Key Factors:</small>
+                                            <ul class="mb-0 ps-3">
+                                                {% for factor in resolution.contributing_factors %}
+                                                <li><small>{{ factor }}</small></li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                        {% endif %}
+                                        {% if resolution.assumptions %}
+                                        <div class="mb-2">
+                                            <small class="text-warning fw-bold"><i class="bi bi-exclamation-triangle me-1"></i>Assumptions:</small>
+                                            <ul class="mb-0 ps-3">
+                                                {% for assumption in resolution.assumptions %}
+                                                <li><small>{{ assumption }}</small></li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                        {% endif %}
+                                        {% if resolution.success_indicators %}
+                                        <div class="mb-0">
+                                            <small class="text-success fw-bold"><i class="bi bi-check-circle me-1"></i>Success Indicators:</small>
+                                            <ul class="mb-0 ps-3">
+                                                {% for indicator in resolution.success_indicators %}
+                                                <li><small>{{ indicator }}</small></li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                        {% endif %}
+                                    </div>
                                 </div>
                                 {% endif %}
 
@@ -346,6 +386,14 @@
 <script>
 let selectedResolutionId = null;
 let appliedResolutionId = null;
+
+// Toggle resolution explainability section
+function toggleResolutionExplain(resolutionId) {
+    const section = document.getElementById(`resolution-explain-${resolutionId}`);
+    if (section) {
+        section.style.display = section.style.display === 'none' ? 'block' : 'none';
+    }
+}
 
 // Select resolution
 function selectResolution(resolutionId) {

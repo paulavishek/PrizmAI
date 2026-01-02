@@ -214,8 +214,48 @@ function initAILssClassification() {
         })
         .then(data => {
             if (data.classification && data.justification) {
-                let suggestionHtml = `This activity is likely <strong>${data.classification}</strong>. `;
-                suggestionHtml += data.justification;
+                let suggestionHtml = `
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <strong>Suggested Classification:</strong> 
+                            <span class="badge bg-primary fs-6">${data.classification}</span>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-info" onclick="toggleLssExplain()">
+                            <i class="bi bi-lightbulb"></i> Why?
+                        </button>
+                    </div>
+                    <p class="mb-2">${data.justification}</p>
+                    
+                    <div id="lss-explainability" class="why-this-section mt-2" style="display: none;">
+                        <div class="why-this-content">
+                            ${data.confidence_score ? `
+                                <div class="mb-2">
+                                    <strong class="small text-muted"><i class="bi bi-speedometer2 me-1"></i>CONFIDENCE</strong>
+                                    <div class="progress mt-1" style="height: 15px;">
+                                        <div class="progress-bar ${data.confidence_score >= 0.75 ? 'bg-success' : data.confidence_score >= 0.5 ? 'bg-warning' : 'bg-danger'}" 
+                                             style="width: ${Math.round(data.confidence_score * 100)}%">
+                                            ${Math.round(data.confidence_score * 100)}%
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            ${data.contributing_factors && data.contributing_factors.length > 0 ? `
+                                <div class="mb-2">
+                                    <strong class="small text-muted"><i class="bi bi-pie-chart me-1"></i>KEY FACTORS</strong>
+                                    <ul class="small mb-0 ps-3 mt-1">
+                                        ${data.contributing_factors.map(f => `<li>${f.factor || f}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            ` : ''}
+                            ${data.methodology ? `
+                                <div class="mb-2">
+                                    <strong class="small text-muted"><i class="bi bi-gear me-1"></i>METHODOLOGY</strong>
+                                    <p class="small mb-0 mt-1 text-muted">${data.methodology}</p>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
                 
                 suggestionText.innerHTML = suggestionHtml;
                 suggestionContainer.classList.remove('d-none');
@@ -1606,5 +1646,95 @@ function getImpactBadgeClass(impact) {
         default: return 'secondary';
     }
 }
+
+/**
+ * Toggle LSS classification explainability section
+ */
+function toggleLssExplain() {
+    const section = document.getElementById('lss-explainability');
+    if (section) {
+        section.style.display = section.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
+/**
+ * Toggle analytics summary explainability section
+ */
+function toggleAnalyticsExplain() {
+    const section = document.getElementById('analytics-explainability');
+    if (section) {
+        section.style.display = section.style.display === 'none' ? 'block' : 'none';
+    }
+}
+
+/**
+ * Show AI explainability modal with full details
+ */
+function showAIExplainabilityModal(data, title) {
+    if (typeof AIExplainability !== 'undefined' && AIExplainability.showExplainabilityModal) {
+        AIExplainability.showExplainabilityModal(data, title);
+    } else {
+        // Fallback modal
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-primary text-white">
+                        <h5 class="modal-title"><i class="bi bi-robot me-2"></i>${title || 'AI Explainability'}</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        ${data.confidence_score !== undefined ? `
+                            <div class="mb-3">
+                                <h6>Confidence Score</h6>
+                                <div class="progress" style="height: 25px;">
+                                    <div class="progress-bar ${data.confidence_score >= 0.75 ? 'bg-success' : data.confidence_score >= 0.5 ? 'bg-warning' : 'bg-danger'}" 
+                                         style="width: ${Math.round(data.confidence_score * 100)}%">
+                                        ${Math.round(data.confidence_score * 100)}%
+                                    </div>
+                                </div>
+                            </div>
+                        ` : ''}
+                        ${data.reasoning ? `
+                            <div class="mb-3">
+                                <h6>Reasoning</h6>
+                                <p>${data.reasoning}</p>
+                            </div>
+                        ` : ''}
+                        ${data.contributing_factors && data.contributing_factors.length > 0 ? `
+                            <div class="mb-3">
+                                <h6>Contributing Factors</h6>
+                                <ul>
+                                    ${data.contributing_factors.map(f => `<li>${f.factor || f}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                        ${data.assumptions && data.assumptions.length > 0 ? `
+                            <div class="mb-3">
+                                <h6>Assumptions</h6>
+                                <ul class="text-warning">
+                                    ${data.assumptions.map(a => `<li>${a}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    }
+}
+
+// Export functions for global access
+window.toggleLssExplain = toggleLssExplain;
+window.toggleAnalyticsExplain = toggleAnalyticsExplain;
+window.showAIExplainabilityModal = showAIExplainabilityModal;
 
 
