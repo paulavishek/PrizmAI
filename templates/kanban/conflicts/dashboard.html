@@ -45,9 +45,21 @@
         margin: 0;
     }
     .stat-label {
-        color: #6c757d;
         font-size: 0.9rem;
         text-transform: uppercase;
+        opacity: 0.95;
+    }
+    .stat-card.conflicts {
+        background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    }
+    .stat-card.critical {
+        background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
+    }
+    .stat-card.high-priority {
+        background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+    }
+    .stat-card.notifications {
+        background: linear-gradient(135deg, #0891b2 0%, #0e7490 100%);
     }
     .notification-item {
         border-left: 3px solid #007bff;
@@ -121,25 +133,25 @@
     <!-- Statistics Cards -->
     <div class="row mb-4">
         <div class="col-md-3">
-            <div class="stat-card bg-danger text-white">
+            <div class="stat-card conflicts text-white">
                 <p class="stat-number">{{ stats.total_active }}</p>
                 <p class="stat-label mb-0">Active Conflicts</p>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="stat-card bg-dark text-white">
+            <div class="stat-card critical text-white">
                 <p class="stat-number">{{ stats.by_severity.critical }}</p>
                 <p class="stat-label mb-0">Critical</p>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="stat-card bg-warning text-white">
+            <div class="stat-card high-priority text-white">
                 <p class="stat-number">{{ stats.by_severity.high }}</p>
                 <p class="stat-label mb-0">High Priority</p>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="stat-card bg-info text-white">
+            <div class="stat-card notifications text-white">
                 <p class="stat-number">{{ stats.unread_notifications }}</p>
                 <p class="stat-label mb-0">Notifications</p>
             </div>
