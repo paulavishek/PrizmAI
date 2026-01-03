@@ -178,16 +178,215 @@
 
     // WebSocket connection for real-time updates
     const roomId = '{{ chat_room.id }}';
-    const chatSocket = new WebSocket(
-        'ws://' + window.location.host + '/ws/chat-room/' + roomId + '/'
-    );
-
-    chatSocket.onopen = function(e) {
-        console.log('Chat connection established for room ' + roomId);
+    
+    // ============================================================
+    // ROBUST WEBSOCKET MANAGER WITH AUTO-RECONNECTION
+    // ============================================================
+    class ChatWebSocketManager {
+        constructor(roomId) {
+            this.roomId = roomId;
+            this.socket = null;
+            this.reconnectAttempts = 0;
+            this.maxReconnectAttempts = 10;
+            this.reconnectDelay = 1000; // Start with 1 second
+            this.maxReconnectDelay = 30000; // Max 30 seconds
+            this.heartbeatInterval = null;
+            this.heartbeatTimeout = null;
+            this.isIntentionallyClosed = false;
+            this.messageQueue = []; // Queue messages while disconnected
+            
+            this.connect();
+        }
+        
+        getWebSocketUrl() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            return `${protocol}//${window.location.host}/ws/chat-room/${this.roomId}/`;
+        }
+        
+        connect() {
+            if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                return; // Already connected
+            }
+            
+            this.updateConnectionStatus('connecting');
+            console.log(`[WebSocket] Connecting to room ${this.roomId}...`);
+            
+            try {
+                this.socket = new WebSocket(this.getWebSocketUrl());
+                
+                this.socket.onopen = (e) => this.handleOpen(e);
+                this.socket.onmessage = (e) => this.handleMessage(e);
+                this.socket.onerror = (e) => this.handleError(e);
+                this.socket.onclose = (e) => this.handleClose(e);
+            } catch (error) {
+                console.error('[WebSocket] Connection error:', error);
+                this.scheduleReconnect();
+            }
+        }
+        
+        handleOpen(event) {
+            console.log(`[WebSocket] Connected to room ${this.roomId}`);
+            this.reconnectAttempts = 0;
+            this.reconnectDelay = 1000;
+            this.updateConnectionStatus('connected');
+            
+            // Start heartbeat
+            this.startHeartbeat();
+            
+            // Send any queued messages
+            this.flushMessageQueue();
+        }
+        
+        handleMessage(event) {
+            try {
+                const data = JSON.parse(event.data);
+                
+                // Handle heartbeat response (pong)
+                if (data.type === 'pong') {
+                    this.clearHeartbeatTimeout();
+                    return;
+                }
+                
+                // Dispatch to message handler
+                this.onMessage(data);
+            } catch (error) {
+                console.error('[WebSocket] Error parsing message:', error);
+            }
+        }
+        
+        handleError(event) {
+            console.error('[WebSocket] Error:', event);
+            this.updateConnectionStatus('error');
+        }
+        
+        handleClose(event) {
+            console.warn(`[WebSocket] Connection closed. Code: ${event.code}, Reason: ${event.reason}`);
+            this.stopHeartbeat();
+            
+            if (!this.isIntentionallyClosed) {
+                this.updateConnectionStatus('disconnected');
+                this.scheduleReconnect();
+            }
+        }
+        
+        scheduleReconnect() {
+            if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+                console.error('[WebSocket] Max reconnection attempts reached');
+                this.updateConnectionStatus('failed');
+                return;
+            }
+            
+            this.reconnectAttempts++;
+            const delay = Math.min(
+                this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1),
+                this.maxReconnectDelay
+            );
+            
+            console.log(`[WebSocket] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+            this.updateConnectionStatus('reconnecting', this.reconnectAttempts);
+            
+            setTimeout(() => this.connect(), delay);
+        }
+        
+        startHeartbeat() {
+            // Send ping every 25 seconds to keep connection alive
+            this.heartbeatInterval = setInterval(() => {
+                if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                    this.socket.send(JSON.stringify({ type: 'ping' }));
+                    
+                    // Expect pong within 5 seconds
+                    this.heartbeatTimeout = setTimeout(() => {
+                        console.warn('[WebSocket] Heartbeat timeout - reconnecting');
+                        this.socket.close();
+                    }, 5000);
+                }
+            }, 25000);
+        }
+        
+        stopHeartbeat() {
+            if (this.heartbeatInterval) {
+                clearInterval(this.heartbeatInterval);
+                this.heartbeatInterval = null;
+            }
+            this.clearHeartbeatTimeout();
+        }
+        
+        clearHeartbeatTimeout() {
+            if (this.heartbeatTimeout) {
+                clearTimeout(this.heartbeatTimeout);
+                this.heartbeatTimeout = null;
+            }
+        }
+        
+        send(data) {
+            if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+                this.socket.send(JSON.stringify(data));
+                return true;
+            } else {
+                // Queue message to send when reconnected
+                this.messageQueue.push(data);
+                console.warn('[WebSocket] Message queued (not connected)');
+                return false;
+            }
+        }
+        
+        flushMessageQueue() {
+            while (this.messageQueue.length > 0) {
+                const msg = this.messageQueue.shift();
+                this.send(msg);
+            }
+        }
+        
+        close() {
+            this.isIntentionallyClosed = true;
+            this.stopHeartbeat();
+            if (this.socket) {
+                this.socket.close();
+            }
+        }
+        
+        updateConnectionStatus(status, attempts = 0) {
+            const statusEl = document.getElementById('ws-connection-status');
+            if (!statusEl) return;
+            
+            const statusConfig = {
+                connecting: { icon: 'fa-spinner fa-spin', color: '#ffc107', text: 'Connecting...' },
+                connected: { icon: 'fa-wifi', color: '#28a745', text: 'Connected' },
+                disconnected: { icon: 'fa-wifi', color: '#dc3545', text: 'Disconnected' },
+                reconnecting: { icon: 'fa-sync fa-spin', color: '#ffc107', text: `Reconnecting (${attempts})...` },
+                error: { icon: 'fa-exclamation-triangle', color: '#dc3545', text: 'Connection Error' },
+                failed: { icon: 'fa-times-circle', color: '#dc3545', text: 'Connection Failed - Please refresh' }
+            };
+            
+            const config = statusConfig[status] || statusConfig.error;
+            statusEl.innerHTML = `<i class="fas ${config.icon}" style="color: ${config.color}"></i> <span style="color: ${config.color}">${config.text}</span>`;
+            statusEl.style.display = 'inline-block';
+            
+            // Hide "connected" status after 3 seconds
+            if (status === 'connected') {
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                }, 3000);
+            }
+        }
+        
+        // This will be overwritten by the message handler
+        onMessage(data) {
+            console.log('[WebSocket] Message received:', data);
+        }
+    }
+    
+    // Create the WebSocket manager
+    const chatSocketManager = new ChatWebSocketManager(roomId);
+    
+    // Alias for backwards compatibility
+    const chatSocket = {
+        send: (data) => chatSocketManager.send(typeof data === 'string' ? JSON.parse(data) : data),
+        close: () => chatSocketManager.close()
     };
-
-    chatSocket.onmessage = function(e) {
-        const data = JSON.parse(e.data);
+    
+    // Set up message handler
+    chatSocketManager.onMessage = function(data) {
         console.log('Message received:', data);
         
         if (data.type === 'chat_message') {
@@ -291,6 +490,10 @@
         }
         else if (data.type === 'user_typing') {
             console.log(data.username + ' is typing...');
+            showTypingIndicator(data.username);
+        }
+        else if (data.type === 'user_stop_typing') {
+            hideTypingIndicator(data.username);
         }
         else if (data.type === 'user_join') {
             console.log(data.username + ' joined the room');
@@ -300,26 +503,17 @@
         }
     };
 
-    chatSocket.onerror = function(error) {
-        console.error('Chat socket error:', error);
-    };
-
-    chatSocket.onclose = function(e) {
-        console.warn('Chat socket closed');
-        // Optionally show reconnection UI
-    };
-
     // Send message on form submit
     document.querySelector('.chat-form').addEventListener('submit', function(e) {
         e.preventDefault();
         const input = document.querySelector('input[name="message"]');
         const message = input.value.trim();
         if (message) {
-            // Send message via WebSocket
-            chatSocket.send(JSON.stringify({
+            // Send message via WebSocket (using new manager)
+            chatSocketManager.send({
                 'type': 'chat_message',
                 'message': message
-            }));
+            });
             input.value = '';
             input.focus();
         }
@@ -335,10 +529,43 @@
 
     // Cleanup on page unload
     window.addEventListener('beforeunload', function() {
-        if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
-            chatSocket.close();
-        }
+        chatSocketManager.close();
     });
+    
+    // Typing indicator functions
+    const typingUsers = new Set();
+    function showTypingIndicator(username) {
+        if (username === currentUsername) return;
+        typingUsers.add(username);
+        updateTypingDisplay();
+    }
+    
+    function hideTypingIndicator(username) {
+        typingUsers.delete(username);
+        updateTypingDisplay();
+    }
+    
+    function updateTypingDisplay() {
+        let indicator = document.getElementById('typing-indicator');
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'typing-indicator';
+            indicator.style.cssText = 'padding: 0.5rem 1rem; font-size: 0.85rem; color: #666; font-style: italic;';
+            const chatForm = document.querySelector('.chat-form');
+            chatForm.parentNode.insertBefore(indicator, chatForm);
+        }
+        
+        if (typingUsers.size === 0) {
+            indicator.textContent = '';
+            indicator.style.display = 'none';
+        } else if (typingUsers.size === 1) {
+            indicator.textContent = `${[...typingUsers][0]} is typing...`;
+            indicator.style.display = 'block';
+        } else {
+            indicator.textContent = `${typingUsers.size} people are typing...`;
+            indicator.style.display = 'block';
+        }
+    }
     
     // Function to add file to the files list dynamically
     function addFileToList(fileData) {
@@ -445,6 +672,8 @@
                         {% if chat_room.description %}
                             <p class="mb-0 text-light">{{ chat_room.description }}</p>
                         {% endif %}
+                        <!-- WebSocket Connection Status -->
+                        <span id="ws-connection-status" style="font-size: 0.75rem; display: none;"></span>
                     </div>
                     <button onclick="goBack()" class="btn btn-light btn-sm">
                         <i class="fas fa-arrow-left me-1"></i> Back

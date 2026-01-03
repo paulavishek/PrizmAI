@@ -70,6 +70,11 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
             data = json.loads(text_data)
             message_type = data.get('type')
             
+            # Handle heartbeat ping - respond with pong immediately
+            if message_type == 'ping':
+                await self.send(text_data=json.dumps({'type': 'pong'}))
+                return
+            
             if message_type == 'chat_message':
                 await self.handle_message(data)
             elif message_type == 'typing':
@@ -447,6 +452,11 @@ class TaskCommentConsumer(AsyncWebsocketConsumer):
         try:
             data = json.loads(text_data)
             message_type = data.get('type')
+            
+            # Handle heartbeat ping - respond with pong immediately
+            if message_type == 'ping':
+                await self.send(text_data=json.dumps({'type': 'pong'}))
+                return
             
             if message_type == 'comment':
                 await self.handle_comment(data)
