@@ -683,21 +683,35 @@
 
             {% if user == chat_room.created_by or user.is_staff %}
             <div class="chat-header-actions">
-                <div></div>
+                <div>
+                    {% if is_demo_mode %}
+                    <button type="button" id="showDemoBannerBtn" class="btn btn-sm btn-outline-success" onclick="showDemoBanner()" style="display: none; margin-right: 0.5rem;">
+                        <i class="fas fa-info-circle me-1"></i> Show Multi-User Test Instructions
+                    </button>
+                    {% endif %}
+                </div>
                 <button type="button" class="clear-messages-btn" data-bs-toggle="modal" data-bs-target="#clearAllModal">
                     <i class="fas fa-trash me-1"></i> Clear All Messages
                 </button>
             </div>
+            {% elif is_demo_mode %}
+            <div class="chat-header-actions">
+                <div></div>
+                <button type="button" id="showDemoBannerBtn" class="btn btn-sm btn-outline-success" onclick="showDemoBanner()" style="display: none;">
+                    <i class="fas fa-info-circle me-1"></i> Show Multi-User Test Instructions
+                </button>
+            </div>
             {% endif %}
 
-            <!-- Demo Mode Info Banner -->
+            <!-- Demo Mode Info Banner (Dismissible) -->
             {% if is_demo_mode %}
-            <div class="alert alert-success mb-0" style="border-radius: 0; border-left: 4px solid #4caf50; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);">
+            <div id="demoMultiUserBanner" class="alert alert-success mb-0" style="border-radius: 0; border-left: 4px solid #4caf50; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); position: relative; display: none;">
+                <button type="button" class="btn-close" onclick="dismissDemoBanner()" style="position: absolute; top: 10px; right: 10px; font-size: 0.8rem;" aria-label="Close"></button>
                 <div class="d-flex align-items-start">
                     <div class="flex-shrink-0 me-3">
                         <i class="fas fa-key fa-2x" style="color: #2e7d32;"></i>
                     </div>
-                    <div class="flex-grow-1">
+                    <div class="flex-grow-1" style="padding-right: 2rem;">
                         <h6 class="mb-2" style="color: #1b5e20;"><strong>🔓 Test Real-Time Messaging with Multiple Users</strong></h6>
                         <p class="mb-2" style="font-size: 0.9rem;">Want to see messages arrive in real-time? <strong>Open an incognito/private window</strong> and login as a different user to experience true real-time delivery!</p>
                         
@@ -1164,6 +1178,52 @@
             .catch(error => console.error('Error:', error));
         }
     }
+
+    // ============================================================
+    // Demo Banner Management
+    // ============================================================
+    function dismissDemoBanner() {
+        const banner = document.getElementById('demoMultiUserBanner');
+        const showBtn = document.getElementById('showDemoBannerBtn');
+        if (banner) {
+            banner.style.display = 'none';
+            // Remember dismissal in localStorage
+            localStorage.setItem('demoMultiUserBannerDismissed', 'true');
+            // Show the "Show Instructions" button
+            if (showBtn) showBtn.style.display = 'inline-block';
+        }
+    }
+
+    function showDemoBanner() {
+        const banner = document.getElementById('demoMultiUserBanner');
+        const showBtn = document.getElementById('showDemoBannerBtn');
+        if (banner) {
+            banner.style.display = 'block';
+            // Clear dismissal from localStorage
+            localStorage.removeItem('demoMultiUserBannerDismissed');
+            // Hide the "Show Instructions" button
+            if (showBtn) showBtn.style.display = 'none';
+            // Scroll to banner
+            banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    // Show banner on page load if not dismissed
+    (function() {
+        const banner = document.getElementById('demoMultiUserBanner');
+        const showBtn = document.getElementById('showDemoBannerBtn');
+        const isDismissed = localStorage.getItem('demoMultiUserBannerDismissed') === 'true';
+        
+        if (banner) {
+            if (isDismissed) {
+                banner.style.display = 'none';
+                if (showBtn) showBtn.style.display = 'inline-block';
+            } else {
+                banner.style.display = 'block';
+                if (showBtn) showBtn.style.display = 'none';
+            }
+        }
+    })();
 
 </script>
 
