@@ -690,6 +690,32 @@
             </div>
             {% endif %}
 
+            <!-- Demo Mode Info Banner -->
+            {% if is_demo_mode %}
+            <div class="alert alert-info mb-0" style="border-radius: 0; border-left: 4px solid #0d6efd; background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);">
+                <div class="d-flex align-items-start">
+                    <div class="flex-shrink-0 me-3">
+                        <i class="fas fa-info-circle fa-2x" style="color: #0d6efd;"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h6 class="mb-2" style="color: #0d47a1;"><strong>📬 Demo Mode: Team Collaboration Preview</strong></h6>
+                        <p class="mb-2" style="font-size: 0.9rem;">You're viewing <strong>pre-populated messages</strong> from your demo team members (<span class="badge bg-primary">@sam_rivera_demo</span>, <span class="badge bg-primary">@jordan_taylor_demo</span>, <span class="badge bg-primary">@alex_chen_demo</span>). These messages showcase realistic team communication.</p>
+                        <div class="mb-2">
+                            <strong style="color: #0d47a1;">✨ Try it yourself:</strong>
+                            <ul class="mb-0" style="font-size: 0.85rem; padding-left: 1.5rem;">
+                                <li>Send a message below - it will appear instantly</li>
+                                <li>Use <code>@username</code> to mention team members</li>
+                                <li>Click the "Demo Message" button to simulate receiving a message from another team member</li>
+                            </ul>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="simulateDemoMessage()" title="See how real-time message delivery works">
+                            <i class="fas fa-paper-plane me-1"></i> Simulate Demo Message from Team
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
             <div class="chat-messages" id="messages">
                 {% for message in chat_messages %}
                     <div class="message" data-message-id="{{ message.id }}" data-read-by="{{ message.read_by.count }}">
@@ -1118,6 +1144,76 @@
                 }
             })
             .catch(error => console.error('Error:', error));
+        }
+    }
+
+    // ============================================================
+    // DEMO: Simulate Incoming Message
+    // ============================================================
+    function simulateDemoMessage() {
+        const demoTeamMembers = [
+            { username: 'sam_rivera_demo', id: 0 },
+            { username: 'alex_chen_demo', id: 1 },
+            { username: 'jordan_taylor_demo', id: 2 }
+        ];
+        
+        const demoMessages = [
+            "Great work on this feature! 👏",
+            "I've reviewed the changes and they look good.",
+            "Can we schedule a quick sync to discuss the next steps?",
+            "Just deployed the latest changes to staging.",
+            "Thanks for the update! This helps a lot.",
+            "I'll take a look at this after lunch.",
+            "The demo looks fantastic! Well done team! 🎉",
+            "Quick question - did we update the documentation?",
+            "I've added some notes to the wiki about this.",
+            "Let's discuss this in our standup tomorrow."
+        ];
+        
+        // Pick a random team member and message
+        const randomMember = demoTeamMembers[Math.floor(Math.random() * demoTeamMembers.length)];
+        const randomMessage = demoMessages[Math.floor(Math.random() * demoMessages.length)];
+        
+        // Create fake message data that looks like a real WebSocket message
+        const fakeMessageData = {
+            type: 'chat_message',
+            id: Date.now(), // Use timestamp as fake ID
+            message_id: Date.now(),
+            username: randomMember.username,
+            user_id: -1, // Negative ID to indicate it's simulated
+            message: randomMessage,
+            timestamp: new Date().toISOString(),
+            mentioned_users: [],
+            is_broadcast: true,
+            is_own_message: false,
+            current_user_is_room_creator: false,
+            sender_is_room_creator: false
+        };
+        
+        // Add message to chat using the same handler
+        chatSocketManager.onMessage(fakeMessageData);
+        
+        // Show a subtle notification
+        const notification = document.createElement('div');
+        notification.className = 'alert alert-success alert-dismissible fade show position-fixed';
+        notification.style.cssText = 'top: 80px; right: 20px; z-index: 9999; max-width: 350px;';
+        notification.innerHTML = `
+            <i class="fas fa-check-circle me-2"></i>
+            <strong>Demo Message Simulated!</strong><br>
+            <small>This is how messages from <strong>@${randomMember.username}</strong> would appear in real-time.</small>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            notification.remove();
+        }, 5000);
+        
+        // Scroll to bottom to show new message
+        const messagesDiv = document.querySelector('.chat-messages');
+        if (messagesDiv) {
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
     }
 </script>
