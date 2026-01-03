@@ -48,13 +48,17 @@ def get_or_create_demo_admin():
             )
             
             if created:
-                # Set an unusable password - this user cannot log in normally
-                demo_admin.set_unusable_password()
+                # Set simple demo password for easy testing
+                demo_admin.set_password('demo123')
                 demo_admin.save()
-                logger.info(f"Created virtual demo admin user: {DEMO_ADMIN_USERNAME}")
+                logger.info(f"Created virtual demo admin user: {DEMO_ADMIN_USERNAME} with password 'demo123'")
                 
                 # Create profile and assign to demo organization
                 _setup_demo_admin_profile(demo_admin)
+            else:
+                # Update existing user password
+                demo_admin.set_password('demo123')
+                demo_admin.save()
             
             return demo_admin
             

@@ -692,25 +692,43 @@
 
             <!-- Demo Mode Info Banner -->
             {% if is_demo_mode %}
-            <div class="alert alert-info mb-0" style="border-radius: 0; border-left: 4px solid #0d6efd; background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);">
+            <div class="alert alert-success mb-0" style="border-radius: 0; border-left: 4px solid #4caf50; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);">
                 <div class="d-flex align-items-start">
                     <div class="flex-shrink-0 me-3">
-                        <i class="fas fa-info-circle fa-2x" style="color: #0d6efd;"></i>
+                        <i class="fas fa-key fa-2x" style="color: #2e7d32;"></i>
                     </div>
                     <div class="flex-grow-1">
-                        <h6 class="mb-2" style="color: #0d47a1;"><strong>📬 Demo Mode: Team Collaboration Preview</strong></h6>
-                        <p class="mb-2" style="font-size: 0.9rem;">You're viewing <strong>pre-populated messages</strong> from your demo team members (<span class="badge bg-primary">@sam_rivera_demo</span>, <span class="badge bg-primary">@jordan_taylor_demo</span>, <span class="badge bg-primary">@alex_chen_demo</span>). These messages showcase realistic team communication.</p>
-                        <div class="mb-2">
-                            <strong style="color: #0d47a1;">✨ Try it yourself:</strong>
-                            <ul class="mb-0" style="font-size: 0.85rem; padding-left: 1.5rem;">
-                                <li>Send a message below - it will appear instantly</li>
-                                <li>Use <code>@username</code> to mention team members</li>
-                                <li>Click the "Demo Message" button to simulate receiving a message from another team member</li>
-                            </ul>
+                        <h6 class="mb-2" style="color: #1b5e20;"><strong>🔓 Test Real-Time Messaging with Multiple Users</strong></h6>
+                        <p class="mb-2" style="font-size: 0.9rem;">Want to see messages arrive in real-time? <strong>Open an incognito/private window</strong> and login as a different user to experience true real-time delivery!</p>
+                        
+                        <div style="background: white; padding: 0.75rem; border-radius: 6px; border: 1px solid #81c784; margin-bottom: 0.75rem;">
+                            <strong style="color: #2e7d32; font-size: 0.9rem;"><i class="fas fa-users me-1"></i> Available Demo Accounts (all use password: <code style="background: #f1f8f4; padding: 0.2rem 0.4rem; border-radius: 3px;">demo123</code>):</strong>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; margin-top: 0.5rem;">
+                                <div style="font-family: monospace; font-size: 0.85rem; background: #f1f8f4; padding: 0.4rem; border-radius: 4px; border: 1px solid #a5d6a7;">
+                                    <i class="fas fa-user me-1"></i> demo_admin_solo
+                                </div>
+                                <div style="font-family: monospace; font-size: 0.85rem; background: #f1f8f4; padding: 0.4rem; border-radius: 4px; border: 1px solid #a5d6a7;">
+                                    <i class="fas fa-user me-1"></i> alex_chen_demo
+                                </div>
+                                <div style="font-family: monospace; font-size: 0.85rem; background: #f1f8f4; padding: 0.4rem; border-radius: 4px; border: 1px solid #a5d6a7;">
+                                    <i class="fas fa-user me-1"></i> sam_rivera_demo
+                                </div>
+                                <div style="font-family: monospace; font-size: 0.85rem; background: #f1f8f4; padding: 0.4rem; border-radius: 4px; border: 1px solid #a5d6a7;">
+                                    <i class="fas fa-user me-1"></i> jordan_taylor_demo
+                                </div>
+                            </div>
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="simulateDemoMessage()" title="See how real-time message delivery works">
-                            <i class="fas fa-paper-plane me-1"></i> Simulate Demo Message from Team
-                        </button>
+                        
+                        <div style="font-size: 0.85rem; color: #333;">
+                            <strong style="color: #1b5e20;"><i class="fas fa-lightbulb me-1"></i> Quick Test:</strong>
+                            <ol style="margin: 0.3rem 0 0 1.2rem; padding: 0; font-size: 0.85rem;">
+                                <li>Keep this window open</li>
+                                <li>Open a <strong>new incognito/private window</strong></li>
+                                <li>Login as <code>sam_rivera_demo</code> / <code>demo123</code></li>
+                                <li>Navigate to this same chat room</li>
+                                <li>Send messages from either window and watch real-time delivery! 🚀</li>
+                            </ol>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1147,75 +1165,6 @@
         }
     }
 
-    // ============================================================
-    // DEMO: Simulate Incoming Message
-    // ============================================================
-    function simulateDemoMessage() {
-        const demoTeamMembers = [
-            { username: 'sam_rivera_demo', id: 0 },
-            { username: 'alex_chen_demo', id: 1 },
-            { username: 'jordan_taylor_demo', id: 2 }
-        ];
-        
-        const demoMessages = [
-            "Great work on this feature! 👏",
-            "I've reviewed the changes and they look good.",
-            "Can we schedule a quick sync to discuss the next steps?",
-            "Just deployed the latest changes to staging.",
-            "Thanks for the update! This helps a lot.",
-            "I'll take a look at this after lunch.",
-            "The demo looks fantastic! Well done team! 🎉",
-            "Quick question - did we update the documentation?",
-            "I've added some notes to the wiki about this.",
-            "Let's discuss this in our standup tomorrow."
-        ];
-        
-        // Pick a random team member and message
-        const randomMember = demoTeamMembers[Math.floor(Math.random() * demoTeamMembers.length)];
-        const randomMessage = demoMessages[Math.floor(Math.random() * demoMessages.length)];
-        
-        // Create fake message data that looks like a real WebSocket message
-        const fakeMessageData = {
-            type: 'chat_message',
-            id: Date.now(), // Use timestamp as fake ID
-            message_id: Date.now(),
-            username: randomMember.username,
-            user_id: -1, // Negative ID to indicate it's simulated
-            message: randomMessage,
-            timestamp: new Date().toISOString(),
-            mentioned_users: [],
-            is_broadcast: true,
-            is_own_message: false,
-            current_user_is_room_creator: false,
-            sender_is_room_creator: false
-        };
-        
-        // Add message to chat using the same handler
-        chatSocketManager.onMessage(fakeMessageData);
-        
-        // Show a subtle notification
-        const notification = document.createElement('div');
-        notification.className = 'alert alert-success alert-dismissible fade show position-fixed';
-        notification.style.cssText = 'top: 80px; right: 20px; z-index: 9999; max-width: 350px;';
-        notification.innerHTML = `
-            <i class="fas fa-check-circle me-2"></i>
-            <strong>Demo Message Simulated!</strong><br>
-            <small>This is how messages from <strong>@${randomMember.username}</strong> would appear in real-time.</small>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        document.body.appendChild(notification);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            notification.remove();
-        }, 5000);
-        
-        // Scroll to bottom to show new message
-        const messagesDiv = document.querySelector('.chat-messages');
-        if (messagesDiv) {
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
-    }
 </script>
 
 {% endblock %}

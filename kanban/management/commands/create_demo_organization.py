@@ -203,12 +203,15 @@ class Command(BaseCommand):
             )
             
             if created:
-                # Set unusable password (demo users can't login directly)
-                user.set_unusable_password()
+                # Set simple demo password for easy testing
+                user.set_password('demo123')
                 user.save()
-                self.stdout.write(self.style.SUCCESS(f'  ✓ Created: {user.get_full_name()} ({user.email})'))
+                self.stdout.write(self.style.SUCCESS(f'  ✓ Created: {user.get_full_name()} ({user.email}) - password: demo123'))
             else:
-                self.stdout.write(self.style.WARNING(f'  ! Already exists: {user.get_full_name()}'))
+                # Update existing user password
+                user.set_password('demo123')
+                user.save()
+                self.stdout.write(self.style.WARNING(f'  ! Already exists: {user.get_full_name()} - password updated to: demo123'))
             
             # Create or update user profile
             profile, profile_created = UserProfile.objects.get_or_create(

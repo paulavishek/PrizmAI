@@ -221,40 +221,79 @@
 
     <!-- Demo Mode Info Box -->
     {% if is_demo_mode %}
-    <div class="demo-info-box" style="background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%); border-left: 4px solid #ff9800; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
-        <h4 style="margin-top: 0; color: #e65100;">
-            <i class="fas fa-users me-2"></i>Demo Team Collaboration
+    <div class="demo-info-box" style="background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); border-left: 4px solid #4caf50; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+        <h4 style="margin-top: 0; color: #2e7d32;">
+            <i class="fas fa-key me-2"></i>Test Real-Time Messaging with Multiple Accounts
         </h4>
         <p style="margin-bottom: 1rem; color: #333;">
-            Explore pre-populated chat rooms with realistic team conversations! Each board has chat rooms with messages from your demo team members.
+            To experience real message sending and receiving, login as different users in separate browser windows or incognito/private tabs:
         </p>
-        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
-            <div style="background: white; padding: 0.75rem; border-radius: 6px; border: 1px solid #ffcc80;">
-                <strong style="color: #e65100;"><i class="fas fa-user-tie me-1"></i> Alex Chen</strong>
-                <div style="font-size: 0.85rem; color: #666;">@alex_chen_demo</div>
-                <div style="font-size: 0.8rem; color: #888;">Project Manager</div>
-            </div>
-            <div style="background: white; padding: 0.75rem; border-radius: 6px; border: 1px solid #ffcc80;">
-                <strong style="color: #e65100;"><i class="fas fa-code me-1"></i> Sam Rivera</strong>
-                <div style="font-size: 0.85rem; color: #666;">@sam_rivera_demo</div>
-                <div style="font-size: 0.8rem; color: #888;">Developer</div>
-            </div>
-            <div style="background: white; padding: 0.75rem; border-radius: 6px; border: 1px solid #ffcc80;">
-                <strong style="color: #e65100;"><i class="fas fa-chart-line me-1"></i> Jordan Taylor</strong>
-                <div style="font-size: 0.85rem; color: #666;">@jordan_taylor_demo</div>
-                <div style="font-size: 0.8rem; color: #888;">Analyst</div>
+        
+        <div style="background: white; padding: 1.5rem; border-radius: 8px; border: 2px solid #81c784; margin-bottom: 1rem;">
+            <h5 style="margin: 0 0 1rem 0; color: #2e7d32;"><i class="fas fa-users-cog me-2"></i>Available Demo Accounts:</h5>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+                <div style="background: #f1f8f4; padding: 1rem; border-radius: 6px; border: 1px solid #a5d6a7;">
+                    <div style="font-weight: 600; color: #2e7d32; margin-bottom: 0.5rem;">
+                        <i class="fas fa-user-shield me-1"></i> Demo Admin
+                    </div>
+                    <div style="font-family: monospace; color: #333; margin-bottom: 0.25rem;">
+                        <strong>Username:</strong> demo_admin_solo
+                    </div>
+                    <div style="font-family: monospace; color: #333;">
+                        <strong>Password:</strong> demo123
+                    </div>
+                </div>
+                
+                <div style="background: #f1f8f4; padding: 1rem; border-radius: 6px; border: 1px solid #a5d6a7;">
+                    <div style="font-weight: 600; color: #2e7d32; margin-bottom: 0.5rem;">
+                        <i class="fas fa-user-tie me-1"></i> Alex Chen (PM)
+                    </div>
+                    <div style="font-family: monospace; color: #333; margin-bottom: 0.25rem;">
+                        <strong>Username:</strong> alex_chen_demo
+                    </div>
+                    <div style="font-family: monospace; color: #333;">
+                        <strong>Password:</strong> demo123
+                    </div>
+                </div>
+                
+                <div style="background: #f1f8f4; padding: 1rem; border-radius: 6px; border: 1px solid #a5d6a7;">
+                    <div style="font-weight: 600; color: #2e7d32; margin-bottom: 0.5rem;">
+                        <i class="fas fa-code me-1"></i> Sam Rivera (Dev)
+                    </div>
+                    <div style="font-family: monospace; color: #333; margin-bottom: 0.25rem;">
+                        <strong>Username:</strong> sam_rivera_demo
+                    </div>
+                    <div style="font-family: monospace; color: #333;">
+                        <strong>Password:</strong> demo123
+                    </div>
+                </div>
+                
+                <div style="background: #f1f8f4; padding: 1rem; border-radius: 6px; border: 1px solid #a5d6a7;">
+                    <div style="font-weight: 600; color: #2e7d32; margin-bottom: 0.5rem;">
+                        <i class="fas fa-chart-line me-1"></i> Jordan Taylor (Analyst)
+                    </div>
+                    <div style="font-family: monospace; color: #333; margin-bottom: 0.25rem;">
+                        <strong>Username:</strong> jordan_taylor_demo
+                    </div>
+                    <div style="font-family: monospace; color: #333;">
+                        <strong>Password:</strong> demo123
+                    </div>
+                </div>
             </div>
         </div>
-        <div style="font-size: 0.9rem; color: #666;">
-            <i class="fas fa-info-circle me-1"></i>
-            <strong>How to Experience Messaging:</strong> 
-            <ul style="margin-top: 0.5rem; margin-bottom: 0; font-size: 0.85rem;">
-                <li>View existing team conversations with pre-populated messages</li>
-                <li>Send your own messages and see them appear instantly</li>
-                <li>Use the "Simulate Demo Message" button in chat rooms to see how real-time delivery works</li>
-                <li>@mention team members (e.g., @sam_rivera_demo) to try the notification feature</li>
-            </ul>
-        </div>
+        
+        <div style="background: #fff8e1; padding: 1rem; border-radius: 6px; border: 1px solid #ffecb3;">
+            <div style="font-size: 0.9rem; color: #333;">
+                <strong style="color: #f57f17;"><i class="fas fa-lightbulb me-1"></i> How to Test:</strong>
+                <ol style="margin: 0.5rem 0 0 1rem; padding: 0; font-size: 0.85rem;">
+                    <li>Open a chat room in this window (as demo_admin_solo)</li>
+                    <li>Open a new <strong>incognito/private window</strong></li>
+                    <li>Login as a different user (e.g., sam_rivera_demo / demo123)</li>
+                    <li>Navigate to the same chat room</li>
+                    <li>Send messages from either window and watch them appear instantly in both!</li>
+                </ol>
+            </div>
         </div>
     </div>
     {% endif %}
