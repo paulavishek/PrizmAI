@@ -148,7 +148,7 @@ def suggestion_detail(request, suggestion_id):
     board = suggestion.board
     
     # Check if this is a demo board
-    demo_org_names = ['Dev Team', 'Marketing Team']
+    demo_org_names = ['Demo - Acme Corporation']
     is_demo_board = board.organization.name in demo_org_names
     is_demo_mode = request.session.get('is_demo_mode', False)
     demo_mode_type = request.session.get('demo_mode', 'solo')

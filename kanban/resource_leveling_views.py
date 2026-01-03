@@ -29,7 +29,7 @@ def _can_access_board(user, board):
         return True
     
     # Demo boards: organization-level access
-    demo_org_names = ['Dev Team', 'Marketing Team']
+    demo_org_names = ['Demo - Acme Corporation']
     if board.organization.name in demo_org_names:
         # Check if user has access to any board in this demo organization
         from kanban.models import Board as BoardModel

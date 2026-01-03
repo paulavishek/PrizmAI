@@ -33,7 +33,7 @@ def dashboard(request):
         
         # Get boards from user's organization OR where user is a member
         # EXCLUDE demo boards - demo environment is isolated and accessed via demo dashboard
-        demo_org_names = ['Dev Team', 'Marketing Team']
+        demo_org_names = ['Demo - Acme Corporation']
         boards = Board.objects.filter(
             Q(organization=organization) | Q(members=request.user)
         ).filter(
@@ -197,7 +197,7 @@ def board_list(request):
         
         # Get boards from user's organization OR where user is a member
         # EXCLUDE demo boards - demo environment is isolated
-        demo_org_names = ['Dev Team', 'Marketing Team']
+        demo_org_names = ['Demo - Acme Corporation']
         boards = Board.objects.filter(
             Q(organization=organization) | Q(members=request.user)
         ).filter(
@@ -335,8 +335,13 @@ def board_detail(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
     # Check if this is a demo board
-    demo_org_names = ['Dev Team', 'Marketing Team']
+    demo_org_names = ['Demo - Acme Corporation']
     is_demo_board = board.organization.name in demo_org_names
+    
+    # If in demo mode and viewing a demo board, redirect to demo board view
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    if is_demo_board and is_demo_mode:
+        return redirect('demo_board_detail', board_id=board_id)
     
     # Check permission using RBAC (includes organization-level access for demo boards)
     if not user_has_board_permission(request.user, board, 'board.view'):
@@ -1330,7 +1335,7 @@ def add_board_member(request, board_id):
                 # Check if user is in the same organization
                 if user.profile.organization == request.user.profile.organization:
                     # Check if this is a demo board
-                    demo_org_names = ['Dev Team', 'Marketing Team']
+                    demo_org_names = ['Demo - Acme Corporation']
                     is_demo_board = board.organization.name in demo_org_names
                     
                     if is_demo_board:
@@ -1479,7 +1484,7 @@ def organization_boards(request):
         
         # Get all boards for this organization, even if user is not a member
         # EXCLUDE demo boards - demo environment is isolated
-        demo_org_names = ['Dev Team', 'Marketing Team']
+        demo_org_names = ['Demo - Acme Corporation']
         all_org_boards = Board.objects.filter(
             organization=organization
         ).exclude(
@@ -2641,7 +2646,7 @@ def load_demo_data(request):
             user_org = profile.organization
             
             # Find the demo organizations
-            demo_org_names = ['Dev Team', 'Marketing Team']
+            demo_org_names = ['Demo - Acme Corporation']
             demo_orgs = Organization.objects.filter(name__in=demo_org_names)
             
             if not demo_orgs.exists():
@@ -2759,7 +2764,7 @@ def load_demo_data(request):
     # GET request - show confirmation page
     # Check if demo boards exist in system
     from django.contrib.auth.models import User
-    demo_org_names = ['Dev Team', 'Marketing Team']
+    demo_org_names = ['Demo - Acme Corporation']
     demo_orgs = Organization.objects.filter(name__in=demo_org_names)
     demo_available = demo_orgs.exists() and Board.objects.filter(organization__in=demo_orgs).exists()
     

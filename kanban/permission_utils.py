@@ -60,7 +60,7 @@ def user_has_board_permission(user, board, permission):
     
     # Demo boards: organization-level access
     # If user is a member of ANY board in this demo org, they can access ALL boards in that org
-    demo_org_names = ['Dev Team', 'Marketing Team']
+    demo_org_names = ['Demo - Acme Corporation']
     if board.organization.name in demo_org_names:
         from kanban.models import Board as BoardModel
         user_has_demo_org_access = BoardModel.objects.filter(

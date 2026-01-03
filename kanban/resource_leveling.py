@@ -70,7 +70,7 @@ class ResourceLevelingService:
             potential_assignees = board.members.all()
             
             # For demo boards, show demo users + real users from requesting user's org who are members
-            demo_org_names = ['Dev Team', 'Marketing Team']
+            demo_org_names = ['Demo - Acme Corporation']
             if board.organization.name in demo_org_names and requesting_user:
                 try:
                     from django.db.models import Q
@@ -461,7 +461,7 @@ class ResourceLevelingService:
         ).select_related('assigned_to', 'column')
         
         # For demo boards, show tasks assigned to demo users + real users from requesting user's org
-        demo_org_names = ['Dev Team', 'Marketing Team']
+        demo_org_names = ['Demo - Acme Corporation']
         if board.organization.name in demo_org_names and requesting_user:
             try:
                 from accounts.models import Organization
@@ -548,7 +548,7 @@ class ResourceLevelingService:
             Dict with team member workloads and recommendations
         """
         # For demo boards, show demo users + real users from requesting user's org who are members
-        demo_org_names = ['Dev Team', 'Marketing Team']
+        demo_org_names = ['Demo - Acme Corporation']
         if board.organization.name in demo_org_names and requesting_user:
             try:
                 from django.db.models import Q
