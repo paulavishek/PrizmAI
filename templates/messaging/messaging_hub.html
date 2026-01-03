@@ -219,15 +219,48 @@
         </a>
     </div>
 
+    <!-- Demo Mode Info Box -->
+    {% if is_demo_mode %}
+    <div class="demo-info-box" style="background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%); border-left: 4px solid #ff9800; padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+        <h4 style="margin-top: 0; color: #e65100;">
+            <i class="fas fa-users me-2"></i>Demo Team Collaboration
+        </h4>
+        <p style="margin-bottom: 1rem; color: #333;">
+            Explore pre-populated chat rooms with realistic team conversations! Each board has chat rooms with messages from your demo team members.
+        </p>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+            <div style="background: white; padding: 0.75rem; border-radius: 6px; border: 1px solid #ffcc80;">
+                <strong style="color: #e65100;"><i class="fas fa-user-tie me-1"></i> Alex Chen</strong>
+                <div style="font-size: 0.85rem; color: #666;">@alex_chen_demo</div>
+                <div style="font-size: 0.8rem; color: #888;">Project Manager</div>
+            </div>
+            <div style="background: white; padding: 0.75rem; border-radius: 6px; border: 1px solid #ffcc80;">
+                <strong style="color: #e65100;"><i class="fas fa-code me-1"></i> Sam Rivera</strong>
+                <div style="font-size: 0.85rem; color: #666;">@sam_rivera_demo</div>
+                <div style="font-size: 0.8rem; color: #888;">Developer</div>
+            </div>
+            <div style="background: white; padding: 0.75rem; border-radius: 6px; border: 1px solid #ffcc80;">
+                <strong style="color: #e65100;"><i class="fas fa-chart-line me-1"></i> Jordan Taylor</strong>
+                <div style="font-size: 0.85rem; color: #666;">@jordan_taylor_demo</div>
+                <div style="font-size: 0.8rem; color: #888;">Analyst</div>
+            </div>
+        </div>
+        <div style="font-size: 0.9rem; color: #666;">
+            <i class="fas fa-info-circle me-1"></i>
+            <strong>Tip:</strong> Click on any board's "Chat Rooms" button to see conversations between team members. You can also send messages and @mention users!
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Help Box -->
     <div class="help-box">
         <h4><i class="fas fa-lightbulb me-2"></i>How to Use Messaging</h4>
         <ul>
-            <li><strong>Chat Rooms:</strong> Click on a board, then "Messages" to see chat rooms</li>
+            <li><strong>Chat Rooms:</strong> Click on a board below, then select a room to see conversations</li>
             <li><strong>Send Messages:</strong> Type in the message box and press Enter</li>
-            <li><strong>@Mention:</strong> Type @username to mention team members</li>
+            <li><strong>@Mention:</strong> Type @username to mention team members (e.g., @alex_chen_demo)</li>
             <li><strong>Task Comments:</strong> Open any task and scroll to Comments section</li>
-            <li><strong>Invite Users:</strong> When creating a room, select members from the dropdown</li>
+            <li><strong>File Sharing:</strong> Upload and share files within chat rooms</li>
         </ul>
     </div>
 
