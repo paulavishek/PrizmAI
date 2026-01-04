@@ -156,7 +156,13 @@ class DemoPermissions:
         if not request.session.get('is_demo_mode'):
             return True  # Not in demo mode, allow all actions
         
-        # Get current role
+        # SOLO MODE: Full admin access, no restrictions
+        # Solo demo users should have unrestricted access to all features
+        demo_mode_type = request.session.get('demo_mode', 'solo')
+        if demo_mode_type == 'solo':
+            return True  # Solo mode: bypass all permission checks
+        
+        # TEAM MODE: Check role-based permissions
         role = request.session.get('demo_role', 'admin')
         
         return DemoPermissions.has_permission(role, action)
@@ -176,6 +182,12 @@ class DemoPermissions:
             # Not in demo mode, return full permissions
             return {perm: True for perm in DemoPermissions.PERMISSIONS['admin'].keys()}
         
+        # SOLO MODE: Full admin permissions (no restrictions)
+        demo_mode_type = request.session.get('demo_mode', 'solo')
+        if demo_mode_type == 'solo':
+            return {perm: True for perm in DemoPermissions.PERMISSIONS['admin'].keys()}
+        
+        # TEAM MODE: Return role-based permissions
         role = request.session.get('demo_role', 'admin')
         return DemoPermissions.get_all_permissions(role)
     
