@@ -1,5 +1,11 @@
 # 🚀 PrizmAI - AI-Powered Project Management Platform
 
+[![CI Pipeline](https://github.com/paulavishek/PrizmAI/actions/workflows/ci.yml/badge.svg)](https://github.com/paulavishek/PrizmAI/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Django 5.2](https://img.shields.io/badge/django-5.2-green.svg)](https://www.djangoproject.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 > **Kanban Boards Powered by AI**
 
 PrizmAI combines visual project management with AI that helps you work smarter—no setup required, just start organizing. Built with Django, Python, Google Gemini API, WebSockets, and a professional REST API.
