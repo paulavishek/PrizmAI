@@ -250,6 +250,16 @@ def analytics_dashboard(request):
         ).count(),
     }
     
+    # Calculate percentages
+    if total_sessions > 0:
+        feature_usage['board_creators_pct'] = round((feature_usage['board_creators'] / total_sessions) * 100, 1)
+        feature_usage['task_creators_pct'] = round((feature_usage['task_creators'] / total_sessions) * 100, 1)
+        feature_usage['ai_users_pct'] = round((feature_usage['ai_users'] / total_sessions) * 100, 1)
+    else:
+        feature_usage['board_creators_pct'] = 0
+        feature_usage['task_creators_pct'] = 0
+        feature_usage['ai_users_pct'] = 0
+    
     # AI feature breakdown
     ai_events = AnalyticsEvent.objects.filter(
         timestamp__gte=start_date,
@@ -284,6 +294,14 @@ def analytics_dashboard(request):
     ).values('sentiment').annotate(
         count=Count('id')
     ).order_by('sentiment')
+    
+    # Calculate sentiment percentages
+    sentiment_list = list(sentiment_breakdown)
+    for item in sentiment_list:
+        if total_feedback > 0:
+            item['percentage'] = round((item['count'] / total_feedback) * 100, 1)
+        else:
+            item['percentage'] = 0
     
     # Rating distribution
     rating_distribution = Feedback.objects.filter(
@@ -381,7 +399,7 @@ def analytics_dashboard(request):
         
         # Feedback
         'feedback_stats': feedback_stats,
-        'sentiment_breakdown': sentiment_breakdown,
+        'sentiment_breakdown': sentiment_list,
         'rating_distribution': rating_distribution,
         
         # Funnel

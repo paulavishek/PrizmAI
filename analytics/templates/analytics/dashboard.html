@@ -589,8 +589,14 @@
         </p>
         <div class="engagement-grid">
             {% for level in engagement_breakdown %}
-            <div class="engagement-card {{ level.engagement_level|replace:'_','-' }}">
-                <div class="engagement-level">{{ level.engagement_level|title|replace:"_"," " }}</div>
+            <div class="engagement-card {% if level.engagement_level == 'very_high' %}very-high{% elif level.engagement_level == 'high' %}high{% elif level.engagement_level == 'medium' %}medium{% else %}low{% endif %}">
+                <div class="engagement-level">
+                    {% if level.engagement_level == 'very_high' %}Very High
+                    {% elif level.engagement_level == 'high' %}High
+                    {% elif level.engagement_level == 'medium' %}Medium
+                    {% elif level.engagement_level == 'low' %}Low
+                    {% else %}{{ level.engagement_level|title }}{% endif %}
+                </div>
                 <div class="engagement-count">{{ level.count }}</div>
                 <div class="engagement-stats">
                     ⏱️ {{ level.avg_duration|floatformat:1 }}m avg<br>
@@ -612,11 +618,11 @@
         <div class="feature-bar">
             <div class="feature-name">
                 <span>💼 Board Creators</span>
-                <span><strong>{{ feature_usage.board_creators }}</strong> ({{ feature_usage.board_creators|floatformat:0 }} users)</span>
+                <span><strong>{{ feature_usage.board_creators }}</strong> users</span>
             </div>
             <div class="progress-bar">
-                <div class="progress-fill" style="width: {{ feature_usage.board_creators|multiply:100|divide:total_sessions }}%;">
-                    {{ feature_usage.board_creators|multiply:100|divide:total_sessions|floatformat:0 }}%
+                <div class="progress-fill" style="width: {{ feature_usage.board_creators_pct }}%;">
+                    {{ feature_usage.board_creators_pct }}%
                 </div>
             </div>
         </div>
@@ -624,11 +630,11 @@
         <div class="feature-bar">
             <div class="feature-name">
                 <span>✅ Task Creators</span>
-                <span><strong>{{ feature_usage.task_creators }}</strong> ({{ feature_usage.task_creators|floatformat:0 }} users)</span>
+                <span><strong>{{ feature_usage.task_creators }}</strong> users</span>
             </div>
             <div class="progress-bar">
-                <div class="progress-fill" style="width: {{ feature_usage.task_creators|multiply:100|divide:total_sessions }}%;">
-                    {{ feature_usage.task_creators|multiply:100|divide:total_sessions|floatformat:0 }}%
+                <div class="progress-fill" style="width: {{ feature_usage.task_creators_pct }}%;">
+                    {{ feature_usage.task_creators_pct }}%
                 </div>
             </div>
         </div>
@@ -636,11 +642,11 @@
         <div class="feature-bar">
             <div class="feature-name">
                 <span>🤖 AI Feature Users</span>
-                <span><strong>{{ feature_usage.ai_users }}</strong> ({{ feature_usage.ai_users|floatformat:0 }} users)</span>
+                <span><strong>{{ feature_usage.ai_users }}</strong> users</span>
             </div>
             <div class="progress-bar">
-                <div class="progress-fill" style="width: {{ feature_usage.ai_users|multiply:100|divide:total_sessions }}%;">
-                    {{ feature_usage.ai_users|multiply:100|divide:total_sessions|floatformat:0 }}%
+                <div class="progress-fill" style="width: {{ feature_usage.ai_users_pct }}%;">
+                    {{ feature_usage.ai_users_pct }}%
                 </div>
             </div>
         </div>
@@ -661,7 +667,7 @@
                 <div class="sentiment-label">{{ sentiment.sentiment|title }}</div>
                 <div class="sentiment-count">{{ sentiment.count }}</div>
                 <div style="font-size: 0.8rem; color: #6b7280; margin-top: 4px;">
-                    {{ sentiment.count|multiply:100|divide:total_feedback|floatformat:0 }}% of feedback
+                    {{ sentiment.percentage }}% of feedback
                 </div>
             </div>
             {% empty %}
@@ -765,13 +771,17 @@
             <li><strong>Satisfaction Correlation:</strong> Users with "High" engagement give {{ feedback_stats.avg_rating|floatformat:1 }}★ average - {% if feedback_stats.avg_rating >= 4 %}strong satisfaction!{% else %}investigate friction points{% endif %}</li>
             <li><strong>Activation Rate:</strong> {{ funnel.task_conversion|floatformat:0 }}% create tasks (industry benchmark: 30%) - {% if funnel.task_conversion >= 30 %}above average!{% else %}optimize onboarding{% endif %}</li>
             <li><strong>Sentiment Health:</strong> 
-                {% with positive_count=sentiment_breakdown.0.count|default:0 total=total_feedback %}
-                {% if total > 0 %}
-                    {{ positive_count|multiply:100|divide:total|floatformat:0 }}% positive sentiment
+                {% if sentiment_breakdown %}
+                    {% with first_sentiment=sentiment_breakdown.0 %}
+                    {% if first_sentiment.sentiment == 'positive' %}
+                        {{ first_sentiment.percentage }}% positive sentiment
+                    {% else %}
+                        Collecting baseline data
+                    {% endif %}
+                    {% endwith %}
                 {% else %}
                     Collecting baseline data
                 {% endif %}
-                {% endwith %}
             </li>
         </ul>
     </div>
