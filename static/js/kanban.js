@@ -1215,24 +1215,40 @@ function initCharts() {
                 
                 if (priorityDataElement && priorityDataElement.textContent) {
                     const priorityData = JSON.parse(priorityDataElement.textContent);
-                      priorityChart = new Chart(priorityCanvas.getContext('2d'), {
+                    
+                    // Use accessibility-aware color palette
+                    const isColorblindMode = window.PrizmAccessibility && window.PrizmAccessibility.isColorblindModeActive();
+                    const bgColors = isColorblindMode ? [
+                        'rgba(127, 127, 127, 0.7)',  // Low - Gray
+                        'rgba(31, 119, 180, 0.7)',   // Medium - Blue
+                        'rgba(255, 127, 14, 0.7)',   // High - Orange
+                        'rgba(214, 39, 40, 0.7)'     // Urgent - Red
+                    ] : [
+                        'rgba(40, 167, 69, 0.7)',  // Low
+                        'rgba(255, 193, 7, 0.7)',  // Medium
+                        'rgba(253, 126, 20, 0.7)', // High
+                        'rgba(220, 53, 69, 0.7)'   // Urgent
+                    ];
+                    const borderColors = isColorblindMode ? [
+                        'rgba(127, 127, 127, 1)',
+                        'rgba(31, 119, 180, 1)',
+                        'rgba(255, 127, 14, 1)',
+                        'rgba(214, 39, 40, 1)'
+                    ] : [
+                        'rgba(40, 167, 69, 1)',
+                        'rgba(255, 193, 7, 1)',
+                        'rgba(253, 126, 20, 1)',
+                        'rgba(220, 53, 69, 1)'
+                    ];
+                    
+                    priorityChart = new Chart(priorityCanvas.getContext('2d'), {
                         type: 'doughnut',
                         data: {
                             labels: priorityData.map(item => item.priority.charAt(0).toUpperCase() + item.priority.slice(1)),
                             datasets: [{
                                 data: priorityData.map(item => item.count),
-                                backgroundColor: [
-                                    'rgba(40, 167, 69, 0.7)',  // Low
-                                    'rgba(255, 193, 7, 0.7)',  // Medium
-                                    'rgba(253, 126, 20, 0.7)', // High
-                                    'rgba(220, 53, 69, 0.7)'   // Urgent
-                                ],
-                                borderColor: [
-                                    'rgba(40, 167, 69, 1)',
-                                    'rgba(255, 193, 7, 1)',
-                                    'rgba(253, 126, 20, 1)',
-                                    'rgba(220, 53, 69, 1)'
-                                ],
+                                backgroundColor: bgColors,
+                                borderColor: borderColors,
                                 borderWidth: 1
                             }]
                         },

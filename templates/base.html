@@ -22,6 +22,7 @@
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{% static 'css/styles.css' %}">
     <link rel="stylesheet" href="{% static 'css/theme.css' %}">
+    <link rel="stylesheet" href="{% static 'css/accessibility.css' %}">
     <link rel="stylesheet" href="{% static 'css/ai_explainability.css' %}">
     
     <style>
@@ -124,7 +125,18 @@
                         </li>
                     {% endif %}
                 </ul>
-                <ul class="navbar-nav">
+                <ul class="navbar-nav align-items-center">
+                    <!-- Accessibility Toggle Button -->
+                    <li class="nav-item">
+                        <button id="accessibility-toggle" 
+                                type="button" 
+                                class="btn btn-link nav-link p-1" 
+                                title="Color Blind Mode: OFF (Click to enable)" 
+                                aria-label="Toggle color blind mode" 
+                                aria-pressed="false">
+                            <i class="fas fa-eye-slash"></i>
+                        </button>
+                    </li>
                     {% if user.is_authenticated %}
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -258,6 +270,9 @@
     
     <!-- AI Explainability JS -->
     <script src="{% static 'js/ai_explainability.js' %}"></script>
+    
+    <!-- Accessibility Toggle JS -->
+    <script src="{% static 'js/accessibility-toggle.js' %}"></script>
     
     <!-- Demo Mode GA4 Analytics -->
     {% if request.session.is_demo_mode %}

@@ -961,8 +961,10 @@ function applyDeadlinePrediction(deadline) {
 
 /**
  * Utility function to get priority badge class
+ * Supports accessibility mode with colorblind-friendly colors
  */
 function getPriorityBadgeClass(priority) {
+    // Standard mapping works for both modes since CSS handles the color transformation
     switch(priority.toLowerCase()) {
         case 'urgent': return 'danger';
         case 'high': return 'warning';

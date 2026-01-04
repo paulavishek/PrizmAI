@@ -5,6 +5,7 @@
 
 // Global variables
 let chartsInitialized = false;
+let priorityChartInstance = null;
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
@@ -24,6 +25,12 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Lean data script:', document.getElementById('tasks-by-lean-data'));
     
     initializeAnalytics();
+    
+    // Listen for accessibility mode changes to update chart colors
+    window.addEventListener('accessibilityModeChanged', function(e) {
+        console.log('Accessibility mode changed:', e.detail.colorblindMode);
+        updateChartsForAccessibility();
+    });
 });
 
 function initializeAnalytics() {
@@ -145,14 +152,18 @@ function initializePriorityChart() {
     }
     
     console.log('Priority data:', priorityData);
-      const priorityColors = {
-        'Urgent': 'rgba(220, 53, 69, 0.8)',  // Red
-        'High': 'rgba(255, 193, 7, 0.8)',    // Orange/Yellow
-        'Medium': 'rgba(54, 162, 235, 0.8)', // Blue
-        'Low': 'rgba(40, 167, 69, 0.8)'      // Green
-    };
     
-    new Chart(priorityCtx, {
+    // Use accessibility-aware color palette
+    const priorityColors = window.PrizmAccessibility ? 
+        window.PrizmAccessibility.getPriorityColors() : {
+            'Urgent': 'rgba(220, 53, 69, 0.8)',  // Red
+            'High': 'rgba(255, 193, 7, 0.8)',    // Orange/Yellow
+            'Medium': 'rgba(54, 162, 235, 0.8)', // Blue
+            'Low': 'rgba(40, 167, 69, 0.8)'      // Green
+        };
+    
+    // Store chart instance for later updates
+    priorityChartInstance = new Chart(priorityCtx, {
         type: 'doughnut',
         data: {
             labels: priorityData.map(item => item.priority),
@@ -173,6 +184,34 @@ function initializePriorityChart() {
             }
         }
     });
+}
+
+/**
+ * Update chart colors when accessibility mode changes
+ */
+function updateChartsForAccessibility() {
+    if (priorityChartInstance) {
+        const priorityDataElement = document.getElementById('tasks-by-priority-data');
+        if (priorityDataElement) {
+            try {
+                const priorityData = JSON.parse(priorityDataElement.textContent);
+                const priorityColors = window.PrizmAccessibility ? 
+                    window.PrizmAccessibility.getPriorityColors() : {
+                        'Urgent': 'rgba(220, 53, 69, 0.8)',
+                        'High': 'rgba(255, 193, 7, 0.8)',
+                        'Medium': 'rgba(54, 162, 235, 0.8)',
+                        'Low': 'rgba(40, 167, 69, 0.8)'
+                    };
+                
+                priorityChartInstance.data.datasets[0].backgroundColor = 
+                    priorityData.map(item => priorityColors[item.priority] || 'rgba(108, 117, 125, 0.8)');
+                priorityChartInstance.update();
+                console.log('Priority chart colors updated for accessibility mode');
+            } catch (e) {
+                console.error('Failed to update priority chart:', e);
+            }
+        }
+    }
 }
 
 function initializeUserChart() {

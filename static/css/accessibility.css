@@ -1,0 +1,587 @@
+/* ============================================
+   ACCESSIBILITY CSS - Color Blind Friendly Mode
+   ============================================
+   
+   This file provides color blind friendly alternatives using:
+   - Blue/Orange color palette (distinguishable for most color blindness types)
+   - Pattern indicators (stripes, dots, shapes)
+   - Icons alongside colors for redundant visual cues
+   
+   Activated by adding 'colorblind-mode' class to body
+   ============================================ */
+
+/* ============================================
+   CSS VARIABLES FOR COLOR BLIND MODE
+   ============================================ */
+
+body.colorblind-mode {
+    /* Priority Colors - Blue/Orange/Purple palette */
+    --priority-urgent: #d62728;      /* Darker red - still visible */
+    --priority-urgent-bg: #ffeaea;
+    --priority-urgent-pattern: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 2px,
+        rgba(214, 39, 40, 0.3) 2px,
+        rgba(214, 39, 40, 0.3) 4px
+    );
+    
+    --priority-high: #ff7f0e;        /* Orange - highly visible */
+    --priority-high-bg: #fff3e0;
+    --priority-high-pattern: repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 3px,
+        rgba(255, 127, 14, 0.3) 3px,
+        rgba(255, 127, 14, 0.3) 6px
+    );
+    
+    --priority-medium: #1f77b4;      /* Blue - safe for all types */
+    --priority-medium-bg: #e3f2fd;
+    --priority-medium-pattern: none;
+    
+    --priority-low: #7f7f7f;         /* Gray - neutral */
+    --priority-low-bg: #f5f5f5;
+    --priority-low-pattern: none;
+    
+    /* Status Colors */
+    --status-success: #2ca02c;       /* Darker green */
+    --status-warning: #ff7f0e;       /* Orange */
+    --status-danger: #d62728;        /* Darker red */
+    --status-info: #1f77b4;          /* Blue */
+    
+    /* Chart Colors - Optimized for color blindness */
+    --chart-color-1: #1f77b4;        /* Blue */
+    --chart-color-2: #ff7f0e;        /* Orange */
+    --chart-color-3: #2ca02c;        /* Green */
+    --chart-color-4: #d62728;        /* Red */
+    --chart-color-5: #9467bd;        /* Purple */
+    --chart-color-6: #8c564b;        /* Brown */
+    --chart-color-7: #e377c2;        /* Pink */
+    --chart-color-8: #7f7f7f;        /* Gray */
+}
+
+/* ============================================
+   PRIORITY BADGES WITH PATTERNS & ICONS
+   ============================================ */
+
+/* Base styles for all priority badges in colorblind mode */
+body.colorblind-mode .priority-urgent,
+body.colorblind-mode .badge.priority-urgent,
+body.colorblind-mode .priority-badge[class*="urgent"] {
+    background-color: var(--priority-urgent) !important;
+    background-image: var(--priority-urgent-pattern) !important;
+    color: white !important;
+    border: 2px solid var(--priority-urgent) !important;
+    position: relative;
+}
+
+body.colorblind-mode .priority-urgent::before,
+body.colorblind-mode .badge.priority-urgent::before {
+    content: "⬆⬆ ";
+    font-size: 0.7em;
+}
+
+body.colorblind-mode .priority-high,
+body.colorblind-mode .badge.priority-high,
+body.colorblind-mode .priority-badge[class*="high"] {
+    background-color: var(--priority-high) !important;
+    background-image: var(--priority-high-pattern) !important;
+    color: white !important;
+    border: 2px solid var(--priority-high) !important;
+}
+
+body.colorblind-mode .priority-high::before,
+body.colorblind-mode .badge.priority-high::before {
+    content: "⬆ ";
+    font-size: 0.8em;
+}
+
+body.colorblind-mode .priority-medium,
+body.colorblind-mode .badge.priority-medium,
+body.colorblind-mode .priority-badge[class*="medium"] {
+    background-color: var(--priority-medium) !important;
+    color: white !important;
+    border: 2px solid var(--priority-medium) !important;
+}
+
+body.colorblind-mode .priority-medium::before,
+body.colorblind-mode .badge.priority-medium::before {
+    content: "● ";
+    font-size: 0.7em;
+}
+
+body.colorblind-mode .priority-low,
+body.colorblind-mode .badge.priority-low,
+body.colorblind-mode .priority-badge[class*="low"] {
+    background-color: var(--priority-low) !important;
+    color: white !important;
+    border: 2px solid var(--priority-low) !important;
+}
+
+body.colorblind-mode .priority-low::before,
+body.colorblind-mode .badge.priority-low::before {
+    content: "○ ";
+    font-size: 0.8em;
+}
+
+/* ============================================
+   BOOTSTRAP BADGE OVERRIDES
+   ============================================ */
+
+body.colorblind-mode .bg-success,
+body.colorblind-mode .badge.bg-success {
+    background-color: var(--status-success) !important;
+    border: 2px solid var(--status-success) !important;
+}
+
+body.colorblind-mode .bg-success::before {
+    content: "✓ ";
+}
+
+body.colorblind-mode .bg-warning,
+body.colorblind-mode .badge.bg-warning {
+    background-color: var(--status-warning) !important;
+    color: white !important;
+    border: 2px solid var(--status-warning) !important;
+}
+
+body.colorblind-mode .bg-warning::before {
+    content: "⚠ ";
+}
+
+body.colorblind-mode .bg-danger,
+body.colorblind-mode .badge.bg-danger {
+    background-color: var(--status-danger) !important;
+    background-image: var(--priority-urgent-pattern) !important;
+    border: 2px solid var(--status-danger) !important;
+}
+
+body.colorblind-mode .bg-danger::before {
+    content: "✕ ";
+}
+
+body.colorblind-mode .bg-info,
+body.colorblind-mode .badge.bg-info {
+    background-color: var(--status-info) !important;
+    border: 2px solid var(--status-info) !important;
+}
+
+body.colorblind-mode .bg-info::before {
+    content: "ℹ ";
+}
+
+/* ============================================
+   ALERT BOXES WITH PATTERNS
+   ============================================ */
+
+body.colorblind-mode .alert-success {
+    background-color: rgba(44, 160, 44, 0.15) !important;
+    border-color: var(--status-success) !important;
+    border-left: 5px solid var(--status-success) !important;
+}
+
+body.colorblind-mode .alert-success::before {
+    content: "✓ SUCCESS: ";
+    font-weight: bold;
+    color: var(--status-success);
+}
+
+body.colorblind-mode .alert-warning {
+    background-color: rgba(255, 127, 14, 0.15) !important;
+    border-color: var(--status-warning) !important;
+    border-left: 5px solid var(--status-warning) !important;
+}
+
+body.colorblind-mode .alert-warning::before {
+    content: "⚠ WARNING: ";
+    font-weight: bold;
+    color: var(--status-warning);
+}
+
+body.colorblind-mode .alert-danger {
+    background-color: rgba(214, 39, 40, 0.15) !important;
+    border-color: var(--status-danger) !important;
+    border-left: 5px solid var(--status-danger) !important;
+    background-image: var(--priority-urgent-pattern) !important;
+}
+
+body.colorblind-mode .alert-danger::before {
+    content: "✕ ERROR: ";
+    font-weight: bold;
+    color: var(--status-danger);
+}
+
+body.colorblind-mode .alert-info {
+    background-color: rgba(31, 119, 180, 0.15) !important;
+    border-color: var(--status-info) !important;
+    border-left: 5px solid var(--status-info) !important;
+}
+
+body.colorblind-mode .alert-info::before {
+    content: "ℹ INFO: ";
+    font-weight: bold;
+    color: var(--status-info);
+}
+
+/* ============================================
+   PROGRESS BARS WITH PATTERNS
+   ============================================ */
+
+body.colorblind-mode .progress-bar.bg-success {
+    background-color: var(--status-success) !important;
+    background-image: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 5px,
+        rgba(255, 255, 255, 0.2) 5px,
+        rgba(255, 255, 255, 0.2) 10px
+    ) !important;
+}
+
+body.colorblind-mode .progress-bar.bg-warning {
+    background-color: var(--status-warning) !important;
+    background-image: repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 5px,
+        rgba(255, 255, 255, 0.2) 5px,
+        rgba(255, 255, 255, 0.2) 10px
+    ) !important;
+}
+
+body.colorblind-mode .progress-bar.bg-danger {
+    background-color: var(--status-danger) !important;
+    background-image: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 5px,
+        rgba(255, 255, 255, 0.3) 5px,
+        rgba(255, 255, 255, 0.3) 10px
+    ) !important;
+}
+
+body.colorblind-mode .progress-bar.bg-info {
+    background-color: var(--status-info) !important;
+}
+
+/* ============================================
+   BORDER LEFT INDICATORS (Analytics Cards)
+   ============================================ */
+
+body.colorblind-mode .border-left-success,
+body.colorblind-mode .border-left-primary {
+    border-left-color: var(--status-info) !important;
+}
+
+body.colorblind-mode .border-left-warning {
+    border-left-color: var(--status-warning) !important;
+}
+
+body.colorblind-mode .border-left-danger {
+    border-left-color: var(--status-danger) !important;
+}
+
+body.colorblind-mode .border-left-info {
+    border-left-color: var(--status-info) !important;
+}
+
+/* ============================================
+   KANBAN TASK CARDS
+   ============================================ */
+
+body.colorblind-mode .task-card.priority-urgent,
+body.colorblind-mode .kanban-task.priority-urgent {
+    border-left: 5px solid var(--priority-urgent) !important;
+    background-image: var(--priority-urgent-pattern) !important;
+}
+
+body.colorblind-mode .task-card.priority-high,
+body.colorblind-mode .kanban-task.priority-high {
+    border-left: 5px solid var(--priority-high) !important;
+}
+
+body.colorblind-mode .task-card.priority-medium,
+body.colorblind-mode .kanban-task.priority-medium {
+    border-left: 5px solid var(--priority-medium) !important;
+}
+
+body.colorblind-mode .task-card.priority-low,
+body.colorblind-mode .kanban-task.priority-low {
+    border-left: 5px solid var(--priority-low) !important;
+}
+
+/* ============================================
+   OVERDUE/DUE DATE INDICATORS
+   ============================================ */
+
+body.colorblind-mode .task-due-date.overdue {
+    color: var(--status-danger) !important;
+    font-weight: 700 !important;
+    text-decoration: underline !important;
+}
+
+body.colorblind-mode .task-due-date.overdue::before {
+    content: "⏰ ";
+}
+
+/* ============================================
+   STATS CARDS
+   ============================================ */
+
+body.colorblind-mode .stats-card.success {
+    border-left-color: var(--status-success) !important;
+}
+
+body.colorblind-mode .stats-card.warning {
+    border-left-color: var(--status-warning) !important;
+}
+
+body.colorblind-mode .stats-card.danger {
+    border-left-color: var(--status-danger) !important;
+}
+
+body.colorblind-mode .stats-card.info {
+    border-left-color: var(--status-info) !important;
+}
+
+/* ============================================
+   GANTT CHART BARS
+   ============================================ */
+
+body.colorblind-mode .gantt .bar[data-priority="urgent"] {
+    fill: var(--priority-urgent) !important;
+    stroke: #000 !important;
+    stroke-width: 2px !important;
+    stroke-dasharray: 4,2 !important;
+}
+
+body.colorblind-mode .gantt .bar[data-priority="high"] {
+    fill: var(--priority-high) !important;
+    stroke: #000 !important;
+    stroke-width: 1px !important;
+}
+
+body.colorblind-mode .gantt .bar[data-priority="medium"] {
+    fill: var(--priority-medium) !important;
+}
+
+body.colorblind-mode .gantt .bar[data-priority="low"] {
+    fill: var(--priority-low) !important;
+}
+
+/* ============================================
+   ACTION ITEMS / URGENCY INDICATORS
+   ============================================ */
+
+body.colorblind-mode .action-item.urgency-high {
+    border-left-color: var(--status-danger) !important;
+    background: rgba(214, 39, 40, 0.1) !important;
+}
+
+body.colorblind-mode .action-item.urgency-medium {
+    border-left-color: var(--status-warning) !important;
+    background: rgba(255, 127, 14, 0.1) !important;
+}
+
+body.colorblind-mode .action-item.urgency-low {
+    border-left-color: var(--status-success) !important;
+    background: rgba(44, 160, 44, 0.1) !important;
+}
+
+/* ============================================
+   TEXT COLOR OVERRIDES
+   ============================================ */
+
+body.colorblind-mode .text-success {
+    color: var(--status-success) !important;
+}
+
+body.colorblind-mode .text-warning {
+    color: var(--status-warning) !important;
+}
+
+body.colorblind-mode .text-danger {
+    color: var(--status-danger) !important;
+}
+
+body.colorblind-mode .text-info {
+    color: var(--status-info) !important;
+}
+
+/* ============================================
+   ACCESSIBILITY TOGGLE BUTTON STYLES
+   ============================================ */
+
+#accessibility-toggle {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    color: white;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 0.5rem;
+}
+
+#accessibility-toggle:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.8);
+}
+
+#accessibility-toggle:focus {
+    outline: 2px solid rgba(255, 255, 255, 0.5);
+    outline-offset: 2px;
+}
+
+#accessibility-toggle.active {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: white;
+}
+
+#accessibility-toggle i {
+    font-size: 1rem;
+}
+
+/* Accessibility indicator when mode is active */
+body.colorblind-mode #accessibility-toggle::after {
+    content: "";
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    background: #28a745;
+    border-radius: 50%;
+    border: 1px solid white;
+}
+
+/* ============================================
+   LEGEND/KEY FOR COLOR BLIND MODE
+   ============================================ */
+
+.accessibility-legend {
+    display: none;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 0.875rem;
+}
+
+body.colorblind-mode .accessibility-legend {
+    display: block;
+}
+
+.accessibility-legend-title {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #495057;
+}
+
+.accessibility-legend-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.accessibility-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.accessibility-legend-item .symbol {
+    font-weight: bold;
+    min-width: 24px;
+    text-align: center;
+}
+
+/* ============================================
+   FOCUS INDICATORS (Enhanced for accessibility)
+   ============================================ */
+
+body.colorblind-mode *:focus {
+    outline: 3px solid var(--status-info) !important;
+    outline-offset: 2px !important;
+}
+
+body.colorblind-mode a:focus,
+body.colorblind-mode button:focus,
+body.colorblind-mode input:focus,
+body.colorblind-mode select:focus,
+body.colorblind-mode textarea:focus {
+    outline: 3px solid var(--status-info) !important;
+    outline-offset: 2px !important;
+}
+
+/* ============================================
+   DARK MODE + COLORBLIND MODE COMBINATION
+   ============================================ */
+
+body.dark-mode.colorblind-mode {
+    --priority-urgent-bg: rgba(214, 39, 40, 0.2);
+    --priority-high-bg: rgba(255, 127, 14, 0.2);
+    --priority-medium-bg: rgba(31, 119, 180, 0.2);
+    --priority-low-bg: rgba(127, 127, 127, 0.2);
+}
+
+body.dark-mode.colorblind-mode .accessibility-legend {
+    background: #2d2d2d;
+    border-color: #444;
+    color: #e8e8e8;
+}
+
+body.dark-mode.colorblind-mode .accessibility-legend-title {
+    color: #e8e8e8;
+}
+
+/* ============================================
+   TOOLTIP FOR ACCESSIBILITY BUTTON
+   ============================================ */
+
+.accessibility-tooltip {
+    position: absolute;
+    background: #333;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    z-index: 1100;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.accessibility-tooltip.show {
+    opacity: 1;
+}
+
+.accessibility-tooltip::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: #333;
+}
+
+/* ============================================
+   PRINT STYLES - Ensure patterns print well
+   ============================================ */
+
+@media print {
+    body.colorblind-mode .priority-urgent,
+    body.colorblind-mode .priority-high,
+    body.colorblind-mode .priority-medium,
+    body.colorblind-mode .priority-low {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+}

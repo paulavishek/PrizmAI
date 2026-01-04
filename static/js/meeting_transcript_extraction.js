@@ -249,7 +249,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const cardDiv = document.createElement('div');
         cardDiv.className = 'col-md-6 col-lg-4 mb-3';
         
-        const priorityColors = {
+        // Use accessibility-aware color mapping
+        const isColorblindMode = window.PrizmAccessibility && window.PrizmAccessibility.isColorblindModeActive();
+        const priorityColors = isColorblindMode ? {
+            low: 'secondary',      // Gray
+            medium: 'info',        // Blue
+            high: 'warning',       // Orange
+            urgent: 'danger'       // Red
+        } : {
             low: 'success',
             medium: 'warning',
             high: 'danger',

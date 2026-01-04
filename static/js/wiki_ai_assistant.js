@@ -570,7 +570,14 @@ function showModalError(modalBody, message) {
 
 // Helper functions
 function getPriorityColor(priority) {
-    const colors = {
+    // Use accessibility-aware color mapping
+    const isColorblindMode = window.PrizmAccessibility && window.PrizmAccessibility.isColorblindModeActive();
+    const colors = isColorblindMode ? {
+        'urgent': 'danger',
+        'high': 'warning',
+        'medium': 'info',
+        'low': 'secondary'
+    } : {
         'urgent': 'danger',
         'high': 'warning',
         'medium': 'primary',
@@ -590,7 +597,13 @@ function getSeverityColor(severity) {
 }
 
 function getProbabilityColor(probability) {
-    const colors = {
+    // Use accessibility-aware color mapping
+    const isColorblindMode = window.PrizmAccessibility && window.PrizmAccessibility.isColorblindModeActive();
+    const colors = isColorblindMode ? {
+        'high': 'danger',
+        'medium': 'warning',
+        'low': 'info'       // Use blue instead of green
+    } : {
         'high': 'danger',
         'medium': 'warning',
         'low': 'success'
