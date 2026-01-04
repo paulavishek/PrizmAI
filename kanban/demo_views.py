@@ -400,11 +400,26 @@ def demo_dashboard(request):
         return render(request, 'kanban/demo_dashboard.html', context)
     
     # Get demo boards - these are visible to ALL users (using constants)
+    # Also include boards created by this demo session (using browser fingerprint)
+    browser_fingerprint = request.session.get('browser_fingerprint')
+    
+    # Start with official demo boards
     demo_boards = Board.objects.filter(
         organization__in=demo_orgs,
         name__in=DEMO_BOARD_NAMES
     ).prefetch_related('members')
     logger.info(f"demo_dashboard: DEMO_BOARD_NAMES={DEMO_BOARD_NAMES}, found {demo_boards.count()} boards")
+    
+    # Also include boards created by this user during demo mode
+    user_created_boards = Board.objects.none()
+    if browser_fingerprint:
+        user_created_boards = Board.objects.filter(
+            created_by_session=browser_fingerprint
+        ).prefetch_related('members')
+        if user_created_boards.exists():
+            logger.info(f"demo_dashboard: Found {user_created_boards.count()} user-created boards for this session")
+            # Combine official demo boards with user-created boards
+            demo_boards = (demo_boards | user_created_boards).distinct()
     
     if not demo_boards.exists():
         logger.warning("demo_dashboard: No demo boards found!")
@@ -577,13 +592,25 @@ def demo_board_detail(request, board_id):
     """
     # Get the demo organization - using constants
     demo_orgs = Organization.objects.filter(name__in=DEMO_ORG_NAMES)
+    browser_fingerprint = request.session.get('browser_fingerprint')
     
-    # Get the board - must be a demo board
-    board = get_object_or_404(
-        Board,
+    # Get the board - must be a demo board OR a board created by this demo session
+    # First try to get it as a demo board
+    board = Board.objects.filter(
         id=board_id,
         organization__in=demo_orgs
-    )
+    ).first()
+    
+    # If not found in demo orgs, check if it's a user-created board from this session
+    if not board and browser_fingerprint:
+        board = Board.objects.filter(
+            id=board_id,
+            created_by_session=browser_fingerprint
+        ).first()
+    
+    if not board:
+        from django.http import Http404
+        raise Http404("Board not found or not accessible in demo mode")
     
     # Auto-grant access for authenticated users only
     if request.user.is_authenticated:

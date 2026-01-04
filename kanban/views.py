@@ -253,6 +253,18 @@ def create_board(request):
                 board = form.save(commit=False)
                 board.organization = organization
                 board.created_by = request.user
+                
+                # If in demo mode, track this board as created by this demo session
+                is_demo_mode = request.session.get('is_demo_mode', False)
+                if is_demo_mode:
+                    # Use browser_fingerprint for persistent tracking across session changes
+                    browser_fingerprint = request.session.get('browser_fingerprint')
+                    if browser_fingerprint:
+                        board.created_by_session = browser_fingerprint
+                    else:
+                        # Fallback to session key if fingerprint not available
+                        board.created_by_session = request.session.session_key
+                
                 board.save()
                 board.members.add(request.user)
                 
