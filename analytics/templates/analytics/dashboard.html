@@ -354,6 +354,124 @@
     .insight-box li:last-child {
         border-bottom: none;
     }
+    
+    /* Navigation Tabs */
+    .nav-tabs {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 25px;
+        border-bottom: 2px solid #e5e7eb;
+        padding-bottom: 0;
+    }
+    
+    .nav-tabs a {
+        padding: 12px 24px;
+        text-decoration: none;
+        color: #666;
+        border-radius: 8px 8px 0 0;
+        transition: all 0.2s;
+        font-weight: 500;
+        border: 1px solid transparent;
+        border-bottom: none;
+        margin-bottom: -2px;
+    }
+    
+    .nav-tabs a:hover { 
+        background: #f9fafb;
+        color: #1f2937;
+    }
+    
+    .nav-tabs a.active { 
+        background: white;
+        color: #667eea;
+        border-color: #e5e7eb;
+        border-bottom-color: white;
+    }
+    
+    /* Abuse Stats Section */
+    .abuse-summary {
+        background: linear-gradient(135deg, #fef3c7 0%, #fee2e2 100%);
+        border: 1px solid #fbbf24;
+        border-radius: 12px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+    
+    .abuse-summary-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    
+    .abuse-summary-header h2 {
+        margin: 0;
+        color: #92400e;
+    }
+    
+    .abuse-metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 16px;
+    }
+    
+    .abuse-metric {
+        background: white;
+        padding: 16px;
+        border-radius: 8px;
+        text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .abuse-metric .value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #1f2937;
+    }
+    
+    .abuse-metric .label {
+        font-size: 0.85rem;
+        color: #6b7280;
+        margin-top: 4px;
+    }
+    
+    .abuse-metric.danger .value { color: #dc2626; }
+    .abuse-metric.warning .value { color: #d97706; }
+    .abuse-metric.success .value { color: #059669; }
+    
+    .high-risk-list {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(0,0,0,0.1);
+    }
+    
+    .high-risk-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        background: white;
+        border-radius: 6px;
+        margin-bottom: 8px;
+        font-size: 0.9rem;
+    }
+    
+    .high-risk-item code {
+        font-family: monospace;
+        background: #f3f4f6;
+        padding: 2px 6px;
+        border-radius: 4px;
+    }
+    
+    .badge-sm {
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .badge-danger { background: #fee2e2; color: #dc2626; }
+    .badge-warning { background: #fef3c7; color: #d97706; }
 </style>
 {% endblock %}
 
@@ -373,6 +491,68 @@
             </select>
         </div>
     </div>
+    
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+        <a href="{% url 'analytics:dashboard' %}" class="active">📈 Overview</a>
+        <a href="{% url 'analytics:abuse_dashboard' %}">🛡️ Demo Security</a>
+        <a href="{% url 'analytics:abuse_visitor_list' %}">👥 Visitors</a>
+        <a href="{% url 'analytics:abuse_realtime_monitor' %}">📡 Live Monitor</a>
+    </div>
+    
+    <!-- Abuse Prevention Summary (NEW) -->
+    {% if abuse_stats.flagged_count > 0 or abuse_stats.blocked_count > 0 or demo_stats.ai_limit_hit > 0 %}
+    <div class="abuse-summary">
+        <div class="abuse-summary-header">
+            <h2>🛡️ Demo Security Summary</h2>
+            <a href="{% url 'analytics:abuse_dashboard' %}" style="color: #92400e; font-weight: 500;">View Details →</a>
+        </div>
+        <div class="abuse-metrics-grid">
+            <div class="abuse-metric warning">
+                <div class="value">{{ abuse_stats.flagged_count }}</div>
+                <div class="label">⚠️ Flagged IPs</div>
+            </div>
+            <div class="abuse-metric danger">
+                <div class="value">{{ abuse_stats.blocked_count }}</div>
+                <div class="label">🚫 Blocked IPs</div>
+            </div>
+            <div class="abuse-metric">
+                <div class="value">{{ demo_stats.total_demo_sessions }}</div>
+                <div class="label">📋 Demo Sessions</div>
+            </div>
+            <div class="abuse-metric">
+                <div class="value">{{ demo_stats.ai_limit_hit }}</div>
+                <div class="label">🤖 AI Limit Hit</div>
+            </div>
+            <div class="abuse-metric success">
+                <div class="value">{{ demo_stats.conversion_rate }}%</div>
+                <div class="label">🎯 Demo → Signup</div>
+            </div>
+        </div>
+        {% if high_risk_visitors %}
+        <div class="high-risk-list">
+            <strong style="color: #92400e;">⚠️ High-Risk Visitors:</strong>
+            {% for visitor in high_risk_visitors %}
+            <div class="high-risk-item">
+                <div>
+                    <code>{{ visitor.ip_address }}</code>
+                    <span style="color: #666; margin-left: 10px;">
+                        {{ visitor.total_sessions_created }} sessions • {{ visitor.total_ai_generations }} AI uses
+                    </span>
+                </div>
+                <div>
+                    {% if visitor.is_blocked %}
+                    <span class="badge-sm badge-danger">Blocked</span>
+                    {% elif visitor.is_flagged %}
+                    <span class="badge-sm badge-warning">Flagged</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
     
     <!-- Key Metrics -->
     <div class="metrics-grid">

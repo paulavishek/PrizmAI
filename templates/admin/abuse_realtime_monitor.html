@@ -1,0 +1,527 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Live Monitor - Abuse Monitoring{% endblock %}
+
+{% block extra_css %}
+<style>
+    .realtime-page {
+        padding: 20px;
+    }
+    
+    .nav-tabs {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 25px;
+        border-bottom: 2px solid #e5e7eb;
+        padding-bottom: 0;
+    }
+    
+    .nav-tabs a {
+        padding: 12px 24px;
+        text-decoration: none;
+        color: #666;
+        border-radius: 8px 8px 0 0;
+        transition: all 0.2s;
+        font-weight: 500;
+        border: 1px solid transparent;
+        border-bottom: none;
+        margin-bottom: -2px;
+    }
+    
+    .nav-tabs a:hover { 
+        background: #f9fafb;
+        color: #1f2937;
+    }
+    
+    .nav-tabs a.active { 
+        background: white;
+        color: #667eea;
+        border-color: #e5e7eb;
+        border-bottom-color: white;
+    }
+    
+    .status-bar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 15px 25px;
+        border-radius: 12px;
+        margin-bottom: 20px;
+    }
+    
+    .status-bar .live-indicator {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .pulse {
+        width: 12px;
+        height: 12px;
+        background: #4ade80;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(1.2); }
+    }
+    
+    .metric-pills {
+        display: flex;
+        gap: 20px;
+    }
+    
+    .metric-pill {
+        text-align: center;
+    }
+    
+    .metric-pill .value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    
+    .metric-pill .label {
+        font-size: 0.8rem;
+        opacity: 0.9;
+    }
+    
+    .alerts-section {
+        margin-bottom: 20px;
+    }
+    
+    .alert-item {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 15px 20px;
+        border-radius: 10px;
+        margin-bottom: 10px;
+    }
+    
+    .alert-item.warning {
+        background: #fef3c7;
+        border-left: 4px solid #f59e0b;
+    }
+    
+    .alert-item.danger {
+        background: #fee2e2;
+        border-left: 4px solid #dc2626;
+    }
+    
+    .alert-icon {
+        font-size: 1.5rem;
+    }
+    
+    .alert-message {
+        flex: 1;
+    }
+    
+    .alert-time {
+        color: #999;
+        font-size: 0.85rem;
+    }
+    
+    .live-grid {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 20px;
+    }
+    
+    .section-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        overflow: hidden;
+    }
+    
+    .section-header {
+        padding: 15px 20px;
+        background: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .section-header h3 {
+        margin: 0;
+        font-size: 1rem;
+    }
+    
+    .section-body {
+        padding: 0;
+        max-height: 500px;
+        overflow-y: auto;
+    }
+    
+    .session-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .session-item {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 12px 20px;
+        border-bottom: 1px solid #f0f0f0;
+        transition: background 0.2s;
+    }
+    
+    .session-item:hover {
+        background: #f8f9fa;
+    }
+    
+    .session-item.new {
+        animation: slideIn 0.3s ease-out;
+        background: #ecfdf5;
+    }
+    
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateX(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+    
+    .session-icon {
+        font-size: 1.5rem;
+    }
+    
+    .session-details {
+        flex: 1;
+    }
+    
+    .session-ip {
+        font-family: monospace;
+        font-weight: 600;
+    }
+    
+    .session-meta {
+        font-size: 0.85rem;
+        color: #666;
+    }
+    
+    .session-time {
+        font-size: 0.8rem;
+        color: #999;
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .badge-solo { background: #dbeafe; color: #2563eb; }
+    .badge-team { background: #d1fae5; color: #059669; }
+    .badge-danger { background: #fee2e2; color: #dc2626; }
+    .badge-warning { background: #fef3c7; color: #d97706; }
+    
+    .flagged-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .flagged-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 20px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .flagged-item code {
+        font-size: 0.9rem;
+    }
+    
+    .duplicate-list {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+    
+    .duplicate-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 20px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+    
+    .empty-state {
+        padding: 40px;
+        text-align: center;
+        color: #999;
+    }
+    
+    .empty-state .icon {
+        font-size: 3rem;
+        margin-bottom: 10px;
+    }
+    
+    .refresh-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 1.2rem;
+        color: #667eea;
+        transition: transform 0.3s;
+    }
+    
+    .refresh-btn:hover {
+        transform: rotate(180deg);
+    }
+    
+    .refresh-btn.spinning {
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="realtime-page">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h1 style="margin: 0;">📡 Live Monitor</h1>
+        <div>
+            <label style="margin-right: 10px;">
+                <input type="checkbox" id="autoRefresh" checked onchange="toggleAutoRefresh()">
+                Auto-refresh (10s)
+            </label>
+        </div>
+    </div>
+    
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+        <a href="{% url 'analytics:dashboard' %}">📈 Overview</a>
+        <a href="{% url 'analytics:abuse_dashboard' %}">🛡️ Demo Security</a>
+        <a href="{% url 'analytics:abuse_visitor_list' %}">👥 Visitors</a>
+        <a href="{% url 'analytics:abuse_realtime_monitor' %}" class="active">📡 Live Monitor</a>
+    </div>
+    
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <div class="live-indicator">
+            <div class="pulse"></div>
+            <span>Live Monitoring Active</span>
+        </div>
+        <div class="metric-pills">
+            <div class="metric-pill">
+                <div class="value" id="sessionCount">{{ sessions_last_10_min }}</div>
+                <div class="label">Sessions (10 min)</div>
+            </div>
+            <div class="metric-pill">
+                <div class="value" id="alertCount">{{ alerts|length }}</div>
+                <div class="label">Active Alerts</div>
+            </div>
+            <div class="metric-pill">
+                <div class="value" id="flaggedCount">{{ active_flagged|length }}</div>
+                <div class="label">Flagged Active</div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Alerts Section -->
+    {% if alerts %}
+    <div class="alerts-section">
+        <h3 style="margin-bottom: 10px;">⚠️ Active Alerts</h3>
+        {% for alert in alerts %}
+        <div class="alert-item {{ alert.level }}">
+            <div class="alert-icon">
+                {% if alert.level == 'danger' %}🚨{% else %}⚠️{% endif %}
+            </div>
+            <div class="alert-message">{{ alert.message }}</div>
+            <div class="alert-time">Just now</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+    
+    <!-- Live Grid -->
+    <div class="live-grid">
+        <!-- Recent Sessions -->
+        <div class="section-card">
+            <div class="section-header">
+                <h3>📋 Recent Sessions</h3>
+                <button class="refresh-btn" onclick="refreshSessions()" id="refreshBtn">🔄</button>
+            </div>
+            <div class="section-body">
+                <ul class="session-list" id="sessionList">
+                    {% for session in recent_sessions %}
+                    <li class="session-item">
+                        <div class="session-icon">
+                            {% if session.demo_mode == 'solo' %}👤{% else %}👥{% endif %}
+                        </div>
+                        <div class="session-details">
+                            <div class="session-ip">{{ session.ip_address|default:"Unknown IP" }}</div>
+                            <div class="session-meta">
+                                <span class="badge badge-{{ session.demo_mode }}">{{ session.demo_mode }}</span>
+                                {{ session.device_type }} •
+                                AI: {{ session.ai_generations_used }} •
+                                Projects: {{ session.projects_created_in_demo }}
+                            </div>
+                        </div>
+                        <div class="session-time">{{ session.created_at|timesince }} ago</div>
+                    </li>
+                    {% empty %}
+                    <li class="empty-state">
+                        <div class="icon">📭</div>
+                        <div>No recent sessions</div>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Right Column -->
+        <div>
+            <!-- Duplicate IPs -->
+            <div class="section-card" style="margin-bottom: 20px;">
+                <div class="section-header">
+                    <h3>🔁 Multiple Sessions (Same IP)</h3>
+                </div>
+                <div class="section-body">
+                    <ul class="duplicate-list">
+                        {% for dup in duplicate_ips %}
+                        <li class="duplicate-item">
+                            <code>{{ dup.ip_address }}</code>
+                            <span class="badge {% if dup.count >= 5 %}badge-danger{% else %}badge-warning{% endif %}">
+                                {{ dup.count }} sessions
+                            </span>
+                        </li>
+                        {% empty %}
+                        <li class="empty-state" style="padding: 20px;">
+                            <div>No duplicate IPs detected ✓</div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- Active Flagged -->
+            <div class="section-card">
+                <div class="section-header">
+                    <h3>⚠️ Flagged (Active Now)</h3>
+                </div>
+                <div class="section-body">
+                    <ul class="flagged-list">
+                        {% for visitor in active_flagged %}
+                        <li class="flagged-item">
+                            <span class="badge badge-warning">⚠️</span>
+                            <code>{{ visitor.ip_address }}</code>
+                            <span style="color: #999; font-size: 0.85rem;">
+                                {{ visitor.total_sessions_created }} sessions
+                            </span>
+                        </li>
+                        {% empty %}
+                        <li class="empty-state" style="padding: 20px;">
+                            <div>No flagged visitors active ✓</div>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let autoRefreshInterval = null;
+let lastTimestamp = '{{ recent_sessions.0.created_at.isoformat|default:"" }}';
+
+function toggleAutoRefresh() {
+    const enabled = document.getElementById('autoRefresh').checked;
+    if (enabled) {
+        startAutoRefresh();
+    } else {
+        stopAutoRefresh();
+    }
+}
+
+function startAutoRefresh() {
+    stopAutoRefresh();
+    autoRefreshInterval = setInterval(refreshSessions, 10000);
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+}
+
+function refreshSessions() {
+    const btn = document.getElementById('refreshBtn');
+    btn.classList.add('spinning');
+    
+    fetch(`{% url 'analytics:abuse_api_sessions' %}?since=${encodeURIComponent(lastTimestamp || '')}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.sessions && data.sessions.length > 0) {
+                const list = document.getElementById('sessionList');
+                
+                // Add new sessions to the top
+                data.sessions.reverse().forEach(session => {
+                    const li = document.createElement('li');
+                    li.className = 'session-item new';
+                    li.innerHTML = `
+                        <div class="session-icon">${session.demo_mode === 'solo' ? '👤' : '👥'}</div>
+                        <div class="session-details">
+                            <div class="session-ip">${session.ip_address || 'Unknown IP'}</div>
+                            <div class="session-meta">
+                                <span class="badge badge-${session.demo_mode}">${session.demo_mode}</span>
+                                ${session.device_type} •
+                                AI: ${session.ai_used} •
+                                Projects: ${session.projects}
+                            </div>
+                        </div>
+                        <div class="session-time">Just now</div>
+                    `;
+                    list.insertBefore(li, list.firstChild);
+                });
+                
+                // Update last timestamp
+                lastTimestamp = data.timestamp;
+                
+                // Update counter
+                const currentCount = parseInt(document.getElementById('sessionCount').textContent);
+                document.getElementById('sessionCount').textContent = currentCount + data.sessions.length;
+                
+                // Remove old items if list is too long
+                while (list.children.length > 50) {
+                    list.removeChild(list.lastChild);
+                }
+            }
+            
+            btn.classList.remove('spinning');
+        })
+        .catch(err => {
+            console.error('Refresh error:', err);
+            btn.classList.remove('spinning');
+        });
+}
+
+// Start auto-refresh on page load
+if (document.getElementById('autoRefresh').checked) {
+    startAutoRefresh();
+}
+</script>
+{% endblock %}

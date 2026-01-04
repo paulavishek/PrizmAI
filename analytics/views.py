@@ -187,11 +187,14 @@ def submit_feedback_ajax(request):
 def analytics_dashboard(request):
     """
     Comprehensive analytics dashboard combining session data,
-    feedback, and engagement metrics.
+    feedback, engagement metrics, and abuse prevention stats.
     """
     # Date range for analysis
     days = int(request.GET.get('days', 30))
     start_date = timezone.now() - timedelta(days=days)
+    
+    # Import abuse prevention models
+    from analytics.models import DemoAbusePrevention, DemoSession
     
     # === USER ACQUISITION & RETENTION ===
     total_sessions = UserSession.objects.filter(session_start__gte=start_date).count()
@@ -320,6 +323,40 @@ def analytics_dashboard(request):
         engagement_level='very_high'
     ).select_related('user').order_by('-engagement_score')[:10]
     
+    # === ABUSE PREVENTION STATS ===
+    abuse_stats = {
+        'total_records': DemoAbusePrevention.objects.count(),
+        'flagged_count': DemoAbusePrevention.objects.filter(is_flagged=True).count(),
+        'blocked_count': DemoAbusePrevention.objects.filter(is_blocked=True).count(),
+        'recent_flagged': DemoAbusePrevention.objects.filter(
+            is_flagged=True,
+            last_seen__gte=start_date
+        ).count(),
+    }
+    
+    # Demo session stats
+    demo_stats = {
+        'total_demo_sessions': DemoSession.objects.filter(created_at__gte=start_date).count(),
+        'solo_sessions': DemoSession.objects.filter(created_at__gte=start_date, demo_mode='solo').count(),
+        'team_sessions': DemoSession.objects.filter(created_at__gte=start_date, demo_mode='team').count(),
+        'demo_conversions': DemoSession.objects.filter(created_at__gte=start_date, converted_to_signup=True).count(),
+        'ai_limit_hit': DemoSession.objects.filter(created_at__gte=start_date, ai_generations_used__gte=20).count(),
+        'project_limit_hit': DemoSession.objects.filter(created_at__gte=start_date, projects_created_in_demo__gte=2).count(),
+    }
+    
+    # High risk visitors (potential abusers)
+    high_risk_visitors = DemoAbusePrevention.objects.filter(
+        Q(is_flagged=True) | Q(total_sessions_created__gte=5) | Q(total_ai_generations__gte=30)
+    ).order_by('-last_seen')[:5]
+    
+    # Calculate demo conversion rate
+    if demo_stats['total_demo_sessions'] > 0:
+        demo_stats['conversion_rate'] = round(
+            (demo_stats['demo_conversions'] / demo_stats['total_demo_sessions']) * 100, 1
+        )
+    else:
+        demo_stats['conversion_rate'] = 0
+    
     context = {
         'days': days,
         'start_date': start_date,
@@ -353,6 +390,11 @@ def analytics_dashboard(request):
         # Recent activity
         'recent_feedback': recent_feedback,
         'high_engagement_users': high_engagement_users,
+        
+        # Abuse prevention (NEW)
+        'abuse_stats': abuse_stats,
+        'demo_stats': demo_stats,
+        'high_risk_visitors': high_risk_visitors,
     }
     
     return render(request, 'analytics/dashboard.html', context)

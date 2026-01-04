@@ -1,0 +1,440 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Visitors - Abuse Monitoring{% endblock %}
+
+{% block extra_css %}
+<style>
+    .visitor-list-page {
+        padding: 20px;
+    }
+    
+    .nav-tabs {
+        display: flex;
+        gap: 5px;
+        margin-bottom: 25px;
+        border-bottom: 2px solid #e5e7eb;
+        padding-bottom: 0;
+    }
+    
+    .nav-tabs a {
+        padding: 12px 24px;
+        text-decoration: none;
+        color: #666;
+        border-radius: 8px 8px 0 0;
+        transition: all 0.2s;
+        font-weight: 500;
+        border: 1px solid transparent;
+        border-bottom: none;
+        margin-bottom: -2px;
+    }
+    
+    .nav-tabs a:hover { 
+        background: #f9fafb;
+        color: #1f2937;
+    }
+    
+    .nav-tabs a.active { 
+        background: white;
+        color: #667eea;
+        border-color: #e5e7eb;
+        border-bottom-color: white;
+    }
+    
+    .filter-bar {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 20px;
+        flex-wrap: wrap;
+        align-items: center;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    }
+    
+    .filter-bar label {
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: #666;
+    }
+    
+    .filter-bar select,
+    .filter-bar input {
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 0.9rem;
+    }
+    
+    .section-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        overflow: hidden;
+    }
+    
+    .visitor-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .visitor-table th,
+    .visitor-table td {
+        padding: 12px 15px;
+        text-align: left;
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .visitor-table th {
+        background: #f8f9fa;
+        font-weight: 600;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        color: #666;
+        position: sticky;
+        top: 0;
+    }
+    
+    .visitor-table tr:hover {
+        background: #f8f9fa;
+    }
+    
+    .visitor-table th a {
+        color: inherit;
+        text-decoration: none;
+    }
+    
+    .visitor-table th a:hover {
+        color: #667eea;
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    
+    .badge-danger { background: #fee2e2; color: #dc2626; }
+    .badge-warning { background: #fef3c7; color: #d97706; }
+    .badge-info { background: #dbeafe; color: #2563eb; }
+    .badge-success { background: #d1fae5; color: #059669; }
+    
+    .action-btn {
+        padding: 6px 12px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 0.8rem;
+        transition: all 0.2s;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .action-btn:hover { transform: translateY(-1px); }
+    .action-btn.block { background: #dc2626; color: white; }
+    .action-btn.flag { background: #f59e0b; color: white; }
+    .action-btn.view { background: #3b82f6; color: white; }
+    .action-btn.unblock { background: #059669; color: white; }
+    
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 5px;
+        padding: 20px;
+    }
+    
+    .pagination a,
+    .pagination span {
+        padding: 8px 14px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        text-decoration: none;
+        color: #333;
+    }
+    
+    .pagination a:hover {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+    }
+    
+    .pagination .current {
+        background: #667eea;
+        color: white;
+        border-color: #667eea;
+    }
+    
+    .bulk-actions {
+        display: none;
+        gap: 10px;
+        padding: 15px;
+        background: #f0f9ff;
+        border-bottom: 1px solid #ddd;
+        align-items: center;
+    }
+    
+    .bulk-actions.visible {
+        display: flex;
+    }
+    
+    .checkbox-col {
+        width: 40px;
+    }
+    
+    input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="visitor-list-page">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h1 style="margin: 0;">👥 Visitor List</h1>
+        <span style="color: #666;">{{ total_count }} total visitors</span>
+    </div>
+    
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+        <a href="{% url 'analytics:dashboard' %}">📈 Overview</a>
+        <a href="{% url 'analytics:abuse_dashboard' %}">🛡️ Demo Security</a>
+        <a href="{% url 'analytics:abuse_visitor_list' %}" class="active">👥 Visitors</a>
+        <a href="{% url 'analytics:abuse_realtime_monitor' %}">📡 Live Monitor</a>
+    </div>
+    
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+        <label>Filter:</label>
+        <select id="filterSelect" onchange="applyFilters()">
+            <option value="all" {% if filter_type == 'all' %}selected{% endif %}>All Visitors</option>
+            <option value="flagged" {% if filter_type == 'flagged' %}selected{% endif %}>Flagged Only</option>
+            <option value="blocked" {% if filter_type == 'blocked' %}selected{% endif %}>Blocked Only</option>
+            <option value="high_usage" {% if filter_type == 'high_usage' %}selected{% endif %}>High Usage (5+ sessions)</option>
+            <option value="high_ai" {% if filter_type == 'high_ai' %}selected{% endif %}>High AI (30+ uses)</option>
+        </select>
+        
+        <label>Search IP:</label>
+        <input type="text" id="searchInput" placeholder="Enter IP address..." value="{{ search }}" onkeyup="if(event.key==='Enter') applyFilters()">
+        
+        <label>Sort:</label>
+        <select id="sortSelect" onchange="applyFilters()">
+            <option value="-last_seen" {% if sort == '-last_seen' %}selected{% endif %}>Last Seen (newest)</option>
+            <option value="last_seen" {% if sort == 'last_seen' %}selected{% endif %}>Last Seen (oldest)</option>
+            <option value="-total_sessions_created" {% if sort == '-total_sessions_created' %}selected{% endif %}>Sessions (high to low)</option>
+            <option value="-total_ai_generations" {% if sort == '-total_ai_generations' %}selected{% endif %}>AI Usage (high to low)</option>
+        </select>
+        
+        <button onclick="applyFilters()" class="action-btn view">Apply</button>
+        <button onclick="clearFilters()" class="action-btn" style="background: #6b7280; color: white;">Clear</button>
+    </div>
+    
+    <!-- Bulk Actions -->
+    <div class="bulk-actions" id="bulkActions">
+        <span id="selectedCount">0 selected</span>
+        <button onclick="bulkAction('flag')" class="action-btn flag">Flag Selected</button>
+        <button onclick="bulkAction('block')" class="action-btn block">Block Selected</button>
+        <button onclick="bulkAction('unblock')" class="action-btn unblock">Unblock Selected</button>
+        <button onclick="bulkAction('delete')" class="action-btn" style="background: #374151; color: white;">Delete Selected</button>
+    </div>
+    
+    <!-- Visitors Table -->
+    <div class="section-card">
+        <table class="visitor-table">
+            <thead>
+                <tr>
+                    <th class="checkbox-col">
+                        <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                    </th>
+                    <th><a href="?sort={% if sort == 'ip_address' %}-{% endif %}ip_address&filter={{ filter_type }}&search={{ search }}">IP Address</a></th>
+                    <th>Fingerprint</th>
+                    <th><a href="?sort={% if sort == '-total_sessions_created' %}total_sessions_created{% else %}-total_sessions_created{% endif %}&filter={{ filter_type }}&search={{ search }}">Sessions</a></th>
+                    <th><a href="?sort={% if sort == '-total_ai_generations' %}total_ai_generations{% else %}-total_ai_generations{% endif %}&filter={{ filter_type }}&search={{ search }}">AI Used</a></th>
+                    <th>Projects</th>
+                    <th>Status</th>
+                    <th><a href="?sort={% if sort == '-last_seen' %}last_seen{% else %}-last_seen{% endif %}&filter={{ filter_type }}&search={{ search }}">Last Seen</a></th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for visitor in visitors %}
+                <tr>
+                    <td class="checkbox-col">
+                        <input type="checkbox" class="visitor-checkbox" value="{{ visitor.id }}" onchange="updateBulkActions()">
+                    </td>
+                    <td>
+                        <code style="font-size: 0.9rem;">{{ visitor.ip_address }}</code>
+                    </td>
+                    <td>
+                        {% if visitor.browser_fingerprint %}
+                            <code style="font-size: 0.75rem; color: #999;">{{ visitor.browser_fingerprint|truncatechars:12 }}</code>
+                        {% else %}
+                            <span style="color: #999;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <strong {% if visitor.total_sessions_created >= 10 %}style="color: #dc2626;"{% elif visitor.total_sessions_created >= 5 %}style="color: #d97706;"{% endif %}>
+                            {{ visitor.total_sessions_created }}
+                        </strong>
+                    </td>
+                    <td>
+                        <strong {% if visitor.total_ai_generations >= 40 %}style="color: #dc2626;"{% elif visitor.total_ai_generations >= 20 %}style="color: #d97706;"{% endif %}>
+                            {{ visitor.total_ai_generations }}
+                        </strong>
+                    </td>
+                    <td>{{ visitor.total_projects_created }}</td>
+                    <td>
+                        {% if visitor.is_blocked %}
+                            <span class="badge badge-danger">Blocked</span>
+                        {% elif visitor.is_flagged %}
+                            <span class="badge badge-warning">Flagged</span>
+                        {% elif visitor.total_sessions_created >= 10 %}
+                            <span class="badge badge-danger">Abuse</span>
+                        {% elif visitor.total_sessions_created >= 5 %}
+                            <span class="badge badge-warning">High</span>
+                        {% else %}
+                            <span class="badge badge-success">Normal</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size: 0.85rem; color: #666;">
+                        {{ visitor.last_seen|timesince }} ago
+                    </td>
+                    <td>
+                        <a href="{% url 'analytics:abuse_visitor_detail' visitor.id %}" class="action-btn view">View</a>
+                        {% if visitor.is_blocked %}
+                            <button onclick="unblockVisitor({{ visitor.id }})" class="action-btn unblock">Unblock</button>
+                        {% else %}
+                            <button onclick="blockVisitor({{ visitor.id }})" class="action-btn block">Block</button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" style="text-align: center; padding: 50px; color: #999;">
+                        No visitors found matching your criteria
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        
+        <!-- Pagination -->
+        {% if visitors.has_other_pages %}
+        <div class="pagination">
+            {% if visitors.has_previous %}
+                <a href="?page=1&filter={{ filter_type }}&search={{ search }}&sort={{ sort }}">« First</a>
+                <a href="?page={{ visitors.previous_page_number }}&filter={{ filter_type }}&search={{ search }}&sort={{ sort }}">‹ Prev</a>
+            {% endif %}
+            
+            <span class="current">
+                Page {{ visitors.number }} of {{ visitors.paginator.num_pages }}
+            </span>
+            
+            {% if visitors.has_next %}
+                <a href="?page={{ visitors.next_page_number }}&filter={{ filter_type }}&search={{ search }}&sort={{ sort }}">Next ›</a>
+                <a href="?page={{ visitors.paginator.num_pages }}&filter={{ filter_type }}&search={{ search }}&sort={{ sort }}">Last »</a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function applyFilters() {
+    const filter = document.getElementById('filterSelect').value;
+    const search = document.getElementById('searchInput').value;
+    const sort = document.getElementById('sortSelect').value;
+    window.location.href = `?filter=${filter}&search=${encodeURIComponent(search)}&sort=${sort}`;
+}
+
+function clearFilters() {
+    window.location.href = '{% url "analytics:abuse_visitor_list" %}';
+}
+
+function toggleSelectAll() {
+    const selectAll = document.getElementById('selectAll');
+    document.querySelectorAll('.visitor-checkbox').forEach(cb => {
+        cb.checked = selectAll.checked;
+    });
+    updateBulkActions();
+}
+
+function updateBulkActions() {
+    const selected = document.querySelectorAll('.visitor-checkbox:checked').length;
+    document.getElementById('selectedCount').textContent = `${selected} selected`;
+    document.getElementById('bulkActions').classList.toggle('visible', selected > 0);
+}
+
+function getSelectedIds() {
+    return Array.from(document.querySelectorAll('.visitor-checkbox:checked'))
+        .map(cb => cb.value);
+}
+
+function bulkAction(action) {
+    const ids = getSelectedIds();
+    if (!ids.length) return;
+    
+    const actionText = {
+        'flag': 'flag',
+        'block': 'block',
+        'unblock': 'unblock',
+        'delete': 'permanently delete'
+    }[action];
+    
+    if (!confirm(`Are you sure you want to ${actionText} ${ids.length} visitor(s)?`)) return;
+    
+    fetch('{% url "analytics:abuse_bulk_action" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify({
+            action: action,
+            visitor_ids: ids
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    });
+}
+
+function blockVisitor(id) {
+    if (!confirm('Block this visitor?')) return;
+    performAction('block', id);
+}
+
+function unblockVisitor(id) {
+    if (!confirm('Unblock this visitor?')) return;
+    performAction('unblock', id);
+}
+
+function performAction(action, id) {
+    fetch('{% url "analytics:abuse_action" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: `action=${action}&visitor_id=${id}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            alert('Error: ' + data.error);
+        }
+    });
+}
+</script>
+{% endblock %}
