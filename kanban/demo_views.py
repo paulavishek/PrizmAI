@@ -43,6 +43,19 @@ def demo_mode_selection(request):
         mode = request.POST.get('mode', 'solo')  # 'solo' or 'team'
         selection_method = request.POST.get('selection_method', 'selected')  # 'selected' or 'skipped'
         
+        # Check abuse prevention BEFORE allowing demo access
+        try:
+            from kanban.utils.demo_abuse_prevention import can_create_demo_session
+            can_create, abuse_message = can_create_demo_session(request)
+            if not can_create:
+                logger.warning(f"Demo access denied due to abuse prevention: {abuse_message}")
+                return render(request, 'demo/mode_selection.html', {
+                    'error': abuse_message,
+                    'abuse_blocked': True,
+                })
+        except Exception as e:
+            logger.warning(f"Could not check abuse prevention: {e}")
+        
         # Track if user was authenticated before starting demo
         was_authenticated = request.user.is_authenticated
         original_user_id = request.user.id if was_authenticated else None
@@ -158,6 +171,13 @@ def demo_mode_selection(request):
                 demo_session.selection_method = selection_method
                 demo_session.user = request.user if request.user.is_authenticated else None
                 demo_session.save()
+            else:
+                # Register new session for abuse prevention tracking
+                try:
+                    from kanban.utils.demo_abuse_prevention import register_new_session
+                    register_new_session(request, request.session.session_key)
+                except Exception as e:
+                    logger.warning(f"Could not register session for abuse prevention: {e}")
             
             # Track selection event with anonymous flag
             DemoAnalytics.objects.create(

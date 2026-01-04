@@ -142,6 +142,11 @@ def record_export_attempt(request):
 def check_ai_generation_limit(request):
     """
     Check if user can use more AI generations in demo mode.
+    
+    Checks BOTH:
+    1. Per-session limit (20 AI generations per session)
+    2. Global limit across all sessions (prevents abuse via new accounts)
+    
     Returns dict with:
     - can_generate: bool
     - current_count: int
@@ -157,6 +162,23 @@ def check_ai_generation_limit(request):
             'is_demo': False
         }
     
+    # Check global limit first (prevents abuse)
+    try:
+        from kanban.utils.demo_abuse_prevention import check_global_ai_limit
+        global_status = check_global_ai_limit(request)
+        if not global_status['can_generate']:
+            return {
+                'can_generate': False,
+                'current_count': global_status['current_count'],
+                'max_allowed': global_status['max_allowed'],
+                'message': global_status['message'],
+                'is_demo': True,
+                'is_global_limit': True
+            }
+    except Exception as e:
+        logger.warning(f"Could not check global AI limit: {e}")
+    
+    # Check per-session limit
     demo_session = get_demo_session(request)
     if not demo_session:
         return {
@@ -187,14 +209,25 @@ def check_ai_generation_limit(request):
 
 
 def increment_ai_generation_count(request):
-    """Increment the AI generation count after using AI in demo mode"""
+    """
+    Increment the AI generation count after using AI in demo mode.
+    Updates BOTH session-level and global (IP-based) counters.
+    """
     if not is_demo_mode(request):
         return
     
+    # Update session counter
     demo_session = get_demo_session(request)
     if demo_session:
         demo_session.ai_generations_used += 1
         demo_session.save(update_fields=['ai_generations_used'])
+    
+    # Update global counter (abuse prevention)
+    try:
+        from kanban.utils.demo_abuse_prevention import increment_global_ai_count
+        increment_global_ai_count(request)
+    except Exception as e:
+        logger.warning(f"Could not update global AI count: {e}")
 
 
 def record_limitation_hit(request, limitation_type):

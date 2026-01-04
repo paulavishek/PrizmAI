@@ -722,3 +722,162 @@ class DemoConversion(models.Model):
     
     def __str__(self):
         return f"Conversion: {self.converted_user.username} - {self.timestamp.strftime('%Y-%m-%d')}"
+
+class DemoAbusePrevention(models.Model):
+    """
+    Track demo usage across sessions to prevent abuse.
+    
+    Users can bypass session-based limits by:
+    - Clearing cookies (new session)
+    - Using incognito mode
+    - Creating new accounts
+    
+    This model tracks usage by IP address and browser fingerprint
+    to enforce limits across sessions and accounts.
+    """
+    # Identification (at least one required)
+    ip_address = models.GenericIPAddressField(db_index=True)
+    browser_fingerprint = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="SHA256 hash of browser attributes"
+    )
+    
+    # Aggregated limits across ALL sessions from this IP/fingerprint
+    total_ai_generations = models.IntegerField(
+        default=0,
+        help_text="Total AI generations across all demo sessions"
+    )
+    total_projects_created = models.IntegerField(
+        default=0,
+        help_text="Total projects created across all demo sessions"
+    )
+    total_export_attempts = models.IntegerField(
+        default=0,
+        help_text="Total export attempts across all demo sessions"
+    )
+    total_sessions_created = models.IntegerField(
+        default=1,
+        help_text="Number of demo sessions created from this IP"
+    )
+    
+    # Abuse detection flags
+    is_flagged = models.BooleanField(
+        default=False,
+        help_text="Flagged for suspicious activity"
+    )
+    flag_reason = models.TextField(
+        blank=True,
+        help_text="Reason for flagging"
+    )
+    is_blocked = models.BooleanField(
+        default=False,
+        help_text="Blocked from demo access"
+    )
+    
+    # Time tracking
+    first_seen = models.DateTimeField(auto_now_add=True)
+    last_seen = models.DateTimeField(auto_now=True)
+    last_session_created = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the last demo session was started"
+    )
+    
+    # Rate limiting
+    sessions_last_hour = models.IntegerField(
+        default=0,
+        help_text="Sessions created in the last hour (for rate limiting)"
+    )
+    sessions_last_24h = models.IntegerField(
+        default=0,
+        help_text="Sessions created in the last 24 hours"
+    )
+    last_rate_limit_reset = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When rate limit counters were last reset"
+    )
+    
+    # Associated sessions for reference
+    session_ids = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="List of all session IDs from this IP/fingerprint"
+    )
+    
+    class Meta:
+        verbose_name = 'Demo Abuse Prevention'
+        verbose_name_plural = 'Demo Abuse Prevention Records'
+        indexes = [
+            models.Index(fields=['ip_address', 'browser_fingerprint']),
+            models.Index(fields=['is_flagged']),
+            models.Index(fields=['is_blocked']),
+            models.Index(fields=['last_seen']),
+        ]
+        # Allow same IP with different fingerprints (shared networks)
+        unique_together = [['ip_address', 'browser_fingerprint']]
+    
+    def __str__(self):
+        return f"Abuse Prevention: {self.ip_address} (AI: {self.total_ai_generations}, Sessions: {self.total_sessions_created})"
+    
+    def check_rate_limit(self):
+        """Check if this IP/fingerprint is creating sessions too fast"""
+        from datetime import timedelta
+        
+        # Reset hourly counter if needed
+        if self.last_rate_limit_reset:
+            if timezone.now() - self.last_rate_limit_reset > timedelta(hours=1):
+                self.sessions_last_hour = 0
+                self.last_rate_limit_reset = timezone.now()
+        else:
+            self.last_rate_limit_reset = timezone.now()
+        
+        # Rate limits
+        MAX_SESSIONS_PER_HOUR = 3
+        MAX_SESSIONS_PER_24H = 5
+        
+        if self.sessions_last_hour >= MAX_SESSIONS_PER_HOUR:
+            return False, "Too many demo sessions. Please try again later."
+        if self.sessions_last_24h >= MAX_SESSIONS_PER_24H:
+            return False, "Daily demo session limit reached. Please create an account for unlimited access."
+        
+        return True, None
+    
+    def check_ai_limit(self):
+        """Check if this IP/fingerprint has exceeded global AI limits"""
+        # Global limit across ALL sessions (prevents account cycling)
+        GLOBAL_AI_LIMIT = 50  # More generous than per-session limit
+        
+        if self.total_ai_generations >= GLOBAL_AI_LIMIT:
+            return False, f"You've used {self.total_ai_generations} AI generations across demo sessions. Create a free account for unlimited AI."
+        
+        return True, None
+    
+    def increment_session_count(self):
+        """Call when a new demo session is created"""
+        from datetime import timedelta
+        
+        self.total_sessions_created += 1
+        self.sessions_last_hour += 1
+        self.sessions_last_24h += 1
+        self.last_session_created = timezone.now()
+        
+        # Flag suspicious behavior
+        if self.total_sessions_created > 10:
+            self.is_flagged = True
+            self.flag_reason = f"Created {self.total_sessions_created} demo sessions (possible abuse)"
+        
+        self.save()
+    
+    def increment_ai_count(self, count=1):
+        """Call when AI is used in any demo session"""
+        self.total_ai_generations += count
+        self.save(update_fields=['total_ai_generations', 'last_seen'])
+    
+    def increment_project_count(self, count=1):
+        """Call when a project is created in any demo session"""
+        self.total_projects_created += count
+        self.save(update_fields=['total_projects_created', 'last_seen'])
