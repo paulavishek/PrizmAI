@@ -39,6 +39,11 @@ from kanban.utils.ai_utils import (
     assess_task_dependencies_and_risks
 )
 from api.ai_usage_utils import track_ai_request, check_ai_quota
+from kanban.utils.demo_limits import (
+    check_ai_generation_limit, 
+    increment_ai_generation_count, 
+    record_limitation_hit
+)
 
 @login_required
 @require_http_methods(["POST"])
@@ -48,6 +53,16 @@ def generate_task_description_api(request):
     """
     start_time = time.time()
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -77,6 +92,9 @@ def generate_task_description_api(request):
                 response_time_ms=response_time_ms
             )
             return JsonResponse({'error': 'Failed to generate description'}, status=500)
+        
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -109,6 +127,16 @@ def summarize_comments_api(request, task_id):
     """
     start_time = time.time()
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -152,6 +180,9 @@ def summarize_comments_api(request, task_id):
                 response_time_ms=response_time_ms
             )
             return JsonResponse({'error': 'Failed to generate summary'}, status=500)
+        
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -762,6 +793,16 @@ def suggest_task_priority_api(request):
     """
     start_time = time.time()
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -848,6 +889,9 @@ def suggest_task_priority_api(request):
             )
             return JsonResponse({'error': 'Failed to suggest priority'}, status=500)
         
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
+        
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
         track_ai_request(
@@ -882,6 +926,16 @@ def predict_deadline_api(request):
     """
     start_time = time.time()
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -986,6 +1040,9 @@ def predict_deadline_api(request):
             )
             return JsonResponse({'error': 'Failed to predict deadline'}, status=500)
         
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
+        
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
         track_ai_request(
@@ -1019,6 +1076,16 @@ def recommend_columns_api(request):
     start_time = time.time()
     board_id_for_tracking = None
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -1079,6 +1146,9 @@ def recommend_columns_api(request):
             )
             return JsonResponse({'error': 'Failed to recommend columns'}, status=500)
         
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
+        
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
         track_ai_request(
@@ -1113,6 +1183,16 @@ def suggest_task_breakdown_api(request):
     start_time = time.time()
     board_id_for_tracking = None
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -1164,6 +1244,9 @@ def suggest_task_breakdown_api(request):
             )
             return JsonResponse({'error': 'Failed to suggest task breakdown'}, status=500)
         
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
+        
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
         track_ai_request(
@@ -1197,6 +1280,16 @@ def analyze_workflow_optimization_api(request):
     """
     start_time = time.time()
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -1311,6 +1404,9 @@ def analyze_workflow_optimization_api(request):
                 response_time_ms=response_time_ms
             )
             return JsonResponse({'error': 'Failed to analyze workflow'}, status=500)
+        
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
