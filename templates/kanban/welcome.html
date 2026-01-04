@@ -426,6 +426,21 @@
         border: none;
     }
 
+    .feature-category.core-pm {
+        background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+        border: none;
+    }
+
+    .feature-category.enterprise {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        border: none;
+    }
+
+    .feature-category.collaboration {
+        background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+        border: none;
+    }
+
     .feature-category.highlight .category-title,
     .feature-category.highlight .category-desc,
     .feature-category.highlight .mini-content h4,
@@ -433,7 +448,25 @@
         color: white;
     }
 
-    .feature-category.highlight .mini-feature {
+    .feature-category.core-pm .category-title,
+    .feature-category.core-pm .category-desc,
+    .feature-category.core-pm .mini-content h4,
+    .feature-category.core-pm .mini-content p,
+    .feature-category.enterprise .category-title,
+    .feature-category.enterprise .category-desc,
+    .feature-category.enterprise .mini-content h4,
+    .feature-category.enterprise .mini-content p,
+    .feature-category.collaboration .category-title,
+    .feature-category.collaboration .category-desc,
+    .feature-category.collaboration .mini-content h4,
+    .feature-category.collaboration .mini-content p {
+        color: white;
+    }
+
+    .feature-category.highlight .mini-feature,
+    .feature-category.core-pm .mini-feature,
+    .feature-category.enterprise .mini-feature,
+    .feature-category.collaboration .mini-feature {
         background: rgba(255, 255, 255, 0.15);
         border-color: rgba(255, 255, 255, 0.2);
     }
@@ -459,7 +492,10 @@
         flex-shrink: 0;
     }
 
-    .feature-category.highlight .category-icon-wrap {
+    .feature-category.highlight .category-icon-wrap,
+    .feature-category.core-pm .category-icon-wrap,
+    .feature-category.enterprise .category-icon-wrap,
+    .feature-category.collaboration .category-icon-wrap {
         background: rgba(255, 255, 255, 0.2);
     }
 
@@ -550,7 +586,10 @@
         color: #000;
     }
 
-    .feature-category.highlight .mini-icon {
+    .feature-category.highlight .mini-icon,
+    .feature-category.core-pm .mini-icon,
+    .feature-category.enterprise .mini-icon,
+    .feature-category.collaboration .mini-icon {
         background: rgba(255, 255, 255, 0.25);
     }
 
@@ -1409,7 +1448,7 @@
         <div class="feature-categories">
             
             <!-- Category 1: Core Project Management -->
-            <div class="feature-category">
+            <div class="feature-category core-pm">
                 <div class="category-header">
                     <div class="category-icon-wrap">
                         <i class="fas fa-th-large"></i>
@@ -1496,7 +1535,7 @@
             </div>
             
             <!-- Category 3: Enterprise & Security -->
-            <div class="feature-category">
+            <div class="feature-category enterprise">
                 <div class="category-header">
                     <div class="category-icon-wrap">
                         <i class="fas fa-shield-alt"></i>
@@ -1539,7 +1578,7 @@
             </div>
             
             <!-- Category 4: Collaboration & Knowledge -->
-            <div class="feature-category">
+            <div class="feature-category collaboration">
                 <div class="category-header">
                     <div class="category-icon-wrap">
                         <i class="fas fa-users"></i>
