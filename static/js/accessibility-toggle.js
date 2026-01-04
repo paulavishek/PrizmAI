@@ -243,26 +243,14 @@
     }
 
     /**
-     * Sync accessibility preference to database
+     * Sync accessibility preference to database (disabled - using localStorage only)
+     * This function is kept for future implementation if database sync is needed
      */
     function syncAccessibilityToDatabase(enabled) {
-        // Check if we have a sync endpoint
-        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
-                         document.querySelector('meta[name="csrf-token"]')?.content;
-        
-        if (!csrfToken) return; // Not authenticated or no CSRF token
-
-        // Try to sync - silently fail if endpoint doesn't exist
-        fetch('/accounts/update-accessibility/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': csrfToken
-            },
-            body: JSON.stringify({ colorblind_mode: enabled })
-        }).catch(() => {
-            // Silently ignore - endpoint may not exist yet
-        });
+        // Currently disabled - using localStorage only for persistence
+        // This avoids 404 errors in the console
+        // To enable database sync, create /accounts/update-accessibility/ endpoint
+        return;
     }
 
     /**
