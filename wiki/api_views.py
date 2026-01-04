@@ -20,6 +20,11 @@ from kanban.models import Board, Task, Column
 from .models import WikiPage, WikiMeetingAnalysis, WikiMeetingTask
 from .ai_utils import analyze_meeting_notes_from_wiki, analyze_wiki_documentation, parse_due_date
 from api.ai_usage_utils import track_ai_request, check_ai_quota
+from kanban.utils.demo_limits import (
+    check_ai_generation_limit, 
+    increment_ai_generation_count, 
+    record_limitation_hit
+)
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +38,16 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
     """
     start_time = time.time()
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -86,6 +101,9 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
                     response_time_ms=response_time_ms
                 )
                 return JsonResponse({'error': 'Failed to analyze documentation'}, status=500)
+            
+            # Increment demo AI generation count on success
+            increment_ai_generation_count(request)
             
             # Track successful request
             response_time_ms = int((time.time() - start_time) * 1000)
@@ -142,6 +160,16 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
     """
     start_time = time.time()
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -224,6 +252,9 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
                 analysis.processing_error = 'AI analysis returned no results'
                 analysis.save()
                 return JsonResponse({'error': 'Failed to analyze meeting notes'}, status=500)
+            
+            # Increment demo AI generation count on success
+            increment_ai_generation_count(request)
             
             # Track successful request
             response_time_ms = int((time.time() - start_time) * 1000)

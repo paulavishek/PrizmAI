@@ -27,6 +27,11 @@ from kanban.budget_forms import (
     ProjectROIForm, BudgetRecommendationActionForm
 )
 from api.ai_usage_utils import track_ai_request, check_ai_quota
+from kanban.utils.demo_limits import (
+    check_ai_generation_limit, 
+    increment_ai_generation_count, 
+    record_limitation_hit
+)
 
 logger = logging.getLogger(__name__)
 
@@ -442,6 +447,16 @@ def ai_analyze_budget(request, board_id):
         return JsonResponse({'error': 'Permission denied'}, status=403)
     
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -474,6 +489,9 @@ def ai_analyze_budget(request, board_id):
                 response_time_ms=response_time_ms
             )
             return JsonResponse({'error': results['error']}, status=400)
+        
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -521,6 +539,16 @@ def ai_generate_recommendations(request, board_id):
         return JsonResponse({'error': 'Permission denied'}, status=403)
     
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -545,6 +573,9 @@ def ai_generate_recommendations(request, board_id):
         # Generate recommendations
         optimizer = BudgetAIOptimizer(board)
         recommendations = optimizer.generate_recommendations(context=context)
+        
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -663,6 +694,16 @@ def ai_predict_overrun(request, board_id):
         return JsonResponse({'error': 'Permission denied'}, status=403)
     
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -691,6 +732,9 @@ def ai_predict_overrun(request, board_id):
                 response_time_ms=response_time_ms
             )
             return JsonResponse({'error': prediction['error']}, status=400)
+        
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)

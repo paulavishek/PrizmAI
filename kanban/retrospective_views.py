@@ -22,6 +22,11 @@ from kanban.retrospective_models import (
 )
 from kanban.utils.retrospective_generator import RetrospectiveGenerator
 from api.ai_usage_utils import track_ai_request, check_ai_quota
+from kanban.utils.demo_limits import (
+    check_ai_generation_limit, 
+    increment_ai_generation_count, 
+    record_limitation_hit
+)
 
 logger = logging.getLogger(__name__)
 
@@ -253,6 +258,13 @@ def retrospective_create(request, board_id):
     else:  # POST
         start_time = time.time()
         try:
+            # Check demo mode AI generation limit first
+            ai_limit_status = check_ai_generation_limit(request)
+            if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+                record_limitation_hit(request, 'ai_limit')
+                messages.error(request, ai_limit_status['message'])
+                return redirect('retrospective_create', board_id=board_id)
+            
             # Check AI quota (skip for anonymous demo users)
             if request.user.is_authenticated:
                 has_quota, quota, remaining = check_ai_quota(request.user)
@@ -309,6 +321,9 @@ def retrospective_create(request, board_id):
                 _add_manual_lessons(retrospective, board, manual_lessons)
             if manual_actions:
                 _add_manual_actions(retrospective, board, manual_actions)
+            
+            # Increment demo AI generation count on success
+            increment_ai_generation_count(request)
             
             # Track successful AI request (only for authenticated users)
             if request.user.is_authenticated:

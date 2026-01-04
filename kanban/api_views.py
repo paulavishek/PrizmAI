@@ -216,6 +216,16 @@ def suggest_lss_classification_api(request):
     """
     start_time = time.time()
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -245,6 +255,9 @@ def suggest_lss_classification_api(request):
                 response_time_ms=response_time_ms
             )
             return JsonResponse({'error': 'Failed to suggest classification'}, status=500)
+        
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -284,6 +297,17 @@ def summarize_board_analytics_api(request, board_id):
         demo_org_names = ['Demo - Acme Corporation']
         is_demo_board = board.organization.name in demo_org_names
         is_demo_mode = request.session.get('is_demo_mode', False)
+        
+        # For demo boards in demo mode, check AI generation limit
+        if is_demo_board and is_demo_mode:
+            ai_limit_status = check_ai_generation_limit(request)
+            if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+                record_limitation_hit(request, 'ai_limit')
+                return JsonResponse({
+                    'error': ai_limit_status['message'],
+                    'quota_exceeded': True,
+                    'demo_limit': True
+                }, status=429)
         
         # For non-demo boards, require authentication
         if not (is_demo_board and is_demo_mode):
@@ -456,6 +480,10 @@ def summarize_board_analytics_api(request, board_id):
                 success=True,
                 response_time_ms=response_time_ms
             )
+        
+        # Increment demo AI generation count for demo mode
+        if is_demo_board and is_demo_mode:
+            increment_ai_generation_count(request)
             
         return JsonResponse({'summary': summary})
     except Exception as e:
@@ -1552,6 +1580,16 @@ def calculate_task_risk_api(request):
     """
     start_time = time.time()
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -1601,6 +1639,9 @@ def calculate_task_risk_api(request):
                 response_time_ms=response_time_ms
             )
             return JsonResponse({'error': 'Failed to calculate risk score'}, status=500)
+        
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -1654,6 +1695,16 @@ def get_mitigation_suggestions_api(request):
     """
     start_time = time.time()
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -1709,6 +1760,9 @@ def get_mitigation_suggestions_api(request):
             )
             return JsonResponse({'error': 'Failed to generate mitigation suggestions'}, status=500)
         
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
+        
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
         track_ai_request(
@@ -1752,7 +1806,26 @@ def assess_task_dependencies_api(request):
     """
     API endpoint to assess task dependencies and cascading risks
     """
+    start_time = time.time()
     try:
+        # Check demo mode AI generation limit first
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
         data = json.loads(request.body)
         task_id = data.get('task_id')
         board_id = data.get('board_id')
@@ -1791,6 +1864,9 @@ def assess_task_dependencies_api(request):
         
         if not dependency_analysis:
             return JsonResponse({'error': 'Failed to assess task dependencies'}, status=500)
+        
+        # Increment demo AI generation count on success
+        increment_ai_generation_count(request)
         
         return JsonResponse({
             'success': True,
