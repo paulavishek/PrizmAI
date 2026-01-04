@@ -273,7 +273,7 @@
         </div>
         {% for board_data in demo_boards %}
         <div class="col-md-4 mb-4">
-            <div class="card demo-board-card" onclick="window.location.href='{% url 'demo_board_detail' board_data.board.id %}'">
+            <div class="card demo-board-card" onclick="openDemoBoard('{% url 'demo_board_detail' board_data.board.id %}', '{{ board_data.board.name|escapejs }}')">
                 <div class="card-body">
                     <h5 class="demo-board-title">
                         <i class="fas fa-folder-open me-2"></i>{{ board_data.board.name }}
@@ -401,12 +401,16 @@
 <script src="{% static 'js/aha_moment_detection.js' %}"></script>
 <script src="{% static 'js/conversion_nudges.js' %}"></script>
 <script>
-// Track demo dashboard view as a feature explored (after brief delay to confirm engagement)
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(function() {
-        trackDemoFeature('dashboard_view');
-    }, 5000);
-});
+// Note: We no longer auto-track page views as features explored.
+// Features are only tracked when users perform meaningful interactions
+// such as clicking on boards, creating tasks, using AI features, etc.
+
+// Track when user opens a demo board (meaningful interaction)
+function openDemoBoard(url, boardName) {
+    trackDemoFeature('board_opened');
+    console.log('📊 User opened demo board:', boardName);
+    window.location.href = url;
+}
 
 // Track demo feature for nudge system
 function trackDemoFeature(featureName) {

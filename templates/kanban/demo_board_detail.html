@@ -898,10 +898,9 @@ document.addEventListener('DOMContentLoaded', function() {
         observer.observe(container, { childList: true });
     });
     
-    // Track board view as a feature explored (after brief delay to confirm engagement)
-    setTimeout(function() {
-        trackDemoFeature('board_view');
-    }, 5000);
+    // Note: We no longer auto-track page views as features explored.
+    // Features are only tracked when users perform meaningful interactions
+    // such as dragging tasks, clicking on features, using AI, etc.
 });
 
 // Track demo feature for nudge system
