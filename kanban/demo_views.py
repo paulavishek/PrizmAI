@@ -539,12 +539,28 @@ def demo_dashboard(request):
         }
     ).order_by('due_date_order', 'due_date', 'priority_order')[:8]
     
-    # Get message count
-    message_count = ChatMessage.objects.filter(
-        chat_room__board__in=demo_boards
-    ).count()
+    # Get UNREAD message count (matching the navigation bar badge)
+    # Count messages the current user hasn't read (excluding their own messages)
+    if request.user.is_authenticated:
+        # Get chat rooms from demo boards where user is a member
+        user_chat_rooms = ChatRoom.objects.filter(
+            board__in=demo_boards,
+            members=request.user
+        )
+        
+        # Count unread messages across all these rooms
+        message_count = 0
+        for room in user_chat_rooms:
+            room_unread = room.messages.exclude(read_by=request.user).exclude(author=request.user).count()
+            message_count += room_unread
+    else:
+        # For anonymous demo users, show total message count as fallback
+        message_count = ChatMessage.objects.filter(
+            chat_room__board__in=demo_boards
+        ).count()
     
-    # Get conflict count
+    # Get conflict count (matching the navigation bar badge)
+    # Only count active conflicts from boards the user has access to
     conflict_count = ConflictDetection.objects.filter(
         board__in=demo_boards,
         status='active'
@@ -1320,4 +1336,60 @@ def track_nudge(request):
         return JsonResponse({
             'status': 'error',
             'message': f'Error tracking nudge: {str(e)}'
+        }, status=500)
+
+
+def demo_feature_counts_api(request):
+    """
+    API endpoint to get real-time counts for demo dashboard banner.
+    Returns: unread messages, active conflicts, and wiki pages count.
+    """
+    try:
+        # Get demo organizations and boards
+        demo_orgs = Organization.objects.filter(name__in=DEMO_ORG_NAMES)
+        demo_boards = Board.objects.filter(
+            organization__in=demo_orgs,
+            is_official_demo_board=True
+        )
+        
+        # Get UNREAD message count (same logic as demo_dashboard)
+        if request.user.is_authenticated:
+            # Get chat rooms from demo boards where user is a member
+            user_chat_rooms = ChatRoom.objects.filter(
+                board__in=demo_boards,
+                members=request.user
+            )
+            
+            # Count unread messages across all these rooms
+            message_count = 0
+            for room in user_chat_rooms:
+                room_unread = room.messages.exclude(read_by=request.user).exclude(author=request.user).count()
+                message_count += room_unread
+        else:
+            # For anonymous demo users, show total message count as fallback
+            message_count = ChatMessage.objects.filter(
+                chat_room__board__in=demo_boards
+            ).count()
+        
+        # Get active conflict count
+        conflict_count = ConflictDetection.objects.filter(
+            board__in=demo_boards,
+            status='active'
+        ).count()
+        
+        # Get wiki pages count
+        wiki_count = WikiPage.objects.filter(
+            organization__in=demo_orgs
+        ).count()
+        
+        return JsonResponse({
+            'message_count': message_count,
+            'conflict_count': conflict_count,
+            'wiki_count': wiki_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting demo feature counts: {e}")
+        return JsonResponse({
+            'error': str(e)
         }, status=500)

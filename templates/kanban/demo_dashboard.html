@@ -245,9 +245,9 @@
         </div>
         <div class="card-body">
             <div class="text-center">
-                <span class="feature-badge"><i class="fas fa-comments me-1"></i>{{ message_count }} Messages</span>
-                <span class="feature-badge"><i class="fas fa-exclamation-triangle me-1"></i>{{ conflict_count }} Active Conflicts</span>
-                <span class="feature-badge"><i class="fas fa-brain me-1"></i>{{ wiki_count }} Wiki Pages</span>
+                <span class="feature-badge"><i class="fas fa-comments me-1"></i><span id="message-count-badge">{{ message_count }}</span> Unread Message<span id="message-plural">{{ message_count|pluralize }}</span></span>
+                <span class="feature-badge"><i class="fas fa-exclamation-triangle me-1"></i><span id="conflict-count-badge">{{ conflict_count }}</span> Active Conflict<span id="conflict-plural">{{ conflict_count|pluralize }}</span></span>
+                <span class="feature-badge"><i class="fas fa-brain me-1"></i><span id="wiki-count-badge">{{ wiki_count }}</span> Wiki Page<span id="wiki-plural">{{ wiki_count|pluralize }}</span></span>
                 <span class="feature-badge"><i class="fas fa-users me-1"></i>Stakeholder Management</span>
                 <span class="feature-badge"><i class="fas fa-chart-gantt me-1"></i>Gantt Charts</span>
                 <span class="feature-badge"><i class="fas fa-dollar-sign me-1"></i>Budget Tracking</span>
@@ -443,5 +443,54 @@ function getCsrfToken() {
     const cookie = document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='));
     return cookie ? cookie.split('=')[1] : '';
 }
+
+// Auto-update feature counts in the banner
+function updateFeatureCounts() {
+    fetch('/demo/api/feature-counts/', {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Update message count
+        const messageCountEl = document.getElementById('message-count-badge');
+        const messagePluralEl = document.getElementById('message-plural');
+        if (messageCountEl && data.message_count !== undefined) {
+            messageCountEl.textContent = data.message_count;
+            messagePluralEl.textContent = data.message_count === 1 ? '' : 's';
+        }
+        
+        // Update conflict count
+        const conflictCountEl = document.getElementById('conflict-count-badge');
+        const conflictPluralEl = document.getElementById('conflict-plural');
+        if (conflictCountEl && data.conflict_count !== undefined) {
+            conflictCountEl.textContent = data.conflict_count;
+            conflictPluralEl.textContent = data.conflict_count === 1 ? '' : 's';
+        }
+        
+        // Update wiki count
+        const wikiCountEl = document.getElementById('wiki-count-badge');
+        const wikiPluralEl = document.getElementById('wiki-plural');
+        if (wikiCountEl && data.wiki_count !== undefined) {
+            wikiCountEl.textContent = data.wiki_count;
+            wikiPluralEl.textContent = data.wiki_count === 1 ? '' : 's';
+        }
+    })
+    .catch(error => {
+        console.error('Error updating feature counts:', error);
+    });
+}
+
+// Update counts every 10 seconds
+setInterval(updateFeatureCounts, 10000);
+
+// Also update when page becomes visible (user switches back to tab)
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+        updateFeatureCounts();
+    }
+});
 </script>
 {% endblock %}
