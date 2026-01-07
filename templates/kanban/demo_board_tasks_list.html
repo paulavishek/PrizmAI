@@ -582,9 +582,9 @@
 
         <!-- Back Button -->
         <div class="text-center mt-4 mb-4">
-            <a href="{% url 'demo_board_detail' board.id %}" class="btn btn-lg btn-outline-primary">
-                <i class="fas fa-arrow-left me-2"></i>Back to Board
-            </a>
+            <button onclick="goBack()" class="btn btn-lg btn-outline-primary">
+                <i class="fas fa-arrow-left me-2"></i>Back
+            </button>
         </div>
     </div>
 </div>
@@ -596,7 +596,7 @@
 document.addEventListener('keydown', function(e) {
     // ESC key to go back
     if (e.key === 'Escape') {
-        window.location.href = "{% url 'demo_board_detail' board.id %}";
+        goBack();
     }
 });
 </script>

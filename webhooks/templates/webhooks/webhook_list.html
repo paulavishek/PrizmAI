@@ -11,9 +11,9 @@
             <p class="text-muted">Board: {{ board.name }}</p>
         </div>
         <div>
-            <a href="{% url 'board_detail' board.id %}" class="btn btn-secondary">
-                <i class="bi bi-arrow-left"></i> Back to Board
-            </a>
+            <button onclick="goBack()" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Back
+            </button>
             <a href="{% url 'webhooks:webhook_create' board.id %}" class="btn btn-primary">
                 <i class="bi bi-plus-circle"></i> Add Webhook
             </a>

@@ -53,7 +53,7 @@
     })(window,document,'script','dataLayer','GTM-N4RMZ4SN');</script>
     <!-- End Google Tag Manager -->
 </head>
-<body>
+<body data-demo-mode="{% if request.session.is_demo_mode %}true{% else %}false{% endif %}">
     <!-- Google Tag Manager (noscript) -->
     <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-N4RMZ4SN"
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
@@ -267,6 +267,9 @@
         setInterval(updateUnreadMessageCount, 30000);
         {% endif %}
     </script>
+    
+    <!-- Navigation Utilities JS (goBack function) -->
+    <script src="{% static 'js/navigation.js' %}"></script>
     
     <!-- AI Explainability JS -->
     <script src="{% static 'js/ai_explainability.js' %}"></script>

@@ -8,9 +8,9 @@
 <div class="row">
     <div class="col-lg-6">
         <div class="mb-3">
-            <a href="{% url 'wiki:category_list' %}" class="btn btn-outline-secondary btn-sm">
+            <button onclick="goBack()" class="btn btn-outline-secondary btn-sm">
                 <i class="fas fa-arrow-left"></i> Back
-            </a>
+            </button>
         </div>
         <h2 class="mb-4">
             <i class="fas fa-folder-{% if form.instance.pk %}edit{% else %}plus{% endif %}"></i>

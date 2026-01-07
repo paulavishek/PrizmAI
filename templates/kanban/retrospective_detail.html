@@ -26,9 +26,9 @@
             <a href="{% url 'retrospective_export' board.id retrospective.id %}" class="btn btn-info">
                 <i class="fas fa-file-pdf"></i> Export PDF
             </a>
-            <a href="{% url 'retrospective_list' board.id %}" class="btn btn-secondary">
+            <button onclick="goBack()" class="btn btn-secondary">
                 <i class="fas fa-arrow-left"></i> Back
-            </a>
+            </button>
         </div>
     </div>
 

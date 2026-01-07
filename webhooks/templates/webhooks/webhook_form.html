@@ -115,7 +115,7 @@
                         </div>
                         
                         <div class="d-flex justify-content-between">
-                            <a href="{% url 'webhooks:webhook_list' board.id %}" class="btn btn-secondary">Cancel</a>
+                            <button onclick="goBack()" type="button" class="btn btn-secondary">Cancel</button>
                             <button type="submit" class="btn btn-primary">{% if webhook %}Update{% else %}Create{% endif %} Webhook</button>
                         </div>
                     </form>

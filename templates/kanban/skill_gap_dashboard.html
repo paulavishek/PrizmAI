@@ -100,15 +100,9 @@
             <p class="text-muted mb-0">{{ board.name }}</p>
         </div>
         <div class="btn-group">
-            {% if is_demo_mode %}
-            <a href="{% url 'demo_board_detail' board.id %}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-1"></i> Back to Board
-            </a>
-            {% else %}
-            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-1"></i> Back to Board
-            </a>
-            {% endif %}
+            <button onclick="goBack()" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Back
+            </button>
             <button class="btn btn-primary" onclick="runSkillAnalysis()">
                 <i class="fas fa-sync-alt me-1"></i> Run Analysis
             </button>

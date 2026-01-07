@@ -213,9 +213,9 @@
     </div>
     {% else %}
     <div class="text-center mt-5">
-        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
-            <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
-        </a>
+        <button onclick="goBack()" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-1"></i> Back
+        </button>
     </div>
     {% endif %}
 </div>

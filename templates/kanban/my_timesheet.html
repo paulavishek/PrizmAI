@@ -17,11 +17,9 @@
             <a href="{% url 'time_tracking_dashboard' %}" class="btn btn-sm btn-outline-primary">
                 <i class="fas fa-chart-line"></i> Dashboard
             </a>
-            {% if board %}
-            <a href="{% url 'board_detail' board.id %}" class="btn btn-sm btn-outline-secondary">
-                <i class="fas fa-columns"></i> Back to Board
-            </a>
-            {% endif %}
+            <button onclick="goBack()" class="btn btn-sm btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
         </div>
     </div>
 

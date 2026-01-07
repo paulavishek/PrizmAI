@@ -14,9 +14,9 @@
             <a href="{% url 'retrospective_dashboard' board.id %}" class="btn btn-info">
                 <i class="fas fa-chart-line"></i> Dashboard
             </a>
-            <a href="{% url 'retrospective_list' board.id %}" class="btn btn-secondary">
-                <i class="fas fa-arrow-left"></i> Back to Retrospectives
-            </a>
+            <button onclick="goBack()" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
             {% if is_demo_mode %}
             <a href="{% url 'demo_board_detail' board.id %}" class="btn btn-outline-primary">
                 <i class="fas fa-columns"></i> View Board

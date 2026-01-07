@@ -21,9 +21,9 @@
 
 {% block content %}
 <div class="mb-4">
-    <a href="{% url 'messaging:chat_room_list' board_id=board.id %}" class="btn btn-outline-secondary btn-sm">
+    <button onclick="goBack()" class="btn btn-outline-secondary btn-sm">
         <i class="fas fa-arrow-left me-1"></i> Back
-    </a>
+    </button>
 </div>
 
 <div class="form-container">

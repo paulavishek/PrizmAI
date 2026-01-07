@@ -16,6 +16,9 @@
                             Create New Task
                         {% endif %}
                     </h6>
+                    <button onclick="goBack()" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i> Back
+                    </button>
                 </div>
                 <div class="card-body">
                     <form method="post" class="task-form">
@@ -323,9 +326,9 @@
                         </div>
                         
                         <div class="d-flex justify-content-between mt-4">
-                            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
+                            <button onclick="goBack()" type="button" class="btn btn-outline-secondary">
                                 Cancel
-                            </a>
+                            </button>
                             <button type="submit" class="btn btn-primary">
                                 Create Task
                             </button>
