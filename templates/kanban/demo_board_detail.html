@@ -591,13 +591,13 @@ kbd {
 
 <!-- Board Stats -->
 <div class="board-stats">
-    <a href="#all-tasks-section" class="stat-item stat-item-clickable" title="View all tasks on this board">
+    <a href="{% url 'demo_board_tasks_list' board.id %}?status=all" class="stat-item stat-item-clickable" title="View all tasks in list format">
         <div class="stat-value">{{ total_tasks }}</div>
         <div class="stat-label">
             <i class="fas fa-clipboard-list me-1"></i>Total Tasks
         </div>
     </a>
-    <a href="#all-tasks-section" class="stat-item stat-item-clickable" title="View completed tasks" onclick="filterTasksByStatus('completed'); return false;">
+    <a href="{% url 'demo_board_tasks_list' board.id %}?status=completed" class="stat-item stat-item-clickable" title="View completed tasks in list format">
         <div class="stat-value">{{ completed_tasks }}</div>
         <div class="stat-label">
             <i class="fas fa-check-circle me-1"></i>Completed

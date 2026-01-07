@@ -1392,3 +1392,75 @@ def demo_feature_counts_api(request):
         return JsonResponse({
             'error': str(e)
         }, status=500)
+
+
+def demo_board_tasks_list(request, board_id):
+    """
+    Display all tasks for a demo board in a filterable table view
+    Provides better UX than navigating through columns
+    """
+    # Get the demo organization
+    demo_orgs = Organization.objects.filter(name__in=DEMO_ORG_NAMES)
+    browser_fingerprint = request.session.get('browser_fingerprint')
+    
+    # Get the board
+    board = Board.objects.filter(
+        id=board_id,
+        organization__in=demo_orgs
+    ).first()
+    
+    # If not found in demo orgs, check if it's a user-created board from this session
+    if not board and browser_fingerprint:
+        board = Board.objects.filter(
+            id=board_id,
+            created_by_session=browser_fingerprint
+        ).first()
+    
+    if not board:
+        from django.http import Http404
+        raise Http404("Board not found or not accessible in demo mode")
+    
+    # Get filter parameter from URL
+    status_filter = request.GET.get('status', 'all')
+    
+    # Get all tasks with related data
+    tasks = Task.objects.filter(
+        column__board=board
+    ).select_related(
+        'assigned_to', 'assigned_to__profile', 'created_by', 'column'
+    ).prefetch_related('labels', 'dependencies').order_by('-created_at')
+    
+    # Apply filters
+    if status_filter == 'completed':
+        tasks = tasks.filter(progress=100)
+    elif status_filter == 'in_progress':
+        tasks = tasks.filter(progress__gt=0, progress__lt=100)
+    elif status_filter == 'not_started':
+        tasks = tasks.filter(progress=0)
+    elif status_filter == 'high_priority':
+        tasks = tasks.filter(priority__in=['high', 'urgent'])
+    
+    # Get statistics
+    total_tasks = Task.objects.filter(column__board=board).count()
+    completed_count = Task.objects.filter(column__board=board, progress=100).count()
+    in_progress_count = Task.objects.filter(column__board=board, progress__gt=0, progress__lt=100).count()
+    not_started_count = Task.objects.filter(column__board=board, progress=0).count()
+    high_priority_count = Task.objects.filter(column__board=board, priority__in=['high', 'urgent']).count()
+    
+    # Completion rate
+    completion_rate = round((completed_count / total_tasks * 100) if total_tasks > 0 else 0, 1)
+    
+    context = {
+        'board': board,
+        'tasks': tasks,
+        'status_filter': status_filter,
+        'total_tasks': total_tasks,
+        'completed_count': completed_count,
+        'in_progress_count': in_progress_count,
+        'not_started_count': not_started_count,
+        'high_priority_count': high_priority_count,
+        'completion_rate': completion_rate,
+        'demo_mode': request.session.get('demo_mode', 'solo'),
+    }
+    
+    return render(request, 'kanban/demo_board_tasks_list.html', context)
