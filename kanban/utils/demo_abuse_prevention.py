@@ -12,18 +12,30 @@ import hashlib
 import logging
 from django.utils import timezone
 from datetime import timedelta
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
 # Global limits (across all sessions from same IP/fingerprint)
-GLOBAL_DEMO_LIMITS = {
-    'max_ai_generations_global': 50,      # Across all sessions
-    'max_projects_global': 5,              # Across all sessions
-    'max_sessions_per_hour': 3,            # Rate limit
-    'max_sessions_per_24h': 5,             # Daily limit
-    'max_sessions_total': 20,              # Before blocking
-    'cooldown_after_abuse_hours': 24,      # Cooldown period
-}
+# In DEBUG mode, limits are much higher for development
+if settings.DEBUG:
+    GLOBAL_DEMO_LIMITS = {
+        'max_ai_generations_global': 500,     # High for development
+        'max_projects_global': 50,            # High for development
+        'max_sessions_per_hour': 100,         # Effectively unlimited
+        'max_sessions_per_24h': 500,          # Effectively unlimited
+        'max_sessions_total': 1000,           # Effectively unlimited
+        'cooldown_after_abuse_hours': 24,
+    }
+else:
+    GLOBAL_DEMO_LIMITS = {
+        'max_ai_generations_global': 50,      # Across all sessions
+        'max_projects_global': 5,              # Across all sessions
+        'max_sessions_per_hour': 3,            # Rate limit
+        'max_sessions_per_24h': 5,             # Daily limit
+        'max_sessions_total': 20,              # Before blocking
+        'cooldown_after_abuse_hours': 24,      # Cooldown period
+    }
 
 
 def get_client_ip(request):
