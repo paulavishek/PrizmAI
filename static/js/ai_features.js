@@ -96,11 +96,49 @@ function initAICommentSummarizer() {
     const summaryContainer = document.getElementById('comment-summary-container');
     const summaryText = document.getElementById('comment-summary-text');
     const summarySpinner = document.getElementById('summary-spinner');
+    const closeButton = document.getElementById('close-summary');
+    const exportButton = document.getElementById('export-summary-pdf');
     
+    // Store summary data globally for export
+    let currentSummaryData = null;
+    
+    // Check if there's a saved summary in sessionStorage
     if (summarizeButton && summaryContainer && summaryText) {
+        const taskId = summarizeButton.getAttribute('data-task-id');
+        const savedSummary = sessionStorage.getItem(`comment-summary-${taskId}`);
+        
+        if (savedSummary) {
+            try {
+                const summaryData = JSON.parse(savedSummary);
+                summaryText.innerHTML = summaryData.formatted;
+                currentSummaryData = summaryData.raw;
+                summaryContainer.classList.remove('d-none');
+                if (exportButton) exportButton.classList.remove('d-none');
+            } catch (e) {
+                console.error('Failed to load saved summary:', e);
+            }
+        }
+        
+        // Close button handler
+        if (closeButton) {
+            closeButton.addEventListener('click', function() {
+                summaryContainer.classList.add('d-none');
+                if (exportButton) exportButton.classList.add('d-none');
+                // Clear from sessionStorage
+                sessionStorage.removeItem(`comment-summary-${taskId}`);
+                currentSummaryData = null;
+            });
+        }
+        
+        // Export PDF button handler
+        if (exportButton) {
+            exportButton.addEventListener('click', function() {
+                exportCommentSummaryPDF(taskId, currentSummaryData);
+            });
+        }
+        
+        // Summarize button handler
         summarizeButton.addEventListener('click', function() {
-            const taskId = summarizeButton.getAttribute('data-task-id');
-            
             if (!taskId) return;
             
             // Show spinner
@@ -127,14 +165,28 @@ function initAICommentSummarizer() {
                     if (typeof data.summary === 'object' && data.summary.summary) {
                         // If it's an object, extract the summary field and format it
                         summaryText_content = formatSummaryText(data.summary.summary);
+                        currentSummaryData = data.summary;
                     } else if (typeof data.summary === 'string') {
                         // If it's already a string, format it
                         summaryText_content = formatSummaryText(data.summary);
+                        currentSummaryData = { summary: data.summary };
                     } else {
                         summaryText_content = 'Could not parse summary format.';
+                        currentSummaryData = null;
                     }
                     summaryText.innerHTML = summaryText_content;
                     summaryContainer.classList.remove('d-none');
+                    
+                    // Show export button
+                    if (exportButton && currentSummaryData) {
+                        exportButton.classList.remove('d-none');
+                    }
+                    
+                    // Save to sessionStorage for persistence
+                    sessionStorage.setItem(`comment-summary-${taskId}`, JSON.stringify({
+                        formatted: summaryText_content,
+                        raw: currentSummaryData
+                    }));
                 } else {
                     alert('Could not generate summary. Please try again.');
                 }
@@ -150,6 +202,65 @@ function initAICommentSummarizer() {
             });
         });
     }
+}
+
+/**
+ * Export comment summary as PDF
+ */
+function exportCommentSummaryPDF(taskId, summaryData) {
+    const exportButton = document.getElementById('export-summary-pdf');
+    const spinner = document.getElementById('pdf-export-spinner');
+    
+    if (!taskId || !summaryData) {
+        alert('No summary data available to export.');
+        return;
+    }
+    
+    // Show loading state
+    if (exportButton) exportButton.disabled = true;
+    if (spinner) spinner.classList.remove('d-none');
+    
+    // Make API call to generate PDF
+    fetch(`/api/download-comment-summary-pdf/${taskId}/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(summaryData)
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('Failed to generate PDF');
+        }
+        return response.blob();
+    })
+    .then(blob => {
+        // Create a temporary URL for the blob
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = `Comment_Summary_Task_${taskId}_${new Date().toISOString().slice(0, 10)}.pdf`;
+        
+        document.body.appendChild(a);
+        a.click();
+        
+        // Clean up
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        console.log('PDF downloaded successfully');
+    })
+    .catch(error => {
+        console.error('Error downloading PDF:', error);
+        alert('Failed to download PDF. Please try again.');
+    })
+    .finally(() => {
+        // Hide loading state
+        if (exportButton) exportButton.disabled = false;
+        if (spinner) spinner.classList.add('d-none');
+    });
 }
 
 /**

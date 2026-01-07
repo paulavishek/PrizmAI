@@ -210,6 +210,257 @@ def summarize_comments_api(request, task_id):
 
 @login_required
 @require_http_methods(["POST"])
+def download_comment_summary_pdf(request, task_id):
+    """
+    API endpoint to download comment summary as PDF
+    """
+    try:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import inch
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+        from reportlab.lib import colors
+        from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+        from io import BytesIO
+        from datetime import datetime
+        from django.http import HttpResponse
+        
+        # Get the task and verify user access
+        task = get_object_or_404(Task, id=task_id)
+        board = task.column.board
+        
+        # Check if user has access to this board/task
+        if not (board.created_by == request.user or request.user in board.members.all()):
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # Get summary data from request body
+        import json
+        summary_data = json.loads(request.body)
+        
+        if not summary_data or 'summary' not in summary_data:
+            return JsonResponse({'error': 'No summary data provided'}, status=400)
+        
+        # Create PDF
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=72, leftMargin=72, topMargin=72, bottomMargin=18)
+        
+        # Container for PDF elements
+        elements = []
+        
+        # Define styles
+        styles = getSampleStyleSheet()
+        
+        # Custom styles
+        title_style = ParagraphStyle(
+            'CustomTitle',
+            parent=styles['Heading1'],
+            fontSize=22,
+            textColor=colors.HexColor('#2c3e50'),
+            spaceAfter=20,
+            alignment=TA_CENTER,
+            fontName='Helvetica-Bold'
+        )
+        
+        subtitle_style = ParagraphStyle(
+            'CustomSubtitle',
+            parent=styles['Normal'],
+            fontSize=11,
+            textColor=colors.HexColor('#7f8c8d'),
+            spaceAfter=20,
+            alignment=TA_CENTER,
+            fontName='Helvetica'
+        )
+        
+        heading_style = ParagraphStyle(
+            'CustomHeading',
+            parent=styles['Heading2'],
+            fontSize=14,
+            textColor=colors.HexColor('#34495e'),
+            spaceAfter=10,
+            spaceBefore=15,
+            fontName='Helvetica-Bold'
+        )
+        
+        body_style = ParagraphStyle(
+            'CustomBody',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#2c3e50'),
+            alignment=TA_JUSTIFY,
+            spaceAfter=10,
+            leading=14,
+            fontName='Helvetica'
+        )
+        
+        bullet_style = ParagraphStyle(
+            'CustomBullet',
+            parent=styles['Normal'],
+            fontSize=10,
+            textColor=colors.HexColor('#2c3e50'),
+            leftIndent=20,
+            spaceAfter=8,
+            leading=14,
+            fontName='Helvetica'
+        )
+        
+        # Add title
+        title = Paragraph(f"<b>Comment Summary: {task.title}</b>", title_style)
+        elements.append(title)
+        
+        # Add subtitle
+        subtitle = Paragraph(
+            f"Task #{task.id} | Board: {board.name}<br/>Generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}",
+            subtitle_style
+        )
+        elements.append(subtitle)
+        elements.append(Spacer(1, 0.3 * inch))
+        
+        # Add main summary
+        summary_heading = Paragraph("<b>Summary</b>", heading_style)
+        elements.append(summary_heading)
+        
+        summary_text = summary_data.get('summary', 'No summary available')
+        summary_para = Paragraph(summary_text, body_style)
+        elements.append(summary_para)
+        elements.append(Spacer(1, 0.2 * inch))
+        
+        # Add confidence score if available
+        if 'confidence_score' in summary_data:
+            confidence = summary_data.get('confidence_score', 0)
+            confidence_para = Paragraph(
+                f"<b>Confidence Score:</b> {confidence:.2%}",
+                body_style
+            )
+            elements.append(confidence_para)
+            elements.append(Spacer(1, 0.2 * inch))
+        
+        # Add key decisions if available
+        if 'key_decisions' in summary_data and summary_data['key_decisions']:
+            decisions_heading = Paragraph("<b>Key Decisions</b>", heading_style)
+            elements.append(decisions_heading)
+            
+            for decision in summary_data['key_decisions']:
+                decision_text = f"• <b>{decision.get('decision', '')}</b>"
+                if decision.get('made_by'):
+                    decision_text += f" (by {decision['made_by']})"
+                elements.append(Paragraph(decision_text, bullet_style))
+            
+            elements.append(Spacer(1, 0.2 * inch))
+        
+        # Add action items if available
+        if 'action_items_mentioned' in summary_data and summary_data['action_items_mentioned']:
+            actions_heading = Paragraph("<b>Action Items</b>", heading_style)
+            elements.append(actions_heading)
+            
+            for action in summary_data['action_items_mentioned']:
+                action_text = f"• {action.get('action', '')}"
+                if action.get('assignee'):
+                    action_text += f" (Assigned to: {action['assignee']})"
+                if action.get('deadline_mentioned'):
+                    action_text += f" | Deadline: {action['deadline_mentioned']}"
+                elements.append(Paragraph(action_text, bullet_style))
+            
+            elements.append(Spacer(1, 0.2 * inch))
+        
+        # Add discussion highlights if available
+        if 'discussion_highlights' in summary_data and summary_data['discussion_highlights']:
+            highlights_heading = Paragraph("<b>Discussion Highlights</b>", heading_style)
+            elements.append(highlights_heading)
+            
+            for highlight in summary_data['discussion_highlights']:
+                highlight_text = f"• {highlight.get('highlight', '')}"
+                if highlight.get('raised_by'):
+                    highlight_text += f" (by {highlight['raised_by']})"
+                elements.append(Paragraph(highlight_text, bullet_style))
+            
+            elements.append(Spacer(1, 0.2 * inch))
+        
+        # Add sentiment analysis if available
+        if 'sentiment_analysis' in summary_data:
+            sentiment = summary_data['sentiment_analysis']
+            sentiment_heading = Paragraph("<b>Sentiment Analysis</b>", heading_style)
+            elements.append(sentiment_heading)
+            
+            overall = sentiment.get('overall_sentiment', 'N/A')
+            sentiment_para = Paragraph(f"<b>Overall Sentiment:</b> {overall.title()}", body_style)
+            elements.append(sentiment_para)
+            
+            if sentiment.get('concerns_raised'):
+                elements.append(Paragraph("<b>Concerns:</b>", body_style))
+                for concern in sentiment['concerns_raised']:
+                    elements.append(Paragraph(f"• {concern}", bullet_style))
+            
+            if sentiment.get('positive_aspects'):
+                elements.append(Paragraph("<b>Positive Aspects:</b>", body_style))
+                for positive in sentiment['positive_aspects']:
+                    elements.append(Paragraph(f"• {positive}", bullet_style))
+            
+            elements.append(Spacer(1, 0.2 * inch))
+        
+        # Add participants analysis if available
+        if 'participants_analysis' in summary_data and summary_data['participants_analysis']:
+            participants_heading = Paragraph("<b>Participants</b>", heading_style)
+            elements.append(participants_heading)
+            
+            participant_data = [['User', 'Role', 'Comments']]
+            for participant in summary_data['participants_analysis']:
+                participant_data.append([
+                    participant.get('user', ''),
+                    participant.get('contribution_type', '').replace('_', ' ').title(),
+                    str(participant.get('comments_count', 0))
+                ])
+            
+            participant_table = Table(participant_data, colWidths=[2*inch, 2.5*inch, 1.5*inch])
+            participant_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3498db')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 11),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.grey),
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+                ('ROWHEIGHT', (0, 1), (-1, -1), 25),
+            ]))
+            elements.append(participant_table)
+        
+        # Add footer with disclaimer
+        elements.append(Spacer(1, 0.3 * inch))
+        footer_text = "This summary was generated using AI and should be reviewed for accuracy."
+        footer_para = Paragraph(
+            f"<i>{footer_text}</i>",
+            ParagraphStyle(
+                'Footer',
+                parent=styles['Normal'],
+                fontSize=8,
+                textColor=colors.HexColor('#95a5a6'),
+                alignment=TA_CENTER,
+                fontName='Helvetica-Oblique'
+            )
+        )
+        elements.append(footer_para)
+        
+        # Build PDF
+        doc.build(elements)
+        
+        # Get the PDF data from buffer
+        pdf_data = buffer.getvalue()
+        buffer.close()
+        
+        # Create HTTP response
+        response = HttpResponse(content_type='application/pdf')
+        response['Content-Disposition'] = f'attachment; filename="Comment_Summary_Task_{task_id}.pdf"'
+        response.write(pdf_data)
+        
+        return response
+        
+    except Exception as e:
+        logger.error(f"Error generating comment summary PDF: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+@require_http_methods(["POST"])
 def suggest_lss_classification_api(request):
     """
     API endpoint to suggest Lean Six Sigma classification for a task

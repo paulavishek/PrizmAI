@@ -65,6 +65,7 @@ urlpatterns = [
     path('test-ai-features/', views.test_ai_features, name='test_ai_features'),    # AI API Endpoints
     path('api/generate-task-description/', api_views.generate_task_description_api, name='generate_task_description_api'),
     path('api/summarize-comments/<int:task_id>/', api_views.summarize_comments_api, name='summarize_comments_api'),
+    path('api/download-comment-summary-pdf/<int:task_id>/', api_views.download_comment_summary_pdf, name='download_comment_summary_pdf'),
     path('api/suggest-lss-classification/', api_views.suggest_lss_classification_api, name='suggest_lss_classification_api'),
     path('api/summarize-board-analytics/<int:board_id>/', api_views.summarize_board_analytics_api, name='summarize_board_analytics_api'),
     path('api/download-analytics-pdf/<int:board_id>/', api_views.download_analytics_summary_pdf, name='download_analytics_summary_pdf'),
