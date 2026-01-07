@@ -245,6 +245,32 @@ kbd {
     padding-bottom: 10px;
 }
 
+/* Scrollable content for conflict detection and messages */
+.feature-section-content {
+    max-height: 400px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 5px;
+}
+
+.feature-section-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.feature-section-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.feature-section-content::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.feature-section-content::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
 /* Stats */
 .board-stats {
     display: flex;
@@ -778,21 +804,23 @@ kbd {
             <div class="feature-section-title">
                 <i class="fas fa-comments me-2"></i>Messages & Collaboration
             </div>
-            {% if chat_rooms %}
-                {% for room in chat_rooms %}
-                <div class="preview-item">
-                    <strong>{{ room.name }}</strong>
-                    <div class="small text-muted">
-                        {{ room.message_count }} messages
+            <div class="feature-section-content">
+                {% if chat_rooms %}
+                    {% for room in chat_rooms %}
+                    <div class="preview-item">
+                        <strong>{{ room.name }}</strong>
+                        <div class="small text-muted">
+                            {{ room.message_count }} messages
+                        </div>
                     </div>
-                </div>
-                {% endfor %}
-                <div class="text-muted small mt-2">
-                    <i class="fas fa-info-circle me-1"></i>In your own boards, you can participate in real-time chat
-                </div>
-            {% else %}
-                <p class="text-muted">No chat rooms available</p>
-            {% endif %}
+                    {% endfor %}
+                    <div class="text-muted small mt-2">
+                        <i class="fas fa-info-circle me-1"></i>In your own boards, you can participate in real-time chat
+                    </div>
+                {% else %}
+                    <p class="text-muted">No chat rooms available</p>
+                {% endif %}
+            </div>
         </div>
     </div>
 
@@ -802,33 +830,35 @@ kbd {
             <div class="feature-section-title">
                 <i class="fas fa-exclamation-triangle me-2"></i>Conflict Detection
             </div>
-            {% if conflicts %}
-                {% for conflict in conflicts %}
-                <div class="preview-item">
-                    <strong>{{ conflict.get_conflict_type_display }}</strong>
-                    <div class="small">{{ conflict.title }}</div>
-                    <div class="small text-muted mt-1">
-                        {% with conflict.tasks.all as task_list %}
-                            {% if task_list|length > 0 %}
-                                Tasks: {% for task in task_list %}{{ task.title }}{% if not forloop.last %} vs {% endif %}{% endfor %}
-                            {% else %}
-                                {{ conflict.description|truncatewords:15 }}
-                            {% endif %}
-                        {% endwith %}
+            <div class="feature-section-content">
+                {% if conflicts %}
+                    {% for conflict in conflicts %}
+                    <div class="preview-item">
+                        <strong>{{ conflict.get_conflict_type_display }}</strong>
+                        <div class="small">{{ conflict.title }}</div>
+                        <div class="small text-muted mt-1">
+                            {% with conflict.tasks.all as task_list %}
+                                {% if task_list|length > 0 %}
+                                    Tasks: {% for task in task_list %}{{ task.title }}{% if not forloop.last %} vs {% endif %}{% endfor %}
+                                {% else %}
+                                    {{ conflict.description|truncatewords:15 }}
+                                {% endif %}
+                            {% endwith %}
+                        </div>
+                        <div class="small mt-1">
+                            <span class="badge bg-{% if conflict.severity == 'critical' %}danger{% elif conflict.severity == 'high' %}warning{% elif conflict.severity == 'medium' %}info{% else %}secondary{% endif %}">
+                                {{ conflict.get_severity_display }}
+                            </span>
+                        </div>
                     </div>
-                    <div class="small mt-1">
-                        <span class="badge bg-{% if conflict.severity == 'critical' %}danger{% elif conflict.severity == 'high' %}warning{% elif conflict.severity == 'medium' %}info{% else %}secondary{% endif %}">
-                            {{ conflict.get_severity_display }}
-                        </span>
+                    {% endfor %}
+                    <div class="text-muted small mt-2">
+                        <i class="fas fa-info-circle me-1"></i>AI automatically detects resource conflicts and scheduling issues
                     </div>
-                </div>
-                {% endfor %}
-                <div class="text-muted small mt-2">
-                    <i class="fas fa-info-circle me-1"></i>AI automatically detects resource conflicts and scheduling issues
-                </div>
-            {% else %}
-                <p class="text-muted">No active conflicts detected</p>
-            {% endif %}
+                {% else %}
+                    <p class="text-muted">No active conflicts detected</p>
+                {% endif %}
+            </div>
         </div>
     </div>
 </div>
