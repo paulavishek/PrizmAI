@@ -250,6 +250,45 @@
     margin: 0 2px;
 }
 
+/* Pagination Styles */
+.pagination-container {
+    background: #f8f9fa;
+    border-top: 2px solid #e9ecef;
+}
+
+.pagination {
+    margin: 0;
+}
+
+.pagination .page-link {
+    color: #667eea;
+    border: 1px solid #dee2e6;
+    padding: 8px 12px;
+    margin: 0 2px;
+    border-radius: 5px;
+    transition: all 0.2s ease;
+}
+
+.pagination .page-link:hover {
+    color: #fff;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+    transform: translateY(-2px);
+}
+
+.pagination .page-item.active .page-link {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+    color: white;
+    font-weight: 600;
+}
+
+.pagination .page-item.disabled .page-link {
+    background: #e9ecef;
+    border-color: #dee2e6;
+    color: #6c757d;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .stats-grid {
@@ -455,6 +494,72 @@
                     </tbody>
                 </table>
             </div>
+            
+            <!-- Pagination -->
+            {% if tasks.has_other_pages %}
+            <div class="pagination-container p-4">
+                <nav aria-label="Task list pagination">
+                    <ul class="pagination justify-content-center mb-0">
+                        {% if tasks.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?status={{ status_filter }}&page=1" aria-label="First">
+                                <i class="fas fa-angle-double-left"></i>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?status={{ status_filter }}&page={{ tasks.previous_page_number }}" aria-label="Previous">
+                                <i class="fas fa-angle-left"></i>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="fas fa-angle-double-left"></i></span>
+                        </li>
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="fas fa-angle-left"></i></span>
+                        </li>
+                        {% endif %}
+
+                        {% for num in tasks.paginator.page_range %}
+                            {% if tasks.number == num %}
+                            <li class="page-item active" aria-current="page">
+                                <span class="page-link">{{ num }}</span>
+                            </li>
+                            {% elif num > tasks.number|add:'-3' and num < tasks.number|add:'3' %}
+                            <li class="page-item">
+                                <a class="page-link" href="?status={{ status_filter }}&page={{ num }}">{{ num }}</a>
+                            </li>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if tasks.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?status={{ status_filter }}&page={{ tasks.next_page_number }}" aria-label="Next">
+                                <i class="fas fa-angle-right"></i>
+                            </a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?status={{ status_filter }}&page={{ tasks.paginator.num_pages }}" aria-label="Last">
+                                <i class="fas fa-angle-double-right"></i>
+                            </a>
+                        </li>
+                        {% else %}
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="fas fa-angle-right"></i></span>
+                        </li>
+                        <li class="page-item disabled">
+                            <span class="page-link"><i class="fas fa-angle-double-right"></i></span>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                
+                <div class="text-center mt-3 text-muted small">
+                    Showing {{ tasks.start_index }} - {{ tasks.end_index }} of {{ tasks.paginator.count }} task{{ tasks.paginator.count|pluralize }}
+                </div>
+            </div>
+            {% endif %}
+            
             {% else %}
             <div class="empty-state">
                 <i class="fas fa-inbox"></i>

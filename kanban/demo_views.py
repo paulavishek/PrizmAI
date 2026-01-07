@@ -1424,7 +1424,7 @@ def demo_board_tasks_list(request, board_id):
     status_filter = request.GET.get('status', 'all')
     
     # Get all tasks with related data
-    tasks = Task.objects.filter(
+    tasks_queryset = Task.objects.filter(
         column__board=board
     ).select_related(
         'assigned_to', 'assigned_to__profile', 'created_by', 'column'
@@ -1432,13 +1432,25 @@ def demo_board_tasks_list(request, board_id):
     
     # Apply filters
     if status_filter == 'completed':
-        tasks = tasks.filter(progress=100)
+        tasks_queryset = tasks_queryset.filter(progress=100)
     elif status_filter == 'in_progress':
-        tasks = tasks.filter(progress__gt=0, progress__lt=100)
+        tasks_queryset = tasks_queryset.filter(progress__gt=0, progress__lt=100)
     elif status_filter == 'not_started':
-        tasks = tasks.filter(progress=0)
+        tasks_queryset = tasks_queryset.filter(progress=0)
     elif status_filter == 'high_priority':
-        tasks = tasks.filter(priority__in=['high', 'urgent'])
+        tasks_queryset = tasks_queryset.filter(priority__in=['high', 'urgent'])
+    
+    # Pagination
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    paginator = Paginator(tasks_queryset, 25)  # Show 25 tasks per page
+    page_number = request.GET.get('page', 1)
+    
+    try:
+        tasks = paginator.page(page_number)
+    except PageNotAnInteger:
+        tasks = paginator.page(1)
+    except EmptyPage:
+        tasks = paginator.page(paginator.num_pages)
     
     # Get statistics
     total_tasks = Task.objects.filter(column__board=board).count()
