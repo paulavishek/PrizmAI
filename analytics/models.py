@@ -835,9 +835,9 @@ class DemoAbusePrevention(models.Model):
         else:
             self.last_rate_limit_reset = timezone.now()
         
-        # Rate limits
-        MAX_SESSIONS_PER_HOUR = 3
-        MAX_SESSIONS_PER_24H = 5
+        # Rate limits (increased for development)
+        MAX_SESSIONS_PER_HOUR = 50
+        MAX_SESSIONS_PER_24H = 100
         
         if self.sessions_last_hour >= MAX_SESSIONS_PER_HOUR:
             return False, "Too many demo sessions. Please try again later."
