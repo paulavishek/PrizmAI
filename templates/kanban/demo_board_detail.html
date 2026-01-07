@@ -861,7 +861,7 @@ kbd {
             <div class="feature-section-content">
                 {% if conflicts %}
                     {% for conflict in conflicts %}
-                    <a href="{% url 'conflict_dashboard' %}" class="preview-item-link">
+                    <a href="{% url 'conflict_detail' conflict.id %}" class="preview-item-link">
                         <strong>{{ conflict.get_conflict_type_display }}</strong>
                         <div class="small">{{ conflict.title }}</div>
                         <div class="small text-muted mt-1">
@@ -900,7 +900,7 @@ kbd {
     <div class="row">
         {% for page in wiki_pages %}
         <div class="col-md-4 mb-3">
-            <a href="{% url 'wiki:page_detail' page.id %}" class="preview-item-link">
+            <a href="{% url 'wiki:page_detail' page.slug %}" class="preview-item-link">
                 <strong>{{ page.title }}</strong>
                 <div class="small text-muted">
                     Updated {{ page.updated_at|date:"M d, Y" }}
