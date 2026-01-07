@@ -462,7 +462,6 @@ def demo_dashboard(request):
         if not user_demo_orgs.exists():
             # User doesn't have access yet - grant it automatically
             from kanban.permission_models import BoardMembership, Role
-            from messaging.models import ChatRoom
             
             for demo_board in demo_boards:
                 # Add user to board members
