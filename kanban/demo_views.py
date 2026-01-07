@@ -856,17 +856,27 @@ def reset_demo_data(request):
             )
             
             # Delete session-created content (if any)
+            # IMPORTANT: Content may be tagged with session_id OR browser_fingerprint
             session_id = request.session.get('demo_session_id')
+            browser_fingerprint = request.session.get('browser_fingerprint')
+            
+            # Build list of identifiers to clean (session_id and/or fingerprint)
+            identifiers_to_clean = []
             if session_id:
-                # Delete tasks created by this session
+                identifiers_to_clean.append(session_id)
+            if browser_fingerprint:
+                identifiers_to_clean.append(browser_fingerprint)
+            
+            if identifiers_to_clean:
+                # Delete tasks created by this session (by session_id OR fingerprint)
                 Task.objects.filter(
-                    created_by_session=session_id,
+                    created_by_session__in=identifiers_to_clean,
                     column__board__organization=demo_org
                 ).delete()
                 
-                # Delete boards created by this session
+                # Delete boards created by this session (by session_id OR fingerprint)
                 Board.objects.filter(
-                    created_by_session=session_id,
+                    created_by_session__in=identifiers_to_clean,
                     organization=demo_org,
                     is_official_demo_board=False
                 ).delete()

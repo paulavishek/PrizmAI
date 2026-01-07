@@ -37,15 +37,21 @@ def cleanup_expired_demo_sessions():
     
     logger.info(f"Found {expired_count} expired demo sessions to cleanup")
     
-    # Get session IDs for content cleanup
+    # Get session IDs AND browser fingerprints for content cleanup
+    # IMPORTANT: Boards may be tagged with browser_fingerprint instead of session_id
     expired_session_ids = list(expired_sessions.values_list('session_id', flat=True))
+    expired_fingerprints = list(expired_sessions.exclude(
+        browser_fingerprint__isnull=True
+    ).values_list('browser_fingerprint', flat=True))
+    
+    # Combine both lists for comprehensive cleanup
+    identifiers_to_cleanup = expired_session_ids + expired_fingerprints
     
     # Track cleanup stats
     cleanup_stats = {
         'sessions': expired_count,
         'tasks': 0,
         'boards': 0,
-        'comments': 0,
     }
     
     try:
@@ -53,26 +59,23 @@ def cleanup_expired_demo_sessions():
         demo_org = Organization.objects.filter(is_demo=True).first()
         
         if demo_org:
-            # Delete tasks created by expired sessions
+            # Delete tasks created by expired sessions (by session_id OR fingerprint)
             deleted_tasks = Task.objects.filter(
-                created_by_session__in=expired_session_ids,
+                created_by_session__in=identifiers_to_cleanup,
                 column__board__organization=demo_org
             ).delete()[0]
             cleanup_stats['tasks'] = deleted_tasks
             
-            # Delete non-official boards created by expired sessions
+            # Delete non-official boards created by expired sessions (by session_id OR fingerprint)
             deleted_boards = Board.objects.filter(
-                created_by_session__in=expired_session_ids,
+                created_by_session__in=identifiers_to_cleanup,
                 organization=demo_org,
                 is_official_demo_board=False
             ).delete()[0]
             cleanup_stats['boards'] = deleted_boards
             
-            # Delete comments created by expired sessions
-            deleted_comments = Comment.objects.filter(
-                created_by_session__in=expired_session_ids
-            ).delete()[0]
-            cleanup_stats['comments'] = deleted_comments
+            # Note: Comments are automatically deleted via CASCADE when boards/tasks are deleted
+            # Comment model doesn't have created_by_session field
             
             # Reset official demo boards to clean state
             _reset_demo_boards(demo_org)
