@@ -342,10 +342,38 @@ kbd {
     background: #f8f9fa;
     border-radius: 4px;
     margin-bottom: 10px;
+    transition: all 0.2s ease;
 }
 
 .preview-item:hover {
     background: #e8e9fc;
+}
+
+/* Clickable preview items */
+.preview-item-link {
+    padding: 10px;
+    border-left: 3px solid #667eea;
+    background: #f8f9fa;
+    border-radius: 4px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+}
+
+.preview-item-link:hover {
+    background: #e8e9fc;
+    border-left-color: #4c51bf;
+    transform: translateX(3px);
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+    text-decoration: none;
+    color: inherit;
+}
+
+.preview-item-link:active {
+    transform: translateX(1px);
 }
 </style>
 {% endblock %}
@@ -807,12 +835,12 @@ kbd {
             <div class="feature-section-content">
                 {% if chat_rooms %}
                     {% for room in chat_rooms %}
-                    <div class="preview-item">
+                    <a href="{% url 'messaging:chat_room_detail' room.id %}" class="preview-item-link">
                         <strong>{{ room.name }}</strong>
                         <div class="small text-muted">
                             {{ room.message_count }} messages
                         </div>
-                    </div>
+                    </a>
                     {% endfor %}
                     <div class="text-muted small mt-2">
                         <i class="fas fa-info-circle me-1"></i>In your own boards, you can participate in real-time chat
@@ -833,7 +861,7 @@ kbd {
             <div class="feature-section-content">
                 {% if conflicts %}
                     {% for conflict in conflicts %}
-                    <div class="preview-item">
+                    <a href="{% url 'conflict_dashboard' %}" class="preview-item-link">
                         <strong>{{ conflict.get_conflict_type_display }}</strong>
                         <div class="small">{{ conflict.title }}</div>
                         <div class="small text-muted mt-1">
@@ -850,7 +878,7 @@ kbd {
                                 {{ conflict.get_severity_display }}
                             </span>
                         </div>
-                    </div>
+                    </a>
                     {% endfor %}
                     <div class="text-muted small mt-2">
                         <i class="fas fa-info-circle me-1"></i>AI automatically detects resource conflicts and scheduling issues
@@ -872,12 +900,12 @@ kbd {
     <div class="row">
         {% for page in wiki_pages %}
         <div class="col-md-4 mb-3">
-            <div class="preview-item">
+            <a href="{% url 'wiki:page_detail' page.id %}" class="preview-item-link">
                 <strong>{{ page.title }}</strong>
                 <div class="small text-muted">
                     Updated {{ page.updated_at|date:"M d, Y" }}
                 </div>
-            </div>
+            </a>
         </div>
         {% endfor %}
     </div>
