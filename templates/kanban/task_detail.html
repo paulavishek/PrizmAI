@@ -107,14 +107,14 @@
             </div>
             <div class="card-body">
                 <!-- AI Summary Section -->
-                <div id="comment-summary-container" class="alert alert-info mb-4 d-none">
-                    <button type="button" class="btn-close" id="close-summary" aria-label="Close" style="position: absolute; right: 15px; top: 15px;"></button>
+                <div id="comment-summary-container" class="alert alert-info mb-4 d-none" style="position: relative; padding-right: 45px;">
+                    <button type="button" class="btn-close" id="close-summary" aria-label="Close" style="position: absolute; right: 10px; top: 10px;"></button>
                     <div class="d-flex align-items-start">
                         <i class="fas fa-robot mt-1 me-2"></i>
                         <div class="flex-grow-1">
                             <div class="d-flex justify-content-between align-items-center mb-2">
                                 <strong>Comment Summary:</strong>
-                                <button id="export-summary-pdf" class="btn btn-sm btn-outline-primary d-none" title="Export summary as PDF">
+                                <button id="export-summary-pdf" class="btn btn-sm btn-outline-primary d-none me-4" title="Export summary as PDF">
                                     <i class="fas fa-file-pdf me-1"></i> Export PDF
                                     <span id="pdf-export-spinner" class="spinner-border spinner-border-sm ms-1 d-none" role="status"></span>
                                 </button>
