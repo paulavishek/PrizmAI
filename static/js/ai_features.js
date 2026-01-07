@@ -122,7 +122,18 @@ function initAICommentSummarizer() {
             })
             .then(data => {
                 if (data.summary) {
-                    summaryText.innerHTML = data.summary;
+                    // Check if summary is an object or string
+                    let summaryText_content = '';
+                    if (typeof data.summary === 'object' && data.summary.summary) {
+                        // If it's an object, extract the summary field and format it
+                        summaryText_content = formatSummaryText(data.summary.summary);
+                    } else if (typeof data.summary === 'string') {
+                        // If it's already a string, format it
+                        summaryText_content = formatSummaryText(data.summary);
+                    } else {
+                        summaryText_content = 'Could not parse summary format.';
+                    }
+                    summaryText.innerHTML = summaryText_content;
                     summaryContainer.classList.remove('d-none');
                 } else {
                     alert('Could not generate summary. Please try again.');
