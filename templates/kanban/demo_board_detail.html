@@ -259,6 +259,42 @@ kbd {
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     text-align: center;
+    text-decoration: none;
+    color: inherit;
+    display: block;
+}
+
+.stat-item-clickable {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-item-clickable::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(102, 126, 234, 0.1), transparent);
+    transition: left 0.5s ease;
+}
+
+.stat-item-clickable:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fc 100%);
+}
+
+.stat-item-clickable:hover::before {
+    left: 100%;
+}
+
+.stat-item-clickable:active {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(0,0,0,0.1);
 }
 
 .stat-value {
@@ -529,22 +565,30 @@ kbd {
 
 <!-- Board Stats -->
 <div class="board-stats">
-    <div class="stat-item">
+    <a href="#all-tasks-section" class="stat-item stat-item-clickable" title="View all tasks on this board">
         <div class="stat-value">{{ total_tasks }}</div>
-        <div class="stat-label">Total Tasks</div>
-    </div>
-    <div class="stat-item">
+        <div class="stat-label">
+            <i class="fas fa-clipboard-list me-1"></i>Total Tasks
+        </div>
+    </a>
+    <a href="#all-tasks-section" class="stat-item stat-item-clickable" title="View completed tasks" onclick="filterTasksByStatus('completed'); return false;">
         <div class="stat-value">{{ completed_tasks }}</div>
-        <div class="stat-label">Completed</div>
-    </div>
-    <div class="stat-item">
+        <div class="stat-label">
+            <i class="fas fa-check-circle me-1"></i>Completed
+        </div>
+    </a>
+    <a href="#" class="stat-item stat-item-clickable" title="Scroll to board columns" onclick="scrollToColumns(); return false;">
         <div class="stat-value">{{ columns|length }}</div>
-        <div class="stat-label">Columns</div>
-    </div>
-    <div class="stat-item">
+        <div class="stat-label">
+            <i class="fas fa-columns me-1"></i>Columns
+        </div>
+    </a>
+    <a href="{% url 'messaging:chat_room_list' board_id=board.id %}" class="stat-item stat-item-clickable" title="View all chat rooms">
         <div class="stat-value">{{ chat_rooms|length }}</div>
-        <div class="stat-label">Chat Rooms</div>
-    </div>
+        <div class="stat-label">
+            <i class="fas fa-comments me-1"></i>Chat Rooms
+        </div>
+    </a>
 </div>
 
 <!-- Column Ordering Panel -->
@@ -599,6 +643,7 @@ kbd {
 
 <!-- Kanban Board -->
 <div class="kanban-board" id="kanban-board">
+    <div id="all-tasks-section"></div>
     {% for column in columns %}
     <div class="kanban-column" id="column-{{ column.id }}" data-column-id="{{ column.id }}" draggable="true">
         <div class="kanban-column-header">
@@ -901,6 +946,46 @@ document.addEventListener('DOMContentLoaded', function() {
     // Note: We no longer auto-track page views as features explored.
     // Features are only tracked when users perform meaningful interactions
     // such as dragging tasks, clicking on features, using AI, etc.
+    
+    // Stat card interaction functions
+    window.filterTasksByStatus = function(status) {
+        const allTasks = document.querySelectorAll('.kanban-task');
+        
+        if (status === 'completed') {
+            // Highlight completed tasks (progress = 100%)
+            allTasks.forEach(task => {
+                const progressBar = task.querySelector('.progress-bar');
+                if (progressBar) {
+                    const progress = parseInt(progressBar.style.width) || 0;
+                    if (progress === 100 || progressBar.classList.contains('bg-success')) {
+                        task.style.border = '2px solid #28a745';
+                        task.style.backgroundColor = '#f0fff4';
+                        setTimeout(() => {
+                            task.style.border = '';
+                            task.style.backgroundColor = '';
+                        }, 3000);
+                        // Scroll first completed task into view
+                        if (document.querySelectorAll('.kanban-task[style*="border"]').length === 1) {
+                            task.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Track feature usage
+        trackDemoFeature('stat_card_interaction');
+    };
+    
+    window.scrollToColumns = function() {
+        const kanbanBoard = document.querySelector('.kanban-board');
+        if (kanbanBoard) {
+            kanbanBoard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Track feature usage
+            trackDemoFeature('stat_card_interaction');
+        }
+    };
+
 });
 
 // Track demo feature for nudge system
