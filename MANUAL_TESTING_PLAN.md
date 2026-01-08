@@ -99,12 +99,70 @@ ALLOWED_HOSTS=localhost,127.0.0.1
 
 ### 3. Test Data Preparation
 
-**Create Multiple Test Users:**
-- Admin user (full permissions)
-- Manager user (project management permissions)
-- Developer user (contributor permissions)
-- Viewer user (read-only permissions)
-- Anonymous user (demo mode)
+**Pre-Configured Demo Users Available:**
+
+The application includes pre-configured demo users with different access levels. All demo users use the password: **`demo123`**
+
+#### Demo Organization Users (Team Mode)
+These users are part of "Demo - Acme Corporation" and have RBAC permissions:
+
+1. **Alex Chen** (Admin - Full Access)
+   - Username: `alex_chen_demo`
+   - Email: alex.chen@demo.prizmai.local
+   - Password: `demo123`
+   - Role: Organization Admin
+   - Skills: Project Management (Expert), Agile/Scrum (Expert), Leadership (Advanced)
+
+2. **Sam Rivera** (Developer - Member Access)
+   - Username: `sam_rivera_demo`
+   - Email: sam.rivera@demo.prizmai.local
+   - Password: `demo123`
+   - Role: Organization Member
+   - Skills: Python (Expert), JavaScript (Advanced), Django (Expert), React (Intermediate)
+
+3. **Jordan Taylor** (Viewer - Read-Only)
+   - Username: `jordan_taylor_demo`
+   - Email: jordan.taylor@demo.prizmai.local
+   - Password: `demo123`
+   - Role: Organization Viewer
+   - Skills: Strategic Planning (Expert), Business Analysis (Advanced)
+
+#### Solo Mode Admin User
+For testing solo demo mode with full admin access:
+
+4. **Demo Admin Solo**
+   - Username: `demo_admin_solo`
+   - Email: demo_admin@prizmaidemo.internal
+   - Password: `demo123`
+   - Role: Virtual Admin (full access to all features)
+
+#### Standard Test Users (Non-Demo)
+These users can be created via `populate_test_data` command:
+
+5. **Admin User** (Superuser)
+   - Username: `admin`
+   - Password: `admin123`
+   - Full system administrator access
+
+6. **Development Team**
+   - `john_doe` / Password: `JohnDoe@2024`
+   - `jane_smith` / Password: `JaneSmith@2024`
+   - `robert_johnson` / Password: `RobertJ@2024`
+   - `alice_williams` / Password: `AliceW@2024`
+   - `bob_martinez` / Password: `BobM@2024`
+
+7. **Marketing Team**
+   - `carol_anderson` / Password: `CarolA@2024`
+   - `david_taylor` / Password: `DavidT@2024`
+
+**Quick Setup Command:**
+```bash
+# Create all test users and demo data
+python manage.py populate_test_data
+
+# Or just create demo organization
+python manage.py create_demo_organization
+```
 
 ### 4. Browser Setup
 
@@ -153,7 +211,21 @@ http://localhost:8000
   - Verify email confirmation (if enabled)
   - **Expected:** User account created successfully, redirected to dashboard
   
-- [ ] **Test Case 1.2:** Login with valid credentials
+- [ ] **Test Case 1.2:** Login with demo user (recommended)
+  - Navigate to login page
+  - Enter username: `alex_chen_demo`
+  - Enter password: `demo123`
+  - Click login
+  - **Expected:** Redirected to dashboard, can access demo boards
+  
+- [ ] **Test Case 1.2a:** Login with admin user
+  - Navigate to login page
+  - Enter username: `admin`
+  - Enter password: `admin123`
+  - Click login
+  - **Expected:** Redirected to dashboard, superuser access confirmed
+  
+- [ ] **Test Case 1.2b:** Login with valid credentials
   - Navigate to login page
   - Enter valid username/email and password
   - Click login
@@ -755,20 +827,24 @@ http://localhost:8000
 ### 1. Access Control & Permissions
 
 - [ ] **Test Case SEC-1.1:** Role-based access (Admin)
-  - Login as admin
+  - Login as: `alex_chen_demo` / `demo123`
+  - Navigate to organization settings
   - **Expected:** Can access all features, settings, user management
   
-- [ ] **Test Case SEC-1.2:** Role-based access (Manager)
-  - Login as manager
-  - **Expected:** Can manage projects and teams, limited admin access
+- [ ] **Test Case SEC-1.2:** Role-based access (Member/Developer)
+  - Login as: `sam_rivera_demo` / `demo123`
+  - Try to access organization settings
+  - **Expected:** Can manage assigned projects and tasks, limited admin access
   
-- [ ] **Test Case SEC-1.3:** Role-based access (Developer)
-  - Login as developer
-  - **Expected:** Can view and edit assigned tasks, no admin access
+- [ ] **Test Case SEC-1.3:** Role-based access (Viewer)
+  - Login as: `jordan_taylor_demo` / `demo123`
+  - Try to edit tasks
+  - **Expected:** Read-only access, cannot edit tasks or boards
   
-- [ ] **Test Case SEC-1.4:** Role-based access (Viewer)
-  - Login as viewer
-  - **Expected:** Read-only access, cannot edit
+- [ ] **Test Case SEC-1.4:** Superuser access
+  - Login as: `admin` / `admin123`
+  - Navigate to Django admin (/admin/)
+  - **Expected:** Full superuser access, can access Django admin panel
   
 - [ ] **Test Case SEC-1.5:** Board-level permissions
   - Create private board
@@ -1341,17 +1417,19 @@ http://localhost:8000
   - [ ] API_DOCUMENTATION.md complete
   
 - [ ] **Admin documentation**
-  - [ ] Deployment guide
-  - [ ] Troubleshooting guide
-  - [ ] Maintenance procedures
-
-### Final Smoke Tests
+  - [ ] Deployment gu (Use Demo Users)
 
 - [ ] **Homepage loads**
 - [ ] **User can register**
-- [ ] **User can login**
-- [ ] **User can create board**
+- [ ] **Demo user can login** (`alex_chen_demo` / `demo123`)
+- [ ] **Demo boards are visible**
+- [ ] **User can create new board**
 - [ ] **User can create task**
+- [ ] **AI features work** (task description generation)
+- [ ] **API endpoints respond** (create API token for `alex_chen_demo`)
+- [ ] **Different roles work** (test with `jordan_taylor_demo` for viewer)
+- [ ] **Mobile view works**
+- [ ] **Demo mode accessible** (visit /demo/ URL)k**
 - [ ] **AI features work**
 - [ ] **API endpoints respond**
 - [ ] **Email notifications sent**
