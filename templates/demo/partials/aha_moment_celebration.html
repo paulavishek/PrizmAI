@@ -344,7 +344,7 @@
     }
     
     /**
-     * Track aha moment on server
+     * Track aha moment on server and Google Analytics
      */
     function trackAhaMoment(momentType, customData) {
         // Map aha moment types to feature names for tracking
@@ -359,17 +359,25 @@
             'conflict_detected': 'conflict_detection'
         };
         
-        // Track as aha moment
-        fetch("{% url 'track_demo_event' %}", {
+        // Get session ID from demo context
+        const sessionId = window.demoSessionId || null;
+        
+        // Track to dedicated aha moment API endpoint
+        fetch("{% url 'analytics:track_aha_moment' %}", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCookie('csrftoken'),
             },
             body: JSON.stringify({
-                event_type: 'aha_moment',
-                event_data: {
-                    moment_type: momentType,
+                session_id: sessionId,
+                moment_type: momentType,
+                page_path: window.location.pathname,
+                subtype: customData.subtype || '',
+                feature_context: momentToFeature[momentType] || momentType,
+                trigger_action: customData.action || customData.trigger || '',
+                celebration_shown: true,
+                metadata: {
                     timestamp: new Date().toISOString(),
                     ...customData
                 }
@@ -377,7 +385,12 @@
         })
         .then(response => response.json())
         .then(data => {
-            console.log('Aha moment tracked:', momentType);
+            console.log('🎯 Aha moment tracked:', momentType, data);
+            
+            // Store event ID for interaction tracking
+            if (data.event_id) {
+                window.lastAhaEventId = data.event_id;
+            }
             
             // Trigger peak nudge after aha moment (if nudge system is available)
             if (typeof window.nudgeSystem !== 'undefined' && window.nudgeSystem.showPeakNudgeForAha) {
@@ -388,31 +401,94 @@
             console.error('Error tracking aha moment:', error);
         });
         
-        // Also track as feature explored (to enable nudges)
+        // Also send to Google Analytics
+        if (typeof gtag !== 'undefined') {
+            // Primary aha moment event
+            gtag('event', 'aha_moment', {
+                'event_category': 'engagement',
+                'event_label': momentType,
+                'aha_moment_type': momentType,
+                'page_path': window.location.pathname,
+                'demo_mode': true
+            });
+            
+            // Specific event for each aha type (for funnel analysis)
+            gtag('event', `aha_${momentType}`, {
+                'event_category': 'aha_moments',
+                'event_label': window.location.pathname,
+                'value': 1
+            });
+            
+            console.log('📊 Aha moment sent to Google Analytics:', momentType);
+        }
+        
+        // Also track as feature explored (legacy support for nudges)
         const featureName = momentToFeature[momentType] || momentType;
-        fetch("{% url 'track_demo_event' %}", {
+        try {
+            fetch("{% url 'track_demo_event' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: JSON.stringify({
+                    event_type: 'feature_explored',
+                    event_data: {
+                        feature: featureName,
+                        trigger: 'aha_moment',
+                        timestamp: new Date().toISOString()
+                    }
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Feature tracked:', featureName);
+            })
+            .catch(error => {
+                // Silent fail for legacy endpoint
+            });
+        } catch (e) {
+            // Legacy endpoint may not exist
+        }
+    }
+    
+    /**
+     * Track aha moment interaction (acknowledge, dismiss, CTA click)
+     */
+    function trackAhaInteraction(interactionType) {
+        if (!window.lastAhaEventId) return;
+        
+        fetch("{% url 'analytics:aha_moment_interaction' %}", {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCookie('csrftoken'),
             },
             body: JSON.stringify({
-                event_type: 'feature_explored',
-                event_data: {
-                    feature: featureName,
-                    trigger: 'aha_moment',
-                    timestamp: new Date().toISOString()
-                }
+                event_id: window.lastAhaEventId,
+                interaction_type: interactionType
             })
         })
         .then(response => response.json())
         .then(data => {
-            console.log('Feature tracked:', featureName);
+            console.log('Aha interaction tracked:', interactionType);
         })
         .catch(error => {
-            console.error('Error tracking feature:', error);
+            console.error('Error tracking aha interaction:', error);
         });
+        
+        // Also send to Google Analytics
+        if (typeof gtag !== 'undefined') {
+            gtag('event', 'aha_interaction', {
+                'event_category': 'engagement',
+                'event_label': interactionType,
+                'event_id': window.lastAhaEventId
+            });
+        }
     }
+    
+    // Export interaction tracker
+    window.trackAhaInteraction = trackAhaInteraction;
     
     /**
      * Check if user is in demo mode

@@ -14,6 +14,14 @@ urlpatterns = [
     # AJAX feedback submission
     path('api/submit-feedback/', views.submit_feedback_ajax, name='submit_feedback_ajax'),
     
+    # Aha moment tracking API
+    path('api/track-aha-moment/', views.track_aha_moment_ajax, name='track_aha_moment'),
+    path('api/aha-moment-interaction/', views.aha_moment_interaction, name='aha_moment_interaction'),
+    path('api/aha-moment-stats/', views.aha_moment_stats_api, name='aha_moment_stats'),
+    
+    # Demo email collection (for reminders)
+    path('api/collect-demo-email/', views.collect_demo_email, name='collect_demo_email'),
+    
     # Analytics dashboard (staff only)
     path('dashboard/', views.analytics_dashboard, name='dashboard'),
     

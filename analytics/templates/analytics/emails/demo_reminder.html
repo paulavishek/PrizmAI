@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% if reminder_type == '24h' %}24 Hours Left{% else %}12 Hours Left{% endif %} - PrizmAI Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .email-container {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+        }
+        .header .timer {
+            font-size: 48px;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+        .header p {
+            margin: 10px 0 0;
+            opacity: 0.9;
+        }
+        .content {
+            padding: 30px;
+        }
+        .stats-row {
+            display: flex;
+            justify-content: space-around;
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .stat {
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+        }
+        .features-section {
+            margin: 25px 0;
+        }
+        .features-section h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        .feature-item {
+            display: flex;
+            align-items: center;
+            padding: 12px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        .feature-emoji {
+            font-size: 24px;
+            margin-right: 15px;
+        }
+        .feature-name {
+            font-weight: 600;
+            color: #333;
+        }
+        .cta-section {
+            text-align: center;
+            margin: 30px 0;
+        }
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white !important;
+            padding: 15px 40px;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .cta-secondary {
+            display: block;
+            margin-top: 15px;
+            color: #667eea;
+            text-decoration: none;
+        }
+        .urgency-banner {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .urgency-banner.urgent {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        .footer {
+            text-align: center;
+            padding: 20px;
+            background: #f8f9fa;
+            color: #666;
+            font-size: 12px;
+        }
+        .footer a {
+            color: #667eea;
+        }
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            body { background-color: #1a1a2e; }
+            .email-container { background: #16213e; }
+            .content { color: #e0e0e0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header -->
+        <div class="header">
+            <h1>⏰ Time is Running Out!</h1>
+            <div class="timer">{{ hours_remaining }}h</div>
+            <p>remaining in your PrizmAI demo</p>
+        </div>
+        
+        <!-- Content -->
+        <div class="content">
+            {% if reminder_type == '12h' %}
+            <div class="urgency-banner urgent">
+                ⚡ <strong>Final stretch!</strong> Only 12 hours left to explore everything PrizmAI has to offer.
+            </div>
+            {% else %}
+            <div class="urgency-banner">
+                👋 Your demo session is halfway through. Have you discovered everything yet?
+            </div>
+            {% endif %}
+            
+            <!-- Your Progress -->
+            <h3>📊 Your Demo Progress</h3>
+            <div class="stats-row">
+                <div class="stat">
+                    <div class="stat-number">{{ features_explored_count }}</div>
+                    <div class="stat-label">Features Explored</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">{{ aha_moments_count }}</div>
+                    <div class="stat-label">Aha Moments</div>
+                </div>
+            </div>
+            
+            {% if suggested_features %}
+            <!-- Features You Haven't Tried -->
+            <div class="features-section">
+                <h3>🎯 Features You Haven't Tried Yet</h3>
+                <p>These are some of our most powerful features - don't miss them!</p>
+                {% for feature in suggested_features %}
+                <div class="feature-item">
+                    <span class="feature-emoji">{{ feature.emoji }}</span>
+                    <span class="feature-name">{{ feature.name }}</span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            
+            <!-- CTA -->
+            <div class="cta-section">
+                <a href="{{ demo_url }}" class="cta-button">
+                    Continue Your Demo →
+                </a>
+                <a href="{{ signup_url }}" class="cta-secondary">
+                    Or create a free account to save your work
+                </a>
+            </div>
+            
+            {% if reminder_type == '12h' %}
+            <p style="text-align: center; color: #666; font-size: 14px;">
+                ⚠️ <strong>Note:</strong> After your demo expires, all your boards and tasks will be reset.
+                Create a free account to keep your data!
+            </p>
+            {% endif %}
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p>
+                You're receiving this because you started a demo of PrizmAI.<br>
+                <a href="{{ signup_url }}">Create an account</a> to stop receiving demo reminders.
+            </p>
+            <p style="margin-top: 10px;">
+                © PrizmAI - AI-Powered Project Management
+            </p>
+        </div>
+    </div>
+</body>
+</html>

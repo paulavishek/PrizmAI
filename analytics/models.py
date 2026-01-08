@@ -554,6 +554,44 @@ class DemoSession(models.Model):
         help_text="Whether GA4 successfully tracked this session"
     )
     
+    # Email reminder tracking
+    reminder_24h_sent = models.BooleanField(
+        default=False,
+        help_text="Whether 24-hour reminder email was sent"
+    )
+    reminder_24h_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When 24-hour reminder email was sent"
+    )
+    reminder_12h_sent = models.BooleanField(
+        default=False,
+        help_text="Whether 12-hour reminder email was sent"
+    )
+    reminder_12h_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When 12-hour reminder email was sent"
+    )
+    
+    # Inactivity re-engagement tracking
+    inactivity_email_sent = models.BooleanField(
+        default=False,
+        help_text="Whether inactivity re-engagement email was sent"
+    )
+    inactivity_email_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When inactivity email was sent"
+    )
+    
+    # User email for demo (optional - collected during demo or linked to account)
+    demo_user_email = models.EmailField(
+        blank=True,
+        null=True,
+        help_text="Email address for demo user (for sending reminders)"
+    )
+    
     class Meta:
         ordering = ['-created_at']
         indexes = [
@@ -653,6 +691,296 @@ class DemoAnalytics(models.Model):
     
     def __str__(self):
         return f"{self.event_type} - {self.timestamp.strftime('%Y-%m-%d %H:%M:%S')}"
+
+
+class AhaMomentEvent(models.Model):
+    """
+    Dedicated tracking for aha moments - key product value discoveries.
+    Used for understanding when users realize the product's value and
+    optimizing the path to conversion.
+    """
+    # Aha moment types
+    AHA_MOMENT_TYPES = [
+        ('ai_suggestion_accepted', 'AI Suggestion Accepted'),
+        ('burndown_viewed', 'Burndown Chart Viewed'),
+        ('rbac_workflow', 'RBAC/Permissions Used'),
+        ('time_tracking_used', 'Time Tracking Used'),
+        ('dependency_created', 'Task Dependency Created'),
+        ('gantt_viewed', 'Gantt Chart Viewed'),
+        ('skill_gap_viewed', 'Skill Gap Analysis Viewed'),
+        ('conflict_detected', 'Conflict Detection Explored'),
+        ('budget_forecasting', 'Budget Forecasting Used'),
+        ('retrospective_completed', 'Retrospective Completed'),
+        ('milestone_reached', 'Milestone Reached'),
+        ('first_board_created', 'First Board Created'),
+        ('first_task_completed', 'First Task Completed'),
+        ('team_collaboration', 'Team Collaboration Feature'),
+        ('wiki_explored', 'Wiki/Documentation Explored'),
+        ('analytics_deep_dive', 'Analytics Deep Dive'),
+        ('custom', 'Custom Aha Moment'),
+    ]
+    
+    # Session references
+    demo_session = models.ForeignKey(
+        DemoSession,
+        on_delete=models.CASCADE,
+        related_name='aha_moment_events',
+        null=True,
+        blank=True,
+        help_text="Demo session where aha moment occurred"
+    )
+    user_session = models.ForeignKey(
+        UserSession,
+        on_delete=models.CASCADE,
+        related_name='aha_moment_events',
+        null=True,
+        blank=True,
+        help_text="User session where aha moment occurred"
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='aha_moment_events',
+        null=True,
+        blank=True,
+        help_text="User who experienced the aha moment"
+    )
+    session_id = models.CharField(
+        max_length=255,
+        db_index=True,
+        help_text="Session identifier for tracking"
+    )
+    
+    # Aha moment details
+    moment_type = models.CharField(
+        max_length=50,
+        choices=AHA_MOMENT_TYPES,
+        db_index=True,
+        help_text="Type of aha moment triggered"
+    )
+    moment_subtype = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Specific subtype or variant of aha moment"
+    )
+    
+    # Context when aha happened
+    page_path = models.CharField(max_length=500, help_text="Page where aha moment occurred")
+    feature_context = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Specific feature being used (e.g., 'task_generator', 'sprint_burndown')"
+    )
+    trigger_action = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Specific action that triggered the aha (e.g., 'accept_suggestion', 'view_chart')"
+    )
+    
+    # Timing and journey
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    time_since_session_start = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Seconds since session started when aha occurred"
+    )
+    actions_before_aha = models.IntegerField(
+        default=0,
+        help_text="Number of user actions before this aha moment"
+    )
+    previous_aha_moments = models.IntegerField(
+        default=0,
+        help_text="Number of aha moments before this one in session"
+    )
+    
+    # Impact tracking
+    led_to_conversion = models.BooleanField(
+        default=False,
+        help_text="Whether this aha moment led to signup/conversion"
+    )
+    conversion_time_seconds = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Seconds between aha moment and conversion"
+    )
+    engagement_after_aha = models.CharField(
+        max_length=20,
+        choices=[
+            ('increased', 'Increased Engagement'),
+            ('maintained', 'Maintained Engagement'),
+            ('decreased', 'Decreased Engagement'),
+            ('unknown', 'Unknown'),
+        ],
+        default='unknown',
+        help_text="User engagement level after aha moment"
+    )
+    
+    # User feedback on aha (optional)
+    user_acknowledged = models.BooleanField(
+        default=False,
+        help_text="Whether user interacted with aha celebration UI"
+    )
+    celebration_shown = models.BooleanField(
+        default=True,
+        help_text="Whether celebration UI was shown to user"
+    )
+    celebration_dismissed = models.BooleanField(
+        default=False,
+        help_text="Whether user dismissed celebration quickly"
+    )
+    cta_clicked = models.BooleanField(
+        default=False,
+        help_text="Whether user clicked the CTA in celebration UI"
+    )
+    
+    # Additional metadata
+    event_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Additional context data about the aha moment"
+    )
+    device_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('desktop', 'Desktop'),
+            ('mobile', 'Mobile'),
+            ('tablet', 'Tablet'),
+            ('unknown', 'Unknown'),
+        ],
+        default='unknown'
+    )
+    user_agent = models.TextField(blank=True)
+    
+    # Google Analytics sync
+    ga_event_sent = models.BooleanField(
+        default=False,
+        help_text="Whether event was synced to Google Analytics"
+    )
+    
+    class Meta:
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['session_id', 'moment_type']),
+            models.Index(fields=['moment_type', 'timestamp']),
+            models.Index(fields=['demo_session', 'moment_type']),
+            models.Index(fields=['led_to_conversion']),
+            models.Index(fields=['user', 'timestamp']),
+        ]
+        verbose_name = 'Aha Moment Event'
+        verbose_name_plural = 'Aha Moment Events'
+    
+    def __str__(self):
+        user_str = self.user.username if self.user else f"Session {self.session_id[:8]}"
+        return f"{user_str} - {self.get_moment_type_display()} - {self.timestamp.strftime('%Y-%m-%d %H:%M')}"
+    
+    @classmethod
+    def track_aha_moment(cls, session_id, moment_type, page_path, **kwargs):
+        """
+        Convenience method to track an aha moment with proper context.
+        """
+        from django.utils import timezone
+        
+        # Get demo session if exists
+        demo_session = None
+        user_session = None
+        user = None
+        
+        try:
+            demo_session = DemoSession.objects.get(session_id=session_id)
+            if demo_session.user:
+                user = demo_session.user
+        except DemoSession.DoesNotExist:
+            pass
+        
+        try:
+            user_session = UserSession.objects.filter(session_key=session_id).first()
+            if user_session and user_session.user:
+                user = user_session.user
+        except Exception:
+            pass
+        
+        # Calculate time since session start
+        time_since_start = None
+        if demo_session:
+            time_since_start = int((timezone.now() - demo_session.created_at).total_seconds())
+        elif user_session:
+            time_since_start = int((timezone.now() - user_session.session_start).total_seconds())
+        
+        # Count previous aha moments in this session
+        previous_count = cls.objects.filter(session_id=session_id).count()
+        
+        # Create the aha moment event
+        event = cls.objects.create(
+            session_id=session_id,
+            demo_session=demo_session,
+            user_session=user_session,
+            user=user,
+            moment_type=moment_type,
+            page_path=page_path,
+            time_since_session_start=time_since_start,
+            previous_aha_moments=previous_count,
+            **kwargs
+        )
+        
+        # Update demo session aha counter if applicable
+        if demo_session:
+            demo_session.aha_moments += 1
+            if moment_type not in demo_session.aha_moments_list:
+                demo_session.aha_moments_list.append(moment_type)
+            demo_session.save(update_fields=['aha_moments', 'aha_moments_list'])
+        
+        return event
+    
+    @classmethod
+    def get_aha_moment_stats(cls, days=30):
+        """
+        Get aggregated statistics about aha moments.
+        """
+        from datetime import timedelta
+        
+        cutoff = timezone.now() - timedelta(days=days)
+        
+        stats = {
+            'total_aha_moments': cls.objects.filter(timestamp__gte=cutoff).count(),
+            'unique_sessions': cls.objects.filter(timestamp__gte=cutoff).values('session_id').distinct().count(),
+            'conversion_rate': 0,
+            'by_type': {},
+            'avg_time_to_aha': 0,
+        }
+        
+        # Stats by type
+        by_type = cls.objects.filter(timestamp__gte=cutoff).values('moment_type').annotate(
+            count=Count('id'),
+            conversions=Count('id', filter=Q(led_to_conversion=True)),
+            avg_time=Avg('time_since_session_start')
+        ).order_by('-count')
+        
+        for item in by_type:
+            stats['by_type'][item['moment_type']] = {
+                'count': item['count'],
+                'conversions': item['conversions'],
+                'avg_time_seconds': item['avg_time'] or 0
+            }
+        
+        # Overall conversion rate from aha moments
+        total_with_conversion = cls.objects.filter(
+            timestamp__gte=cutoff,
+            led_to_conversion=True
+        ).values('session_id').distinct().count()
+        
+        if stats['unique_sessions'] > 0:
+            stats['conversion_rate'] = round((total_with_conversion / stats['unique_sessions']) * 100, 2)
+        
+        # Average time to first aha
+        avg_time = cls.objects.filter(
+            timestamp__gte=cutoff,
+            time_since_session_start__isnull=False,
+            previous_aha_moments=0  # First aha in session
+        ).aggregate(avg=Avg('time_since_session_start'))['avg']
+        
+        stats['avg_time_to_aha'] = round(avg_time or 0, 0)
+        
+        return stats
 
 
 class DemoConversion(models.Model):

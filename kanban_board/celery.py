@@ -43,6 +43,16 @@ app.conf.beat_schedule = {
         'task': 'kanban.refresh_demo_dates',
         'schedule': crontab(hour=3, minute=0),  # Daily at 3:00 AM
     },
+    # Demo reminder emails (24h and 12h) - runs every 30 minutes
+    'demo-reminder-emails': {
+        'task': 'analytics.send_demo_reminder_emails',
+        'schedule': crontab(minute='*/30'),  # Every 30 minutes
+    },
+    # Inactivity re-engagement emails - runs every hour
+    'inactivity-reengagement-emails': {
+        'task': 'analytics.send_inactivity_reengagement_emails',
+        'schedule': crontab(minute=15),  # Every hour at minute 15
+    },
 }
 
 

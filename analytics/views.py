@@ -183,6 +183,228 @@ def submit_feedback_ajax(request):
         }, status=500)
 
 
+# ============================================================================
+# AHA MOMENT TRACKING API
+# ============================================================================
+
+@require_http_methods(["POST"])
+def track_aha_moment_ajax(request):
+    """
+    Track an aha moment when user experiences product value.
+    Called from frontend when aha moment conditions are met.
+    
+    Also syncs with Google Analytics via gtag on the frontend.
+    """
+    from .models import AhaMomentEvent, DemoSession
+    
+    try:
+        data = json.loads(request.body)
+        
+        # Get session ID (from demo session or regular session)
+        session_id = data.get('session_id') or request.session.session_key
+        if not session_id:
+            return JsonResponse({
+                'success': False,
+                'message': 'No session found'
+            }, status=400)
+        
+        moment_type = data.get('moment_type')
+        if not moment_type:
+            return JsonResponse({
+                'success': False,
+                'message': 'moment_type is required'
+            }, status=400)
+        
+        # Validate moment type
+        valid_types = [t[0] for t in AhaMomentEvent.AHA_MOMENT_TYPES]
+        if moment_type not in valid_types:
+            moment_type = 'custom'
+        
+        # Check for duplicate (don't record same aha moment twice in short time)
+        recent_duplicate = AhaMomentEvent.objects.filter(
+            session_id=session_id,
+            moment_type=moment_type,
+            timestamp__gte=timezone.now() - timedelta(minutes=5)
+        ).exists()
+        
+        if recent_duplicate:
+            return JsonResponse({
+                'success': True,
+                'message': 'Aha moment already recorded',
+                'duplicate': True
+            })
+        
+        # Detect device type from user agent
+        user_agent = request.META.get('HTTP_USER_AGENT', '')
+        device_type = 'unknown'
+        if 'Mobile' in user_agent:
+            device_type = 'mobile'
+        elif 'Tablet' in user_agent:
+            device_type = 'tablet'
+        elif user_agent:
+            device_type = 'desktop'
+        
+        # Create aha moment event using the class method
+        event = AhaMomentEvent.track_aha_moment(
+            session_id=session_id,
+            moment_type=moment_type,
+            page_path=data.get('page_path', request.META.get('HTTP_REFERER', '')),
+            moment_subtype=data.get('subtype', ''),
+            feature_context=data.get('feature_context', ''),
+            trigger_action=data.get('trigger_action', ''),
+            event_data=data.get('metadata', {}),
+            device_type=device_type,
+            user_agent=user_agent,
+            celebration_shown=data.get('celebration_shown', True),
+        )
+        
+        logger.info(f"Aha moment tracked: {moment_type} for session {session_id[:8]}")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Aha moment tracked!',
+            'event_id': event.id,
+            'moment_type': moment_type,
+            'previous_count': event.previous_aha_moments,
+        })
+    
+    except Exception as e:
+        logger.error(f"Error tracking aha moment: {e}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'message': 'Error tracking aha moment'
+        }, status=500)
+
+
+@require_http_methods(["POST"])
+def aha_moment_interaction(request):
+    """
+    Track user interaction with aha moment celebration UI.
+    Called when user acknowledges, dismisses, or clicks CTA.
+    """
+    from .models import AhaMomentEvent
+    
+    try:
+        data = json.loads(request.body)
+        event_id = data.get('event_id')
+        
+        if not event_id:
+            return JsonResponse({
+                'success': False,
+                'message': 'event_id is required'
+            }, status=400)
+        
+        try:
+            event = AhaMomentEvent.objects.get(id=event_id)
+        except AhaMomentEvent.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'message': 'Event not found'
+            }, status=404)
+        
+        # Update interaction flags
+        interaction_type = data.get('interaction_type')
+        
+        if interaction_type == 'acknowledged':
+            event.user_acknowledged = True
+        elif interaction_type == 'dismissed':
+            event.celebration_dismissed = True
+        elif interaction_type == 'cta_clicked':
+            event.cta_clicked = True
+            event.user_acknowledged = True
+        
+        event.save()
+        
+        logger.info(f"Aha moment interaction: {interaction_type} for event {event_id}")
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Interaction recorded'
+        })
+    
+    except Exception as e:
+        logger.error(f"Error recording aha interaction: {e}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'message': 'Error recording interaction'
+        }, status=500)
+
+
+@staff_member_required
+def aha_moment_stats_api(request):
+    """
+    Get aha moment statistics for analytics dashboard.
+    Staff only.
+    """
+    from .models import AhaMomentEvent
+    
+    days = int(request.GET.get('days', 30))
+    stats = AhaMomentEvent.get_aha_moment_stats(days=days)
+    
+    return JsonResponse({
+        'success': True,
+        'stats': stats
+    })
+
+
+@require_http_methods(["POST"])
+def collect_demo_email(request):
+    """
+    Collect email from demo user for sending reminders.
+    Called when user optionally provides email during demo.
+    """
+    from .models import DemoSession
+    
+    try:
+        data = json.loads(request.body)
+        email = data.get('email', '').strip()
+        session_id = data.get('session_id') or request.session.session_key
+        
+        if not email:
+            return JsonResponse({
+                'success': False,
+                'message': 'Email is required'
+            }, status=400)
+        
+        # Basic email validation
+        import re
+        if not re.match(r'^[^@]+@[^@]+\.[^@]+$', email):
+            return JsonResponse({
+                'success': False,
+                'message': 'Invalid email format'
+            }, status=400)
+        
+        if not session_id:
+            return JsonResponse({
+                'success': False,
+                'message': 'No session found'
+            }, status=400)
+        
+        try:
+            session = DemoSession.objects.get(session_id=session_id)
+            session.demo_user_email = email
+            session.save(update_fields=['demo_user_email'])
+            
+            logger.info(f"Demo email collected for session {session_id[:8]}: {email}")
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'Email saved! We\'ll send you helpful reminders.'
+            })
+        except DemoSession.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'message': 'Demo session not found'
+            }, status=404)
+    
+    except Exception as e:
+        logger.error(f"Error collecting demo email: {e}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'message': 'Error saving email'
+        }, status=500)
+
+
 @staff_member_required
 def analytics_dashboard(request):
     """
