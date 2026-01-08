@@ -1,6 +1,6 @@
 """
 Analytics views for logout, feedback submission, and dashboard.
-Simple Django + Google Analytics approach - no HubSpot required.
+Simple Django + Google Analytics approach.
 """
 from django.conf import settings
 from django.contrib.auth import logout

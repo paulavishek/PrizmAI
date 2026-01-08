@@ -483,16 +483,8 @@ CSP_DEFAULT_SRC = ("'self'",)
 CSP_SCRIPT_SRC = (
     "'self'", 
     "'unsafe-inline'",
-    "'unsafe-eval'",  # Required for HubSpot forms
     "https://cdn.jsdelivr.net", 
     "https://code.jquery.com",
-    "https://js.hsforms.net",  # HubSpot Forms base
-    "https://js-na1.hsforms.net",  # HubSpot Forms NA1 region
-    "https://js-na2.hsforms.net",  # HubSpot Forms NA2 region
-    "https://js-eu1.hsforms.net",  # HubSpot Forms EU region
-    "https://*.hsforms.com",  # All HubSpot form domains
-    "https://*.hs-scripts.com",  # HubSpot Scripts
-    "https://*.hs-analytics.net",  # HubSpot Analytics
     "https://www.googletagmanager.com",  # Google Analytics
     "https://www.google-analytics.com",  # Google Analytics
 )
@@ -506,7 +498,7 @@ CSP_STYLE_SRC = (
 CSP_IMG_SRC = (
     "'self'", 
     "data:", 
-    "https:",  # Allow all HTTPS images (required for HubSpot)
+    "https:",  # Allow all HTTPS images
 )
 CSP_FONT_SRC = (
     "'self'", 
@@ -519,26 +511,6 @@ CSP_CONNECT_SRC = (
     "'self'", 
     "wss:", 
     "ws:", 
-    # HubSpot Forms - hubspot.com domains
-    "https://forms.hubspot.com",
-    "https://forms-na1.hubspot.com",
-    "https://forms-na2.hubspot.com",
-    "https://forms-eu1.hubspot.com",
-    "https://*.hubspot.com",
-    # HubSpot Forms - hsforms.com domains (critical!)
-    "https://forms-na2.hsforms.com",  # YOUR SPECIFIC REGION
-    "https://forms-na1.hsforms.com",
-    "https://forms-eu1.hsforms.com",
-    "https://api.hsforms.com",
-    "https://*.hsforms.com",
-    # HubSpot Forms - hsforms.net domains
-    "https://js-na2.hsforms.net",
-    "https://js-na1.hsforms.net",
-    "https://js-eu1.hsforms.net",
-    "https://*.hsforms.net",
-    # HubSpot Analytics & Scripts
-    "https://*.hs-analytics.net",
-    "https://*.hs-scripts.com",
     # Google Analytics
     "https://www.google-analytics.com",
     "https://analytics.google.com",
@@ -546,33 +518,11 @@ CSP_CONNECT_SRC = (
 )
 CSP_FRAME_SRC = (
     "'self'",
-    # HubSpot - hubspot.com domains
-    "https://forms.hubspot.com",
-    # HubSpot - hsforms.com domains
-    "https://forms-na2.hsforms.com",  # YOUR SPECIFIC REGION
-    "https://forms-na1.hsforms.com",
-    "https://forms-eu1.hsforms.com",
-    "https://share.hsforms.com",
-    "https://*.hsforms.com",
-    # HubSpot - hsforms.net domains
-    "https://js-na2.hsforms.net",
-    "https://*.hsforms.net",
 )
 CSP_FRAME_ANCESTORS = ("'none'",)  # Prevent clickjacking
 CSP_BASE_URI = ("'self'",)
 CSP_FORM_ACTION = (
     "'self'",
-    # HubSpot - hubspot.com domains
-    "https://forms.hubspot.com",
-    "https://forms-na1.hubspot.com",
-    "https://forms-na2.hubspot.com",
-    "https://forms-eu1.hubspot.com",
-    "https://*.hubspot.com",
-    # HubSpot - hsforms.com domains
-    "https://forms-na2.hsforms.com",  # YOUR SPECIFIC REGION
-    "https://forms-na1.hsforms.com",
-    "https://forms-eu1.hsforms.com",
-    "https://*.hsforms.com",
 )
 CSP_UPGRADE_INSECURE_REQUESTS = not DEBUG  # Upgrade HTTP to HTTPS in production
 
@@ -613,13 +563,6 @@ AXES_RESET_COOL_OFF = True  # Automatically reset after cooloff period
 
 # Google Analytics 4
 GA4_MEASUREMENT_ID = os.getenv('GA4_MEASUREMENT_ID', '')  # e.g., 'G-XXXXXXXXXX'
-
-# HubSpot CRM Integration - Using Access Token (preferred method)
-HUBSPOT_ACCESS_TOKEN = os.getenv('HUBSPOT_ACCESS_TOKEN', '')  # Private app access token
-HUBSPOT_API_KEY = os.getenv('HUBSPOT_API_KEY', '')  # Legacy API key (fallback)
-HUBSPOT_PORTAL_ID = os.getenv('HUBSPOT_PORTAL_ID', '')
-HUBSPOT_FORM_ID = os.getenv('HUBSPOT_FORM_ID', '')
-HUBSPOT_REGION = os.getenv('HUBSPOT_REGION', 'na1')  # Region: na1, na2, eu1, etc.
 
 # Session tracking settings
 ANALYTICS_SESSION_TIMEOUT = 30  # Minutes of inactivity before session timeout
