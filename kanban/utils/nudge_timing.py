@@ -20,7 +20,11 @@ class NudgeTiming:
     
     Nudge Hierarchy:
     1. SOFT: 3 min OR 3 features explored (unobtrusive toast)
-    2. MEDIUM: 5 min OR 1 aha moment (soft modal)
+       - Shows when visiting a demo board
+    2. MEDIUM: Requires meaningful engagement (soft modal)
+       - User tried AI features, OR
+       - User created boards, OR
+       - 10+ min in demo with 2+ aha moments
     3. PEAK: Triggered by aha moment (contextual)
     4. EXIT_INTENT: Mouse leaves screen + 2 min in demo (desktop only)
     
@@ -29,14 +33,17 @@ class NudgeTiming:
     - Progressive escalation (soft → medium → peak/exit)
     - Respect dismissals (if dismissed, wait longer)
     - Context awareness (don't interrupt active tasks)
+    - Medium nudge requires actual engagement, not just time
     """
     
     # Timing thresholds
     SOFT_MIN_TIME = 180  # 3 minutes in seconds
     SOFT_MIN_FEATURES = 3
     
-    MEDIUM_MIN_TIME = 300  # 5 minutes
-    MEDIUM_MIN_AHA = 1
+    MEDIUM_MIN_TIME = 600  # 10 minutes (increased from 5 min to give more space between nudges)
+    MEDIUM_MIN_AHA = 2  # Now requires 2 aha moments instead of 1
+    MEDIUM_MIN_AI_FEATURES = 1  # At least 1 AI feature tried
+    MEDIUM_MIN_BOARDS_CREATED = 1  # At least 1 board created
     
     EXIT_MIN_TIME = 120  # 2 minutes
     
@@ -102,6 +109,62 @@ class NudgeTiming:
         """
         aha_moments = session.get('aha_moments', [])
         return len(aha_moments) if isinstance(aha_moments, list) else 0
+    
+    @staticmethod
+    def get_ai_features_used_count(session):
+        """
+        Get count of AI features used
+        
+        Args:
+            session: Django request.session object
+            
+        Returns:
+            int: Number of AI features used
+        """
+        # First check session variable
+        ai_features = session.get('ai_features_used', 0)
+        if isinstance(ai_features, int) and ai_features > 0:
+            return ai_features
+        
+        # Fallback: check DemoSession model
+        try:
+            from analytics.models import DemoSession
+            session_id = session.session_key
+            demo_session = DemoSession.objects.filter(session_id=session_id).first()
+            if demo_session:
+                return demo_session.ai_features_used
+        except Exception:
+            pass
+        
+        return 0
+    
+    @staticmethod
+    def get_boards_created_count(session):
+        """
+        Get count of boards created during demo
+        
+        Args:
+            session: Django request.session object
+            
+        Returns:
+            int: Number of boards created
+        """
+        # First check session variable
+        boards_created = session.get('demo_boards_created', 0)
+        if isinstance(boards_created, int) and boards_created > 0:
+            return boards_created
+        
+        # Fallback: check DemoSession model
+        try:
+            from analytics.models import DemoSession
+            session_id = session.session_key
+            demo_session = DemoSession.objects.filter(session_id=session_id).first()
+            if demo_session:
+                return demo_session.boards_created
+        except Exception:
+            pass
+        
+        return 0
     
     @staticmethod
     def get_nudges_shown(session):
@@ -216,12 +279,19 @@ class NudgeTiming:
         """
         Check if medium nudge should be shown
         
-        Conditions:
-        - 5 minutes in demo OR 1 aha moment experienced
+        Conditions (must meet ALL base conditions):
         - At least 1 feature explored (don't show if 0 engagement)
         - Not already shown
         - Not in cooldown
         - Haven't hit frequency cap
+        
+        PLUS one of these engagement conditions:
+        - User has tried AI features (at least 1)
+        - User has created at least 1 board
+        - User has been in demo for 10+ minutes AND has 2+ aha moments
+        
+        This ensures the medium nudge only appears after meaningful engagement,
+        not just passive browsing.
         
         Args:
             session: Django request.session object
@@ -248,12 +318,27 @@ class NudgeTiming:
         if features_count < 1:
             return False
         
-        # Check time or aha threshold
+        # Get engagement metrics
+        ai_features_used = NudgeTiming.get_ai_features_used_count(session)
+        boards_created = NudgeTiming.get_boards_created_count(session)
         time_in_demo = NudgeTiming.get_time_in_demo(session)
         aha_count = NudgeTiming.get_aha_moments_count(session)
         
-        return (time_in_demo >= NudgeTiming.MEDIUM_MIN_TIME or 
-                aha_count >= NudgeTiming.MEDIUM_MIN_AHA)
+        # NEW LOGIC: Require meaningful engagement, not just time
+        # Condition 1: User has tried AI features
+        if ai_features_used >= NudgeTiming.MEDIUM_MIN_AI_FEATURES:
+            return True
+        
+        # Condition 2: User has created boards
+        if boards_created >= NudgeTiming.MEDIUM_MIN_BOARDS_CREATED:
+            return True
+        
+        # Condition 3: Long time in demo WITH multiple aha moments
+        # (Only trigger on time if they've had real "aha" experiences)
+        if time_in_demo >= NudgeTiming.MEDIUM_MIN_TIME and aha_count >= NudgeTiming.MEDIUM_MIN_AHA:
+            return True
+        
+        return False
     
     @staticmethod
     def should_show_peak_nudge(session, moment_type):
@@ -386,6 +471,8 @@ class NudgeTiming:
             'time_in_demo': NudgeTiming.get_time_in_demo(session),
             'features_explored_count': NudgeTiming.get_features_explored_count(session),
             'aha_moments_count': NudgeTiming.get_aha_moments_count(session),
+            'ai_features_used': NudgeTiming.get_ai_features_used_count(session),
+            'boards_created': NudgeTiming.get_boards_created_count(session),
             'nudges_shown': NudgeTiming.get_nudges_shown(session),
             'nudges_dismissed': NudgeTiming.get_nudges_dismissed(session),
             'can_show_more': len(NudgeTiming.get_nudges_shown(session)) < NudgeTiming.MAX_NUDGES_PER_SESSION,
