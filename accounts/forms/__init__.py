@@ -1,5 +1,5 @@
 from django import forms
-from django.contrib.auth.forms import UserCreationForm, AuthenticationForm, SetPasswordForm
+from django.contrib.auth.forms import UserCreationForm, AuthenticationForm, SetPasswordForm, PasswordChangeForm
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from ..models import Organization, UserProfile
@@ -34,6 +34,35 @@ class CustomSetPasswordForm(SetPasswordForm):
             'class': 'form-control',
             'id': 'new-password2-field',
             'placeholder': 'Confirm New Password'
+        })
+    )
+
+class CustomPasswordChangeForm(PasswordChangeForm):
+    old_password = forms.CharField(
+        label="Current Password",
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control',
+            'id': 'old-password-field',
+            'placeholder': 'Current Password',
+            'autocomplete': 'current-password'
+        })
+    )
+    new_password1 = forms.CharField(
+        label="New Password",
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control',
+            'id': 'new-password1-field',
+            'placeholder': 'New Password',
+            'autocomplete': 'new-password'
+        })
+    )
+    new_password2 = forms.CharField(
+        label="Confirm New Password",
+        widget=forms.PasswordInput(attrs={
+            'class': 'form-control',
+            'id': 'new-password2-field',
+            'placeholder': 'Confirm New Password',
+            'autocomplete': 'new-password'
         })
     )
 

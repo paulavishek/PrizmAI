@@ -1,7 +1,7 @@
 from django.urls import path
 from django.contrib.auth import views as auth_views
 from . import views
-from .forms import CustomSetPasswordForm
+from .forms import CustomSetPasswordForm, CustomPasswordChangeForm
 
 # Import analytics logout view to replace default logout
 from analytics.views import CustomLogoutView
@@ -52,4 +52,19 @@ urlpatterns = [
              template_name='accounts/password_reset_complete.html'
          ),
          name='password_reset_complete'),
+    
+    # Password Change URLs (for logged-in users)
+    path('password-change/',
+         auth_views.PasswordChangeView.as_view(
+             template_name='accounts/password_change.html',
+             form_class=CustomPasswordChangeForm,
+             success_url='/accounts/password-change/done/'
+         ),
+         name='password_change'),
+    
+    path('password-change/done/',
+         auth_views.PasswordChangeDoneView.as_view(
+             template_name='accounts/password_change_done.html'
+         ),
+         name='password_change_done'),
 ]
