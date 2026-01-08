@@ -74,6 +74,23 @@ class OrganizationForm(forms.ModelForm):
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'domain': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'example.com'}),
         }
+    
+    def clean_domain(self):
+        """Validate domain format and uniqueness."""
+        domain = self.cleaned_data.get('domain')
+        if domain:
+            # Validate domain format - no spaces allowed
+            if ' ' in domain:
+                raise ValidationError("Domain cannot contain spaces.")
+            
+            # Check for duplicate domain (excluding current instance if editing)
+            queryset = Organization.objects.filter(domain=domain)
+            if self.instance and self.instance.pk:
+                queryset = queryset.exclude(pk=self.instance.pk)
+            if queryset.exists():
+                raise ValidationError(f"An organization with domain '{domain}' already exists.")
+        
+        return domain
 
 class RegistrationForm(UserCreationForm):
     email = forms.EmailField(
@@ -161,6 +178,16 @@ class UserProfileForm(forms.ModelForm):
         help_texts = {
             'weekly_capacity_hours': 'How many hours per week are you available for work?',
         }
+    
+    def clean_weekly_capacity_hours(self):
+        """Validate that capacity hours is positive and reasonable."""
+        hours = self.cleaned_data.get('weekly_capacity_hours')
+        if hours is not None:
+            if hours < 0:
+                raise ValidationError("Weekly capacity hours cannot be negative.")
+            if hours > 168:  # 24 * 7 = 168 hours in a week
+                raise ValidationError("Weekly capacity hours cannot exceed 168 (hours in a week).")
+        return hours
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

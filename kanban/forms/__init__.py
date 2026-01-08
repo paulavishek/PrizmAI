@@ -291,6 +291,16 @@ class TaskForm(forms.ModelForm):
         self.fields['risk_level'].help_text = 'Overall risk classification (can be set manually or auto-calculated from likelihood × impact)'
         self.fields['workload_impact'].help_text = 'Estimated impact on the assignee\'s workload (Low, Medium, High, or Critical)'
     
+    def clean_progress(self):
+        """Validate that progress is between 0 and 100."""
+        progress = self.cleaned_data.get('progress')
+        if progress is not None:
+            if progress < 0:
+                raise forms.ValidationError("Progress cannot be negative.")
+            if progress > 100:
+                raise forms.ValidationError("Progress cannot exceed 100%.")
+        return progress
+    
     def clean(self):
         """Calculate risk_score automatically if likelihood and impact are provided, and validate parent_task"""
         cleaned_data = super().clean()

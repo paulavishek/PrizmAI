@@ -51,14 +51,14 @@ class BoardViewTests(TestCase):
     
     def test_board_list_view_requires_login(self):
         """Test board list view requires authentication"""
-        response = self.client.get(reverse('kanban:board_list'))
+        response = self.client.get(reverse('board_list'))
         self.assertEqual(response.status_code, 302)  # Redirect to login
         self.assertIn('/accounts/login/', response.url)
     
     def test_board_list_view_authenticated(self):
         """Test authenticated user can view board list"""
         self.client.login(username='testuser', password='testpass123')
-        response = self.client.get(reverse('kanban:board_list'))
+        response = self.client.get(reverse('board_list'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Test Board')
     
@@ -81,7 +81,7 @@ class BoardViewTests(TestCase):
         )
         
         self.client.login(username='testuser', password='testpass123')
-        response = self.client.get(reverse('kanban:board_list'))
+        response = self.client.get(reverse('board_list'))
         
         self.assertContains(response, 'Test Board')
         self.assertNotContains(response, 'Other Board')
@@ -96,7 +96,7 @@ class BoardViewTests(TestCase):
         
         self.client.login(username='otheruser', password='testpass123')
         response = self.client.get(
-            reverse('kanban:board_detail', kwargs={'pk': self.board.id})
+            reverse('board_detail', kwargs={'pk': self.board.id})
         )
         self.assertEqual(response.status_code, 403)  # Forbidden
     
@@ -115,7 +115,7 @@ class BoardViewTests(TestCase):
         
         self.client.login(username='testuser', password='testpass123')
         response = self.client.get(
-            reverse('kanban:board_detail', kwargs={'pk': self.board.id})
+            reverse('board_detail', kwargs={'pk': self.board.id})
         )
         
         self.assertEqual(response.status_code, 200)
@@ -125,7 +125,7 @@ class BoardViewTests(TestCase):
     def test_board_create_view_get(self):
         """Test GET request to board create view"""
         self.client.login(username='testuser', password='testpass123')
-        response = self.client.get(reverse('kanban:board_create'))
+        response = self.client.get(reverse('board_create'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Create Board')
     
@@ -137,7 +137,7 @@ class BoardViewTests(TestCase):
             'description': 'New Description',
             'organization': self.org.id
         }
-        response = self.client.post(reverse('kanban:board_create'), data)
+        response = self.client.post(reverse('board_create'), data)
         
         self.assertEqual(response.status_code, 302)  # Redirect after success
         self.assertTrue(
@@ -151,7 +151,7 @@ class BoardViewTests(TestCase):
             'name': '',  # Empty name should fail
             'organization': self.org.id
         }
-        response = self.client.post(reverse('kanban:board_create'), data)
+        response = self.client.post(reverse('board_create'), data)
         
         self.assertEqual(response.status_code, 200)  # Stay on form
         self.assertContains(response, 'This field is required')
@@ -172,7 +172,7 @@ class BoardViewTests(TestCase):
         
         self.client.login(username='nonadmin', password='testpass123')
         response = self.client.get(
-            reverse('kanban:board_update', kwargs={'pk': self.board.id})
+            reverse('board_update', kwargs={'pk': self.board.id})
         )
         self.assertEqual(response.status_code, 403)
     
@@ -185,7 +185,7 @@ class BoardViewTests(TestCase):
             'organization': self.org.id
         }
         response = self.client.post(
-            reverse('kanban:board_update', kwargs={'pk': self.board.id}),
+            reverse('board_update', kwargs={'pk': self.board.id}),
             data
         )
         
@@ -207,7 +207,7 @@ class BoardViewTests(TestCase):
         
         self.client.login(username='nonadmin', password='testpass123')
         response = self.client.post(
-            reverse('kanban:board_delete', kwargs={'pk': self.board.id})
+            reverse('board_delete', kwargs={'pk': self.board.id})
         )
         self.assertEqual(response.status_code, 403)
 
@@ -260,7 +260,7 @@ class TaskViewTests(TestCase):
         
         self.client.login(username='otheruser', password='testpass123')
         response = self.client.get(
-            reverse('kanban:task_detail', kwargs={'pk': self.task.id})
+            reverse('task_detail', kwargs={'pk': self.task.id})
         )
         self.assertEqual(response.status_code, 403)
     
@@ -268,7 +268,7 @@ class TaskViewTests(TestCase):
         """Test task detail displays all task information"""
         self.client.login(username='testuser', password='testpass123')
         response = self.client.get(
-            reverse('kanban:task_detail', kwargs={'pk': self.task.id})
+            reverse('task_detail', kwargs={'pk': self.task.id})
         )
         
         self.assertEqual(response.status_code, 200)
@@ -285,7 +285,7 @@ class TaskViewTests(TestCase):
             'priority': 'high'
         }
         response = self.client.post(
-            reverse('kanban:task_create', kwargs={'board_id': self.board.id}),
+            reverse('task_create', kwargs={'board_id': self.board.id}),
             data
         )
         
@@ -304,7 +304,7 @@ class TaskViewTests(TestCase):
             'priority': 'urgent'
         }
         response = self.client.post(
-            reverse('kanban:task_update', kwargs={'pk': self.task.id}),
+            reverse('task_update', kwargs={'pk': self.task.id}),
             data
         )
         
@@ -322,7 +322,7 @@ class TaskViewTests(TestCase):
         
         self.client.login(username='testuser', password='testpass123')
         response = self.client.post(
-            reverse('kanban:task_move', kwargs={'pk': self.task.id}),
+            reverse('task_move', kwargs={'pk': self.task.id}),
             {'column_id': in_progress.id}
         )
         
@@ -345,7 +345,7 @@ class TaskViewTests(TestCase):
             'assigned_to': user2.id
         }
         response = self.client.post(
-            reverse('kanban:task_update', kwargs={'pk': self.task.id}),
+            reverse('task_update', kwargs={'pk': self.task.id}),
             data
         )
         
@@ -362,7 +362,7 @@ class TaskViewTests(TestCase):
         
         self.client.login(username='otheruser', password='testpass123')
         response = self.client.post(
-            reverse('kanban:task_delete', kwargs={'pk': self.task.id})
+            reverse('task_delete', kwargs={'pk': self.task.id})
         )
         self.assertEqual(response.status_code, 403)
 
@@ -404,7 +404,7 @@ class ColumnViewTests(TestCase):
             'position': 0
         }
         response = self.client.post(
-            reverse('kanban:column_create', kwargs={'board_id': self.board.id}),
+            reverse('column_create', kwargs={'board_id': self.board.id}),
             data
         )
         
@@ -428,7 +428,7 @@ class ColumnViewTests(TestCase):
             'position': 0
         }
         response = self.client.post(
-            reverse('kanban:column_update', kwargs={'pk': column.id}),
+            reverse('column_update', kwargs={'pk': column.id}),
             data
         )
         
@@ -445,7 +445,7 @@ class ColumnViewTests(TestCase):
         
         self.client.login(username='testuser', password='testpass123')
         response = self.client.post(
-            reverse('kanban:column_delete', kwargs={'pk': column.id})
+            reverse('column_delete', kwargs={'pk': column.id})
         )
         
         self.assertEqual(response.status_code, 302)
@@ -464,7 +464,7 @@ class ColumnViewTests(TestCase):
             'column_order': [col3.id, col1.id, col2.id]
         }
         response = self.client.post(
-            reverse('kanban:column_reorder', kwargs={'board_id': self.board.id}),
+            reverse('column_reorder', kwargs={'board_id': self.board.id}),
             data,
             content_type='application/json'
         )
@@ -509,7 +509,7 @@ class TaskLabelViewTests(TestCase):
             'category': 'regular'
         }
         response = self.client.post(
-            reverse('kanban:label_create', kwargs={'board_id': self.board.id}),
+            reverse('label_create', kwargs={'board_id': self.board.id}),
             data
         )
         
