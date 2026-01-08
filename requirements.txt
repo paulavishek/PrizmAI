@@ -69,6 +69,9 @@ certifi==2025.8.3
 charset-normalizer==3.4.3
 idna==3.10
 
+# DNS Validation
+dnspython==2.7.0
+
 # Real-time Communication (WebSockets)
 channels==4.1.0
 channels-redis==4.1.0

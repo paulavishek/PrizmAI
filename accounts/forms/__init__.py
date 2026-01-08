@@ -3,6 +3,7 @@ from django.contrib.auth.forms import UserCreationForm, AuthenticationForm, SetP
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from ..models import Organization, UserProfile
+from kanban.utils.email_validation import validate_email_for_signup
 
 class LoginForm(AuthenticationForm):
     username = forms.CharField(widget=forms.TextInput(attrs={
@@ -72,10 +73,18 @@ class RegistrationForm(UserCreationForm):
     
     def clean_email(self):
         email = self.cleaned_data.get('email')
+        
+        # Validate email domain exists and is not disposable
+        is_valid, error_message = validate_email_for_signup(email)
+        if not is_valid:
+            raise ValidationError(error_message)
+        
+        # If registering for an organization, check domain match
         if self.organization:
             domain = email.split('@')[-1]
             if domain != self.organization.domain:
                 raise ValidationError(f"Email must belong to the {self.organization.domain} domain.")
+        
         return email
     
     def save(self, commit=True):

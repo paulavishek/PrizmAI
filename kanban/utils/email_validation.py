@@ -7,6 +7,8 @@ to use a real email address.
 """
 import re
 import logging
+import socket
+import dns.resolver
 
 logger = logging.getLogger(__name__)
 
@@ -114,7 +116,7 @@ DISPOSABLE_EMAIL_DOMAINS = {
     'emailto.de', 'emailwarden.com', 'emailx.at.hm',
     'emailxfer.com', 'emz.net', 'enterto.com',
     'ephemail.net', 'etranquil.com', 'etranquil.net',
-    'etranquil.org', 'evopo.com', 'example.com',
+    'etranquil.org', 'evopo.com',
     'explodemail.com', 'express.net.ua', 'eyepaste.com',
     'fakeinbox.cf', 'fakeinbox.ga', 'fakeinbox.gq',
     'fakeinbox.ml', 'fakeinbox.tk', 'fakemail.fr',
@@ -360,21 +362,20 @@ SUSPICIOUS_TLDS = {
     '.bid', '.loan', '.racing', '.download', '.stream',
 }
 
-# Email patterns that suggest abuse
+# Email patterns that suggest abuse - Be conservative to avoid false positives
 SUSPICIOUS_PATTERNS = [
-    r'^test\d*@',  # test123@
-    r'^temp\d*@',  # temp123@
-    r'^fake\d*@',  # fake123@
-    r'^\d{5,}@',   # 12345678@
-    r'^[a-z]{1,3}\d{3,}@',  # abc123456@
+    r'^temp\d{3,}@',  # temp123456@ (but not temp@)
+    r'^fake\d{3,}@',  # fake123456@ (but not fake@)
+    r'^\d{8,}@',   # 12345678@ (long numeric only)
+    r'^[a-z]{1,2}\d{5,}@',  # a12345@ or ab12345@
     r'^noreply@',
     r'^donotreply@',
     r'^spam@',
-    r'^throwaway',
-    r'disposable',
+    r'^throwaway\d+@',  # throwaway123@
+    r'disposable.*mail',  # disposablemail, disposable-mail
     r'tempmail',
     r'mailinator',
-    r'guerrilla',
+    r'guerrilla.*mail',
 ]
 
 
@@ -475,6 +476,75 @@ def is_suspicious_email(email):
     return min(score, 100)
 
 
+def has_valid_mx_or_a_record(domain):
+    """
+    Check if a domain has valid MX records or A/AAAA records.
+    This ensures the domain actually exists and can receive email.
+    
+    Args:
+        domain: The domain to check
+        
+    Returns:
+        tuple: (is_valid: bool, error_message: str or None)
+    """
+    domain = domain.lower().strip()
+    
+    # Configure DNS resolver with shorter timeout
+    resolver = dns.resolver.Resolver()
+    resolver.timeout = 3.0  # 3 second timeout
+    resolver.lifetime = 3.0  # Total query lifetime
+    
+    try:
+        # First try to get MX records (mail exchange records)
+        try:
+            mx_records = resolver.resolve(domain, 'MX')
+            if mx_records:
+                logger.debug(f"Domain {domain} has valid MX records")
+                return True, None
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+            # No MX records, try A/AAAA records as fallback
+            pass
+        except dns.resolver.NoNameservers:
+            logger.warning(f"No nameservers available for domain {domain}")
+            return False, f"The email domain '{domain}' could not be verified. Please check your email address."
+        except dns.exception.Timeout:
+            logger.warning(f"DNS timeout for domain {domain} - treating as invalid")
+            return False, f"The email domain '{domain}' could not be verified. Please check your email address."
+        
+        # Try A record (IPv4)
+        try:
+            a_records = resolver.resolve(domain, 'A')
+            if a_records:
+                logger.debug(f"Domain {domain} has valid A records")
+                return True, None
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+            pass
+        except dns.exception.Timeout:
+            logger.warning(f"DNS timeout for domain {domain} on A record - treating as invalid")
+            return False, f"The email domain '{domain}' could not be verified. Please check your email address."
+        
+        # Try AAAA record (IPv6)
+        try:
+            aaaa_records = resolver.resolve(domain, 'AAAA')
+            if aaaa_records:
+                logger.debug(f"Domain {domain} has valid AAAA records")
+                return True, None
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+            pass
+        except dns.exception.Timeout:
+            # Already timed out on other queries
+            pass
+        
+        # Domain doesn't exist or has no valid records
+        logger.info(f"Domain {domain} has no valid MX, A, or AAAA records")
+        return False, f"The email domain '{domain}' does not appear to be valid. Please check your email address."
+        
+    except Exception as e:
+        logger.error(f"Error validating domain {domain}: {str(e)}")
+        # On critical errors, be conservative and block
+        return False, "Unable to verify email domain. Please try again or use a different email."
+
+
 def get_email_domain_info(email):
     """
     Get information about the email domain for risk assessment.
@@ -505,7 +575,7 @@ def get_email_domain_info(email):
 def validate_email_for_signup(email):
     """
     Validate email for account signup.
-    Blocks disposable emails and returns appropriate error message.
+    Blocks disposable emails and invalid domains, returns appropriate error message.
     
     Args:
         email: The email address to validate
@@ -513,11 +583,24 @@ def validate_email_for_signup(email):
     Returns:
         tuple: (is_valid: bool, error_message: str or None)
     """
+    # First check if it's a disposable email
     is_disposable, reason = is_disposable_email(email)
     
     if is_disposable:
         logger.warning(f"Blocked signup attempt with disposable email: {email}")
         return False, reason
+    
+    # Extract domain for DNS validation
+    try:
+        local_part, domain = email.rsplit('@', 1)
+    except ValueError:
+        return False, "Invalid email format"
+    
+    # Check if domain has valid DNS records
+    has_valid_dns, dns_error = has_valid_mx_or_a_record(domain)
+    if not has_valid_dns:
+        logger.warning(f"Blocked signup attempt with invalid domain: {email}")
+        return False, dns_error
     
     # Check risk score
     risk_score = is_suspicious_email(email)
