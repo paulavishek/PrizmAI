@@ -70,7 +70,36 @@ function initAITaskDescription() {
             })
             .then(data => {
                 if (data.description) {
-                    descriptionTextarea.value = data.description;
+                    // Handle both object and string responses from AI
+                    let descriptionText;
+                    if (typeof data.description === 'object' && data.description !== null) {
+                        // Use markdown_description if available, fallback to detailed_description or objective
+                        descriptionText = data.description.markdown_description || 
+                                         data.description.detailed_description ||
+                                         data.description.objective ||
+                                         '';
+                        // If still empty, try to construct from available fields
+                        if (!descriptionText && (data.description.objective || data.description.checklist)) {
+                            let parts = [];
+                            if (data.description.objective) {
+                                parts.push('**Objective:** ' + data.description.objective);
+                            }
+                            if (data.description.detailed_description) {
+                                parts.push('\n\n' + data.description.detailed_description);
+                            }
+                            if (data.description.checklist && Array.isArray(data.description.checklist)) {
+                                parts.push('\n\n**Checklist:**');
+                                data.description.checklist.forEach(item => {
+                                    const itemText = typeof item === 'object' ? item.item : item;
+                                    parts.push('\n- [ ] ' + itemText);
+                                });
+                            }
+                            descriptionText = parts.join('');
+                        }
+                    } else {
+                        descriptionText = data.description;
+                    }
+                    descriptionTextarea.value = descriptionText;
                 } else {
                     alert('Could not generate description. Please try again or enter description manually.');
                 }
@@ -436,8 +465,15 @@ function initAIAnalyticsSummary() {
             })
             .then(data => {
                 if (data.summary) {
-                    // Convert markdown-like text to HTML for better display
-                    const formattedSummary = formatSummaryText(data.summary);
+                    // Handle both object and string responses from AI
+                    let formattedSummary;
+                    if (typeof data.summary === 'object' && data.summary !== null) {
+                        // Use structured analytics summary formatter
+                        formattedSummary = formatStructuredAnalyticsSummary(data.summary);
+                    } else {
+                        // Fallback to plain text formatting
+                        formattedSummary = formatSummaryText(data.summary);
+                    }
                     summaryText.innerHTML = formattedSummary;
                     
                     // Show summary and hide placeholder
@@ -495,6 +531,204 @@ function formatSummaryText(text) {
     formatted = formatted.replace(/<p><\/p>/g, '');
     
     return formatted;
+}
+
+/**
+ * Format structured analytics summary into HTML
+ */
+function formatStructuredAnalyticsSummary(summary) {
+    let html = '<div class="ai-analytics-summary-structured">';
+    
+    // Helper functions
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    function capitalizeFirst(str) {
+        if (!str) return '';
+        return str.charAt(0).toUpperCase() + str.slice(1).replace(/_/g, ' ');
+    }
+    
+    // Executive Summary
+    if (summary.executive_summary) {
+        html += `<div class="alert alert-info mb-3">
+            <h5 class="alert-heading"><i class="fas fa-chart-bar me-2"></i>Executive Summary</h5>
+            <p class="mb-0">${escapeHtml(summary.executive_summary)}</p>
+        </div>`;
+    }
+    
+    // Confidence Score
+    if (summary.confidence_score) {
+        const confidencePercent = Math.round(summary.confidence_score * 100);
+        const confidenceClass = confidencePercent >= 70 ? 'bg-success' : confidencePercent >= 40 ? 'bg-warning' : 'bg-danger';
+        html += `<div class="mb-3">
+            <small class="text-muted">Analysis Confidence:</small>
+            <div class="progress" style="height: 20px;">
+                <div class="progress-bar ${confidenceClass}" role="progressbar" style="width: ${confidencePercent}%">${confidencePercent}%</div>
+            </div>
+        </div>`;
+    }
+    
+    // Health Assessment
+    if (summary.health_assessment) {
+        const health = summary.health_assessment;
+        const statusClass = health.overall_score === 'healthy' ? 'success' : health.overall_score === 'at_risk' ? 'warning' : 'danger';
+        const statusIcon = health.overall_score === 'healthy' ? 'check-circle' : health.overall_score === 'at_risk' ? 'exclamation-triangle' : 'times-circle';
+        html += `<div class="card mb-3 border-${statusClass}">
+            <div class="card-header bg-${statusClass} text-white">
+                <i class="fas fa-${statusIcon} me-2"></i>Health Assessment: ${capitalizeFirst(health.overall_score || 'Unknown')}
+            </div>
+            <div class="card-body">
+                ${health.score_reasoning ? `<p>${escapeHtml(health.score_reasoning)}</p>` : ''}
+                ${health.health_indicators && health.health_indicators.length > 0 ? `
+                    <div class="mt-2">
+                        ${health.health_indicators.map(ind => `
+                            <div class="d-flex align-items-center mb-1">
+                                <i class="fas fa-${ind.status === 'positive' ? 'check text-success' : ind.status === 'negative' ? 'times text-danger' : 'minus text-secondary'} me-2"></i>
+                                <span><strong>${escapeHtml(ind.indicator)}:</strong> ${escapeHtml(ind.value)} ${ind.benchmark ? `(Expected: ${escapeHtml(ind.benchmark)})` : ''}</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+            </div>
+        </div>`;
+    }
+    
+    // Key Insights
+    if (summary.key_insights && summary.key_insights.length > 0) {
+        html += `<div class="card mb-3">
+            <div class="card-header bg-primary text-white">
+                <i class="fas fa-lightbulb me-2"></i>Key Insights
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    ${summary.key_insights.map(insight => `
+                        <div class="list-group-item px-0">
+                            <strong>${escapeHtml(insight.insight)}</strong>
+                            ${insight.evidence ? `<p class="small text-muted mb-0 mt-1"><em>Evidence:</em> ${escapeHtml(insight.evidence)}</p>` : ''}
+                            ${insight.significance ? `<p class="small mb-0"><em>Significance:</em> ${escapeHtml(insight.significance)}</p>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>`;
+    }
+    
+    // Areas of Concern
+    if (summary.areas_of_concern && summary.areas_of_concern.length > 0) {
+        html += `<div class="card mb-3 border-warning">
+            <div class="card-header bg-warning text-dark">
+                <i class="fas fa-exclamation-triangle me-2"></i>Areas of Concern
+            </div>
+            <div class="card-body">
+                ${summary.areas_of_concern.map(concern => `
+                    <div class="border-start border-${concern.severity === 'critical' ? 'danger' : concern.severity === 'high' ? 'warning' : 'info'} ps-2 mb-3">
+                        <strong>${escapeHtml(concern.concern)}</strong>
+                        <span class="badge bg-${concern.severity === 'critical' ? 'danger' : concern.severity === 'high' ? 'warning' : 'info'} ms-2">${capitalizeFirst(concern.severity)}</span>
+                        ${concern.root_cause_hypothesis ? `<p class="small text-muted mb-1 mt-1"><em>Likely Cause:</em> ${escapeHtml(concern.root_cause_hypothesis)}</p>` : ''}
+                        ${concern.recommended_action ? `<p class="small mb-0"><strong>Action:</strong> ${escapeHtml(concern.recommended_action)}</p>` : ''}
+                    </div>
+                `).join('')}
+            </div>
+        </div>`;
+    }
+    
+    // Recommendations
+    if (summary.process_improvement_recommendations && summary.process_improvement_recommendations.length > 0) {
+        html += `<div class="card mb-3 border-success">
+            <div class="card-header bg-success text-white">
+                <i class="fas fa-tasks me-2"></i>Recommendations
+            </div>
+            <div class="card-body">
+                <ol class="mb-0">
+                    ${summary.process_improvement_recommendations.map(rec => `
+                        <li class="mb-2">
+                            <strong>${escapeHtml(rec.recommendation)}</strong>
+                            ${rec.rationale ? `<p class="small text-muted mb-0">${escapeHtml(rec.rationale)}</p>` : ''}
+                            ${rec.expected_impact ? `<p class="small mb-0"><em>Expected Impact:</em> ${escapeHtml(rec.expected_impact)}</p>` : ''}
+                        </li>
+                    `).join('')}
+                </ol>
+            </div>
+        </div>`;
+    }
+    
+    // Lean Analysis
+    if (summary.lean_analysis) {
+        const lean = summary.lean_analysis;
+        html += `<div class="card mb-3">
+            <div class="card-header">
+                <i class="fas fa-chart-line me-2"></i>Lean Six Sigma Analysis
+            </div>
+            <div class="card-body">
+                ${lean.value_stream_efficiency ? `<p><strong>Value Stream Efficiency:</strong> <span class="badge bg-${lean.value_stream_efficiency === 'excellent' ? 'success' : lean.value_stream_efficiency === 'good' ? 'info' : lean.value_stream_efficiency === 'fair' ? 'warning' : 'danger'}">${capitalizeFirst(lean.value_stream_efficiency)}</span></p>` : ''}
+                ${lean.efficiency_reasoning ? `<p class="text-muted">${escapeHtml(lean.efficiency_reasoning)}</p>` : ''}
+                ${lean.waste_identification && lean.waste_identification.length > 0 ? `
+                    <p><strong>Waste Identified:</strong></p>
+                    <ul>
+                        ${lean.waste_identification.map(w => `<li>${escapeHtml(w.waste_type)}: ${escapeHtml(w.elimination_strategy)}</li>`).join('')}
+                    </ul>
+                ` : ''}
+            </div>
+        </div>`;
+    }
+    
+    // Team Performance
+    if (summary.team_performance) {
+        const team = summary.team_performance;
+        html += `<div class="card mb-3">
+            <div class="card-header">
+                <i class="fas fa-users me-2"></i>Team Performance
+            </div>
+            <div class="card-body">
+                ${team.workload_balance ? `<p><strong>Workload Balance:</strong> ${capitalizeFirst(team.workload_balance)}</p>` : ''}
+                ${team.balance_analysis ? `<p class="text-muted">${escapeHtml(team.balance_analysis)}</p>` : ''}
+                ${team.capacity_concerns && team.capacity_concerns.length > 0 ? `<p class="text-danger"><strong>Capacity Concerns:</strong> ${team.capacity_concerns.map(c => escapeHtml(c)).join(', ')}</p>` : ''}
+            </div>
+        </div>`;
+    }
+    
+    // Action Items
+    if (summary.action_items && summary.action_items.length > 0) {
+        html += `<div class="card mb-3 border-primary">
+            <div class="card-header bg-primary text-white">
+                <i class="fas fa-list-check me-2"></i>Action Items
+            </div>
+            <div class="card-body">
+                <div class="list-group list-group-flush">
+                    ${summary.action_items.map((item, idx) => `
+                        <div class="list-group-item px-0 d-flex justify-content-between align-items-start">
+                            <div>
+                                <strong>${idx + 1}. ${escapeHtml(item.action)}</strong>
+                                ${item.owner ? `<br><small class="text-muted">Owner: ${escapeHtml(item.owner)}</small>` : ''}
+                                ${item.expected_outcome ? `<p class="small mb-0 mt-1">${escapeHtml(item.expected_outcome)}</p>` : ''}
+                            </div>
+                            ${item.urgency ? `<span class="badge bg-${item.urgency === 'immediate' ? 'danger' : item.urgency === 'this_week' ? 'warning' : 'info'}">${capitalizeFirst(item.urgency)}</span>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>`;
+    }
+    
+    // Limitations
+    if ((summary.assumptions && summary.assumptions.length > 0) || (summary.limitations && summary.limitations.length > 0)) {
+        html += `<div class="card mb-3 border-secondary">
+            <div class="card-header bg-light">
+                <i class="fas fa-info-circle me-2"></i>Analysis Notes
+            </div>
+            <div class="card-body small text-muted">
+                ${summary.assumptions && summary.assumptions.length > 0 ? `<p class="mb-1"><strong>Assumptions:</strong></p><ul class="mb-2">${summary.assumptions.map(a => `<li>${escapeHtml(a)}</li>`).join('')}</ul>` : ''}
+                ${summary.limitations && summary.limitations.length > 0 ? `<p class="mb-1"><strong>Limitations:</strong></p><ul class="mb-0">${summary.limitations.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>` : ''}
+            </div>
+        </div>`;
+    }
+    
+    html += '</div>';
+    return html;
 }
 
 /**

@@ -1299,8 +1299,20 @@
             placeholder.classList.add('d-none');
             container.classList.remove('d-none');
             
-            // Format the summary with proper markdown-style rendering
-            const formattedSummary = formatTaskSummary(data.summary);
+            // Handle structured JSON response from AI
+            const summary = data.summary;
+            let formattedSummary;
+            
+            if (typeof summary === 'object' && summary !== null) {
+                // Format the structured JSON response
+                formattedSummary = formatStructuredTaskSummary(summary);
+            } else if (typeof summary === 'string') {
+                // Fallback: Format plain text summary
+                formattedSummary = formatTaskSummary(summary);
+            } else {
+                throw new Error('Invalid summary format received');
+            }
+            
             textElement.innerHTML = formattedSummary;
         })
         .catch(error => {
@@ -1316,7 +1328,226 @@
         });
     });
     
-    // Format task summary with proper styling
+    // Format structured JSON task summary into HTML
+    function formatStructuredTaskSummary(summary) {
+        let html = '<div class="ai-summary-structured">';
+        
+        // Executive Summary
+        if (summary.executive_summary) {
+            html += `<div class="alert alert-info mb-3">
+                <h5 class="alert-heading"><i class="fas fa-clipboard-list me-2"></i>Executive Summary</h5>
+                <p class="mb-0">${escapeHtml(summary.executive_summary)}</p>
+            </div>`;
+        }
+        
+        // Confidence Score
+        if (summary.confidence_score) {
+            const confidencePercent = Math.round(summary.confidence_score * 100);
+            const confidenceClass = confidencePercent >= 70 ? 'bg-success' : confidencePercent >= 40 ? 'bg-warning' : 'bg-danger';
+            html += `<div class="mb-3">
+                <small class="text-muted">Analysis Confidence:</small>
+                <div class="progress" style="height: 20px;">
+                    <div class="progress-bar ${confidenceClass}" role="progressbar" style="width: ${confidencePercent}%">${confidencePercent}%</div>
+                </div>
+            </div>`;
+        }
+        
+        // Task Health
+        if (summary.task_health) {
+            const health = summary.task_health;
+            const statusClass = health.overall_status === 'healthy' ? 'success' : health.overall_status === 'at_risk' ? 'warning' : 'danger';
+            const statusIcon = health.overall_status === 'healthy' ? 'check-circle' : health.overall_status === 'at_risk' ? 'exclamation-triangle' : 'times-circle';
+            html += `<div class="card mb-3 border-${statusClass}">
+                <div class="card-header bg-${statusClass} text-white">
+                    <i class="fas fa-${statusIcon} me-2"></i>Task Health: ${capitalizeFirst(health.overall_status || 'Unknown')}
+                </div>
+                <div class="card-body">
+                    ${health.status_reasoning ? `<p>${escapeHtml(health.status_reasoning)}</p>` : ''}
+                    ${formatHealthFactors(health.health_factors)}
+                </div>
+            </div>`;
+        }
+        
+        // Risk Analysis
+        if (summary.risk_analysis) {
+            const risk = summary.risk_analysis;
+            html += `<div class="card mb-3 border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <i class="fas fa-shield-alt me-2"></i>Risk Analysis
+                </div>
+                <div class="card-body">
+                    ${risk.risk_assessment_validity ? `<p><strong>Assessment:</strong> ${escapeHtml(risk.risk_assessment_validity)}</p>` : ''}
+                    ${risk.validity_reasoning ? `<p class="text-muted small">${escapeHtml(risk.validity_reasoning)}</p>` : ''}
+                    ${formatTopRisks(risk.top_risks)}
+                    ${risk.blockers_impact ? `<p class="mt-2"><strong>Blockers Impact:</strong> ${escapeHtml(risk.blockers_impact)}</p>` : ''}
+                </div>
+            </div>`;
+        }
+        
+        // Timeline Assessment
+        if (summary.timeline_assessment) {
+            const timeline = summary.timeline_assessment;
+            const feasibilityClass = timeline.deadline_feasibility === 'achievable' ? 'success' : timeline.deadline_feasibility === 'at_risk' ? 'warning' : 'danger';
+            html += `<div class="card mb-3">
+                <div class="card-header">
+                    <i class="fas fa-calendar-alt me-2"></i>Timeline Assessment
+                </div>
+                <div class="card-body">
+                    <span class="badge bg-${feasibilityClass} mb-2">${capitalizeFirst(timeline.deadline_feasibility || 'Unknown')}</span>
+                    ${timeline.feasibility_reasoning ? `<p>${escapeHtml(timeline.feasibility_reasoning)}</p>` : ''}
+                    ${timeline.dependency_impact ? `<p><strong>Dependency Impact:</strong> ${escapeHtml(timeline.dependency_impact)}</p>` : ''}
+                    ${formatSuggestions(timeline.suggested_adjustments, 'Suggested Adjustments')}
+                </div>
+            </div>`;
+        }
+        
+        // Resource Assessment
+        if (summary.resource_assessment) {
+            const resource = summary.resource_assessment;
+            html += `<div class="card mb-3">
+                <div class="card-header">
+                    <i class="fas fa-users me-2"></i>Resource Assessment
+                </div>
+                <div class="card-body">
+                    ${resource.assignee_fit ? `<p><strong>Assignee Fit:</strong> <span class="badge bg-${resource.assignee_fit === 'good' ? 'success' : resource.assignee_fit === 'adequate' ? 'warning' : 'danger'}">${capitalizeFirst(resource.assignee_fit)}</span></p>` : ''}
+                    ${resource.fit_reasoning ? `<p class="text-muted small">${escapeHtml(resource.fit_reasoning)}</p>` : ''}
+                    ${resource.capacity_status ? `<p><strong>Capacity:</strong> ${capitalizeFirst(resource.capacity_status)}</p>` : ''}
+                    ${formatSkillGaps(resource.skill_gaps)}
+                    ${resource.collaboration_needs ? `<p><strong>Collaboration:</strong> ${escapeHtml(resource.collaboration_needs)}</p>` : ''}
+                </div>
+            </div>`;
+        }
+        
+        // Prioritized Actions
+        if (summary.prioritized_actions && summary.prioritized_actions.length > 0) {
+            html += `<div class="card mb-3 border-primary">
+                <div class="card-header bg-primary text-white">
+                    <i class="fas fa-tasks me-2"></i>Recommended Actions
+                </div>
+                <div class="card-body">
+                    <div class="list-group list-group-flush">
+                        ${summary.prioritized_actions.map((action, idx) => `
+                            <div class="list-group-item px-0">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <strong>${idx + 1}. ${escapeHtml(action.action)}</strong>
+                                        ${action.owner ? `<br><small class="text-muted">Owner: ${escapeHtml(action.owner)}</small>` : ''}
+                                        ${action.reasoning ? `<p class="small text-muted mt-1 mb-0">${escapeHtml(action.reasoning)}</p>` : ''}
+                                    </div>
+                                    ${action.urgency ? `<span class="badge bg-${action.urgency === 'immediate' ? 'danger' : action.urgency === 'this_week' ? 'warning' : 'info'}">${formatUrgency(action.urgency)}</span>` : ''}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>`;
+        }
+        
+        // Stakeholder Insights
+        if (summary.stakeholder_insights) {
+            const stakeholder = summary.stakeholder_insights;
+            html += `<div class="card mb-3">
+                <div class="card-header">
+                    <i class="fas fa-user-tie me-2"></i>Stakeholder Insights
+                </div>
+                <div class="card-body">
+                    ${stakeholder.engagement_level ? `<p><strong>Engagement:</strong> ${capitalizeFirst(stakeholder.engagement_level)}</p>` : ''}
+                    ${stakeholder.satisfaction_trend ? `<p><strong>Satisfaction Trend:</strong> ${capitalizeFirst(stakeholder.satisfaction_trend)}</p>` : ''}
+                    ${formatSuggestions(stakeholder.key_concerns, 'Key Concerns')}
+                    ${formatSuggestions(stakeholder.communication_recommendations, 'Communication Tips')}
+                </div>
+            </div>`;
+        }
+        
+        // Lean Efficiency
+        if (summary.lean_efficiency) {
+            const lean = summary.lean_efficiency;
+            html += `<div class="card mb-3">
+                <div class="card-header">
+                    <i class="fas fa-chart-line me-2"></i>Lean Efficiency
+                </div>
+                <div class="card-body">
+                    ${lean.classification_reasoning ? `<p>${escapeHtml(lean.classification_reasoning)}</p>` : ''}
+                    ${formatSuggestions(lean.waste_indicators, 'Waste Indicators')}
+                    ${formatSuggestions(lean.efficiency_suggestions, 'Efficiency Suggestions')}
+                </div>
+            </div>`;
+        }
+        
+        // Analysis Limitations
+        if ((summary.assumptions && summary.assumptions.length > 0) || (summary.limitations && summary.limitations.length > 0)) {
+            html += `<div class="card mb-3 border-secondary">
+                <div class="card-header bg-light">
+                    <i class="fas fa-info-circle me-2"></i>Analysis Notes
+                </div>
+                <div class="card-body small text-muted">
+                    ${formatSuggestions(summary.assumptions, 'Assumptions Made')}
+                    ${formatSuggestions(summary.limitations, 'Limitations')}
+                </div>
+            </div>`;
+        }
+        
+        html += '</div>';
+        return html;
+    }
+    
+    // Helper functions for formatting
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    function capitalizeFirst(str) {
+        if (!str) return '';
+        return str.charAt(0).toUpperCase() + str.slice(1).replace(/_/g, ' ');
+    }
+    
+    function formatUrgency(urgency) {
+        const map = { 'immediate': 'Immediate', 'this_week': 'This Week', 'this_month': 'This Month' };
+        return map[urgency] || urgency;
+    }
+    
+    function formatHealthFactors(factors) {
+        if (!factors || factors.length === 0) return '';
+        return `<div class="mt-2">
+            ${factors.map(f => `
+                <div class="d-flex align-items-center mb-1">
+                    <i class="fas fa-${f.status === 'positive' ? 'check text-success' : f.status === 'negative' ? 'times text-danger' : 'minus text-secondary'} me-2"></i>
+                    <span><strong>${escapeHtml(f.factor)}:</strong> ${escapeHtml(f.impact)}</span>
+                </div>
+            `).join('')}
+        </div>`;
+    }
+    
+    function formatTopRisks(risks) {
+        if (!risks || risks.length === 0) return '<p class="text-muted">No significant risks identified.</p>';
+        return `<div class="mt-2">
+            ${risks.map(r => `
+                <div class="border-start border-warning ps-2 mb-2">
+                    <strong>${escapeHtml(r.risk)}</strong>
+                    <div class="small">
+                        <span class="badge bg-${r.likelihood === 'high' ? 'danger' : r.likelihood === 'medium' ? 'warning' : 'success'} me-1">Likelihood: ${capitalizeFirst(r.likelihood)}</span>
+                        <span class="badge bg-${r.impact === 'high' ? 'danger' : r.impact === 'medium' ? 'warning' : 'success'}">Impact: ${capitalizeFirst(r.impact)}</span>
+                    </div>
+                    ${r.recommended_action ? `<p class="small mt-1 mb-0"><strong>Action:</strong> ${escapeHtml(r.recommended_action)}</p>` : ''}
+                </div>
+            `).join('')}
+        </div>`;
+    }
+    
+    function formatSkillGaps(gaps) {
+        if (!gaps || gaps.length === 0) return '';
+        return `<p><strong>Skill Gaps:</strong></p><ul class="mb-2">${gaps.map(g => `<li>${escapeHtml(g)}</li>`).join('')}</ul>`;
+    }
+    
+    function formatSuggestions(items, title) {
+        if (!items || items.length === 0) return '';
+        return `<p class="mb-1"><strong>${title}:</strong></p><ul class="mb-2">${items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>`;
+    }
+    
+    // Format plain text task summary with proper styling (fallback)
     function formatTaskSummary(text) {
         if (!text) return '';
         
