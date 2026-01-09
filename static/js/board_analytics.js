@@ -511,6 +511,11 @@ function generateAISummary(boardId) {
             throw new Error(data.error);
         }
         
+        // Check if summary is present and valid
+        if (!data.summary) {
+            throw new Error('No summary data received from AI service');
+        }
+        
         // Hide placeholder and show content
         placeholder.classList.add('d-none');
         container.classList.remove('d-none');
@@ -520,8 +525,8 @@ function generateAISummary(boardId) {
         if (typeof data.summary === 'string') {
             // Old format: plain string summary
             formattedSummary = formatAISummary(data.summary);
-        } else if (typeof data.summary === 'object') {
-            // New format: structured JSON with explainability
+        } else if (data.summary !== null && typeof data.summary === 'object') {
+            // New format: structured JSON with explainability (check for null explicitly)
             formattedSummary = formatStructuredAISummary(data.summary);
         } else {
             throw new Error('Invalid summary format received');
@@ -728,6 +733,12 @@ function formatAISummary(summary) {
 }
 
 function formatStructuredAISummary(summary) {
+    // Defensive check for null/undefined summary
+    if (!summary || typeof summary !== 'object') {
+        console.error('formatStructuredAISummary received invalid summary:', summary);
+        return '<div class="alert alert-warning">Unable to format AI summary. Please try again.</div>';
+    }
+    
     // This function handles structured JSON summaries with explainability
     let html = '<div class="structured-ai-summary">';
     
@@ -769,16 +780,17 @@ function formatStructuredAISummary(summary) {
     }
     
     // Key Insights
-    if (summary.key_insights && summary.key_insights.length > 0) {
+    if (summary.key_insights && Array.isArray(summary.key_insights) && summary.key_insights.length > 0) {
         html += '<div class="mb-4">';
         html += '<h6 class="text-info"><i class="fas fa-lightbulb me-2"></i>Key Insights</h6>';
         summary.key_insights.forEach(insight => {
+            if (!insight) return; // Skip null/undefined items
             const confBadge = insight.confidence ? '<span class="badge bg-secondary me-2">' + insight.confidence + '</span>' : '';
             html += '<div class="card mb-2 border-left-info">';
             html += '<div class="card-body py-2">';
-            html += '<p class="mb-1">' + confBadge + escapeHtml(insight.insight) + '</p>';
+            html += '<p class="mb-1">' + confBadge + escapeHtml(insight.insight || 'Insight') + '</p>';
             if (insight.evidence) {
-                html += '<small class="text-muted"><strong>Evidence:</strong> ' + escapeHtml(insight.evidence) + '</small>';
+                html += '<small class="text-muted"><strong>Evidence:</strong> ' + escapeHtml(String(insight.evidence)) + '</small>';
             }
             html += '</div></div>';
         });
@@ -786,16 +798,17 @@ function formatStructuredAISummary(summary) {
     }
     
     // Areas of Concern
-    if (summary.areas_of_concern && summary.areas_of_concern.length > 0) {
+    if (summary.areas_of_concern && Array.isArray(summary.areas_of_concern) && summary.areas_of_concern.length > 0) {
         html += '<div class="mb-4">';
         html += '<h6 class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Areas of Concern</h6>';
         summary.areas_of_concern.forEach(concern => {
+            if (!concern) return; // Skip null/undefined items
             const severityColors = {critical: 'danger', high: 'warning', medium: 'info', low: 'secondary'};
             const severityColor = severityColors[concern.severity] || 'secondary';
             html += '<div class="alert alert-' + severityColor + ' py-2 mb-2">';
-            html += '<strong>' + escapeHtml(concern.concern) + '</strong>';
+            html += '<strong>' + escapeHtml(concern.concern || 'Concern') + '</strong>';
             if (concern.recommended_action) {
-                html += '<p class="mb-0 mt-1 small"><i class="fas fa-arrow-right me-1"></i>' + escapeHtml(concern.recommended_action) + '</p>';
+                html += '<p class="mb-0 mt-1 small"><i class="fas fa-arrow-right me-1"></i>' + escapeHtml(String(concern.recommended_action)) + '</p>';
             }
             html += '</div>';
         });
@@ -803,21 +816,22 @@ function formatStructuredAISummary(summary) {
     }
     
     // Process Improvement Recommendations
-    if (summary.process_improvement_recommendations && summary.process_improvement_recommendations.length > 0) {
+    if (summary.process_improvement_recommendations && Array.isArray(summary.process_improvement_recommendations) && summary.process_improvement_recommendations.length > 0) {
         html += '<div class="mb-4">';
         html += '<h6 class="text-success"><i class="fas fa-rocket me-2"></i>Recommendations</h6>';
         summary.process_improvement_recommendations.forEach((rec, idx) => {
+            if (!rec) return; // Skip null/undefined items
             html += '<div class="card mb-2">';
             html += '<div class="card-body py-2">';
             html += '<div class="d-flex justify-content-between align-items-start">';
-            html += '<div><strong>' + (idx + 1) + '. ' + escapeHtml(rec.recommendation) + '</strong></div>';
+            html += '<div><strong>' + (idx + 1) + '. ' + escapeHtml(rec.recommendation || 'Recommendation') + '</strong></div>';
             if (rec.implementation_effort) {
                 const effortColor = rec.implementation_effort === 'low' ? 'success' : rec.implementation_effort === 'medium' ? 'warning' : 'danger';
-                html += '<span class="badge bg-' + effortColor + '">' + rec.implementation_effort + ' effort</span>';
+                html += '<span class="badge bg-' + effortColor + '">' + String(rec.implementation_effort) + ' effort</span>';
             }
             html += '</div>';
             if (rec.expected_impact) {
-                html += '<p class="mb-0 mt-1 small text-muted">' + escapeHtml(rec.expected_impact) + '</p>';
+                html += '<p class="mb-0 mt-1 small text-muted">' + escapeHtml(String(rec.expected_impact)) + '</p>';
             }
             html += '</div></div>';
         });
@@ -830,12 +844,13 @@ function formatStructuredAISummary(summary) {
         html += '<div class="mb-4">';
         html += '<h6 class="text-warning"><i class="fas fa-cogs me-2"></i>Lean Six Sigma Analysis</h6>';
         if (lean.value_stream_efficiency) {
-            html += '<p><strong>Value Stream Efficiency:</strong> <span class="badge bg-info">' + lean.value_stream_efficiency.toUpperCase() + '</span></p>';
+            html += '<p><strong>Value Stream Efficiency:</strong> <span class="badge bg-info">' + String(lean.value_stream_efficiency).toUpperCase() + '</span></p>';
         }
-        if (lean.waste_identification && lean.waste_identification.length > 0) {
+        if (lean.waste_identification && Array.isArray(lean.waste_identification) && lean.waste_identification.length > 0) {
             html += '<p class="mb-1"><strong>Waste Identified:</strong></p><ul class="small">';
             lean.waste_identification.forEach(waste => {
-                html += '<li>' + escapeHtml(waste.waste_type) + ' (' + waste.tasks_affected + ' tasks)</li>';
+                if (!waste) return; // Skip null/undefined items
+                html += '<li>' + escapeHtml(waste.waste_type || 'Waste') + ' (' + (waste.tasks_affected || 0) + ' tasks)</li>';
             });
             html += '</ul>';
         }
@@ -843,16 +858,18 @@ function formatStructuredAISummary(summary) {
     }
     
     // Action Items
-    if (summary.action_items && summary.action_items.length > 0) {
+    if (summary.action_items && Array.isArray(summary.action_items) && summary.action_items.length > 0) {
         html += '<div class="mb-4">';
         html += '<h6 class="text-primary"><i class="fas fa-tasks me-2"></i>Immediate Action Items</h6>';
         html += '<ol class="ps-3">';
         summary.action_items.forEach(item => {
+            if (!item) return; // Skip null/undefined items
             const urgencyColors = {immediate: 'danger', this_week: 'warning', this_month: 'info'};
             const urgencyColor = urgencyColors[item.urgency] || 'secondary';
+            const urgencyText = String(item.urgency || 'planned').replace('_', ' ');
             html += '<li class="mb-2">';
-            html += escapeHtml(item.action);
-            html += ' <span class="badge bg-' + urgencyColor + ' ms-2">' + (item.urgency || 'planned').replace('_', ' ') + '</span>';
+            html += escapeHtml(item.action || 'Action item');
+            html += ' <span class="badge bg-' + urgencyColor + ' ms-2">' + urgencyText + '</span>';
             html += '</li>';
         });
         html += '</ol></div>';
