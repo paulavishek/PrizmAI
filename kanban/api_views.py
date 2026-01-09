@@ -1013,8 +1013,100 @@ def download_analytics_summary_pdf(request, board_id):
         # Process the summary text - convert markdown-like formatting to proper paragraphs
         import re
         
+        # Convert dictionary summary to formatted text if needed
+        if isinstance(summary, dict):
+            formatted_summary = []
+            
+            # Executive Summary
+            if summary.get('executive_summary'):
+                formatted_summary.append("## Executive Summary")
+                formatted_summary.append(summary['executive_summary'])
+                formatted_summary.append("")
+            
+            # Health Assessment
+            if summary.get('health_assessment'):
+                health = summary['health_assessment']
+                formatted_summary.append("## Project Health Assessment")
+                formatted_summary.append(f"**Overall Status:** {health.get('overall_score', 'N/A').replace('_', ' ').title()}")
+                if health.get('score_reasoning'):
+                    formatted_summary.append(f"**Reasoning:** {health['score_reasoning']}")
+                formatted_summary.append("")
+            
+            # Key Insights
+            if summary.get('key_insights') and isinstance(summary['key_insights'], list):
+                formatted_summary.append("## Key Insights")
+                for insight in summary['key_insights']:
+                    if isinstance(insight, dict):
+                        formatted_summary.append(f"* **{insight.get('insight', 'N/A')}**")
+                        if insight.get('evidence'):
+                            formatted_summary.append(f"  Evidence: {insight['evidence']}")
+                    elif isinstance(insight, str):
+                        formatted_summary.append(f"* {insight}")
+                formatted_summary.append("")
+            
+            # Areas of Concern
+            if summary.get('areas_of_concern') and isinstance(summary['areas_of_concern'], list):
+                formatted_summary.append("## Areas of Concern")
+                for concern in summary['areas_of_concern']:
+                    if isinstance(concern, dict):
+                        severity = concern.get('severity', 'medium').upper()
+                        formatted_summary.append(f"* **[{severity}]** {concern.get('concern', 'N/A')}")
+                        if concern.get('recommended_action'):
+                            formatted_summary.append(f"  Recommended Action: {concern['recommended_action']}")
+                    elif isinstance(concern, str):
+                        formatted_summary.append(f"* {concern}")
+                formatted_summary.append("")
+            
+            # Process Improvement Recommendations
+            if summary.get('process_improvement_recommendations') and isinstance(summary['process_improvement_recommendations'], list):
+                formatted_summary.append("## Process Improvement Recommendations")
+                for rec in summary['process_improvement_recommendations']:
+                    if isinstance(rec, dict):
+                        formatted_summary.append(f"* **{rec.get('recommendation', 'N/A')}**")
+                        if rec.get('expected_impact'):
+                            formatted_summary.append(f"  Expected Impact: {rec['expected_impact']}")
+                    elif isinstance(rec, str):
+                        formatted_summary.append(f"* {rec}")
+                formatted_summary.append("")
+            
+            # Lean Analysis
+            if summary.get('lean_analysis'):
+                lean = summary['lean_analysis']
+                formatted_summary.append("## Lean Six Sigma Analysis")
+                if lean.get('value_stream_efficiency'):
+                    formatted_summary.append(f"**Value Stream Efficiency:** {lean['value_stream_efficiency'].replace('_', ' ').title()}")
+                if lean.get('efficiency_reasoning'):
+                    formatted_summary.append(lean['efficiency_reasoning'])
+                formatted_summary.append("")
+            
+            # Team Performance
+            if summary.get('team_performance'):
+                team = summary['team_performance']
+                formatted_summary.append("## Team Performance")
+                if team.get('workload_balance'):
+                    formatted_summary.append(f"**Workload Balance:** {team['workload_balance'].replace('_', ' ').title()}")
+                if team.get('balance_analysis'):
+                    formatted_summary.append(team['balance_analysis'])
+                formatted_summary.append("")
+            
+            # Action Items
+            if summary.get('action_items') and isinstance(summary['action_items'], list):
+                formatted_summary.append("## Recommended Action Items")
+                for action in summary['action_items']:
+                    if isinstance(action, dict):
+                        urgency = action.get('urgency', 'normal').replace('_', ' ').title()
+                        formatted_summary.append(f"* **[{urgency}]** {action.get('action', 'N/A')}")
+                    elif isinstance(action, str):
+                        formatted_summary.append(f"* {action}")
+                formatted_summary.append("")
+            
+            summary_text = '\n'.join(formatted_summary)
+        else:
+            # Summary is already a string
+            summary_text = summary
+        
         # Split summary into sections
-        summary_lines = summary.split('\n')
+        summary_lines = summary_text.split('\n')
         for line in summary_lines:
             line = line.strip()
             if not line:
