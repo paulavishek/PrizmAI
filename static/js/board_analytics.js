@@ -516,18 +516,39 @@ function generateAISummary(boardId) {
             throw new Error('No summary data received from AI service');
         }
         
+        // Debug: log what we received
+        console.log('AI Summary response type:', typeof data.summary);
+        console.log('AI Summary data:', data.summary);
+        
         // Hide placeholder and show content
         placeholder.classList.add('d-none');
         container.classList.remove('d-none');
         
         // Handle both structured and simple string responses
         let formattedSummary;
-        if (typeof data.summary === 'string') {
-            // Old format: plain string summary
-            formattedSummary = formatAISummary(data.summary);
-        } else if (data.summary !== null && typeof data.summary === 'object') {
-            // New format: structured JSON with explainability (check for null explicitly)
-            formattedSummary = formatStructuredAISummary(data.summary);
+        let summaryData = data.summary;
+        
+        // If summary is a string that looks like JSON, try to parse it
+        if (typeof summaryData === 'string') {
+            const trimmed = summaryData.trim();
+            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+                try {
+                    summaryData = JSON.parse(summaryData);
+                    console.log('Parsed JSON string into object:', summaryData);
+                } catch (e) {
+                    console.log('String looks like JSON but failed to parse:', e);
+                    // Keep as string
+                }
+            }
+        }
+        
+        // Now format based on the actual type
+        if (typeof summaryData === 'string') {
+            // Plain string summary
+            formattedSummary = formatAISummary(summaryData);
+        } else if (summaryData !== null && typeof summaryData === 'object') {
+            // Structured JSON with explainability
+            formattedSummary = formatStructuredAISummary(summaryData);
         } else {
             throw new Error('Invalid summary format received');
         }

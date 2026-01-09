@@ -226,8 +226,8 @@
 {{ tasks_by_user|json_script:"tasks-by-user-data" }}
 {{ tasks_by_lean_category|json_script:"tasks-by-lean-data" }}
 
-<!-- Custom JavaScript Files -->
-<script src="{% static 'js/board_analytics.js' %}"></script>
+<!-- Custom JavaScript Files with cache busting -->
+<script src="{% static 'js/board_analytics.js' %}?v=2026010912"></script>
 <script src="{% static 'js/ai_timeline.js' %}"></script>
 
 <!-- Initialize CSRF Token -->
