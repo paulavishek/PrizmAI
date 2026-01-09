@@ -841,6 +841,37 @@
         margin-bottom: 1.25rem;
     }
 
+    .ai-benefits-row {
+        display: flex;
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .ai-benefit-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 0.5rem 1rem;
+        border-radius: 50px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .ai-benefit-item i {
+        color: #fbbf24;
+        font-size: 0.9rem;
+    }
+
+    @media (max-width: 768px) {
+        .ai-benefits-row {
+            justify-content: center;
+        }
+    }
+
     .btn-ai-demo {
         display: inline-flex;
         align-items: center;
@@ -1722,6 +1753,20 @@
                 <div class="ai-cta-content">
                     <h3>Experience the difference AI makes</h3>
                     <p>Try our interactive demo and see how AI transforms project management</p>
+                    <div class="ai-benefits-row">
+                        <div class="ai-benefit-item">
+                            <i class="fas fa-clock"></i>
+                            <span>Save 40% planning time</span>
+                        </div>
+                        <div class="ai-benefit-item">
+                            <i class="fas fa-check-circle"></i>
+                            <span>95% accuracy predictions</span>
+                        </div>
+                        <div class="ai-benefit-item">
+                            <i class="fas fa-chart-line"></i>
+                            <span>Real-time insights</span>
+                        </div>
+                    </div>
                     <a href="{% url 'demo_mode_selection' %}" class="btn-ai-demo">
                         <i class="fas fa-play-circle me-2"></i>Try AI Features Now
                     </a>
