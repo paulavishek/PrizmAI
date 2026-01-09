@@ -78,11 +78,6 @@
                             <a class="nav-link" href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'board_list' %}{% endif %}">Boards</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if request.resolver_match.url_name == 'demo_dashboard' %}active{% endif %}" href="{% url 'demo_dashboard' %}">
-                                <i class="fas fa-graduation-cap me-1"></i> Demo
-                            </a>
-                        </li>
-                        <li class="nav-item">
                             <a class="nav-link" href="{% url 'wiki:knowledge_hub_home' %}">
                                 <i class="fas fa-brain me-1"></i> Wiki
                             </a>
@@ -126,6 +121,16 @@
                     {% endif %}
                 </ul>
                 <ul class="navbar-nav align-items-center">
+                    <!-- Demo Mode Badge (visible only in demo mode) -->
+                    {% if request.session.is_demo_mode %}
+                        <li class="nav-item me-2">
+                            <a class="btn btn-warning btn-sm text-dark fw-bold {% if request.resolver_match.url_name == 'demo_dashboard' %}active{% endif %}" 
+                               href="{% url 'demo_dashboard' %}"
+                               style="border: 2px solid #ffc107; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                                <i class="fas fa-graduation-cap me-1"></i> DEMO MODE
+                            </a>
+                        </li>
+                    {% endif %}
                     <!-- Accessibility Toggle Button -->
                     <li class="nav-item">
                         <button id="accessibility-toggle" 
