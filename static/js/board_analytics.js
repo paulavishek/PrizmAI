@@ -515,8 +515,18 @@ function generateAISummary(boardId) {
         placeholder.classList.add('d-none');
         container.classList.remove('d-none');
         
-        // Convert markdown-like text to HTML for better display
-        const formattedSummary = formatAISummary(data.summary);
+        // Handle both structured and simple string responses
+        let formattedSummary;
+        if (typeof data.summary === 'string') {
+            // Old format: plain string summary
+            formattedSummary = formatAISummary(data.summary);
+        } else if (typeof data.summary === 'object') {
+            // New format: structured JSON with explainability
+            formattedSummary = formatStructuredAISummary(data.summary);
+        } else {
+            throw new Error('Invalid summary format received');
+        }
+        
         textElement.innerHTML = formattedSummary;
         
         // Show the download PDF button
@@ -692,6 +702,12 @@ function formatTimelineRecommendations(recommendations) {
 
 // Formatting helper functions
 function formatAISummary(summary) {
+    // This function handles plain string summaries (legacy format)
+    if (typeof summary !== 'string') {
+        console.error('formatAISummary expects a string, got:', typeof summary);
+        return '<p>Error formatting summary</p>';
+    }
+    
     // Convert basic markdown-like formatting to HTML
     let formatted = summary
         .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -709,6 +725,141 @@ function formatAISummary(summary) {
     }
     
     return formatted;
+}
+
+function formatStructuredAISummary(summary) {
+    // This function handles structured JSON summaries with explainability
+    let html = '<div class="structured-ai-summary">';
+    
+    // Executive Summary
+    if (summary.executive_summary) {
+        html += '<div class="mb-4">';
+        html += '<h5 class="text-primary"><i class="fas fa-chart-line me-2"></i>Executive Summary</h5>';
+        html += '<p class="lead">' + escapeHtml(summary.executive_summary) + '</p>';
+        
+        // Confidence and Quality Indicators
+        if (summary.confidence_score || summary.analysis_quality) {
+            html += '<div class="d-flex gap-2 mb-3">';
+            if (summary.confidence_score) {
+                const confidence = Math.round(summary.confidence_score * 100);
+                const confColor = confidence >= 80 ? 'success' : confidence >= 60 ? 'warning' : 'secondary';
+                html += '<span class="badge bg-' + confColor + '">Confidence: ' + confidence + '%</span>';
+            }
+            if (summary.analysis_quality) {
+                html += '<span class="badge bg-info">Data: ' + summary.analysis_quality.data_completeness + '</span>';
+            }
+            html += '</div>';
+        }
+        html += '</div>';
+    }
+    
+    // Health Assessment
+    if (summary.health_assessment) {
+        const health = summary.health_assessment;
+        const healthColors = {healthy: 'success', at_risk: 'warning', critical: 'danger'};
+        const healthColor = healthColors[health.overall_score] || 'secondary';
+        
+        html += '<div class="mb-4">';
+        html += '<h6 class="text-' + healthColor + '"><i class="fas fa-heartbeat me-2"></i>Project Health</h6>';
+        html += '<span class="badge bg-' + healthColor + ' mb-2">' + (health.overall_score || 'Unknown').toUpperCase() + '</span>';
+        if (health.score_reasoning) {
+            html += '<p class="text-muted small">' + escapeHtml(health.score_reasoning) + '</p>';
+        }
+        html += '</div>';
+    }
+    
+    // Key Insights
+    if (summary.key_insights && summary.key_insights.length > 0) {
+        html += '<div class="mb-4">';
+        html += '<h6 class="text-info"><i class="fas fa-lightbulb me-2"></i>Key Insights</h6>';
+        summary.key_insights.forEach(insight => {
+            const confBadge = insight.confidence ? '<span class="badge bg-secondary me-2">' + insight.confidence + '</span>' : '';
+            html += '<div class="card mb-2 border-left-info">';
+            html += '<div class="card-body py-2">';
+            html += '<p class="mb-1">' + confBadge + escapeHtml(insight.insight) + '</p>';
+            if (insight.evidence) {
+                html += '<small class="text-muted"><strong>Evidence:</strong> ' + escapeHtml(insight.evidence) + '</small>';
+            }
+            html += '</div></div>';
+        });
+        html += '</div>';
+    }
+    
+    // Areas of Concern
+    if (summary.areas_of_concern && summary.areas_of_concern.length > 0) {
+        html += '<div class="mb-4">';
+        html += '<h6 class="text-danger"><i class="fas fa-exclamation-triangle me-2"></i>Areas of Concern</h6>';
+        summary.areas_of_concern.forEach(concern => {
+            const severityColors = {critical: 'danger', high: 'warning', medium: 'info', low: 'secondary'};
+            const severityColor = severityColors[concern.severity] || 'secondary';
+            html += '<div class="alert alert-' + severityColor + ' py-2 mb-2">';
+            html += '<strong>' + escapeHtml(concern.concern) + '</strong>';
+            if (concern.recommended_action) {
+                html += '<p class="mb-0 mt-1 small"><i class="fas fa-arrow-right me-1"></i>' + escapeHtml(concern.recommended_action) + '</p>';
+            }
+            html += '</div>';
+        });
+        html += '</div>';
+    }
+    
+    // Process Improvement Recommendations
+    if (summary.process_improvement_recommendations && summary.process_improvement_recommendations.length > 0) {
+        html += '<div class="mb-4">';
+        html += '<h6 class="text-success"><i class="fas fa-rocket me-2"></i>Recommendations</h6>';
+        summary.process_improvement_recommendations.forEach((rec, idx) => {
+            html += '<div class="card mb-2">';
+            html += '<div class="card-body py-2">';
+            html += '<div class="d-flex justify-content-between align-items-start">';
+            html += '<div><strong>' + (idx + 1) + '. ' + escapeHtml(rec.recommendation) + '</strong></div>';
+            if (rec.implementation_effort) {
+                const effortColor = rec.implementation_effort === 'low' ? 'success' : rec.implementation_effort === 'medium' ? 'warning' : 'danger';
+                html += '<span class="badge bg-' + effortColor + '">' + rec.implementation_effort + ' effort</span>';
+            }
+            html += '</div>';
+            if (rec.expected_impact) {
+                html += '<p class="mb-0 mt-1 small text-muted">' + escapeHtml(rec.expected_impact) + '</p>';
+            }
+            html += '</div></div>';
+        });
+        html += '</div>';
+    }
+    
+    // Lean Analysis
+    if (summary.lean_analysis) {
+        const lean = summary.lean_analysis;
+        html += '<div class="mb-4">';
+        html += '<h6 class="text-warning"><i class="fas fa-cogs me-2"></i>Lean Six Sigma Analysis</h6>';
+        if (lean.value_stream_efficiency) {
+            html += '<p><strong>Value Stream Efficiency:</strong> <span class="badge bg-info">' + lean.value_stream_efficiency.toUpperCase() + '</span></p>';
+        }
+        if (lean.waste_identification && lean.waste_identification.length > 0) {
+            html += '<p class="mb-1"><strong>Waste Identified:</strong></p><ul class="small">';
+            lean.waste_identification.forEach(waste => {
+                html += '<li>' + escapeHtml(waste.waste_type) + ' (' + waste.tasks_affected + ' tasks)</li>';
+            });
+            html += '</ul>';
+        }
+        html += '</div>';
+    }
+    
+    // Action Items
+    if (summary.action_items && summary.action_items.length > 0) {
+        html += '<div class="mb-4">';
+        html += '<h6 class="text-primary"><i class="fas fa-tasks me-2"></i>Immediate Action Items</h6>';
+        html += '<ol class="ps-3">';
+        summary.action_items.forEach(item => {
+            const urgencyColors = {immediate: 'danger', this_week: 'warning', this_month: 'info'};
+            const urgencyColor = urgencyColors[item.urgency] || 'secondary';
+            html += '<li class="mb-2">';
+            html += escapeHtml(item.action);
+            html += ' <span class="badge bg-' + urgencyColor + ' ms-2">' + (item.urgency || 'planned').replace('_', ' ') + '</span>';
+            html += '</li>';
+        });
+        html += '</ol></div>';
+    }
+    
+    html += '</div>';
+    return html;
 }
 
 function formatWorkflowOptimization(data) {

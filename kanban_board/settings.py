@@ -515,14 +515,20 @@ CSP_CONNECT_SRC = (
     "https://www.google-analytics.com",
     "https://analytics.google.com",
     "https://www.googletagmanager.com",
+    # CDN resources
+    "https://cdn.jsdelivr.net",
+    # Google OAuth
+    "https://accounts.google.com",
 )
 CSP_FRAME_SRC = (
     "'self'",
+    "https://accounts.google.com",  # Allow Google OAuth frames
 )
 CSP_FRAME_ANCESTORS = ("'none'",)  # Prevent clickjacking
 CSP_BASE_URI = ("'self'",)
 CSP_FORM_ACTION = (
     "'self'",
+    "https://accounts.google.com",  # Allow form submission to Google OAuth
 )
 CSP_UPGRADE_INSECURE_REQUESTS = not DEBUG  # Upgrade HTTP to HTTPS in production
 
