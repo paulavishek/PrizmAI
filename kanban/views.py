@@ -695,7 +695,24 @@ def task_detail(request, task_id):
             try:
                 prediction = update_task_prediction(task)
                 if prediction:
-                    prediction_data = prediction
+                    # Format the prediction for template use
+                    is_likely_late = False
+                    if task.due_date:
+                        is_likely_late = prediction['predicted_date'] > task.due_date
+                    
+                    prediction_data = {
+                        'predicted_date': prediction['predicted_date'],
+                        'confidence': prediction['confidence'],
+                        'confidence_percentage': int(prediction['confidence'] * 100),
+                        'confidence_interval_days': prediction['confidence_interval_days'],
+                        'based_on_tasks': prediction['based_on_tasks'],
+                        'similar_tasks': prediction.get('similar_tasks', []),
+                        'factors': prediction['factors'],
+                        'early_date': prediction['early_date'],
+                        'late_date': prediction['late_date'],
+                        'prediction_method': prediction['prediction_method'],
+                        'is_likely_late': is_likely_late
+                    }
             except Exception as e:
                 logger.warning(f"Failed to generate initial prediction for task {task.id}: {e}")
         
@@ -707,7 +724,24 @@ def task_detail(request, task_id):
             try:
                 prediction = update_task_prediction(task)
                 if prediction:
-                    prediction_data = prediction
+                    # Format the prediction for template use
+                    is_likely_late = False
+                    if task.due_date:
+                        is_likely_late = prediction['predicted_date'] > task.due_date
+                    
+                    prediction_data = {
+                        'predicted_date': prediction['predicted_date'],
+                        'confidence': prediction['confidence'],
+                        'confidence_percentage': int(prediction['confidence'] * 100),
+                        'confidence_interval_days': prediction['confidence_interval_days'],
+                        'based_on_tasks': prediction['based_on_tasks'],
+                        'similar_tasks': prediction.get('similar_tasks', []),
+                        'factors': prediction['factors'],
+                        'early_date': prediction['early_date'],
+                        'late_date': prediction['late_date'],
+                        'prediction_method': prediction['prediction_method'],
+                        'is_likely_late': is_likely_late
+                    }
             except Exception as e:
                 logger.warning(f"Failed to update prediction for task {task.id}: {e}")
         
