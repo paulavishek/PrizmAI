@@ -90,6 +90,7 @@ def refresh_all_demo_dates():
         'roi_snapshots_updated': 0,
         'trend_analysis_updated': 0,
         'sprint_milestones_updated': 0,
+        'skill_development_plans_updated': 0,
     }
     
     now = timezone.now()
@@ -150,6 +151,9 @@ def refresh_all_demo_dates():
             
             # 18. Refresh Sprint Milestones (burndown_models)
             stats['sprint_milestones_updated'] = _refresh_sprint_milestone_dates(base_date)
+            
+            # 19. Refresh Skill Development Plans
+            stats['skill_development_plans_updated'] = _refresh_skill_development_plan_dates(now, base_date)
         
         # Mark refresh as complete
         mark_demo_dates_refreshed()
@@ -1040,6 +1044,94 @@ def _refresh_sprint_milestone_dates(base_date):
                                                 ['target_date', 'actual_date'], batch_size=100)
         
         return len(milestones_to_update)
+        
+    except Exception as e:
+        logger.warning(f"Error refreshing sprint milestone dates: {e}")
+        return 0
+
+
+def _refresh_skill_development_plan_dates(now, base_date):
+    """
+    Refresh skill development plan dates (start_date, target_completion_date, created_at).
+    
+    NOTE: Skill development plans don't have created_by_session field, so all plans
+    in demo organizations are treated as seed data and will be refreshed.
+    """
+    try:
+        from kanban.models import SkillDevelopmentPlan
+        
+        demo_org_ids = _get_demo_organizations()
+        plans = list(SkillDevelopmentPlan.objects.filter(
+            board__organization_id__in=demo_org_ids
+        ).select_related('board'))
+        
+        if not plans:
+            return 0
+        
+        plans_to_update = []
+        
+        for plan in plans:
+            # Determine dates based on plan status
+            if plan.status == 'completed':
+                # Completed plans - in the past
+                created_offset = -(plan.id % 60 + 30)  # 30-90 days ago
+                start_offset = created_offset + (plan.id % 5 + 1)  # Started shortly after creation
+                target_offset = -(plan.id % 30 + 5)  # Completed 5-35 days ago
+                
+                plan.created_at = now + timedelta(days=created_offset)
+                if plan.start_date or plan.target_completion_date:
+                    plan.start_date = base_date + timedelta(days=start_offset)
+                    plan.target_completion_date = base_date + timedelta(days=target_offset)
+                
+            elif plan.status in ['in_progress', 'approved']:
+                # Active plans - started in past, target in future
+                created_offset = -(plan.id % 45 + 15)  # 15-60 days ago
+                start_offset = -(plan.id % 30 + 5)  # Started 5-35 days ago
+                target_offset = (plan.id % 30) + 7  # Target 7-37 days in future
+                
+                plan.created_at = now + timedelta(days=created_offset)
+                if plan.start_date or plan.target_completion_date:
+                    plan.start_date = base_date + timedelta(days=start_offset)
+                    plan.target_completion_date = base_date + timedelta(days=target_offset)
+                
+            elif plan.status == 'proposed':
+                # Proposed plans - recently created, target in future
+                created_offset = -(plan.id % 14 + 1)  # 1-15 days ago
+                start_offset = (plan.id % 7) + 3  # Start 3-10 days in future
+                target_offset = (plan.id % 45) + 21  # Target 21-66 days in future
+                
+                plan.created_at = now + timedelta(days=created_offset)
+                if plan.start_date or plan.target_completion_date:
+                    plan.start_date = base_date + timedelta(days=start_offset)
+                    plan.target_completion_date = base_date + timedelta(days=target_offset)
+                
+            elif plan.status == 'cancelled':
+                # Cancelled plans - in the past
+                created_offset = -(plan.id % 90 + 30)  # 30-120 days ago
+                start_offset = created_offset + (plan.id % 7 + 1)  # Started shortly after
+                
+                plan.created_at = now + timedelta(days=created_offset)
+                if plan.start_date:
+                    plan.start_date = base_date + timedelta(days=start_offset)
+                # Keep target date as is or set in past
+                if plan.target_completion_date:
+                    target_offset = -(plan.id % 30 + 5)
+                    plan.target_completion_date = base_date + timedelta(days=target_offset)
+            
+            plans_to_update.append(plan)
+        
+        if plans_to_update:
+            SkillDevelopmentPlan.objects.bulk_update(
+                plans_to_update, 
+                ['created_at', 'start_date', 'target_completion_date'], 
+                batch_size=100
+            )
+        
+        return len(plans_to_update)
+        
+    except Exception as e:
+        logger.warning(f"Error refreshing skill development plan dates: {e}")
+        return 0
         
     except Exception as e:
         logger.warning(f"Error refreshing sprint milestone dates: {e}")

@@ -3503,6 +3503,95 @@ def create_skill_development_plan_api(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
+@login_required
+@require_http_methods(["PUT"])
+def update_skill_development_plan_api(request, plan_id):
+    """
+    Update an existing skill development plan
+    """
+    try:
+        data = json.loads(request.body)
+        
+        from kanban.models import SkillDevelopmentPlan
+        
+        plan = get_object_or_404(SkillDevelopmentPlan, pk=plan_id)
+        board = plan.board
+        
+        # Check access
+        if request.user not in board.members.all() and board.created_by != request.user:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # Update fields
+        if 'title' in data:
+            plan.title = data['title']
+        if 'description' in data:
+            plan.description = data['description']
+        if 'plan_type' in data:
+            plan.plan_type = data['plan_type']
+        if 'status' in data:
+            plan.status = data['status']
+        if 'progress_percentage' in data:
+            plan.progress_percentage = data['progress_percentage']
+        if 'start_date' in data:
+            plan.start_date = data['start_date'] if data['start_date'] else None
+        if 'target_completion_date' in data:
+            plan.target_completion_date = data['target_completion_date'] if data['target_completion_date'] else None
+        if 'estimated_cost' in data:
+            plan.estimated_cost = data['estimated_cost'] if data['estimated_cost'] else None
+        if 'estimated_hours' in data:
+            plan.estimated_hours = data['estimated_hours'] if data['estimated_hours'] else None
+        if 'target_proficiency' in data:
+            plan.target_proficiency = data['target_proficiency']
+        
+        # Update target users if specified
+        if 'target_user_ids' in data:
+            from django.contrib.auth.models import User
+            target_users = User.objects.filter(id__in=data['target_user_ids'])
+            plan.target_users.set(target_users)
+        
+        plan.save()
+        
+        return JsonResponse({
+            'success': True,
+            'plan_id': plan.id,
+            'message': 'Development plan updated successfully'
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        logger.error(f"Error in update_skill_development_plan_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["DELETE"])
+def delete_skill_development_plan_api(request, plan_id):
+    """
+    Delete a skill development plan
+    """
+    try:
+        from kanban.models import SkillDevelopmentPlan
+        
+        plan = get_object_or_404(SkillDevelopmentPlan, pk=plan_id)
+        board = plan.board
+        
+        # Check access
+        if request.user not in board.members.all() and board.created_by != request.user:
+            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        plan.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Development plan deleted successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in delete_skill_development_plan_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
 def get_skill_gaps_list_api(request, board_id):
     """
     Get list of active skill gaps for a board

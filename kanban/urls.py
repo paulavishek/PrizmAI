@@ -133,6 +133,8 @@ urlpatterns = [
     path('api/task/<int:task_id>/match-team/', api_views.match_team_to_task_api, name='match_team_to_task_api'),
     path('api/task/<int:task_id>/extract-skills/', api_views.extract_task_skills_api, name='extract_task_skills_api'),
     path('api/development-plans/create/', api_views.create_skill_development_plan_api, name='create_skill_development_plan_api'),
+    path('api/development-plans/<int:plan_id>/update/', api_views.update_skill_development_plan_api, name='update_skill_development_plan_api'),
+    path('api/development-plans/<int:plan_id>/delete/', api_views.delete_skill_development_plan_api, name='delete_skill_development_plan_api'),
     path('api/skill-gaps/list/<int:board_id>/', api_views.get_skill_gaps_list_api, name='get_skill_gaps_list_api'),
     path('api/development-plans/<int:board_id>/', api_views.get_development_plans_api, name='get_development_plans_api'),
     
