@@ -57,6 +57,18 @@
 {% endblock %}
 
 {% block content %}
+<div class="mb-3">
+    {% if is_demo_board %}
+        <a href="{% url 'demo_board_detail' board_id=board.id %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-2"></i> Back to Board
+        </a>
+    {% else %}
+        <a href="{% url 'board_detail' board_id=board.id %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left me-2"></i> Back to Board
+        </a>
+    {% endif %}
+</div>
+
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h1>Chat Rooms for {{ board.name }}</h1>

@@ -81,6 +81,7 @@ def chat_room_list(request, board_id):
         'board': board,
         'chat_rooms_with_unread': chat_rooms_with_unread,
         'total_unread_in_board': total_unread_in_board,
+        'is_demo_board': board.is_official_demo_board,
     }
     return render(request, 'messaging/chat_room_list.html', context)
 
