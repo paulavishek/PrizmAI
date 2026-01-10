@@ -5,6 +5,20 @@
 
 {% block extra_css %}
 <style>
+    .back-to-board-btn {
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        transition: all 0.3s ease;
+    }
+
+    .back-to-board-btn:hover {
+        background-color: #5a6268;
+        color: white;
+        transform: translateX(-2px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
     .chat-rooms-container {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -59,11 +73,11 @@
 {% block content %}
 <div class="mb-3">
     {% if is_demo_board %}
-        <a href="{% url 'demo_board_detail' board_id=board.id %}" class="btn btn-secondary">
+        <a href="{% url 'demo_board_detail' board_id=board.id %}" class="btn back-to-board-btn">
             <i class="fas fa-arrow-left me-2"></i> Back to Board
         </a>
     {% else %}
-        <a href="{% url 'board_detail' board_id=board.id %}" class="btn btn-secondary">
+        <a href="{% url 'board_detail' board_id=board.id %}" class="btn back-to-board-btn">
             <i class="fas fa-arrow-left me-2"></i> Back to Board
         </a>
     {% endif %}
