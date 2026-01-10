@@ -484,33 +484,36 @@
                     </div>
                 </div>                <!-- 🛡️ Risk Management Section -->
                 {% if task.risk_level %}
-                <div class="mb-3 p-2 rounded border-2 {% if task.risk_level == 'critical' %}border-danger bg-danger{% elif task.risk_level == 'high' %}border-warning bg-warning{% elif task.risk_level == 'medium' %}border-info bg-info{% else %}border-success bg-success{% endif %} text-white">
-                    <div class="d-flex justify-content-between align-items-center">
+                <div class="mb-3 p-3 rounded border {% if task.risk_level == 'critical' %}border-danger bg-danger-subtle{% elif task.risk_level == 'high' %}border-warning bg-warning-subtle{% elif task.risk_level == 'medium' %}border-info bg-info-subtle{% else %}border-success bg-success-subtle{% endif %}" style="border-width: 2px !important;">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
                         <div class="flex-grow-1">
-                            <label class="text-white-50 mb-1">Risk Assessment</label>
-                            <h6 class="mb-1">🛡️ Risk Level: <strong>{{ task.risk_level|title }}</strong></h6>
-                            <small>Score: {{ task.risk_score }}/9 | Likelihood: {{ task.risk_likelihood }}/3 | Impact: {{ task.risk_impact }}/3</small>
+                            <label class="text-muted small mb-1 d-block">Risk Assessment</label>
+                            <h6 class="mb-1 fw-bold {% if task.risk_level == 'critical' %}text-danger{% elif task.risk_level == 'high' %}text-warning{% elif task.risk_level == 'medium' %}text-info{% else %}text-success{% endif %}">
+                                🛡️ Risk Level: {{ task.risk_level|title }}
+                            </h6>
+                            <small class="text-muted d-block">Score: <strong>{{ task.risk_score }}/9</strong> | Likelihood: <strong>{{ task.risk_likelihood }}/3</strong> | Impact: <strong>{{ task.risk_impact }}/3</strong></small>
                         </div>
                         <div>
-                            <button type="button" class="btn btn-sm btn-light" 
+                            <button type="button" class="btn btn-sm btn-outline-secondary" 
                                     onclick="showRiskExplanation({{ task.id }})" 
-                                    title="Why did AI give this risk score?">
+                                    title="Why did AI give this risk score?"
+                                    style="border-radius: 20px;">
                                 <i class="bi bi-lightbulb me-1"></i> Why?
                             </button>
                         </div>
                     </div>
                     {% if task.risk_indicators %}
-                    <div class="mt-2">
-                        <small class="text-white-50">Indicators to Monitor:</small>
-                        <ul class="small mb-0 mt-1">
+                    <div class="mt-3 pt-3 border-top">
+                        <small class="text-muted fw-semibold d-block mb-2">Indicators to Monitor:</small>
+                        <ul class="small mb-0 list-unstyled">
                             {% for indicator in task.risk_indicators %}
-                            <li>
+                            <li class="mb-2">
                                 {% if indicator.indicator %}
-                                    <strong>{{ indicator.indicator }}</strong>
-                                    {% if indicator.frequency %}<span class="text-white-75"> (Monitor: {{ indicator.frequency }})</span>{% endif %}
-                                    {% if indicator.threshold %}<span class="badge bg-light text-dark ms-1">Alert: {{ indicator.threshold }}</span>{% endif %}
+                                    <strong class="text-dark">{{ indicator.indicator }}</strong>
+                                    {% if indicator.frequency %}<span class="text-muted"> (Monitor: {{ indicator.frequency }})</span>{% endif %}
+                                    {% if indicator.threshold %}<span class="badge bg-danger text-white ms-1" style="font-size: 0.7rem;">{{ indicator.threshold }}</span>{% endif %}
                                 {% else %}
-                                    {{ indicator }}
+                                    <span class="text-dark">{{ indicator }}</span>
                                 {% endif %}
                             </li>
                             {% endfor %}
@@ -518,20 +521,20 @@
                     </div>
                     {% endif %}
                     {% if task.mitigation_suggestions %}
-                    <div class="mt-2">
-                        <small class="text-white-50">Mitigation Strategies:</small>
-                        <div class="small mt-1">
+                    <div class="mt-3 pt-3 border-top">
+                        <small class="text-muted fw-semibold d-block mb-2">Mitigation Strategies:</small>
+                        <div class="small">
                             {% for suggestion in task.mitigation_suggestions %}
-                            <div class="mb-1">
+                            <div class="mb-2 p-2 bg-white rounded border">
                                 {% if suggestion.action %}
-                                    <strong>{{ suggestion.action }}</strong>
-                                    {% if suggestion.expected_impact %} - <em>{{ suggestion.expected_impact }}</em>{% endif %}
-                                    {% if suggestion.timeline %} <span class="text-white-75">({{ suggestion.timeline }})</span>{% endif %}
-                                    {% if suggestion.priority %}<span class="badge bg-light text-dark ms-1">{{ suggestion.priority|upper }}</span>{% endif %}
+                                    <strong class="text-dark">{{ suggestion.action }}</strong>
+                                    {% if suggestion.expected_impact %}<div class="text-muted fst-italic mt-1">{{ suggestion.expected_impact }}</div>{% endif %}
+                                    {% if suggestion.timeline %}<span class="text-muted">({{ suggestion.timeline }})</span>{% endif %}
+                                    {% if suggestion.priority %}<span class="badge {% if suggestion.priority|lower == 'high' %}bg-danger{% elif suggestion.priority|lower == 'medium' %}bg-warning{% else %}bg-secondary{% endif %} ms-1" style="font-size: 0.7rem;">{{ suggestion.priority|upper }}</span>{% endif %}
                                 {% elif suggestion.strategy %}
-                                    <strong>{{ suggestion.strategy }}</strong>: {{ suggestion.description }} ({{ suggestion.timeline }})
+                                    <strong class="text-dark">{{ suggestion.strategy }}</strong>: <span class="text-muted">{{ suggestion.description }} ({{ suggestion.timeline }})</span>
                                 {% else %}
-                                    {{ suggestion }}
+                                    <span class="text-dark">{{ suggestion }}</span>
                                 {% endif %}
                             </div>
                             {% endfor %}
