@@ -686,13 +686,24 @@ def task_detail(request, task_id):
     
     # Get task completion prediction if available
     prediction_data = None
-    if task.progress < 100 and task.predicted_completion_date:
+    if task.progress < 100:
         from kanban.utils.task_prediction import predict_task_completion_date
+        from kanban.utils.task_prediction import update_task_prediction
+        
+        # Auto-generate prediction if task has start date but no prediction yet
+        if task.start_date and not task.predicted_completion_date:
+            try:
+                prediction = update_task_prediction(task)
+                if prediction:
+                    prediction_data = prediction
+            except Exception as e:
+                logger.warning(f"Failed to generate initial prediction for task {task.id}: {e}")
         
         # Check if prediction is stale (older than 24 hours) and update if needed
-        if not task.last_prediction_update or \
-           (timezone.now() - task.last_prediction_update > timedelta(hours=24)):
-            from kanban.utils.task_prediction import update_task_prediction
+        elif task.predicted_completion_date and (
+            not task.last_prediction_update or 
+            (timezone.now() - task.last_prediction_update > timedelta(hours=24))
+        ):
             try:
                 prediction = update_task_prediction(task)
                 if prediction:
