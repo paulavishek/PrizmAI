@@ -805,9 +805,9 @@
             showNotification('Development plan deleted successfully', 'success');
             
             // Reload the skill gap analyzer
-            if (typeof skillGapAnalyzer !== 'undefined') {
-                await skillGapAnalyzer.loadDevelopmentPlans();
-                skillGapAnalyzer.renderPlansSection();
+            if (window.skillGapAnalyzer) {
+                await window.skillGapAnalyzer.loadDevelopmentPlans();
+                window.skillGapAnalyzer.renderPlansSection();
             } else {
                 // Fallback: reload page
                 location.reload();
@@ -983,9 +983,9 @@
             showNotification('Development plan updated successfully', 'success');
             
             // Reload the skill gap analyzer
-            if (typeof skillGapAnalyzer !== 'undefined') {
-                await skillGapAnalyzer.loadDevelopmentPlans();
-                skillGapAnalyzer.renderPlansSection();
+            if (window.skillGapAnalyzer) {
+                await window.skillGapAnalyzer.loadDevelopmentPlans();
+                window.skillGapAnalyzer.renderPlansSection();
             } else {
                 // Fallback: reload page
                 location.reload();
