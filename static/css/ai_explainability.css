@@ -407,7 +407,7 @@
     .explainability-panel .card-title,
     .explainability-panel p,
     .explainability-panel li {
-        color: #ffffff !important;
+        color: #212529 !important;
     }
 }
 
