@@ -9,6 +9,7 @@ import re
 import logging
 import socket
 import dns.resolver
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -488,6 +489,12 @@ def has_valid_mx_or_a_record(domain):
         tuple: (is_valid: bool, error_message: str or None)
     """
     domain = domain.lower().strip()
+    
+    # In DEBUG mode, skip DNS validation to allow easier testing
+    # This allows developers to use any email address during development
+    if getattr(settings, 'DEBUG', False):
+        logger.debug(f"DEBUG mode: Skipping DNS validation for domain {domain}")
+        return True, None
     
     # Configure DNS resolver with shorter timeout
     resolver = dns.resolver.Resolver()

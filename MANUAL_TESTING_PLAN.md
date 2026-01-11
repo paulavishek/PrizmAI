@@ -204,12 +204,35 @@ http://localhost:8000
 ### 1. User Authentication & Account Management
 
 #### Registration & Login
+
+> **⚠️ IMPORTANT NOTE - EMAIL VALIDATION IN DEVELOPMENT:**
+> 
+> <span style="background-color: #fff3cd; color: #856404; padding: 10px; display: block; border-left: 4px solid #ffc107;">
+> 
+> **Development Mode (DEBUG=True):** DNS email validation is **DISABLED** for easier testing.
+> - ✅ You can use **ANY email address** (test@example.com, user@fake.com, etc.)
+> - ✅ No need for real email domains to exist
+> - ✅ Perfect for creating test accounts quickly
+> 
+> **Production Mode (DEBUG=False):** DNS email validation is **ENABLED** for security.
+> - 🔒 Only real, verified email domains are accepted
+> - 🔒 Disposable/temporary email services are blocked
+> - 🔒 DNS lookups verify domain actually exists and can receive email
+> 
+> **Common Issues in Development:**
+> - If you see "The email domain 'X' could not be verified", restart the server after code changes
+> - The system checks for disposable email domains (like tempmail.com, guerrillamail.com) - these are always blocked
+> 
+> </span>
+
 - [ ] **Test Case 1.1:** Register new user
   - Navigate to registration page
   - Fill in valid information (username, email, password)
   - Submit form
   - Verify email confirmation (if enabled)
   - **Expected:** User account created successfully, redirected to dashboard
+  
+  > **💡 TIP:** In development, you can use any email like `testuser@example.com` or `user123@test.com`
   
 - [ ] **Test Case 1.2:** Login with demo user (recommended)
   - Navigate to login page
@@ -1609,12 +1632,18 @@ SERVER_EMAIL=noreply@yourcompany.com
 ### Pre-Deployment Configuration
 
 - [ ] **Environment variables set correctly**
-  - [ ] `DEBUG=False`
+  - [ ] `DEBUG=False` (⚠️ This enables email domain validation and other security features)
   - [ ] `SECRET_KEY` is strong and unique
   - [ ] `ALLOWED_HOSTS` configured
   - [ ] Database URL set
   - [ ] Gemini API key configured
-  - [ ] Email settings configured (see Email Configuration Guide below)
+  - [ ] Email settings configured (see Email Configuration Guide above)
+  
+  > **⚠️ CRITICAL:** Setting `DEBUG=False` activates production security features:
+  > - DNS email validation (blocks fake/invalid email domains)
+  > - Stricter error handling
+  > - Static file serving via ALLOWED_HOSTS only
+  > - Email backend switches from console to SMTP
   
 - [ ] **Database ready**
   - [ ] Migrations applied
