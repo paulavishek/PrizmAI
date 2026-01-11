@@ -986,7 +986,6 @@ kbd {
 {% include 'demo/nudges/medium.html' %}
 {% include 'demo/nudges/peak.html' %}
 {% include 'demo/nudges/exit_intent.html' %}
-{% endblock %}
 
 <!-- Edit Column Modal -->
 <div class="modal fade" id="editColumnModal" tabindex="-1" aria-hidden="true">
@@ -1038,6 +1037,7 @@ kbd {
         </div>
     </div>
 </div>
+{% endblock %}
 
 {% block extra_js %}
 <script src="{% static 'js/kanban.js' %}?v={{ board.id }}_{% now 'U' %}" id="kanban-script"></script>
