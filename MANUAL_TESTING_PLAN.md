@@ -242,6 +242,31 @@ http://localhost:8000
   - Follow link and reset password
   - **Expected:** Password reset successfully, can login with new password
   
+  > **⚠️ IMPORTANT NOTE - DEVELOPMENT MODE EMAIL VISIBILITY:**
+  > 
+  > <span style="background-color: #fff3cd; color: #856404; padding: 10px; display: block; border-left: 4px solid #ffc107;">
+  > 
+  > **In development mode, password reset emails are sent to the CONSOLE (terminal), not to actual email addresses.**
+  > 
+  > **The Problem:** The email output can be **easily missed** because:
+  > - It appears mixed with server logs and other console output
+  > - It may scroll past quickly in a busy terminal
+  > - PowerShell/terminal buffers may not show all output clearly
+  > 
+  > **Solution Options:**
+  > 1. **Scroll up in your terminal** to find the email (look for email headers like "Subject:", "From:", "To:")
+  > 2. **Use the utility script:** Run `python generate_reset_link.py <username>` to generate a reset link clearly
+  > 3. **Check the terminal immediately** after clicking the reset button
+  > 
+  > **Quick Reset Link Generator:**
+  > ```powershell
+  > .\venv\Scripts\activate
+  > python generate_reset_link.py avishekpaul1310
+  > ```
+  > This will display the reset link clearly without searching through logs.
+  > 
+  > </span>
+  
 - [ ] **Test Case 1.5:** Logout
   - Click logout button
   - **Expected:** User logged out, redirected to landing page
@@ -1172,6 +1197,10 @@ http://localhost:8000
 - [ ] **Test Case INT-1.2:** Password reset email
   - Request password reset
   - **Expected:** Email received with valid reset link
+  
+  > **⚠️ DEVELOPMENT MODE:** In development, emails are sent to console/terminal, NOT actual email addresses.
+  > The email output can be easily missed in server logs. Use `python generate_reset_link.py <username>` 
+  > to generate a clear reset link for testing. See Test Case 1.4 for detailed instructions.
 
 ### 2. Webhook Integration
 
