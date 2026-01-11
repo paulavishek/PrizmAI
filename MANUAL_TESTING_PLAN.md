@@ -1369,6 +1369,241 @@ http://localhost:8000
 
 ---
 
+## 📧 Email Configuration Guide
+
+> **💡 FOR BEGINNERS:** This section explains how email works in development vs production.
+> Keep this as a reference when you deploy your application!
+
+### Understanding Email Backends
+
+**Development Mode (`DEBUG=True`):**
+- Emails are printed to the **console/terminal** only
+- No actual emails are sent to user email addresses
+- Good for testing without needing an email server
+- Current configuration in `settings.py`:
+  ```python
+  EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+  ```
+
+**Production Mode (`DEBUG=False`):**
+- Emails are sent to **user's actual email addresses**
+- Requires SMTP server configuration (Gmail, SendGrid, AWS SES, etc.)
+- Users receive real emails in their inbox
+- Production configuration in `settings.py`:
+  ```python
+  EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+  EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+  EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+  EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
+  EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+  EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+  ```
+
+### Production Email Setup Options
+
+#### Option 1: Gmail SMTP (Easiest for Beginners)
+
+**Steps:**
+1. **Enable 2-Step Verification** on your Google Account:
+   - Go to: https://myaccount.google.com/security
+   - Enable 2-Step Verification
+
+2. **Generate App Password**:
+   - Go to: https://myaccount.google.com/apppasswords
+   - Select "Mail" and your device
+   - Copy the 16-character password (e.g., `abcd efgh ijkl mnop`)
+
+3. **Update `.env` file**:
+   ```env
+   DEBUG=False
+   EMAIL_HOST=smtp.gmail.com
+   EMAIL_PORT=587
+   EMAIL_USE_TLS=True
+   EMAIL_HOST_USER=your-email@gmail.com
+   EMAIL_HOST_PASSWORD=abcdefghijklmnop  # App password (no spaces)
+   DEFAULT_FROM_EMAIL=noreply@yourcompany.com
+   ```
+
+**Pros:**
+- ✅ Free for low volume (500 emails/day)
+- ✅ Easy to set up
+- ✅ Good for initial testing
+
+**Cons:**
+- ❌ Daily sending limits
+- ❌ Not ideal for high-volume production apps
+- ❌ May be blocked if sending many emails
+
+#### Option 2: SendGrid (Recommended for Production)
+
+**Steps:**
+1. **Create Account**: https://sendgrid.com (Free tier: 100 emails/day)
+2. **Create API Key**: Settings → API Keys → Create API Key
+3. **Update `.env` file**:
+   ```env
+   DEBUG=False
+   EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+   EMAIL_HOST=smtp.sendgrid.net
+   EMAIL_PORT=587
+   EMAIL_USE_TLS=True
+   EMAIL_HOST_USER=apikey
+   EMAIL_HOST_PASSWORD=your-sendgrid-api-key-here
+   DEFAULT_FROM_EMAIL=noreply@yourcompany.com
+   ```
+
+**Pros:**
+- ✅ Professional email service
+- ✅ Better deliverability
+- ✅ Email analytics and tracking
+- ✅ Free tier available (100/day)
+- ✅ Scales well for production
+
+**Cons:**
+- ❌ Requires account creation
+- ❌ Paid plans for higher volume
+
+#### Option 3: AWS SES (For AWS Users)
+
+**Best if you're hosting on AWS.**
+
+**Steps:**
+1. **Create AWS Account**: https://aws.amazon.com
+2. **Set up SES**: AWS Console → SES → Verify email/domain
+3. **Get SMTP credentials**: SES → SMTP Settings → Create SMTP Credentials
+4. **Update `.env` file**:
+   ```env
+   DEBUG=False
+   EMAIL_HOST=email-smtp.us-east-1.amazonaws.com  # Your region
+   EMAIL_PORT=587
+   EMAIL_USE_TLS=True
+   EMAIL_HOST_USER=your-smtp-username
+   EMAIL_HOST_PASSWORD=your-smtp-password
+   DEFAULT_FROM_EMAIL=noreply@yourcompany.com
+   ```
+
+**Pros:**
+- ✅ Very cheap (€0.10 per 1000 emails)
+- ✅ Highly reliable
+- ✅ Integrates with AWS infrastructure
+
+**Cons:**
+- ❌ More complex setup
+- ❌ Requires AWS account
+- ❌ Starts in "sandbox mode" (limited sending)
+
+#### Option 4: Other Email Services
+
+- **Mailgun**: Similar to SendGrid, good reputation
+- **Office 365/Outlook**: If using Microsoft 365
+- **Postmark**: Great for transactional emails
+- **Amazon WorkMail**: Another AWS option
+
+### Testing Email in Production
+
+**Before Going Live:**
+1. **Send Test Email**:
+   ```powershell
+   # In Django shell
+   python manage.py shell
+   ```
+   ```python
+   from django.core.mail import send_mail
+   send_mail(
+       'Test Email',
+       'This is a test email from PrizmAI',
+       'noreply@yourcompany.com',
+       ['your-test-email@gmail.com'],
+       fail_silently=False
+   )
+   ```
+
+2. **Test Password Reset**:
+   - Request password reset for a test account
+   - Verify email is received
+   - Click link and confirm it works
+
+3. **Check Spam Folder**:
+   - If emails don't arrive, check spam/junk folder
+   - May need to configure SPF/DKIM records (ask your email provider)
+
+### Email Configuration Checklist
+
+- [ ] **Email backend configured** for production
+- [ ] **SMTP credentials** added to `.env` file
+- [ ] **DEFAULT_FROM_EMAIL** set to your domain/company email
+- [ ] **Test email sent successfully**
+- [ ] **Password reset email** tested and working
+- [ ] **Email templates** reviewed and customized:
+  - [ ] `templates/accounts/password_reset_email.html`
+  - [ ] `templates/accounts/password_reset_subject.txt`
+- [ ] **Email deliverability** checked (not going to spam)
+- [ ] **Email sending limits** understood for your provider
+- [ ] **Monitoring** set up for email failures
+
+### Common Issues & Solutions
+
+**Issue: Emails go to spam**
+- **Solution**: Set up SPF, DKIM, and DMARC records for your domain
+- Ask your email provider for instructions
+
+**Issue: "Authentication failed"**
+- **Solution**: Double-check username and password
+- For Gmail: Use App Password, not regular password
+- For SendGrid: Username should be literally `apikey`
+
+**Issue: Connection timeout**
+- **Solution**: Check if port 587 is blocked by firewall
+- Try port 465 with SSL instead of TLS
+
+**Issue: Rate limiting**
+- **Solution**: Check your provider's sending limits
+- Upgrade plan or switch providers if needed
+
+### Quick Reference: `.env` Email Settings
+
+```env
+# ==== EMAIL CONFIGURATION ====
+
+# Development: Emails to console
+DEBUG=True
+
+# Production: Actual emails (choose ONE option below)
+
+# Option 1: Gmail
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your-email@gmail.com
+EMAIL_HOST_PASSWORD=your-app-password-here
+
+# Option 2: SendGrid
+EMAIL_HOST=smtp.sendgrid.net
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=apikey
+EMAIL_HOST_PASSWORD=your-sendgrid-api-key
+
+# Option 3: AWS SES
+EMAIL_HOST=email-smtp.us-east-1.amazonaws.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=True
+EMAIL_HOST_USER=your-aws-smtp-username
+EMAIL_HOST_PASSWORD=your-aws-smtp-password
+
+# Common settings (all options)
+DEFAULT_FROM_EMAIL=noreply@yourcompany.com
+SERVER_EMAIL=noreply@yourcompany.com
+```
+
+### Additional Resources
+
+- **Django Email Documentation**: https://docs.djangoproject.com/en/5.2/topics/email/
+- **SendGrid Django Guide**: https://docs.sendgrid.com/for-developers/sending-email/django
+- **Gmail App Passwords**: https://support.google.com/accounts/answer/185833
+- **AWS SES Setup**: https://docs.aws.amazon.com/ses/latest/dg/send-email-smtp.html
+
+---
+
 ## ✅ Final Deployment Checklist
 
 ### Pre-Deployment Configuration
@@ -1379,7 +1614,7 @@ http://localhost:8000
   - [ ] `ALLOWED_HOSTS` configured
   - [ ] Database URL set
   - [ ] Gemini API key configured
-  - [ ] Email settings configured
+  - [ ] Email settings configured (see Email Configuration Guide below)
   
 - [ ] **Database ready**
   - [ ] Migrations applied
