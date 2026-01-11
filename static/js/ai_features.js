@@ -1143,6 +1143,21 @@ function displayDeadlinePrediction(data) {
     // Velocity analysis
     if (data.velocity_analysis) {
         const velocity = data.velocity_analysis;
+        
+        // Determine trend styling based on value
+        let trendClass = '';
+        let trendDisplay = velocity.velocity_trend;
+        
+        if (velocity.velocity_trend === 'Pending' || velocity.velocity_trend === 'N/A') {
+            trendClass = 'text-muted';
+        } else if (velocity.velocity_trend === 'accelerating') {
+            trendClass = 'text-success';
+        } else if (velocity.velocity_trend === 'declining') {
+            trendClass = 'text-danger';
+        } else {
+            trendClass = 'text-primary';
+        }
+        
         html += `
             <div class="velocity-section mb-3">
                 <h6 class="small fw-bold text-muted">VELOCITY ANALYSIS</h6>
@@ -1162,7 +1177,7 @@ function displayDeadlinePrediction(data) {
                     <div class="col-3">
                         <div class="metric-box">
                             <div class="small text-muted">Trend</div>
-                            <div class="fw-bold">${velocity.velocity_trend}</div>
+                            <div class="fw-bold ${trendClass}">${trendDisplay}</div>
                         </div>
                     </div>
                     <div class="col-3">

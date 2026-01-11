@@ -180,10 +180,13 @@ def generate_task_description(title: str, context: Optional[Dict] = None) -> Opt
         Provide comprehensive explainability for all generated content.
         {context_info}
         
+        IMPORTANT: For the 'objective' and 'detailed_description' fields, use PLAIN TEXT WITHOUT any Markdown formatting.
+        Only use Markdown formatting in the 'markdown_description' field.
+        
         Format your response as JSON WITH FULL EXPLAINABILITY:
         {{
-            "objective": "Clear description of what this task aims to accomplish",
-            "detailed_description": "2-3 paragraph detailed description of the task scope and approach",
+            "objective": "Clear description of what this task aims to accomplish (PLAIN TEXT, NO MARKDOWN)",
+            "detailed_description": "2-3 paragraph detailed description of the task scope and approach (PLAIN TEXT, NO MARKDOWN)",
             "confidence_score": 0.XX,
             "confidence_level": "high|medium|low",
             "interpretation_reasoning": "How the task title was interpreted to generate this description",
@@ -806,6 +809,18 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
                 response_text = response_text.split("```")[1].strip()
                 
             ai_response = json.loads(response_text)
+            
+            # Handle velocity edge case: If current velocity is 0, set trend to 'Pending'
+            if 'velocity_analysis' in ai_response:
+                velocity = ai_response['velocity_analysis']
+                current_vel = velocity.get('current_velocity', '0 hours/day')
+                # Extract numeric value from velocity string
+                try:
+                    vel_value = float(current_vel.split()[0])
+                    if vel_value == 0:
+                        ai_response['velocity_analysis']['velocity_trend'] = 'Pending'
+                except (ValueError, IndexError):
+                    pass  # Keep original trend if parsing fails
             
             # Calculate actual dates from the predicted days
             from datetime import datetime, timedelta
