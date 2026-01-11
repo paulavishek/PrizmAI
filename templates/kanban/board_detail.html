@@ -591,12 +591,6 @@
                     {% endif %}
                 </div>                <div class="column-actions">
                     {% if column.name|lower == 'to do' or column.name|lower == 'todo' %}
-                        <!-- Quick Add Task button for To Do column -->
-                        <a href="{% url 'create_task_in_column' board.id column.id %}" 
-                           class="btn btn-sm btn-primary me-2 quick-add-task-btn" 
-                           title="Quick Add Task">
-                            <i class="fas fa-plus"></i>
-                        </a>
                         <!-- Edit button for To Do column -->
                         <button type="button" class="btn btn-sm btn-outline-primary me-2 edit-column-btn" 
                                 data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
