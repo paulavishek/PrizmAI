@@ -78,20 +78,20 @@ function initAITaskDescription() {
                                          data.description.detailed_description ||
                                          data.description.objective ||
                                          '';
-                        // If still empty, try to construct from available fields
+                        // If still empty, try to construct from available fields (using plain text, no Markdown)
                         if (!descriptionText && (data.description.objective || data.description.checklist)) {
                             let parts = [];
                             if (data.description.objective) {
-                                parts.push('**Objective:** ' + data.description.objective);
+                                parts.push('Objective: ' + data.description.objective);
                             }
                             if (data.description.detailed_description) {
                                 parts.push('\n\n' + data.description.detailed_description);
                             }
                             if (data.description.checklist && Array.isArray(data.description.checklist)) {
-                                parts.push('\n\n**Checklist:**');
+                                parts.push('\n\nChecklist:');
                                 data.description.checklist.forEach(item => {
                                     const itemText = typeof item === 'object' ? item.item : item;
-                                    parts.push('\n- [ ] ' + itemText);
+                                    parts.push('\n- ' + itemText);
                                 });
                             }
                             descriptionText = parts.join('');
@@ -365,6 +365,9 @@ function initAILssClassification() {
         })
         .then(data => {
             if (data.classification && data.justification) {
+                // Use stripMarkdown to clean up AI-generated text
+                const stripMarkdown = window.AIExplainability?.stripMarkdown || ((text) => text);
+                
                 let suggestionHtml = `
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <div>
@@ -375,7 +378,7 @@ function initAILssClassification() {
                             <i class="bi bi-lightbulb"></i> Why?
                         </button>
                     </div>
-                    <p class="mb-2">${data.justification}</p>
+                    <p class="mb-2">${stripMarkdown(data.justification)}</p>
                     
                     <div id="lss-explainability" class="why-this-section mt-2" style="display: none;">
                         <div class="why-this-content">
@@ -394,14 +397,14 @@ function initAILssClassification() {
                                 <div class="mb-2">
                                     <strong class="small text-muted"><i class="bi bi-pie-chart me-1"></i>KEY FACTORS</strong>
                                     <ul class="small mb-0 ps-3 mt-1">
-                                        ${data.contributing_factors.map(f => `<li>${f.factor || f}</li>`).join('')}
+                                        ${data.contributing_factors.map(f => `<li>${stripMarkdown(f.factor || f)}</li>`).join('')}
                                     </ul>
                                 </div>
                             ` : ''}
                             ${data.methodology ? `
                                 <div class="mb-2">
                                     <strong class="small text-muted"><i class="bi bi-gear me-1"></i>METHODOLOGY</strong>
-                                    <p class="small mb-0 mt-1 text-muted">${data.methodology}</p>
+                                    <p class="small mb-0 mt-1 text-muted">${stripMarkdown(data.methodology)}</p>
                                 </div>
                             ` : ''}
                         </div>
@@ -1010,12 +1013,15 @@ function displayPrioritySuggestion(data) {
     const resultDiv = document.getElementById('priority-suggestion-result');
     if (!resultDiv) return;
     
+    // Use stripMarkdown to clean up AI-generated text
+    const stripMarkdown = window.AIExplainability?.stripMarkdown || ((text) => text);
+    
     let html = `
         <div class="alert alert-info">
             <h6><i class="fas fa-robot"></i> AI Priority Suggestion</h6>
             <p><strong>Suggested Priority:</strong> <span class="badge badge-${getPriorityBadgeClass(data.suggested_priority)}">${data.suggested_priority.toUpperCase()}</span></p>
             <p><strong>Confidence:</strong> ${data.confidence}</p>
-            <p><strong>Reasoning:</strong> ${data.reasoning}</p>
+            <p><strong>Reasoning:</strong> ${stripMarkdown(data.reasoning)}</p>
     `;
     
     if (data.recommendations && data.recommendations.length > 0) {
@@ -1128,6 +1134,9 @@ function displayDeadlinePrediction(data) {
     }
     
     // Add detailed explanation
+    // Use stripMarkdown to clean up AI-generated text
+    const stripMarkdown = window.AIExplainability?.stripMarkdown || ((text) => text);
+    
     html += `
         <div class="card mb-3">
             <div class="card-header bg-light">
@@ -1136,7 +1145,7 @@ function displayDeadlinePrediction(data) {
             <div class="card-body">
                 <div class="reasoning-section mb-3">
                     <h6 class="small fw-bold text-muted">REASONING</h6>
-                    <p>${data.reasoning}</p>
+                    <p>${stripMarkdown(data.reasoning)}</p>
                 </div>
     `;
     

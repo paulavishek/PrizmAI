@@ -99,6 +99,10 @@ class PrioritySuggestionWidget {
         const label = priorityLabels[priority] || priorityLabels.medium;
         const confidence = (this.suggestion.confidence * 100).toFixed(0);
         
+        // Use stripMarkdown to clean up AI-generated text
+        const stripMarkdown = window.AIExplainability?.stripMarkdown || ((text) => text);
+        const reasoningText = stripMarkdown(this.suggestion.reasoning.explanation || this.suggestion.reasoning);
+        
         container.innerHTML = `
             <div class="alert alert-${label.class} border-start border-5 border-${label.class} shadow-sm mb-3" role="alert">
                 <div class="d-flex align-items-start">
@@ -108,7 +112,7 @@ class PrioritySuggestionWidget {
                             <span class="badge bg-${label.class} ms-2">${confidence}% confident</span>
                         </h6>
                         
-                        <p class="mb-2 small">${this.suggestion.reasoning.explanation || this.suggestion.reasoning}</p>
+                        <p class="mb-2 small">${reasoningText}</p>
                         
                         ${this._renderTopFactors()}
                         

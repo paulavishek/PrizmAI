@@ -322,6 +322,9 @@ const RiskManagement = (() => {
         }
 
         // Detailed Analysis Cards
+        // Use stripMarkdown to clean up AI-generated text
+        const stripMarkdown = window.AIExplainability?.stripMarkdown || ((text) => text);
+        
         html += `
             <div class="row mb-4">
                 <div class="col-md-6">
@@ -331,16 +334,16 @@ const RiskManagement = (() => {
                         </div>
                         <div class="card-body">
                             <p><strong>Reasoning:</strong></p>
-                            <p>${likelihood.reasoning || 'N/A'}</p>
+                            <p>${stripMarkdown(likelihood.reasoning || 'N/A')}</p>
                             <p><strong>Key Factors:</strong></p>
                             <ul>
-                                ${(likelihood.key_factors || []).map(f => `<li>${AIExplainability.escapeHtml(f)}</li>`).join('')}
+                                ${(likelihood.key_factors || []).map(f => `<li>${AIExplainability.escapeHtml(stripMarkdown(f))}</li>`).join('')}
                             </ul>
                             ${likelihood.factor_weights ? `
                                 <p><strong>Factor Weights:</strong></p>
                                 <ul class="small">
                                     ${Object.entries(likelihood.factor_weights).map(([k, v]) => 
-                                        `<li>${AIExplainability.escapeHtml(k)}: ${(v * 100).toFixed(0)}%</li>`
+                                        `<li>${AIExplainability.escapeHtml(stripMarkdown(k))}: ${(v * 100).toFixed(0)}%</li>`
                                     ).join('')}
                                 </ul>
                             ` : ''}
@@ -354,10 +357,10 @@ const RiskManagement = (() => {
                         </div>
                         <div class="card-body">
                             <p><strong>Reasoning:</strong></p>
-                            <p>${impact.reasoning || 'N/A'}</p>
+                            <p>${stripMarkdown(impact.reasoning || 'N/A')}</p>
                             <p><strong>Affected Areas:</strong></p>
                             <ul>
-                                ${(impact.affected_areas || []).map(a => `<li>${AIExplainability.escapeHtml(a)}</li>`).join('')}
+                                ${(impact.affected_areas || []).map(a => `<li>${AIExplainability.escapeHtml(stripMarkdown(a))}</li>`).join('')}
                             </ul>
                         </div>
                     </div>

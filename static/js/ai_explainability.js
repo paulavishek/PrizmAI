@@ -593,7 +593,7 @@ const AIExplainability = (() => {
                             <div class="d-flex w-100 justify-content-between align-items-start">
                                 <div>
                                     <span class="badge bg-primary rounded-pill me-2">${idx + 1}</span>
-                                    <strong>${escapeHtml(action.action || action.title || action)}</strong>
+                                    <strong>${escapeHtml(stripMarkdown(action.action || action.title || action))}</strong>
                                 </div>
                                 ${action.urgency ? `
                                     <span class="badge bg-${action.urgency === 'immediate' ? 'danger' : action.urgency === 'this_week' ? 'warning' : 'secondary'}">
@@ -604,13 +604,13 @@ const AIExplainability = (() => {
                             ${action.rationale || action.reasoning ? `
                                 <p class="small text-muted mt-2 mb-1">
                                     <i class="bi bi-arrow-return-right me-1"></i>
-                                    <em>Why:</em> ${escapeHtml(action.rationale || action.reasoning)}
+                                    <em>Why:</em> ${escapeHtml(stripMarkdown(action.rationale || action.reasoning))}
                                 </p>
                             ` : ''}
                             ${action.expected_outcome ? `
                                 <p class="small text-success mb-0">
                                     <i class="bi bi-check2-circle me-1"></i>
-                                    <em>Expected outcome:</em> ${escapeHtml(action.expected_outcome)}
+                                    <em>Expected outcome:</em> ${escapeHtml(stripMarkdown(action.expected_outcome))}
                                 </p>
                             ` : ''}
                         </div>
@@ -817,14 +817,14 @@ const AIExplainability = (() => {
                         ${data.reasoning ? `
                             <div class="mb-2">
                                 <strong class="small text-muted">REASONING:</strong>
-                                <p class="small mb-0">${escapeHtml(data.reasoning)}</p>
+                                <p class="small mb-0">${escapeHtml(stripMarkdown(data.reasoning))}</p>
                             </div>
                         ` : ''}
                         
                         ${data.methodology ? `
                             <div class="mb-2">
                                 <strong class="small text-muted">METHODOLOGY:</strong>
-                                <p class="small mb-0">${escapeHtml(data.methodology)}</p>
+                                <p class="small mb-0">${escapeHtml(stripMarkdown(data.methodology))}</p>
                             </div>
                         ` : ''}
                         
@@ -833,7 +833,7 @@ const AIExplainability = (() => {
                                 <strong class="small text-muted">KEY FACTORS:</strong>
                                 <ul class="small mb-0 ps-3">
                                     ${data.contributing_factors.slice(0, 3).map(f => 
-                                        `<li>${escapeHtml(f.factor || f)}: ${f.contribution_percentage ? f.contribution_percentage + '%' : ''} ${f.description ? '- ' + escapeHtml(f.description) : ''}</li>`
+                                        `<li>${escapeHtml(stripMarkdown(f.factor || f))}: ${f.contribution_percentage ? f.contribution_percentage + '%' : ''} ${f.description ? '- ' + escapeHtml(stripMarkdown(f.description)) : ''}</li>`
                                     ).join('')}
                                 </ul>
                             </div>
@@ -843,7 +843,7 @@ const AIExplainability = (() => {
                             <div class="mb-2">
                                 <strong class="small text-muted">ASSUMPTIONS:</strong>
                                 <ul class="small mb-0 ps-3 text-warning">
-                                    ${data.assumptions.slice(0, 3).map(a => `<li>${escapeHtml(a)}</li>`).join('')}
+                                    ${data.assumptions.slice(0, 3).map(a => `<li>${escapeHtml(stripMarkdown(a))}</li>`).join('')}
                                 </ul>
                             </div>
                         ` : ''}
@@ -888,7 +888,7 @@ const AIExplainability = (() => {
             ${insight.executive_summary || insight.summary ? `
                 <div class="alert alert-info mb-3">
                     <i class="bi bi-info-circle me-2"></i>
-                    ${escapeHtml(insight.executive_summary || insight.summary)}
+                    ${escapeHtml(stripMarkdown(insight.executive_summary || insight.summary))}
                 </div>
             ` : ''}
             
@@ -997,6 +997,7 @@ const AIExplainability = (() => {
         if (!data) return '';
         
         const confidence = data.confidence_score || data.confidence || 0;
+        const reasoningText = data.reasoning ? stripMarkdown(data.reasoning) : '';
         
         return `
             <div class="p-2" style="max-width: 300px;">
@@ -1004,9 +1005,9 @@ const AIExplainability = (() => {
                     <strong>AI Confidence</strong>
                     <span>${Math.round(confidence * 100)}%</span>
                 </div>
-                ${data.reasoning ? `<p class="small mb-1">${escapeHtml(data.reasoning.substring(0, 150))}...</p>` : ''}
+                ${reasoningText ? `<p class="small mb-1">${escapeHtml(reasoningText.substring(0, 150))}...</p>` : ''}
                 ${data.assumptions && data.assumptions.length > 0 ? `
-                    <small class="text-muted">Assumes: ${escapeHtml(data.assumptions[0])}</small>
+                    <small class="text-muted">Assumes: ${escapeHtml(stripMarkdown(data.assumptions[0]))}</small>
                 ` : ''}
             </div>
         `;
@@ -1020,6 +1021,38 @@ const AIExplainability = (() => {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    /**
+     * Utility: Strip Markdown formatting from text
+     * Removes bold (**text** or __text__), italic (*text* or _text_), 
+     * headers (#), checkboxes (- [ ] or - [x]), links [text](url), etc.
+     * Use this when displaying AI-generated text in plain text contexts
+     */
+    function stripMarkdown(text) {
+        if (!text) return '';
+        return text
+            // Remove bold/strong: **text** or __text__
+            .replace(/\*\*([^*]+)\*\*/g, '$1')
+            .replace(/__([^_]+)__/g, '$1')
+            // Remove italic: *text* or _text_ (be careful not to remove list items)
+            .replace(/(?<![*_])\*([^*\n]+)\*(?![*_])/g, '$1')
+            .replace(/(?<![*_])_([^_\n]+)_(?![*_])/g, '$1')
+            // Remove strikethrough: ~~text~~
+            .replace(/~~([^~]+)~~/g, '$1')
+            // Remove inline code: `code`
+            .replace(/`([^`]+)`/g, '$1')
+            // Remove headers: # ## ### etc.
+            .replace(/^#{1,6}\s+/gm, '')
+            // Remove checkbox markers: - [ ] or - [x]
+            .replace(/- \[[x ]\]\s*/gi, '- ')
+            // Remove links: [text](url) -> text
+            .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            // Remove images: ![alt](url)
+            .replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
+            // Clean up any double spaces
+            .replace(/  +/g, ' ')
+            .trim();
     }
 
     /**
@@ -1060,6 +1093,7 @@ const AIExplainability = (() => {
         showExplainabilityModal,
         renderTooltipContent,
         escapeHtml,
+        stripMarkdown,
         formatDate
     };
 })();
