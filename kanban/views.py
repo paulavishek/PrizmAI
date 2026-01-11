@@ -979,6 +979,58 @@ def create_column(request, board_id):
         'board': board
     })
 
+def update_column(request, column_id):
+    """Update/rename a column"""
+    from kanban.permission_utils import user_has_board_permission
+    from kanban.audit_utils import log_model_change
+    
+    column = get_object_or_404(Column, id=column_id)
+    board = column.board
+    
+    # Check if this is a demo board
+    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
+    is_demo_mode = request.session.get('is_demo_mode', False)
+    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
+    
+    # For non-demo boards, require authentication
+    if not (is_demo_board and is_demo_mode):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+            return redirect_to_login(request.get_full_path())
+        
+        # Check permission using RBAC
+        if not user_has_board_permission(request.user, board, 'column.edit'):
+            return HttpResponseForbidden("You don't have permission to edit columns on this board.")
+    
+    # For demo boards in team mode, check role-based permissions
+    elif demo_mode_type == 'team':
+        from kanban.utils.demo_permissions import DemoPermissions
+        if not DemoPermissions.can_perform_action(request, 'can_edit_columns'):
+            return HttpResponseForbidden("You don't have permission to edit columns in your current demo role.")
+    # Solo demo mode: no restrictions, allow all column edits
+    
+    if request.method == 'POST':
+        new_name = request.POST.get('name', '').strip()
+        if new_name:
+            old_name = column.name
+            column.name = new_name
+            column.save()
+            
+            # Log to audit trail
+            log_model_change('column.updated', column, request.user if request.user.is_authenticated else None, request)
+            
+            messages.success(request, f'Column renamed from "{old_name}" to "{new_name}"!')
+        else:
+            messages.error(request, 'Column name cannot be empty.')
+        
+        return redirect('board_detail', board_id=board.id)
+    
+    # For GET requests, return JSON data
+    return JsonResponse({
+        'id': column.id,
+        'name': column.name
+    })
+
 @login_required
 def create_label(request, board_id):
     board = get_object_or_404(Board, id=board_id)

@@ -59,6 +59,7 @@ urlpatterns = [
     path('columns/<int:column_id>/move/left/', views.move_column, {'direction': 'left'}, name='move_column_left'),    path('columns/<int:column_id>/move/right/', views.move_column, {'direction': 'right'}, name='move_column_right'),
     path('columns/reorder/', views.reorder_columns, name='reorder_columns'),
     path('columns/reorder-multiple/', views.reorder_multiple_columns, name='reorder_multiple_columns'),
+    path('columns/<int:column_id>/update/', views.update_column, name='update_column'),
     path('columns/<int:column_id>/delete/', views.delete_column, name='delete_column'),    path('boards/<int:board_id>/add-lean-labels/', views.add_lean_labels, name='add_lean_labels'),
     
     # Test page for AI features
