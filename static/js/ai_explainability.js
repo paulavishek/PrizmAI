@@ -115,7 +115,7 @@ const AIExplainability = (() => {
             html += `
                 <div class="factor-item mb-3">
                     <div class="d-flex justify-content-between align-items-start mb-1">
-                        <div class="factor-name fw-semibold" style="flex: 1;">
+                        <div class="factor-name fw-semibold" style="flex: 1; color: #212529;">
                             <span class="badge bg-secondary me-1">${index + 1}</span>
                             ${escapeHtml(factor.factor)}
                         </div>
@@ -124,7 +124,7 @@ const AIExplainability = (() => {
                         </div>
                     </div>
                     ${factor.description ? `
-                        <div class="factor-description text-muted small mb-2">
+                        <div class="factor-description small mb-2" style="color: #6c757d;">
                             ${escapeHtml(factor.description)}
                         </div>
                     ` : ''}
