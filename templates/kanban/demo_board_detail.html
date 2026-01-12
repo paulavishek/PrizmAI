@@ -754,7 +754,7 @@ kbd {
 </div>
 
 <!-- Kanban Board -->
-<div class="kanban-board" id="kanban-board">
+<div class="kanban-board" id="kanban-board" data-board-id="{{ board.id }}">
     <div id="all-tasks-section"></div>
     {% for column in columns %}
     <div class="kanban-column" id="column-{{ column.id }}" data-column-id="{{ column.id }}" draggable="true">

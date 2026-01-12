@@ -217,17 +217,20 @@ function performAISearch(query) {
     })
     .then(response => response.json())
     .then(data => {
+        console.log('AI Search API Response:', data);
+        console.log('Board ID sent:', getBoardId());
+        
         if (resultCount) {
             resultCount.classList.remove('bg-primary');
             resultCount.classList.add('bg-secondary');
         }
         
-        if (data.success && data.results) {
+        if (data.success && data.results && data.results.length > 0) {
             // Apply filter based on AI results
             applyAISearchResults(data.results, query);
         } else {
             // Fallback to keyword search
-            console.log('AI search failed, falling back to keyword search');
+            console.log('AI search returned no results or failed, falling back to keyword search. Data:', data);
             performKeywordFilter(query);
         }
     })
@@ -246,16 +249,25 @@ function performAISearch(query) {
  * Apply AI search results as filter
  */
 function applyAISearchResults(results, query) {
+    console.log('AI Search Results:', results);
+    console.log('All Tasks on page:', searchState.allTasks.map(t => ({id: t.id, title: t.title})));
+    
     const matchingIds = results.map(r => String(r.id));
+    console.log('Matching IDs from AI:', matchingIds);
+    
     let matchCount = 0;
     
     searchState.allTasks.forEach(task => {
-        if (matchingIds.includes(String(task.id))) {
+        const taskIdStr = String(task.id);
+        const isMatch = matchingIds.includes(taskIdStr);
+        console.log(`Task ${taskIdStr} (${task.title}): match=${isMatch}`);
+        
+        if (isMatch) {
             task.element.classList.remove('filtered-out');
             matchCount++;
             
             // Add AI match indicator if available
-            const matchInfo = results.find(r => String(r.id) === String(task.id));
+            const matchInfo = results.find(r => String(r.id) === taskIdStr);
             if (matchInfo && matchInfo.relevance_score) {
                 addAIMatchBadge(task.element, matchInfo.relevance_score, matchInfo.match_reason);
             }
