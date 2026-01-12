@@ -20,11 +20,16 @@ document.addEventListener('DOMContentLoaded', function() {
  * Initialize command palette functionality
  */
 function initializeCommandPalette() {
-    // Keyboard shortcut (Alt+K)
-    // Use capture phase to intercept before browser shortcuts
-    document.addEventListener('keydown', function(e) {
-        // Alt+K (check both lowercase and uppercase)
-        if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'k' || e.key === 'K')) {
+    console.log('Command Palette: Initializing...');
+    
+    // Keyboard shortcut (Alt+K) - register on both window and document for reliability
+    function handleGlobalKeydown(e) {
+        // Alt+K (check both lowercase and uppercase, also check keyCode for browser compatibility)
+        const isAltK = e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && 
+                       (e.key === 'k' || e.key === 'K' || e.keyCode === 75);
+        
+        if (isAltK) {
+            console.log('Command Palette: Alt+K detected!');
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
@@ -32,12 +37,28 @@ function initializeCommandPalette() {
             return false;
         }
         
+        // Ctrl+K as fallback (some users may prefer this)
+        const isCtrlK = e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && 
+                        (e.key === 'k' || e.key === 'K' || e.keyCode === 75);
+        
+        if (isCtrlK) {
+            console.log('Command Palette: Ctrl+K detected!');
+            e.preventDefault();
+            e.stopPropagation();
+            openCommandPalette();
+            return false;
+        }
+        
         // ESC to close
-        if (e.key === 'Escape' && commandPaletteState.isOpen) {
+        if ((e.key === 'Escape' || e.keyCode === 27) && commandPaletteState.isOpen) {
             e.preventDefault();
             closeCommandPalette();
         }
-    }, true); // Use capture phase
+    }
+    
+    // Use capture phase on both window and document for maximum coverage
+    window.addEventListener('keydown', handleGlobalKeydown, true);
+    document.addEventListener('keydown', handleGlobalKeydown, true);
     
     // Search input handler
     const searchInput = document.getElementById('commandPaletteInput');
@@ -54,11 +75,19 @@ function initializeCommandPalette() {
         modeToggle.addEventListener('click', toggleSearchMode);
     }
     
-    // Close on backdrop click
-    const modal = document.getElementById('commandPaletteModal');
-    if (modal) {
-        modal.addEventListener('click', function(e) {
-            if (e.target === modal) {
+    // Modal event handlers
+    const modalElement = document.getElementById('commandPaletteModal');
+    if (modalElement) {
+        // Track when modal is hidden (by any means)
+        modalElement.addEventListener('hidden.bs.modal', function() {
+            console.log('Command Palette: Modal hidden');
+            commandPaletteState.isOpen = false;
+            clearTaskHighlights();
+        });
+        
+        // Also handle backdrop click
+        modalElement.addEventListener('click', function(e) {
+            if (e.target === modalElement) {
                 closeCommandPalette();
             }
         });
@@ -66,6 +95,8 @@ function initializeCommandPalette() {
     
     // Collect all tasks on page load
     collectAllTasks();
+    
+    console.log('Command Palette: Initialized successfully!');
 }
 
 /**
@@ -119,35 +150,59 @@ function collectAllTasks() {
  * Open command palette modal
  */
 function openCommandPalette() {
+    console.log('Command Palette: Opening...');
+    
+    const modalElement = document.getElementById('commandPaletteModal');
+    if (!modalElement) {
+        console.error('Command Palette: Modal element not found!');
+        return;
+    }
+    
     commandPaletteState.isOpen = true;
     commandPaletteState.selectedIndex = 0;
     
-    const modal = new bootstrap.Modal(document.getElementById('commandPaletteModal'));
+    // Refresh task index when opening
+    collectAllTasks();
+    
+    // Get or create Bootstrap modal instance
+    let modal = bootstrap.Modal.getInstance(modalElement);
+    if (!modal) {
+        modal = new bootstrap.Modal(modalElement, {
+            backdrop: true,
+            keyboard: true,
+            focus: true
+        });
+    }
+    
     modal.show();
     
-    // Focus search input
-    setTimeout(() => {
+    // Focus search input after modal is shown
+    modalElement.addEventListener('shown.bs.modal', function onShown() {
         const input = document.getElementById('commandPaletteInput');
         if (input) {
             input.value = '';
             input.focus();
         }
-        
-        // Reset view
         showEmptyState();
-    }, 100);
+        console.log('Command Palette: Opened and focused!');
+        // Remove event listener after first use
+        modalElement.removeEventListener('shown.bs.modal', onShown);
+    }, { once: true });
 }
 
 /**
  * Close command palette modal
  */
 function closeCommandPalette() {
+    console.log('Command Palette: Closing...');
     commandPaletteState.isOpen = false;
     
     const modalElement = document.getElementById('commandPaletteModal');
-    const modal = bootstrap.Modal.getInstance(modalElement);
-    if (modal) {
-        modal.hide();
+    if (modalElement) {
+        const modal = bootstrap.Modal.getInstance(modalElement);
+        if (modal) {
+            modal.hide();
+        }
     }
     
     // Clear any highlights
@@ -233,6 +288,8 @@ function displayResults(results, isAISearch = false, explanation = null) {
     const emptyState = document.getElementById('commandPaletteEmpty');
     const loadingState = document.getElementById('commandPaletteLoading');
     const resultCount = document.getElementById('resultCount');
+    const searchInput = document.getElementById('commandPaletteInput');
+    const currentQuery = searchInput ? searchInput.value.trim() : '';
     
     // Hide empty and loading states
     emptyState.classList.add('d-none');
@@ -250,12 +307,32 @@ function displayResults(results, isAISearch = false, explanation = null) {
         return;
     }
     
+    // Store current results for filtering
+    commandPaletteState.currentResults = results;
+    commandPaletteState.currentQuery = currentQuery;
+    
     // Show results
     resultsList.classList.remove('d-none');
     resultCount.textContent = `${results.length} result${results.length !== 1 ? 's' : ''}`;
     
     // Build results HTML
     let html = '';
+    
+    // Add "Filter Board" action button at the top
+    html += `
+        <div class="list-group-item bg-primary bg-opacity-10 border-0">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="fas fa-filter text-primary me-2"></i>
+                    <strong>Filter Board View</strong>
+                    <small class="text-muted d-block">Hide all tasks except these ${results.length} matching results</small>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="filterBoardFromResults()">
+                    <i class="fas fa-eye me-1"></i> Apply Filter
+                </button>
+            </div>
+        </div>
+    `;
     
     // Show AI explanation if available
     if (isAISearch && explanation) {
@@ -519,3 +596,154 @@ function debounce(func, wait) {
 // Refresh task index when new tasks are added
 window.addEventListener('taskCreated', collectAllTasks);
 window.addEventListener('taskUpdated', collectAllTasks);
+
+
+// =============================================================================
+// LIVE FILTER FUNCTIONALITY
+// Filters tasks directly on the board (hides non-matching cards)
+// =============================================================================
+
+let liveFilterState = {
+    active: false,
+    query: '',
+    matchingIds: []
+};
+
+/**
+ * Apply live filter to the board - hides non-matching tasks
+ */
+function applyLiveFilter(query, matchingTaskIds = null) {
+    console.log('Live Filter: Applying filter for:', query);
+    
+    liveFilterState.active = true;
+    liveFilterState.query = query;
+    
+    const allTaskCards = document.querySelectorAll('.kanban-task');
+    let visibleCount = 0;
+    
+    if (matchingTaskIds) {
+        // Filter by specific IDs (from AI search or click results)
+        liveFilterState.matchingIds = matchingTaskIds;
+        
+        allTaskCards.forEach(card => {
+            const taskId = card.getAttribute('data-task-id');
+            if (matchingTaskIds.includes(parseInt(taskId)) || matchingTaskIds.includes(taskId)) {
+                card.classList.remove('filtered-out');
+                visibleCount++;
+            } else {
+                card.classList.add('filtered-out');
+            }
+        });
+    } else {
+        // Filter by keyword search
+        const queryLower = query.toLowerCase();
+        
+        allTaskCards.forEach(card => {
+            const titleElement = card.querySelector('.task-title a');
+            const title = titleElement ? titleElement.textContent.toLowerCase() : '';
+            const descElement = card.querySelector('.task-description');
+            const description = descElement ? descElement.textContent.toLowerCase() : '';
+            
+            if (title.includes(queryLower) || description.includes(queryLower)) {
+                card.classList.remove('filtered-out');
+                liveFilterState.matchingIds.push(card.getAttribute('data-task-id'));
+                visibleCount++;
+            } else {
+                card.classList.add('filtered-out');
+            }
+        });
+    }
+    
+    // Show the live filter badge
+    showLiveFilterBadge(query, visibleCount, allTaskCards.length);
+    
+    // Update column task counts
+    updateColumnTaskCounts();
+    
+    return visibleCount;
+}
+
+/**
+ * Clear live filter and show all tasks
+ */
+function clearLiveFilter() {
+    console.log('Live Filter: Clearing filter');
+    
+    liveFilterState.active = false;
+    liveFilterState.query = '';
+    liveFilterState.matchingIds = [];
+    
+    // Show all task cards
+    document.querySelectorAll('.kanban-task.filtered-out').forEach(card => {
+        card.classList.remove('filtered-out');
+    });
+    
+    // Hide the filter badge
+    const badge = document.getElementById('liveFilterBadge');
+    if (badge) {
+        badge.classList.remove('active');
+    }
+    
+    // Update column task counts
+    updateColumnTaskCounts();
+}
+
+/**
+ * Show the live filter badge with current filter info
+ */
+function showLiveFilterBadge(query, visibleCount, totalCount) {
+    const badge = document.getElementById('liveFilterBadge');
+    const queryDisplay = document.getElementById('liveFilterQuery');
+    const countDisplay = document.getElementById('liveFilterCount');
+    
+    if (badge && queryDisplay && countDisplay) {
+        queryDisplay.textContent = query.length > 30 ? query.substring(0, 30) + '...' : query;
+        countDisplay.textContent = `${visibleCount} of ${totalCount} tasks`;
+        badge.classList.add('active');
+    }
+}
+
+/**
+ * Update column task counts based on visible tasks
+ */
+function updateColumnTaskCounts() {
+    document.querySelectorAll('.kanban-column').forEach(column => {
+        const visibleTasks = column.querySelectorAll('.kanban-task:not(.filtered-out)').length;
+        const countElement = column.querySelector('.column-task-count');
+        if (countElement) {
+            countElement.textContent = visibleTasks;
+        }
+    });
+}
+
+/**
+ * Filter board from current search results
+ * Called when user clicks "Apply Filter" button
+ */
+function filterBoardFromResults() {
+    const results = commandPaletteState.currentResults || commandPaletteState.filteredTasks;
+    const query = commandPaletteState.currentQuery || document.getElementById('commandPaletteInput')?.value || 'search';
+    
+    if (!results || results.length === 0) {
+        console.log('Filter Board: No results to filter by');
+        return;
+    }
+    
+    // Get task IDs from results
+    const matchingIds = results.map(task => task.id);
+    
+    // Close the command palette
+    closeCommandPalette();
+    
+    // Apply the live filter
+    applyLiveFilter(query, matchingIds);
+    
+    console.log(`Filter Board: Applied filter for "${query}" with ${matchingIds.length} tasks`);
+}
+
+// Make functions available globally
+window.openCommandPalette = openCommandPalette;
+window.closeCommandPalette = closeCommandPalette;
+window.clearLiveFilter = clearLiveFilter;
+window.applyLiveFilter = applyLiveFilter;
+window.filterBoardFromResults = filterBoardFromResults;

@@ -170,6 +170,59 @@
         font-size: 0.9rem;
     }
     
+    /* Task highlight for search results */
+    .task-highlighted {
+        animation: pulse-highlight 1s ease-in-out;
+    }
+    
+    @keyframes pulse-highlight {
+        0%, 100% { box-shadow: 0 4px 12px rgba(13, 110, 253, 0.4); }
+        50% { box-shadow: 0 8px 24px rgba(13, 110, 253, 0.6); }
+    }
+    
+    /* Live filter - hide non-matching tasks */
+    .kanban-task.filtered-out {
+        display: none !important;
+    }
+    
+    /* Live filter indicator badge */
+    .live-filter-badge {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1050;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 25px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        font-size: 0.9rem;
+        display: none;
+    }
+    
+    .live-filter-badge.active {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .live-filter-badge .clear-filter {
+        background: rgba(255,255,255,0.2);
+        border: none;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+    }
+    
+    .live-filter-badge .clear-filter:hover {
+        background: rgba(255,255,255,0.4);
+    }
     
 </style>
 {% endblock %}
@@ -207,10 +260,16 @@
         {% if board.description %}
             <p class="text-muted mb-0">{{ board.description }}</p>
         {% endif %}
-        <small class="text-muted d-block mt-1">
-            <i class="fas fa-search me-1"></i> Quick search: Press 
-            <kbd class="bg-light px-2 py-1" style="font-size: 0.75rem;">Alt+K</kbd>
-        </small>
+        <div class="d-flex align-items-center mt-1 gap-2">
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="openCommandPalette()" 
+                    title="Open Quick Search (Alt+K or Ctrl+K)">
+                <i class="fas fa-search me-1"></i> Search Tasks
+            </button>
+            <small class="text-muted">
+                or press <kbd class="bg-light px-2 py-1" style="font-size: 0.75rem;">Alt+K</kbd> / 
+                <kbd class="bg-light px-2 py-1" style="font-size: 0.75rem;">Ctrl+K</kbd>
+            </small>
+        </div>
     </div>    <div class="btn-group">
         <button onclick="goBack()" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left me-1"></i> Back
@@ -573,8 +632,8 @@
     </div>
 </div>
 
-<!-- Command Palette Modal (Ctrl+K) -->
-<div class="modal fade" id="commandPaletteModal" tabindex="-1" aria-labelledby="commandPaletteLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+<!-- Command Palette Modal (Alt+K / Ctrl+K) -->
+<div class="modal fade" id="commandPaletteModal" tabindex="-1" aria-labelledby="commandPaletteLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content" style="border-radius: 12px; border: none; box-shadow: 0 8px 32px rgba(0,0,0,0.2);">
             <div class="modal-body p-0">
@@ -624,7 +683,13 @@
                 <!-- Quick Tips Footer -->
                 <div class="command-palette-footer px-4 py-2 bg-light" style="border-top: 1px solid #e9ecef; font-size: 0.8rem;">
                     <div class="d-flex justify-content-between align-items-center text-muted">
-                        <span><i class="fas fa-lightbulb text-warning me-1"></i> <strong>AI Tip:</strong> Try natural language like "login issues" or "high priority bugs"</span>
+                        <div>
+                            <i class="fas fa-lightbulb text-warning me-1"></i> 
+                            <strong>AI Tip:</strong> Try "login issues", "urgent tasks", or "database work"
+                            <span class="mx-2">•</span>
+                            <i class="fas fa-filter text-primary me-1"></i>
+                            <strong>Filter:</strong> Click "Apply Filter" to hide non-matching tasks
+                        </div>
                         <span id="resultCount" class="badge bg-secondary"></span>
                     </div>
                 </div>
@@ -1271,4 +1336,18 @@
     }
     
     </script>
-<script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'4' }}"></script>\n{% endblock %}\n\n{% endblock content %}
+
+<!-- Live Filter Indicator Badge -->
+<div id="liveFilterBadge" class="live-filter-badge">
+    <i class="fas fa-filter me-2"></i>
+    <span id="liveFilterText">Filtering: <strong id="liveFilterQuery"></strong></span>
+    <span id="liveFilterCount" class="badge bg-light text-dark ms-2"></span>
+    <button class="clear-filter" onclick="clearLiveFilter()" title="Clear filter">
+        <i class="fas fa-times"></i>
+    </button>
+</div>
+
+<script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'8' }}"></script>
+{% endblock %}
+
+{% endblock content %}
