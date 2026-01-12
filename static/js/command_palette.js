@@ -20,11 +20,11 @@ document.addEventListener('DOMContentLoaded', function() {
  * Initialize command palette functionality
  */
 function initializeCommandPalette() {
-    // Keyboard shortcut (Ctrl+K or Cmd+K)
+    // Keyboard shortcut (Alt+K)
     // Use capture phase to intercept before browser shortcuts
     document.addEventListener('keydown', function(e) {
-        // Ctrl+K or Cmd+K (check both lowercase and uppercase)
-        if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        // Alt+K (check both lowercase and uppercase)
+        if (e.altKey && !e.ctrlKey && !e.metaKey && (e.key === 'k' || e.key === 'K')) {
             e.preventDefault();
             e.stopPropagation();
             e.stopImmediatePropagation();
