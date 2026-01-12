@@ -227,6 +227,32 @@ class Task(models.Model):
     assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, related_name='assigned_tasks', blank=True, null=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_tasks')
     labels = models.ManyToManyField(TaskLabel, related_name='tasks', blank=True)
+    
+    # Lean Six Sigma Classification (Single-select, mutually exclusive)
+    LSS_CLASSIFICATION_CHOICES = [
+        ('value_added', 'Value-Added'),
+        ('necessary_nva', 'Necessary NVA'),
+        ('waste', 'Waste/Eliminate'),
+    ]
+    lss_classification = models.CharField(
+        max_length=20,
+        choices=LSS_CLASSIFICATION_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Lean Six Sigma classification - mutually exclusive category"
+    )
+    lss_classification_confidence = models.FloatField(
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="AI confidence score for LSS classification (0.0-1.0)"
+    )
+    lss_classification_reasoning = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="AI reasoning for LSS classification"
+    )
+    
     priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='medium')
     progress = models.IntegerField(default=0, validators=[MinValueValidator(0), MaxValueValidator(100)])
       # AI Analysis Results

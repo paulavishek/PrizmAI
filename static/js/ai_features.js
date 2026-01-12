@@ -365,20 +365,46 @@ function initAILssClassification() {
         })
         .then(data => {
             if (data.classification && data.justification) {
+                // Map the classification text to the radio button value
+                const classificationMap = {
+                    'Value-Added': 'value_added',
+                    'Necessary Non-Value-Added': 'necessary_nva',
+                    'Waste/Eliminate': 'waste'
+                };
+                
+                const radioValue = classificationMap[data.classification];
+                if (radioValue) {
+                    // Select the appropriate radio button
+                    const radioButton = document.getElementById(`lss_${radioValue}`);
+                    if (radioButton) {
+                        radioButton.checked = true;
+                    }
+                }
+                
                 // Use stripMarkdown to clean up AI-generated text
                 const stripMarkdown = window.AIExplainability?.stripMarkdown || ((text) => text);
+                
+                let badgeClass = 'success';
+                if (data.classification === 'Necessary Non-Value-Added') badgeClass = 'warning';
+                else if (data.classification === 'Waste/Eliminate') badgeClass = 'danger';
                 
                 let suggestionHtml = `
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <div>
-                            <strong>Suggested Classification:</strong> 
-                            <span class="badge bg-primary fs-6">${data.classification}</span>
+                            <strong>✨ AI Suggests:</strong> 
+                            <span class="badge bg-${badgeClass} fs-6">${data.classification}</span>
+                            ${data.confidence_score ? `<span class="badge bg-secondary ms-1">${Math.round(data.confidence_score * 100)}% confident</span>` : ''}
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-info" onclick="toggleLssExplain()">
-                            <i class="bi bi-lightbulb"></i> Why?
-                        </button>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-success me-1" onclick="acceptLssClassification('${radioValue}')">
+                                <i class="fas fa-check"></i> Accept
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-info" onclick="toggleLssExplain()">
+                                <i class="bi bi-lightbulb"></i> Why?
+                            </button>
+                        </div>
                     </div>
-                    <p class="mb-2">${stripMarkdown(data.justification)}</p>
+                    <p class="mb-2 small">${stripMarkdown(data.justification)}</p>
                     
                     <div id="lss-explainability" class="why-this-section mt-2" style="display: none;">
                         <div class="why-this-content">
@@ -397,14 +423,26 @@ function initAILssClassification() {
                                 <div class="mb-2">
                                     <strong class="small text-muted"><i class="bi bi-pie-chart me-1"></i>KEY FACTORS</strong>
                                     <ul class="small mb-0 ps-3 mt-1">
-                                        ${data.contributing_factors.map(f => `<li>${stripMarkdown(f.factor || f)}</li>`).join('')}
+                                        ${data.contributing_factors.map(f => `
+                                            <li>${stripMarkdown(f.description || f.factor || f)}
+                                                ${f.contribution_percentage ? `<span class="badge bg-secondary ms-1">${f.contribution_percentage}%</span>` : ''}
+                                            </li>
+                                        `).join('')}
                                     </ul>
                                 </div>
                             ` : ''}
-                            ${data.methodology ? `
+                            ${data.lean_waste_type ? `
                                 <div class="mb-2">
-                                    <strong class="small text-muted"><i class="bi bi-gear me-1"></i>METHODOLOGY</strong>
-                                    <p class="small mb-0 mt-1 text-muted">${stripMarkdown(data.methodology)}</p>
+                                    <strong class="small text-muted"><i class="bi bi-exclamation-triangle me-1"></i>WASTE TYPE</strong>
+                                    <p class="small mb-0 mt-1 text-danger">${data.lean_waste_type}</p>
+                                </div>
+                            ` : ''}
+                            ${data.improvement_suggestions && data.improvement_suggestions.length > 0 ? `
+                                <div class="mb-2">
+                                    <strong class="small text-muted"><i class="bi bi-lightbulb me-1"></i>IMPROVEMENT IDEAS</strong>
+                                    <ul class="small mb-0 ps-3 mt-1">
+                                        ${data.improvement_suggestions.map(s => `<li>${stripMarkdown(s)}</li>`).join('')}
+                                    </ul>
                                 </div>
                             ` : ''}
                         </div>
@@ -2032,6 +2070,39 @@ function displayWorkflowOptimization(data) {
     content.innerHTML = html;
     container.classList.remove('d-none');
     placeholder.classList.add('d-none');
+}
+
+/**
+ * Accept LSS classification suggestion
+ */
+function acceptLssClassification(value) {
+    const radioButton = document.getElementById(`lss_${value}`);
+    if (radioButton) {
+        radioButton.checked = true;
+        // Hide the suggestion after accepting
+        const container = document.getElementById('lss-suggestion-container');
+        if (container) {
+            container.classList.add('d-none');
+        }
+        // Show success message
+        if (typeof showToast === 'function') {
+            showToast('LSS classification applied!', 'success');
+        }
+    }
+}
+
+/**
+ * Toggle LSS classification explainability section
+ */
+function toggleLssExplain() {
+    const explainSection = document.getElementById('lss-explainability');
+    if (explainSection) {
+        if (explainSection.style.display === 'none') {
+            explainSection.style.display = 'block';
+        } else {
+            explainSection.style.display = 'none';
+        }
+    }
 }
 
 /**

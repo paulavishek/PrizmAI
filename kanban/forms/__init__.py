@@ -55,7 +55,7 @@ class TaskForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = [
-            'title', 'description', 'start_date', 'due_date', 'assigned_to', 'labels', 'priority', 'progress', 
+            'title', 'description', 'start_date', 'due_date', 'assigned_to', 'labels', 'lss_classification', 'priority', 'progress', 
             'dependencies', 'parent_task', 'complexity_score', 'required_skills', 'skill_match_score',
             'collaboration_required', 'workload_impact', 'related_tasks',
             'risk_likelihood', 'risk_impact', 'risk_level'
@@ -75,6 +75,10 @@ class TaskForm(forms.ModelForm):
             }),
             'assigned_to': forms.Select(attrs={'class': 'form-select'}),
             'labels': forms.SelectMultiple(attrs={'class': 'form-select'}),
+            'lss_classification': forms.RadioSelect(attrs={
+                'class': 'form-check-input',
+                'title': 'Lean Six Sigma classification - select ONE category'
+            }),
             'priority': forms.Select(attrs={'class': 'form-select'}),
             'progress': forms.NumberInput(attrs={
                 'class': 'form-control',

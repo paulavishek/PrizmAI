@@ -98,39 +98,72 @@
                                 <div class="invalid-feedback d-block">{{ form.assigned_to.errors }}</div>
                             {% endif %}                        </div>
 
+                        <!-- Lean Six Sigma Classification (Single-select) -->
                         <div class="mb-3">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <label for="{{ form.labels.id_for_label }}" class="form-label mb-0">
-                                    Labels
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label mb-0">
+                                    <i class="fas fa-chart-line me-1"></i> Lean Six Sigma Classification
                                     <button type="button" class="btn btn-sm p-0" data-bs-toggle="modal" data-bs-target="#leanLabelsInfoModal">
-                                        <i class="fas fa-info-circle text-primary" title="Learn about Lean Six Sigma labels"></i>
+                                        <i class="fas fa-info-circle text-primary" title="Learn about Lean Six Sigma categories"></i>
                                     </button>
                                 </label>
                                 <button type="button" id="suggest-lss-classification" class="btn btn-sm btn-outline-primary">
-                                    <i class="fas fa-robot me-1"></i> Suggest LSS Classification
+                                    <i class="fas fa-robot me-1"></i> Suggest LSS
                                 </button>
                             </div>
-                            {{ form.labels }}
-                            <small class="form-text text-muted">Hold Ctrl (or Cmd on Mac) to select multiple labels</small>
+                            
+                            <div class="lss-radio-group">
+                                {% for value, label in form.lss_classification.field.choices %}
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="lss_classification" 
+                                           id="lss_{{ value }}" value="{{ value }}"
+                                           {% if form.lss_classification.value == value %}checked{% endif %}>
+                                    <label class="form-check-label" for="lss_{{ value }}">
+                                        {% if value == 'value_added' %}
+                                            <span class="badge bg-success">{{ label }}</span>
+                                            <small class="text-muted">- Directly adds customer value</small>
+                                        {% elif value == 'necessary_nva' %}
+                                            <span class="badge bg-warning">{{ label }}</span>
+                                            <small class="text-muted">- Required but doesn't add direct value</small>
+                                        {% elif value == 'waste' %}
+                                            <span class="badge bg-danger">{{ label }}</span>
+                                            <small class="text-muted">- Should be eliminated or minimized</small>
+                                        {% endif %}
+                                    </label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            
                             <div id="classify-spinner" class="d-none text-center mt-2">
                                 <div class="spinner-border spinner-border-sm text-primary" role="status">
                                     <span class="visually-hidden">Loading...</span>
                                 </div>
                                 <span class="ms-2 text-muted">Analyzing with AI...</span>
                             </div>
-                            {% if form.labels.errors %}
-                                <div class="invalid-feedback d-block">{{ form.labels.errors }}</div>
+                            {% if form.lss_classification.errors %}
+                                <div class="invalid-feedback d-block">{{ form.lss_classification.errors }}</div>
                             {% endif %}
                         </div>
-                          <!-- AI LSS Classification Suggestion -->
+                        
+                        <!-- AI LSS Classification Suggestion -->
                         <div id="lss-suggestion-container" class="alert alert-info mb-3 d-none">
                             <div class="d-flex align-items-start">
                                 <i class="fas fa-robot mt-1 me-2"></i>
-                                <div>
-                                    <strong>AI Suggestion:</strong>
-                                    <p id="lss-suggestion-text" class="mb-0"></p>
+                                <div class="flex-grow-1" id="lss-suggestion-text">
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Regular Labels (for other tags, not LSS) -->
+                        <div class="mb-3">
+                            <label for="{{ form.labels.id_for_label }}" class="form-label">
+                                Tags/Labels
+                            </label>
+                            {{ form.labels }}
+                            <small class="form-text text-muted">Optional: Add tags for organization (Hold Ctrl to select multiple)</small>
+                            {% if form.labels.errors %}
+                                <div class="invalid-feedback d-block">{{ form.labels.errors }}</div>
+                            {% endif %}
                         </div>
                         
                         <!-- AI Task Breakdown Suggestion -->
