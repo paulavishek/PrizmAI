@@ -107,6 +107,22 @@ kbd {
     font-family: monospace;
 }
 
+/* Live filter - hide non-matching tasks */
+.kanban-task.filtered-out {
+    display: none !important;
+}
+
+/* Task Search Bar Styling */
+#liveSearchInput:focus {
+    box-shadow: none;
+    border-color: #0d6efd;
+}
+
+.btn-check:checked + .btn-outline-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-color: #667eea;
+}
+
 .kanban-task {
     background: white;
     border-radius: 6px;
@@ -695,6 +711,48 @@ kbd {
     </div>
 </div>
 
+<!-- Task Search Bar - Always Visible -->
+<div class="card mb-4 shadow-sm" id="taskSearchCard" style="border-left: 4px solid #0d6efd;">
+    <div class="card-body py-3">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <div class="input-group">
+                    <span class="input-group-text bg-primary text-white">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" 
+                           id="liveSearchInput" 
+                           class="form-control form-control-lg" 
+                           placeholder="Search tasks... (e.g., 'marketing', 'campaign', 'high priority')"
+                           autocomplete="off">
+                    <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn" style="display: none;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="d-flex align-items-center gap-2 mt-2 mt-md-0">
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="searchMode" id="keywordMode" value="keyword" checked>
+                        <label class="btn btn-outline-secondary btn-sm" for="keywordMode">
+                            <i class="fas fa-keyboard me-1"></i> Keyword
+                        </label>
+                        <input type="radio" class="btn-check" name="searchMode" id="aiMode" value="ai">
+                        <label class="btn btn-outline-primary btn-sm" for="aiMode">
+                            <i class="fas fa-brain me-1"></i> AI Search
+                        </label>
+                    </div>
+                    <span id="searchResultCount" class="badge bg-secondary ms-2" style="display: none;"></span>
+                </div>
+            </div>
+        </div>
+        <div id="aiSearchTip" class="mt-2 small text-muted" style="display: none;">
+            <i class="fas fa-lightbulb text-warning me-1"></i>
+            <strong>AI Tip:</strong> Try natural language like "video content", "social media tasks", or "urgent deadlines"
+        </div>
+    </div>
+</div>
+
 <!-- Kanban Board -->
 <div class="kanban-board" id="kanban-board">
     <div id="all-tasks-section"></div>
@@ -1188,4 +1246,7 @@ function goBack() {
     }
 }
 </script>
+
+<!-- Task Search Script -->
+<script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'9' }}"></script>
 {% endblock %}
