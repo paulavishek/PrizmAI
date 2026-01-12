@@ -213,12 +213,46 @@ class PrioritySuggestionWidget {
                     </div>`;
         }).join('');
         
-        // Add analysis metadata if available
+        // Add analysis metadata if available with visual meter
         let metaInfo = '';
         if (this.suggestion.reasoning?.analysis_score) {
-            metaInfo = `<div class="mt-2 pt-2 border-top small text-muted">
-                <i class="fas fa-calculator me-1"></i>Analysis Score: ${this.suggestion.reasoning.analysis_score}
-            </div>`;
+            // Extract score numbers (e.g., "6/12" -> 6, 12)
+            const scoreMatch = this.suggestion.reasoning.analysis_score.match(/(\d+)\/(\d+)/);
+            if (scoreMatch) {
+                const score = parseInt(scoreMatch[1]);
+                const maxScore = parseInt(scoreMatch[2]);
+                const percentage = (score / maxScore) * 100;
+                
+                // Color code based on percentage
+                let barColor = 'secondary';
+                if (percentage >= 67) barColor = 'danger';      // 8+/12 = red (urgent/high)
+                else if (percentage >= 42) barColor = 'warning'; // 5-7/12 = orange (medium/high)
+                else if (percentage >= 25) barColor = 'info';    // 3-4/12 = blue (medium)
+                
+                metaInfo = `<div class="mt-2 pt-2 border-top">
+                    <div class="d-flex align-items-center justify-content-between small mb-1">
+                        <span class="text-muted">
+                            <i class="fas fa-tachometer-alt me-1"></i>Priority Score
+                        </span>
+                        <span class="badge bg-${barColor}">${this.suggestion.reasoning.analysis_score}</span>
+                    </div>
+                    <div class="progress" style="height: 6px;">
+                        <div class="progress-bar bg-${barColor}" role="progressbar" 
+                             style="width: ${percentage}%" 
+                             aria-valuenow="${score}" aria-valuemin="0" aria-valuemax="${maxScore}">
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between mt-1" style="font-size: 0.7rem; color: #999;">
+                        <span>Low</span>
+                        <span>High</span>
+                    </div>
+                </div>`;
+            } else {
+                // Fallback if score format doesn't match
+                metaInfo = `<div class="mt-2 pt-2 border-top small text-muted">
+                    <i class="fas fa-calculator me-1"></i>Analysis Score: ${this.suggestion.reasoning.analysis_score}
+                </div>`;
+            }
         }
         
         return factorHtml + metaInfo;
