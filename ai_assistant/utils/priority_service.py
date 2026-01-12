@@ -346,12 +346,36 @@ class PrioritySuggestionService:
         """
         Fallback rule-based priority suggestion when no ML model available
         
-        Uses heuristics based on due date, dependencies, and complexity
+        Uses heuristics based on due date, dependencies, complexity, and semantic keywords
         """
         score = 0
         factors = []
         
+        # Semantic keyword analysis (0-4 points) - Check FIRST before due date
+        high_impact_keywords = {
+            'critical': 4, 'urgent': 4, 'emergency': 4, 'security': 4, 'breach': 4,
+            'migration': 3, 'database': 3, 'deployment': 3, 'production': 3, 'outage': 3,
+            'payment': 3, 'compliance': 3, 'audit': 3, 'legal': 3, 'data loss': 4,
+            'bug': 2, 'performance': 2, 'optimization': 2, 'refactor': 1, 'integration': 2,
+            'api': 2, 'authentication': 3, 'authorization': 3, 'backup': 3
+        }
+        
+        text_to_analyze = f"{task.title} {task.description or ''}".lower()
+        keyword_score = 0
+        keyword_matches = []
+        
+        for keyword, weight in high_impact_keywords.items():
+            if keyword in text_to_analyze:
+                keyword_score = max(keyword_score, weight)  # Take highest match
+                keyword_matches.append(keyword.title())
+        
+        if keyword_score > 0:
+            score += keyword_score
+            if keyword_matches:
+                factors.append(f"High-impact keywords detected: {', '.join(keyword_matches[:3])}")
+        
         # Due date urgency (0-4 points)
+        days_until_due = None
         if task.due_date:
             due_date = task.due_date
             if timezone.is_naive(due_date):
@@ -370,7 +394,9 @@ class PrioritySuggestionService:
                 factors.append("Due within 3 days")
             elif days_until_due < 7:
                 score += 1
-                factors.append("Due this week")
+                factors.append("Due within 7 days")
+            else:
+                factors.append(f"Due in {int(days_until_due)} days (Low urgency)")
         
         # Blocking tasks (0-3 points)
         if task.pk:
@@ -418,7 +444,7 @@ class PrioritySuggestionService:
             score += 1
             factors.append("Requires collaboration")
         
-        # Determine priority based on score
+        # Determine priority based on score with better thresholds
         if score >= 8:
             priority = 'urgent'
             confidence = 0.75
@@ -432,17 +458,40 @@ class PrioritySuggestionService:
             priority = 'low'
             confidence = 0.60
         
-        explanation = f"Based on rule-based analysis, this task should be **{priority}** priority. "
-        if factors:
-            explanation += f"Key factors: {', '.join(factors[:3])}."
+        # Build detailed explanation
+        explanation = f"Based on rule-based analysis (score: {score}/12), this task should be **{priority}** priority. "
+        
+        # Add specific reasoning
+        if keyword_matches:
+            explanation += f"Contains critical keywords suggesting high impact. "
+        if days_until_due is not None:
+            if days_until_due > 7:
+                explanation += f"However, due date is {int(days_until_due)} days away. "
+            elif days_until_due < 3:
+                explanation += f"Due date is approaching ({int(days_until_due)} days). "
+        
+        if not factors:
+            factors.append("No strong indicators detected")
+        
+        # Calculate contribution percentages
+        top_factors_with_pct = []
+        for i, f in enumerate(factors[:5]):
+            # Estimate contribution based on order and total factors
+            pct = max(10, 40 - (i * 8)) if factors else 0
+            top_factors_with_pct.append({
+                'description': f,
+                'contribution_percentage': pct,
+                'factor': f.split(':')[0] if ':' in f else f
+            })
         
         return {
             'suggested_priority': priority,
             'confidence': confidence,
             'reasoning': {
-                'top_factors': [{'description': f} for f in factors[:5]],
+                'top_factors': top_factors_with_pct,
                 'explanation': explanation,
-                'confidence_level': self._confidence_label(confidence)
+                'confidence_level': self._confidence_label(confidence),
+                'analysis_score': f"{score}/12 points"
             },
             'alternatives': [],
             'is_ml_based': False,

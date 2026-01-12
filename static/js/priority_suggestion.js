@@ -165,7 +165,13 @@ class PrioritySuggestionWidget {
                        this.suggestion.contributing_factors || [];
         
         if (factors.length === 0) {
-            return '<em>Based on task attributes and project context</em>';
+            // Provide more specific fallback based on what we know
+            const confidence = this.suggestion.confidence || 0;
+            const isLowConfidence = confidence < 0.7;
+            if (isLowConfidence) {
+                return '<em>Limited data available. Suggestion based on basic heuristics. Please review carefully.</em>';
+            }
+            return '<em>Analysis based on task attributes, due date, and project context</em>';
         }
         
         // Get top 2-3 most impactful factors
@@ -191,19 +197,31 @@ class PrioritySuggestionWidget {
             const importance = factor.importance || factor.contribution_percentage;
             
             let importanceHtml = '';
+            let weightClass = 'secondary';
             if (importance) {
                 const pct = typeof importance === 'number' ? 
                     (importance > 1 ? importance : importance * 100).toFixed(0) : importance;
-                importanceHtml = ` <span class="badge bg-secondary" style="font-size: 0.7rem;">${pct}%</span>`;
+                // Color code by importance
+                if (pct >= 30) weightClass = 'danger';
+                else if (pct >= 20) weightClass = 'warning';
+                importanceHtml = ` <span class="badge bg-${weightClass}" style="font-size: 0.7rem;">${pct}%</span>`;
             }
             
             return `<div class="d-flex align-items-center mb-1">
                         <span class="me-1">${icon}</span>
-                        <span>${desc}${importanceHtml}</span>
+                        <span class="small">${desc}${importanceHtml}</span>
                     </div>`;
         }).join('');
         
-        return factorHtml;
+        // Add analysis metadata if available
+        let metaInfo = '';
+        if (this.suggestion.reasoning?.analysis_score) {
+            metaInfo = `<div class="mt-2 pt-2 border-top small text-muted">
+                <i class="fas fa-calculator me-1"></i>Analysis Score: ${this.suggestion.reasoning.analysis_score}
+            </div>`;
+        }
+        
+        return factorHtml + metaInfo;
     }
     
     /**

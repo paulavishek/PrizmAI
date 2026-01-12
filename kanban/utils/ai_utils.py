@@ -632,6 +632,16 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
         prompt = f"""
         Analyze this task and suggest an optimal priority level based on the context provided.
         
+        ## CRITICAL ANALYSIS RULES:
+        1. **Semantic Importance FIRST**: Keywords like "Migration", "Database", "Security", "Critical", 
+           "Production", "Payment", "Compliance", "Deployment", "Outage" suggest HIGH IMPACT regardless of due date
+        2. **Separate Urgency from Importance**: A task due in 10 days has LOW URGENCY but may still need 
+           HIGH PRIORITY if it's critical work (e.g., "Database Migration")
+        3. **Balance Factors**: When there's conflict (e.g., critical keyword + far due date), explain BOTH:
+           "High Impact due to [keyword], but Low Urgency due to [due date]"
+        4. **Workload Distribution**: Consider if the board already has too many high/urgent tasks
+        5. **Dependencies**: Tasks that block others need higher priority
+        
         ## Task Information:
         - Title: {title}
         - Description: {description or 'No description provided'}
@@ -645,12 +655,13 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
         - Overdue Tasks: {overdue_count}
         - Tasks Due Soon: {upcoming_deadlines_count}
         
-        Consider these factors:
-        1. Urgency based on due date proximity
-        2. Impact based on task description and title
-        3. Current workload distribution (avoid too many high/urgent priorities)
-        4. Dependencies and blockers that might be indicated
-        5. Business value implied by the task
+        Consider these factors in order:
+        1. **Semantic keywords** in title/description indicating business impact
+        2. Urgency based on due date proximity
+        3. Impact based on task description and title context
+        4. Current workload distribution (avoid too many high/urgent priorities)
+        5. Dependencies and blockers that might be indicated
+        6. Business value and risk implied by the task
         
         Available priority levels: low, medium, high, urgent
         
