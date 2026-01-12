@@ -116,6 +116,19 @@ class PrioritySuggestionWidget {
                         
                         ${this._renderTopFactors()}
                         
+                        <!-- Show AI Explainability Inline -->
+                        <div class="mt-2 mb-2 p-2 bg-light rounded border border-${label.class} border-opacity-25">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-brain text-${label.class} me-2 mt-1"></i>
+                                <div class="flex-grow-1">
+                                    <strong class="small text-${label.class}">Why AI chose this:</strong>
+                                    <div class="small text-muted mt-1">
+                                        ${this._renderInlineExplanation()}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
                         ${this._renderAlternatives()}
                         
                         <div class="mt-3 d-flex flex-wrap gap-2">
@@ -126,7 +139,7 @@ class PrioritySuggestionWidget {
                                 <i class="fas fa-times"></i> Dismiss
                             </button>
                             <button type="button" class="btn btn-sm btn-outline-info" onclick="event.preventDefault(); prioritySuggestion.toggleDetails()">
-                                <i class="fas fa-lightbulb"></i> Why This?
+                                <i class="fas fa-chart-bar"></i> Full Analysis
                             </button>
                         </div>
                     </div>
@@ -142,6 +155,55 @@ class PrioritySuggestionWidget {
         
         this.isVisible = true;
         container.style.display = 'block';
+    }
+    
+    /**
+     * Render inline explanation showing key factors
+     */
+    _renderInlineExplanation() {
+        const factors = this.suggestion.reasoning?.top_factors || 
+                       this.suggestion.contributing_factors || [];
+        
+        if (factors.length === 0) {
+            return '<em>Based on task attributes and project context</em>';
+        }
+        
+        // Get top 2-3 most impactful factors
+        const topFactors = factors.slice(0, 3);
+        
+        // Create icons map for common factors
+        const factorIcons = {
+            'days_until_due': '📅',
+            'is_overdue': '⏰',
+            'complexity_score': '🧩',
+            'blocking_count': '🚧',
+            'blocked_by_count': '⛔',
+            'assignee_workload': '👤',
+            'collaboration_required': '👥',
+            'risk_score': '⚠️',
+            'has_subtasks': '📋'
+        };
+        
+        const factorHtml = topFactors.map((factor, idx) => {
+            const factorName = factor.factor || '';
+            const icon = factorIcons[factorName] || '•';
+            const desc = factor.description || factor.factor || '';
+            const importance = factor.importance || factor.contribution_percentage;
+            
+            let importanceHtml = '';
+            if (importance) {
+                const pct = typeof importance === 'number' ? 
+                    (importance > 1 ? importance : importance * 100).toFixed(0) : importance;
+                importanceHtml = ` <span class="badge bg-secondary" style="font-size: 0.7rem;">${pct}%</span>`;
+            }
+            
+            return `<div class="d-flex align-items-center mb-1">
+                        <span class="me-1">${icon}</span>
+                        <span>${desc}${importanceHtml}</span>
+                    </div>`;
+        }).join('');
+        
+        return factorHtml;
     }
     
     /**

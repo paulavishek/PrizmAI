@@ -1016,12 +1016,51 @@ function displayPrioritySuggestion(data) {
     // Use stripMarkdown to clean up AI-generated text
     const stripMarkdown = window.AIExplainability?.stripMarkdown || ((text) => text);
     
+    const priorityClass = getPriorityBadgeClass(data.suggested_priority);
+    const confidence = ((data.confidence || 0) * 100).toFixed(0);
+    
+    // Extract reasoning factors
+    const reasoning = data.reasoning || {};
+    const factors = reasoning.top_factors || data.contributing_factors || [];
+    
+    let factorsHtml = '';
+    if (factors && factors.length > 0) {
+        factorsHtml = `
+            <div class="mt-2 p-2 bg-light rounded border">
+                <div class="d-flex align-items-start">
+                    <i class="fas fa-brain text-primary me-2 mt-1"></i>
+                    <div class="flex-grow-1">
+                        <strong class="small text-primary">Why AI chose this:</strong>
+                        <div class="small text-muted mt-1">
+        `;
+        
+        factors.slice(0, 3).forEach(factor => {
+            const desc = factor.description || factor.factor || '';
+            const importance = factor.importance || factor.contribution_percentage;
+            let importanceBadge = '';
+            if (importance) {
+                const pct = typeof importance === 'number' ? 
+                    (importance > 1 ? importance : importance * 100).toFixed(0) : importance;
+                importanceBadge = ` <span class="badge bg-secondary" style="font-size: 0.7rem;">${pct}%</span>`;
+            }
+            factorsHtml += `<div class="mb-1">• ${desc}${importanceBadge}</div>`;
+        });
+        
+        factorsHtml += `
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
     let html = `
-        <div class="alert alert-info">
+        <div class="alert alert-${priorityClass === 'danger' ? 'danger' : priorityClass === 'warning' ? 'warning' : 'info'}">
             <h6><i class="fas fa-robot"></i> AI Priority Suggestion</h6>
-            <p><strong>Suggested Priority:</strong> <span class="badge badge-${getPriorityBadgeClass(data.suggested_priority)}">${data.suggested_priority.toUpperCase()}</span></p>
-            <p><strong>Confidence:</strong> ${data.confidence}</p>
-            <p><strong>Reasoning:</strong> ${stripMarkdown(data.reasoning)}</p>
+            <p><strong>Suggested Priority:</strong> <span class="badge badge-${priorityClass}">${data.suggested_priority.toUpperCase()}</span> 
+               <span class="badge bg-secondary">${confidence}% confident</span></p>
+            <p class="small"><strong>Reasoning:</strong> ${stripMarkdown(reasoning.explanation || data.reasoning)}</p>
+            ${factorsHtml}
     `;
     
     if (data.recommendations && data.recommendations.length > 0) {
@@ -1033,9 +1072,11 @@ function displayPrioritySuggestion(data) {
     }
     
     html += `
-            <button type="button" class="btn btn-sm btn-primary" onclick="applyPrioritySuggestion('${data.suggested_priority}')">
-                Apply Suggestion
-            </button>
+            <div class="mt-3">
+                <button type="button" class="btn btn-sm btn-primary" onclick="applyPrioritySuggestion('${data.suggested_priority}')">
+                    <i class="fas fa-check"></i> Apply Suggestion
+                </button>
+            </div>
         </div>
     `;
     
