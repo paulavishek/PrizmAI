@@ -185,43 +185,19 @@
         display: none !important;
     }
     
-    /* Live filter indicator badge */
-    .live-filter-badge {
-        position: fixed;
-        bottom: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 1050;
+    /* Task Search Bar Styling */
+    #taskSearchCard {
+        border-left: 4px solid #0d6efd;
+    }
+    
+    #liveSearchInput:focus {
+        box-shadow: none;
+        border-color: #0d6efd;
+    }
+    
+    #taskSearchCard .btn-check:checked + .btn-outline-primary {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 10px 20px;
-        border-radius: 25px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
-        font-size: 0.9rem;
-        display: none;
-    }
-    
-    .live-filter-badge.active {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    
-    .live-filter-badge .clear-filter {
-        background: rgba(255,255,255,0.2);
-        border: none;
-        border-radius: 50%;
-        width: 24px;
-        height: 24px;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-    }
-    
-    .live-filter-badge .clear-filter:hover {
-        background: rgba(255,255,255,0.4);
+        border-color: #667eea;
     }
     
 </style>
@@ -260,16 +236,6 @@
         {% if board.description %}
             <p class="text-muted mb-0">{{ board.description }}</p>
         {% endif %}
-        <div class="d-flex align-items-center mt-1 gap-2">
-            <button type="button" class="btn btn-outline-primary btn-sm" onclick="openCommandPalette()" 
-                    title="Open Quick Search (Alt+K or Ctrl+K)">
-                <i class="fas fa-search me-1"></i> Search Tasks
-            </button>
-            <small class="text-muted">
-                or press <kbd class="bg-light px-2 py-1" style="font-size: 0.75rem;">Alt+K</kbd> / 
-                <kbd class="bg-light px-2 py-1" style="font-size: 0.75rem;">Ctrl+K</kbd>
-            </small>
-        </div>
     </div>    <div class="btn-group">
         <button onclick="goBack()" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left me-1"></i> Back
@@ -632,68 +598,44 @@
     </div>
 </div>
 
-<!-- Command Palette Modal (Alt+K / Ctrl+K) -->
-<div class="modal fade" id="commandPaletteModal" tabindex="-1" aria-labelledby="commandPaletteLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content" style="border-radius: 12px; border: none; box-shadow: 0 8px 32px rgba(0,0,0,0.2);">
-            <div class="modal-body p-0">
-                <!-- Search Input -->
-                <div class="command-palette-search" style="border-bottom: 1px solid #e9ecef;">
-                    <div class="input-group input-group-lg border-0">
-                        <span class="input-group-text bg-white border-0 ps-4" style="font-size: 1.3rem;">
-                            <i class="fas fa-search text-primary"></i>
-                        </span>
-                        <input type="text" 
-                               id="commandPaletteInput" 
-                               class="form-control border-0 shadow-none" 
-                               placeholder="Search tasks... (try: 'database migration' or 'urgent tasks')"
-                               autocomplete="off"
-                               style="font-size: 1rem; padding: 1.2rem 0;">
-                        <span class="input-group-text bg-white border-0 pe-4">
-                            <div class="d-flex gap-2 align-items-center">
-                                <span id="searchModeToggle" class="badge bg-primary" style="cursor: pointer; font-size: 0.75rem;" title="Toggle between keyword and AI semantic search">
-                                    <i class="fas fa-brain me-1"></i> AI Search
-                                </span>
-                                <kbd class="bg-light text-muted px-2 py-1" style="font-size: 0.7rem; border: 1px solid #dee2e6;">ESC</kbd>
-                            </div>
-                        </span>
-                    </div>
-                </div>
-                
-                <!-- Search Results -->
-                <div id="commandPaletteResults" class="command-palette-results" style="max-height: 60vh; overflow-y: auto; min-height: 200px;">
-                    <div class="text-center py-5 text-muted" id="commandPaletteEmpty">
-                        <i class="fas fa-keyboard fa-3x mb-3 opacity-25"></i>
-                        <p class="mb-1">Type to search tasks...</p>
-                        <small class="d-block text-muted mt-2">
-                            <kbd class="bg-light px-2 py-1">↑</kbd> <kbd class="bg-light px-2 py-1">↓</kbd> to navigate • 
-                            <kbd class="bg-light px-2 py-1">Enter</kbd> to open • 
-                            <kbd class="bg-light px-2 py-1">ESC</kbd> to close
-                        </small>
-                    </div>
-                    <div id="commandPaletteLoading" class="d-none text-center py-5">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Searching...</span>
-                        </div>
-                        <p class="mt-3 text-muted" id="loadingText">Searching...</p>
-                    </div>
-                    <div id="commandPaletteResultsList" class="list-group list-group-flush d-none"></div>
-                </div>
-                
-                <!-- Quick Tips Footer -->
-                <div class="command-palette-footer px-4 py-2 bg-light" style="border-top: 1px solid #e9ecef; font-size: 0.8rem;">
-                    <div class="d-flex justify-content-between align-items-center text-muted">
-                        <div>
-                            <i class="fas fa-lightbulb text-warning me-1"></i> 
-                            <strong>AI Tip:</strong> Try "login issues", "urgent tasks", or "database work"
-                            <span class="mx-2">•</span>
-                            <i class="fas fa-filter text-primary me-1"></i>
-                            <strong>Filter:</strong> Click "Apply Filter" to hide non-matching tasks
-                        </div>
-                        <span id="resultCount" class="badge bg-secondary"></span>
-                    </div>
+<!-- Task Search Bar - Always Visible -->
+<div class="card mb-4 shadow-sm" id="taskSearchCard">
+    <div class="card-body py-3">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <div class="input-group">
+                    <span class="input-group-text bg-primary text-white">
+                        <i class="fas fa-search"></i>
+                    </span>
+                    <input type="text" 
+                           id="liveSearchInput" 
+                           class="form-control form-control-lg" 
+                           placeholder="Search tasks... (e.g., 'authentication', 'database', 'high priority')"
+                           autocomplete="off">
+                    <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn" style="display: none;">
+                        <i class="fas fa-times"></i>
+                    </button>
                 </div>
             </div>
+            <div class="col-md-4">
+                <div class="d-flex align-items-center gap-2 mt-2 mt-md-0">
+                    <div class="btn-group" role="group">
+                        <input type="radio" class="btn-check" name="searchMode" id="keywordMode" value="keyword" checked>
+                        <label class="btn btn-outline-secondary btn-sm" for="keywordMode">
+                            <i class="fas fa-keyboard me-1"></i> Keyword
+                        </label>
+                        <input type="radio" class="btn-check" name="searchMode" id="aiMode" value="ai">
+                        <label class="btn btn-outline-primary btn-sm" for="aiMode">
+                            <i class="fas fa-brain me-1"></i> AI Search
+                        </label>
+                    </div>
+                    <span id="searchResultCount" class="badge bg-secondary ms-2" style="display: none;"></span>
+                </div>
+            </div>
+        </div>
+        <div id="aiSearchTip" class="mt-2 small text-muted" style="display: none;">
+            <i class="fas fa-lightbulb text-warning me-1"></i>
+            <strong>AI Tip:</strong> Try natural language like "login issues", "urgent bugs", or "tasks for John"
         </div>
     </div>
 </div>
@@ -1337,17 +1279,7 @@
     
     </script>
 
-<!-- Live Filter Indicator Badge -->
-<div id="liveFilterBadge" class="live-filter-badge">
-    <i class="fas fa-filter me-2"></i>
-    <span id="liveFilterText">Filtering: <strong id="liveFilterQuery"></strong></span>
-    <span id="liveFilterCount" class="badge bg-light text-dark ms-2"></span>
-    <button class="clear-filter" onclick="clearLiveFilter()" title="Clear filter">
-        <i class="fas fa-times"></i>
-    </button>
-</div>
-
-<script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'8' }}"></script>
+<script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'9' }}"></script>
 {% endblock %}
 
 {% endblock content %}
