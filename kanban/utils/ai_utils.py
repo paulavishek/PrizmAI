@@ -1015,7 +1015,7 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
                     "description": "Brief description with clear deliverable",
                     "estimated_effort": "1-3 days",
                     "priority": "low|medium|high",
-                    "dependencies": ["indices of dependent subtasks or empty array"],
+                    "dependencies": ["1-based indices of dependent subtasks (e.g., 1, 2, 3) or empty array"],
                     "order": 1,
                     "skill_requirements": ["skill1", "skill2"],
                     "why_needed": "Brief explanation of why this subtask is essential"

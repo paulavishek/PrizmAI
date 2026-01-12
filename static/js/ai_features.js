@@ -1659,8 +1659,8 @@ function displayTaskBreakdown(data) {
                     </div>
                     <p class="mb-1">${subtask.description}</p>
                     <small class="text-${getPriorityBadgeClass(subtask.priority)}">Priority: ${subtask.priority}</small>
-                    ${subtask.dependencies.length > 0 ? 
-                        `<small class="ms-3 text-info">Depends on: ${subtask.dependencies.join(', ')}</small>` : 
+                    ${subtask.dependencies && subtask.dependencies.length > 0 ? 
+                        `<small class="ms-3 text-info">Depends on: ${subtask.dependencies.map(d => parseInt(d) + 1).join(', ')}</small>` : 
                         ''
                     }
                 </div>
@@ -1679,7 +1679,20 @@ function displayTaskBreakdown(data) {
         if (data.risk_considerations && data.risk_considerations.length > 0) {
             html += '<h6 class="mt-3">Risk Considerations:</h6><ul>';
             data.risk_considerations.forEach(risk => {
-                html += `<li class="text-warning">${risk}</li>`;
+                // Handle both string and object formats
+                if (typeof risk === 'string') {
+                    html += `<li class="text-warning">${risk}</li>`;
+                } else if (typeof risk === 'object' && risk.risk) {
+                    html += `<li class="text-warning">`;
+                    html += `<strong>${risk.risk}</strong>`;
+                    if (risk.affected_subtasks && risk.affected_subtasks.length > 0) {
+                        html += `<br><small>Affects: ${risk.affected_subtasks.join(', ')}</small>`;
+                    }
+                    if (risk.mitigation) {
+                        html += `<br><small class="text-muted">Mitigation: ${risk.mitigation}</small>`;
+                    }
+                    html += `</li>`;
+                }
             });
             html += '</ul>';
         }
