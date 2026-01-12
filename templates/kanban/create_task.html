@@ -156,7 +156,8 @@
                             </div>
                         </div>
 
-                        <!-- Regular Labels (for other tags, not LSS) -->
+                        <!-- Regular Labels (for other tags, not LSS) - Only show if non-LSS labels exist -->
+                        {% if form.labels.field.queryset.exists %}
                         <div class="mb-3">
                             <label for="{{ form.labels.id_for_label }}" class="form-label">
                                 <i class="fas fa-tags me-1"></i> Tags/Labels <small class="text-muted">(Optional)</small>
@@ -166,6 +167,7 @@
                                 <div class="invalid-feedback d-block">{{ form.labels.errors }}</div>
                             {% endif %}
                         </div>
+                        {% endif %}
                         
                         <!-- AI Task Breakdown Suggestion -->
                         <div class="mb-3">
