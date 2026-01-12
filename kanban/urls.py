@@ -78,6 +78,9 @@ urlpatterns = [
     path('api/suggest-task-breakdown/', api_views.suggest_task_breakdown_api, name='suggest_task_breakdown_api'),
     path('api/analyze-workflow-optimization/', api_views.analyze_workflow_optimization_api, name='analyze_workflow_optimization_api'),    path('api/create-subtasks/', api_views.create_subtasks_api, name='create_subtasks_api'),
     
+    # AI Semantic Search
+    path('api/search-tasks-semantic/', api_views.search_tasks_semantic_api, name='search_tasks_semantic_api'),
+    
     # Risk Management API Endpoints
     path('api/kanban/calculate-task-risk/', api_views.calculate_task_risk_api, name='calculate_task_risk_api'),
     path('api/kanban/get-mitigation-suggestions/', api_views.get_mitigation_suggestions_api, name='get_mitigation_suggestions_api'),

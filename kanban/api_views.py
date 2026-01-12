@@ -3782,3 +3782,179 @@ def get_skill_gap_detail_api(request, gap_id):
     except Exception as e:
         logger.error(f"Error in get_skill_gap_detail_api: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def search_tasks_semantic_api(request):
+    """
+    AI-powered semantic search for tasks using Gemini
+    Understands natural language queries and finds relevant tasks
+    """
+    start_time = time.time()
+    try:
+        # Check demo mode AI generation limit
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
+        
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
+        
+        data = json.loads(request.body)
+        query = data.get('query', '').strip()
+        board_id = data.get('board_id')
+        
+        if not query:
+            return JsonResponse({'error': 'Query is required'}, status=400)
+        
+        # Get board and verify access
+        if board_id:
+            board = get_object_or_404(Board, id=board_id)
+            if not (board.created_by == request.user or request.user in board.members.all()):
+                return JsonResponse({'error': 'Access denied'}, status=403)
+            
+            # Get tasks from this board
+            tasks = Task.objects.filter(column__board=board).select_related(
+                'column', 'assigned_to', 'created_by'
+            ).prefetch_related('labels')
+        else:
+            # Get all accessible tasks
+            owned_boards = Board.objects.filter(created_by=request.user)
+            member_boards = Board.objects.filter(members=request.user)
+            accessible_boards = owned_boards | member_boards
+            
+            tasks = Task.objects.filter(
+                column__board__in=accessible_boards
+            ).select_related('column', 'assigned_to', 'created_by').prefetch_related('labels')
+        
+        # Prepare task data for AI analysis
+        tasks_data = []
+        for task in tasks[:100]:  # Limit to 100 tasks to avoid token overflow
+            labels = [label.name for label in task.labels.all()]
+            tasks_data.append({
+                'id': task.id,
+                'title': task.title,
+                'description': task.description or '',
+                'priority': task.priority,
+                'column': task.column.name if task.column else '',
+                'labels': labels,
+                'assignee': task.assigned_to.get_full_name() if task.assigned_to else ''
+            })
+        
+        # Call AI for semantic search
+        from kanban.utils.ai_utils import generate_ai_content
+        
+        prompt = f"""You are a semantic search assistant for a project management tool. Analyze the user's search query and find the most relevant tasks.
+
+USER QUERY: "{query}"
+
+AVAILABLE TASKS:
+{json.dumps(tasks_data[:50], indent=2)}
+
+INSTRUCTIONS:
+1. Understand the user's intent and what they're looking for
+2. Find tasks that match the query semantically (not just keyword matching)
+3. Consider synonyms, related concepts, and context
+4. Rank tasks by relevance (0.0 to 1.0)
+5. Provide a brief explanation of why each task matches
+6. Return only the most relevant tasks (top 10 maximum)
+
+Examples of semantic understanding:
+- "login issues" should match "Auth failure", "Password reset bug", "Session timeout"
+- "urgent tasks" should match high priority tasks, tasks with near deadlines
+- "database work" should match "DB migration", "SQL optimization", "Schema changes"
+
+Format your response as JSON:
+{{
+    "explanation": "Brief explanation of how you interpreted the query",
+    "results": [
+        {{
+            "id": task_id,
+            "title": "task title",
+            "relevance_score": 0.95,
+            "match_reason": "Why this task matches the query"
+        }}
+    ]
+}}
+
+Only include tasks with relevance_score >= 0.3"""
+        
+        response_text = generate_ai_content(prompt, task_type='simple')
+        
+        if not response_text:
+            # Fallback to keyword search
+            return JsonResponse({
+                'success': False,
+                'fallback': True,
+                'message': 'AI search unavailable, use keyword search'
+            })
+        
+        # Parse AI response
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].strip()
+        
+        search_result = json.loads(response_text)
+        
+        # Enrich results with full task data
+        enriched_results = []
+        for result in search_result.get('results', []):
+            task = next((t for t in tasks_data if t['id'] == result['id']), None)
+            if task:
+                enriched_results.append({
+                    **task,
+                    'relevance_score': result.get('relevance_score', 0),
+                    'match_reason': result.get('match_reason', '')
+                })
+        
+        # Increment demo AI generation count
+        increment_ai_generation_count(request)
+        
+        # Track successful request
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='semantic_search',
+            request_type='search',
+            board_id=board_id,
+            success=True,
+            response_time_ms=response_time_ms
+        )
+        
+        return JsonResponse({
+            'success': True,
+            'explanation': search_result.get('explanation', ''),
+            'results': enriched_results,
+            'query': query
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in semantic search: {str(e)}")
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='semantic_search',
+            request_type='search',
+            board_id=data.get('board_id'),
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'fallback': True
+        })
+
