@@ -366,9 +366,6 @@ class PrioritySuggestionWidget {
             </div>
         `;
     }
-            </div>
-        `;
-    }
     
     /**
      * Accept the suggested priority
