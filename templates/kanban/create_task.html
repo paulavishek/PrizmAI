@@ -114,6 +114,7 @@
                             
                             <div class="lss-radio-group">
                                 {% for value, label in form.lss_classification.field.choices %}
+                                {% if value %}  {# Skip empty choice #}
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="lss_classification" 
                                            id="lss_{{ value }}" value="{{ value }}"
@@ -123,7 +124,7 @@
                                             <span class="badge bg-success">{{ label }}</span>
                                             <small class="text-muted">- Directly adds customer value</small>
                                         {% elif value == 'necessary_nva' %}
-                                            <span class="badge bg-warning">{{ label }}</span>
+                                            <span class="badge bg-warning text-dark">{{ label }}</span>
                                             <small class="text-muted">- Required but doesn't add direct value</small>
                                         {% elif value == 'waste' %}
                                             <span class="badge bg-danger">{{ label }}</span>
@@ -131,6 +132,7 @@
                                         {% endif %}
                                     </label>
                                 </div>
+                                {% endif %}
                                 {% endfor %}
                             </div>
                             
@@ -157,10 +159,9 @@
                         <!-- Regular Labels (for other tags, not LSS) -->
                         <div class="mb-3">
                             <label for="{{ form.labels.id_for_label }}" class="form-label">
-                                Tags/Labels
+                                <i class="fas fa-tags me-1"></i> Tags/Labels <small class="text-muted">(Optional)</small>
                             </label>
                             {{ form.labels }}
-                            <small class="form-text text-muted">Optional: Add tags for organization (Hold Ctrl to select multiple)</small>
                             {% if form.labels.errors %}
                                 <div class="invalid-feedback d-block">{{ form.labels.errors }}</div>
                             {% endif %}

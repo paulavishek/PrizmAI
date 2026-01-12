@@ -199,7 +199,8 @@ class TaskForm(forms.ModelForm):
                     self.fields['mitigation_strategies_text'].initial = '\n'.join(mitigation_lines)
         
         if board:
-            self.fields['labels'].queryset = TaskLabel.objects.filter(board=board)
+            # Filter out Lean Six Sigma labels - they have their own dedicated field
+            self.fields['labels'].queryset = TaskLabel.objects.filter(board=board).exclude(category='lean')
             self.fields['assigned_to'].queryset = board.members.all()
             
             # Filter dependencies to only show tasks from the same board with dates
