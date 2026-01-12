@@ -170,6 +170,9 @@ function performKeywordFilter(query) {
     let matchCount = 0;
     
     searchState.allTasks.forEach(task => {
+        // Remove any AI match badges when switching to keyword search
+        removeAIMatchBadge(task.element);
+        
         const matches = 
             task.title.toLowerCase().includes(queryLower) ||
             task.description.toLowerCase().includes(queryLower) ||
