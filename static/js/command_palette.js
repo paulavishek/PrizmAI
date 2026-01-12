@@ -21,18 +21,23 @@ document.addEventListener('DOMContentLoaded', function() {
  */
 function initializeCommandPalette() {
     // Keyboard shortcut (Ctrl+K or Cmd+K)
+    // Use capture phase to intercept before browser shortcuts
     document.addEventListener('keydown', function(e) {
-        // Ctrl+K or Cmd+K
-        if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        // Ctrl+K or Cmd+K (check both lowercase and uppercase)
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
             e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
             openCommandPalette();
+            return false;
         }
         
         // ESC to close
         if (e.key === 'Escape' && commandPaletteState.isOpen) {
+            e.preventDefault();
             closeCommandPalette();
         }
-    });
+    }, true); // Use capture phase
     
     // Search input handler
     const searchInput = document.getElementById('commandPaletteInput');
