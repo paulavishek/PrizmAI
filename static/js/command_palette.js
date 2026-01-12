@@ -89,7 +89,14 @@ function collectAllTasks() {
     const taskCards = document.querySelectorAll('.kanban-task');
     
     taskCards.forEach(card => {
-        const taskId = card.getAttribute('data-task-id');
+        // Try data-task-id first, then fallback to parsing the id attribute (format: "task-123")
+        let taskId = card.getAttribute('data-task-id');
+        if (!taskId) {
+            const elementId = card.getAttribute('id');
+            if (elementId && elementId.startsWith('task-')) {
+                taskId = elementId.replace('task-', '');
+            }
+        }
         const titleElement = card.querySelector('.task-title a');
         const title = titleElement ? titleElement.textContent.trim() : '';
         const descriptionElement = card.querySelector('.task-description');
