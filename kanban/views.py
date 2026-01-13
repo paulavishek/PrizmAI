@@ -607,6 +607,8 @@ def task_detail(request, task_id):
                     # Store who made the change for signal handler
                     task._changed_by_user = request.user
                     task.save()
+                    # Save many-to-many relationships (dependencies, labels, related_tasks)
+                    form.save_m2m()
                 
                 # Record activity
                 TaskActivity.objects.create(
