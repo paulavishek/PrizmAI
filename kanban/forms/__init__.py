@@ -250,10 +250,15 @@ class TaskForm(forms.ModelForm):
         self.fields['related_tasks'].required = False
         self.fields['parent_task'].required = False
         self.fields['complexity_score'].required = False
+        self.fields['progress'].required = False  # Progress defaults to 0 for new tasks
         
         # Set initial value for complexity score if editing existing task
         if self.instance and self.instance.pk and self.instance.complexity_score:
             self.fields['complexity_score'].initial = self.instance.complexity_score
+        
+        # Set initial value for progress (0 for new tasks)
+        if not self.instance.pk:
+            self.fields['progress'].initial = 0
         
         # Set help text for complexity score
         self.fields['complexity_score'].help_text = 'Rate the task complexity from 1 (simple) to 10 (very complex). AI can suggest this value.'
