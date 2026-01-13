@@ -1878,6 +1878,12 @@ def create_subtasks_api(request):
                     description += f"\n\n*Subtask of: {original_task_title}*"
                 
                 # Create the task
+                # Check if in demo mode to set created_by_session
+                is_demo_mode = request.session.get('is_demo_mode', False)
+                created_by_session = None
+                if is_demo_mode:
+                    created_by_session = request.session.get('browser_fingerprint') or request.session.session_key
+                
                 task = Task.objects.create(
                     title=title,
                     description=description,
@@ -1885,7 +1891,8 @@ def create_subtasks_api(request):
                     priority=priority,
                     due_date=due_date,
                     created_by=request.user,
-                    position=Task.objects.filter(column=column).count()  # Add to end
+                    position=Task.objects.filter(column=column).count(),  # Add to end
+                    created_by_session=created_by_session
                 )
                 
                 created_tasks.append({

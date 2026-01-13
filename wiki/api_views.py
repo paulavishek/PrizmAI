@@ -371,13 +371,19 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                     }
                     priority = priority_map.get(action_item.get('priority', 'medium'), 'medium')
                     
-                    # Create task
+                    # Create task - mark as user-created in demo mode
+                    is_demo_mode = request.session.get('is_demo_mode', False)
+                    created_by_session = None
+                    if is_demo_mode:
+                        created_by_session = request.session.get('browser_fingerprint') or request.session.session_key
+                    
                     task = Task.objects.create(
                         title=action_item['title'][:200],  # Limit title length
                         description=action_item.get('description', ''),
                         column=target_column,
                         priority=priority,
-                        created_by=request.user
+                        created_by=request.user,
+                        created_by_session=created_by_session
                     )
                     
                     # Try to assign if suggested

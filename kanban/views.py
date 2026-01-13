@@ -855,6 +855,15 @@ def create_task(request, board_id, column_id=None):
             # Set position to be at the end of the column
             last_position = Task.objects.filter(column=column).order_by('-position').first()
             task.position = (last_position.position + 1) if last_position else 0
+            
+            # If in demo mode, track this task as user-created (prevents date refresh from modifying it)
+            if is_demo_mode:
+                browser_fingerprint = request.session.get('browser_fingerprint')
+                if browser_fingerprint:
+                    task.created_by_session = browser_fingerprint
+                else:
+                    task.created_by_session = request.session.session_key
+            
             # Store who created the task for signal handler
             task._changed_by_user = task.created_by
             task.save()
@@ -2081,8 +2090,13 @@ def import_board(request):
             )
             
             # Create tasks for this column
+            is_demo_mode = request.session.get('is_demo_mode', False)
             for task_index, task_data in enumerate(column_data.get('tasks', [])):
-                # Create the task
+                # Create the task - mark as user-created in demo mode
+                created_by_session = None
+                if is_demo_mode:
+                    created_by_session = request.session.get('browser_fingerprint') or request.session.session_key
+                
                 new_task = Task.objects.create(
                     title=task_data.get('title', f'Task {task_index+1}'),
                     description=task_data.get('description', ''),
@@ -2090,7 +2104,8 @@ def import_board(request):
                     position=task_data.get('position', task_index),
                     created_by=request.user,
                     priority=task_data.get('priority', 'medium'),
-                    progress=task_data.get('progress', 0)
+                    progress=task_data.get('progress', 0),
+                    created_by_session=created_by_session
                 )
                 
                 # Handle assigned_to if provided
@@ -2360,13 +2375,16 @@ def wizard_create_task(request):
                     task_description = enhanced['enhanced_description']
             
             # Create the task
+            is_demo_mode = request.session.get('is_demo_mode', False)
             task = Task.objects.create(
                 title=task_title,
                 description=task_description,
                 column=first_column,
                 created_by=request.user,
                 assigned_to=request.user,
-                priority='medium'
+                priority='medium',
+                # If in demo mode, mark as user-created to prevent date refresh
+                created_by_session=request.session.get('browser_fingerprint') or request.session.session_key if is_demo_mode else None
             )
             
             return JsonResponse({
