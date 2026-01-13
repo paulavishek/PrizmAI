@@ -1,5 +1,37 @@
 from django import forms
 from ..models import Board, Column, Task, TaskLabel, Comment, TaskFile, Milestone
+from django.utils import timezone
+from datetime import datetime
+
+
+class LocalDateTimeInput(forms.DateTimeInput):
+    """
+    Custom widget for datetime-local input that properly handles timezone-aware datetimes.
+    This widget ensures that datetime values are displayed in the user's local timezone
+    and properly parsed when submitted from the browser.
+    """
+    input_type = 'datetime-local'
+    
+    def format_value(self, value):
+        """Format value for datetime-local input (YYYY-MM-DDTHH:MM)"""
+        if value is None or value == '':
+            return None
+        
+        # If value is a string, try to parse it first
+        if isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            except (ValueError, AttributeError):
+                return None
+        
+        # Convert timezone-aware datetime to local timezone for display
+        if timezone.is_aware(value):
+            # Convert to local timezone for proper display
+            value = timezone.localtime(value)
+        
+        # Format as YYYY-MM-DDTHH:MM for datetime-local input
+        return value.strftime('%Y-%m-%dT%H:%M')
+
 
 class BoardForm(forms.ModelForm):
     class Meta:
@@ -68,9 +100,8 @@ class TaskForm(forms.ModelForm):
                 'type': 'date',
                 'title': 'When this task should start (for Gantt chart)'
             }),
-            'due_date': forms.DateTimeInput(attrs={
-                'class': 'form-control', 
-                'type': 'datetime-local',
+            'due_date': LocalDateTimeInput(attrs={
+                'class': 'form-control',
                 'title': 'When this task should be completed'
             }),
             'assigned_to': forms.Select(attrs={'class': 'form-select'}),
@@ -310,6 +341,18 @@ class TaskForm(forms.ModelForm):
             if progress > 100:
                 raise forms.ValidationError("Progress cannot exceed 100%.")
         return progress
+    
+    def clean_due_date(self):
+        """
+        Properly handle due_date from datetime-local input.
+        Browser sends datetime as naive (without timezone), so we need to make it aware.
+        """
+        due_date = self.cleaned_data.get('due_date')
+        if due_date and timezone.is_naive(due_date):
+            # Make the naive datetime aware using the current timezone
+            # This assumes the user entered the datetime in their local timezone
+            due_date = timezone.make_aware(due_date, timezone.get_current_timezone())
+        return due_date
     
     def clean(self):
         """Calculate risk_score automatically if likelihood and impact are provided, and validate parent_task"""
