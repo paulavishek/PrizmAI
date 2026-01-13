@@ -1419,6 +1419,65 @@ function applyDeadlinePrediction(deadline) {
 }
 
 /**
+ * Highlight due date field for user review after high complexity detection
+ */
+function highlightDueDateForReview() {
+    const dueDateInput = document.getElementById('id_due_date');
+    const dueDateSection = dueDateInput ? dueDateInput.closest('.col-md-6') : null;
+    
+    if (dueDateSection) {
+        // Add pulsing highlight effect
+        dueDateSection.style.backgroundColor = '#fff3cd';
+        dueDateSection.style.border = '2px solid #ffc107';
+        dueDateSection.style.borderRadius = '8px';
+        dueDateSection.style.padding = '10px';
+        dueDateSection.style.transition = 'all 0.3s ease';
+        
+        // Scroll to due date field
+        dueDateSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        
+        // Focus the input
+        if (dueDateInput) {
+            dueDateInput.focus();
+        }
+        
+        // Remove highlight after 5 seconds
+        setTimeout(() => {
+            dueDateSection.style.backgroundColor = '';
+            dueDateSection.style.border = '';
+            dueDateSection.style.padding = '';
+        }, 5000);
+    }
+}
+
+/**
+ * Re-trigger deadline prediction button after complexity analysis
+ */
+function repredictDeadlineWithComplexity(complexityScore) {
+    const predictButton = document.getElementById('predict-deadline-btn');
+    if (predictButton) {
+        // Store complexity score for context (optional for future backend integration)
+        window.lastComplexityScore = complexityScore;
+        
+        // Show user feedback
+        const toast = document.createElement('div');
+        toast.className = 'alert alert-info position-fixed top-0 start-50 translate-middle-x mt-3';
+        toast.style.zIndex = '9999';
+        toast.innerHTML = `<i class="fas fa-info-circle"></i> Re-calculating deadline with complexity score of ${complexityScore}/10...`;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.remove();
+        }, 2000);
+        
+        // Trigger the predict deadline button
+        predictButton.click();
+    } else {
+        alert('Please use the "Predict" button next to the Due Date field to calculate an optimal deadline.');
+    }
+}
+
+/**
  * Utility function to get priority badge class
  * Supports accessibility mode with colorblind-friendly colors
  */
@@ -1644,6 +1703,28 @@ function displayTaskBreakdown(data) {
             <p><strong>Complexity Score:</strong> ${data.complexity_score}/10</p>
             <p><strong>Breakdown Recommended:</strong> ${data.is_breakdown_recommended ? 'Yes' : 'No'}</p>
             <p><strong>Analysis:</strong> ${data.reasoning}</p>
+    `;
+    
+    // High Complexity Warning - nudge user about due date
+    if (data.complexity_score > 7) {
+        html += `
+            <div class="alert alert-danger mt-3 mb-0" role="alert">
+                <h6 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> High Complexity Detected!</h6>
+                <p class="mb-2">This task has a complexity score of <strong>${data.complexity_score}/10</strong>. 
+                The current due date might be too aggressive.</p>
+                <p class="mb-2"><strong>Recommendation:</strong> Consider extending the deadline by <strong>2-3 days</strong> 
+                to account for the task complexity.</p>
+                <button type="button" class="btn btn-sm btn-warning mt-2" onclick="highlightDueDateForReview()">
+                    <i class="fas fa-calendar-check me-1"></i> Review Due Date
+                </button>
+                <button type="button" class="btn btn-sm btn-info mt-2 ms-2" onclick="repredictDeadlineWithComplexity(${data.complexity_score})">
+                    <i class="fas fa-brain me-1"></i> Re-predict Deadline
+                </button>
+            </div>
+        `;
+    }
+    
+    html += `
     `;
     
     if (data.is_breakdown_recommended && data.subtasks && data.subtasks.length > 0) {
