@@ -1275,46 +1275,57 @@ function displayDeadlinePrediction(data) {
     if (data.velocity_analysis) {
         const velocity = data.velocity_analysis;
         
-        // Determine trend styling based on value
+        // Determine trend styling and icon based on value
         let trendClass = '';
+        let trendIcon = '';
         let trendDisplay = velocity.velocity_trend;
         
         if (velocity.velocity_trend === 'Pending' || velocity.velocity_trend === 'N/A') {
             trendClass = 'text-muted';
+            trendIcon = '<i class="fas fa-clock"></i>';
+            trendDisplay = 'Pending';
         } else if (velocity.velocity_trend === 'accelerating') {
             trendClass = 'text-success';
+            trendIcon = '<i class="fas fa-arrow-up"></i>';
+            trendDisplay = '<span class="d-none d-sm-inline">Accelerating</span>';
         } else if (velocity.velocity_trend === 'declining') {
             trendClass = 'text-danger';
+            trendIcon = '<i class="fas fa-arrow-down"></i>';
+            trendDisplay = '<span class="d-none d-sm-inline">Declining</span>';
         } else {
             trendClass = 'text-primary';
+            trendIcon = '<i class="fas fa-arrows-alt-h"></i>';
+            trendDisplay = '<span class="d-none d-sm-inline">Steady</span>';
         }
         
         html += `
             <div class="velocity-section mb-3">
                 <h6 class="small fw-bold text-muted">VELOCITY ANALYSIS</h6>
-                <div class="row text-center">
-                    <div class="col-3">
-                        <div class="metric-box">
-                            <div class="small text-muted">Current</div>
+                <div class="row text-center g-2">
+                    <div class="col-6 col-sm-3">
+                        <div class="metric-box p-2">
+                            <div class="small text-muted text-nowrap">Current</div>
                             <div class="fw-bold">${velocity.current_velocity}</div>
                         </div>
                     </div>
-                    <div class="col-3">
-                        <div class="metric-box">
-                            <div class="small text-muted">Expected</div>
+                    <div class="col-6 col-sm-3">
+                        <div class="metric-box p-2">
+                            <div class="small text-muted text-nowrap">Expected</div>
                             <div class="fw-bold">${velocity.expected_velocity}</div>
                         </div>
                     </div>
-                    <div class="col-3">
-                        <div class="metric-box">
-                            <div class="small text-muted">Trend</div>
-                            <div class="fw-bold ${trendClass}">${trendDisplay}</div>
+                    <div class="col-6 col-sm-3">
+                        <div class="metric-box p-2">
+                            <div class="small text-muted text-nowrap">Trend</div>
+                            <div class="fw-bold ${trendClass}">
+                                ${trendIcon} ${trendDisplay}
+                            </div>
                         </div>
                     </div>
-                    <div class="col-3">
-                        <div class="metric-box">
-                            <div class="small text-muted">Remaining</div>
-                            <div class="fw-bold">${velocity.remaining_effort_hours}h</div>
+                    <div class="col-6 col-sm-3">
+                        <div class="metric-box p-2">
+                            <div class="small text-muted text-nowrap">Remaining</div>
+                            <div class="fw-bold text-nowrap">${velocity.remaining_effort_hours}h</div>
                         </div>
                     </div>
                 </div>

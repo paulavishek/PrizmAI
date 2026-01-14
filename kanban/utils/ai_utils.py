@@ -746,6 +746,19 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         current_workload = team_context.get('assignee_current_tasks', 0)
         similar_tasks_avg = team_context.get('similar_tasks_avg_days', 0)
         upcoming_holidays = team_context.get('upcoming_holidays', [])
+        assignee_completed_count = team_context.get('assignee_completed_tasks_count', 0)
+        assignee_velocity = team_context.get('assignee_velocity_hours_per_day', 8)
+        
+        # Calculate performance comparison
+        if team_avg_completion > 0 and assignee_avg_completion > 0:
+            if assignee_avg_completion < team_avg_completion:
+                performance_note = f"{assigned_to} is {round((1 - assignee_avg_completion/team_avg_completion) * 100)}% FASTER than team average"
+            elif assignee_avg_completion > team_avg_completion:
+                performance_note = f"{assigned_to} is {round((assignee_avg_completion/team_avg_completion - 1) * 100)}% SLOWER than team average"
+            else:
+                performance_note = f"{assigned_to} performs at team average speed"
+        else:
+            performance_note = "No historical data available for comparison"
         
         prompt = f"""
         Predict a realistic timeline for completing this task based on the provided context and historical data.
@@ -756,23 +769,28 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         - Priority: {priority}
         - Assigned To: {assigned_to}
         
-        ## Historical Context:
-        - Assignee's Average Completion Time: {assignee_avg_completion} days
+        ## Historical Context (IMPORTANT - Use these actual metrics for {assigned_to}):
+        - {assigned_to}'s Personal Average Completion Time: {assignee_avg_completion} days (based on {assignee_completed_count} completed tasks)
+        - {assigned_to}'s Estimated Velocity: {assignee_velocity} hours/day
         - Team Average Completion Time: {team_avg_completion} days
+        - Performance Comparison: {performance_note}
         - Similar Tasks Average: {similar_tasks_avg} days
-        - Assignee's Current Workload: {current_workload} active tasks
+        - {assigned_to}'s Current Workload: {current_workload} active tasks
         - Upcoming Holidays/Breaks: {', '.join(upcoming_holidays) if upcoming_holidays else 'None'}
         
         Consider these factors:
         1. Task complexity based on title and description
-        2. Assignee's historical performance
-        3. Current workload impact
+        2. {assigned_to}'s SPECIFIC historical performance (use the actual numbers above!)
+        3. Current workload impact on {assigned_to}
         4. Priority level urgency
         5. Potential dependencies or blockers
         6. Buffer time for reviews/testing
         7. Holidays or known interruptions
         
-        IMPORTANT: Predict the number of DAYS from today that this task should be completed, not absolute dates.
+        IMPORTANT: 
+        - Predict the number of DAYS from today that this task should be completed, not absolute dates.
+        - Use {assigned_to}'s ACTUAL historical average of {assignee_avg_completion} days as your baseline, NOT the team average.
+        - If {assignee_completed_count} is 0, fall back to team average but mention this in reasoning.
         
         Format your response as JSON WITH EXPLAINABILITY:
         {{

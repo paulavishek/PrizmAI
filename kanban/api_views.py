@@ -1359,6 +1359,7 @@ def predict_deadline_api(request):
         
         team_avg_completion = 5  # Default fallback
         assignee_avg_completion = 5  # Default fallback
+        assignee_velocity_hours = 8  # Default: 8 hours/day
         
         if completed_tasks.exists():
             # Simple calculation based on created_at to completion
@@ -1374,24 +1375,61 @@ def predict_deadline_api(request):
             if count > 0:
                 team_avg_completion = total_days / count
         
-        # Get assignee's current workload
+        # Get assignee's current workload AND their personal historical completion times
         assignee_current_tasks = 0
+        assignee_completed_count = 0
         if assigned_to and assigned_to != 'Unassigned':
             from django.contrib.auth.models import User
             try:
                 assignee_user = User.objects.get(username=assigned_to)
+                
+                # Count assignee's current incomplete tasks (workload)
                 assignee_current_tasks = Task.objects.filter(
                     column__board=board,
                     assigned_to=assignee_user
                 ).exclude(progress=100).count()
+                
+                # Calculate assignee's PERSONAL average completion time
+                assignee_completed_tasks = Task.objects.filter(
+                    column__board=board,
+                    assigned_to=assignee_user,
+                    progress=100
+                )
+                
+                if assignee_completed_tasks.exists():
+                    assignee_total_days = 0
+                    assignee_count = 0
+                    for task in assignee_completed_tasks:
+                        if task.updated_at and task.created_at:
+                            days_to_complete = (task.updated_at - task.created_at).days
+                            if days_to_complete > 0:
+                                assignee_total_days += days_to_complete
+                                assignee_count += 1
+                    
+                    if assignee_count > 0:
+                        assignee_avg_completion = assignee_total_days / assignee_count
+                        assignee_completed_count = assignee_count
+                        # Estimate velocity: assume 8 working hours per day as baseline
+                        # Faster completers get higher velocity estimate
+                        if assignee_avg_completion < team_avg_completion:
+                            # Assignee is faster than team average
+                            velocity_boost = team_avg_completion / assignee_avg_completion
+                            assignee_velocity_hours = min(10, 8 * velocity_boost)  # Cap at 10 hrs/day
+                        else:
+                            # Assignee is slower than team average
+                            velocity_reduction = assignee_avg_completion / team_avg_completion
+                            assignee_velocity_hours = max(4, 8 / velocity_reduction)  # Min 4 hrs/day
+                            
             except User.DoesNotExist:
                 pass
         
         team_context = {
-            'assignee_avg_completion_days': assignee_avg_completion,
-            'team_avg_completion_days': team_avg_completion,
+            'assignee_avg_completion_days': round(assignee_avg_completion, 1),
+            'team_avg_completion_days': round(team_avg_completion, 1),
             'assignee_current_tasks': assignee_current_tasks,
-            'similar_tasks_avg_days': team_avg_completion,  # Simplified
+            'assignee_completed_tasks_count': assignee_completed_count,
+            'assignee_velocity_hours_per_day': round(assignee_velocity_hours, 1),
+            'similar_tasks_avg_days': round(team_avg_completion, 1),  # Simplified
             'upcoming_holidays': []  # Could be enhanced to include actual holidays
         }
         
