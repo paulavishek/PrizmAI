@@ -76,6 +76,10 @@ def calculate_engagement_metrics(board):
         metrics, created = EngagementMetrics.objects.get_or_create(
             board=board,
             stakeholder=stakeholder,
+            defaults={
+                'period_start': start_date,
+                'period_end': end_date,
+            }
         )
         
         # Update metrics
