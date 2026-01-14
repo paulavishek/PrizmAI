@@ -1,0 +1,520 @@
+﻿{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Create Task - PrizmAI{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow mb-4">
+                <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        {% if column %}
+                            Add Task to {{ column.name }}
+                        {% else %}
+                            Create New Task
+                        {% endif %}
+                    </h6>
+                    <button onclick="goBack()" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i> Back
+                    </button>
+                </div>
+                <div class="card-body">
+                    <form method="post" class="task-form">
+                        {% csrf_token %}
+                        
+                        <!-- Display form-level errors -->
+                        {% if form.errors %}
+                        <div class="alert alert-danger mb-3" role="alert">
+                            <h6 class="alert-heading"><i class="fas fa-exclamation-circle"></i> Please fix the following errors:</h6>
+                            {% if form.non_field_errors %}
+                                <ul class="mb-0">
+                                {% for error in form.non_field_errors %}
+                                    <li>{{ error }}</li>
+                                {% endfor %}
+                                </ul>
+                            {% endif %}
+                            {% for field in form %}
+                                {% if field.errors %}
+                                    <p class="mb-1"><strong>{{ field.label }}:</strong> {{ field.errors|join:", " }}</p>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                        
+                        <div class="mb-3">
+                            <label for="{{ form.title.id_for_label }}" class="form-label">Title</label>
+                            {{ form.title }}
+                            {% if form.title.errors %}
+                                <div class="invalid-feedback d-block">{{ form.title.errors }}</div>
+                            {% endif %}
+                        </div>
+                          <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label for="{{ form.description.id_for_label }}" class="form-label mb-0">Description</label>
+                                <button type="button" id="generate-ai-description" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-robot me-1"></i> Generate with AI
+                                </button>
+                            </div>
+                            {{ form.description }}
+                            <div id="ai-spinner" class="d-none text-center mt-2">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <span class="ms-2 text-muted">Generating description with AI...</span>
+                            </div>
+                            {% if form.description.errors %}
+                                <div class="invalid-feedback d-block">{{ form.description.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Assigned To - Moved above Due Date for better UX flow -->
+                        <div class="mb-3">
+                            <label for="{{ form.assigned_to.id_for_label }}" class="form-label">
+                                <i class="fas fa-user-check me-1"></i> Assigned To
+                            </label>
+                            {{ form.assigned_to }}
+                            <small class="form-text text-muted">
+                                <i class="fas fa-info-circle me-1"></i>Select an assignee to enable AI deadline prediction below.
+                            </small>
+                            {% if form.assigned_to.errors %}
+                                <div class="invalid-feedback d-block">{{ form.assigned_to.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label for="{{ form.due_date.id_for_label }}" class="form-label mb-0">Due Date</label>
+                                    <button type="button" id="predict-deadline-btn" class="btn btn-sm btn-outline-info" 
+                                            data-board-id="{{ board.id }}" title="AI-powered deadline prediction">
+                                        <i class="fas fa-brain me-1"></i> Predict
+                                    </button>
+                                </div>
+                                {{ form.due_date }}
+                                <!-- Helper text for prediction requirements -->
+                                <small id="predict-assignee-hint" class="form-text text-warning d-none">
+                                    <i class="fas fa-exclamation-circle me-1"></i>Please select an assignee above to enable AI prediction.
+                                </small>
+                                <div id="deadline-ai-spinner" class="d-none text-center mt-1">
+                                    <div class="spinner-border spinner-border-sm text-info" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <span class="ms-2 text-muted small">Predicting optimal deadline...</span>
+                                </div>
+                                <div id="deadline-prediction-result" class="d-none mt-2"></div>
+                                {% if form.due_date.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.due_date.errors }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label for="{{ form.priority.id_for_label }}" class="form-label mb-0">Priority</label>
+                                    <button type="button" id="suggest-priority-btn" class="btn btn-sm btn-outline-warning" 
+                                            data-board-id="{{ board.id }}" title="AI-powered priority suggestion">
+                                        <i class="fas fa-magic me-1"></i> Suggest
+                                    </button>
+                                </div>
+                                <div id="priority-suggestion-container" class="mb-2"></div>
+                                {{ form.priority }}
+                                <div id="priority-ai-spinner" class="d-none text-center mt-1">
+                                    <div class="spinner-border spinner-border-sm text-warning" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <span class="ms-2 text-muted small">Analyzing optimal priority...</span>
+                                </div>
+                                {% if form.priority.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.priority.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- Lean Six Sigma Classification (Single-select) -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label mb-0">
+                                    <i class="fas fa-chart-line me-1"></i> Lean Six Sigma Classification
+                                    <button type="button" class="btn btn-sm p-0" data-bs-toggle="modal" data-bs-target="#leanLabelsInfoModal">
+                                        <i class="fas fa-info-circle text-primary" title="Learn about Lean Six Sigma categories"></i>
+                                    </button>
+                                </label>
+                                <button type="button" id="suggest-lss-classification" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-robot me-1"></i> Suggest LSS
+                                </button>
+                            </div>
+                            
+                            <div class="lss-radio-group">
+                                {% for value, label in form.lss_classification.field.choices %}
+                                {% if value %}  {# Skip empty choice #}
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="lss_classification" 
+                                           id="lss_{{ value }}" value="{{ value }}"
+                                           {% if form.lss_classification.value == value %}checked{% endif %}>
+                                    <label class="form-check-label" for="lss_{{ value }}">
+                                        {% if value == 'value_added' %}
+                                            <span class="badge bg-success">{{ label }}</span>
+                                            <small class="text-muted">- Directly adds customer value</small>
+                                        {% elif value == 'necessary_nva' %}
+                                            <span class="badge bg-warning text-dark">{{ label }}</span>
+                                            <small class="text-muted">- Required but doesn't add direct value</small>
+                                        {% elif value == 'waste' %}
+                                            <span class="badge bg-danger">{{ label }}</span>
+                                            <small class="text-muted">- Should be eliminated or minimized</small>
+                                        {% endif %}
+                                    </label>
+                                </div>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                            
+                            <div id="classify-spinner" class="d-none text-center mt-2">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <span class="ms-2 text-muted">Analyzing with AI...</span>
+                            </div>
+                            {% if form.lss_classification.errors %}
+                                <div class="invalid-feedback d-block">{{ form.lss_classification.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- AI LSS Classification Suggestion -->
+                        <div id="lss-suggestion-container" class="alert alert-info mb-3 d-none">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-robot mt-1 me-2"></i>
+                                <div class="flex-grow-1" id="lss-suggestion-text">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Regular Labels (for other tags, not LSS) - Only show if non-LSS labels exist -->
+                        {% if form.labels.field.queryset.exists %}
+                        <div class="mb-3">
+                            <label for="{{ form.labels.id_for_label }}" class="form-label">
+                                <i class="fas fa-tags me-1"></i> Tags/Labels <small class="text-muted">(Optional)</small>
+                            </label>
+                            {{ form.labels }}
+                            {% if form.labels.errors %}
+                                <div class="invalid-feedback d-block">{{ form.labels.errors }}</div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        <!-- AI Task Breakdown Suggestion -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0">Task Complexity Analysis</h6>
+                                <button type="button" id="suggest-breakdown-btn" class="btn btn-sm btn-outline-success" 
+                                        title="AI-powered task breakdown suggestion">
+                                    <i class="fas fa-sitemap me-1"></i> Analyze & Break Down
+                                </button>
+                            </div>
+                            <small class="text-muted">Get AI suggestions for breaking complex tasks into manageable subtasks</small>
+                            <div id="breakdown-ai-spinner" class="d-none text-center mt-2">
+                                <div class="spinner-border spinner-border-sm text-success" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <span class="ms-2 text-muted">Analyzing task complexity...</span>
+                            </div>
+                            <div id="task-breakdown-result" class="d-none mt-2"></div>
+                        </div>
+                        
+                        <!-- Advanced Features Section -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light cursor-pointer" data-bs-toggle="collapse" data-bs-target="#advancedFeaturesSection">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-chevron-down me-2"></i>
+                                    <i class="fas fa-star text-warning"></i> Advanced Features (Optional)
+                                </h6>
+                            </div>
+                            <div id="advancedFeaturesSection" class="collapse">
+                                <div class="card-body">
+                                    <!-- 🛡️ Risk Assessment Section -->
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-shield-alt text-warning"></i> Risk Assessment</h6>
+                                        <p class="small text-muted mb-3">Assess potential risks for this task. Risk score will be automatically calculated from likelihood × impact.</p>
+                                        
+                                        <div class="row">
+                                            <div class="col-md-4 mb-3">
+                                                <label for="{{ form.risk_likelihood.id_for_label }}" class="form-label">Risk Likelihood</label>
+                                                {{ form.risk_likelihood }}
+                                                <small class="form-text text-muted">How likely is the risk to occur?</small>
+                                                {% if form.risk_likelihood.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.risk_likelihood.errors }}</div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="col-md-4 mb-3">
+                                                <label for="{{ form.risk_impact.id_for_label }}" class="form-label">Risk Impact</label>
+                                                {{ form.risk_impact }}
+                                                <small class="form-text text-muted">What's the severity if it occurs?</small>
+                                                {% if form.risk_impact.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.risk_impact.errors }}</div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="col-md-4 mb-3">
+                                                <label for="{{ form.risk_level.id_for_label }}" class="form-label">Risk Level</label>
+                                                {{ form.risk_level }}
+                                                <small class="form-text text-muted">Overall risk classification</small>
+                                                {% if form.risk_level.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.risk_level.errors }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="{{ form.risk_indicators_text.id_for_label }}" class="form-label">{{ form.risk_indicators_text.label }}</label>
+                                            {{ form.risk_indicators_text }}
+                                            <small class="form-text text-muted">{{ form.risk_indicators_text.help_text }}</small>
+                                            {% if form.risk_indicators_text.errors %}
+                                                <div class="invalid-feedback d-block">{{ form.risk_indicators_text.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <div class="mb-3">
+                                            <label for="{{ form.mitigation_strategies_text.id_for_label }}" class="form-label">{{ form.mitigation_strategies_text.label }}</label>
+                                            {{ form.mitigation_strategies_text }}
+                                            <small class="form-text text-muted">{{ form.mitigation_strategies_text.help_text }}</small>
+                                            {% if form.mitigation_strategies_text.errors %}
+                                                <div class="invalid-feedback d-block">{{ form.mitigation_strategies_text.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                        
+                                        <div class="alert alert-info mb-0">
+                                            <small>
+                                                <i class="fas fa-info-circle"></i> 
+                                                <strong>Tip:</strong> If you set Likelihood and Impact, the Risk Score (1-9) will be automatically calculated. The Risk Level can be manually set or will be auto-suggested based on the score.
+                                            </small>
+                                        </div>
+                                    </div>
+
+                                    <hr>
+
+                                    <!-- Gantt Chart Dependencies & Task Hierarchy -->
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-project-diagram text-info"></i> Task Relationships & Timeline</h6>
+                                        <div class="row">
+                                            <div class="col-md-6 mb-3">
+                                                <label for="{{ form.start_date.id_for_label }}" class="form-label">Start Date</label>
+                                                {{ form.start_date }}
+                                                <small class="form-text text-muted">When this task should start</small>
+                                                {% if form.start_date.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.start_date.errors }}</div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="col-md-6 mb-3">
+                                                <label for="{{ form.parent_task.id_for_label }}" class="form-label">
+                                                    Parent Task
+                                                    <i class="fas fa-question-circle text-muted" title="Select a parent task to create a subtask hierarchy"></i>
+                                                </label>
+                                                {{ form.parent_task }}
+                                                <small class="form-text text-muted">Make this a subtask of another task (optional)</small>
+                                                {% if form.parent_task.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.parent_task.errors }}</div>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label for="{{ form.dependencies.id_for_label }}" class="form-label">
+                                                Timeline Dependencies (Gantt Chart)
+                                                <i class="fas fa-question-circle text-muted" title="Tasks that must be completed before this task can start"></i>
+                                            </label>
+                                            {{ form.dependencies }}
+                                            <small class="form-text text-muted">{{ form.dependencies.help_text }}</small>
+                                            {% if form.dependencies.errors %}
+                                                <div class="invalid-feedback d-block">{{ form.dependencies.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="alert alert-info mb-0">
+                                            <small>
+                                                <i class="fas fa-info-circle"></i> 
+                                                <strong>Timeline vs Hierarchy:</strong> Dependencies block timeline progress (Gantt chart), while Parent Task creates an organizational hierarchy (subtasks).
+                                            </small>
+                                        </div>
+                                    </div>
+
+                                    <hr>
+                                    
+                                    <!-- Complexity Score -->
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-chart-line text-warning"></i> Task Complexity</h6>
+                                        <div class="mb-3">
+                                            <label for="{{ form.complexity_score.id_for_label }}" class="form-label d-flex justify-content-between align-items-center">
+                                                <span>Complexity Score</span>
+                                                <output id="complexity-output" class="badge bg-secondary">5</output>
+                                            </label>
+                                            <div class="d-flex align-items-center gap-3">
+                                                <small class="text-muted">Simple (1)</small>
+                                                {{ form.complexity_score }}
+                                                <small class="text-muted">Complex (10)</small>
+                                            </div>
+                                            <small class="form-text text-muted">{{ form.complexity_score.help_text }}</small>
+                                            {% if form.complexity_score.errors %}
+                                                <div class="invalid-feedback d-block">{{ form.complexity_score.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+
+                                    <hr>
+
+                                    <!-- 📦 Resource Information -->
+                                    <div class="mb-4">
+                                        <h6><i class="fas fa-box text-info"></i> Resource Information</h6>
+                                        <div class="mb-3">
+                                            <label for="{{ form.workload_impact.id_for_label }}" class="form-label">Workload Impact</label>
+                                            {{ form.workload_impact }}
+                                            <small class="form-text text-muted">{{ form.workload_impact.help_text }}</small>
+                                            {% if form.workload_impact.errors %}
+                                                <div class="invalid-feedback d-block">{{ form.workload_impact.errors }}</div>
+                                            {% endif %}
+                                        </div>
+                                        <div class="alert alert-info mb-0">
+                                            <small>
+                                                <i class="fas fa-info-circle"></i> 
+                                                <strong>Tip:</strong> Workload impact helps track how this task affects the assignee's capacity. Choose Low for quick tasks, Medium for standard work, High for major efforts, or Critical for urgent, high-priority work.
+                                            </small>
+                                        </div>
+                                    </div>
+
+                                    <hr>
+
+                                    <!-- 👥 Stakeholder Involvement Info -->
+                                    <div class="alert alert-info mb-3">
+                                        <h6><i class="fas fa-users"></i> Stakeholder Management</h6>
+                                        <p class="small mb-0">After creating the task, you can add stakeholders to track their involvement and engagement with this task.</p>
+                                    </div>
+
+                                    <!-- 📋 Additional Info -->
+                                    <div class="alert alert-info mb-0">
+                                        <h6><i class="fas fa-info-circle"></i> Additional Features</h6>
+                                        <p class="small mb-0">You can add related tasks and attach files after creating the task from the task detail page.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mt-4">
+                            <button onclick="goBack()" type="button" class="btn btn-outline-secondary">
+                                Cancel
+                            </button>
+                            <button type="submit" class="btn btn-primary">
+                                Create Task
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lean Six Sigma Labels Info Modal -->
+<div class="modal fade" id="leanLabelsInfoModal" tabindex="-1" aria-labelledby="leanLabelsInfoModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="leanLabelsInfoModalLabel">Understanding Lean Six Sigma Labels</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Pri<span class="stylish-z">z</span>mAI includes Lean Six Sigma labels to help categorize your tasks based on their value contribution:</p>
+                
+                <div class="card mb-3">
+                    <div class="card-header bg-success text-white">
+                        Value-Added (VA)
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">Activities that transform inputs into outputs that customers value and are willing to pay for.</p>
+                        <p class="card-text small">Example: Developing a feature that customers requested</p>
+                    </div>
+                </div>
+                
+                <div class="card mb-3">
+                    <div class="card-header bg-warning text-dark">
+                        Necessary Non-Value-Added (NNVA)
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">Activities required by current regulations, processes, or constraints, but don't directly add value for the customer.</p>
+                        <p class="card-text small">Example: Compliance documentation, quality checks</p>
+                    </div>
+                </div>
+                
+                <div class="card mb-3">
+                    <div class="card-header bg-danger text-white">
+                        Waste/Eliminate (NVA)
+                    </div>
+                    <div class="card-body">
+                        <p class="card-text">Activities that consume resources without adding any value. These should be minimized or eliminated.</p>
+                        <p class="card-text small">Example: Fixing defects, unnecessary meetings, waiting for approvals</p>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info">
+                    <i class="fas fa-lightbulb me-2"></i> 
+                    <strong>Tip:</strong> Tagging your tasks this way helps identify process improvement opportunities and focus on value-adding activities.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>    </div>
+</div>
+
+<script>
+    // Handle complexity score slider display
+    document.addEventListener('DOMContentLoaded', function() {
+        const complexitySlider = document.querySelector('input[name="complexity_score"]');
+        const complexityOutput = document.getElementById('complexity-output');
+        
+        if (complexitySlider && complexityOutput) {
+            // Set initial value from the input
+            const initialValue = complexitySlider.value || 5;
+            complexityOutput.value = initialValue;
+            complexityOutput.textContent = initialValue;
+            
+            // Update on change
+            complexitySlider.addEventListener('input', function() {
+                const value = this.value;
+                complexityOutput.value = value;
+                complexityOutput.textContent = value;
+                
+                // Update badge color based on complexity
+                complexityOutput.className = 'badge ';
+                if (value >= 8) {
+                    complexityOutput.className += 'bg-danger';
+                } else if (value >= 5) {
+                    complexityOutput.className += 'bg-warning';
+                } else {
+                    complexityOutput.className += 'bg-success';
+                }
+            });
+            
+            // Trigger initial update
+            complexitySlider.dispatchEvent(new Event('input'));
+        }
+        
+        // Debug: Log form submission
+        const taskForm = document.querySelector('.task-form');
+        if (taskForm) {
+            taskForm.addEventListener('submit', function(e) {
+                const complexityValue = document.querySelector('input[name="complexity_score"]')?.value;
+                console.log('Submitting complexity score:', complexityValue);
+            });
+        }
+    });
+</script>
+{% endblock %}
+
+{% block extra_js %}
+{% load static %}
+<script src="{% static 'js/ai_features.js' %}?v={{ STATIC_VERSION|default:'2' }}"></script>
+<script src="{% static 'js/priority_suggestion.js' %}?v={{ STATIC_VERSION|default:'5' }}"></script>
+<script>
+    // Initialize Priority Suggestion Widget and assign to global variable
+    document.addEventListener('DOMContentLoaded', function() {
+        const boardId = {{ board.id }};
+        prioritySuggestion = new PrioritySuggestionWidget({ boardId: boardId });
+        prioritySuggestion.init();
+    });
+</script>
+{% endblock %}
