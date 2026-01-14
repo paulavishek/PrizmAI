@@ -346,9 +346,11 @@ class PrioritySuggestionService:
         """
         Fallback rule-based priority suggestion when no ML model available
         
-        Uses heuristics based on due date, dependencies, complexity, and semantic keywords
+        Uses heuristics based on due date, dependencies, complexity, semantic keywords,
+        and advanced fields (risk assessment, workload impact, complexity analysis, etc.)
         """
         score = 0
+        max_score = 22  # Increased to accommodate complexity analysis factors
         factors = []
         
         # Semantic keyword analysis (0-4 points) - Check FIRST before due date
@@ -361,6 +363,13 @@ class PrioritySuggestionService:
         }
         
         text_to_analyze = f"{task.title} {task.description or ''}".lower()
+        
+        # Also analyze risk indicators, mitigation strategies, and complexity risks if available
+        if hasattr(task, '_advanced_context'):
+            text_to_analyze += f" {task._advanced_context.get('risk_indicators_text', '')}".lower()
+            text_to_analyze += f" {task._advanced_context.get('mitigation_strategies_text', '')}".lower()
+            text_to_analyze += f" {task._advanced_context.get('complexity_risks_text', '')}".lower()
+        
         keyword_score = 0
         keyword_matches = []
         
@@ -398,68 +407,148 @@ class PrioritySuggestionService:
             else:
                 factors.append(f"Due in {int(days_until_due)} days (Low urgency)")
         
-        # Blocking tasks (0-3 points)
+        # Blocking tasks (0-3 points) - Check both saved tasks and advanced context
+        blocking_count = 0
         if task.pk:
             blocking_count = task.dependencies.count()
-            if blocking_count >= 3:
-                score += 3
-                factors.append(f"Blocks {blocking_count} tasks")
-            elif blocking_count >= 1:
-                score += 2
-                factors.append(f"Blocks {blocking_count} tasks")
+        elif hasattr(task, '_advanced_context'):
+            blocking_count = task._advanced_context.get('dependencies_count', 0)
         
-        # Complexity (0-2 points)
-        complexity = task.complexity_score
-        if isinstance(complexity, str):
-            try:
-                complexity = int(complexity)
-            except (ValueError, TypeError):
-                complexity = 5
-        
-        if complexity >= 8:
+        if blocking_count >= 3:
+            score += 3
+            factors.append(f"Blocks {blocking_count} tasks")
+        elif blocking_count >= 1:
             score += 2
-            factors.append(f"High complexity ({complexity}/10)")
-        elif complexity >= 6:
-            score += 1
-            factors.append(f"Medium-high complexity")
+            factors.append(f"Blocks {blocking_count} tasks")
         
-        # Risk (0-2 points)
-        risk = task.risk_score
-        if risk:
-            if isinstance(risk, str):
-                try:
-                    risk = int(risk)
-                except (ValueError, TypeError):
-                    risk = 0
-            
-            if risk >= 7:
+        # Complexity (0-3 points) - Use AI-analyzed complexity if available
+        complexity = task.complexity_score
+        ai_complexity = None
+        
+        # Check for AI complexity analysis results
+        if hasattr(task, '_advanced_context'):
+            ai_complexity = task._advanced_context.get('ai_complexity_score')
+            is_breakdown_recommended = task._advanced_context.get('is_breakdown_recommended', False)
+            subtasks_count = task._advanced_context.get('suggested_subtasks_count', 0)
+            complexity_risk_count = task._advanced_context.get('complexity_risk_count', 0)
+        else:
+            is_breakdown_recommended = False
+            subtasks_count = 0
+            complexity_risk_count = 0
+        
+        # Use AI complexity if available (more accurate), otherwise use manual slider
+        effective_complexity = ai_complexity if ai_complexity is not None else complexity
+        if isinstance(effective_complexity, str):
+            try:
+                effective_complexity = int(effective_complexity)
+            except (ValueError, TypeError):
+                effective_complexity = 5
+        
+        # Score based on complexity
+        if effective_complexity >= 8:
+            score += 2
+            complexity_source = "AI-analyzed" if ai_complexity else "Manual"
+            factors.append(f"High complexity ({effective_complexity}/10, {complexity_source})")
+        elif effective_complexity >= 6:
+            score += 1
+            factors.append(f"Medium-high complexity ({effective_complexity}/10)")
+        
+        # Additional points for breakdown recommendation (indicates very complex task)
+        if is_breakdown_recommended:
+            score += 1
+            factors.append(f"AI recommends breaking into {subtasks_count} subtasks")
+        
+        # Additional consideration for complexity-related risks
+        if complexity_risk_count >= 2:
+            score += 1
+            factors.append(f"Multiple complexity risks identified ({complexity_risk_count})")
+        
+        # === ADVANCED RISK ASSESSMENT (0-4 points) ===
+        # Check risk_likelihood and risk_impact first (more granular)
+        risk_likelihood = getattr(task, 'risk_likelihood', None)
+        risk_impact = getattr(task, 'risk_impact', None)
+        risk_level = getattr(task, 'risk_level', None)
+        
+        if risk_likelihood and risk_impact:
+            # Calculate combined risk (likelihood × impact gives 1-9)
+            combined_risk = risk_likelihood * risk_impact
+            if combined_risk >= 6:  # High (6-9)
+                score += 3
+                factors.append(f"High risk assessment (likelihood × impact = {combined_risk})")
+            elif combined_risk >= 4:  # Medium (4-5)
                 score += 2
-                factors.append("High risk")
-            elif risk >= 4:
+                factors.append(f"Medium risk assessment (score: {combined_risk})")
+            elif combined_risk >= 2:  # Low-Medium (2-3)
                 score += 1
-                factors.append("Medium risk")
+                factors.append(f"Low-medium risk (score: {combined_risk})")
+        elif risk_level:
+            # Fallback to risk_level if likelihood/impact not set
+            risk_level_scores = {'critical': 4, 'high': 3, 'medium': 2, 'low': 1}
+            risk_level_score = risk_level_scores.get(risk_level.lower(), 0)
+            if risk_level_score >= 3:
+                score += risk_level_score
+                factors.append(f"Risk level: {risk_level.title()}")
+            elif risk_level_score >= 1:
+                score += risk_level_score
+                factors.append(f"Risk level: {risk_level.title()}")
+        else:
+            # Original risk_score fallback (0-2 points)
+            risk = task.risk_score
+            if risk:
+                if isinstance(risk, str):
+                    try:
+                        risk = int(risk)
+                    except (ValueError, TypeError):
+                        risk = 0
+                
+                if risk >= 7:
+                    score += 2
+                    factors.append("High risk score")
+                elif risk >= 4:
+                    score += 1
+                    factors.append("Medium risk score")
+        
+        # === WORKLOAD IMPACT (0-2 points) ===
+        workload_impact = getattr(task, 'workload_impact', None)
+        if workload_impact:
+            workload_scores = {'critical': 2, 'high': 2, 'medium': 1, 'low': 0}
+            workload_score = workload_scores.get(workload_impact.lower(), 0)
+            if workload_score > 0:
+                score += workload_score
+                factors.append(f"Workload impact: {workload_impact.title()}")
         
         # Collaboration (0-1 point)
         if task.collaboration_required:
             score += 1
             factors.append("Requires collaboration")
         
-        # Determine priority based on score with better thresholds
-        if score >= 8:
+        # === SUBTASK/HIERARCHY CONTEXT (0-1 point) ===
+        is_subtask = False
+        if hasattr(task, '_advanced_context'):
+            is_subtask = task._advanced_context.get('has_parent_task', False)
+        elif task.parent_task:
+            is_subtask = True
+        
+        if is_subtask:
+            # Subtasks might inherit urgency but are generally more focused
+            factors.append("Part of larger task (subtask)")
+        
+        # Determine priority based on score with adjusted thresholds (max_score = 22)
+        if score >= 12:
             priority = 'urgent'
-            confidence = 0.75
-        elif score >= 5:
+            confidence = 0.82
+        elif score >= 7:
             priority = 'high'
-            confidence = 0.70
-        elif score >= 3:
+            confidence = 0.77
+        elif score >= 4:
             priority = 'medium'
-            confidence = 0.65
+            confidence = 0.72
         else:
             priority = 'low'
-            confidence = 0.60
+            confidence = 0.67
         
         # Build detailed explanation
-        explanation = f"Based on rule-based analysis (score: {score}/12), this task should be **{priority}** priority. "
+        explanation = f"Based on rule-based analysis (score: {score}/{max_score}), this task should be **{priority}** priority. "
         
         # Add specific reasoning
         if keyword_matches:
@@ -469,6 +558,18 @@ class PrioritySuggestionService:
                 explanation += f"However, due date is {int(days_until_due)} days away. "
             elif days_until_due < 3:
                 explanation += f"Due date is approaching ({int(days_until_due)} days). "
+        
+        # Highlight advanced factors in explanation
+        if risk_likelihood and risk_impact:
+            explanation += f"Risk assessment (L:{risk_likelihood}×I:{risk_impact}) factored in. "
+        if workload_impact and workload_impact.lower() in ['high', 'critical']:
+            explanation += f"High workload impact increases priority. "
+        
+        # Highlight complexity analysis in explanation
+        if is_breakdown_recommended:
+            explanation += f"AI complexity analysis suggests this is a complex task requiring breakdown. "
+        elif ai_complexity and ai_complexity >= 7:
+            explanation += f"AI detected high complexity ({ai_complexity}/10). "
         
         if not factors:
             factors.append("No strong indicators detected")
@@ -491,7 +592,7 @@ class PrioritySuggestionService:
                 'top_factors': top_factors_with_pct,
                 'explanation': explanation,
                 'confidence_level': self._confidence_label(confidence),
-                'analysis_score': f"{score}/12 points"
+                'analysis_score': f"{score}/{max_score} points"
             },
             'alternatives': [],
             'is_ml_based': False,

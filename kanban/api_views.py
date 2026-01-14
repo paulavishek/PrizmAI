@@ -3003,18 +3003,61 @@ def suggest_task_priority_api(request):
                 except (ValueError, TypeError):
                     risk_score = None
             
+            # Parse advanced risk fields
+            risk_likelihood = data.get('risk_likelihood')
+            if risk_likelihood and isinstance(risk_likelihood, str):
+                try:
+                    risk_likelihood = int(risk_likelihood)
+                except (ValueError, TypeError):
+                    risk_likelihood = None
+            
+            risk_impact = data.get('risk_impact')
+            if risk_impact and isinstance(risk_impact, str):
+                try:
+                    risk_impact = int(risk_impact)
+                except (ValueError, TypeError):
+                    risk_impact = None
+            
+            # Auto-calculate risk_score from likelihood × impact if not provided
+            if risk_likelihood and risk_impact and not risk_score:
+                risk_score = risk_likelihood * risk_impact
+            
             task = Task(
                 title=data.get('title', 'New Task'),
                 description=data.get('description', ''),
                 complexity_score=complexity_score,
                 collaboration_required=data.get('collaboration_required', False),
                 risk_score=risk_score,
+                risk_likelihood=risk_likelihood,
+                risk_impact=risk_impact,
+                risk_level=data.get('risk_level') or None,
+                workload_impact=data.get('workload_impact') or None,
             )
+            
+            # Store additional advanced context for AI analysis
+            task._advanced_context = {
+                'risk_indicators_text': data.get('risk_indicators_text', ''),
+                'mitigation_strategies_text': data.get('mitigation_strategies_text', ''),
+                'has_dependencies': data.get('has_dependencies', False),
+                'dependencies_count': data.get('dependencies_count', 0),
+                'has_parent_task': bool(data.get('parent_task')),
+                # Task Complexity Analysis results (from "Analyze & Break Down" AI feature)
+                'ai_complexity_score': data.get('ai_complexity_score'),
+                'is_breakdown_recommended': data.get('is_breakdown_recommended', False),
+                'suggested_subtasks_count': data.get('suggested_subtasks_count', 0),
+                'complexity_risk_count': data.get('complexity_risk_count', 0),
+                'complexity_risks_text': data.get('complexity_risks_text', ''),
+            }
             
             # Parse due_date if provided
             if data.get('due_date'):
                 from django.utils.dateparse import parse_datetime
                 task.due_date = parse_datetime(data.get('due_date'))
+            
+            # Parse start_date if provided
+            if data.get('start_date'):
+                from django.utils.dateparse import parse_datetime
+                task.start_date = parse_datetime(data.get('start_date'))
             
             # Attach board for context
             task._board = board

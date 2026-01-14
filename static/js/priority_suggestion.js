@@ -542,26 +542,84 @@ class PrioritySuggestionWidget {
     }
     
     /**
-     * Extract task data from form
+     * Extract task data from form - includes all fields for comprehensive AI analysis
      */
     _getTaskDataFromForm() {
         const data = {};
         
-        const fields = [
+        // Basic fields
+        const basicFields = [
             'title', 'description', 'due_date', 'complexity_score',
             'collaboration_required', 'risk_score'
         ];
         
-        fields.forEach(field => {
+        // Advanced fields from the collapsible section
+        const advancedFields = [
+            // Risk Assessment
+            'risk_likelihood', 'risk_impact', 'risk_level',
+            'risk_indicators_text', 'mitigation_strategies_text',
+            // Task Relationships & Timeline
+            'start_date', 'parent_task',
+            // Resource Information
+            'workload_impact'
+        ];
+        
+        // Combine all fields
+        const allFields = [...basicFields, ...advancedFields];
+        
+        allFields.forEach(field => {
             const element = document.getElementById(`id_${field}`);
             if (element) {
                 if (element.type === 'checkbox') {
                     data[field] = element.checked;
-                } else {
+                } else if (element.multiple) {
+                    // Handle multi-select fields like dependencies
+                    data[field] = Array.from(element.selectedOptions).map(opt => opt.value);
+                } else if (element.value && element.value.trim() !== '') {
                     data[field] = element.value;
                 }
             }
         });
+        
+        // Handle dependencies separately (multi-select)
+        const dependenciesElement = document.getElementById('id_dependencies');
+        if (dependenciesElement) {
+            const selectedDeps = Array.from(dependenciesElement.selectedOptions).map(opt => opt.value);
+            if (selectedDeps.length > 0) {
+                data.dependencies_count = selectedDeps.length;
+                data.has_dependencies = true;
+            }
+        }
+        
+        // Include Task Complexity Analysis results if available
+        // This data comes from the "Analyze & Break Down" AI feature
+        if (window.currentTaskBreakdown) {
+            const breakdown = window.currentTaskBreakdown;
+            
+            // AI-analyzed complexity score (may differ from manual slider)
+            if (breakdown.complexity_score) {
+                data.ai_complexity_score = breakdown.complexity_score;
+            }
+            
+            // Whether breakdown is recommended indicates high complexity
+            if (breakdown.is_breakdown_recommended) {
+                data.is_breakdown_recommended = true;
+            }
+            
+            // Include subtask count as an indicator of task size
+            if (breakdown.subtasks && breakdown.subtasks.length > 0) {
+                data.suggested_subtasks_count = breakdown.subtasks.length;
+            }
+            
+            // Include risk considerations from complexity analysis
+            if (breakdown.risk_considerations && breakdown.risk_considerations.length > 0) {
+                data.complexity_risk_count = breakdown.risk_considerations.length;
+                // Convert to text for keyword analysis
+                data.complexity_risks_text = breakdown.risk_considerations
+                    .map(r => typeof r === 'string' ? r : r.risk || '')
+                    .join(' ');
+            }
+        }
         
         return data;
     }
