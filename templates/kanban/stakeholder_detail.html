@@ -150,25 +150,49 @@
                         <div class="col-md-3">
                             <div class="text-center">
                                 <h3>{{ total_engagements }}</h3>
-                                <p class="text-muted">Total Engagements</p>
+                                <p class="text-muted">
+                                    Total Engagements
+                                    <i class="bi bi-info-circle" 
+                                       data-bs-toggle="tooltip" 
+                                       data-bs-placement="top" 
+                                       title="Total number of recorded interactions with this stakeholder"></i>
+                                </p>
                             </div>
                         </div>
                         <div class="col-md-3">
                             <div class="text-center">
                                 <h3>{{ avg_satisfaction|floatformat:1 }}/5</h3>
-                                <p class="text-muted">Avg Satisfaction</p>
+                                <p class="text-muted">
+                                    Avg Satisfaction
+                                    <i class="bi bi-info-circle" 
+                                       data-bs-toggle="tooltip" 
+                                       data-bs-placement="top" 
+                                       title="Average satisfaction rating from engagement records (1-5 scale)"></i>
+                                </p>
                             </div>
                         </div>
                         <div class="col-md-3">
                             <div class="text-center">
                                 <h3>{{ task_involvements|length }}</h3>
-                                <p class="text-muted">Tasks Involved</p>
+                                <p class="text-muted">
+                                    Tasks Involved
+                                    <i class="bi bi-info-circle" 
+                                       data-bs-toggle="tooltip" 
+                                       data-bs-placement="top" 
+                                       title="Number of tasks this stakeholder is associated with"></i>
+                                </p>
                             </div>
                         </div>
                         <div class="col-md-3">
                             <div class="text-center">
                                 <h3>{% if metrics %}{{ metrics.calculate_engagement_health|floatformat:0 }}{% else %}—{% endif %}</h3>
-                                <p class="text-muted">Engagement Health</p>
+                                <p class="text-muted">
+                                    Engagement Health
+                                    <i class="bi bi-info-circle" 
+                                       data-bs-toggle="tooltip" 
+                                       data-bs-placement="top" 
+                                       title="Overall engagement health score (0-100) based on: Frequency (0-30pts), Satisfaction (0-40pts), and Engagement Gap (0-30pts)"></i>
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -340,6 +364,14 @@
 </style>
 
 <script>
+// Initialize Bootstrap tooltips
+document.addEventListener('DOMContentLoaded', function() {
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+});
+
 // Handle back navigation to previous page
 function goBack() {
     // Check if there's a previous page in history
