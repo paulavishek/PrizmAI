@@ -99,38 +99,25 @@ class PrioritySuggestionWidget {
         const label = priorityLabels[priority] || priorityLabels.medium;
         const confidence = (this.suggestion.confidence * 100).toFixed(0);
         
-        // Use stripMarkdown to clean up AI-generated text
-        const stripMarkdown = window.AIExplainability?.stripMarkdown || ((text) => text);
-        const reasoningText = stripMarkdown(this.suggestion.reasoning.explanation || this.suggestion.reasoning);
-        
         container.innerHTML = `
             <div class="alert alert-${label.class} border-start border-5 border-${label.class} shadow-sm mb-3" role="alert">
                 <div class="d-flex align-items-start">
                     <div class="flex-grow-1">
-                        <h6 class="alert-heading mb-2">
+                        <!-- Header: AI Suggestion with Confidence -->
+                        <h6 class="alert-heading mb-3">
                             ${label.icon} AI Suggests: <strong>${label.text} Priority</strong>
                             <span class="badge bg-${label.class} ms-2">${confidence}% confident</span>
                         </h6>
                         
-                        <p class="mb-2 small">${reasoningText}</p>
+                        <!-- Score Bar -->
+                        ${this._renderPriorityScoreBar(label.class)}
                         
-                        ${this._renderTopFactors()}
-                        
-                        <!-- Show AI Explainability Inline -->
-                        <div class="mt-2 mb-2 p-2 bg-light rounded border border-${label.class} border-opacity-25">
-                            <div class="d-flex align-items-start">
-                                <i class="fas fa-brain text-${label.class} me-2 mt-1"></i>
-                                <div class="flex-grow-1">
-                                    <strong class="small text-${label.class}">Why AI chose this:</strong>
-                                    <div class="small text-muted mt-1">
-                                        ${this._renderInlineExplanation()}
-                                    </div>
-                                </div>
-                            </div>
+                        <!-- Primary Reasoning (Consolidated) -->
+                        <div class="mt-3 mb-3">
+                            ${this._renderConsolidatedReasoning(label.class)}
                         </div>
                         
-                        ${this._renderAlternatives()}
-                        
+                        <!-- Actions -->
                         <div class="mt-3 d-flex flex-wrap gap-2">
                             <button type="button" class="btn btn-sm btn-${label.class}" onclick="event.preventDefault(); prioritySuggestion.acceptSuggestion()">
                                 <i class="fas fa-check"></i> Accept ${label.text}
@@ -147,6 +134,7 @@ class PrioritySuggestionWidget {
                     <button type="button" class="btn-close ms-2" onclick="prioritySuggestion.hideSuggestion()"></button>
                 </div>
                 
+                <!-- Expandable Full Details -->
                 <div id="suggestion-details" class="mt-3 pt-3 border-top" style="display: none;">
                     ${this._renderEnhancedDetails()}
                 </div>
@@ -158,26 +146,62 @@ class PrioritySuggestionWidget {
     }
     
     /**
-     * Render inline explanation showing key factors
+     * Render priority score bar with visual indicator
      */
-    _renderInlineExplanation() {
+    _renderPriorityScoreBar(labelClass) {
+        if (!this.suggestion.reasoning?.analysis_score) return '';
+        
+        // Extract score numbers (e.g., "6/12" -> 6, 12)
+        const scoreMatch = this.suggestion.reasoning.analysis_score.match(/(\d+)\/(\d+)/);
+        if (!scoreMatch) return '';
+        
+        const score = parseInt(scoreMatch[1]);
+        const maxScore = parseInt(scoreMatch[2]);
+        const percentage = (score / maxScore) * 100;
+        
+        // Color code based on percentage
+        let barColor = 'secondary';
+        if (percentage >= 67) barColor = 'danger';      // 8+/12 = red (urgent/high)
+        else if (percentage >= 42) barColor = 'warning'; // 5-7/12 = orange (medium/high)
+        else if (percentage >= 25) barColor = 'info';    // 3-4/12 = blue (medium)
+        
+        return `
+            <div class="mb-3">
+                <div class="d-flex align-items-center justify-content-between small mb-2">
+                    <span class="fw-bold">
+                        <i class="fas fa-tachometer-alt me-1"></i>Priority Score
+                    </span>
+                    <span class="badge bg-${barColor}">${this.suggestion.reasoning.analysis_score}</span>
+                </div>
+                <div class="progress" style="height: 8px;">
+                    <div class="progress-bar bg-${barColor}" role="progressbar" 
+                         style="width: ${percentage}%" 
+                         aria-valuenow="${score}" aria-valuemin="0" aria-valuemax="${maxScore}">
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between mt-1" style="font-size: 0.7rem; color: #999;">
+                    <span>Low</span>
+                    <span>High</span>
+                </div>
+            </div>
+        `;
+    }
+    
+    /**
+     * Render consolidated reasoning with key factors
+     */
+    _renderConsolidatedReasoning(labelClass) {
         const factors = this.suggestion.reasoning?.top_factors || 
                        this.suggestion.contributing_factors || [];
         
         if (factors.length === 0) {
-            // Provide more specific fallback based on what we know
-            const confidence = this.suggestion.confidence || 0;
-            const isLowConfidence = confidence < 0.7;
-            if (isLowConfidence) {
-                return '<em>Limited data available. Suggestion based on basic heuristics. Please review carefully.</em>';
-            }
-            return '<em>Analysis based on task attributes, due date, and project context</em>';
+            return '<p class="small text-muted mb-0"><em>Analysis based on task attributes, due date, and project context</em></p>';
         }
         
-        // Get top 2-3 most impactful factors
+        // Get top 3 most impactful factors
         const topFactors = factors.slice(0, 3);
         
-        // Create icons map for common factors
+        // Create icons map for common factors with better visuals
         const factorIcons = {
             'days_until_due': '📅',
             'is_overdue': '⏰',
@@ -187,130 +211,58 @@ class PrioritySuggestionWidget {
             'assignee_workload': '👤',
             'collaboration_required': '👥',
             'risk_score': '⚠️',
-            'has_subtasks': '📋'
+            'has_subtasks': '📋',
+            'keywords_detected': '🔑',
+            'high_impact': '💥',
+            'low_urgency': '🔻',
+            'high_urgency': '🔺'
         };
         
-        const factorHtml = topFactors.map((factor, idx) => {
+        const factorHtml = topFactors.map(factor => {
             const factorName = factor.factor || '';
-            const icon = factorIcons[factorName] || '•';
+            let icon = factorIcons[factorName] || '•';
             const desc = factor.description || factor.factor || '';
             const importance = factor.importance || factor.contribution_percentage;
             
+            // Determine if this is a positive or negative factor
+            let prefix = '';
+            let iconClass = '';
+            if (desc.toLowerCase().includes('high-impact') || desc.toLowerCase().includes('critical')) {
+                prefix = '✅';
+                iconClass = 'text-success';
+            } else if (desc.toLowerCase().includes('low urgency') || desc.toLowerCase().includes('8 days away')) {
+                prefix = '🔻';
+                iconClass = 'text-warning';
+            }
+            
             let importanceHtml = '';
-            let weightClass = 'secondary';
             if (importance) {
                 const pct = typeof importance === 'number' ? 
                     (importance > 1 ? importance : importance * 100).toFixed(0) : importance;
+                let weightClass = 'secondary';
                 // Color code by importance
                 if (pct >= 30) weightClass = 'danger';
                 else if (pct >= 20) weightClass = 'warning';
-                importanceHtml = ` <span class="badge bg-${weightClass}" style="font-size: 0.7rem;">${pct}%</span>`;
+                else if (pct >= 10) weightClass = 'info';
+                importanceHtml = ` <span class="badge bg-${weightClass}" style="font-size: 0.65rem;">${pct}%</span>`;
             }
             
-            return `<div class="d-flex align-items-center mb-1">
-                        <span class="me-1">${icon}</span>
-                        <span class="small">${desc}${importanceHtml}</span>
-                    </div>`;
-        }).join('');
-        
-        // Add analysis metadata if available with visual meter
-        let metaInfo = '';
-        if (this.suggestion.reasoning?.analysis_score) {
-            // Extract score numbers (e.g., "6/12" -> 6, 12)
-            const scoreMatch = this.suggestion.reasoning.analysis_score.match(/(\d+)\/(\d+)/);
-            if (scoreMatch) {
-                const score = parseInt(scoreMatch[1]);
-                const maxScore = parseInt(scoreMatch[2]);
-                const percentage = (score / maxScore) * 100;
-                
-                // Color code based on percentage
-                let barColor = 'secondary';
-                if (percentage >= 67) barColor = 'danger';      // 8+/12 = red (urgent/high)
-                else if (percentage >= 42) barColor = 'warning'; // 5-7/12 = orange (medium/high)
-                else if (percentage >= 25) barColor = 'info';    // 3-4/12 = blue (medium)
-                
-                metaInfo = `<div class="mt-2 pt-2 border-top">
-                    <div class="d-flex align-items-center justify-content-between small mb-1">
-                        <span class="text-muted">
-                            <i class="fas fa-tachometer-alt me-1"></i>Priority Score
-                        </span>
-                        <span class="badge bg-${barColor}">${this.suggestion.reasoning.analysis_score}</span>
-                    </div>
-                    <div class="progress" style="height: 6px;">
-                        <div class="progress-bar bg-${barColor}" role="progressbar" 
-                             style="width: ${percentage}%" 
-                             aria-valuenow="${score}" aria-valuemin="0" aria-valuemax="${maxScore}">
-                        </div>
-                    </div>
-                    <div class="d-flex justify-content-between mt-1" style="font-size: 0.7rem; color: #999;">
-                        <span>Low</span>
-                        <span>High</span>
-                    </div>
-                </div>`;
-            } else {
-                // Fallback if score format doesn't match
-                metaInfo = `<div class="mt-2 pt-2 border-top small text-muted">
-                    <i class="fas fa-calculator me-1"></i>Analysis Score: ${this.suggestion.reasoning.analysis_score}
-                </div>`;
-            }
-        }
-        
-        return factorHtml + metaInfo;
-    }
-    
-    /**
-     * Render top influencing factors with enhanced explainability
-     */
-    _renderTopFactors() {
-        const factors = this.suggestion.reasoning?.top_factors || 
-                       this.suggestion.contributing_factors || [];
-        if (factors.length === 0) return '';
-        
-        const factorItems = factors.slice(0, 3).map(factor => {
-            const desc = factor.description || factor.factor || factor;
-            const pct = factor.contribution_percentage;
             return `
-                <li class="text-muted small">
-                    ${desc}
-                    ${pct ? `<span class="badge bg-secondary ms-1">${pct}%</span>` : ''}
-                </li>
+                <div class="d-flex align-items-start mb-2">
+                    <span class="me-2" style="font-size: 1.1rem;">${prefix || icon}</span>
+                    <span class="flex-grow-1">
+                        <span class="fw-medium">${desc}</span>${importanceHtml}
+                    </span>
+                </div>
             `;
         }).join('');
         
         return `
-            <div class="mb-2">
-                <strong class="small"><i class="bi bi-pie-chart me-1"></i>Key factors:</strong>
-                <ul class="mb-0 ps-3">
-                    ${factorItems}
-                </ul>
-            </div>
-        `;
-    }
-    
-    /**
-     * Render alternative priorities with explainability
-     */
-    _renderAlternatives() {
-        const alternatives = this.suggestion.alternatives || 
-                            this.suggestion.priority_comparison || [];
-        if (alternatives.length === 0) return '';
-        
-        const altButtons = alternatives.map(alt => {
-            const priority = alt.priority || alt.level;
-            const conf = alt.confidence ? (alt.confidence * 100).toFixed(0) : '';
-            const reason = alt.reason || alt.comparison || '';
-            return `
-                <button class="btn btn-sm btn-outline-secondary me-1 mb-1" 
-                        onclick="prioritySuggestion.selectAlternative('${priority}')"
-                        title="${reason}">
-                    ${priority} ${conf ? `(${conf}%)` : ''}
-                </button>
-            `;
-        }).join('');
-        
-        return `
-            <div class="small text-muted mb-2">
-                <i class="bi bi-arrows-angle-expand me-1"></i>Alternatives: ${altButtons}
+            <div class="p-3 bg-light bg-opacity-50 rounded border border-${labelClass} border-opacity-25">
+                <h6 class="small fw-bold mb-2 text-${labelClass}">
+                    <i class="fas fa-lightbulb me-1"></i>Primary Reasoning:
+                </h6>
+                ${factorHtml}
             </div>
         `;
     }
