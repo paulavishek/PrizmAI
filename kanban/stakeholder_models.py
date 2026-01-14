@@ -338,9 +338,10 @@ class EngagementMetrics(models.Model):
             satisfaction_score = (self.average_satisfaction / 5) * 40
             score += satisfaction_score
         
-        # Gap component (0-30)
-        gap_score = max(30 - (self.engagement_gap * 5), 0)
-        score += gap_score
+        # Gap component (0-30) - only applies if there are engagements
+        if self.total_engagements > 0:
+            gap_score = max(30 - (self.engagement_gap * 5), 0)
+            score += gap_score
         
         return min(score, 100)
 
