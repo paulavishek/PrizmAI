@@ -90,6 +90,7 @@ def predict_task_completion_date(task):
         'team_member_velocity': round(historical_stats.get('velocity_factor', 1.0), 2),
         'historical_avg_days': round(historical_stats['avg_duration'], 1),
         'sample_size': historical_stats['sample_size'],
+        'data_quality': historical_stats.get('data_quality', 'unknown'),
         'adjustments_applied': historical_stats.get('adjustments', {})
     }
     
