@@ -1760,10 +1760,83 @@ function displayTaskBreakdown(data) {
     const resultDiv = document.getElementById('task-breakdown-result');
     if (!resultDiv) return;
     
+    // Get the user's manual complexity score
+    const userComplexityInput = document.querySelector('input[name="complexity_score"]');
+    const userComplexityScore = userComplexityInput ? parseInt(userComplexityInput.value) : null;
+    const aiComplexityScore = data.complexity_score;
+    
+    // Determine if there's a discrepancy
+    const hasDiscrepancy = userComplexityScore && userComplexityScore !== aiComplexityScore;
+    const scoreDifference = hasDiscrepancy ? Math.abs(userComplexityScore - aiComplexityScore) : 0;
+    
     let html = `
         <div class="alert alert-${data.is_breakdown_recommended ? 'warning' : 'info'}">
             <h6><i class="fas fa-sitemap"></i> Task Complexity Analysis</h6>
-            <p><strong>Complexity Score:</strong> ${data.complexity_score}/10</p>
+            
+            <!-- Complexity Score Comparison -->
+            <div class="mb-3">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span><strong>AI Complexity Score:</strong></span>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-${getComplexityBadgeClass(aiComplexityScore)} fs-6">${aiComplexityScore}/10</span>
+                        ${hasDiscrepancy ? `
+                            <button type="button" class="btn btn-sm btn-success" onclick="applyAIComplexityScore(${aiComplexityScore})" title="Apply AI score to your manual estimate">
+                                <i class="fas fa-check me-1"></i>Apply this Score
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                ${hasDiscrepancy ? `
+                    <div class="complexity-comparison mt-3 p-3 bg-light border rounded">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted"><i class="fas fa-info-circle me-1"></i> Score Comparison:</small>
+                            <small class="text-muted">Difference: ${scoreDifference} point${scoreDifference !== 1 ? 's' : ''}</small>
+                        </div>
+                        
+                        <!-- User Score (Solid Bar) -->
+                        <div class="mb-2">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small><strong>Your Estimate:</strong> ${userComplexityScore}/10</small>
+                                <span class="badge bg-secondary">${userComplexityScore > aiComplexityScore ? 'Higher' : 'Lower'}</span>
+                            </div>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-primary" role="progressbar" 
+                                     style="width: ${userComplexityScore * 10}%" 
+                                     aria-valuenow="${userComplexityScore}" aria-valuemin="0" aria-valuemax="10">
+                                    ${userComplexityScore}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- AI Score (Outlined/Ghost Bar) -->
+                        <div>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small><strong>AI Suggestion:</strong> ${aiComplexityScore}/10</small>
+                                <span class="badge bg-info">AI</span>
+                            </div>
+                            <div class="progress" style="height: 20px; background-color: transparent; border: 2px dashed #0dcaf0;">
+                                <div class="progress-bar" role="progressbar" 
+                                     style="width: ${aiComplexityScore * 10}%; background-color: rgba(13, 202, 240, 0.3); border-right: 3px solid #0dcaf0;" 
+                                     aria-valuenow="${aiComplexityScore}" aria-valuemin="0" aria-valuemax="10">
+                                    ${aiComplexityScore}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info mt-3 mb-0 py-2">
+                            <small>
+                                <i class="fas fa-lightbulb me-1"></i>
+                                <strong>You're the Captain:</strong> ${userComplexityScore > aiComplexityScore ? 
+                                    'Your estimate is higher. You might know factors the AI doesn\'t (e.g., team constraints, hidden complexity).' : 
+                                    'Your estimate is lower. The AI detected factors you might want to reconsider.'}
+                                The AI provides a <em>second opinion</em>—review the analysis below and decide.
+                            </small>
+                        </div>
+                    </div>
+                ` : ''}
+            </div>
+            
             <p><strong>Breakdown Recommended:</strong> ${data.is_breakdown_recommended ? 'Yes' : 'No'}</p>
             <p><strong>Analysis:</strong> ${data.reasoning}</p>
     `;
@@ -2034,6 +2107,79 @@ function createSubtasksFromBreakdown() {
         createButton.textContent = originalText;
         createButton.disabled = false;
     });
+}
+
+/**
+ * Apply AI-suggested complexity score to the manual input
+ */
+function applyAIComplexityScore(aiScore) {
+    const complexityInput = document.querySelector('input[name="complexity_score"]');
+    const complexityOutput = document.getElementById('complexity-output');
+    
+    if (!complexityInput) {
+        console.error('Complexity input not found');
+        return;
+    }
+    
+    // Update the input value
+    complexityInput.value = aiScore;
+    
+    // Trigger input event to update the visual indicator
+    complexityInput.dispatchEvent(new Event('input', { bubbles: true }));
+    
+    // Update the output badge if it exists
+    if (complexityOutput) {
+        complexityOutput.value = aiScore;
+        complexityOutput.textContent = aiScore;
+        
+        // Update badge color based on complexity
+        complexityOutput.className = 'badge ';
+        if (aiScore >= 8) {
+            complexityOutput.className += 'bg-danger';
+        } else if (aiScore >= 5) {
+            complexityOutput.className += 'bg-warning';
+        } else {
+            complexityOutput.className += 'bg-success';
+        }
+    }
+    
+    // Scroll to the complexity input to show the update
+    complexityInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Highlight the input briefly
+    complexityInput.parentElement.style.transition = 'background-color 0.3s ease';
+    complexityInput.parentElement.style.backgroundColor = '#d1ecf1';
+    setTimeout(() => {
+        complexityInput.parentElement.style.backgroundColor = '';
+    }, 1500);
+    
+    // Show a subtle success message
+    const resultDiv = document.getElementById('task-breakdown-result');
+    if (resultDiv) {
+        const successMsg = document.createElement('div');
+        successMsg.className = 'alert alert-success alert-dismissible fade show mt-2';
+        successMsg.innerHTML = `
+            <i class="fas fa-check-circle me-1"></i>
+            <strong>Score Applied!</strong> Your complexity estimate has been updated to ${aiScore}/10.
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        resultDiv.insertBefore(successMsg, resultDiv.firstChild);
+        
+        // Auto-dismiss after 3 seconds
+        setTimeout(() => {
+            successMsg.remove();
+        }, 3000);
+    }
+}
+
+/**
+ * Helper function to get complexity badge class
+ */
+function getComplexityBadgeClass(score) {
+    if (score >= 8) return 'danger';
+    if (score >= 6) return 'warning';
+    if (score >= 4) return 'info';
+    return 'success';
 }
 
 /**
