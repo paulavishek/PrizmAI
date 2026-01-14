@@ -19,6 +19,10 @@ urlpatterns = [
     # Engagement recording
     path('boards/<int:board_id>/stakeholders/<int:stakeholder_id>/engagement/create/', 
          stakeholder_views.engagement_record_create, name='engagement_record_create'),
+    path('boards/<int:board_id>/stakeholders/<int:stakeholder_id>/engagement/<int:record_id>/update/', 
+         stakeholder_views.engagement_record_update, name='engagement_record_update'),
+    path('boards/<int:board_id>/stakeholders/<int:stakeholder_id>/engagement/<int:record_id>/delete/', 
+         stakeholder_views.engagement_record_delete, name='engagement_record_delete'),
     
     # Task-stakeholder involvement
     path('boards/<int:board_id>/tasks/<int:task_id>/stakeholders/', 

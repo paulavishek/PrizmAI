@@ -231,7 +231,8 @@ def engagement_record_create(request, board_id, stakeholder_id):
             messages.success(request, 'Engagement recorded successfully!')
             return redirect('stakeholder:stakeholder_detail', board_id=board_id, pk=stakeholder_id)
     else:
-        form = StakeholderEngagementRecordForm()
+        # Set default date to today
+        form = StakeholderEngagementRecordForm(initial={'date': timezone.now().date()})
     
     context = {
         'board': board,
@@ -239,6 +240,60 @@ def engagement_record_create(request, board_id, stakeholder_id):
         'form': form,
     }
     return render(request, 'kanban/engagement_record_form.html', context)
+
+
+@login_required
+def engagement_record_update(request, board_id, stakeholder_id, record_id):
+    """Edit an existing engagement record"""
+    board = check_board_access(request.user, board_id)
+    if not board:
+        messages.error(request, 'Access denied to this board')
+        return redirect('dashboard')
+    
+    stakeholder = get_object_or_404(ProjectStakeholder, pk=stakeholder_id, board=board)
+    record = get_object_or_404(StakeholderEngagementRecord, pk=record_id, stakeholder=stakeholder)
+    
+    if request.method == 'POST':
+        form = StakeholderEngagementRecordForm(request.POST, instance=record)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Engagement record updated successfully!')
+            return redirect('stakeholder:stakeholder_detail', board_id=board_id, pk=stakeholder_id)
+    else:
+        form = StakeholderEngagementRecordForm(instance=record)
+    
+    context = {
+        'board': board,
+        'stakeholder': stakeholder,
+        'record': record,
+        'form': form,
+        'is_update': True,
+    }
+    return render(request, 'kanban/engagement_record_form.html', context)
+
+
+@login_required
+def engagement_record_delete(request, board_id, stakeholder_id, record_id):
+    """Delete an engagement record"""
+    board = check_board_access(request.user, board_id)
+    if not board:
+        messages.error(request, 'Access denied to this board')
+        return redirect('dashboard')
+    
+    stakeholder = get_object_or_404(ProjectStakeholder, pk=stakeholder_id, board=board)
+    record = get_object_or_404(StakeholderEngagementRecord, pk=record_id, stakeholder=stakeholder)
+    
+    if request.method == 'POST':
+        record.delete()
+        messages.success(request, 'Engagement record deleted successfully!')
+        return redirect('stakeholder:stakeholder_detail', board_id=board_id, pk=stakeholder_id)
+    
+    context = {
+        'board': board,
+        'stakeholder': stakeholder,
+        'record': record,
+    }
+    return render(request, 'kanban/engagement_record_confirm_delete.html', context)
 
 
 @login_required

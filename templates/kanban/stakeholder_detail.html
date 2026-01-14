@@ -288,6 +288,7 @@
                                     <th>Sentiment</th>
                                     <th>Satisfaction</th>
                                     <th>Follow-up</th>
+                                    <th>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -330,6 +331,22 @@
                                         {% else %}
                                         <span class="text-muted">—</span>
                                         {% endif %}
+                                    </td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{% url 'stakeholder:engagement_record_update' board.id stakeholder.id record.id %}" 
+                                               class="btn btn-outline-primary btn-sm"
+                                               data-bs-toggle="tooltip"
+                                               title="Edit engagement record">
+                                                <i class="bi bi-pencil"></i>
+                                            </a>
+                                            <a href="{% url 'stakeholder:engagement_record_delete' board.id stakeholder.id record.id %}" 
+                                               class="btn btn-outline-danger btn-sm"
+                                               data-bs-toggle="tooltip"
+                                               title="Delete engagement record">
+                                                <i class="bi bi-trash"></i>
+                                            </a>
+                                        </div>
                                     </td>
                                 </tr>
                                 {% endfor %}
