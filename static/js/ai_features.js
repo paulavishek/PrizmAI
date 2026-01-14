@@ -834,10 +834,16 @@ function predictTaskDeadline(taskData, callback) {
         body: JSON.stringify(taskData)
     })
     .then(response => {
-        if (!response.ok) {
-            throw new Error('Failed to predict deadline');
-        }
-        return response.json();
+        return response.json().then(data => {
+            if (!response.ok) {
+                // Pass error details including assignee_required flag
+                const error = new Error(data.error || 'Failed to predict deadline');
+                error.assignee_required = data.assignee_required || false;
+                error.message = data.error || 'Failed to predict deadline';
+                throw error;
+            }
+            return data;
+        });
     })
     .then(data => {
         if (aiSpinner) aiSpinner.classList.add('d-none');
@@ -1149,16 +1155,48 @@ function initDeadlinePrediction() {
     const predictButton = document.getElementById('predict-deadline-btn');
     if (!predictButton) return;
     
+    const assignedToSelect = document.getElementById('id_assigned_to');
+    
+    // Function to check if assignee is selected and update button state
+    function updatePredictButtonState() {
+        if (!assignedToSelect) return;
+        
+        const selectedValue = assignedToSelect.value;
+        const hasAssignee = selectedValue && selectedValue !== '';
+        
+        if (hasAssignee) {
+            predictButton.disabled = false;
+            predictButton.classList.remove('disabled');
+            predictButton.title = 'AI-powered deadline prediction';
+        } else {
+            predictButton.disabled = true;
+            predictButton.classList.add('disabled');
+            predictButton.title = 'Please select an assignee first. The AI needs to analyze their historical velocity and workload to predict an accurate deadline.';
+        }
+    }
+    
+    // Update button state on assignee change
+    if (assignedToSelect) {
+        assignedToSelect.addEventListener('change', updatePredictButtonState);
+        // Initial state check
+        updatePredictButtonState();
+    }
+    
     predictButton.addEventListener('click', function() {
         const titleInput = document.getElementById('id_title');
         const descriptionInput = document.getElementById('id_description');
         const prioritySelect = document.getElementById('id_priority');
-        const assignedToSelect = document.getElementById('id_assigned_to');
         const boardId = this.dataset.boardId;
         const taskId = this.dataset.taskId;
         
         if (!titleInput || !titleInput.value.trim()) {
             alert('Please enter a task title first.');
+            return;
+        }
+        
+        // Double-check assignee is selected
+        if (!assignedToSelect || !assignedToSelect.value || assignedToSelect.value === '') {
+            alert('Please select an assignee first. The AI needs to analyze their historical velocity and current workload to make an accurate prediction.');
             return;
         }
         
@@ -1173,7 +1211,12 @@ function initDeadlinePrediction() {
         
         predictTaskDeadline(taskData, function(error, data) {
             if (error) {
-                alert('Failed to predict deadline. Please try again.');
+                // Check if error is due to missing assignee
+                if (error.assignee_required) {
+                    alert(error.message || 'Please select an assignee first. The AI needs to analyze their historical velocity and current workload to make an accurate prediction.');
+                } else {
+                    alert('Failed to predict deadline. Please try again.');
+                }
                 return;
             }
             

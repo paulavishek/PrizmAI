@@ -722,8 +722,12 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
     """
     Predict realistic completion timeline for a task based on historical data and context.
     
+    IMPORTANT: This function requires a valid assignee to be set in task_data.
+    The prediction is based on the assignee's historical velocity and current workload.
+    The API endpoint validates that an assignee is selected before calling this function.
+    
     Args:
-        task_data: Dictionary containing task information
+        task_data: Dictionary containing task information (must include 'assigned_to')
         team_context: Dictionary containing team performance and historical data
         
     Returns:

@@ -1325,6 +1325,14 @@ def predict_deadline_api(request):
         if not title:
             return JsonResponse({'error': 'Title is required'}, status=400)
         
+        # CRITICAL FIX: Reject prediction if no assignee is selected
+        # The AI prediction relies on assignee's historical velocity and workload
+        if not assigned_to or assigned_to == 'Unassigned' or assigned_to.strip() == '':
+            return JsonResponse({
+                'error': 'Please select an assignee before predicting the deadline. The AI needs to analyze the assignee\'s historical velocity and current workload to make an accurate prediction.',
+                'assignee_required': True
+            }, status=400)
+        
         # Get board context for deadline prediction
         board_id = data.get('board_id')
         if task_id:
