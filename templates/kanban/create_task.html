@@ -284,6 +284,24 @@
                                                     <div class="invalid-feedback d-block">{{ form.workload_impact.errors }}</div>
                                                 {% endif %}
                                             </div>
+                                            <div class="mb-3">
+                                                <label for="{{ form.skill_match_score.id_for_label }}" class="form-label">Skill Match Score</label>
+                                                {{ form.skill_match_score }}
+                                                <small class="form-text text-muted">How well the assignee's skills match this task (0-100%)</small>
+                                                {% if form.skill_match_score.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.skill_match_score.errors }}</div>
+                                                {% endif %}
+                                            </div>
+                                            <div class="mb-3 form-check">
+                                                {{ form.collaboration_required }}
+                                                <label class="form-check-label" for="{{ form.collaboration_required.id_for_label }}">
+                                                    <i class="fas fa-users me-1"></i> Collaboration Required
+                                                </label>
+                                                <small class="form-text text-muted d-block">Check if this task requires collaboration with other team members</small>
+                                                {% if form.collaboration_required.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.collaboration_required.errors }}</div>
+                                                {% endif %}
+                                            </div>
                                         </div>
 
                                         <hr>
@@ -323,12 +341,37 @@
                                                     <div class="invalid-feedback d-block">{{ form.dependencies.errors }}</div>
                                                 {% endif %}
                                             </div>
+                                            <div class="mb-3">
+                                                <label for="{{ form.related_tasks.id_for_label }}" class="form-label">
+                                                    Related Tasks
+                                                    <i class="fas fa-question-circle text-muted" title="Tasks that are related but not dependencies"></i>
+                                                </label>
+                                                {{ form.related_tasks }}
+                                                <small class="form-text text-muted">Tasks that are related but not dependencies (optional)</small>
+                                                {% if form.related_tasks.errors %}
+                                                    <div class="invalid-feedback d-block">{{ form.related_tasks.errors }}</div>
+                                                {% endif %}
+                                            </div>
                                             <div class="alert alert-secondary mb-0 py-2">
                                                 <small>
                                                     <i class="fas fa-info-circle"></i> 
                                                     <strong>Timeline vs Hierarchy:</strong> Dependencies block timeline progress (Gantt chart), while Parent Task creates an organizational hierarchy (subtasks).
                                                 </small>
                                             </div>
+                                        </div>
+                                        
+                                        <hr>
+                                        
+                                        <!-- Required Skills (JSON) -->
+                                        <div class="mb-3">
+                                            <label for="{{ form.required_skills.id_for_label }}" class="form-label">
+                                                <i class="fas fa-tools me-1"></i> Required Skills (Advanced)
+                                            </label>
+                                            {{ form.required_skills }}
+                                            <small class="form-text text-muted">{{ form.required_skills.help_text }}</small>
+                                            {% if form.required_skills.errors %}
+                                                <div class="invalid-feedback d-block">{{ form.required_skills.errors }}</div>
+                                            {% endif %}
                                         </div>
 
                                         <hr>
@@ -337,7 +380,7 @@
                                         <div class="alert alert-secondary mb-0 py-2">
                                             <small>
                                                 <i class="fas fa-users me-1"></i> 
-                                                <strong>Stakeholders & Attachments:</strong> You can add stakeholders, related tasks, and files after creating the task.
+                                                <strong>Stakeholders & Attachments:</strong> You can add stakeholders, and files after creating the task.
                                             </small>
                                         </div>
                                     </div>
