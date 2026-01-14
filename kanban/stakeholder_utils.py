@@ -101,6 +101,94 @@ def calculate_engagement_metrics(board):
     return True
 
 
+def recalculate_stakeholder_metrics(stakeholder):
+    """
+    Recalculate engagement metrics for a single stakeholder
+    """
+    board = stakeholder.board
+    
+    # Get date range (last 30 days)
+    end_date = timezone.now().date()
+    start_date = end_date - timedelta(days=30)
+    
+    # Get engagement records for period
+    records = stakeholder.engagement_records.filter(
+        date__gte=start_date,
+        date__lte=end_date
+    )
+    
+    # Calculate metrics
+    total_count = records.count()
+    
+    # Communication channels
+    channel_breakdown = records.values('communication_channel').annotate(
+        count=Count('id')
+    )
+    channels_used = [
+        {
+            'channel': ch['communication_channel'],
+            'count': ch['count']
+        }
+        for ch in channel_breakdown
+    ]
+    primary_channel = max(
+        channels_used, 
+        key=lambda x: x['count']
+    )['channel'] if channels_used else ''
+    
+    # Satisfaction metrics
+    satisfaction_records = records.filter(satisfaction_rating__isnull=False)
+    avg_satisfaction = satisfaction_records.aggregate(
+        avg=Avg('satisfaction_rating')
+    )['avg'] or 0
+    
+    positive_count = records.filter(engagement_sentiment='positive').count()
+    negative_count = records.filter(engagement_sentiment='negative').count()
+    
+    # Last engagement
+    last_record = stakeholder.engagement_records.first()
+    days_since = 0
+    if last_record:
+        days_since = (end_date - last_record.date).days
+    
+    # Follow-ups
+    pending_followups = records.filter(
+        follow_up_required=True,
+        follow_up_completed=False
+    ).count()
+    
+    # Calculate engagement gap
+    engagement_gap = stakeholder.get_engagement_gap()
+    
+    # Get or create metrics
+    metrics, created = EngagementMetrics.objects.get_or_create(
+        board=board,
+        stakeholder=stakeholder,
+        defaults={
+            'period_start': start_date,
+            'period_end': end_date,
+        }
+    )
+    
+    # Update metrics
+    metrics.total_engagements = stakeholder.engagement_records.count()
+    metrics.engagements_this_month = total_count
+    metrics.average_engagements_per_month = total_count / 1  # Simple calculation for now
+    metrics.primary_channel = primary_channel
+    metrics.channels_used = channels_used
+    metrics.average_satisfaction = float(avg_satisfaction)
+    metrics.positive_engagements_count = positive_count
+    metrics.negative_engagements_count = negative_count
+    metrics.days_since_last_engagement = days_since
+    metrics.pending_follow_ups = pending_followups
+    metrics.engagement_gap = engagement_gap
+    metrics.period_start = start_date
+    metrics.period_end = end_date
+    metrics.save()
+    
+    return metrics
+
+
 def update_stakeholder_engagement(stakeholder, task=None):
     """
     Update stakeholder engagement status based on recent activity

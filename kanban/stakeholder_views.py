@@ -24,6 +24,7 @@ from .stakeholder_forms import (
     StakeholderEngagementRecordForm, StakeholderTagForm,
     BulkStakeholderImportForm
 )
+from .stakeholder_utils import recalculate_stakeholder_metrics
 
 
 def check_board_access(user, board_id):
@@ -228,6 +229,9 @@ def engagement_record_create(request, board_id, stakeholder_id):
             # Update stakeholder's last engagement
             stakeholder.task_involvements.all().update(last_engagement=timezone.now())
             
+            # Recalculate engagement metrics
+            recalculate_stakeholder_metrics(stakeholder)
+            
             messages.success(request, 'Engagement recorded successfully!')
             return redirect('stakeholder:stakeholder_detail', board_id=board_id, pk=stakeholder_id)
     else:
@@ -257,6 +261,10 @@ def engagement_record_update(request, board_id, stakeholder_id, record_id):
         form = StakeholderEngagementRecordForm(request.POST, instance=record)
         if form.is_valid():
             form.save()
+            
+            # Recalculate engagement metrics
+            recalculate_stakeholder_metrics(stakeholder)
+            
             messages.success(request, 'Engagement record updated successfully!')
             return redirect('stakeholder:stakeholder_detail', board_id=board_id, pk=stakeholder_id)
     else:
@@ -285,6 +293,10 @@ def engagement_record_delete(request, board_id, stakeholder_id, record_id):
     
     if request.method == 'POST':
         record.delete()
+        
+        # Recalculate engagement metrics
+        recalculate_stakeholder_metrics(stakeholder)
+        
         messages.success(request, 'Engagement record deleted successfully!')
         return redirect('stakeholder:stakeholder_detail', board_id=board_id, pk=stakeholder_id)
     
