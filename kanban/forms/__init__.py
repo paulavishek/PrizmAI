@@ -180,6 +180,9 @@ class TaskForm(forms.ModelForm):
         board = kwargs.pop('board', None)
         super().__init__(*args, **kwargs)
         
+        # Store board reference for duplicate detection in clean method
+        self._board = board
+        
         # Initialize risk indicators and mitigation strategies from JSON fields
         if self.instance and self.instance.pk:
             if self.instance.risk_indicators:
@@ -361,6 +364,30 @@ class TaskForm(forms.ModelForm):
         risk_impact = cleaned_data.get('risk_impact')
         risk_level = cleaned_data.get('risk_level')
         parent_task = cleaned_data.get('parent_task')
+        title = cleaned_data.get('title')
+        
+        # Check for duplicate task titles in the same board
+        if title and hasattr(self, '_board') and self._board:
+            # Look for existing tasks with the same title in the board
+            existing_tasks = Task.objects.filter(
+                column__board=self._board,
+                title__iexact=title  # Case-insensitive match
+            )
+            
+            # Exclude current task if editing
+            if self.instance and self.instance.pk:
+                existing_tasks = existing_tasks.exclude(pk=self.instance.pk)
+            
+            # Store duplicate info for the view to handle
+            if existing_tasks.exists():
+                # Store duplicate tasks info in a non-field error attribute
+                self._duplicate_tasks = list(existing_tasks[:5])  # Limit to 5 for display
+                # Add a warning (not an error, so form can still be submitted)
+                self.add_error(None, forms.ValidationError(
+                    f'⚠️ Warning: {existing_tasks.count()} task(s) with the title "{title}" already exist in this board. '
+                    'Are you sure you want to create a duplicate?',
+                    code='duplicate_warning'
+                ))
         
         # Validate parent_task to prevent circular dependencies
         if parent_task and self.instance:

@@ -842,56 +842,80 @@ def create_task(request, board_id, column_id=None):
     
     if request.method == 'POST':
         form = TaskForm(request.POST, board=board)
-        if form.is_valid():
-            task = form.save(commit=False)
-            task.column = column
-            # For demo mode, use demo_admin if user is anonymous
-            if request.user.is_authenticated:
-                task.created_by = request.user
-            else:
-                # For demo sessions, assign to the demo admin user
-                from django.contrib.auth.models import User
-                task.created_by = User.objects.filter(username='demo_admin').first()
-            # Set position to be at the end of the column
-            last_position = Task.objects.filter(column=column).order_by('-position').first()
-            task.position = (last_position.position + 1) if last_position else 0
-            
-            # If in demo mode, track this task as user-created (prevents date refresh from modifying it)
-            if is_demo_mode:
-                browser_fingerprint = request.session.get('browser_fingerprint')
-                if browser_fingerprint:
-                    task.created_by_session = browser_fingerprint
+        
+        # Check if this is a confirmed duplicate submission
+        confirm_duplicate = request.POST.get('confirm_duplicate', 'false') == 'true'
+        
+        if form.is_valid() or (not form.is_valid() and confirm_duplicate and hasattr(form, '_duplicate_tasks')):
+            # If there are duplicate warnings but user confirmed, clear non-field errors
+            if confirm_duplicate and hasattr(form, '_duplicate_tasks'):
+                # Remove duplicate warning errors
+                if hasattr(form, '_errors') and None in form._errors:
+                    form._errors[None] = [err for err in form._errors[None] if err.code != 'duplicate_warning']
+                    if not form._errors[None]:
+                        del form._errors[None]
+                # Re-validate without duplicate check
+                if form.is_valid():
+                    pass  # Continue to save
                 else:
-                    task.created_by_session = request.session.session_key
+                    # Still has other errors, show form again
+                    pass
             
-            # Store who created the task for signal handler
-            task._changed_by_user = task.created_by
-            task.save()
-            # Save many-to-many relationships
-            form.save_m2m()
-            
-            # Record activity (only for authenticated users)
-            if request.user.is_authenticated:
-                TaskActivity.objects.create(
-                    task=task,
-                    user=request.user,
-                    activity_type='created',
-                    description=f"Created task '{task.title}'"
-                )
-            
-            # Log to audit trail (only for authenticated users)
-            if request.user.is_authenticated:
-                log_model_change('task.created', task, request.user, request)
-            
-            messages.success(request, 'Task created successfully!')
-            return redirect('board_detail', board_id=board.id)
+            if form.is_valid():
+                task = form.save(commit=False)
+                task.column = column
+                # For demo mode, use demo_admin if user is anonymous
+                if request.user.is_authenticated:
+                    task.created_by = request.user
+                else:
+                    # For demo sessions, assign to the demo admin user
+                    from django.contrib.auth.models import User
+                    task.created_by = User.objects.filter(username='demo_admin').first()
+                # Set position to be at the end of the column
+                last_position = Task.objects.filter(column=column).order_by('-position').first()
+                task.position = (last_position.position + 1) if last_position else 0
+                
+                # If in demo mode, track this task as user-created (prevents date refresh from modifying it)
+                if is_demo_mode:
+                    browser_fingerprint = request.session.get('browser_fingerprint')
+                    if browser_fingerprint:
+                        task.created_by_session = browser_fingerprint
+                    else:
+                        task.created_by_session = request.session.session_key
+                
+                # Store who created the task for signal handler
+                task._changed_by_user = task.created_by
+                task.save()
+                # Save many-to-many relationships
+                form.save_m2m()
+                
+                # Record activity (only for authenticated users)
+                if request.user.is_authenticated:
+                    TaskActivity.objects.create(
+                        task=task,
+                        user=request.user,
+                        activity_type='created',
+                        description=f"Created task '{task.title}'"
+                    )
+                
+                # Log to audit trail (only for authenticated users)
+                if request.user.is_authenticated:
+                    log_model_change('task.created', task, request.user, request)
+                
+                messages.success(request, 'Task created successfully!')
+                return redirect('board_detail', board_id=board.id)
+        
+        # If form has duplicate tasks, add them to context for display
+        duplicate_tasks = getattr(form, '_duplicate_tasks', None)
     else:
         form = TaskForm(board=board)
+        duplicate_tasks = None
     
     return render(request, 'kanban/create_task.html', {
         'form': form,
         'board': board,
-        'column': column
+        'column': column,
+        'duplicate_tasks': duplicate_tasks
     })
 
 def delete_task(request, task_id):
