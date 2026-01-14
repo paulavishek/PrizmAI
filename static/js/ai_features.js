@@ -1156,6 +1156,7 @@ function initDeadlinePrediction() {
     if (!predictButton) return;
     
     const assignedToSelect = document.getElementById('id_assigned_to');
+    const assigneeHint = document.getElementById('predict-assignee-hint');
     
     // Function to check if assignee is selected and update button state
     function updatePredictButtonState() {
@@ -1168,10 +1169,18 @@ function initDeadlinePrediction() {
             predictButton.disabled = false;
             predictButton.classList.remove('disabled');
             predictButton.title = 'AI-powered deadline prediction';
+            // Hide the helper hint when assignee is selected
+            if (assigneeHint) {
+                assigneeHint.classList.add('d-none');
+            }
         } else {
             predictButton.disabled = true;
             predictButton.classList.add('disabled');
             predictButton.title = 'Please select an assignee first. The AI needs to analyze their historical velocity and workload to predict an accurate deadline.';
+            // Show the helper hint when no assignee is selected
+            if (assigneeHint) {
+                assigneeHint.classList.remove('d-none');
+            }
         }
     }
     

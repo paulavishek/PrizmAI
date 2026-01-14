@@ -68,7 +68,22 @@
                                 <div class="invalid-feedback d-block">{{ form.description.errors }}</div>
                             {% endif %}
                         </div>
-                          <div class="row mb-3">
+                        
+                        <!-- Assigned To - Moved above Due Date for better UX flow -->
+                        <div class="mb-3">
+                            <label for="{{ form.assigned_to.id_for_label }}" class="form-label">
+                                <i class="fas fa-user-check me-1"></i> Assigned To
+                            </label>
+                            {{ form.assigned_to }}
+                            <small class="form-text text-muted">
+                                <i class="fas fa-info-circle me-1"></i>Select an assignee to enable AI deadline prediction below.
+                            </small>
+                            {% if form.assigned_to.errors %}
+                                <div class="invalid-feedback d-block">{{ form.assigned_to.errors }}</div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="row mb-3">
                             <div class="col-md-6">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <label for="{{ form.due_date.id_for_label }}" class="form-label mb-0">Due Date</label>
@@ -78,6 +93,10 @@
                                     </button>
                                 </div>
                                 {{ form.due_date }}
+                                <!-- Helper text for prediction requirements -->
+                                <small id="predict-assignee-hint" class="form-text text-warning d-none">
+                                    <i class="fas fa-exclamation-circle me-1"></i>Please select an assignee above to enable AI prediction.
+                                </small>
                                 <div id="deadline-ai-spinner" class="d-none text-center mt-1">
                                     <div class="spinner-border spinner-border-sm text-info" role="status">
                                         <span class="visually-hidden">Loading...</span>
@@ -110,12 +129,6 @@
                                 {% endif %}
                             </div>
                         </div>
-                          <div class="mb-3">
-                            <label for="{{ form.assigned_to.id_for_label }}" class="form-label">Assigned To</label>
-                            {{ form.assigned_to }}
-                            {% if form.assigned_to.errors %}
-                                <div class="invalid-feedback d-block">{{ form.assigned_to.errors }}</div>
-                            {% endif %}                        </div>
 
                         <!-- Lean Six Sigma Classification (Single-select) -->
                         <div class="mb-3">
