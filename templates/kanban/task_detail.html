@@ -906,13 +906,11 @@
                     {% endif %}
                 </div>
 
-                <!-- 📋 Dependencies & Requirements Section -->
-                {% if task.parent_task or task.subtasks.all or task.related_tasks.all or task.dependencies.all or task.required_skills %}
+                <!-- 📋 Dependencies & Requirements Section - Always show -->
                 <div class="mb-3">
                     <label class="text-muted mb-2"><strong>📋 Dependencies & Requirements</strong></label>
                     
                     <!-- 📊 Timeline Dependencies (Gantt Chart) -->
-                    {% if task.dependencies.all or task.dependent_tasks.all %}
                     <div class="p-2 bg-light rounded mb-2">
                         <div class="mb-2">
                             <small class="text-muted d-block mb-1"><strong><i class="fas fa-project-diagram me-1"></i>Timeline Dependencies (Gantt Chart)</strong></small>
@@ -936,6 +934,11 @@
                             </div>
                             {% endfor %}
                         </div>
+                        {% else %}
+                        <div class="mb-2">
+                            <small class="text-muted"><i class="fas fa-arrow-right me-1"></i>Dependencies:</small>
+                            <small class="text-muted d-block fst-italic">No dependencies set. Edit this task to add blocking dependencies.</small>
+                        </div>
                         {% endif %}
                         
                         {% with blocking_tasks=task.dependent_tasks.all %}
@@ -955,13 +958,16 @@
                             </div>
                             {% endfor %}
                         </div>
+                        {% else %}
+                        <div class="mb-2">
+                            <small class="text-muted"><i class="fas fa-lock me-1"></i>Blocking:</small>
+                            <small class="text-muted d-block fst-italic">No tasks are blocked by this task.</small>
+                        </div>
                         {% endif %}
                         {% endwith %}
                     </div>
-                    {% endif %}
                     
                     <!-- 🔗 Task Hierarchy -->
-                    {% if task.parent_task or task.subtasks.all %}
                     <div class="p-2 bg-light rounded mb-2">
                         <div class="mb-2">
                             <small class="text-muted d-block mb-1"><strong><i class="fas fa-sitemap me-1"></i>Task Hierarchy</strong></small>
@@ -975,6 +981,11 @@
                                 <a href="{% url 'task_detail' task.parent_task.id %}" class="text-decoration-none"><strong>{{ task.parent_task.title }}</strong></a>
                             </div>
                         </div>
+                        {% else %}
+                        <div class="mb-2">
+                            <small class="text-muted">Parent Task:</small>
+                            <small class="text-muted d-block fst-italic">No parent task. This is a root-level task.</small>
+                        </div>
                         {% endif %}
                         
                         {% if task.subtasks.all %}
@@ -986,42 +997,49 @@
                             </div>
                             {% endfor %}
                         </div>
+                        {% else %}
+                        <div class="mb-2">
+                            <small class="text-muted">Subtasks:</small>
+                            <small class="text-muted d-block fst-italic">No subtasks. Create subtasks by selecting this task as a parent.</small>
+                        </div>
                         {% endif %}
                     </div>
-                    {% endif %}
                     
                     <!-- 📎 Additional Information -->
-                    {% if task.related_tasks.all or task.required_skills or task.complexity_score %}
                     <div class="p-2 bg-light rounded">
                         <div class="mb-2">
                             <small class="text-muted d-block mb-1"><strong><i class="fas fa-info-circle me-1"></i>Additional Information</strong></small>
                         </div>
                         
-                        {% if task.related_tasks.all %}
                         <div class="mb-2">
                             <small class="text-muted">Related Tasks ({{ task.related_tasks.count }}):</small>
+                            {% if task.related_tasks.all %}
                             <div class="mt-1">
                                 {% for related in task.related_tasks.all %}
                                 <a href="{% url 'task_detail' related.id %}" class="badge bg-secondary me-1 text-decoration-none">{{ related.title|truncatewords:3 }}</a>
                                 {% endfor %}
                             </div>
+                            {% else %}
+                            <small class="text-muted d-block fst-italic">No related tasks. Edit to link related tasks.</small>
+                            {% endif %}
                         </div>
-                        {% endif %}
                         
-                        {% if task.required_skills %}
                         <div class="mb-2">
                             <small class="text-muted">Required Skills:</small>
+                            {% if task.required_skills %}
                             <div>
                                 {% for skill in task.required_skills %}
                                 <span class="badge bg-warning me-1 mt-1">{{ skill.name }} ({{ skill.level }})</span>
                                 {% endfor %}
                             </div>
+                            {% else %}
+                            <small class="text-muted d-block fst-italic">Not specified. Edit task to add required skills.</small>
+                            {% endif %}
                         </div>
-                        {% endif %}
                         
-                        {% if task.complexity_score %}
                         <div class="mt-2">
                             <small class="text-muted d-block mb-1">Complexity Score:</small>
+                            {% if task.complexity_score %}
                             <div class="progress" style="height: 10px;">
                                 <div class="progress-bar {% if task.complexity_score >= 8 %}bg-danger{% elif task.complexity_score >= 5 %}bg-warning{% else %}bg-success{% endif %}" 
                                      role="progressbar" 
@@ -1030,43 +1048,48 @@
                             <small class="text-muted">{{ task.complexity_score }}/10 
                                 {% if task.complexity_score >= 8 %}(Very Complex){% elif task.complexity_score >= 5 %}(Moderate){% else %}(Simple){% endif %}
                             </small>
+                            {% else %}
+                            <small class="text-muted fst-italic">Not assessed. Edit task to set complexity.</small>
+                            {% endif %}
                         </div>
-                        {% endif %}
                     </div>
-                    {% endif %}
                 </div>
-                {% endif %}
 
-                <!-- 📦 Resource Information -->
-                {% if task.skill_match_score or task.workload_impact or task.collaboration_required %}
+                <!-- 📦 Resource Information - Always show -->
                 <div class="mb-3">
                     <label class="text-muted">📦 Resource Information</label>
                     <div class="p-2 bg-light rounded">
-                        {% if task.skill_match_score %}
                         <div class="mb-2">
                             <small class="text-muted">Skill Match Score:</small>
+                            {% if task.skill_match_score %}
                             <div class="progress" style="height: 10px;">
-                                <div class="progress-bar bg-info" role="progressbar" style="width: 85%;"></div>
+                                <div class="progress-bar bg-info" role="progressbar" style="width: {{ task.skill_match_score }}%;"></div>
                             </div>
                             <small class="text-muted">{{ task.skill_match_score }}%</small>
+                            {% else %}
+                            <small class="text-muted d-block fst-italic">Not calculated. Assign skills and an assignee to calculate.</small>
+                            {% endif %}
                         </div>
-                        {% endif %}
                         
-                        {% if task.workload_impact %}
                         <div class="mb-2">
                             <small class="text-muted">Workload Impact: </small>
-                            <span class="badge {% if task.workload_impact == 'critical' %}bg-danger{% elif task.workload_impact == 'high' %}bg-warning{% else %}bg-success{% endif %}">{{ task.get_workload_impact_display }}</span>
+                            {% if task.workload_impact %}
+                            <span class="badge {% if task.workload_impact == 'critical' %}bg-danger{% elif task.workload_impact == 'high' %}bg-warning{% elif task.workload_impact == 'medium' %}bg-info{% else %}bg-success{% endif %}">{{ task.get_workload_impact_display }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Not Set</span>
+                            {% endif %}
                         </div>
-                        {% endif %}
                         
-                        {% if task.collaboration_required %}
                         <div>
-                            <small class="text-muted"><i class="fas fa-users me-1"></i>Collaboration Required</small>
+                            <small class="text-muted"><i class="fas fa-users me-1"></i>Collaboration Required: </small>
+                            {% if task.collaboration_required %}
+                            <span class="badge bg-primary">Yes</span>
+                            {% else %}
+                            <span class="badge bg-secondary">No</span>
+                            {% endif %}
                         </div>
-                        {% endif %}
                     </div>
                 </div>
-                {% endif %}
 
                 {% if task.labels.all %}                <div>
                     <div class="d-flex justify-content-between align-items-center">
