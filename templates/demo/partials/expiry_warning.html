@@ -77,13 +77,6 @@
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
-                // Hide warning banner
-                const banner = document.getElementById('expiryWarningBanner');
-                if (banner) {
-                    banner.classList.remove('show');
-                    setTimeout(() => banner.remove(), 150);
-                }
-                
                 // Show success message with extensions remaining
                 const extRemaining = data.extensions_remaining || 0;
                 let message = 'Session extended by 1 hour!';
@@ -99,6 +92,11 @@
                     extensions_remaining: extRemaining,
                     time_remaining: data.new_expiry_time
                 });
+                
+                // Reload page after short delay to update timer display
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
             } else {
                 // Re-enable button on error
                 btn.disabled = false;
