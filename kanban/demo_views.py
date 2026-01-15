@@ -1027,8 +1027,15 @@ def extend_demo_session(request):
                 'message': f'Maximum extensions ({MAX_DEMO_EXTENSIONS}) reached. Please create an account to continue using PrizmAI.'
             }, status=403)
         
-        # Extend session by configured duration
-        demo_session.expires_at = timezone.now() + timedelta(hours=EXTENSION_DURATION_HOURS)
+        # Extend session by adding duration to current expiry time
+        # This ensures we ADD time rather than resetting to now + duration
+        if demo_session.expires_at < timezone.now():
+            # If already expired, extend from now
+            demo_session.expires_at = timezone.now() + timedelta(hours=EXTENSION_DURATION_HOURS)
+        else:
+            # If not expired, add extension to existing expiry time
+            demo_session.expires_at = demo_session.expires_at + timedelta(hours=EXTENSION_DURATION_HOURS)
+        
         demo_session.extensions_count += 1
         demo_session.save()
         
