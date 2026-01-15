@@ -68,8 +68,8 @@
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav flex-grow-1">
+            <div class="collapse navbar-collapse" id="navbarNav" style="justify-content: flex-end;">
+                <ul class="navbar-nav me-auto ms-lg-5">
                     {% if user.is_authenticated %}
                         <li class="nav-item">
                             <a class="nav-link" href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}">Dashboard</a>
@@ -119,11 +119,11 @@
                             </a>
                         </li>
                     {% endif %}
-                    <!-- Spacer to push remaining items to the right -->
-                    <li class="nav-item ms-auto"></li>
+                </ul>
+                <ul class="navbar-nav align-items-center">
                     <!-- Demo Mode Badge and Timer (visible only in demo mode) -->
                     {% if request.session.is_demo_mode %}
-                        <li class="nav-item me-2">
+                        <li class="nav-item me-1">
                             <span class="badge bg-warning text-dark" style="font-size: 0.75rem; padding: 0.4rem 0.6rem;" title="Demo Mode Active">
                                 <i class="fas fa-graduation-cap"></i> DEMO
                             </span>
@@ -150,7 +150,7 @@
                         </li>
                     {% endif %}
                     <!-- Accessibility Toggle Button -->
-                    <li class="nav-item me-1">
+                    <li class="nav-item">
                         <button id="accessibility-toggle" 
                                 type="button" 
                                 class="btn btn-link nav-link p-1" 
