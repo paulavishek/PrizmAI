@@ -97,6 +97,8 @@ def demo_mode_selection(request):
         
         # Check if this browser has an existing demo session (within last 48h)
         existing_demo_start = None
+        existing_extensions_count = 0
+        existing_expires_at = None
         try:
             from analytics.models import DemoSession
             recent_session = DemoSession.objects.filter(
@@ -106,13 +108,22 @@ def demo_mode_selection(request):
             
             if recent_session and recent_session.first_demo_start:
                 existing_demo_start = recent_session.first_demo_start
-                logger.info(f"Found existing demo session for browser, started at {existing_demo_start}")
+                # CRITICAL: Carry over the extensions count from previous session
+                existing_extensions_count = recent_session.extensions_count
+                # Also carry over the expires_at if extensions were used
+                if recent_session.extensions_count > 0 and recent_session.expires_at:
+                    existing_expires_at = recent_session.expires_at
+                logger.info(f"Found existing demo session for browser, started at {existing_demo_start}, extensions used: {existing_extensions_count}")
         except Exception as e:
             logger.warning(f"Could not check for existing demo session: {e}")
         
         # Set demo start time (use existing if found, otherwise now)
         demo_started_at = existing_demo_start or timezone.now()
-        demo_expires_at = demo_started_at + timedelta(hours=48)
+        # Use existing expiry time if extensions were used, otherwise calculate from start
+        if existing_expires_at:
+            demo_expires_at = existing_expires_at
+        else:
+            demo_expires_at = demo_started_at + timedelta(hours=48)
         
         request.session['demo_started_at'] = demo_started_at.isoformat()
         request.session['demo_expires_at'] = demo_expires_at.isoformat()
@@ -169,6 +180,8 @@ def demo_mode_selection(request):
                     'device_type': device_type,
                     'user_agent': request.META.get('HTTP_USER_AGENT', ''),
                     'ip_address': ip_address,
+                    # CRITICAL: Carry over extensions count from previous session
+                    'extensions_count': existing_extensions_count,
                 }
             )
             
@@ -177,6 +190,9 @@ def demo_mode_selection(request):
                 demo_session.demo_mode = mode
                 demo_session.selection_method = selection_method
                 demo_session.user = request.user if request.user.is_authenticated else None
+                # Preserve extensions_count if not already set from previous session
+                if existing_extensions_count > 0 and demo_session.extensions_count < existing_extensions_count:
+                    demo_session.extensions_count = existing_extensions_count
                 demo_session.save()
             else:
                 # Register new session for abuse prevention tracking
