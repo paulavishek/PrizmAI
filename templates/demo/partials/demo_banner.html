@@ -1167,7 +1167,7 @@ function initDemoCountdownTimer() {
     let expiryDate = new Date(expiresAt);
     let lastSyncTime = Date.now();
     
-    // Sync with server every 30 seconds to ensure accuracy
+    // Sync with server to get accurate time
     async function syncWithServer() {
         try {
             const response = await fetch("{% url 'get_demo_status' %}");
@@ -1175,20 +1175,19 @@ function initDemoCountdownTimer() {
                 const data = await response.json();
                 if (data.status === 'success' && data.expires_at) {
                     const newExpiryDate = new Date(data.expires_at);
-                    // Only update if there's a significant difference (more than 5 seconds)
-                    if (Math.abs(newExpiryDate - expiryDate) > 5000) {
+                    // Update if there's any difference
+                    if (Math.abs(newExpiryDate - expiryDate) > 1000) {
                         expiryDate = newExpiryDate;
                         timerElement.setAttribute('data-expires', data.expires_at);
-                        console.log('Demo banner timer synced with server:', data.expires_at);
+                        console.log('✅ Demo timer synced:', data.expires_at, '| Remaining:', data.hours_remaining, 'hours');
                     }
                 }
                 if (data.is_expired) {
-                    // Server says expired - redirect immediately
                     window.location.href = "{% url 'demo_mode_selection' %}?expired=1";
                 }
             }
         } catch (error) {
-            console.warn('Failed to sync demo timer with server:', error);
+            console.warn('⚠️ Failed to sync demo timer:', error);
         }
         lastSyncTime = Date.now();
     }
@@ -1238,14 +1237,17 @@ function initDemoCountdownTimer() {
         }
     }
     
-    // Update immediately
+    // Update immediately on page load
     updateTimer();
+    
+    // Sync with server immediately on page load
+    syncWithServer();
     
     // Update every second
     const timerInterval = setInterval(updateTimer, 1000);
     
-    // Sync with server every 30 seconds
-    const syncInterval = setInterval(syncWithServer, 30000);
+    // Sync with server every 15 seconds for accuracy
+    const syncInterval = setInterval(syncWithServer, 15000);
     
     // Also sync when page becomes visible (user returns to tab)
     document.addEventListener('visibilitychange', () => {
