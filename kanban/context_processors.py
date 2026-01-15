@@ -68,6 +68,7 @@ def demo_context(request):
                 expires_at = make_aware(expires_at)
             
             context['demo_expires_at'] = expires_at
+            context['demo_expires_at_iso'] = expires_at.isoformat()
             
             # Calculate time remaining
             time_remaining = expires_at - timezone.now()

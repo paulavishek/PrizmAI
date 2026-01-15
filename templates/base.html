@@ -139,7 +139,7 @@
                                 {% elif demo_expires_at %}
                                     <span class="nav-demo-timer-value fw-bold" 
                                           id="navDemoCountdownTimer" 
-                                          data-expires="{{ demo_expires_at.isoformat }}"
+                                          data-expires="{{ demo_expires_at_iso }}"
                                           style="font-family: 'Courier New', monospace; font-size: 0.8rem; letter-spacing: 0.3px; min-width: 75px;">
                                         {{ demo_time_formatted|default:"48:00:00" }}
                                     </span>
