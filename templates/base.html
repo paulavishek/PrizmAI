@@ -123,30 +123,30 @@
                 <ul class="navbar-nav align-items-center">
                     <!-- Demo Mode Badge and Timer (visible only in demo mode) -->
                     {% if request.session.is_demo_mode %}
-                        <li class="nav-item me-2">
+                        <li class="nav-item me-1">
                             <a class="btn btn-warning btn-sm text-dark fw-bold {% if request.resolver_match.url_name == 'demo_dashboard' %}active{% endif %}" 
                                href="{% url 'demo_dashboard' %}"
-                               style="border: 2px solid #ffc107; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">
+                               style="border: 2px solid #ffc107; box-shadow: 0 2px 4px rgba(0,0,0,0.2); padding: 0.375rem 0.75rem;">
                                 <i class="fas fa-graduation-cap me-1"></i> DEMO MODE
                             </a>
                         </li>
                         <!-- Demo Timer in Navbar -->
-                        <li class="nav-item me-2" id="navDemoTimerContainer">
+                        <li class="nav-item me-1" id="navDemoTimerContainer">
                             <div class="d-flex align-items-center px-2 py-1 rounded" 
-                                 style="background: rgba(102, 126, 234, 0.15); border: 1px solid rgba(102, 126, 234, 0.3);"
+                                 style="background: rgba(102, 126, 234, 0.15); border: 1px solid rgba(102, 126, 234, 0.3); white-space: nowrap;"
                                  title="Demo session time remaining" id="navDemoTimerDisplay">
-                                <i class="fas fa-clock me-1 text-primary"></i>
+                                <i class="fas fa-clock me-1 text-primary" style="font-size: 0.85rem;"></i>
                                 {% if demo_expired %}
-                                    <span class="nav-demo-timer-expired text-danger fw-bold">Expired</span>
+                                    <span class="nav-demo-timer-expired text-danger fw-bold" style="font-size: 0.85rem;">Expired</span>
                                 {% elif demo_expires_at %}
                                     <span class="nav-demo-timer-value fw-bold" 
                                           id="navDemoCountdownTimer" 
                                           data-expires="{{ demo_expires_at.isoformat }}"
-                                          style="font-family: 'Courier New', monospace; font-size: 0.9rem; letter-spacing: 0.5px;">
+                                          style="font-family: 'Courier New', monospace; font-size: 0.85rem; letter-spacing: 0.3px; min-width: 62px;">
                                         {{ demo_hours_remaining|default:"48" }}h
                                     </span>
                                 {% else %}
-                                    <span class="text-muted" style="font-size: 0.85rem;">48h limit</span>
+                                    <span class="text-muted" style="font-size: 0.8rem;">48h</span>
                                 {% endif %}
                             </div>
                         </li>

@@ -207,31 +207,6 @@
     </div>
 
     <div class="demo-limitations-grid">
-        <!-- Time Limitation -->
-        <div class="demo-limitation-item {% if demo_hours_remaining|default:48 < 24 %}demo-limitation-urgent{% endif %}" id="demoLimitTimerCard">
-            <span class="demo-limitation-icon">⏰</span>
-            <div class="demo-limitation-label">Session Timer</div>
-            <div class="demo-limitation-value">
-                {% if demo_expired %}
-                    <span class="demo-timer-expired-large">Expired</span>
-                {% else %}
-                    <span class="demo-limit-countdown">
-                        {{ demo_hours_remaining|floatformat:1|default:"48" }} hours remaining
-                    </span>
-                {% endif %}
-                {% if demo_hours_remaining|default:48 < 24 and not demo_expired %}
-                <span style="font-size: 0.8rem; color: #ffc107;">⚠️</span>
-                {% endif %}
-            </div>
-            <div class="demo-limitation-desc">
-                {% if demo_expired %}
-                Session expired! Start a new demo or create a free account.
-                {% else %}
-                When time runs out, demo data auto-resets. Create a free account to keep your work forever!
-                {% endif %}
-            </div>
-        </div>
-
         <!-- Project Limitation -->
         <div class="demo-limitation-item {% if demo_projects_remaining|default:2 == 0 %}demo-limitation-warning{% endif %}">
             <span class="demo-limitation-icon">📁</span>
