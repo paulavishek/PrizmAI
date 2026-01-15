@@ -18,17 +18,28 @@
                 <strong>{{ expiry_warning_message }}</strong>
                 {% if expiry_warning_level == 'critical' %}
                     Create a free account now to save your work!
+                {% elif demo_extensions_remaining > 0 %}
+                    <span class="ms-2 text-muted" style="font-size: 0.9em;">
+                        ({{ demo_extensions_remaining }} extension{{ demo_extensions_remaining|pluralize }} remaining)
+                    </span>
                 {% endif %}
             </span>
         </div>
         
         <div class="d-flex align-items-center gap-2">
-            {% if expiry_warning_level != 'critical' %}
+            {% if expiry_warning_level != 'critical' and demo_extensions_remaining > 0 %}
                 <button type="button" 
-                        class="btn btn-sm btn-outline-{{ expiry_warning_level }} me-2"
-                        onclick="extendDemoSession()">
+                        class="btn btn-sm btn-light me-2"
+                        style="font-weight: 500; border: 2px solid rgba(255, 255, 255, 0.5);"
+                        onclick="extendDemoSession()"
+                        id="extendSessionBtn"
+                        title="Extend session by {{ demo_extension_duration }} hour{{ demo_extension_duration|pluralize }}">
                     <i class="fas fa-clock"></i> Extend Session
                 </button>
+            {% elif demo_extensions_remaining <= 0 %}
+                <span class="text-white me-2" style="font-size: 0.9em;">
+                    <i class="fas fa-info-circle"></i> No extensions remaining
+                </span>
             {% endif %}
             
             <a href="{% url 'register' %}" 
@@ -48,14 +59,12 @@
 
 <script>
     function extendDemoSession() {
-        // Check if already extended too many times
-        const extensions = parseInt(sessionStorage.getItem('demo_extensions') || '0');
+        const btn = document.getElementById('extendSessionBtn');
+        if (btn.disabled) return;
         
-        if (extensions >= 3) {
-            alert('You have reached the maximum number of session extensions. Please create an account to continue using PrizmAI.');
-            window.location.href = "{% url 'register' %}";
-            return;
-        }
+        // Disable button during request
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Extending...';
         
         // Make AJAX call to extend session
         fetch("{% url 'extend_demo_session' %}", {
@@ -68,9 +77,6 @@
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
-                // Update extension count
-                sessionStorage.setItem('demo_extensions', (extensions + 1).toString());
-                
                 // Hide warning banner
                 const banner = document.getElementById('expiryWarningBanner');
                 if (banner) {
@@ -78,20 +84,39 @@
                     setTimeout(() => banner.remove(), 150);
                 }
                 
-                // Show success message
-                showToast('Session extended by 1 hour!', 'success');
+                // Show success message with extensions remaining
+                const extRemaining = data.extensions_remaining || 0;
+                let message = 'Session extended by 1 hour!';
+                if (extRemaining > 0) {
+                    message += ` You have ${extRemaining} extension${extRemaining > 1 ? 's' : ''} remaining.`;
+                } else {
+                    message += ' This was your final extension.';
+                }
+                showToast(message, 'success');
                 
                 // Track extension
                 trackAnalyticsEvent('demo_session_extended', {
-                    extensions: extensions + 1,
+                    extensions_remaining: extRemaining,
                     time_remaining: data.new_expiry_time
                 });
             } else {
+                // Re-enable button on error
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-clock"></i> Extend Session';
                 showToast(data.message || 'Failed to extend session. Please try again.', 'error');
+                
+                // If max extensions reached, redirect to registration
+                if (data.message && data.message.includes('Maximum extensions')) {
+                    setTimeout(() => {
+                        window.location.href = "{% url 'register' %}";
+                    }, 3000);
+                }
             }
         })
         .catch(error => {
             console.error('Error extending session:', error);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-clock"></i> Extend Session';
             showToast('An error occurred. Please try again.', 'error');
         });
     }

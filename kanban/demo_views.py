@@ -29,6 +29,13 @@ logger = logging.getLogger(__name__)
 DEMO_ORG_NAMES = ['Demo - Acme Corporation']
 DEMO_BOARD_NAMES = ['Software Development', 'Bug Tracking', 'Marketing Campaign']
 
+# Import session extension limits from centralized config
+from kanban.utils.demo_settings import (
+    MAX_DEMO_EXTENSIONS, 
+    EXTENSION_DURATION_HOURS, 
+    INITIAL_DEMO_DURATION_HOURS
+)
+
 
 def demo_mode_selection(request):
     """
@@ -992,23 +999,36 @@ def extend_demo_session(request):
         
         # Get session
         session_id = request.session.session_key
+        if not session_id:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'No active session found.'
+            }, status=400)
+        
         demo_session = DemoSession.objects.filter(session_id=session_id).first()
         
         if not demo_session:
             return JsonResponse({
                 'status': 'error',
-                'message': 'Demo session not found'
+                'message': 'Demo session not found. Please refresh the page.'
             }, status=404)
         
-        # Check extension count
-        if demo_session.extensions_count >= 3:
+        # Check if session has expired
+        if demo_session.expires_at and demo_session.expires_at < timezone.now():
             return JsonResponse({
                 'status': 'error',
-                'message': 'Maximum extensions reached. Please create an account to continue.'
+                'message': 'Demo session has expired. Please create a free account to continue.'
             }, status=403)
         
-        # Extend session
-        demo_session.expires_at = timezone.now() + timedelta(hours=1)
+        # Check extension count with configured limit
+        if demo_session.extensions_count >= MAX_DEMO_EXTENSIONS:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Maximum extensions ({MAX_DEMO_EXTENSIONS}) reached. Please create an account to continue using PrizmAI.'
+            }, status=403)
+        
+        # Extend session by configured duration
+        demo_session.expires_at = timezone.now() + timedelta(hours=EXTENSION_DURATION_HOURS)
         demo_session.extensions_count += 1
         demo_session.save()
         
@@ -1027,9 +1047,10 @@ def extend_demo_session(request):
         
         return JsonResponse({
             'status': 'success',
-            'message': 'Session extended by 1 hour',
+            'message': f'Session extended by {EXTENSION_DURATION_HOURS} hour{"s" if EXTENSION_DURATION_HOURS > 1 else ""}',
             'new_expiry_time': demo_session.expires_at.isoformat(),
-            'extensions_remaining': 3 - demo_session.extensions_count
+            'extensions_remaining': MAX_DEMO_EXTENSIONS - demo_session.extensions_count,
+            'extension_duration_hours': EXTENSION_DURATION_HOURS
         })
         
     except Exception as e:

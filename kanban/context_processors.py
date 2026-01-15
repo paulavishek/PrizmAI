@@ -120,6 +120,37 @@ def demo_context(request):
         context['nudges_shown'] = nudges_shown
         context['nudges_shown_count'] = len(nudges_shown)
         
+        # Extension limits information
+        try:
+            from analytics.models import DemoSession
+            session_id = request.session.session_key
+            if session_id:
+                demo_session = DemoSession.objects.filter(session_id=session_id).first()
+                if demo_session:
+                    # Import constants from demo_views
+                    from kanban.demo_views import MAX_DEMO_EXTENSIONS, EXTENSION_DURATION_HOURS
+                    context['demo_extensions_used'] = demo_session.extensions_count
+                    context['demo_extensions_max'] = MAX_DEMO_EXTENSIONS
+                    context['demo_extensions_remaining'] = MAX_DEMO_EXTENSIONS - demo_session.extensions_count
+                    context['demo_extension_duration'] = EXTENSION_DURATION_HOURS
+                else:
+                    context['demo_extensions_used'] = 0
+                    context['demo_extensions_max'] = 3
+                    context['demo_extensions_remaining'] = 3
+                    context['demo_extension_duration'] = 1
+            else:
+                context['demo_extensions_used'] = 0
+                context['demo_extensions_max'] = 3
+                context['demo_extensions_remaining'] = 3
+                context['demo_extension_duration'] = 1
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Error loading extension info: {e}")
+            context['demo_extensions_used'] = 0
+            context['demo_extensions_max'] = 3
+            context['demo_extensions_remaining'] = 3
+            context['demo_extension_duration'] = 1
+        
         # Role display names
         role_names = {
             'admin': 'Demo Admin (Solo)',
