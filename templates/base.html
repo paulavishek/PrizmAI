@@ -140,11 +140,11 @@
                                     <span class="nav-demo-timer-value fw-bold" 
                                           id="navDemoCountdownTimer" 
                                           data-expires="{{ demo_expires_at.isoformat }}"
-                                          style="font-family: 'Courier New', monospace; font-size: 0.8rem; letter-spacing: 0.3px; min-width: 58px;">
-                                        {{ demo_hours_remaining|default:"48" }}h
+                                          style="font-family: 'Courier New', monospace; font-size: 0.8rem; letter-spacing: 0.3px; min-width: 75px;">
+                                        {{ demo_time_formatted|default:"48:00:00" }}
                                     </span>
                                 {% else %}
-                                    <span class="text-muted" style="font-size: 0.75rem;">48h</span>
+                                    <span class="text-muted" style="font-size: 0.75rem;">48:00:00</span>
                                 {% endif %}
                             </div>
                         </li>

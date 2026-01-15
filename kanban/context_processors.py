@@ -77,10 +77,24 @@ def demo_context(request):
             if total_seconds < 0:
                 context['demo_time_remaining'] = None
                 context['demo_hours_remaining'] = 0
+                context['demo_hours_component'] = 0
+                context['demo_minutes_component'] = 0
+                context['demo_seconds_component'] = 0
+                context['demo_time_formatted'] = '00:00:00'
                 context['demo_expired'] = True
             else:
                 context['demo_time_remaining'] = time_remaining
                 context['demo_hours_remaining'] = round(total_seconds / 3600, 1)
+                
+                # Add formatted time components for HH:MM:SS display
+                hours = int(total_seconds // 3600)
+                minutes = int((total_seconds % 3600) // 60)
+                seconds = int(total_seconds % 60)
+                context['demo_hours_component'] = hours
+                context['demo_minutes_component'] = minutes
+                context['demo_seconds_component'] = seconds
+                context['demo_time_formatted'] = f'{hours:02d}:{minutes:02d}:{seconds:02d}'
+                
                 context['demo_expired'] = False
             
             # Check if warning should be shown
