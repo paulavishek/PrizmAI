@@ -214,12 +214,10 @@
             <div class="demo-limitation-value">
                 {% if demo_expired %}
                     <span class="demo-timer-expired-large">Expired</span>
-                {% elif demo_expires_at %}
-                    <span class="demo-limit-countdown" id="demoLimitCountdown" data-expires="{{ demo_expires_at.isoformat }}">
-                        {{ demo_hours_remaining|default:"48" }} hours remaining
-                    </span>
                 {% else %}
-                    48 hours remaining
+                    <span class="demo-limit-countdown">
+                        {{ demo_hours_remaining|floatformat:1|default:"48" }} hours remaining
+                    </span>
                 {% endif %}
                 {% if demo_hours_remaining|default:48 < 24 and not demo_expired %}
                 <span style="font-size: 0.8rem; color: #ffc107;">⚠️</span>
@@ -326,98 +324,6 @@ function trackLimitationBannerClick() {
     }
 }
 
-// Live Countdown Timer for Limitations Banner
-function initDemoLimitCountdown() {
-    const countdownElement = document.getElementById('demoLimitCountdown');
-    const cardElement = document.getElementById('demoLimitTimerCard');
-    
-    if (!countdownElement || !cardElement) return;
-    
-    let expiresAt = countdownElement.getAttribute('data-expires');
-    if (!expiresAt) return;
-    
-    let expiryDate = new Date(expiresAt);
-    let lastSyncTime = Date.now();
-    
-    // Sync with server to get accurate time
-    async function syncWithServer() {
-        try {
-            const response = await fetch("{% url 'get_demo_status' %}");
-            if (response.ok) {
-                const data = await response.json();
-                if (data.status === 'success' && data.expires_at) {
-                    const newExpiryDate = new Date(data.expires_at);
-                    // Update if there's any difference
-                    if (Math.abs(newExpiryDate - expiryDate) > 1000) {
-                        expiryDate = newExpiryDate;
-                        countdownElement.setAttribute('data-expires', data.expires_at);
-                        console.log('✅ Dashboard timer synced:', data.expires_at, '| Remaining:', data.hours_remaining, 'hours');
-                    }
-                }
-                if (data.is_expired) {
-                    window.location.href = "{% url 'demo_mode_selection' %}?expired=1";
-                }
-            }
-        } catch (error) {
-            console.warn('⚠️ Failed to sync demo timer:', error);
-        }
-        lastSyncTime = Date.now();
-    }
-    
-    function updateCountdown() {
-        const now = new Date();
-        const diff = expiryDate - now;
-        
-        if (diff <= 0) {
-            countdownElement.innerHTML = '<span class="demo-timer-expired-large">Expired</span>';
-            cardElement.classList.add('demo-limitation-urgent');
-            clearInterval(countdownInterval);
-            clearInterval(syncInterval);
-            
-            // Auto-redirect to demo mode selection after 3 seconds
-            setTimeout(() => {
-                window.location.href = "{% url 'demo_mode_selection' %}?expired=1";
-            }, 3000);
-            return;
-        }
-        
-        const totalSeconds = Math.floor(diff / 1000);
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const seconds = totalSeconds % 60;
-        
-        // Format display
-        const formattedTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        countdownElement.textContent = formattedTime;
-        
-        // Update card state
-        cardElement.classList.remove('demo-limitation-warning', 'demo-limitation-urgent');
-        if (hours < 1) {
-            cardElement.classList.add('demo-limitation-urgent');
-        } else if (hours < 12) {
-            cardElement.classList.add('demo-limitation-warning');
-        }
-    }
-    
-    // Update immediately on page load
-    updateCountdown();
-    
-    // Sync with server immediately on page load
-    syncWithServer();
-    
-    // Update every second
-    const countdownInterval = setInterval(updateCountdown, 1000);
-    
-    // Sync with server every 15 seconds for accuracy
-    const syncInterval = setInterval(syncWithServer, 15000);
-    
-    // Also sync when page becomes visible (user returns to tab)
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && Date.now() - lastSyncTime > 10000) {
-            syncWithServer();
-        }
-    });
-}
-
-document.addEventListener('DOMContentLoaded', initDemoLimitCountdown);
+// Note: Demo timer is now handled by the unified navbar timer in base.html
+// The limitations banner shows a static hours remaining value that updates on page reload
 </script>

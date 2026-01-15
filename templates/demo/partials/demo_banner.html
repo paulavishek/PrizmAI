@@ -179,47 +179,7 @@
         font-weight: 600;
     }
 
-    /* Demo Timer Styles */
-    .demo-timer-label {
-        font-size: 0.85rem;
-        opacity: 0.9;
-        margin-right: 0.3rem;
-    }
-
-    .demo-timer-value {
-        font-family: 'Courier New', monospace;
-        font-size: 1rem;
-        font-weight: 600;
-        letter-spacing: 0.5px;
-        padding: 0.2rem 0.5rem;
-        background: rgba(255, 255, 255, 0.15);
-        border-radius: 4px;
-        transition: all 0.3s ease;
-    }
-
-    .demo-timer-expired {
-        color: #ff6b6b;
-        font-weight: 600;
-        animation: pulse 1.5s ease-in-out infinite;
-    }
-
-    /* Timer warning states */
-    .demo-timer-warning .demo-timer-value {
-        background: rgba(255, 193, 7, 0.2);
-        color: #ffc107;
-    }
-
-    .demo-timer-urgent .demo-timer-value {
-        background: rgba(255, 152, 0, 0.25);
-        color: #ff9800;
-        animation: urgentPulse 2s ease-in-out infinite;
-    }
-
-    .demo-timer-critical .demo-timer-value {
-        background: rgba(255, 107, 107, 0.25);
-        color: #ff6b6b;
-        animation: criticalPulse 1s ease-in-out infinite;
-    }
+    /* Note: Timer styles removed - timer is now in navbar (base.html) */
 
     @keyframes pulse {
         0%, 100% { opacity: 1; }
@@ -713,18 +673,6 @@
                     <span class="demo-role-value">Demo Admin (Solo)</span>
                 </div>
                 {% endif %}
-
-                <div class="demo-banner-notice" title="When session expires, demo data resets and you'll need to start fresh" id="demoTimerDisplay">
-                    <i class="fas fa-clock me-1"></i>
-                    {% if demo_expired %}
-                        <span class="demo-timer-expired">Session Expired</span>
-                    {% elif demo_expires_at %}
-                        <span class="demo-timer-label">Time left:</span>
-                        <span class="demo-timer-value" id="demoCountdownTimer" data-expires="{{ demo_expires_at.isoformat }}">{{ demo_hours_remaining|default:"48" }}h</span>
-                    {% else %}
-                        <span>Session: 48h limit</span>
-                    {% endif %}
-                </div>
                 
                 <!-- Demo Limits Status -->
                 <div class="demo-limits-status">
@@ -1154,109 +1102,5 @@ function clearDemoSession() {
     return true;
 }
 
-// Live Countdown Timer with Server Sync
-function initDemoCountdownTimer() {
-    const timerElement = document.getElementById('demoCountdownTimer');
-    const displayElement = document.getElementById('demoTimerDisplay');
-    
-    if (!timerElement || !displayElement) return;
-    
-    let expiresAt = timerElement.getAttribute('data-expires');
-    if (!expiresAt) return;
-    
-    let expiryDate = new Date(expiresAt);
-    let lastSyncTime = Date.now();
-    
-    // Sync with server to get accurate time
-    async function syncWithServer() {
-        try {
-            const response = await fetch("{% url 'get_demo_status' %}");
-            if (response.ok) {
-                const data = await response.json();
-                if (data.status === 'success' && data.expires_at) {
-                    const newExpiryDate = new Date(data.expires_at);
-                    // Update if there's any difference
-                    if (Math.abs(newExpiryDate - expiryDate) > 1000) {
-                        expiryDate = newExpiryDate;
-                        timerElement.setAttribute('data-expires', data.expires_at);
-                        console.log('✅ Demo timer synced:', data.expires_at, '| Remaining:', data.hours_remaining, 'hours');
-                    }
-                }
-                if (data.is_expired) {
-                    window.location.href = "{% url 'demo_mode_selection' %}?expired=1";
-                }
-            }
-        } catch (error) {
-            console.warn('⚠️ Failed to sync demo timer:', error);
-        }
-        lastSyncTime = Date.now();
-    }
-    
-    function updateTimer() {
-        const now = new Date();
-        const diff = expiryDate - now;
-        
-        if (diff <= 0) {
-            // Expired
-            timerElement.innerHTML = '<span class="demo-timer-expired">Expired</span>';
-            displayElement.classList.add('demo-timer-critical');
-            clearInterval(timerInterval);
-            clearInterval(syncInterval);
-            
-            // Redirect to demo mode selection with expiry message
-            setTimeout(() => {
-                window.location.href = "{% url 'demo_mode_selection' %}?expired=1";
-            }, 2000);
-            return;
-        }
-        
-        // Calculate time components
-        const totalSeconds = Math.floor(diff / 1000);
-        const hours = Math.floor(totalSeconds / 3600);
-        const minutes = Math.floor((totalSeconds % 3600) / 60);
-        const seconds = totalSeconds % 60;
-        
-        // Format with leading zeros
-        const formattedTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        
-        // Update display
-        timerElement.textContent = formattedTime;
-        
-        // Update visual state based on remaining time
-        displayElement.classList.remove('demo-timer-warning', 'demo-timer-critical', 'demo-timer-urgent');
-        
-        if (hours < 1) {
-            // Less than 1 hour - critical
-            displayElement.classList.add('demo-timer-critical');
-        } else if (hours < 4) {
-            // Less than 4 hours - urgent
-            displayElement.classList.add('demo-timer-urgent');
-        } else if (hours < 12) {
-            // Less than 12 hours - warning
-            displayElement.classList.add('demo-timer-warning');
-        }
-    }
-    
-    // Update immediately on page load
-    updateTimer();
-    
-    // Sync with server immediately on page load
-    syncWithServer();
-    
-    // Update every second
-    const timerInterval = setInterval(updateTimer, 1000);
-    
-    // Sync with server every 15 seconds for accuracy
-    const syncInterval = setInterval(syncWithServer, 15000);
-    
-    // Also sync when page becomes visible (user returns to tab)
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible' && Date.now() - lastSyncTime > 10000) {
-            syncWithServer();
-        }
-    });
-}
-
-// Initialize timer when page loads
-document.addEventListener('DOMContentLoaded', initDemoCountdownTimer);
+// Note: Demo timer is now handled by the unified navbar timer in base.html
 </script>
