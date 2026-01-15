@@ -1704,8 +1704,36 @@
             let formattedSummary;
             
             if (typeof summary === 'object' && summary !== null) {
-                // Format the structured JSON response
-                formattedSummary = formatStructuredTaskSummary(summary);
+                // Check if this is a fallback response with only markdown_summary
+                if (summary.markdown_summary && !summary.executive_summary && !summary.task_health) {
+                    // This is a fallback response - show the markdown content
+                    formattedSummary = formatTaskSummary(summary.markdown_summary);
+                    // Add confidence if available
+                    if (summary.confidence_score) {
+                        const confidencePercent = Math.round(summary.confidence_score * 100);
+                        const confidenceClass = confidencePercent >= 70 ? 'bg-success' : confidencePercent >= 40 ? 'bg-warning' : 'bg-danger';
+                        formattedSummary = `<div class="mb-3">
+                            <small class="text-muted">Analysis Confidence:</small>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar ${confidenceClass}" role="progressbar" style="width: ${confidencePercent}%">${confidencePercent}%</div>
+                            </div>
+                        </div>` + formattedSummary;
+                    }
+                    if (summary.parsing_note) {
+                        formattedSummary += `<div class="alert alert-warning mt-3 small">
+                            <i class="fas fa-info-circle me-1"></i> ${summary.parsing_note}
+                        </div>`;
+                    }
+                } else {
+                    // Format the structured JSON response
+                    formattedSummary = formatStructuredTaskSummary(summary);
+                    
+                    // If the formatted summary is empty or only has the wrapper div, show an error
+                    if (!formattedSummary || formattedSummary.trim() === '<div class="ai-summary-structured"></div>') {
+                        console.error('Empty summary generated. Response data:', summary);
+                        throw new Error('AI generated empty summary. This may indicate the response format is incomplete.');
+                    }
+                }
             } else if (typeof summary === 'string') {
                 // Fallback: Format plain text summary
                 formattedSummary = formatTaskSummary(summary);

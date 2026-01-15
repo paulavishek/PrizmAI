@@ -2739,8 +2739,17 @@ def summarize_task_details(task_data: Dict) -> Optional[Dict]:
                 response_text = response_text.split("```")[1].strip()
             
             try:
-                return json.loads(response_text)
-            except json.JSONDecodeError:
+                parsed_json = json.loads(response_text)
+                # Validate that we have at least the key fields
+                if not parsed_json.get('executive_summary') and not parsed_json.get('markdown_summary'):
+                    logger.warning(f"AI response missing key fields. Keys present: {list(parsed_json.keys())}")
+                    # Add markdown summary from the raw response if not present
+                    if 'markdown_summary' not in parsed_json:
+                        parsed_json['markdown_summary'] = response_text
+                        parsed_json['parsing_note'] = 'AI response was parsed but missing expected structure'
+                return parsed_json
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON parsing error in summarize_task_details: {str(e)}. Response length: {len(response_text)}")
                 # Fallback to plain text for backward compatibility
                 return {
                     'markdown_summary': response_text,
