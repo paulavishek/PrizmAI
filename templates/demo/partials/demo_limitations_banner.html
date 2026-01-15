@@ -333,10 +333,37 @@ function initDemoLimitCountdown() {
     
     if (!countdownElement || !cardElement) return;
     
-    const expiresAt = countdownElement.getAttribute('data-expires');
+    let expiresAt = countdownElement.getAttribute('data-expires');
     if (!expiresAt) return;
     
-    const expiryDate = new Date(expiresAt);
+    let expiryDate = new Date(expiresAt);
+    let lastSyncTime = Date.now();
+    
+    // Sync with server every 30 seconds to ensure accuracy
+    async function syncWithServer() {
+        try {
+            const response = await fetch("{% url 'get_demo_status' %}");
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'success' && data.expires_at) {
+                    const newExpiryDate = new Date(data.expires_at);
+                    // Only update if there's a significant difference (more than 5 seconds)
+                    if (Math.abs(newExpiryDate - expiryDate) > 5000) {
+                        expiryDate = newExpiryDate;
+                        countdownElement.setAttribute('data-expires', data.expires_at);
+                        console.log('Demo timer synced with server:', data.expires_at);
+                    }
+                }
+                if (data.is_expired) {
+                    // Server says expired - redirect immediately
+                    window.location.href = "{% url 'demo_mode_selection' %}?expired=1";
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to sync demo timer with server:', error);
+        }
+        lastSyncTime = Date.now();
+    }
     
     function updateCountdown() {
         const now = new Date();
@@ -346,6 +373,12 @@ function initDemoLimitCountdown() {
             countdownElement.innerHTML = '<span class="demo-timer-expired-large">Expired</span>';
             cardElement.classList.add('demo-limitation-urgent');
             clearInterval(countdownInterval);
+            clearInterval(syncInterval);
+            
+            // Auto-redirect to demo mode selection after 3 seconds
+            setTimeout(() => {
+                window.location.href = "{% url 'demo_mode_selection' %}?expired=1";
+            }, 3000);
             return;
         }
         
@@ -369,6 +402,16 @@ function initDemoLimitCountdown() {
     
     updateCountdown();
     const countdownInterval = setInterval(updateCountdown, 1000);
+    
+    // Sync with server every 30 seconds
+    const syncInterval = setInterval(syncWithServer, 30000);
+    
+    // Also sync when page becomes visible (user returns to tab)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && Date.now() - lastSyncTime > 10000) {
+            syncWithServer();
+        }
+    });
 }
 
 document.addEventListener('DOMContentLoaded', initDemoLimitCountdown);

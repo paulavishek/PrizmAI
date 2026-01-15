@@ -1154,17 +1154,44 @@ function clearDemoSession() {
     return true;
 }
 
-// Live Countdown Timer
+// Live Countdown Timer with Server Sync
 function initDemoCountdownTimer() {
     const timerElement = document.getElementById('demoCountdownTimer');
     const displayElement = document.getElementById('demoTimerDisplay');
     
     if (!timerElement || !displayElement) return;
     
-    const expiresAt = timerElement.getAttribute('data-expires');
+    let expiresAt = timerElement.getAttribute('data-expires');
     if (!expiresAt) return;
     
-    const expiryDate = new Date(expiresAt);
+    let expiryDate = new Date(expiresAt);
+    let lastSyncTime = Date.now();
+    
+    // Sync with server every 30 seconds to ensure accuracy
+    async function syncWithServer() {
+        try {
+            const response = await fetch("{% url 'get_demo_status' %}");
+            if (response.ok) {
+                const data = await response.json();
+                if (data.status === 'success' && data.expires_at) {
+                    const newExpiryDate = new Date(data.expires_at);
+                    // Only update if there's a significant difference (more than 5 seconds)
+                    if (Math.abs(newExpiryDate - expiryDate) > 5000) {
+                        expiryDate = newExpiryDate;
+                        timerElement.setAttribute('data-expires', data.expires_at);
+                        console.log('Demo banner timer synced with server:', data.expires_at);
+                    }
+                }
+                if (data.is_expired) {
+                    // Server says expired - redirect immediately
+                    window.location.href = "{% url 'demo_mode_selection' %}?expired=1";
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to sync demo timer with server:', error);
+        }
+        lastSyncTime = Date.now();
+    }
     
     function updateTimer() {
         const now = new Date();
@@ -1175,10 +1202,11 @@ function initDemoCountdownTimer() {
             timerElement.innerHTML = '<span class="demo-timer-expired">Expired</span>';
             displayElement.classList.add('demo-timer-critical');
             clearInterval(timerInterval);
+            clearInterval(syncInterval);
             
-            // Optionally reload page to show expiry state
+            // Redirect to demo mode selection with expiry message
             setTimeout(() => {
-                window.location.reload();
+                window.location.href = "{% url 'demo_mode_selection' %}?expired=1";
             }, 2000);
             return;
         }
@@ -1215,6 +1243,16 @@ function initDemoCountdownTimer() {
     
     // Update every second
     const timerInterval = setInterval(updateTimer, 1000);
+    
+    // Sync with server every 30 seconds
+    const syncInterval = setInterval(syncWithServer, 30000);
+    
+    // Also sync when page becomes visible (user returns to tab)
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && Date.now() - lastSyncTime > 10000) {
+            syncWithServer();
+        }
+    });
 }
 
 // Initialize timer when page loads

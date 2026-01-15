@@ -95,31 +95,36 @@ def demo_mode_selection(request):
         request.session['is_anonymous_demo'] = not was_authenticated
         request.session['browser_fingerprint'] = browser_fingerprint
         
-        # Check if this browser has an existing demo session (within last 48h)
+        # Check if this browser has an existing demo session (within valid timeframe)
         existing_demo_start = None
         existing_extensions_count = 0
         existing_expires_at = None
         try:
             from analytics.models import DemoSession
+            # Look for sessions that haven't expired yet OR are within 48h of start
+            # This handles both fresh sessions and extended sessions
             recent_session = DemoSession.objects.filter(
                 browser_fingerprint=browser_fingerprint,
-                first_demo_start__gte=timezone.now() - timedelta(hours=48)
+            ).filter(
+                # Session still valid: either not expired OR started within 48h
+                Q(expires_at__gt=timezone.now()) | 
+                Q(first_demo_start__gte=timezone.now() - timedelta(hours=48))
             ).order_by('-first_demo_start').first()
             
             if recent_session and recent_session.first_demo_start:
                 existing_demo_start = recent_session.first_demo_start
                 # CRITICAL: Carry over the extensions count from previous session
                 existing_extensions_count = recent_session.extensions_count
-                # Also carry over the expires_at if extensions were used
-                if recent_session.extensions_count > 0 and recent_session.expires_at:
+                # CRITICAL: Always carry over the expires_at from previous session
+                if recent_session.expires_at:
                     existing_expires_at = recent_session.expires_at
-                logger.info(f"Found existing demo session for browser, started at {existing_demo_start}, extensions used: {existing_extensions_count}")
+                logger.info(f"Found existing demo session for browser, started at {existing_demo_start}, expires at {existing_expires_at}, extensions used: {existing_extensions_count}")
         except Exception as e:
             logger.warning(f"Could not check for existing demo session: {e}")
         
         # Set demo start time (use existing if found, otherwise now)
         demo_started_at = existing_demo_start or timezone.now()
-        # Use existing expiry time if extensions were used, otherwise calculate from start
+        # CRITICAL: Always use existing expiry time if available, otherwise calculate from start
         if existing_expires_at:
             demo_expires_at = existing_expires_at
         else:
@@ -1080,6 +1085,80 @@ def extend_demo_session(request):
         return JsonResponse({
             'status': 'error',
             'message': f'Error extending session: {str(e)}'
+        }, status=500)
+
+
+def get_demo_status(request):
+    """
+    API endpoint to get current demo session status.
+    Used by JavaScript to sync timer with server.
+    """
+    if not request.session.get('is_demo_mode'):
+        return JsonResponse({
+            'status': 'error',
+            'is_demo_mode': False,
+            'message': 'Not in demo mode'
+        }, status=403)
+    
+    try:
+        from analytics.models import DemoSession
+        from dateutil import parser
+        
+        session_id = request.session.session_key
+        expires_at_str = request.session.get('demo_expires_at')
+        
+        # Parse expiry time
+        expires_at = None
+        seconds_remaining = 0
+        is_expired = False
+        
+        if expires_at_str:
+            try:
+                expires_at = parser.parse(expires_at_str)
+                if expires_at.tzinfo is None:
+                    from django.utils.timezone import make_aware
+                    expires_at = make_aware(expires_at)
+                
+                time_remaining = expires_at - timezone.now()
+                seconds_remaining = max(0, int(time_remaining.total_seconds()))
+                is_expired = seconds_remaining <= 0
+            except Exception as e:
+                logger.warning(f"Error parsing demo_expires_at: {e}")
+        
+        # Get extensions info from database
+        extensions_used = 0
+        extensions_remaining = MAX_DEMO_EXTENSIONS
+        
+        if session_id:
+            demo_session = DemoSession.objects.filter(session_id=session_id).first()
+            if demo_session:
+                extensions_used = demo_session.extensions_count
+                extensions_remaining = MAX_DEMO_EXTENSIONS - extensions_used
+                # Use database expiry if available (more accurate)
+                if demo_session.expires_at:
+                    expires_at = demo_session.expires_at
+                    time_remaining = expires_at - timezone.now()
+                    seconds_remaining = max(0, int(time_remaining.total_seconds()))
+                    is_expired = seconds_remaining <= 0
+        
+        return JsonResponse({
+            'status': 'success',
+            'is_demo_mode': True,
+            'expires_at': expires_at.isoformat() if expires_at else None,
+            'seconds_remaining': seconds_remaining,
+            'hours_remaining': round(seconds_remaining / 3600, 2),
+            'is_expired': is_expired,
+            'extensions_used': extensions_used,
+            'extensions_remaining': extensions_remaining,
+            'max_extensions': MAX_DEMO_EXTENSIONS,
+            'server_time': timezone.now().isoformat(),
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting demo status: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
         }, status=500)
 
 
