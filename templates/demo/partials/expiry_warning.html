@@ -19,7 +19,7 @@
                 {% if expiry_warning_level == 'critical' %}
                     Create a free account now to save your work!
                 {% elif demo_extensions_remaining > 0 %}
-                    <span class="ms-2 text-muted" style="font-size: 0.9em;">
+                    <span class="ms-2" style="font-size: 0.95em; opacity: 0.95; font-weight: 500;">
                         ({{ demo_extensions_remaining }} extension{{ demo_extensions_remaining|pluralize }} remaining)
                     </span>
                 {% endif %}
