@@ -5,9 +5,14 @@ Handles automatic cleanup and reset of expired demo sessions
 from celery import shared_task
 from django.utils import timezone
 from datetime import timedelta
+from django.db.models import Q
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+# Demo content expires after this many hours
+DEMO_CONTENT_EXPIRY_HOURS = 48
 
 
 @shared_task(name='kanban.cleanup_expired_demo_sessions')
@@ -19,26 +24,26 @@ def cleanup_expired_demo_sessions():
     This task:
     1. Finds demo sessions that have expired (48+ hours old)
     2. Deletes content created during those sessions (tasks, boards, comments)
-    3. Resets demo organization data to original state
-    4. Logs analytics about expired sessions
+    3. Deletes user-created content on demo boards older than 48 hours (fallback cleanup)
+    4. Resets demo organization data to original state
+    5. Logs analytics about expired sessions
+    
+    IMPORTANT: This uses TWO cleanup mechanisms:
+    - Session-based: Deletes content tagged with expired session IDs
+    - Time-based fallback: Deletes non-seed content older than 48 hours
+      (catches cases where session tracking failed)
     """
     from analytics.models import DemoSession, DemoAnalytics
     from kanban.models import Task, Board, Comment, Organization
     
     now = timezone.now()
+    expiry_cutoff = now - timedelta(hours=DEMO_CONTENT_EXPIRY_HOURS)
     
     # Find expired demo sessions
     expired_sessions = DemoSession.objects.filter(expires_at__lt=now)
     expired_count = expired_sessions.count()
     
-    if expired_count == 0:
-        logger.info("No expired demo sessions to cleanup")
-        return {'cleaned_sessions': 0, 'status': 'no_expired_sessions'}
-    
-    logger.info(f"Found {expired_count} expired demo sessions to cleanup")
-    
     # Get session IDs AND browser fingerprints for content cleanup
-    # IMPORTANT: Boards may be tagged with browser_fingerprint instead of session_id
     expired_session_ids = list(expired_sessions.values_list('session_id', flat=True))
     expired_fingerprints = list(expired_sessions.exclude(
         browser_fingerprint__isnull=True
@@ -50,8 +55,10 @@ def cleanup_expired_demo_sessions():
     # Track cleanup stats
     cleanup_stats = {
         'sessions': expired_count,
-        'tasks': 0,
-        'boards': 0,
+        'tasks_by_session': 0,
+        'tasks_by_time': 0,
+        'boards_by_session': 0,
+        'boards_by_time': 0,
     }
     
     try:
@@ -59,23 +66,111 @@ def cleanup_expired_demo_sessions():
         demo_org = Organization.objects.filter(is_demo=True).first()
         
         if demo_org:
-            # Delete tasks created by expired sessions (by session_id OR fingerprint)
-            deleted_tasks = Task.objects.filter(
-                created_by_session__in=identifiers_to_cleanup,
-                column__board__organization=demo_org
-            ).delete()[0]
-            cleanup_stats['tasks'] = deleted_tasks
+            # =========================================================
+            # MECHANISM 1: Session-based cleanup (original mechanism)
+            # =========================================================
+            if identifiers_to_cleanup:
+                # Delete tasks created by expired sessions
+                deleted_tasks = Task.objects.filter(
+                    created_by_session__in=identifiers_to_cleanup,
+                    column__board__organization=demo_org
+                ).delete()[0]
+                cleanup_stats['tasks_by_session'] = deleted_tasks
+                
+                # Delete non-official boards created by expired sessions
+                deleted_boards = Board.objects.filter(
+                    created_by_session__in=identifiers_to_cleanup,
+                    organization=demo_org,
+                    is_official_demo_board=False
+                ).delete()[0]
+                cleanup_stats['boards_by_session'] = deleted_boards
+                
+                logger.info(f"Session-based cleanup: {deleted_tasks} tasks, {deleted_boards} boards")
             
-            # Delete non-official boards created by expired sessions (by session_id OR fingerprint)
-            deleted_boards = Board.objects.filter(
-                created_by_session__in=identifiers_to_cleanup,
+            # =========================================================
+            # MECHANISM 2: Time-based fallback cleanup
+            # Catches user-created content that wasn't properly tagged
+            # =========================================================
+            # Delete tasks that:
+            # - Are on demo boards
+            # - Are NOT seed demo data (is_seed_demo_data=False or NULL)
+            # - Are older than 48 hours
+            # - Don't have a session ID (already handled above) OR have an expired session
+            orphan_tasks = Task.objects.filter(
+                column__board__organization=demo_org,
+                column__board__is_official_demo_board=True,  # Only on official demo boards
+                created_at__lt=expiry_cutoff,  # Older than 48 hours
+            ).filter(
+                Q(is_seed_demo_data=False) | Q(is_seed_demo_data__isnull=True)
+            ).exclude(
+                is_seed_demo_data=True  # Explicitly exclude seed data
+            )
+            
+            # Delete related records first (in order to avoid FK constraint errors)
+            orphan_task_ids = list(orphan_tasks.values_list('id', flat=True))
+            if orphan_task_ids:
+                # Import related models and delete their records
+                from kanban.models import Comment, TaskActivity, TaskFile
+                from kanban.resource_leveling_models import TaskAssignmentHistory
+                from kanban.stakeholder_models import StakeholderTaskInvolvement
+                
+                # Delete task activities
+                TaskActivity.objects.filter(task_id__in=orphan_task_ids).delete()
+                
+                # Delete comments  
+                Comment.objects.filter(task_id__in=orphan_task_ids).delete()
+                
+                # Delete task files
+                TaskFile.objects.filter(task_id__in=orphan_task_ids).delete()
+                
+                # Delete task assignment history
+                TaskAssignmentHistory.objects.filter(task_id__in=orphan_task_ids).delete()
+                
+                # Delete stakeholder task involvement records
+                StakeholderTaskInvolvement.objects.filter(task_id__in=orphan_task_ids).delete()
+                
+                # Clear dependencies (ManyToMany) - remove these tasks from dependency relationships
+                for task in Task.objects.filter(id__in=orphan_task_ids):
+                    task.dependencies.clear()
+                    task.dependent_tasks.clear()
+                    task.related_tasks.clear()
+                    # Also remove from subtasks relationship
+                    if task.parent_task:
+                        task.parent_task = None
+                        task.save(update_fields=['parent_task'])
+                
+                # Now delete the tasks
+                deleted_orphan_tasks = Task.objects.filter(id__in=orphan_task_ids).delete()[0]
+            else:
+                deleted_orphan_tasks = 0
+                
+            cleanup_stats['tasks_by_time'] = deleted_orphan_tasks
+            
+            if deleted_orphan_tasks > 0:
+                logger.info(f"Time-based fallback cleanup: {deleted_orphan_tasks} orphan tasks deleted")
+            
+            # Delete non-official boards that are:
+            # - In demo org
+            # - NOT official demo boards
+            # - NOT seed data
+            # - Older than 48 hours
+            orphan_boards = Board.objects.filter(
                 organization=demo_org,
-                is_official_demo_board=False
-            ).delete()[0]
-            cleanup_stats['boards'] = deleted_boards
+                is_official_demo_board=False,
+                created_at__lt=expiry_cutoff,
+            ).filter(
+                Q(is_seed_demo_data=False) | Q(is_seed_demo_data__isnull=True)
+            ).exclude(
+                is_seed_demo_data=True
+            )
+            
+            deleted_orphan_boards = orphan_boards.delete()[0]
+            cleanup_stats['boards_by_time'] = deleted_orphan_boards
+            
+            if deleted_orphan_boards > 0:
+                logger.info(f"Time-based fallback cleanup: {deleted_orphan_boards} orphan boards deleted")
             
             # Note: Comments are automatically deleted via CASCADE when boards/tasks are deleted
-            # Comment model doesn't have created_by_session field
             
             # Reset official demo boards to clean state
             _reset_demo_boards(demo_org)
@@ -95,9 +190,13 @@ def cleanup_expired_demo_sessions():
                 logger.warning(f"Failed to log analytics for session {session_id}: {e}")
         
         # Delete the expired session records
-        expired_sessions.delete()
+        if expired_count > 0:
+            expired_sessions.delete()
         
-        logger.info(f"Cleanup complete: {cleanup_stats}")
+        total_tasks = cleanup_stats['tasks_by_session'] + cleanup_stats['tasks_by_time']
+        total_boards = cleanup_stats['boards_by_session'] + cleanup_stats['boards_by_time']
+        
+        logger.info(f"Cleanup complete: {expired_count} sessions, {total_tasks} tasks, {total_boards} boards")
         return {'status': 'success', **cleanup_stats}
         
     except Exception as e:

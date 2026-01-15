@@ -445,6 +445,7 @@ class Command(BaseCommand):
                 created_by=alex,
                 progress=0,
                 due_date=now + timedelta(days=random.randint(20, 45)),
+                is_seed_demo_data=True,
             )
             tasks.append(task)
 
@@ -623,6 +624,7 @@ class Command(BaseCommand):
                 created_by=alex,
                 progress=task_data['progress'],
                 due_date=now + timedelta(days=random.randint(5, 15)),
+                is_seed_demo_data=True,
             )
             tasks.append(task)
 
@@ -721,6 +723,7 @@ class Command(BaseCommand):
                 created_by=alex,
                 progress=task_data['progress'],
                 due_date=now + timedelta(days=random.randint(1, 5)),
+                is_seed_demo_data=True,
             )
             tasks.append(task)
 
@@ -779,6 +782,7 @@ class Command(BaseCommand):
                 created_by=alex,
                 progress=task_data['progress'],
                 due_date=now - timedelta(days=random.randint(1, 10)),
+                is_seed_demo_data=True,
             )
             tasks.append(task)
 
@@ -889,6 +893,7 @@ class Command(BaseCommand):
                 created_by=alex,
                 progress=0,
                 due_date=now + timedelta(days=random.randint(30, 60)),
+                is_seed_demo_data=True,
             )
             tasks.append(task)
 
@@ -1027,6 +1032,7 @@ class Command(BaseCommand):
                 created_by=alex,
                 progress=task_data['progress'],
                 due_date=now + timedelta(days=random.randint(10, 25)),
+                is_seed_demo_data=True,
             )
             tasks.append(task)
 
@@ -1109,6 +1115,7 @@ class Command(BaseCommand):
                 created_by=alex,
                 progress=task_data['progress'],
                 due_date=now + timedelta(days=random.randint(3, 10)),
+                is_seed_demo_data=True,
             )
             tasks.append(task)
 
@@ -1167,6 +1174,7 @@ class Command(BaseCommand):
                 created_by=alex,
                 progress=task_data['progress'],
                 due_date=now - timedelta(days=random.randint(1, 15)),
+                is_seed_demo_data=True,
             )
             tasks.append(task)
 
@@ -1263,6 +1271,7 @@ class Command(BaseCommand):
                 created_by=alex,
                 progress=0,
                 due_date=now + timedelta(days=random.randint(1, 7)),
+                is_seed_demo_data=True,
             )
             tasks.append(task)
 
@@ -1377,6 +1386,7 @@ class Command(BaseCommand):
                 created_by=alex,
                 progress=task_data['progress'],
                 due_date=now + timedelta(days=random.randint(3, 10)),
+                is_seed_demo_data=True,
             )
             tasks.append(task)
 
@@ -1435,6 +1445,7 @@ class Command(BaseCommand):
                 created_by=alex,
                 progress=task_data['progress'],
                 due_date=now + timedelta(days=random.randint(1, 5)),
+                is_seed_demo_data=True,
             )
             tasks.append(task)
 
@@ -1477,6 +1488,7 @@ class Command(BaseCommand):
                 created_by=alex,
                 progress=task_data['progress'],
                 due_date=now - timedelta(days=random.randint(1, 10)),
+                is_seed_demo_data=True,
             )
             tasks.append(task)
 

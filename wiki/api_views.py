@@ -372,10 +372,19 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                     priority = priority_map.get(action_item.get('priority', 'medium'), 'medium')
                     
                     # Create task - mark as user-created in demo mode
-                    is_demo_mode = request.session.get('is_demo_mode', False)
+                    # Check demo mode via session OR board organization
+                    is_demo_board = (
+                        target_column.board.is_official_demo_board or 
+                        (hasattr(target_column.board.organization, 'is_demo') and target_column.board.organization.is_demo)
+                    )
+                    is_demo_mode = request.session.get('is_demo_mode', False) or is_demo_board
+                    
                     created_by_session = None
                     if is_demo_mode:
                         created_by_session = request.session.get('browser_fingerprint') or request.session.session_key
+                        if not created_by_session:
+                            import uuid
+                            created_by_session = f"demo-meeting-{uuid.uuid4().hex[:16]}"
                     
                     task = Task.objects.create(
                         title=action_item['title'][:200],  # Limit title length
@@ -383,7 +392,8 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                         column=target_column,
                         priority=priority,
                         created_by=request.user,
-                        created_by_session=created_by_session
+                        created_by_session=created_by_session,
+                        is_seed_demo_data=False  # User-created, not seed data
                     )
                     
                     # Try to assign if suggested

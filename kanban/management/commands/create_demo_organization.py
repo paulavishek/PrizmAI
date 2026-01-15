@@ -275,6 +275,7 @@ class Command(BaseCommand):
                 defaults={
                     'description': board_data['description'],
                     'is_official_demo_board': True,
+                    'is_seed_demo_data': True,  # Mark as seed data for cleanup protection
                     'created_by': creator,
                     'created_at': timezone.now(),
                 }

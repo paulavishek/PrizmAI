@@ -1893,6 +1893,14 @@ def create_subtasks_api(request):
         board = get_object_or_404(Board, id=board_id)
         if not (request.user in board.members.all() or request.user == board.created_by):
             return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # Check if this is a demo board (for session tracking)
+        # Demo boards are either: in a demo organization OR marked as official demo boards
+        is_demo_board = (
+            board.is_official_demo_board or 
+            (hasattr(board.organization, 'is_demo') and board.organization.is_demo)
+        )
+        is_demo_mode = request.session.get('is_demo_mode', False) or is_demo_board
             
         # Get column - if not specified, use first column
         if column_id:
@@ -1948,12 +1956,15 @@ def create_subtasks_api(request):
                 if original_task_title:
                     description += f"\n\n*Subtask of: {original_task_title}*"
                 
-                # Create the task
-                # Check if in demo mode to set created_by_session
-                is_demo_mode = request.session.get('is_demo_mode', False)
+                # Create the task with demo session tracking
+                # is_demo_mode was already calculated above based on board + session
                 created_by_session = None
                 if is_demo_mode:
                     created_by_session = request.session.get('browser_fingerprint') or request.session.session_key
+                    # Fallback: generate a unique identifier if session tracking failed
+                    if not created_by_session:
+                        import uuid
+                        created_by_session = f"demo-subtask-{uuid.uuid4().hex[:16]}"
                 
                 task = Task.objects.create(
                     title=title,
@@ -1963,7 +1974,8 @@ def create_subtasks_api(request):
                     due_date=due_date,
                     created_by=request.user,
                     position=Task.objects.filter(column=column).count(),  # Add to end
-                    created_by_session=created_by_session
+                    created_by_session=created_by_session,
+                    is_seed_demo_data=False  # User-created, not seed data
                 )
                 
                 created_tasks.append({

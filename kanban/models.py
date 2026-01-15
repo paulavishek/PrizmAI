@@ -54,6 +54,10 @@ class Board(models.Model):
         null=True,
         help_text="Session ID if created in demo mode (for cleanup)"
     )
+    is_seed_demo_data = models.BooleanField(
+        default=False,
+        help_text="True if this is original seed demo data (not user-created). Used for 48-hour cleanup."
+    )
     
     def __str__(self):
         return self.name
@@ -448,6 +452,10 @@ class Task(models.Model):
         blank=True,
         null=True,
         help_text="Session ID if created in demo mode (for cleanup)"
+    )
+    is_seed_demo_data = models.BooleanField(
+        default=False,
+        help_text="True if this is original seed demo data (not user-created). Used for 48-hour cleanup."
     )
     
     class Meta:

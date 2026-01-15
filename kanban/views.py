@@ -875,13 +875,21 @@ def create_task(request, board_id, column_id=None):
                 last_position = Task.objects.filter(column=column).order_by('-position').first()
                 task.position = (last_position.position + 1) if last_position else 0
                 
-                # If in demo mode, track this task as user-created (prevents date refresh from modifying it)
-                if is_demo_mode:
+                # If in demo mode (via session OR demo board), track this task as user-created
+                # This ensures proper cleanup after 48 hours
+                effective_demo_mode = is_demo_mode or is_demo_board
+                if effective_demo_mode:
                     browser_fingerprint = request.session.get('browser_fingerprint')
                     if browser_fingerprint:
                         task.created_by_session = browser_fingerprint
-                    else:
+                    elif request.session.session_key:
                         task.created_by_session = request.session.session_key
+                    else:
+                        # Fallback: generate a unique identifier if session tracking failed
+                        import uuid
+                        task.created_by_session = f"demo-task-{uuid.uuid4().hex[:16]}"
+                    # Explicitly mark as NOT seed data
+                    task.is_seed_demo_data = False
                 
                 # Store who created the task for signal handler
                 task._changed_by_user = task.created_by
@@ -2398,8 +2406,18 @@ def wizard_create_task(request):
                 if enhanced and enhanced.get('enhanced_description'):
                     task_description = enhanced['enhanced_description']
             
-            # Create the task
-            is_demo_mode = request.session.get('is_demo_mode', False)
+            # Create the task with demo mode tracking
+            # Check if demo mode via session OR board
+            is_demo_board = board.is_official_demo_board or (hasattr(board.organization, 'is_demo') and board.organization.is_demo)
+            is_demo_mode = request.session.get('is_demo_mode', False) or is_demo_board
+            
+            created_by_session = None
+            if is_demo_mode:
+                created_by_session = request.session.get('browser_fingerprint') or request.session.session_key
+                if not created_by_session:
+                    import uuid
+                    created_by_session = f"demo-wizard-{uuid.uuid4().hex[:16]}"
+            
             task = Task.objects.create(
                 title=task_title,
                 description=task_description,
@@ -2407,8 +2425,8 @@ def wizard_create_task(request):
                 created_by=request.user,
                 assigned_to=request.user,
                 priority='medium',
-                # If in demo mode, mark as user-created to prevent date refresh
-                created_by_session=request.session.get('browser_fingerprint') or request.session.session_key if is_demo_mode else None
+                created_by_session=created_by_session,
+                is_seed_demo_data=False if is_demo_mode else False  # Never seed data when user-created
             )
             
             return JsonResponse({
