@@ -86,7 +86,7 @@
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="fas fa-clock me-1"></i> Time Tracking
                             </a>
-                            <ul class="dropdown-menu">
+                            <ul class="dropdown-menu" style="z-index: 1050;">
                                 <li><a class="dropdown-item" href="{% url 'time_tracking_dashboard' %}">
                                     <i class="fas fa-chart-line me-2"></i> Dashboard
                                 </a></li>
@@ -146,7 +146,7 @@
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 {{ user.username }}
-                            </a>                            <ul class="dropdown-menu dropdown-menu-end">
+                            </a>                            <ul class="dropdown-menu dropdown-menu-end" style="z-index: 1050;">
                                 <li><a class="dropdown-item" href="{% url 'profile' %}">Profile</a></li>
                                 {% if user.profile.is_admin %}
                                     <li><a class="dropdown-item" href="{% url 'organization_members' %}">Organization</a></li>
