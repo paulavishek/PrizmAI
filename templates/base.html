@@ -314,10 +314,20 @@
             const displayContainer = document.getElementById('navDemoTimerDisplay');
             const timerContainer = document.getElementById('navDemoTimerContainer');
             
-            if (!timerElement || !displayContainer) return;
+            console.log('🕒 Timer Init - Element:', timerElement, 'Display:', displayContainer);
+            
+            if (!timerElement || !displayContainer) {
+                console.warn('⚠️ Timer elements not found. Timer will not start.');
+                return;
+            }
             
             let expiresAt = timerElement.getAttribute('data-expires');
-            if (!expiresAt) return;
+            if (!expiresAt) {
+                console.error('❌ No expiry date found in data-expires attribute');
+                return;
+            }
+            
+            console.log('✅ Timer initialized with expiry:', expiresAt);
             
             let expiryDate = new Date(expiresAt);
             let lastSyncTime = Date.now();
@@ -381,6 +391,11 @@
                 
                 // Update display
                 timerElement.textContent = formattedTime;
+                
+                // Debug: Log every 10 seconds
+                if (seconds % 10 === 0) {
+                    console.log('⏱️ Timer update:', formattedTime, '| Remaining:', hours, 'hrs', minutes, 'mins', seconds, 'secs');
+                }
                 
                 // Update visual state based on remaining time
                 if (hours < 1) {
