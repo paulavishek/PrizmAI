@@ -87,6 +87,11 @@ def predict_task_completion_date(task):
         'remaining_progress': round(remaining_progress * 100, 1),
         'complexity_score': task.complexity_score,
         'priority': task.priority,
+        'workload_impact': task.workload_impact,
+        'skill_match_score': task.skill_match_score,
+        'collaboration_required': task.collaboration_required,
+        'dependencies_count': task.dependencies.count(),
+        'risk_score': task.risk_score,
         'team_member_velocity': round(historical_stats.get('velocity_factor', 1.0), 2),
         'historical_avg_days': round(historical_stats['avg_duration'], 1),
         'sample_size': historical_stats['sample_size'],
@@ -281,6 +286,41 @@ def _apply_prediction_adjustments(base_days, task, historical_stats):
     if task.collaboration_required:
         adjusted_days *= 1.15  # +15% for collaboration overhead
         adjustments['collaboration_adjustment'] = "+15% (collaboration required)"
+    
+    # Workload impact adjustment - high workload impact tasks take longer
+    if task.workload_impact:
+        workload_factors = {
+            'low': 0.9,       # Low impact tasks can be done 10% faster
+            'medium': 1.0,    # Baseline
+            'high': 1.15,     # High impact tasks take 15% longer
+            'critical': 1.30  # Critical impact tasks take 30% longer
+        }
+        workload_factor = workload_factors.get(task.workload_impact, 1.0)
+        if workload_factor != 1.0:
+            adjusted_days *= workload_factor
+            adjustments['workload_impact_adjustment'] = f"{workload_factor}x ({task.workload_impact} workload impact)"
+    
+    # Skill match adjustment - poor skill match means task takes longer
+    if task.skill_match_score is not None:
+        # skill_match_score is 0-100, higher is better match
+        if task.skill_match_score < 40:
+            # Poor match: 20% slower
+            skill_factor = 1.20
+            adjustments['skill_match_adjustment'] = f"1.20x (poor skill match: {task.skill_match_score}%)"
+        elif task.skill_match_score < 60:
+            # Below average match: 10% slower
+            skill_factor = 1.10
+            adjustments['skill_match_adjustment'] = f"1.10x (below avg skill match: {task.skill_match_score}%)"
+        elif task.skill_match_score >= 80:
+            # Excellent match: 10% faster
+            skill_factor = 0.90
+            adjustments['skill_match_adjustment'] = f"0.90x (excellent skill match: {task.skill_match_score}%)"
+        else:
+            # Average match: no adjustment
+            skill_factor = 1.0
+        
+        if skill_factor != 1.0:
+            adjusted_days *= skill_factor
     
     # Team velocity adjustment
     velocity_factor = historical_stats.get('velocity_factor', 1.0)

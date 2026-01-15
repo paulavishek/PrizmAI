@@ -1322,6 +1322,15 @@ def predict_deadline_api(request):
         priority = data.get('priority', 'medium')
         assigned_to = data.get('assigned_to', 'Unassigned')
         
+        # Extract new enhanced prediction fields from request
+        complexity_score = data.get('complexity_score', 5)
+        workload_impact = data.get('workload_impact', 'medium')
+        skill_match_score = data.get('skill_match_score')
+        collaboration_required = data.get('collaboration_required', False)
+        dependencies_count = data.get('dependencies_count', 0)
+        risk_score = data.get('risk_score')
+        risk_level = data.get('risk_level')
+        
         if not title:
             return JsonResponse({'error': 'Title is required'}, status=400)
         
@@ -1338,6 +1347,14 @@ def predict_deadline_api(request):
         if task_id:
             task = get_object_or_404(Task, id=task_id)
             board = task.column.board
+            # If task exists, use its actual values for enhanced prediction (fallback to request data)
+            complexity_score = task.complexity_score if task.complexity_score else complexity_score
+            workload_impact = task.workload_impact if task.workload_impact else workload_impact
+            skill_match_score = task.skill_match_score if task.skill_match_score is not None else skill_match_score
+            collaboration_required = task.collaboration_required if task.collaboration_required else collaboration_required
+            dependencies_count = task.dependencies.count() if task.dependencies.exists() else dependencies_count
+            risk_score = task.risk_score if task.risk_score is not None else risk_score
+            risk_level = task.risk_level if task.risk_level else risk_level
         elif board_id:
             board = get_object_or_404(Board, id=board_id)
         else:
@@ -1437,7 +1454,15 @@ def predict_deadline_api(request):
             'title': title,
             'description': description,
             'priority': priority,
-            'assigned_to': assigned_to
+            'assigned_to': assigned_to,
+            # Enhanced prediction fields
+            'complexity_score': complexity_score,
+            'workload_impact': workload_impact,
+            'skill_match_score': skill_match_score,
+            'collaboration_required': collaboration_required,
+            'dependencies_count': dependencies_count,
+            'risk_score': risk_score,
+            'risk_level': risk_level
         }
         
         # Call AI function

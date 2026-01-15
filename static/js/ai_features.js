@@ -1209,13 +1209,44 @@ function initDeadlinePrediction() {
             return;
         }
         
+        // Collect enhanced prediction fields from form
+        const complexityScoreInput = document.getElementById('id_complexity_score');
+        const workloadImpactSelect = document.getElementById('id_workload_impact');
+        const skillMatchScoreInput = document.getElementById('id_skill_match_score');
+        const collaborationRequiredCheckbox = document.getElementById('id_collaboration_required');
+        const dependenciesSelect = document.getElementById('id_dependencies');
+        const riskLevelSelect = document.getElementById('id_risk_level');
+        const riskLikelihoodSelect = document.getElementById('id_risk_likelihood');
+        const riskImpactSelect = document.getElementById('id_risk_impact');
+        
+        // Calculate risk score from likelihood and impact if available
+        let riskScore = null;
+        if (riskLikelihoodSelect && riskImpactSelect && 
+            riskLikelihoodSelect.value && riskImpactSelect.value) {
+            riskScore = parseInt(riskLikelihoodSelect.value) * parseInt(riskImpactSelect.value);
+        }
+        
+        // Count selected dependencies
+        let dependenciesCount = 0;
+        if (dependenciesSelect) {
+            dependenciesCount = Array.from(dependenciesSelect.selectedOptions).length;
+        }
+        
         const taskData = {
             title: titleInput.value.trim(),
             description: descriptionInput ? descriptionInput.value : '',
             priority: prioritySelect ? prioritySelect.value : 'medium',
             assigned_to: assignedToSelect ? assignedToSelect.options[assignedToSelect.selectedIndex].text : 'Unassigned',
             board_id: boardId,
-            task_id: taskId
+            task_id: taskId,
+            // Enhanced prediction fields
+            complexity_score: complexityScoreInput ? parseInt(complexityScoreInput.value) || 5 : 5,
+            workload_impact: workloadImpactSelect ? workloadImpactSelect.value || 'medium' : 'medium',
+            skill_match_score: skillMatchScoreInput && skillMatchScoreInput.value ? parseInt(skillMatchScoreInput.value) : null,
+            collaboration_required: collaborationRequiredCheckbox ? collaborationRequiredCheckbox.checked : false,
+            dependencies_count: dependenciesCount,
+            risk_score: riskScore,
+            risk_level: riskLevelSelect ? riskLevelSelect.value || null : null
         };
         
         predictTaskDeadline(taskData, function(error, data) {

@@ -740,6 +740,15 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         priority = task_data.get('priority', 'medium')
         assigned_to = task_data.get('assigned_to', 'Unassigned')
         
+        # Extract new task fields for enhanced prediction
+        complexity_score = task_data.get('complexity_score', 5)
+        workload_impact = task_data.get('workload_impact', 'medium')
+        skill_match_score = task_data.get('skill_match_score')
+        collaboration_required = task_data.get('collaboration_required', False)
+        dependencies_count = task_data.get('dependencies_count', 0)
+        risk_score = task_data.get('risk_score')
+        risk_level = task_data.get('risk_level')
+        
         # Extract team context
         assignee_avg_completion = team_context.get('assignee_avg_completion_days', 0)
         team_avg_completion = team_context.get('team_avg_completion_days', 0)
@@ -760,6 +769,23 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         else:
             performance_note = "No historical data available for comparison"
         
+        # Format complexity interpretation
+        complexity_label = "Very Complex" if complexity_score >= 8 else "Moderate" if complexity_score >= 5 else "Simple"
+        
+        # Format skill match interpretation
+        skill_match_note = ""
+        if skill_match_score is not None:
+            if skill_match_score >= 80:
+                skill_match_note = f"Excellent skill match ({skill_match_score}%) - assignee is well-suited for this task"
+            elif skill_match_score >= 60:
+                skill_match_note = f"Good skill match ({skill_match_score}%) - assignee has adequate skills"
+            elif skill_match_score >= 40:
+                skill_match_note = f"Below average skill match ({skill_match_score}%) - may need extra time for learning"
+            else:
+                skill_match_note = f"Poor skill match ({skill_match_score}%) - significant learning curve expected"
+        else:
+            skill_match_note = "Skill match not assessed"
+        
         prompt = f"""
         Predict a realistic timeline for completing this task based on the provided context and historical data.
         
@@ -769,6 +795,14 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         - Priority: {priority}
         - Assigned To: {assigned_to}
         
+        ## Task Complexity & Resource Requirements:
+        - Complexity Score: {complexity_score}/10 ({complexity_label})
+        - Workload Impact: {workload_impact or 'Not specified'} (Low/Medium/High/Critical - impact on assignee's capacity)
+        - Skill Match: {skill_match_note}
+        - Collaboration Required: {'Yes - coordination with team members needed' if collaboration_required else 'No - can be done independently'}
+        - Dependencies: {dependencies_count} blocking task(s) that must complete first
+        - Risk Level: {risk_level or 'Not assessed'} {f'(Score: {risk_score}/9)' if risk_score else ''}
+
         ## Historical Context (IMPORTANT - Use these actual metrics for {assigned_to}):
         - {assigned_to}'s Personal Average Completion Time: {assignee_avg_completion} days (based on {assignee_completed_count} completed tasks)
         - {assigned_to}'s Estimated Velocity: {assignee_velocity} hours/day
@@ -778,19 +812,23 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         - {assigned_to}'s Current Workload: {current_workload} active tasks
         - Upcoming Holidays/Breaks: {', '.join(upcoming_holidays) if upcoming_holidays else 'None'}
         
-        Consider these factors:
-        1. Task complexity based on title and description
+        Consider these factors (ALL are important for prediction):
+        1. Task complexity score ({complexity_score}/10) - higher complexity = more time needed
         2. {assigned_to}'s SPECIFIC historical performance (use the actual numbers above!)
-        3. Current workload impact on {assigned_to}
-        4. Priority level urgency
-        5. Potential dependencies or blockers
-        6. Buffer time for reviews/testing
-        7. Holidays or known interruptions
+        3. Workload impact ({workload_impact}) - high/critical impact tasks need more focused time
+        4. Skill match ({skill_match_score}%) - poor match means learning curve adds time
+        5. Collaboration requirements - coordination overhead if team work is needed
+        6. Dependencies ({dependencies_count}) - must wait for blocking tasks
+        7. Risk level ({risk_level}) - high risk tasks often face delays
+        8. Priority level urgency ({priority})
+        9. Buffer time for reviews/testing
+        10. Holidays or known interruptions
         
         IMPORTANT: 
         - Predict the number of DAYS from today that this task should be completed, not absolute dates.
         - Use {assigned_to}'s ACTUAL historical average of {assignee_avg_completion} days as your baseline, NOT the team average.
         - If {assignee_completed_count} is 0, fall back to team average but mention this in reasoning.
+        - Factor in the complexity score, workload impact, and skill match into your estimate.
         
         Format your response as JSON WITH EXPLAINABILITY:
         {{
@@ -809,6 +847,10 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
                 "base_estimate_days": number,
                 "complexity_factor": 0.XX,
                 "workload_adjustment": 0.XX,
+                "skill_match_adjustment": 0.XX,
+                "collaboration_overhead": 0.XX,
+                "dependency_buffer": number,
+                "risk_buffer": number,
                 "priority_adjustment": 0.XX,
                 "buffer_days": number
             }},
