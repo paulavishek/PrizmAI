@@ -69,21 +69,21 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav" style="justify-content: flex-end;">
-                <ul class="navbar-nav me-auto ms-lg-5">
+                <ul class="navbar-nav me-auto ms-lg-4" style="gap: 0.5rem;">
                     {% if user.is_authenticated %}
                         <li class="nav-item">
-                            <a class="nav-link" href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}">Dashboard</a>
+                            <a class="nav-link px-3" href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}">Dashboard</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'board_list' %}{% endif %}">Boards</a>
+                            <a class="nav-link px-3" href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'board_list' %}{% endif %}">Boards</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'wiki:knowledge_hub_home' %}">
+                            <a class="nav-link px-3" href="{% url 'wiki:knowledge_hub_home' %}">
                                 <i class="fas fa-book-open"></i><span class="d-none d-lg-inline ms-1">Wiki</span>
                             </a>
                         </li>
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <a class="nav-link dropdown-toggle px-3" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                                 <i class="fas fa-clock"></i><span class="d-none d-xl-inline ms-1">Time</span>
                             </a>
                             <ul class="dropdown-menu" style="z-index: 1050;">
@@ -96,12 +96,12 @@
                             </ul>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="{% url 'ai_assistant:welcome' %}">
+                            <a class="nav-link px-3" href="{% url 'ai_assistant:welcome' %}">
                                 <i class="fas fa-robot"></i><span class="d-none d-xl-inline ms-1">AI</span>
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link position-relative" href="{% url 'messaging:go_to_first_unread_room' %}" onclick="addBoardIdToLink(event)">
+                            <a class="nav-link position-relative px-3" href="{% url 'messaging:go_to_first_unread_room' %}" onclick="addBoardIdToLink(event)">
                                 <i class="fas fa-comments"></i><span class="d-none d-lg-inline ms-1">Messages</span>
                                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="unread-message-badge" style="display: none; font-size: 0.65rem;">
                                     <span id="unread-count">0</span>
@@ -109,7 +109,7 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link position-relative" href="{% url 'conflict_dashboard' %}">
+                            <a class="nav-link position-relative px-3" href="{% url 'conflict_dashboard' %}">
                                 <i class="fas fa-exclamation-triangle"></i><span class="d-none d-lg-inline ms-1">Conflicts</span>
                                 {% if active_conflict_count > 0 %}
                                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style="font-size: 0.65rem;">
