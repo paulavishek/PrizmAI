@@ -181,21 +181,19 @@
     <!-- Analytics Cards -->
     <div class="row mb-4">
         <div class="col-xl-3 col-md-6 mb-4">
-            <a href="{% url 'demo_all_tasks' %}?status=all" class="text-decoration-none" title="View all tasks">
-                <div class="card stats-card primary shadow h-100 py-2 clickable-card">
-                    <div class="card-body">
-                        <div class="row no-gutters align-items-center">
-                            <div class="col mr-2">
-                                <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Tasks</div>
-                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ task_count }}</div>
-                            </div>
-                            <div class="col-auto">
-                                <i class="fas fa-clipboard-list stats-icon text-gray-300"></i>
-                            </div>
+            <div class="card stats-card warning shadow h-100 py-2 clickable-card" data-bs-toggle="modal" data-bs-target="#completionRateModal" style="cursor: pointer;" title="View completion rate breakdown">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Completion Rate</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completion_rate }}%</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-line stats-icon text-gray-300"></i>
                         </div>
                     </div>
                 </div>
-            </a>
+            </div>
         </div>
 
         <div class="col-xl-3 col-md-6 mb-4">
@@ -217,21 +215,19 @@
         </div>
 
         <div class="col-xl-3 col-md-6 mb-4">
-            <a href="{% url 'demo_all_tasks' %}?status=all" class="text-decoration-none" title="View all tasks">
-                <div class="card stats-card warning shadow h-100 py-2 clickable-card">
-                    <div class="card-body">
-                        <div class="row no-gutters align-items-center">
-                            <div class="col mr-2">
-                                <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Completion Rate</div>
-                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completion_rate }}%</div>
-                            </div>
-                            <div class="col-auto">
-                                <i class="fas fa-chart-line stats-icon text-gray-300"></i>
-                            </div>
+            <div class="card stats-card warning shadow h-100 py-2 clickable-card" data-bs-toggle="modal" data-bs-target="#completionRateModal" style="cursor: pointer;" title="View completion rate breakdown">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Completion Rate</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completion_rate }}%</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-chart-line stats-icon text-gray-300"></i>
                         </div>
                     </div>
                 </div>
-            </a>
+            </div>
         </div>
 
         <div class="col-xl-3 col-md-6 mb-4">
@@ -510,4 +506,86 @@ document.addEventListener('visibilitychange', function() {
     }
 });
 </script>
+
+<!-- Completion Rate Breakdown Modal -->
+<div class="modal fade" id="completionRateModal" tabindex="-1" aria-labelledby="completionRateModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, #f6c23e 0%, #f8b400 100%); color: white;">
+                <h5 class="modal-title" id="completionRateModalLabel">
+                    <i class="fas fa-chart-pie me-2"></i>Completion Rate Breakdown
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="background: #f8f9fc;">
+                <div class="row mb-4">
+                    <div class="col-12 text-center">
+                        <h2 class="display-3 mb-3" style="color: #f6c23e; font-weight: bold;">{{ completion_rate }}%</h2>
+                        <p class="text-muted mb-4">Overall Task Completion Rate</p>
+                    </div>
+                </div>
+                
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #1cc88a !important;">
+                            <div class="card-body text-center">
+                                <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                                <h3 class="mb-2" style="color: #1cc88a; font-weight: bold;">{{ completed_count }}</h3>
+                                <p class="text-muted mb-0">Completed Tasks</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm h-100" style="border-left: 4px solid #4e73df !important;">
+                            <div class="card-body text-center">
+                                <i class="fas fa-clipboard-list fa-3x text-primary mb-3"></i>
+                                <h3 class="mb-2" style="color: #4e73df; font-weight: bold;">{{ task_count }}</h3>
+                                <p class="text-muted mb-0">Total Tasks</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card border-0 shadow-sm mb-4">
+                    <div class="card-body">
+                        <h6 class="font-weight-bold mb-3"><i class="fas fa-calculator me-2"></i>How We Calculate This:</h6>
+                        <div class="calculation-formula p-3 rounded" style="background: white; border: 2px dashed #dee2e6;">
+                            <p class="mb-2 text-center" style="font-family: 'Courier New', monospace; font-size: 1.1rem;">
+                                <span style="color: #1cc88a; font-weight: bold;">{{ completed_count }}</span>
+                                <span class="text-muted"> (completed) </span>
+                                ÷ 
+                                <span style="color: #4e73df; font-weight: bold;">{{ task_count }}</span>
+                                <span class="text-muted"> (total) </span>
+                                × 100 = 
+                                <span style="color: #f6c23e; font-weight: bold;">{{ completion_rate }}%</span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-12">
+                        <div class="progress" style="height: 30px; border-radius: 15px;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: {{ completion_rate }}%; font-size: 1rem; font-weight: bold;" aria-valuenow="{{ completion_rate }}" aria-valuemin="0" aria-valuemax="100">
+                                {{ completion_rate }}% Complete
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="{% url 'demo_all_tasks' %}?status=completed" class="btn btn-success">
+                    <i class="fas fa-check-circle me-2"></i>View Completed Tasks
+                </a>
+                <a href="{% url 'demo_all_tasks' %}?status=all" class="btn btn-primary">
+                    <i class="fas fa-list me-2"></i>View All Tasks
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-2"></i>Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
