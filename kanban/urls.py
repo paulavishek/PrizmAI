@@ -33,6 +33,7 @@ urlpatterns = [
     path('demo/api/feature-counts/', demo_views.demo_feature_counts_api, name='demo_feature_counts_api'),
     path('demo/board/<int:board_id>/', demo_views.demo_board_detail, name='demo_board_detail'),
     path('demo/board/<int:board_id>/tasks/', demo_views.demo_board_tasks_list, name='demo_board_tasks_list'),
+    path('demo/tasks/', demo_views.demo_all_tasks_list, name='demo_all_tasks'),
     path('demo/reset/', demo_views.reset_demo_data, name='reset_demo'),
     
     path('boards/', views.board_list, name='board_list'),

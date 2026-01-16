@@ -85,6 +85,15 @@
     transform: translateY(-3px);
 }
 
+.stats-card.clickable-card {
+    cursor: pointer;
+}
+
+.clickable-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.15) !important;
+}
+
 .stats-card.primary {
     border-left: 4px solid #4e73df;
 }
@@ -172,67 +181,75 @@
     <!-- Analytics Cards -->
     <div class="row mb-4">
         <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card stats-card primary shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Tasks</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ task_count }}</div>
-                        </div>
-                        <div class="col-auto">
-                            <i class="fas fa-clipboard-list stats-icon text-gray-300"></i>
+            <a href="{% url 'demo_all_tasks' %}?status=all" class="text-decoration-none" title="View all tasks">
+                <div class="card stats-card primary shadow h-100 py-2 clickable-card">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Tasks</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ task_count }}</div>
+                            </div>
+                            <div class="col-auto">
+                                <i class="fas fa-clipboard-list stats-icon text-gray-300"></i>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
 
         <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card stats-card success shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Completed Tasks</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completed_count }}</div>
-                        </div>
-                        <div class="col-auto">
-                            <i class="fas fa-check-circle stats-icon text-gray-300"></i>
+            <a href="{% url 'demo_all_tasks' %}?status=completed" class="text-decoration-none" title="View completed tasks">
+                <div class="card stats-card success shadow h-100 py-2 clickable-card">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Completed Tasks</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completed_count }}</div>
+                            </div>
+                            <div class="col-auto">
+                                <i class="fas fa-check-circle stats-icon text-gray-300"></i>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
 
         <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card stats-card warning shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Completion Rate</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completion_rate }}%</div>
-                        </div>
-                        <div class="col-auto">
-                            <i class="fas fa-chart-line stats-icon text-gray-300"></i>
+            <a href="{% url 'demo_all_tasks' %}?status=all" class="text-decoration-none" title="View all tasks">
+                <div class="card stats-card warning shadow h-100 py-2 clickable-card">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Completion Rate</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completion_rate }}%</div>
+                            </div>
+                            <div class="col-auto">
+                                <i class="fas fa-chart-line stats-icon text-gray-300"></i>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
 
         <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card stats-card danger shadow h-100 py-2">
-                <div class="card-body">
-                    <div class="row no-gutters align-items-center">
-                        <div class="col mr-2">
-                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Overdue Tasks</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ overdue_count }}</div>
-                        </div>
-                        <div class="col-auto">
-                            <i class="fas fa-exclamation-triangle stats-icon text-gray-300"></i>
+            <a href="{% url 'demo_all_tasks' %}?status=overdue" class="text-decoration-none" title="View overdue tasks">
+                <div class="card stats-card danger shadow h-100 py-2 clickable-card">
+                    <div class="card-body">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Overdue Tasks</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ overdue_count }}</div>
+                            </div>
+                            <div class="col-auto">
+                                <i class="fas fa-exclamation-triangle stats-icon text-gray-300"></i>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            </a>
         </div>
     </div>
 

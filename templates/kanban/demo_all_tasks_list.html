@@ -1,0 +1,464 @@
+{% extends 'base.html' %}
+
+{% block title %}All Demo Tasks - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Task List Styles */
+.task-list-container {
+    background: #f8f9fa;
+    min-height: 100vh;
+    padding: 20px 0;
+}
+
+.task-list-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 30px 0;
+    margin-bottom: 30px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.stat-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    border: 3px solid transparent;
+}
+
+.stat-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+}
+
+.stat-card.active {
+    border-color: #667eea;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+}
+
+.stat-card .stat-number {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin-bottom: 5px;
+}
+
+.stat-card .stat-label {
+    color: #6c757d;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-card .stat-icon {
+    font-size: 1.5rem;
+    margin-bottom: 10px;
+    opacity: 0.7;
+}
+
+/* Different colors for each stat */
+.stat-card.stat-all .stat-number { color: #667eea; }
+.stat-card.stat-all .stat-icon { color: #667eea; }
+
+.stat-card.stat-completed .stat-number { color: #28a745; }
+.stat-card.stat-completed .stat-icon { color: #28a745; }
+
+.stat-card.stat-in-progress .stat-number { color: #ffc107; }
+.stat-card.stat-in-progress .stat-icon { color: #ffc107; }
+
+.stat-card.stat-not-started .stat-number { color: #6c757d; }
+.stat-card.stat-not-started .stat-icon { color: #6c757d; }
+
+.stat-card.stat-overdue .stat-number { color: #dc3545; }
+.stat-card.stat-overdue .stat-icon { color: #dc3545; }
+
+.stat-card.stat-priority .stat-number { color: #ff6b6b; }
+.stat-card.stat-priority .stat-icon { color: #ff6b6b; }
+
+/* Table Styles */
+.tasks-table-container {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+.table-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.tasks-table {
+    width: 100%;
+    margin: 0;
+}
+
+.tasks-table thead th {
+    background: #f8f9fa;
+    color: #495057;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+    padding: 15px;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.tasks-table tbody tr {
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.tasks-table tbody tr:hover {
+    background: #f8f9fa;
+    transform: scale(1.01);
+}
+
+.tasks-table tbody td {
+    padding: 15px;
+    vertical-align: middle;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.task-title {
+    font-weight: 600;
+    color: #667eea;
+    text-decoration: none;
+}
+
+.task-title:hover {
+    color: #764ba2;
+    text-decoration: underline;
+}
+
+.priority-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.priority-urgent {
+    background: #dc3545;
+    color: white;
+}
+
+.priority-high {
+    background: #ffc107;
+    color: #212529;
+}
+
+.priority-medium {
+    background: #17a2b8;
+    color: white;
+}
+
+.priority-low {
+    background: #6c757d;
+    color: white;
+}
+
+.progress-bar-wrapper {
+    width: 100px;
+    height: 8px;
+    background: #e9ecef;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-bar-fill {
+    height: 100%;
+    border-radius: 10px;
+    transition: width 0.3s ease;
+}
+
+.board-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    background: #e9ecef;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    color: #495057;
+}
+
+.pagination {
+    margin-top: 20px;
+}
+
+.no-tasks-message {
+    text-align: center;
+    padding: 60px 20px;
+    color: #6c757d;
+}
+
+.no-tasks-icon {
+    font-size: 4rem;
+    opacity: 0.3;
+    margin-bottom: 20px;
+}
+
+.back-button {
+    background: white;
+    color: #667eea;
+    border: 2px solid white;
+    padding: 8px 20px;
+    border-radius: 5px;
+    transition: all 0.3s ease;
+}
+
+.back-button:hover {
+    background: transparent;
+    color: white;
+    border-color: white;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="task-list-container">
+    <div class="task-list-header">
+        <div class="container-fluid">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="mb-2">
+                        <i class="fas fa-tasks me-2"></i>All Demo Tasks
+                    </h1>
+                    <p class="mb-0 opacity-75">View and manage tasks across all demo boards</p>
+                </div>
+                <a href="{% url 'demo_dashboard' %}" class="btn back-button">
+                    <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid">
+        <!-- Stats Grid with Filters -->
+        <div class="stats-grid">
+            <a href="?status=all" class="text-decoration-none">
+                <div class="stat-card stat-all {% if status_filter == 'all' %}active{% endif %}">
+                    <div class="stat-icon"><i class="fas fa-clipboard-list"></i></div>
+                    <div class="stat-number">{{ total_tasks }}</div>
+                    <div class="stat-label">All Tasks</div>
+                </div>
+            </a>
+
+            <a href="?status=completed" class="text-decoration-none">
+                <div class="stat-card stat-completed {% if status_filter == 'completed' %}active{% endif %}">
+                    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                    <div class="stat-number">{{ completed_count }}</div>
+                    <div class="stat-label">Completed</div>
+                </div>
+            </a>
+
+            <a href="?status=in_progress" class="text-decoration-none">
+                <div class="stat-card stat-in-progress {% if status_filter == 'in_progress' %}active{% endif %}">
+                    <div class="stat-icon"><i class="fas fa-spinner"></i></div>
+                    <div class="stat-number">{{ in_progress_count }}</div>
+                    <div class="stat-label">In Progress</div>
+                </div>
+            </a>
+
+            <a href="?status=not_started" class="text-decoration-none">
+                <div class="stat-card stat-not-started {% if status_filter == 'not_started' %}active{% endif %}">
+                    <div class="stat-icon"><i class="fas fa-circle"></i></div>
+                    <div class="stat-number">{{ not_started_count }}</div>
+                    <div class="stat-label">Not Started</div>
+                </div>
+            </a>
+
+            <a href="?status=overdue" class="text-decoration-none">
+                <div class="stat-card stat-overdue {% if status_filter == 'overdue' %}active{% endif %}">
+                    <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
+                    <div class="stat-number">{{ overdue_count }}</div>
+                    <div class="stat-label">Overdue</div>
+                </div>
+            </a>
+
+            <a href="?status=high_priority" class="text-decoration-none">
+                <div class="stat-card stat-priority {% if status_filter == 'high_priority' %}active{% endif %}">
+                    <div class="stat-icon"><i class="fas fa-flag"></i></div>
+                    <div class="stat-number">{{ high_priority_count }}</div>
+                    <div class="stat-label">High Priority</div>
+                </div>
+            </a>
+        </div>
+
+        <!-- Tasks Table -->
+        <div class="tasks-table-container">
+            <div class="table-header">
+                <h3 class="mb-0">
+                    <i class="fas fa-list me-2"></i>
+                    {% if status_filter == 'all' %}All Tasks
+                    {% elif status_filter == 'completed' %}Completed Tasks
+                    {% elif status_filter == 'in_progress' %}In Progress Tasks
+                    {% elif status_filter == 'not_started' %}Not Started Tasks
+                    {% elif status_filter == 'overdue' %}Overdue Tasks
+                    {% elif status_filter == 'high_priority' %}High Priority Tasks
+                    {% endif %}
+                    ({{ tasks.paginator.count }})
+                </h3>
+            </div>
+
+            {% if tasks %}
+            <div class="table-responsive">
+                <table class="tasks-table table table-hover">
+                    <thead>
+                        <tr>
+                            <th style="width: 30%;">Task</th>
+                            <th style="width: 15%;">Board</th>
+                            <th style="width: 15%;">Column</th>
+                            <th style="width: 10%;">Priority</th>
+                            <th style="width: 10%;">Progress</th>
+                            <th style="width: 10%;">Due Date</th>
+                            <th style="width: 10%;">Assigned To</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for task in tasks %}
+                        <tr onclick="window.location.href='{% url 'task_detail' task.id %}'">
+                            <td>
+                                <a href="{% url 'task_detail' task.id %}" class="task-title">
+                                    {{ task.title }}
+                                </a>
+                                {% if task.description %}
+                                <br><small class="text-muted">{{ task.description|truncatewords:10 }}</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="board-badge">
+                                    <i class="fas fa-folder me-1"></i>{{ task.column.board.name }}
+                                </span>
+                            </td>
+                            <td>
+                                <span class="text-muted">
+                                    <i class="fas fa-columns me-1"></i>{{ task.column.name }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if task.priority == 'urgent' %}
+                                    <span class="priority-badge priority-urgent">Urgent</span>
+                                {% elif task.priority == 'high' %}
+                                    <span class="priority-badge priority-high">High</span>
+                                {% elif task.priority == 'medium' %}
+                                    <span class="priority-badge priority-medium">Medium</span>
+                                {% else %}
+                                    <span class="priority-badge priority-low">Low</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <div class="progress-bar-wrapper me-2">
+                                        <div class="progress-bar-fill" style="width: {{ task.progress }}%; background: {% if task.progress == 100 %}#28a745{% elif task.progress > 0 %}#ffc107{% else %}#6c757d{% endif %};"></div>
+                                    </div>
+                                    <small>{{ task.progress }}%</small>
+                                </div>
+                            </td>
+                            <td>
+                                {% if task.due_date %}
+                                    {% if task.is_overdue and task.progress < 100 %}
+                                        <span class="text-danger">
+                                            <i class="fas fa-exclamation-triangle me-1"></i>
+                                            {{ task.due_date|date:"M d, Y" }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">{{ task.due_date|date:"M d, Y" }}</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">-</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if task.assigned_to %}
+                                    <span class="text-muted">
+                                        <i class="fas fa-user me-1"></i>{{ task.assigned_to.username }}
+                                    </span>
+                                {% else %}
+                                    <span class="text-muted">Unassigned</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if tasks.has_other_pages %}
+            <div class="p-3 border-top">
+                <nav aria-label="Task pagination">
+                    <ul class="pagination justify-content-center mb-0">
+                        {% if tasks.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?status={{ status_filter }}&page={{ tasks.previous_page_number }}">
+                                    <i class="fas fa-chevron-left"></i> Previous
+                                </a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link"><i class="fas fa-chevron-left"></i> Previous</span>
+                            </li>
+                        {% endif %}
+
+                        <li class="page-item active">
+                            <span class="page-link">
+                                Page {{ tasks.number }} of {{ tasks.paginator.num_pages }}
+                            </span>
+                        </li>
+
+                        {% if tasks.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="?status={{ status_filter }}&page={{ tasks.next_page_number }}">
+                                    Next <i class="fas fa-chevron-right"></i>
+                                </a>
+                            </li>
+                        {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">Next <i class="fas fa-chevron-right"></i></span>
+                            </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+            </div>
+            {% endif %}
+
+            {% else %}
+            <div class="no-tasks-message">
+                <div class="no-tasks-icon">
+                    <i class="fas fa-inbox"></i>
+                </div>
+                <h4>No tasks found</h4>
+                <p class="text-muted">
+                    {% if status_filter != 'all' %}
+                        There are no tasks matching this filter.
+                    {% else %}
+                        No demo tasks have been created yet.
+                    {% endif %}
+                </p>
+                <a href="?status=all" class="btn btn-primary mt-3">
+                    <i class="fas fa-list me-2"></i>View All Tasks
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

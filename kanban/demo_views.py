@@ -1599,3 +1599,89 @@ def demo_board_tasks_list(request, board_id):
     }
     
     return render(request, 'kanban/demo_board_tasks_list.html', context)
+
+
+def demo_all_tasks_list(request):
+    """
+    Display all tasks across all demo boards in a filterable table view
+    Provides a unified view of tasks across the entire demo environment
+    """
+    # Get the demo organization(s)
+    demo_orgs = Organization.objects.filter(name__in=DEMO_ORG_NAMES)
+    browser_fingerprint = request.session.get('browser_fingerprint')
+    
+    # Get all demo boards
+    demo_boards = Board.objects.filter(organization__in=demo_orgs)
+    
+    # Also include user-created boards from this session
+    if browser_fingerprint:
+        user_boards = Board.objects.filter(created_by_session=browser_fingerprint)
+        demo_boards = demo_boards | user_boards
+    
+    # Get filter parameter from URL
+    status_filter = request.GET.get('status', 'all')
+    
+    # Get all tasks with related data
+    tasks_queryset = Task.objects.filter(
+        column__board__in=demo_boards
+    ).select_related(
+        'assigned_to', 'assigned_to__profile', 'created_by', 'column', 'column__board'
+    ).prefetch_related('labels', 'dependencies').order_by('-created_at')
+    
+    # Apply filters
+    if status_filter == 'completed':
+        tasks_queryset = tasks_queryset.filter(progress=100)
+    elif status_filter == 'in_progress':
+        tasks_queryset = tasks_queryset.filter(progress__gt=0, progress__lt=100)
+    elif status_filter == 'not_started':
+        tasks_queryset = tasks_queryset.filter(progress=0)
+    elif status_filter == 'overdue':
+        tasks_queryset = tasks_queryset.filter(
+            due_date__lt=timezone.now().date(),
+            progress__lt=100
+        )
+    elif status_filter == 'high_priority':
+        tasks_queryset = tasks_queryset.filter(priority__in=['high', 'urgent'])
+    
+    # Pagination
+    from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
+    paginator = Paginator(tasks_queryset, 25)  # Show 25 tasks per page
+    page_number = request.GET.get('page', 1)
+    
+    try:
+        tasks = paginator.page(page_number)
+    except PageNotAnInteger:
+        tasks = paginator.page(1)
+    except EmptyPage:
+        tasks = paginator.page(paginator.num_pages)
+    
+    # Get statistics
+    total_tasks = Task.objects.filter(column__board__in=demo_boards).count()
+    completed_count = Task.objects.filter(column__board__in=demo_boards, progress=100).count()
+    in_progress_count = Task.objects.filter(column__board__in=demo_boards, progress__gt=0, progress__lt=100).count()
+    not_started_count = Task.objects.filter(column__board__in=demo_boards, progress=0).count()
+    overdue_count = Task.objects.filter(
+        column__board__in=demo_boards,
+        due_date__lt=timezone.now().date(),
+        progress__lt=100
+    ).count()
+    high_priority_count = Task.objects.filter(column__board__in=demo_boards, priority__in=['high', 'urgent']).count()
+    
+    # Completion rate
+    completion_rate = round((completed_count / total_tasks * 100) if total_tasks > 0 else 0, 1)
+    
+    context = {
+        'tasks': tasks,
+        'status_filter': status_filter,
+        'total_tasks': total_tasks,
+        'completed_count': completed_count,
+        'in_progress_count': in_progress_count,
+        'not_started_count': not_started_count,
+        'overdue_count': overdue_count,
+        'high_priority_count': high_priority_count,
+        'completion_rate': completion_rate,
+        'demo_mode': request.session.get('demo_mode', 'solo'),
+        'all_boards_view': True,
+    }
+    
+    return render(request, 'kanban/demo_all_tasks_list.html', context)
