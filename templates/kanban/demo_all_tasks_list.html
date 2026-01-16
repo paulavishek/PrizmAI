@@ -297,7 +297,7 @@
                 <div class="stat-card stat-priority {% if status_filter == 'high_priority' %}active{% endif %}">
                     <div class="stat-icon"><i class="fas fa-flag"></i></div>
                     <div class="stat-number">{{ high_priority_count }}</div>
-                    <div class="stat-label">High Priority</div>
+                    <div class="stat-label">Critical Priority</div>
                 </div>
             </a>
         </div>
@@ -312,7 +312,7 @@
                     {% elif status_filter == 'in_progress' %}In Progress Tasks
                     {% elif status_filter == 'not_started' %}Not Started Tasks
                     {% elif status_filter == 'overdue' %}Overdue Tasks
-                    {% elif status_filter == 'high_priority' %}High Priority Tasks
+                    {% elif status_filter == 'high_priority' %}Critical Priority Tasks
                     {% endif %}
                     ({{ tasks.paginator.count }})
                 </h3>
