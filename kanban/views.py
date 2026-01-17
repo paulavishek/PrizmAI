@@ -1297,7 +1297,8 @@ def board_analytics(request, board_id):
         {'name': 'Necessary NVA', 'count': necessary_nva_count, 'color': '#ffc107'},
         {'name': 'Waste/Eliminate', 'count': waste_count, 'color': '#dc3545'}
     ]
-    return render(request, 'kanban/board_analytics.html', {
+    
+    response = render(request, 'kanban/board_analytics.html', {
         'board': board,
         'columns': columns,
         'tasks': all_tasks,  # Add all tasks to the template context
@@ -1319,6 +1320,13 @@ def board_analytics(request, board_id):
         'is_demo_mode': is_demo_mode,
         'is_demo_board': is_demo_board,
     })
+    
+    # Prevent caching of analytics data
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate, private'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    
+    return response
 
 def gantt_chart(request, board_id):
     """Display Gantt chart view for a board

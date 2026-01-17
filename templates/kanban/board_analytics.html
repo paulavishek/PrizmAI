@@ -226,8 +226,14 @@
 {{ tasks_by_user|json_script:"tasks-by-user-data" }}
 {{ tasks_by_lean_category|json_script:"tasks-by-lean-data" }}
 
+<!-- Debug: Log data for troubleshooting -->
+<script>
+console.log('Analytics Data Loaded at:', new Date().toISOString());
+console.log('Tasks by user data:', {{ tasks_by_user|safe }});
+</script>
+
 <!-- Custom JavaScript Files with cache busting -->
-<script src="{% static 'js/board_analytics.js' %}?v=2026010912"></script>
+<script src="{% static 'js/board_analytics.js' %}?v=2026011701"></script>
 <script src="{% static 'js/ai_timeline.js' %}"></script>
 
 <!-- Initialize CSRF Token -->
