@@ -8,9 +8,12 @@ from django.utils import timezone
 from django.contrib.auth import get_user_model
 from datetime import timedelta, date
 from decimal import Decimal
-from kanban.models import Board, Column, Task, TaskLabel, Organization
+from kanban.models import Board, Column, Task, TaskLabel, Organization, Milestone
 from kanban.permission_models import Role
-from kanban.budget_models import TimeEntry
+from kanban.budget_models import TimeEntry, ProjectBudget, TaskCost, ProjectROI
+from kanban.burndown_models import TeamVelocitySnapshot, BurndownPrediction
+from kanban.retrospective_models import ProjectRetrospective, LessonLearned, ImprovementMetric, RetrospectiveActionItem
+from kanban.coach_models import CoachingSuggestion, PMMetrics
 import random
 
 User = get_user_model()
@@ -315,6 +318,26 @@ class Command(BaseCommand):
         all_tasks = software_tasks + marketing_tasks + bug_tasks
         self.create_time_tracking_data(all_tasks)
 
+        # Create milestones for Gantt chart
+        self.stdout.write(self.style.SUCCESS('\n📌 Creating milestones...\n'))
+        self.create_milestones(software_board, marketing_board, bug_board, alex, sam, jordan)
+
+        # Create budget and ROI data
+        self.stdout.write(self.style.SUCCESS('\n💰 Creating budget and ROI data...\n'))
+        self.create_budget_roi_data(software_board, marketing_board, bug_board, alex)
+
+        # Create burndown/velocity data
+        self.stdout.write(self.style.SUCCESS('\n📉 Creating burndown velocity data...\n'))
+        self.create_burndown_data(software_board, marketing_board, bug_board)
+
+        # Create retrospective data
+        self.stdout.write(self.style.SUCCESS('\n🔄 Creating retrospective data...\n'))
+        self.create_retrospective_data(software_board, marketing_board, bug_board, alex, sam, jordan)
+
+        # Create AI coaching suggestions
+        self.stdout.write(self.style.SUCCESS('\n🤖 Creating AI coaching suggestions...\n'))
+        self.create_coaching_data(software_board, marketing_board, bug_board)
+
         self.stdout.write(self.style.SUCCESS('\n' + '='*70))
         self.stdout.write(self.style.SUCCESS('✅ DEMO DATA POPULATION COMPLETE'))
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))
@@ -353,14 +376,14 @@ class Command(BaseCommand):
                 'description': 'Mobile-first dashboard with Bootstrap 5 and custom CSS',
                 'priority': 'medium',
                 'complexity': 5,
-                'assigned_to': None,  # Unassigned for AI suggestion demo
+                'assigned_to': sam,
             },
             {
                 'title': 'Implement file upload functionality',
                 'description': 'Support for multiple file types with virus scanning and storage optimization',
                 'priority': 'low',
                 'complexity': 7,
-                'assigned_to': None,
+                'assigned_to': sam,
             },
             {
                 'title': 'Add email notification system',
@@ -374,14 +397,14 @@ class Command(BaseCommand):
                 'description': 'Full-text search across all entities with faceted filtering',
                 'priority': 'low',
                 'complexity': 8,
-                'assigned_to': None,
+                'assigned_to': sam,
             },
             {
                 'title': 'Create data export feature (CSV/Excel)',
                 'description': 'Export any dataset to CSV or Excel with custom column selection',
                 'priority': 'low',
                 'complexity': 4,
-                'assigned_to': None,
+                'assigned_to': jordan,
             },
             {
                 'title': 'Implement API rate limiting',
@@ -395,14 +418,14 @@ class Command(BaseCommand):
                 'description': 'Allow external systems to receive real-time event notifications',
                 'priority': 'low',
                 'complexity': 7,
-                'assigned_to': None,
+                'assigned_to': sam,
             },
             {
                 'title': 'Build admin dashboard for system monitoring',
                 'description': 'Real-time metrics, logs, and system health indicators',
                 'priority': 'medium',
                 'complexity': 6,
-                'assigned_to': None,
+                'assigned_to': alex,
             },
             {
                 'title': 'Implement two-factor authentication',
@@ -416,21 +439,21 @@ class Command(BaseCommand):
                 'description': 'Enable install-to-home-screen and offline capabilities',
                 'priority': 'medium',
                 'complexity': 6,
-                'assigned_to': None,
+                'assigned_to': sam,
             },
             {
                 'title': 'Add dark mode theme support',
                 'description': 'User-selectable dark theme with smooth transitions',
                 'priority': 'low',
                 'complexity': 4,
-                'assigned_to': None,
+                'assigned_to': sam,
             },
             {
                 'title': 'Build automated backup system',
                 'description': 'Daily database backups with retention policy and restore testing',
                 'priority': 'high',
                 'complexity': 5,
-                'assigned_to': None,
+                'assigned_to': alex,
             },
         ]
 
@@ -801,7 +824,7 @@ class Command(BaseCommand):
                 'description': 'Create engaging product demo videos for social media',
                 'priority': 'high',
                 'complexity': 7,
-                'assigned_to': None,
+                'assigned_to': jordan,
             },
             {
                 'title': 'Blog post series on industry trends',
@@ -815,14 +838,14 @@ class Command(BaseCommand):
                 'description': 'Set up automated email nurture campaigns',
                 'priority': 'high',
                 'complexity': 6,
-                'assigned_to': None,
+                'assigned_to': sam,
             },
             {
                 'title': 'Social media contest',
                 'description': 'Run a giveaway to boost engagement',
                 'priority': 'low',
                 'complexity': 4,
-                'assigned_to': None,
+                'assigned_to': jordan,
             },
             {
                 'title': 'Partner with industry influencers',
@@ -843,21 +866,21 @@ class Command(BaseCommand):
                 'description': 'Plan monthly educational webinars',
                 'priority': 'medium',
                 'complexity': 7,
-                'assigned_to': None,
+                'assigned_to': alex,
             },
             {
                 'title': 'Redesign landing pages',
                 'description': 'Optimize conversion rates on key pages',
                 'priority': 'high',
                 'complexity': 6,
-                'assigned_to': None,
+                'assigned_to': sam,
             },
             {
                 'title': 'Launch referral program',
                 'description': 'Incentivize customers to refer friends',
                 'priority': 'medium',
                 'complexity': 5,
-                'assigned_to': None,
+                'assigned_to': alex,
             },
             {
                 'title': 'Create product comparison guides',
@@ -871,14 +894,14 @@ class Command(BaseCommand):
                 'description': 'Improve organic search rankings',
                 'priority': 'high',
                 'complexity': 7,
-                'assigned_to': None,
+                'assigned_to': sam,
             },
             {
                 'title': 'Customer testimonial videos',
                 'description': 'Film satisfied customers sharing their experience',
                 'priority': 'medium',
                 'complexity': 6,
-                'assigned_to': None,
+                'assigned_to': jordan,
             },
         ]
 
@@ -1861,3 +1884,520 @@ class Command(BaseCommand):
         ).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
         
         self.stdout.write(f'   📊 Total logged hours: {total_hours}h')
+
+    def create_milestones(self, software_board, marketing_board, bug_board, alex, sam, jordan):
+        """Create milestones for each demo board"""
+        now = timezone.now()
+        
+        # Software Development Milestones
+        software_tasks = list(Task.objects.filter(column__board=software_board))
+        software_milestones = [
+            {
+                'title': 'Project Kickoff',
+                'description': 'Official start of the Software Development project',
+                'target_date': (now - timedelta(days=45)).date(),
+                'milestone_type': 'project_start',
+                'is_completed': True,
+                'completed_date': (now - timedelta(days=45)).date(),
+                'color': '#28a745',
+                'created_by': alex,
+            },
+            {
+                'title': 'Authentication Module Complete',
+                'description': 'User authentication with JWT tokens and 2FA implemented',
+                'target_date': (now - timedelta(days=20)).date(),
+                'milestone_type': 'phase_completion',
+                'is_completed': True,
+                'completed_date': (now - timedelta(days=18)).date(),
+                'color': '#28a745',
+                'created_by': sam,
+            },
+            {
+                'title': 'API MVP Ready',
+                'description': 'Core REST API endpoints ready for testing',
+                'target_date': (now + timedelta(days=7)).date(),
+                'milestone_type': 'deliverable',
+                'is_completed': False,
+                'completed_date': None,
+                'color': '#ffc107',
+                'created_by': sam,
+            },
+            {
+                'title': 'Beta Release',
+                'description': 'First beta release to selected users',
+                'target_date': (now + timedelta(days=30)).date(),
+                'milestone_type': 'deliverable',
+                'is_completed': False,
+                'completed_date': None,
+                'color': '#fd7e14',
+                'created_by': alex,
+            },
+            {
+                'title': 'Production Launch',
+                'description': 'Final deployment to production',
+                'target_date': (now + timedelta(days=60)).date(),
+                'milestone_type': 'project_end',
+                'is_completed': False,
+                'completed_date': None,
+                'color': '#dc3545',
+                'created_by': alex,
+            },
+        ]
+        
+        for m_data in software_milestones:
+            milestone, created = Milestone.objects.get_or_create(
+                board=software_board,
+                title=m_data['title'],
+                defaults=m_data
+            )
+            if created and software_tasks:
+                milestone.related_tasks.set(random.sample(software_tasks, min(3, len(software_tasks))))
+        
+        self.stdout.write(f'   ✅ Created {len(software_milestones)} milestones for Software Development')
+        
+        # Marketing Campaign Milestones
+        marketing_tasks = list(Task.objects.filter(column__board=marketing_board))
+        marketing_milestones = [
+            {
+                'title': 'Campaign Planning Complete',
+                'description': 'All campaign strategies and content calendar finalized',
+                'target_date': (now - timedelta(days=30)).date(),
+                'milestone_type': 'phase_completion',
+                'is_completed': True,
+                'completed_date': (now - timedelta(days=28)).date(),
+                'color': '#28a745',
+                'created_by': jordan,
+            },
+            {
+                'title': 'Content Creation Phase',
+                'description': 'All marketing content created and reviewed',
+                'target_date': (now + timedelta(days=14)).date(),
+                'milestone_type': 'deliverable',
+                'is_completed': False,
+                'completed_date': None,
+                'color': '#17a2b8',
+                'created_by': jordan,
+            },
+            {
+                'title': 'Campaign Launch',
+                'description': 'Official marketing campaign launch across all channels',
+                'target_date': (now + timedelta(days=21)).date(),
+                'milestone_type': 'project_end',
+                'is_completed': False,
+                'completed_date': None,
+                'color': '#fd7e14',
+                'created_by': alex,
+            },
+        ]
+        
+        for m_data in marketing_milestones:
+            milestone, created = Milestone.objects.get_or_create(
+                board=marketing_board,
+                title=m_data['title'],
+                defaults=m_data
+            )
+            if created and marketing_tasks:
+                milestone.related_tasks.set(random.sample(marketing_tasks, min(3, len(marketing_tasks))))
+        
+        self.stdout.write(f'   ✅ Created {len(marketing_milestones)} milestones for Marketing Campaign')
+        
+        # Bug Tracking Milestones
+        bug_tasks = list(Task.objects.filter(column__board=bug_board))
+        bug_milestones = [
+            {
+                'title': 'Critical Bugs Fixed',
+                'description': 'All critical/urgent bugs resolved',
+                'target_date': (now + timedelta(days=5)).date(),
+                'milestone_type': 'deliverable',
+                'is_completed': False,
+                'completed_date': None,
+                'color': '#dc3545',
+                'created_by': sam,
+            },
+            {
+                'title': 'Security Audit Complete',
+                'description': 'All security vulnerabilities addressed',
+                'target_date': (now + timedelta(days=10)).date(),
+                'milestone_type': 'review',
+                'is_completed': False,
+                'completed_date': None,
+                'color': '#6f42c1',
+                'created_by': alex,
+            },
+            {
+                'title': 'Bug-Free Release',
+                'description': 'Zero known bugs release candidate',
+                'target_date': (now + timedelta(days=20)).date(),
+                'milestone_type': 'project_end',
+                'is_completed': False,
+                'completed_date': None,
+                'color': '#28a745',
+                'created_by': alex,
+            },
+        ]
+        
+        for m_data in bug_milestones:
+            milestone, created = Milestone.objects.get_or_create(
+                board=bug_board,
+                title=m_data['title'],
+                defaults=m_data
+            )
+            if created and bug_tasks:
+                milestone.related_tasks.set(random.sample(bug_tasks, min(3, len(bug_tasks))))
+        
+        self.stdout.write(f'   ✅ Created {len(bug_milestones)} milestones for Bug Tracking')
+
+    def create_budget_roi_data(self, software_board, marketing_board, bug_board, admin_user):
+        """Create budget and ROI data for all demo boards"""
+        
+        budget_configs = [
+            {'board': software_board, 'budget': Decimal('75000.00'), 'hours': Decimal('1200.0'), 'name': 'Software Development'},
+            {'board': marketing_board, 'budget': Decimal('35000.00'), 'hours': Decimal('600.0'), 'name': 'Marketing Campaign'},
+            {'board': bug_board, 'budget': Decimal('25000.00'), 'hours': Decimal('500.0'), 'name': 'Bug Tracking'},
+        ]
+        
+        for config in budget_configs:
+            board = config['board']
+            
+            # Create or get budget
+            budget, created = ProjectBudget.objects.get_or_create(
+                board=board,
+                defaults={
+                    'allocated_budget': config['budget'],
+                    'currency': 'USD',
+                    'allocated_hours': config['hours'],
+                    'warning_threshold': 80,
+                    'critical_threshold': 95,
+                    'ai_optimization_enabled': True,
+                    'created_by': admin_user,
+                }
+            )
+            
+            if created:
+                self.stdout.write(f'   ✅ Created budget for {config["name"]}: ${config["budget"]}')
+            
+            # Create task costs
+            tasks = Task.objects.filter(column__board=board)[:20]
+            task_costs_created = 0
+            
+            for i, task in enumerate(tasks):
+                estimated_cost = Decimal(random.uniform(500, 5000)).quantize(Decimal('0.01'))
+                estimated_hours = Decimal(random.uniform(4, 40)).quantize(Decimal('0.01'))
+                
+                # Some tasks over budget for realistic demo
+                is_over = i % 5 == 0
+                variance = Decimal(random.uniform(1.1, 1.3)) if is_over else Decimal(random.uniform(0.7, 1.0))
+                actual_cost = (estimated_cost * variance).quantize(Decimal('0.01'))
+                
+                task_cost, created = TaskCost.objects.get_or_create(
+                    task=task,
+                    defaults={
+                        'estimated_cost': estimated_cost,
+                        'estimated_hours': estimated_hours,
+                        'actual_cost': actual_cost,
+                        'hourly_rate': Decimal(random.choice(['75.00', '100.00', '125.00'])),
+                        'resource_cost': Decimal(random.uniform(0, 200)).quantize(Decimal('0.01')) if i % 4 == 0 else Decimal('0.00'),
+                    }
+                )
+                if created:
+                    task_costs_created += 1
+            
+            self.stdout.write(f'   ✅ Created {task_costs_created} task costs for {config["name"]}')
+            
+            # Create ROI snapshot
+            completed_tasks = Task.objects.filter(column__board=board, progress=100).count()
+            total_tasks = Task.objects.filter(column__board=board).count()
+            
+            total_cost = sum([tc.get_total_actual_cost() for tc in TaskCost.objects.filter(task__column__board=board)])
+            if not total_cost:
+                total_cost = config['budget'] * Decimal('0.5')
+            expected_value = config['budget'] * Decimal('1.6')
+            realized_value = (expected_value * Decimal(random.uniform(0.85, 1.15))).quantize(Decimal('0.01'))
+            
+            roi_percentage = None
+            if total_cost > 0:
+                roi_percentage = ((realized_value - total_cost) / total_cost * 100).quantize(Decimal('0.01'))
+            
+            roi, created = ProjectROI.objects.get_or_create(
+                board=board,
+                snapshot_date__date=timezone.now().date(),
+                defaults={
+                    'expected_value': expected_value,
+                    'realized_value': realized_value,
+                    'roi_percentage': roi_percentage or Decimal('0'),
+                    'total_cost': total_cost,
+                    'total_tasks': total_tasks,
+                    'completed_tasks': completed_tasks,
+                    'ai_insights': {'note': f'Automated ROI tracking for {config["name"]}'},
+                }
+            )
+            if created:
+                self.stdout.write(f'   ✅ Created ROI snapshot for {config["name"]}: {roi_percentage}%')
+
+    def create_burndown_data(self, software_board, marketing_board, bug_board):
+        """Create velocity and burndown data for all demo boards"""
+        now = timezone.now()
+        
+        boards = [
+            {'board': software_board, 'name': 'Software Development', 'base_velocity': 45},
+            {'board': marketing_board, 'name': 'Marketing Campaign', 'base_velocity': 35},
+            {'board': bug_board, 'name': 'Bug Tracking', 'base_velocity': 40},
+        ]
+        
+        for config in boards:
+            board = config['board']
+            
+            # Create weekly velocity snapshots for last 8 weeks
+            snapshots_created = 0
+            for week in range(8, 0, -1):
+                period_end = now.date() - timedelta(days=week * 7)
+                period_start = period_end - timedelta(days=7)
+                
+                # Vary velocity realistically
+                velocity_variation = random.uniform(0.8, 1.2)
+                tasks_completed = int(config['base_velocity'] * velocity_variation / 5)
+                story_points = Decimal(config['base_velocity'] * velocity_variation).quantize(Decimal('0.01'))
+                hours = Decimal(tasks_completed * random.uniform(3, 6)).quantize(Decimal('0.01'))
+                
+                snapshot, created = TeamVelocitySnapshot.objects.get_or_create(
+                    board=board,
+                    period_start=period_start,
+                    period_end=period_end,
+                    defaults={
+                        'period_type': 'weekly',
+                        'tasks_completed': tasks_completed,
+                        'story_points_completed': story_points,
+                        'hours_completed': hours,
+                        'active_team_members': 3,
+                        'tasks_reopened': 0,
+                        'quality_score': Decimal('95.00'),
+                    }
+                )
+                if created:
+                    snapshots_created += 1
+            
+            self.stdout.write(f'   ✅ Created {snapshots_created} velocity snapshots for {config["name"]}')
+            
+            # Create burndown prediction
+            total_tasks = Task.objects.filter(column__board=board).count()
+            completed_tasks = Task.objects.filter(column__board=board, progress=100).count()
+            total_remaining = total_tasks - completed_tasks
+            avg_velocity = Decimal(config['base_velocity'] / 7).quantize(Decimal('0.01'))  # Daily velocity
+            
+            if avg_velocity > 0:
+                days_to_complete = int(total_remaining / float(avg_velocity))
+                predicted_date = now + timedelta(days=days_to_complete)
+                lower_bound = (predicted_date - timedelta(days=int(days_to_complete * 0.2))).date()
+                upper_bound = (predicted_date + timedelta(days=int(days_to_complete * 0.3))).date()
+                
+                # Use objects.create since prediction_date is auto_now_add
+                prediction = BurndownPrediction.objects.create(
+                    board=board,
+                    prediction_type='burndown',
+                    total_tasks=total_tasks,
+                    completed_tasks=completed_tasks,
+                    remaining_tasks=total_remaining,
+                    current_velocity=avg_velocity,
+                    average_velocity=avg_velocity,
+                    velocity_std_dev=Decimal('2.5'),
+                    velocity_trend='stable',
+                    predicted_completion_date=predicted_date.date(),
+                    completion_date_lower_bound=lower_bound,
+                    completion_date_upper_bound=upper_bound,
+                    days_until_completion_estimate=days_to_complete,
+                    days_margin_of_error=int(days_to_complete * 0.25),
+                    confidence_percentage=85,
+                    prediction_confidence_score=Decimal('0.85'),
+                )
+                if created:
+                    self.stdout.write(f'   ✅ Created burndown prediction for {config["name"]}')
+
+    def create_retrospective_data(self, software_board, marketing_board, bug_board, alex, sam, jordan):
+        """Create retrospective data for all demo boards"""
+        now = timezone.now()
+        
+        boards_data = [
+            {'board': software_board, 'name': 'Software Development', 'lead': sam},
+            {'board': marketing_board, 'name': 'Marketing Campaign', 'lead': jordan},
+            {'board': bug_board, 'name': 'Bug Tracking', 'lead': sam},
+        ]
+        
+        for config in boards_data:
+            board = config['board']
+            
+            # Create 2 retrospectives per board
+            for i in range(2):
+                days_ago = 30 * (i + 1)
+                
+                retro, created = ProjectRetrospective.objects.get_or_create(
+                    board=board,
+                    title=f'Sprint {3-i} Retrospective - {config["name"]}',
+                    defaults={
+                        'retrospective_type': 'sprint',
+                        'status': 'finalized' if i == 1 else 'in_progress',
+                        'period_start': (now - timedelta(days=days_ago + 14)).date(),
+                        'period_end': (now - timedelta(days=days_ago)).date(),
+                        'metrics_snapshot': {
+                            'tasks_completed': random.randint(15, 25),
+                            'tasks_planned': random.randint(18, 28),
+                            'velocity': random.randint(35, 50),
+                            'completion_rate': random.randint(75, 95),
+                        },
+                        'what_went_well': 'Team collaboration was excellent. Daily standups kept everyone aligned. Code reviews were thorough and helpful.',
+                        'what_needs_improvement': 'Some tasks had unclear requirements. Testing environment had stability issues.',
+                        'lessons_learned': [
+                            {'lesson': 'Early testing catches issues faster', 'priority': 'high'},
+                            {'lesson': 'Clear requirements reduce rework', 'priority': 'high'},
+                        ],
+                        'key_achievements': [
+                            'All sprint goals met',
+                            'Zero critical bugs in production',
+                            'Improved code coverage',
+                        ],
+                        'overall_sentiment_score': Decimal(random.uniform(0.7, 0.9)).quantize(Decimal('0.01')),
+                        'team_morale_indicator': random.choice(['high', 'medium']),
+                        'performance_trend': 'improving',
+                        'created_by': config['lead'],
+                        'finalized_by': alex if i == 1 else None,
+                        'finalized_at': now - timedelta(days=days_ago) if i == 1 else None,
+                    }
+                )
+                
+                if created:
+                    # Add lessons learned
+                    LessonLearned.objects.create(
+                        retrospective=retro,
+                        board=board,
+                        title='Early Testing Prevents Issues',
+                        description='Running tests early in development catches bugs before they become blockers.',
+                        category='quality',
+                        priority='high',
+                        status='implemented' if i == 1 else 'in_progress',
+                        expected_benefit='Reduce debugging time by 40%',
+                        recommended_action='Implement test-driven development practices and code review before merging',
+                        action_owner=config['lead'],
+                    )
+                    
+                    # Add action items
+                    RetrospectiveActionItem.objects.create(
+                        retrospective=retro,
+                        board=board,
+                        title='Implement test automation',
+                        description='Set up automated testing pipeline for all new features',
+                        action_type='technical_improvement',
+                        priority='high',
+                        status='completed' if i == 1 else 'in_progress',
+                        assigned_to=config['lead'],
+                        target_completion_date=(now + timedelta(days=14)).date(),
+                    )
+                    
+                    # Add improvement metrics
+                    ImprovementMetric.objects.create(
+                        retrospective=retro,
+                        board=board,
+                        metric_type='velocity',
+                        metric_name='Team Velocity',
+                        metric_value=Decimal(random.randint(40, 50)),
+                        previous_value=Decimal(random.randint(35, 45)),
+                        target_value=Decimal('55'),
+                        trend='improving',
+                        unit_of_measure='story points',
+                        measured_at=(now - timedelta(days=days_ago)).date(),
+                    )
+            
+            self.stdout.write(f'   ✅ Created 2 retrospectives for {config["name"]}')
+
+    def create_coaching_data(self, software_board, marketing_board, bug_board):
+        """Create AI coaching suggestions and PM metrics for all demo boards"""
+        now = timezone.now()
+        
+        boards = [
+            {'board': software_board, 'name': 'Software Development'},
+            {'board': marketing_board, 'name': 'Marketing Campaign'},
+            {'board': bug_board, 'name': 'Bug Tracking'},
+        ]
+        
+        suggestion_templates = [
+            {
+                'suggestion_type': 'resource_overload',
+                'title': 'Workload Imbalance Detected',
+                'message': 'Some team members have significantly more tasks. Consider redistributing work for better balance.',
+                'severity': 'high',
+            },
+            {
+                'suggestion_type': 'deadline_risk',
+                'title': 'Upcoming Deadline Risk',
+                'message': 'Several high-priority tasks are approaching their due dates. Consider prioritizing or adjusting scope.',
+                'severity': 'high',
+            },
+            {
+                'suggestion_type': 'best_practice',
+                'title': 'Velocity Improvement Opportunity',
+                'message': 'Breaking down complex tasks into smaller units could improve team velocity by 15-20%.',
+                'severity': 'medium',
+            },
+            {
+                'suggestion_type': 'quality_issue',
+                'title': 'Quality Enhancement Suggestion',
+                'message': 'Adding code review checkpoints for complex tasks can reduce bugs by up to 30%.',
+                'severity': 'medium',
+            },
+            {
+                'suggestion_type': 'skill_opportunity',
+                'title': 'Collaboration Opportunity',
+                'message': 'Tasks with overlapping skills could benefit from pair programming or knowledge sharing sessions.',
+                'severity': 'low',
+            },
+        ]
+        
+        for config in boards:
+            board = config['board']
+            suggestions_created = 0
+            
+            for template in suggestion_templates:
+                suggestion, created = CoachingSuggestion.objects.get_or_create(
+                    board=board,
+                    title=template['title'],
+                    defaults={
+                        'suggestion_type': template['suggestion_type'],
+                        'message': template['message'],
+                        'severity': template['severity'],
+                        'status': 'active',
+                        'confidence_score': Decimal(random.uniform(0.75, 0.95)).quantize(Decimal('0.01')),
+                        'metrics_snapshot': {
+                            'analysis_date': now.isoformat(),
+                            'tasks_analyzed': Task.objects.filter(column__board=board).count(),
+                        },
+                    }
+                )
+                if created:
+                    suggestions_created += 1
+            
+            self.stdout.write(f'   ✅ Created {suggestions_created} coaching suggestions for {config["name"]}')
+            
+            # Get a demo user for PM metrics
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            demo_pm = User.objects.filter(email='alex.chen@demo.prizmai.local').first()
+            if not demo_pm:
+                demo_pm = User.objects.first()
+            
+            # Create PM metrics
+            metrics, created = PMMetrics.objects.get_or_create(
+                board=board,
+                pm_user=demo_pm,
+                period_start=(now - timedelta(days=30)).date(),
+                period_end=now.date(),
+                defaults={
+                    'suggestions_received': random.randint(5, 15),
+                    'suggestions_acted_on': random.randint(3, 10),
+                    'avg_response_time_hours': Decimal(random.uniform(2, 24)).quantize(Decimal('0.01')),
+                    'velocity_trend': random.choice(['improving', 'stable']),
+                    'risk_mitigation_success_rate': Decimal(random.uniform(70, 95)).quantize(Decimal('0.01')),
+                    'deadline_hit_rate': Decimal(random.uniform(75, 95)).quantize(Decimal('0.01')),
+                    'team_satisfaction_score': Decimal(random.uniform(3.5, 4.8)).quantize(Decimal('0.1')),
+                    'coaching_effectiveness_score': Decimal(random.uniform(70, 90)).quantize(Decimal('0.01')),
+                }
+            )
+            if created:
+                self.stdout.write(f'   ✅ Created PM metrics for {config["name"]}')

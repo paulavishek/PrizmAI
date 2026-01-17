@@ -397,7 +397,7 @@ class Command(BaseCommand):
                     'due_date': timezone.now() + timedelta(days=10),
                     'progress': 0,
                     'created_by': self.users['robert_johnson'],
-                    'assigned_to': None,
+                    'assigned_to': self.users['robert_johnson'],
                     'labels': [board_lean_labels['Necessary NVA']]
                 }
             ]
@@ -597,7 +597,7 @@ class Command(BaseCommand):
                     'due_date': timezone.now() + timedelta(days=2),
                     'progress': 0,
                     'created_by': self.users['john_doe'],
-                    'assigned_to': None,
+                    'assigned_to': self.users['john_doe'],
                     'labels': [board_regular_labels['Critical'], board_lean_labels['Value-Added']]
                 },
                 {
@@ -607,7 +607,7 @@ class Command(BaseCommand):
                     'due_date': timezone.now() + timedelta(days=5),
                     'progress': 0,
                     'created_by': self.users['robert_johnson'],
-                    'assigned_to': None,
+                    'assigned_to': self.users['robert_johnson'],
                     'labels': [board_regular_labels['Performance'], board_lean_labels['Value-Added']]
                 }
             ]
