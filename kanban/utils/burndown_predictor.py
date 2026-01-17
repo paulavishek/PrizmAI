@@ -509,21 +509,38 @@ class BurndownPredictor:
         avg_velocity = float(velocity_stats['average_velocity'])
         std_dev = float(velocity_stats['std_dev'])
         
-        # Historical data points (past 8 weeks)
+        # Historical data points - use actual velocity history
         historical_points = []
-        for week in range(8, 0, -1):
-            date_point = today - timedelta(weeks=week)
-            # Estimate based on velocity (simplified)
-            tasks_done = min(completed_tasks, int(avg_velocity * week))
-            remaining_est = total_tasks - tasks_done
-            
-            historical_points.append({
-                'date': date_point.isoformat(),
-                'remaining': max(0, remaining_est),
-                'completed': tasks_done,
-            })
+        velocity_history = velocity_stats.get('history_data', [])
         
-        # Current point
+        if velocity_history:
+            # Sort by period_end (oldest first) for forward cumulative calculation
+            sorted_history = sorted(velocity_history, key=lambda x: x['period_end'])
+            
+            # Calculate initial state: start with total tasks and work down
+            # We'll use the oldest snapshot as starting point
+            oldest_date = sorted_history[0]['period_start']
+            
+            # Add starting point (before any velocity history)
+            historical_points.append({
+                'date': oldest_date,
+                'remaining': total_tasks,
+                'completed': 0,
+            })
+            
+            # Build historical points by subtracting each period's completions
+            cumulative_completed = 0
+            for snapshot in sorted_history:
+                cumulative_completed += snapshot['tasks_completed']
+                remaining = total_tasks - cumulative_completed
+                
+                historical_points.append({
+                    'date': snapshot['period_end'],
+                    'remaining': max(0, remaining),
+                    'completed': cumulative_completed,
+                })
+        
+        # Always add current point to anchor to actual state
         historical_points.append({
             'date': today.isoformat(),
             'remaining': remaining_tasks,
