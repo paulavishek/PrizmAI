@@ -171,36 +171,49 @@ def demo_mode_selection(request):
             else:
                 ip_address = request.META.get('REMOTE_ADDR')
             
-            # Create or update demo session
-            demo_session, created = DemoSession.objects.get_or_create(
-                session_id=request.session.session_key,
-                defaults={
-                    'user': request.user if request.user.is_authenticated else None,
-                    'demo_mode': mode,
-                    'current_role': 'admin',
-                    'browser_fingerprint': browser_fingerprint,
-                    'first_demo_start': demo_started_at,
-                    'expires_at': demo_expires_at,
-                    'selection_method': selection_method,
-                    'device_type': device_type,
-                    'user_agent': request.META.get('HTTP_USER_AGENT', ''),
-                    'ip_address': ip_address,
-                    # CRITICAL: Carry over extensions count from previous session
-                    'extensions_count': existing_extensions_count,
-                }
-            )
-            
-            if not created:
-                # Update existing session
+            # CRITICAL FIX: Check if we found an existing session by browser fingerprint
+            # If so, update that session's session_id instead of creating a new record
+            # This ensures extensions persist across login/logout
+            if recent_session:
+                # Update the existing session with the new session_id
+                demo_session = recent_session
+                demo_session.session_id = request.session.session_key
                 demo_session.demo_mode = mode
                 demo_session.selection_method = selection_method
                 demo_session.user = request.user if request.user.is_authenticated else None
-                # Preserve extensions_count if not already set from previous session
-                if existing_extensions_count > 0 and demo_session.extensions_count < existing_extensions_count:
-                    demo_session.extensions_count = existing_extensions_count
+                demo_session.current_role = 'admin'
+                demo_session.is_active = True
                 demo_session.save()
+                created = False
+                logger.info(f"Updated existing demo session with new session_id: {request.session.session_key}, extensions preserved: {demo_session.extensions_count}")
             else:
-                # Register new session for abuse prevention tracking
+                # No existing session found, create a new one
+                demo_session, created = DemoSession.objects.get_or_create(
+                    session_id=request.session.session_key,
+                    defaults={
+                        'user': request.user if request.user.is_authenticated else None,
+                        'demo_mode': mode,
+                        'current_role': 'admin',
+                        'browser_fingerprint': browser_fingerprint,
+                        'first_demo_start': demo_started_at,
+                        'expires_at': demo_expires_at,
+                        'selection_method': selection_method,
+                        'device_type': device_type,
+                        'user_agent': request.META.get('HTTP_USER_AGENT', ''),
+                        'ip_address': ip_address,
+                        'extensions_count': 0,
+                    }
+                )
+                
+                if not created:
+                    # Session_id already exists, just update it
+                    demo_session.demo_mode = mode
+                    demo_session.selection_method = selection_method
+                    demo_session.user = request.user if request.user.is_authenticated else None
+                    demo_session.save()
+            
+            # Register new session for abuse prevention tracking if it's truly new
+            if created:
                 try:
                     from kanban.utils.demo_abuse_prevention import register_new_session
                     register_new_session(request, request.session.session_key)
