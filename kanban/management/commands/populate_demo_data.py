@@ -1882,6 +1882,23 @@ class Command(BaseCommand):
             task.last_risk_assessment = now
 
             task.save()
+            
+            # CRITICAL: Fix created_at to be before start_date
+            # created_at has auto_now_add=True, so we must use update() to bypass it
+            if task.start_date:
+                # created_at should be 1-7 days before start_date (when task was planned)
+                days_before_start = random.randint(1, 7)
+                # Convert start_date to datetime if needed
+                if hasattr(task.start_date, 'date'):
+                    created_date = task.start_date - timedelta(days=days_before_start)
+                else:
+                    created_date = timezone.make_aware(
+                        timezone.datetime.combine(task.start_date, timezone.datetime.min.time())
+                    ) - timedelta(days=days_before_start)
+                
+                # Update created_at using update() to bypass auto_now_add
+                Task.objects.filter(pk=task.pk).update(created_at=created_date)
+            
             enhanced_count += 1
 
         self.stdout.write(f'   ✅ Enhanced {enhanced_count} {task_type.replace("_", " ")} tasks')

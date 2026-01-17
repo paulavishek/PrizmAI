@@ -270,6 +270,24 @@ def _refresh_task_dates(now, base_date):
         
         if tasks_to_update:
             Task.objects.bulk_update(tasks_to_update, ['due_date', 'start_date'], batch_size=500)
+            
+            # CRITICAL: Also update created_at to be before start_date
+            # created_at has auto_now_add=True, so we must update it individually
+            # to bypass the auto_now_add behavior
+            for task in tasks_to_update:
+                if task.start_date:
+                    # created_at should be 1-7 days before start_date
+                    import random
+                    days_before = (task.id % 7) + 1  # Deterministic based on task ID
+                    if hasattr(task.start_date, 'date'):
+                        created_date = task.start_date - timedelta(days=days_before)
+                    else:
+                        created_date = now.replace(
+                            year=task.start_date.year,
+                            month=task.start_date.month,
+                            day=task.start_date.day
+                        ) - timedelta(days=days_before)
+                    Task.objects.filter(pk=task.pk).update(created_at=created_date)
         
         return len(tasks_to_update)
         
