@@ -562,5 +562,87 @@ function goBack() {
         {% endif %}
     }
 }
+
+// Modal management script to prevent page freeze and scrolling issues
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize metric cards to open modals when clicked
+    const metricCards = document.querySelectorAll('.metrics-card');
+    metricCards.forEach(card => {
+        card.addEventListener('click', function() {
+            const targetModal = this.getAttribute('data-bs-target');
+            const modalElement = document.querySelector(targetModal);
+            if (modalElement) {
+                const modalInstance = new bootstrap.Modal(modalElement);
+                modalInstance.show();
+            }
+        });
+    });
+    
+    // Enhanced modal cleanup for proper scrolling restoration
+    const allModals = document.querySelectorAll('.modal');
+    allModals.forEach(modal => {
+        // Handle modal hide events
+        modal.addEventListener('hidden.bs.modal', function () {
+            // Ensure body can scroll again
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+            
+            // Remove any orphaned backdrops
+            document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+                backdrop.remove();
+            });
+            
+            // Remove aria-hidden and restore focus
+            this.setAttribute('aria-hidden', 'true');
+            document.body.focus();
+        });
+        
+        // Handle modal shown events
+        modal.addEventListener('shown.bs.modal', function () {
+            // Ensure modal is properly visible
+            this.removeAttribute('aria-hidden');
+        });
+    });
+    
+    // Additional cleanup for close buttons
+    document.querySelectorAll('.modal button[data-bs-dismiss="modal"]').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const modal = this.closest('.modal');
+            if (modal) {
+                const modalInstance = bootstrap.Modal.getInstance(modal);
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+            }
+        });
+    });
+    
+    // Global escape key handler for better modal management
+    document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape') {
+            const openModal = document.querySelector('.modal.show');
+            if (openModal) {
+                const modalInstance = bootstrap.Modal.getInstance(openModal);
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+            }
+        }
+    });
+    
+    // Fix any existing modal state issues on page load
+    setTimeout(function() {
+        // Ensure no modal backdrops are left over
+        document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+            backdrop.remove();
+        });
+        
+        // Ensure body can scroll
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+    }, 100);
+});
 </script>
 {% endblock %}
