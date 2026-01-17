@@ -1235,17 +1235,12 @@ def board_analytics(request, board_id):
         progress=100
     ).count()
     
-    # Calculate total progress percentage across all tasks
-    total_progress_percentage = 0
-    for task in all_tasks:
-        # Use actual task progress, defaulting to 0 if None
-        progress = task.progress if task.progress is not None else 0
-        total_progress_percentage += progress
-    
-    # Calculate overall productivity based on progress of all tasks
+    # Calculate overall productivity based on completion rate (completed tasks / total tasks)
     productivity = 0
     if total_tasks > 0:
-        productivity = (total_progress_percentage / (total_tasks * 100)) * 100      # Get tasks due soon (next 7 days)
+        productivity = (completed_count / total_tasks) * 100
+    
+    # Get tasks due soon (next 7 days)
     today = timezone.now().date()
     upcoming_tasks = Task.objects.filter(
         column__board=board,
@@ -1298,6 +1293,9 @@ def board_analytics(request, board_id):
         {'name': 'Waste/Eliminate', 'count': waste_count, 'color': '#dc3545'}
     ]
     
+    # Calculate remaining tasks
+    remaining_tasks = total_tasks - completed_count
+    
     response = render(request, 'kanban/board_analytics.html', {
         'board': board,
         'columns': columns,
@@ -1313,6 +1311,7 @@ def board_analytics(request, board_id):
         'overdue_count': overdue_count,  # Add overdue count
         'total_tasks': total_tasks,
         'completed_count': completed_count,
+        'remaining_tasks': remaining_tasks,  # Add remaining tasks count
         'now': timezone.now(),  # For comparing dates in the template
         # Lean Six Sigma metrics
         'value_added_percentage': round(value_added_percentage, 1),
