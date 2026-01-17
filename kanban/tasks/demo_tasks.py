@@ -49,8 +49,23 @@ def cleanup_expired_demo_sessions():
         browser_fingerprint__isnull=True
     ).values_list('browser_fingerprint', flat=True))
     
-    # Combine both lists for comprehensive cleanup
-    identifiers_to_cleanup = expired_session_ids + expired_fingerprints
+    # CRITICAL FIX: Get fingerprints that have ANY active (non-expired) session
+    # These fingerprints should NOT be cleaned up, even if they also appear in expired sessions
+    # This prevents deleting user content when they log in again with a new session
+    active_sessions = DemoSession.objects.filter(expires_at__gte=now)
+    active_fingerprints = set(active_sessions.exclude(
+        browser_fingerprint__isnull=True
+    ).values_list('browser_fingerprint', flat=True))
+    active_session_ids = set(active_sessions.values_list('session_id', flat=True))
+    
+    # Remove fingerprints and session IDs that have active sessions from cleanup list
+    safe_expired_fingerprints = [fp for fp in expired_fingerprints if fp not in active_fingerprints]
+    safe_expired_session_ids = [sid for sid in expired_session_ids if sid not in active_session_ids]
+    
+    # Combine both lists for comprehensive cleanup (only truly orphaned identifiers)
+    identifiers_to_cleanup = safe_expired_session_ids + safe_expired_fingerprints
+    
+    logger.info(f"Cleanup: {len(expired_fingerprints)} expired fingerprints, {len(active_fingerprints)} active fingerprints, {len(safe_expired_fingerprints)} safe to cleanup")
     
     # Track cleanup stats
     cleanup_stats = {
@@ -96,6 +111,11 @@ def cleanup_expired_demo_sessions():
             # - Are NOT seed demo data (is_seed_demo_data=False or NULL)
             # - Are older than 48 hours
             # - Don't have a session ID (already handled above) OR have an expired session
+            # - CRITICAL: Exclude tasks that belong to ACTIVE sessions
+            
+            # Build list of all active session identifiers (fingerprints + session IDs)
+            all_active_identifiers = list(active_fingerprints) + list(active_session_ids)
+            
             orphan_tasks = Task.objects.filter(
                 column__board__organization=demo_org,
                 column__board__is_official_demo_board=True,  # Only on official demo boards
@@ -104,6 +124,9 @@ def cleanup_expired_demo_sessions():
                 Q(is_seed_demo_data=False) | Q(is_seed_demo_data__isnull=True)
             ).exclude(
                 is_seed_demo_data=True  # Explicitly exclude seed data
+            ).exclude(
+                # CRITICAL FIX: Exclude tasks that belong to users with active sessions
+                created_by_session__in=all_active_identifiers
             )
             
             # Delete related records first (in order to avoid FK constraint errors)
