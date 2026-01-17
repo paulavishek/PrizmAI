@@ -2,21 +2,120 @@
 Management command to populate demo boards with realistic tasks
 Creates ~120 tasks across 3 demo boards with proper assignments, dates, dependencies, and skills
 Includes comprehensive demo data for all task fields including risk, skills, and collaboration
+Also includes comments, activity logs, stakeholders, wiki links, and file attachment metadata
 """
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from datetime import timedelta, date
 from decimal import Decimal
-from kanban.models import Board, Column, Task, TaskLabel, Organization, Milestone
+from kanban.models import Board, Column, Task, TaskLabel, Organization, Milestone, Comment, TaskActivity, TaskFile
 from kanban.permission_models import Role
 from kanban.budget_models import TimeEntry, ProjectBudget, TaskCost, ProjectROI
 from kanban.burndown_models import TeamVelocitySnapshot, BurndownPrediction
 from kanban.retrospective_models import ProjectRetrospective, LessonLearned, ImprovementMetric, RetrospectiveActionItem
 from kanban.coach_models import CoachingSuggestion, PMMetrics
+from kanban.stakeholder_models import ProjectStakeholder, StakeholderTaskInvolvement
 import random
+import os
 
 User = get_user_model()
+
+# Comment templates for realistic demo comments
+COMMENT_TEMPLATES = [
+    # Progress updates
+    "Made good progress on this today. {progress_detail}",
+    "Updated the implementation based on the latest requirements. Looking good so far!",
+    "Just finished the initial draft. Ready for review.",
+    "Ran into a small issue with {technical_detail}, but found a workaround.",
+    "This is taking a bit longer than expected due to {complexity_reason}.",
+    
+    # Questions
+    "@{mention} Could you take a look at this when you get a chance?",
+    "Question: Should we prioritize performance or feature completeness here?",
+    "Need clarification on the acceptance criteria for this task.",
+    "Has anyone encountered this issue before? Looking for suggestions.",
+    
+    # Reviews and feedback
+    "Code review complete. Left some minor suggestions for improvement.",
+    "LGTM! Just a few minor style issues to address.",
+    "Great work on this! The implementation is clean and well-documented.",
+    "Approved with minor changes. Please update the documentation.",
+    
+    # Status updates
+    "Blocked by dependency on {related_task}. Will resume once that's complete.",
+    "Moving this to In Review - all tests passing.",
+    "Deployed to staging for QA testing.",
+    "All edge cases covered. This is ready for final review.",
+    
+    # Collaboration
+    "Had a productive discussion with the team about this approach.",
+    "Paired with @{mention} to work through the complex parts.",
+    "Added comprehensive test coverage for the new functionality.",
+    "Updated based on stakeholder feedback from yesterday's meeting.",
+]
+
+# Technical details for comment templates
+TECHNICAL_DETAILS = [
+    "the database connection pooling",
+    "the authentication flow",
+    "the API rate limiting",
+    "the caching layer",
+    "the WebSocket integration",
+    "the file upload handler",
+    "the search indexing",
+    "the permission checks",
+]
+
+PROGRESS_DETAILS = [
+    "Completed the core functionality and started on edge cases.",
+    "The main feature is working, now adding polish and error handling.",
+    "Integration with the existing system is complete.",
+    "Unit tests are all passing, moving to integration tests.",
+    "Documentation is updated with the new changes.",
+]
+
+COMPLEXITY_REASONS = [
+    "some unexpected edge cases",
+    "integration with legacy code",
+    "performance optimization requirements",
+    "additional security considerations",
+    "cross-browser compatibility issues",
+]
+
+# Activity log templates
+ACTIVITY_TEMPLATES = {
+    'created': [
+        "created this task",
+        "added this task to the board",
+    ],
+    'moved': [
+        "moved this task from {from_col} to {to_col}",
+        "updated status to {to_col}",
+    ],
+    'assigned': [
+        "assigned this task to {assignee}",
+        "changed assignee to {assignee}",
+    ],
+    'updated': [
+        "updated the description",
+        "changed priority to {priority}",
+        "updated the due date",
+        "modified the complexity score",
+        "added required skills",
+        "updated progress to {progress}%",
+    ],
+    'commented': [
+        "added a comment",
+        "replied to a comment",
+    ],
+    'label_added': [
+        "added label '{label}'",
+    ],
+    'label_removed': [
+        "removed label '{label}'",
+    ],
+}
 
 # Skill pools for different task categories
 SOFTWARE_SKILLS = [
@@ -313,10 +412,10 @@ class Command(BaseCommand):
         self.create_related_tasks(marketing_tasks)
         self.create_related_tasks(bug_tasks)
 
-        # Create time tracking data for demo_admin_solo
+        # Create time tracking data for all demo users
         self.stdout.write(self.style.SUCCESS('\n⏱️  Creating time tracking data...\n'))
         all_tasks = software_tasks + marketing_tasks + bug_tasks
-        self.create_time_tracking_data(all_tasks)
+        self.create_time_tracking_data(all_tasks, alex, sam, jordan)
 
         # Create milestones for Gantt chart
         self.stdout.write(self.style.SUCCESS('\n📌 Creating milestones...\n'))
@@ -337,6 +436,26 @@ class Command(BaseCommand):
         # Create AI coaching suggestions
         self.stdout.write(self.style.SUCCESS('\n🤖 Creating AI coaching suggestions...\n'))
         self.create_coaching_data(software_board, marketing_board, bug_board)
+
+        # Create comments for all tasks
+        self.stdout.write(self.style.SUCCESS('\n💬 Creating task comments...\n'))
+        self.create_comments(all_tasks, alex, sam, jordan)
+
+        # Create activity logs for all tasks
+        self.stdout.write(self.style.SUCCESS('\n📋 Creating activity logs...\n'))
+        self.create_activity_logs(all_tasks, alex, sam, jordan)
+
+        # Create stakeholders and link them to tasks
+        self.stdout.write(self.style.SUCCESS('\n👥 Creating stakeholders...\n'))
+        self.create_stakeholders(software_board, marketing_board, bug_board, all_tasks, alex, sam, jordan)
+
+        # Create file attachment metadata (simulated attachments)
+        self.stdout.write(self.style.SUCCESS('\n📎 Creating file attachments...\n'))
+        self.create_file_attachments(all_tasks, alex, sam, jordan)
+
+        # Create wiki links for tasks
+        self.stdout.write(self.style.SUCCESS('\n📚 Creating wiki links...\n'))
+        self.create_wiki_links(all_tasks, demo_org, alex)
 
         self.stdout.write(self.style.SUCCESS('\n' + '='*70))
         self.stdout.write(self.style.SUCCESS('✅ DEMO DATA POPULATION COMPLETE'))
@@ -1658,7 +1777,7 @@ class Command(BaseCommand):
     def enhance_tasks_with_demo_data(self, tasks, skill_pool, task_type):
         """
         Enhance tasks with comprehensive demo data including:
-        - start_date
+        - start_date (always before due_date)
         - required_skills
         - skill_match_score
         - collaboration_required
@@ -1672,14 +1791,43 @@ class Command(BaseCommand):
 
         for task in tasks:
             # Calculate start_date based on due_date and complexity
+            # CRITICAL: Ensure start_date is ALWAYS before due_date
             if task.due_date:
                 # Duration in days based on complexity (complexity * 2-3 days)
                 duration_days = task.complexity_score * random.randint(2, 3)
-                task.start_date = (task.due_date - timedelta(days=duration_days)).date()
                 
-                # Ensure start_date is not in the past for incomplete tasks
-                if task.progress < 100 and task.start_date < now.date():
-                    task.start_date = now.date() - timedelta(days=random.randint(1, 5))
+                # Get due_date as date object
+                due_date = task.due_date.date() if hasattr(task.due_date, 'date') else task.due_date
+                
+                # Calculate start_date (must be before due_date)
+                task.start_date = due_date - timedelta(days=duration_days)
+                
+                # For completed tasks, ensure dates make sense historically
+                if task.progress == 100:
+                    # Task is complete, so start_date should be in the past
+                    # and completed_at should be set
+                    if not task.completed_at:
+                        # Set completed_at to a day or two before due_date
+                        days_before_due = random.randint(1, 3)
+                        task.completed_at = task.due_date - timedelta(days=days_before_due)
+                    # Calculate actual duration
+                    if task.start_date:
+                        actual_days = (task.completed_at.date() - task.start_date).days
+                        task.actual_duration_days = max(0.5, actual_days)
+                else:
+                    # For incomplete tasks, start_date should be recent if task has started
+                    if task.progress > 0:
+                        # Task has started - start_date should be in the recent past
+                        max_days_ago = min(duration_days, 14)  # Started within last 2 weeks
+                        task.start_date = (now - timedelta(days=random.randint(3, max_days_ago))).date()
+                    else:
+                        # Task hasn't started yet - start_date should be today or in future
+                        if task.start_date < now.date():
+                            task.start_date = now.date()
+                
+                # FINAL CHECK: Ensure start_date is always before due_date
+                if task.start_date >= due_date:
+                    task.start_date = due_date - timedelta(days=max(1, duration_days))
 
             # Add required skills (1-3 skills based on complexity)
             min_skills = 1 if task.complexity_score < 5 else 2
@@ -1791,13 +1939,17 @@ class Command(BaseCommand):
 
         self.stdout.write(f'   ✅ Created {related_count} related task connections')
 
-    def create_time_tracking_data(self, all_tasks):
-        """Create realistic time tracking entries for demo_admin_solo user"""
+    def create_time_tracking_data(self, all_tasks, alex, sam, jordan):
+        """Create realistic time tracking entries for all demo users"""
         
-        # Get demo_admin_solo user
+        # Get demo_admin_solo user for additional entries
         demo_admin = User.objects.filter(username='demo_admin_solo').first()
-        if not demo_admin:
-            self.stdout.write(self.style.WARNING('   ⚠️ demo_admin_solo user not found, skipping time tracking data'))
+        
+        # All users who can log time
+        time_loggers = [u for u in [alex, sam, jordan, demo_admin] if u is not None]
+        
+        if not time_loggers:
+            self.stdout.write(self.style.WARNING('   ⚠️ No users found for time tracking data'))
             return
         
         # Sample descriptions for time entries
@@ -1828,21 +1980,24 @@ class Command(BaseCommand):
         
         today = timezone.now().date()
         time_entries_created = 0
-        tasks_assigned = 0
         
-        # Assign 30-40% of tasks to demo_admin_solo
-        num_to_assign = max(15, len(all_tasks) // 3)
-        tasks_to_assign = random.sample(all_tasks, min(num_to_assign, len(all_tasks)))
+        # Create time entries for tasks that have progress > 0
+        tasks_with_progress = [t for t in all_tasks if t.progress > 0]
         
-        for task in tasks_to_assign:
-            # Assign task to demo_admin_solo if not already assigned
-            if task.assigned_to != demo_admin:
-                task.assigned_to = demo_admin
-                task.save()
-                tasks_assigned += 1
+        for task in tasks_with_progress:
+            # Get the assigned user or a random user
+            if task.assigned_to and task.assigned_to in time_loggers:
+                primary_user = task.assigned_to
+            else:
+                primary_user = random.choice(time_loggers)
             
-            # Create 2-5 time entries per task
-            num_entries = random.randint(2, 5)
+            # Number of time entries based on progress
+            if task.progress >= 80:
+                num_entries = random.randint(3, 6)
+            elif task.progress >= 50:
+                num_entries = random.randint(2, 4)
+            else:
+                num_entries = random.randint(1, 3)
             
             for i in range(num_entries):
                 # Random date within last 30 days (weighted towards recent)
@@ -1859,31 +2014,36 @@ class Command(BaseCommand):
                 
                 description = random.choice(work_descriptions)
                 
-                # Check if entry already exists for this exact task/date
+                # Use primary user for most entries, occasionally use other users
+                if random.random() < 0.8:
+                    entry_user = primary_user
+                else:
+                    entry_user = random.choice(time_loggers)
+                
+                # Check if entry already exists for this exact task/date/user
                 if not TimeEntry.objects.filter(
                     task=task, 
-                    user=demo_admin, 
+                    user=entry_user, 
                     work_date=work_date
                 ).exists():
                     TimeEntry.objects.create(
                         task=task,
-                        user=demo_admin,
+                        user=entry_user,
                         hours_spent=hours_spent,
                         work_date=work_date,
                         description=description
                     )
                     time_entries_created += 1
         
-        self.stdout.write(f'   ✅ Assigned {tasks_assigned} tasks to demo_admin_solo')
-        self.stdout.write(f'   ✅ Created {time_entries_created} time entries')
+        self.stdout.write(f'   ✅ Created {time_entries_created} time entries across {len(tasks_with_progress)} tasks')
         
         # Calculate and display totals
         from django.db.models import Sum
         total_hours = TimeEntry.objects.filter(
-            user=demo_admin
+            task__is_seed_demo_data=True
         ).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
         
-        self.stdout.write(f'   📊 Total logged hours: {total_hours}h')
+        self.stdout.write(f'   📊 Total logged hours across all users: {total_hours}h')
 
     def create_milestones(self, software_board, marketing_board, bug_board, alex, sam, jordan):
         """Create milestones for each demo board"""
@@ -2401,3 +2561,361 @@ class Command(BaseCommand):
             )
             if created:
                 self.stdout.write(f'   ✅ Created PM metrics for {config["name"]}')
+
+    def create_comments(self, all_tasks, alex, sam, jordan):
+        """Create realistic comments for all demo tasks"""
+        users = [alex, sam, jordan]
+        user_names = ['alex.chen', 'sam.rivera', 'jordan.taylor']
+        comments_created = 0
+        now = timezone.now()
+
+        for task in all_tasks:
+            # Number of comments based on task progress and complexity
+            if task.progress >= 80:
+                num_comments = random.randint(3, 6)
+            elif task.progress >= 40:
+                num_comments = random.randint(2, 4)
+            elif task.progress > 0:
+                num_comments = random.randint(1, 3)
+            else:
+                num_comments = random.randint(0, 2)
+
+            # Create comments at different times
+            for i in range(num_comments):
+                # Select a random comment template and user
+                template = random.choice(COMMENT_TEMPLATES)
+                user = random.choice(users)
+                mention = random.choice(user_names)
+                
+                # Fill in template variables
+                comment_text = template.format(
+                    mention=mention,
+                    progress_detail=random.choice(PROGRESS_DETAILS),
+                    technical_detail=random.choice(TECHNICAL_DETAILS),
+                    complexity_reason=random.choice(COMPLEXITY_REASONS),
+                    related_task=random.choice(all_tasks).title[:30] if all_tasks else 'related task'
+                )
+
+                # Create comment at a random time in the past
+                days_ago = random.randint(0, 30)
+                hours_ago = random.randint(0, 23)
+                comment_time = now - timedelta(days=days_ago, hours=hours_ago)
+
+                # Create comment and update created_at (auto_now_add prevents direct setting)
+                comment = Comment.objects.create(
+                    task=task,
+                    user=user,
+                    content=comment_text,
+                )
+                # Update the created_at using raw SQL or update() to bypass auto_now_add
+                Comment.objects.filter(pk=comment.pk).update(created_at=comment_time)
+                comments_created += 1
+
+        self.stdout.write(f'   ✅ Created {comments_created} comments across all tasks')
+
+    def create_activity_logs(self, all_tasks, alex, sam, jordan):
+        """Create activity logs for all demo tasks"""
+        users = [alex, sam, jordan]
+        activities_created = 0
+        now = timezone.now()
+        columns = ['To Do', 'In Progress', 'In Review', 'Done']
+        priorities = ['low', 'medium', 'high', 'urgent']
+
+        for task in all_tasks:
+            # Always create a 'created' activity
+            days_ago = random.randint(15, 45)
+            created_time = now - timedelta(days=days_ago)
+            
+            activity = TaskActivity.objects.create(
+                task=task,
+                user=task.created_by,
+                activity_type='created',
+                description=random.choice(ACTIVITY_TEMPLATES['created']),
+            )
+            # Update the created_at using update() to bypass auto_now_add
+            TaskActivity.objects.filter(pk=activity.pk).update(created_at=created_time)
+            activities_created += 1
+
+            # Add assignment activity if assigned
+            if task.assigned_to:
+                assign_time = created_time + timedelta(hours=random.randint(1, 48))
+                description = random.choice(ACTIVITY_TEMPLATES['assigned']).format(
+                    assignee=task.assigned_to.get_full_name() or task.assigned_to.username
+                )
+                activity = TaskActivity.objects.create(
+                    task=task,
+                    user=random.choice(users),
+                    activity_type='assigned',
+                    description=description,
+                )
+                TaskActivity.objects.filter(pk=activity.pk).update(created_at=assign_time)
+                activities_created += 1
+
+            # Add movement activities based on progress
+            if task.progress > 0:
+                # Moved from To Do to In Progress
+                move_time = created_time + timedelta(days=random.randint(1, 5))
+                description = random.choice(ACTIVITY_TEMPLATES['moved']).format(
+                    from_col='To Do',
+                    to_col='In Progress'
+                )
+                activity = TaskActivity.objects.create(
+                    task=task,
+                    user=random.choice(users),
+                    activity_type='moved',
+                    description=description,
+                )
+                TaskActivity.objects.filter(pk=activity.pk).update(created_at=move_time)
+                activities_created += 1
+
+            # Add update activities
+            num_updates = random.randint(1, 4)
+            for i in range(num_updates):
+                update_time = created_time + timedelta(days=random.randint(2, 14), hours=random.randint(0, 23))
+                template = random.choice(ACTIVITY_TEMPLATES['updated'])
+                description = template.format(
+                    priority=random.choice(priorities),
+                    progress=task.progress
+                )
+                activity = TaskActivity.objects.create(
+                    task=task,
+                    user=random.choice(users),
+                    activity_type='updated',
+                    description=description,
+                )
+                TaskActivity.objects.filter(pk=activity.pk).update(created_at=update_time)
+                activities_created += 1
+
+            # Add label activities for some tasks
+            if random.random() < 0.5:
+                label_time = created_time + timedelta(days=random.randint(1, 7))
+                labels = task.labels.all()
+                if labels.exists():
+                    label = labels.first()
+                    description = random.choice(ACTIVITY_TEMPLATES['label_added']).format(label=label.name)
+                    activity = TaskActivity.objects.create(
+                        task=task,
+                        user=random.choice(users),
+                        activity_type='label_added',
+                        description=description,
+                    )
+                    TaskActivity.objects.filter(pk=activity.pk).update(created_at=label_time)
+                    activities_created += 1
+
+        self.stdout.write(f'   ✅ Created {activities_created} activity log entries')
+
+    def create_stakeholders(self, software_board, marketing_board, bug_board, all_tasks, alex, sam, jordan):
+        """Create project stakeholders and link them to tasks"""
+        now = timezone.now()
+        stakeholders_created = 0
+        involvements_created = 0
+
+        # Stakeholder data for each board
+        stakeholder_configs = [
+            {
+                'board': software_board,
+                'stakeholders': [
+                    {'name': 'Michael Chen', 'role': 'CTO', 'influence': 'high', 'interest': 'high', 'email': 'michael.chen@acme.demo'},
+                    {'name': 'Sarah Williams', 'role': 'Product Owner', 'influence': 'high', 'interest': 'high', 'email': 'sarah.williams@acme.demo'},
+                    {'name': 'David Brown', 'role': 'Security Lead', 'influence': 'medium', 'interest': 'high', 'email': 'david.brown@acme.demo'},
+                    {'name': 'Emily Davis', 'role': 'QA Manager', 'influence': 'medium', 'interest': 'medium', 'email': 'emily.davis@acme.demo'},
+                    {'name': 'Robert Johnson', 'role': 'DevOps Lead', 'influence': 'medium', 'interest': 'medium', 'email': 'robert.johnson@acme.demo'},
+                ]
+            },
+            {
+                'board': marketing_board,
+                'stakeholders': [
+                    {'name': 'Jennifer Smith', 'role': 'CMO', 'influence': 'high', 'interest': 'high', 'email': 'jennifer.smith@acme.demo'},
+                    {'name': 'Amanda Wilson', 'role': 'Brand Manager', 'influence': 'high', 'interest': 'high', 'email': 'amanda.wilson@acme.demo'},
+                    {'name': 'Kevin Lee', 'role': 'Content Director', 'influence': 'medium', 'interest': 'high', 'email': 'kevin.lee@acme.demo'},
+                    {'name': 'Lisa Anderson', 'role': 'Social Media Lead', 'influence': 'low', 'interest': 'high', 'email': 'lisa.anderson@acme.demo'},
+                ]
+            },
+            {
+                'board': bug_board,
+                'stakeholders': [
+                    {'name': 'Michael Chen', 'role': 'CTO', 'influence': 'high', 'interest': 'medium', 'email': 'michael.chen@acme.demo'},
+                    {'name': 'Thomas Miller', 'role': 'Support Manager', 'influence': 'medium', 'interest': 'high', 'email': 'thomas.miller@acme.demo'},
+                    {'name': 'Nancy Clark', 'role': 'Customer Success', 'influence': 'medium', 'interest': 'high', 'email': 'nancy.clark@acme.demo'},
+                ]
+            },
+        ]
+
+        for config in stakeholder_configs:
+            board = config['board']
+            board_tasks = [t for t in all_tasks if t.column.board == board]
+
+            for stakeholder_data in config['stakeholders']:
+                # Create stakeholder
+                stakeholder, created = ProjectStakeholder.objects.get_or_create(
+                    board=board,
+                    email=stakeholder_data['email'],
+                    defaults={
+                        'name': stakeholder_data['name'],
+                        'role': stakeholder_data['role'],
+                        'organization': 'Acme Corporation',
+                        'influence_level': stakeholder_data['influence'],
+                        'interest_level': stakeholder_data['interest'],
+                        'current_engagement': random.choice(['inform', 'consult', 'involve', 'collaborate']),
+                        'desired_engagement': random.choice(['involve', 'collaborate', 'empower']),
+                        'notes': f'{stakeholder_data["role"]} stakeholder for {board.name} project',
+                        'is_active': True,
+                        'created_by': alex,
+                    }
+                )
+                if created:
+                    stakeholders_created += 1
+
+                # Link stakeholder to random tasks (30-60% of board tasks)
+                num_tasks_to_link = max(2, int(len(board_tasks) * random.uniform(0.3, 0.6)))
+                tasks_to_link = random.sample(board_tasks, min(num_tasks_to_link, len(board_tasks)))
+
+                for task in tasks_to_link:
+                    # Create involvement record
+                    involvement_type = random.choice(['reviewer', 'approver', 'observer', 'beneficiary', 'impacted'])
+                    engagement_status = random.choice(['informed', 'consulted', 'involved', 'satisfied'])
+                    
+                    involvement, inv_created = StakeholderTaskInvolvement.objects.get_or_create(
+                        stakeholder=stakeholder,
+                        task=task,
+                        defaults={
+                            'involvement_type': involvement_type,
+                            'engagement_status': engagement_status,
+                            'engagement_count': random.randint(1, 10),
+                            'last_engagement': now - timedelta(days=random.randint(0, 14)),
+                            'satisfaction_rating': random.choice([3, 4, 4, 5, 5]) if task.progress > 50 else None,
+                            'feedback': 'Good progress on this task.' if random.random() < 0.3 else '',
+                        }
+                    )
+                    if inv_created:
+                        involvements_created += 1
+
+        self.stdout.write(f'   ✅ Created {stakeholders_created} stakeholders')
+        self.stdout.write(f'   ✅ Created {involvements_created} stakeholder-task involvements')
+
+    def create_file_attachments(self, all_tasks, alex, sam, jordan):
+        """Create simulated file attachment metadata for demo tasks"""
+        users = [alex, sam, jordan]
+        attachments_created = 0
+        now = timezone.now()
+
+        # Sample file metadata (we create the records but not actual files)
+        file_templates = [
+            {'name': 'requirements.pdf', 'type': 'pdf', 'size': 245760, 'desc': 'Requirements document'},
+            {'name': 'design-mockup.png', 'type': 'png', 'size': 1048576, 'desc': 'UI design mockup'},
+            {'name': 'technical-spec.docx', 'type': 'docx', 'size': 524288, 'desc': 'Technical specification'},
+            {'name': 'test-plan.xlsx', 'type': 'xlsx', 'size': 102400, 'desc': 'Test plan spreadsheet'},
+            {'name': 'architecture-diagram.png', 'type': 'png', 'size': 819200, 'desc': 'Architecture diagram'},
+            {'name': 'api-docs.pdf', 'type': 'pdf', 'size': 368640, 'desc': 'API documentation'},
+            {'name': 'meeting-notes.docx', 'type': 'docx', 'size': 81920, 'desc': 'Meeting notes'},
+            {'name': 'wireframes.pdf', 'type': 'pdf', 'size': 1536000, 'desc': 'UI wireframes'},
+            {'name': 'data-model.xlsx', 'type': 'xlsx', 'size': 153600, 'desc': 'Data model diagram'},
+            {'name': 'user-flow.png', 'type': 'png', 'size': 614400, 'desc': 'User flow diagram'},
+            {'name': 'code-review.pdf', 'type': 'pdf', 'size': 204800, 'desc': 'Code review notes'},
+            {'name': 'deployment-guide.docx', 'type': 'docx', 'size': 163840, 'desc': 'Deployment guide'},
+        ]
+
+        # Add attachments to 40-50% of tasks
+        tasks_with_attachments = random.sample(all_tasks, int(len(all_tasks) * 0.45))
+
+        for task in tasks_with_attachments:
+            # 1-3 attachments per task
+            num_attachments = random.randint(1, 3)
+            selected_files = random.sample(file_templates, min(num_attachments, len(file_templates)))
+
+            for file_data in selected_files:
+                uploader = random.choice(users)
+                upload_date = now - timedelta(days=random.randint(1, 30))
+
+                # Create attachment record (without actual file - just metadata for demo)
+                # Note: We set the file field to a placeholder path for demo purposes
+                try:
+                    attachment = TaskFile.objects.create(
+                        task=task,
+                        uploaded_by=uploader,
+                        file=f'demo_files/{task.id}/{file_data["name"]}',  # Placeholder path
+                        filename=file_data['name'],
+                        file_size=file_data['size'],
+                        file_type=file_data['type'],
+                        description=file_data['desc'],
+                    )
+                    attachments_created += 1
+                except Exception as e:
+                    # Skip if there's an issue creating the attachment
+                    pass
+
+        self.stdout.write(f'   ✅ Created {attachments_created} file attachment records')
+
+    def create_wiki_links(self, all_tasks, demo_org, admin_user):
+        """Create wiki links for demo tasks"""
+        links_created = 0
+
+        try:
+            from wiki.models import WikiPage, WikiLink
+        except ImportError:
+            self.stdout.write(self.style.WARNING('   ⚠️ Wiki module not available, skipping wiki links'))
+            return
+
+        # Check if wiki pages exist
+        wiki_pages = list(WikiPage.objects.filter(organization=demo_org))
+        if not wiki_pages:
+            self.stdout.write(self.style.WARNING('   ⚠️ No wiki pages found. Run populate_wiki_demo_data first.'))
+            return
+
+        # Link tasks to wiki pages based on keywords
+        # Using actual page slugs from the wiki demo data
+        keyword_mappings = [
+            {'keywords': ['api', 'endpoint', 'rest', 'swagger'], 'page_slug': 'api-documentation'},
+            {'keywords': ['code', 'review', 'refactor', 'pull request', 'pr'], 'page_slug': 'code-review-guidelines'},
+            {'keywords': ['standard', 'style', 'lint', 'format'], 'page_slug': 'coding-standards'},
+            {'keywords': ['design', 'architecture', 'infrastructure', 'system'], 'page_slug': 'system-architecture'},
+            {'keywords': ['database', 'schema', 'migration', 'model', 'query'], 'page_slug': 'database-schema'},
+            {'keywords': ['sprint', 'planning', 'backlog', 'story'], 'page_slug': 'sprint-45-planning'},
+            {'keywords': ['standup', 'daily', 'scrum', 'meeting'], 'page_slug': 'standup-week-1'},
+            {'keywords': ['retro', 'retrospective', 'improvement'], 'page_slug': 'sprint-44-retro'},
+            {'keywords': ['feature', 'dashboard', 'analytics', 'ai', 'machine learning'], 'page_slug': 'feature-req-ai-dashboard'},
+            {'keywords': ['release', 'deploy', 'production', 'version', 'launch'], 'page_slug': 'release-notes-v25'},
+            {'keywords': ['incident', 'bug', 'fix', 'error', 'crash', 'issue'], 'page_slug': 'incident-response'},
+            {'keywords': ['onboard', 'setup', 'install', 'environment', 'guide', 'tutorial'], 'page_slug': 'team-setup-guide'},
+            {'keywords': ['roadmap', 'milestone', 'q1', 'q2', 'quarter', 'goal'], 'page_slug': 'q1-2026-roadmap'},
+            {'keywords': ['workflow', 'process', 'agile', 'kanban'], 'page_slug': 'sprint-workflow'},
+            {'keywords': ['welcome', 'intro', 'start', 'new'], 'page_slug': 'welcome-to-acme'},
+            {'keywords': ['checklist', 'employee', 'hr', 'training'], 'page_slug': 'onboarding-checklist'},
+        ]
+
+        for task in all_tasks:
+            title_lower = task.title.lower()
+            desc_lower = (task.description or '').lower()
+            combined_text = title_lower + ' ' + desc_lower
+
+            # Try to match multiple pages (up to 2 per task)
+            matched_pages = 0
+            for mapping in keyword_mappings:
+                if matched_pages >= 2:
+                    break
+                    
+                # Check if any keyword matches
+                if any(kw in combined_text for kw in mapping['keywords']):
+                    # Find the wiki page
+                    wiki_page = WikiPage.objects.filter(
+                        organization=demo_org,
+                        slug=mapping['page_slug']
+                    ).first()
+
+                    if wiki_page:
+                        # Create link if it doesn't exist
+                        link, created = WikiLink.objects.get_or_create(
+                            wiki_page=wiki_page,
+                            link_type='task',
+                            task=task,
+                            defaults={
+                                'created_by': admin_user,
+                                'description': f'Related documentation for {task.title[:50]}'
+                            }
+                        )
+                        if created:
+                            links_created += 1
+                            matched_pages += 1
+
+        self.stdout.write(f'   ✅ Created {links_created} wiki links for tasks')
+

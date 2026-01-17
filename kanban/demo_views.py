@@ -945,22 +945,28 @@ def reset_demo_data(request):
             # Capture output for logging
             out = StringIO()
             
-            # 1. Repopulate main demo tasks (with --reset to clear and recreate)
+            # 1. Repopulate wiki demo data first (pages needed for task wiki links)
+            try:
+                call_command('populate_wiki_demo_data', '--reset', stdout=out, stderr=out)
+            except Exception:
+                pass  # Wiki is optional
+            
+            # 2. Repopulate main demo tasks (with --reset to clear and recreate)
             call_command('populate_demo_data', '--reset', stdout=out, stderr=out)
             
-            # 2. Repopulate AI assistant data
+            # 3. Repopulate AI assistant data
             call_command('populate_ai_assistant_demo_data', '--reset', stdout=out, stderr=out)
             
-            # 3. Repopulate messaging data
+            # 4. Repopulate messaging data
             call_command('populate_messaging_demo_data', '--clear', stdout=out, stderr=out)
             
-            # 4. Refresh all dates to current (burndown, retrospectives, etc.)
+            # 5. Refresh all dates to current (burndown, retrospectives, etc.)
             try:
                 call_command('refresh_demo_dates', '--force', stdout=out, stderr=out)
             except Exception:
                 pass  # Date refresh is optional
             
-            # 5. Detect conflicts for fresh data
+            # 6. Detect conflicts for fresh data
             try:
                 call_command('detect_conflicts', stdout=out, stderr=out)
             except Exception:
@@ -1018,11 +1024,15 @@ def reset_demo_data(request):
     task_count = Task.objects.filter(column__board__in=demo_boards).count() if demo_boards else 0
     user_count = demo_boards.values('members').distinct().count() if demo_boards else 0
     
+    # Count demo orgs for the template (always 1 in new system)
+    demo_orgs_count = 1 if demo_org else 0
+    
     context = {
         'demo_boards': demo_boards,
         'task_count': task_count,
         'user_count': user_count,
         'demo_org': demo_org,
+        'demo_orgs': {'count': demo_orgs_count},  # For template compatibility
     }
     
     return render(request, 'kanban/reset_demo_confirm.html', context)
