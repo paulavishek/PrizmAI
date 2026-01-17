@@ -163,6 +163,7 @@ class Command(BaseCommand):
         # Get boards
         software_board = demo_boards.filter(name__icontains='software').first()
         marketing_board = demo_boards.filter(name__icontains='marketing').first()
+        bug_board = demo_boards.filter(name__icontains='bug').first()
         
         sessions_data = self.get_sessions_data()
         
@@ -180,6 +181,8 @@ class Command(BaseCommand):
                 board = software_board
             elif session_data.get('board') == 'marketing' and marketing_board:
                 board = marketing_board
+            elif session_data.get('board') == 'bug' and bug_board:
+                board = bug_board
             else:
                 board = None
             
@@ -970,6 +973,178 @@ Week 13-14:
 🎯 Mar 31: Final report
 
 Would you like me to create tasks for each phase on your board?""",
+                        'is_helpful': True,
+                    },
+                ]
+            },
+            
+            # Session 8: Bug Tracking - Defect Prioritization
+            {
+                'title': 'Bug Prioritization Strategy',
+                'description': 'Help prioritizing bugs for the current sprint',
+                'is_active': True,
+                'days_ago': 1,
+                'board': 'bug',
+                'user': 'primary',
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': 'How should I prioritize the bugs in our backlog?',
+                    },
+                    {
+                        'role': 'assistant',
+                        'content': """I've analyzed your bug backlog and here's a prioritization framework based on severity, impact, and effort:
+
+**🔴 Critical Priority (Fix Immediately)**
+
+1. **Login Authentication Failure** - P1
+   - Users cannot access the system
+   - Impact: 100% of users blocked
+   - Est. Fix Time: 4 hours
+   
+2. **Data Loss on Form Submit** - P1
+   - User data not being saved
+   - Impact: All form submissions affected
+   - Est. Fix Time: 6 hours
+
+**🟠 High Priority (This Sprint)**
+
+3. **Dashboard Performance Issue** - P2
+   - Page load > 10 seconds
+   - Impact: User experience degradation
+   - Est. Fix Time: 8 hours
+
+4. **Email Notifications Not Sending** - P2
+   - Critical alerts not delivered
+   - Impact: Communication breakdown
+   - Est. Fix Time: 4 hours
+
+**🟡 Medium Priority (Next Sprint)**
+
+5. **UI Alignment Issues** - P3
+   - Visual inconsistencies on mobile
+   - Impact: Minor UX issues
+   - Est. Fix Time: 3 hours
+
+**Prioritization Matrix:**
+
+| Bug | Severity | User Impact | Effort | Priority Score |
+|-----|----------|-------------|--------|----------------|
+| Login Failure | Critical | High | Low | 95/100 |
+| Data Loss | Critical | High | Medium | 90/100 |
+| Dashboard Perf | High | Medium | High | 70/100 |
+| Email Issues | High | Medium | Low | 75/100 |
+| UI Alignment | Low | Low | Low | 40/100 |
+
+Would you like me to help create a bug fix sprint plan?""",
+                        'is_helpful': True,
+                    },
+                ]
+            },
+            
+            # Session 9: Bug Tracking - Root Cause Analysis
+            {
+                'title': 'Bug Root Cause Analysis',
+                'description': 'Investigating recurring issues',
+                'is_active': False,
+                'days_ago': 4,
+                'board': 'bug',
+                'user': 'primary',
+                'messages': [
+                    {
+                        'role': 'user',
+                        'content': 'We keep seeing similar bugs. Can you help identify patterns?',
+                    },
+                    {
+                        'role': 'assistant',
+                        'content': """I've analyzed your bug history and found several recurring patterns:
+
+**📊 Bug Pattern Analysis (Last 30 Days)**
+
+**Pattern 1: Input Validation Issues (35% of bugs)**
+- **Symptoms:** Invalid data accepted, crashes on edge cases
+- **Affected Areas:** User forms, API endpoints
+- **Root Cause:** Missing or incomplete input validation
+- **Fix Strategy:** Implement comprehensive validation layer
+
+**Pattern 2: Null Reference Errors (25% of bugs)**
+- **Symptoms:** Crashes when data is missing
+- **Affected Areas:** Data display, calculations
+- **Root Cause:** Not handling optional/nullable fields
+- **Fix Strategy:** Add null checks, use optional chaining
+
+**Pattern 3: Race Conditions (20% of bugs)**
+- **Symptoms:** Intermittent failures, data inconsistency
+- **Affected Areas:** Concurrent operations, async processes
+- **Root Cause:** Improper synchronization
+- **Fix Strategy:** Review async patterns, add locks
+
+**Pattern 4: UI State Management (20% of bugs)**
+- **Symptoms:** Stale data, wrong UI state
+- **Affected Areas:** Interactive components
+- **Root Cause:** Complex state dependencies
+- **Fix Strategy:** Simplify state, add state validation
+
+**Recommendations:**
+
+1. **Short-term:**
+   - Add validation library for all inputs
+   - Code review checklist for null handling
+
+2. **Medium-term:**
+   - Implement automated testing for edge cases
+   - Add monitoring for race conditions
+
+3. **Long-term:**
+   - Refactor state management
+   - Create reusable validated components
+
+Would you like a detailed action plan for addressing these patterns?""",
+                        'is_helpful': True,
+                    },
+                    {
+                        'role': 'user',
+                        'content': 'Yes, give me an action plan for the input validation issues',
+                    },
+                    {
+                        'role': 'assistant',
+                        'content': """Here's a comprehensive action plan for addressing input validation issues:
+
+**🎯 Input Validation Improvement Plan**
+
+**Phase 1: Assessment (Week 1)**
+- [ ] Audit all user input points
+- [ ] Document current validation coverage
+- [ ] Identify high-risk endpoints
+- [ ] Review recent validation-related bugs
+
+**Phase 2: Framework Setup (Week 2)**
+- [ ] Choose/implement validation library
+- [ ] Define validation rules schema
+- [ ] Create reusable validators
+- [ ] Set up validation error handling
+
+**Phase 3: Implementation (Weeks 3-4)**
+- [ ] Apply validation to critical forms
+- [ ] Add API request validation
+- [ ] Implement frontend validation
+- [ ] Add validation logging
+
+**Phase 4: Testing (Week 5)**
+- [ ] Write validation unit tests
+- [ ] Create edge case test suite
+- [ ] Perform security testing
+- [ ] User acceptance testing
+
+**Success Metrics:**
+- ✅ 0 new validation bugs in next sprint
+- ✅ 100% critical endpoint coverage
+- ✅ < 2s validation response time
+
+**Estimated Effort:** 3 developer-weeks
+**Expected Bug Reduction:** 35% fewer defects
+
+Would you like me to create tasks for this plan on your board?""",
                         'is_helpful': True,
                     },
                 ]

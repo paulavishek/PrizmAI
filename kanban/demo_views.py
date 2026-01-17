@@ -937,22 +937,34 @@ def reset_demo_data(request):
                     is_official_demo_board=False
                 ).delete()
             
-            # OPTIMIZATION: Reset by clearing user modifications, not full repopulation
-            # Use bulk_update for performance
-            for board in demo_boards:
-                tasks = list(Task.objects.filter(column__board=board))
-                # Reset task progress and assignments in batch
-                for task in tasks:
-                    # Reset progress based on column type
-                    if task.column.name in ['Done', 'Closed', 'Published']:
-                        task.progress = 100  # Keep completed tasks done
-                    else:
-                        task.progress = 0  # Reset others to 0
-                    task.assigned_to = None  # Clear assignments
-                
-                # Bulk update for performance
-                if tasks:
-                    Task.objects.bulk_update(tasks, ['progress', 'assigned_to'], batch_size=100)
+            # PROPER RESET: Repopulate demo data using management commands
+            # This ensures all demo data is restored to proper state with correct assignments
+            from django.core.management import call_command
+            from io import StringIO
+            
+            # Capture output for logging
+            out = StringIO()
+            
+            # 1. Repopulate main demo tasks (with --reset to clear and recreate)
+            call_command('populate_demo_data', '--reset', stdout=out, stderr=out)
+            
+            # 2. Repopulate AI assistant data
+            call_command('populate_ai_assistant_demo_data', '--reset', stdout=out, stderr=out)
+            
+            # 3. Repopulate messaging data
+            call_command('populate_messaging_demo_data', '--clear', stdout=out, stderr=out)
+            
+            # 4. Refresh all dates to current (burndown, retrospectives, etc.)
+            try:
+                call_command('refresh_demo_dates', '--force', stdout=out, stderr=out)
+            except Exception:
+                pass  # Date refresh is optional
+            
+            # 5. Detect conflicts for fresh data
+            try:
+                call_command('detect_conflicts', stdout=out, stderr=out)
+            except Exception:
+                pass  # Conflicts detection is optional
             
             # Track reset event
             try:
@@ -969,7 +981,7 @@ def reset_demo_data(request):
                 DemoAnalytics.objects.create(
                     session_id=request.session.session_key,
                     event_type='demo_reset',
-                    event_data={'success': True}
+                    event_data={'success': True, 'full_repopulation': True}
                 )
             except:
                 pass
