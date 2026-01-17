@@ -108,11 +108,21 @@ def demo_context(request):
             elif hours_remaining <= 1:  # 1 hour
                 context['show_expiry_warning'] = True
                 context['expiry_warning_level'] = 'warning'
-                context['expiry_warning_message'] = 'Demo session expires in less than 1 hour. Create an account to save your work!'
+                minutes_left = max(1, int(total_seconds / 60))
+                context['expiry_warning_message'] = f'Demo session expires in {minutes_left} minutes. Create an account to save your work!'
             elif hours_remaining <= 4:  # 4 hours
                 context['show_expiry_warning'] = True
                 context['expiry_warning_level'] = 'info'
-                context['expiry_warning_message'] = f'Demo session expires in {int(hours_remaining)} hours.'
+                # Show hours and minutes for accurate display
+                hours = int(hours_remaining)
+                minutes = int((hours_remaining - hours) * 60)
+                if hours > 0 and minutes > 0:
+                    time_str = f'{hours} hour{"s" if hours != 1 else ""} {minutes} minutes'
+                elif hours > 0:
+                    time_str = f'{hours} hour{"s" if hours != 1 else ""}'
+                else:
+                    time_str = f'{minutes} minutes'
+                context['expiry_warning_message'] = f'Demo session expires in {time_str}.'
         except Exception as e:
             # Fallback: set reasonable defaults
             import logging
