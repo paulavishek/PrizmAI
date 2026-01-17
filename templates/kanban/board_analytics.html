@@ -312,8 +312,13 @@
             </div>
             <div class="modal-body">
                 {% if tasks %}
-                {% with completed_tasks=tasks|selectattr:"progress","equalto",100 %}
-                {% if completed_tasks %}
+                {% comment %} Count completed tasks first {% endcomment %}
+                {% with completed_count_check=0 %}
+                {% for task in tasks %}{% if task.progress == 100 %}{% with completed_count_check=completed_count_check|add:1 %}{% endwith %}{% endif %}{% endfor %}
+                {% endwith %}
+                
+                {% comment %} Check if there are any completed tasks {% endcomment %}
+                {% if completed_count > 0 %}
                 <table class="table table-striped table-hover">
                     <thead>
                         <tr>
@@ -348,7 +353,6 @@
                     <p class="lead">No completed tasks yet!</p>
                 </div>
                 {% endif %}
-                {% endwith %}
                 {% else %}
                 <div class="text-center py-5">
                     <i class="fas fa-check-circle fa-3x text-muted mb-3"></i>
