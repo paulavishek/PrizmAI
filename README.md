@@ -16,25 +16,23 @@ PrizmAI combines visual project management with AI that helps you work smarter�
 
 ## 🎉 What's New
 
-### 🎯 Demo Limitations & Conversion Analytics (December 2025)
-- **Strategic limits:** Max 2 projects, export blocked, 20 AI generations per session
-- **Conversion tracking:** GA4 events for limitation encounters and upgrade CTAs
-- **Workaround prevention:** Cumulative counters prevent exploit loops
-- **→ [Full Guide](DEMO_LIMITATIONS_GUIDE.md)**
+### ⏱️ Demo Session Extension (January 2026)
+- **Extended exploration:** Users can extend their demo session up to 3 times
+- **Smart warnings:** Expiry notifications at 4 hours, 1 hour, and 15 minutes remaining
+- **Centralized configuration:** All demo settings managed in one place
 
-### 🎮 Interactive Demo Mode (December 2025)
+### 🎮 Interactive Demo Mode
 - **Try without signup!** Anonymous users can now explore all features instantly
 - **Choose your path:** Solo Mode (5 min) or Team Mode (10 min)
 - **Full feature access:** AI, burndown charts, time tracking, RBAC demo
-- **Session-based:** 48-hour sessions with data reset warning in banner
+- **Session-based:** 48-hour sessions with session extension option
 
-### 📊 Anonymous Demo Analytics
-- **100% tracking coverage** using hybrid analytics (server + client-side)
-- **Privacy-compliant:** Session-based, no PII required
-- **Conversion insights:** Track aha moments, limitations hit, and signup rates
-- **Analytics dashboard:** `python manage.py demo_analytics_report`
+### 🎯 Demo Limitations & Conversion Analytics
+- **Strategic limits:** Max 2 projects, export blocked, 20 AI generations per session
+- **Conversion tracking:** GA4 events for limitation encounters and upgrade CTAs
+- **Workaround prevention:** Cumulative counters prevent exploit loops
 
-### 🔄 Improved User Flow
+### 🔄 User Flow
 ```
 Landing Page → Try Demo (instant) → Explore → Hit Limit → Convert to Account
              ↘ Sign Up (traditional) → Full Access
@@ -65,6 +63,7 @@ Landing Page → Try Demo (instant) → Explore → Hit Limit → Convert to Acc
 - 📱 **Mobile PWA Support** - Progressive Web App with offline capabilities and mobile-first design
 - 🔄 **Real-Time Collaboration** - WebSocket support for live updates and chat
 - 🔗 **Webhook Integration** - Event-driven automation with external apps
+- ♿ **Colorblind Accessibility** - Toggle colorblind-friendly mode with optimized palettes and pattern indicators
 
 **→ [See all features in detail](FEATURES.md)**
 
@@ -238,8 +237,6 @@ python manage.py demo_analytics_report --days 7
 - Which limitation drives most conversions
 - Exit points (where users leave)
 
-**→ [Demo Limitations Guide](DEMO_LIMITATIONS_GUIDE.md)** | **[Complete Analytics Guide](ANONYMOUS_DEMO_TRACKING_GUIDE.md)**
-
 ---
 
 **💡 Dynamic Demo Data:** Demo data is intelligently designed with dates relative to the current date, so tasks and milestones will always appear fresh and relevant. The system automatically:
@@ -269,8 +266,6 @@ python manage.py cleanup_duplicate_demo_boards --auto-fix
 ```
 This removes duplicate boards and migrates users to the official demo boards.
 
-**📖 Learn More:** See [DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md) for comprehensive information about the dynamic date system.
-
 **→ [Full setup guide with configuration options](SETUP.md)**
 
 ---
@@ -280,27 +275,18 @@ This removes duplicate boards and migrates users to the official demo boards.
 | Document | Description |
 |----------|-------------|
 | **[📖 USER_GUIDE.md](USER_GUIDE.md)** | Practical usage, examples, and best practices |
-| **[✨ FEATURES.md](FEATURES.md)** | Detailed feature descriptions and capabilities |
-| **[🎯 DEMO_LIMITATIONS_GUIDE.md](DEMO_LIMITATIONS_GUIDE.md)** | **NEW!** Demo limits, conversion strategy, and GA4 tracking |
-| **[🎮 Improving Demo UX.md](Improving%20Demo%20UX.md)** | Demo experience design guide with conversion optimization |
-| **[📊 ANONYMOUS_DEMO_TRACKING_GUIDE.md](ANONYMOUS_DEMO_TRACKING_GUIDE.md)** | Complete guide to tracking anonymous users and analytics |
-| **[📅 DEMO_DATA_GUIDE.md](DEMO_DATA_GUIDE.md)** | Dynamic demo data system guide |
-| **[⏱️ TIME_TRACKING_IMPLEMENTATION_COMPLETE.md](TIME_TRACKING_IMPLEMENTATION_COMPLETE.md)** | Time tracking, timesheets, and labor cost tracking |
-| **[🔐 DEMO_RBAC_READY.md](DEMO_RBAC_READY.md)** | Role-based access control, approval workflows, and permission management |
-| **[📈 USER_FEEDBACK_ANALYTICS.md](USER_FEEDBACK_ANALYTICS.md)** | User feedback, sentiment analysis, and behavior tracking |
-| **[📊 API_RATE_LIMITING_DASHBOARD.md](API_RATE_LIMITING_DASHBOARD.md)** | AI usage tracking and quota management |
-| **[📝 TRANSCRIPT_IMPORT_GUIDE.md](TRANSCRIPT_IMPORT_GUIDE.md)** | Import meeting transcripts from any source (Fireflies, Otter, Zoom, Teams, Meet) |
-| **[🔌 INTEGRATION_STRATEGY.md](INTEGRATION_STRATEGY.md)** | Phased approach to building integrations (Webhooks, GitHub, Slack, and beyond) |
-| **[🆚 FIREFLIES_COMPARISON.md](FIREFLIES_COMPARISON.md)** | Import-only vs Full API integration comparison |
+| **[✨ FEATURES.md](FEATURES.md)** | Detailed feature descriptions and AI capabilities |
 | **[🔌 API_DOCUMENTATION.md](API_DOCUMENTATION.md)** | REST API reference with 20+ endpoints |
-| **[🔗 INTEGRATIONS.md](INTEGRATIONS.md)** | Integration guide (Slack, Zapier, Teams) |
-| **[🪝 WEBHOOKS.md](WEBHOOKS.md)** | Webhook integration and automation |
-| **[🧑‍💼 SKILLS_MANAGEMENT_GUIDE.md](SKILLS_MANAGEMENT_GUIDE.md)** | Team skills and resource management |
-| **[🎯 RETROSPECTIVE_DEMO_SETUP.md](RETROSPECTIVE_DEMO_SETUP.md)** | AI-powered retrospectives setup |
-| **[📱 MOBILE_PWA_BACKEND_SETUP.md](MOBILE_PWA_BACKEND_SETUP.md)** | Mobile PWA configuration and setup |
-| **[🔒 SECURITY_OVERVIEW.md](SECURITY_OVERVIEW.md)** | Security features and compliance |
-| **[⚙️ SETUP.md](SETUP.md)** | Installation and configuration |
-| **[🤝 CONTRIBUTING.md](CONTRIBUTING.md)** | How to contribute |
+| **[⚙️ SETUP.md](SETUP.md)** | Installation and configuration guide |
+| **[🔒 SECURITY.md](SECURITY.md)** | Security policy and vulnerability reporting |
+| **[🤝 CONTRIBUTING.md](CONTRIBUTING.md)** | How to contribute to PrizmAI |
+
+### Developer Guides (in `docs/` folder)
+
+| Document | Description |
+|----------|-------------|
+| **[🎯 Aha Moment Integration](docs/AHA_MOMENT_INTEGRATION_GUIDE.md)** | Guide for integrating aha moment detection into views |
+| **[⏱️ Demo Session Extension](docs/DEMO_SESSION_EXTENSION.md)** | Technical documentation for demo session extension feature |
 
 ---
 
@@ -410,11 +396,11 @@ graph TB
 - **Audit Logging** - Complete audit trail of sensitive operations
 - **HTTPS Enforcement** - Encrypted data in transit with HSTS
 
-**→ [Complete security documentation](SECURITY_OVERVIEW.md)**
+**→ [Security Policy](SECURITY.md)**
 
 ---
 
-## � Mobile PWA Support
+## 📱 Mobile PWA Support
 
 PrizmAI now includes a **Progressive Web App (PWA)** for mobile devices!
 
@@ -427,7 +413,6 @@ PrizmAI now includes a **Progressive Web App (PWA)** for mobile devices!
 
 **Get Started:**
 - **Mobile PWA Repository:** [github.com/paulavishek/PrizmAI_mobile_PWA](https://github.com/paulavishek/PrizmAI_mobile_PWA)
-- **Setup Guide:** [MOBILE_PWA_BACKEND_SETUP.md](MOBILE_PWA_BACKEND_SETUP.md)
 
 **Quick Setup:**
 ```bash
@@ -537,7 +522,7 @@ Perfect for developers building their portfolio or evaluating production-ready P
 2. **[Install PrizmAI](SETUP.md)** - Follow the setup guide for local installation
 3. **[Explore Features](FEATURES.md)** - Learn what PrizmAI can do
 4. **[Read User Guide](USER_GUIDE.md)** - See practical examples
-5. **[View Analytics](ANONYMOUS_DEMO_TRACKING_GUIDE.md)** - Understand user behavior tracking
+5. **[API Reference](API_DOCUMENTATION.md)** - Build integrations with the REST API
 6. **Create Your First Board** - Start managing projects with AI
 
 ---
