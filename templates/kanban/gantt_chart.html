@@ -658,7 +658,7 @@
                 view_mode: viewMode,
                 bar_height: 32,
                 bar_corner_radius: 6,
-                arrow_curve: 0, // Straight arrows for clean, professional look
+                arrow_curve: 10, // Smooth curves for clean routing
                 padding: 20,
                 date_format: 'YYYY-MM-DD',
                 language: 'en',
@@ -750,41 +750,36 @@
         // Create ONE clean arrowhead marker
         const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
         marker.setAttribute('id', 'arrowhead');
-        marker.setAttribute('markerWidth', '8');
-        marker.setAttribute('markerHeight', '8');
-        marker.setAttribute('refX', '7');
-        marker.setAttribute('refY', '4');
+        marker.setAttribute('markerWidth', '6');
+        marker.setAttribute('markerHeight', '6');
+        marker.setAttribute('refX', '5');
+        marker.setAttribute('refY', '3');
         marker.setAttribute('orient', 'auto');
-        marker.setAttribute('markerUnits', 'strokeWidth');
 
-        // Simple triangle polygon
+        // Simple clean triangle
         const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-        polygon.setAttribute('points', '0,0 8,4 0,8');
+        polygon.setAttribute('points', '0,0 6,3 0,6');
         polygon.setAttribute('fill', '#64748b');
-        polygon.setAttribute('stroke', 'none');
 
         marker.appendChild(polygon);
         defs.appendChild(marker);
 
-        // Remove ALL standalone polygons (these are the distorted arrows)
+        // Remove ALL standalone polygons (the distorted default arrows)
         ganttSvg.querySelectorAll('polygon').forEach(polygon => {
-            // Only remove if not inside our marker definition
             if (!polygon.closest('defs')) {
                 polygon.remove();
             }
         });
 
-        // Find and style all arrow paths
+        // Style all arrow paths
         ganttSvg.querySelectorAll('path').forEach(path => {
             const className = path.getAttribute('class') || '';
 
-            // Identify arrow paths by class
+            // Only target arrow paths
             if (className.includes('arrow')) {
                 path.setAttribute('stroke', '#64748b');
                 path.setAttribute('stroke-width', '2');
                 path.setAttribute('fill', 'none');
-                path.setAttribute('stroke-linecap', 'round');
-                path.setAttribute('stroke-linejoin', 'round');
                 path.setAttribute('marker-end', 'url(#arrowhead)');
             }
         });
