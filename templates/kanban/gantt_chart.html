@@ -44,40 +44,30 @@
     /* ============================================
        PROFESSIONAL DEPENDENCY ARROWS
        ============================================ */
-    
-    /* Main arrow path styling */
-    .gantt .arrow {
-        fill: none;
-        stroke: #9ca3af !important;
-        stroke-width: 1.5px !important;
-        opacity: 0.8;
-    }
 
-    .gantt .arrow:hover {
-        stroke: #6b7280 !important;
-        stroke-width: 1.5px !important;
-        opacity: 1;
-    }
-
-    /* Completely hide default frappe-gantt arrow heads - ALL polygons */
-    .gantt polygon,
-    .gantt svg polygon,
-    #gantt polygon,
-    svg#gantt polygon,
-    .gantt .arrow-head,
-    .gantt polygon.arrow-head,
-    .gantt path.arrow-head,
-    svg .arrow-head,
-    g .arrow-head {
+    /* Hide ALL default frappe-gantt arrow polygons */
+    .gantt polygon {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
-        pointer-events: none !important;
     }
 
-    /* Custom arrow container for better visibility */
-    .gantt svg .arrow-group {
-        pointer-events: stroke;
+    /* Main arrow path styling */
+    .gantt .arrow,
+    .gantt path.arrow {
+        fill: none !important;
+        stroke: #64748b !important;
+        stroke-width: 2px !important;
+        stroke-linecap: round !important;
+        stroke-linejoin: round !important;
+        opacity: 0.85 !important;
+    }
+
+    .gantt .arrow:hover,
+    .gantt path.arrow:hover {
+        stroke: #475569 !important;
+        stroke-width: 2.5px !important;
+        opacity: 1 !important;
     }
 
     /* ============================================
@@ -428,21 +418,33 @@
        DEPENDENCY ARROW ENHANCEMENTS
        ============================================ */
 
-    .gantt .arrow-head {
-        fill: #64748b !important;
-        stroke: none !important;
+    /* Ensure all arrow heads (markers) are hidden except our custom one */
+    .gantt marker polygon {
+        display: block !important;
     }
 
-    /* Colored arrows based on task priority */
-    .gantt .bar-wrapper[data-priority="urgent"] ~ .arrow,
-    .arrow[data-from-priority="urgent"] {
-        stroke: #ef4444;
+
+
+    /* ============================================
+       ASSIGNEE INITIALS ON TASK BARS
+       ============================================ */
+
+    .assignee-initials {
+        font-size: 10px;
+        font-weight: 700;
+        fill: white;
+        text-anchor: middle;
+        dominant-baseline: middle;
+        pointer-events: none;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.3);
     }
 
-    .gantt .bar-wrapper[data-priority="high"] ~ .arrow,
-    .arrow[data-from-priority="high"] {
-        stroke: #f59e0b;
+    .assignee-circle {
+        fill: rgba(255, 255, 255, 0.25);
+        stroke: rgba(255, 255, 255, 0.4);
+        stroke-width: 1;
     }
+
 </style>
 {% endblock %}
 
@@ -515,6 +517,13 @@
                     <span class="legend-color" style="background: #ef4444;"></span>
                     <span>Urgent Priority</span>
                 </div>
+                <div class="legend-item">
+                    <svg width="22" height="16" style="vertical-align: middle;">
+                        <circle cx="11" cy="8" r="7" fill="rgba(59,130,246,0.3)" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
+                        <text x="11" y="8" text-anchor="middle" dominant-baseline="middle" font-size="8" font-weight="700" fill="white">AB</text>
+                    </svg>
+                    <span>Assignee</span>
+                </div>
                 <div class="legend-item" style="margin-left: auto;">
                     <svg width="40" height="12" style="vertical-align: middle;">
                         <defs>
@@ -567,7 +576,9 @@
             custom_class: 'status-{{ task.column.name|lower|cut:" " }}',
             status: '{% if "done" in task.column.name|lower %}done{% elif "progress" in task.column.name|lower %}in_progress{% else %}todo{% endif %}',
             priority: '{{ task.priority }}',
-            assigned_to: '{% if task.assigned_to %}{{ task.assigned_to.username }}{% else %}Unassigned{% endif %}'
+            assigned_to: '{% if task.assigned_to %}{{ task.assigned_to.username }}{% else %}Unassigned{% endif %}',
+            assignee_first_name: '{% if task.assigned_to %}{{ task.assigned_to.first_name|escapejs }}{% endif %}',
+            assignee_last_name: '{% if task.assigned_to %}{{ task.assigned_to.last_name|escapejs }}{% endif %}'
         }{% if not forloop.last %},{% endif %}
         {% endfor %}
     ];
@@ -647,10 +658,11 @@
                 view_mode: viewMode,
                 bar_height: 32,
                 bar_corner_radius: 6,
-                arrow_curve: 8,
+                arrow_curve: 10, // Smooth curves for clean routing
                 padding: 20,
                 date_format: 'YYYY-MM-DD',
                 language: 'en',
+                custom_popup_html: null, // Disable default popup
                 popup_trigger: 'none', // Disable popup entirely for cleaner navigation
                 on_click: function(task) {
                     // Redirect to task detail page immediately without showing popup
@@ -673,6 +685,11 @@
             setTimeout(() => {
                 applyCustomStyling();
             }, 300);
+            
+            // Apply arrow styling again after a longer delay to ensure all SVG elements are rendered
+            setTimeout(() => {
+                enhanceDependencyArrows();
+            }, 600);
         }
     }
 
@@ -708,95 +725,64 @@
         // Enhance bars with additional info
         enhanceBarsWithInfo();
 
+        // Add assignee initials to task bars
+        addAssigneeInitials();
+
         // Add tooltip functionality
         addTooltipHandlers();
     }
 
-    // Enhance dependency arrows with professional styling
+    // Fix frappe-gantt's arrow rendering
     function enhanceDependencyArrows() {
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
 
-        // Super aggressive removal of ALL polygons (frappe-gantt uses polygons for arrow heads)
-        const removeArrowHeads = () => {
-            // Remove ALL polygons - frappe-gantt creates arrow heads as polygon elements
-            const allPolygons = ganttSvg.querySelectorAll('polygon');
-            allPolygons.forEach(polygon => {
-                polygon.remove();
-            });
-            
-            // Also remove paths with specific arrow-head patterns
-            const allPaths = ganttSvg.querySelectorAll('path');
-            allPaths.forEach(path => {
-                const d = path.getAttribute('d');
-                // If it's a small triangular path (not a curved arrow line), remove it
-                if (d && d.includes('Z') && !d.includes('C') && !d.includes('Q')) {
-                    const bbox = path.getBBox();
-                    if (bbox.width < 20 && bbox.height < 20) {
-                        path.remove();
-                    }
-                }
-            });
-        };
-
-        // Add custom arrowhead marker definition FIRST
+        // Find or create defs
         let defs = ganttSvg.querySelector('defs');
         if (!defs) {
             defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
             ganttSvg.insertBefore(defs, ganttSvg.firstChild);
         }
 
-        // Remove any existing markers
-        const existingMarker = defs.querySelector('#simple-arrow');
-        if (existingMarker) existingMarker.remove();
+        // Remove ALL existing markers to start fresh
+        defs.querySelectorAll('marker').forEach(m => m.remove());
 
-        // Create a clean, simple arrowhead marker
+        // Create ONE clean arrowhead marker
         const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-        marker.setAttribute('id', 'simple-arrow');
-        marker.setAttribute('viewBox', '0 0 10 10');
-        marker.setAttribute('refX', '9');
-        marker.setAttribute('refY', '5');
-        marker.setAttribute('markerWidth', '5');
-        marker.setAttribute('markerHeight', '5');
+        marker.setAttribute('id', 'arrowhead');
+        marker.setAttribute('markerWidth', '6');
+        marker.setAttribute('markerHeight', '6');
+        marker.setAttribute('refX', '5');
+        marker.setAttribute('refY', '3');
         marker.setAttribute('orient', 'auto');
 
-        // Simple solid triangle - single color only
-        const triangle = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        triangle.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
-        triangle.setAttribute('fill', '#9ca3af');
-        triangle.setAttribute('stroke', 'none');
-        marker.appendChild(triangle);
+        // Simple clean triangle
+        const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        polygon.setAttribute('points', '0,0 6,3 0,6');
+        polygon.setAttribute('fill', '#64748b');
+
+        marker.appendChild(polygon);
         defs.appendChild(marker);
 
-        // Apply custom marker to all arrow paths
-        const arrows = ganttSvg.querySelectorAll('path.arrow, .arrow');
-        arrows.forEach(arrow => {
-            // Only process if it's actually an arrow line (has curves)
-            const d = arrow.getAttribute('d');
-            if (d && (d.includes('C') || d.includes('Q'))) {
-                arrow.setAttribute('marker-end', 'url(#simple-arrow)');
-                arrow.removeAttribute('marker-start');
-                arrow.removeAttribute('marker-mid');
+        // Remove ALL standalone polygons (the distorted default arrows)
+        ganttSvg.querySelectorAll('polygon').forEach(polygon => {
+            if (!polygon.closest('defs')) {
+                polygon.remove();
             }
         });
 
-        // Remove arrow heads immediately
-        removeArrowHeads();
-        
-        // Set up a MutationObserver to continuously remove arrow heads as they're created
-        const observer = new MutationObserver((mutations) => {
-            removeArrowHeads();
-        });
-        
-        observer.observe(ganttSvg, {
-            childList: true,
-            subtree: true
-        });
-        
-        // Also do periodic cleanup
-        setInterval(removeArrowHeads, 500);
+        // Style all arrow paths
+        ganttSvg.querySelectorAll('path').forEach(path => {
+            const className = path.getAttribute('class') || '';
 
-        console.log(`Enhanced ${arrows.length} dependency arrows with continuous cleanup`);
+            // Only target arrow paths
+            if (className.includes('arrow')) {
+                path.setAttribute('stroke', '#64748b');
+                path.setAttribute('stroke-width', '2');
+                path.setAttribute('fill', 'none');
+                path.setAttribute('marker-end', 'url(#arrowhead)');
+            }
+        });
     }
 
     // Add tooltip functionality for task bars
@@ -971,6 +957,10 @@
                 return;
             }
 
+            // Calculate space reserved for assignee initials (if task has assignee and bar is wide enough)
+            const hasAssignee = task.assigned_to !== 'Unassigned';
+            const initialsSpace = (hasAssignee && barWidth >= 40) ? 28 : 0; // 20px circle + 8px padding
+
             // Find and modify the existing label to show truncated name ONLY - INSIDE the bar
             const existingLabel = barWrapper.querySelector('.bar-label');
             if (existingLabel) {
@@ -1009,7 +999,8 @@
                     
                     existingLabel.style.fontSize = fontSize + 'px';
                     
-                    const availableWidth = barWidth - 6; // Tighter padding
+                    // Account for assignee initials space on the right
+                    const availableWidth = barWidth - 6 - initialsSpace; // Padding + initials space
                     const maxChars = Math.floor(availableWidth / charWidth);
 
                     let displayName = task.fullName;
@@ -1023,9 +1014,10 @@
                         displayName = displayName.substring(0, maxChars - 3) + '...';
                     }
 
-                    // Update the label text and FORCE position inside bar (centered)
+                    // Update the label text and position - shift left if there's an assignee
                     existingLabel.textContent = displayName;
-                    existingLabel.setAttribute('x', barRect.x + barWidth / 2);
+                    const labelX = barRect.x + (barWidth - initialsSpace) / 2;
+                    existingLabel.setAttribute('x', labelX);
                     existingLabel.setAttribute('y', barRect.y + barHeight / 2);
                     existingLabel.setAttribute('text-anchor', 'middle');
                     existingLabel.setAttribute('dominant-baseline', 'middle');
@@ -1039,6 +1031,75 @@
                     existingLabel.style.display = 'none';
                 }
             }
+        });
+    }
+
+    // Add assignee initials to task bars (like ClickUp)
+    function addAssigneeInitials() {
+        const ganttSvg = document.querySelector('#gantt');
+        if (!ganttSvg) return;
+
+        // Remove existing assignee elements to prevent duplicates
+        ganttSvg.querySelectorAll('.assignee-group').forEach(el => el.remove());
+
+        tasks.forEach(task => {
+            // Skip if no assignee
+            if (task.assigned_to === 'Unassigned') return;
+
+            const barWrapper = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
+            if (!barWrapper) return;
+
+            const bar = barWrapper.querySelector('.bar');
+            if (!bar) return;
+
+            let barRect;
+            try {
+                barRect = bar.getBBox();
+            } catch (e) {
+                return;
+            }
+
+            // Only show initials if bar is wide enough (at least 40px for circle)
+            if (barRect.width < 40) return;
+
+            // Get initials from first and last name, fallback to username
+            let initials = '';
+            if (task.assignee_first_name && task.assignee_last_name) {
+                initials = (task.assignee_first_name.charAt(0) + task.assignee_last_name.charAt(0)).toUpperCase();
+            } else if (task.assignee_first_name) {
+                initials = task.assignee_first_name.substring(0, 2).toUpperCase();
+            } else {
+                // Use first 2 chars of username
+                initials = task.assigned_to.substring(0, 2).toUpperCase();
+            }
+
+            // Create SVG group for assignee avatar
+            const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            group.setAttribute('class', 'assignee-group');
+
+            // Position at the right side of the bar
+            const circleRadius = 10;
+            const circleX = barRect.x + barRect.width - circleRadius - 4;
+            const circleY = barRect.y + barRect.height / 2;
+
+            // Create circle background
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', circleX);
+            circle.setAttribute('cy', circleY);
+            circle.setAttribute('r', circleRadius);
+            circle.setAttribute('class', 'assignee-circle');
+            group.appendChild(circle);
+
+            // Create initials text
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', circleX);
+            text.setAttribute('y', circleY);
+            text.setAttribute('class', 'assignee-initials');
+            text.textContent = initials;
+            group.appendChild(text);
+
+            // Insert into the bar wrapper
+            barWrapper.appendChild(group);
         });
     }
 
