@@ -62,10 +62,16 @@
     }
 
     /* HIDE original frappe-gantt polygon arrowheads (the white residuals) */
-    .gantt polygon:not(.milestone-diamond):not([points*="0 0, 6 3, 0 6"]) {
+    /* Hide ALL polygons that are arrowheads - be more aggressive */
+    .gantt polygon {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
+    }
+    
+    /* Ensure no default markers show through */
+    .gantt marker polygon {
+        display: none !important;
     }
 
     /* ============================================
@@ -667,10 +673,11 @@
                 view_mode: viewMode,
                 bar_height: 32,
                 bar_corner_radius: 6,
-                arrow_curve: 8,
+                arrow_curve: 5, // Reduced curve for more consistent, straighter arrows
                 padding: 20,
                 date_format: 'YYYY-MM-DD',
                 language: 'en',
+                custom_popup_html: null, // Disable default popup
                 popup_trigger: 'none', // Disable popup entirely for cleaner navigation
                 on_click: function(task) {
                     // Redirect to task detail page immediately without showing popup
@@ -747,24 +754,27 @@
             ganttSvg.insertBefore(defs, ganttSvg.firstChild);
         }
 
+        // Remove ALL existing markers first (including frappe-gantt defaults)
+        const existingMarkers = defs.querySelectorAll('marker');
+        existingMarkers.forEach(m => m.remove());
+        
         // Create simple, clean arrowhead marker
-        if (!defs.querySelector('#arrow-marker')) {
-            const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-            marker.setAttribute('id', 'arrow-marker');
-            marker.setAttribute('markerWidth', '12');
-            marker.setAttribute('markerHeight', '12');
-            marker.setAttribute('refX', '10');
-            marker.setAttribute('refY', '6');
-            marker.setAttribute('orient', 'auto');
-            marker.setAttribute('markerUnits', 'userSpaceOnUse');
-
-            // Simple filled triangle arrowhead
-            const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-            arrow.setAttribute('d', 'M 0 0 L 12 6 L 0 12 L 4 6 Z');
-            arrow.setAttribute('fill', '#64748b');
-            marker.appendChild(arrow);
-            defs.appendChild(marker);
-        }
+        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+        marker.setAttribute('id', 'arrow-marker');
+        marker.setAttribute('viewBox', '0 0 10 10');
+        marker.setAttribute('refX', '10');
+        marker.setAttribute('refY', '5');
+        marker.setAttribute('markerWidth', '5');
+        marker.setAttribute('markerHeight', '5');
+        marker.setAttribute('orient', 'auto');
+        
+        // Simple filled triangle
+        const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        arrow.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+        arrow.setAttribute('fill', '#64748b');
+        
+        marker.appendChild(arrow);
+        defs.appendChild(marker);
 
         // Find and style ALL dependency arrows - frappe-gantt creates paths without 'arrow' class
         // Dependency arrows have a specific pattern: they contain 'V' (vertical) and 'H' (horizontal) or curves
@@ -790,18 +800,40 @@
             );
             
             if (isArrowPath || className.includes('arrow')) {
+                // Remove ALL marker attributes first (clean slate)
+                path.removeAttribute('marker-start');
+                path.removeAttribute('marker-mid');
+                path.removeAttribute('marker-end');
+                
                 // Style as dependency arrow
                 path.setAttribute('stroke', '#64748b');
                 path.setAttribute('stroke-width', '2');
                 path.setAttribute('fill', 'none');
+                path.setAttribute('stroke-linecap', 'round');
+                path.setAttribute('stroke-linejoin', 'round');
+                
+                // Now add our clean custom marker
                 path.setAttribute('marker-end', 'url(#arrow-marker)');
                 path.style.opacity = '0.85';
                 path.classList.add('dependency-arrow');
+                
                 arrowCount++;
             }
         });
+        
+        // Aggressively hide ALL polygon elements (frappe-gantt default arrowheads)
+        const allPolygons = ganttSvg.querySelectorAll('polygon');
+        allPolygons.forEach(poly => {
+            // Check if it's inside our custom marker
+            if (!poly.closest('#arrow-marker')) {
+                poly.style.display = 'none';
+                poly.style.visibility = 'hidden';
+                poly.style.opacity = '0';
+                poly.setAttribute('fill', 'none');
+            }
+        });
 
-        console.log(`Styled ${arrowCount} dependency arrows`);
+        console.log(`Styled ${arrowCount} dependency arrows, hidden ${allPolygons.length} default polygons`);
     }
 
     // Add tooltip functionality for task bars
