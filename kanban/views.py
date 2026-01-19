@@ -15,7 +15,7 @@ from django.core.management import call_command
 # Configure logger
 logger = logging.getLogger(__name__)
 
-from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile
+from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Milestone
 from .forms import BoardForm, ColumnForm, TaskForm, TaskLabelForm, CommentForm, TaskMoveForm, TaskSearchForm, TaskFileForm
 from accounts.models import UserProfile, Organization
 from .stakeholder_models import StakeholderTaskInvolvement
@@ -1358,8 +1358,8 @@ def gantt_chart(request, board_id):
             return HttpResponseForbidden("You don't have permission to view Gantt chart in your current demo role.")
     # Solo demo mode: full access, no restrictions
     
-    # Get tasks for this board
-    tasks = Task.objects.filter(column__board=board).select_related('column', 'assigned_to').order_by('due_date', 'created_at')
+    # Get tasks for this board with dependencies prefetched for Gantt chart
+    tasks = Task.objects.filter(column__board=board).select_related('column', 'assigned_to').prefetch_related('dependencies').order_by('start_date', 'due_date')
     
     context = {
         'board': board,
