@@ -4,7 +4,6 @@ from . import api_views
 from . import forecasting_views
 from . import burndown_views
 from . import retrospective_views
-from . import milestone_views
 from . import conflict_views
 from . import demo_views
 from . import permission_views
@@ -121,6 +120,10 @@ urlpatterns = [
     
     # Gantt Chart API Endpoints
     path('api/tasks/update-dates/', api_views.update_task_dates_api, name='update_task_dates_api'),
+
+    # Phase Management API Endpoints
+    path('api/board/<int:board_id>/phases/<int:phase_number>/delete/', api_views.delete_phase, name='delete_phase'),
+    path('api/board/<int:board_id>/phases/add/', api_views.add_phase, name='add_phase'),
     
     # Task Prediction API Endpoints
     path('api/task/<int:task_id>/prediction/', api_views.get_task_prediction_api, name='get_task_prediction_api'),
@@ -152,15 +155,7 @@ urlpatterns = [
     
     # Retrospective URLs
     path('', include('kanban.retrospective_urls')),
-    
-    # Milestone Management URLs
-    path('board/<int:board_id>/milestones/create/', milestone_views.create_milestone, name='create_milestone'),
-    path('board/<int:board_id>/milestones/<int:milestone_id>/update/', milestone_views.update_milestone, name='update_milestone'),
-    path('board/<int:board_id>/milestones/<int:milestone_id>/delete/', milestone_views.delete_milestone, name='delete_milestone'),
-    path('board/<int:board_id>/milestones/<int:milestone_id>/toggle/', milestone_views.toggle_milestone_completion, name='toggle_milestone_completion'),
-    path('board/<int:board_id>/milestones/<int:milestone_id>/', milestone_views.get_milestone_details, name='get_milestone_details'),
-    path('api/milestones/<int:board_id>/list/', milestone_views.list_board_milestones, name='list_board_milestones'),
-    
+
     # Budget & ROI Tracking URLs
     path('', include('kanban.budget_urls')),
     

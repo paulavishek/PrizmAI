@@ -1,5 +1,5 @@
 from django import forms
-from ..models import Board, Column, Task, TaskLabel, Comment, TaskFile, Milestone
+from ..models import Board, Column, Task, TaskLabel, Comment, TaskFile
 from django.utils import timezone
 from datetime import datetime
 
@@ -36,10 +36,20 @@ class LocalDateTimeInput(forms.DateTimeInput):
 class BoardForm(forms.ModelForm):
     class Meta:
         model = Board
-        fields = ['name', 'description']
+        fields = ['name', 'description', 'num_phases']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'num_phases': forms.NumberInput(attrs={
+                'class': 'form-control',
+                'min': 0,
+                'max': 10,
+                'placeholder': '0 = no phases, 3 = Phase 1, 2, 3',
+                'title': 'Number of phases for organizing tasks in this board (0 to disable phases)'
+            }),
+        }
+        help_texts = {
+            'num_phases': 'Set the number of phases for your project (e.g., 3 for Phase 1, Phase 2, Phase 3). Set to 0 if you don\'t need phase-based organization.',
         }
 
 class ColumnForm(forms.ModelForm):
@@ -87,16 +97,27 @@ class TaskForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = [
-            'title', 'description', 'start_date', 'due_date', 'assigned_to', 'labels', 'lss_classification', 'priority', 'progress', 
+            'item_type', 'title', 'description', 'phase',
+            'start_date', 'due_date', 'assigned_to', 'labels', 'lss_classification', 'priority', 'progress',
             'dependencies', 'parent_task', 'complexity_score', 'required_skills', 'skill_match_score',
             'collaboration_required', 'workload_impact', 'related_tasks',
             'risk_likelihood', 'risk_impact', 'risk_level'
         ]
         widgets = {
+            'item_type': forms.Select(attrs={
+                'class': 'form-select',
+                'id': 'id_item_type',
+                'title': 'Select whether this is a Task (with duration) or a Milestone (single date marker)'
+            }),
             'title': forms.TextInput(attrs={'class': 'form-control'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+            'phase': forms.Select(attrs={
+                'class': 'form-select',
+                'id': 'id_phase',
+                'title': 'Select the phase this item belongs to'
+            }),
             'start_date': forms.DateInput(attrs={
-                'class': 'form-control', 
+                'class': 'form-control',
                 'type': 'date',
                 'title': 'When this task should start (for Gantt chart)'
             }),
@@ -285,6 +306,26 @@ class TaskForm(forms.ModelForm):
         self.fields['parent_task'].required = False
         self.fields['complexity_score'].required = False
         self.fields['progress'].required = False  # Progress defaults to 0 for new tasks
+
+        # Configure item_type field
+        self.fields['item_type'].help_text = 'Task: has start date, end date, duration, and assignee. Milestone: single date marker with no duration.'
+
+        # Configure phase field based on board's num_phases
+        if board and board.num_phases > 0:
+            # Build dynamic phase choices based on board's num_phases
+            phase_choices = [('', '-- Select Phase --')]
+            for i in range(1, board.num_phases + 1):
+                phase_choices.append((f'Phase {i}', f'Phase {i}'))
+            self.fields['phase'].widget = forms.Select(
+                choices=phase_choices,
+                attrs={'class': 'form-select', 'id': 'id_phase', 'title': 'Select the phase this item belongs to'}
+            )
+            self.fields['phase'].required = True
+            self.fields['phase'].help_text = f'Select which phase this item belongs to (1-{board.num_phases}).'
+        else:
+            # Hide phase field if no phases configured for this board
+            self.fields['phase'].widget = forms.HiddenInput()
+            self.fields['phase'].required = False
         
         # Set initial value for complexity score if editing existing task
         if self.instance and self.instance.pk and self.instance.complexity_score:
@@ -642,65 +683,3 @@ class TaskFileForm(forms.ModelForm):
             instance.save()
         
         return instance
-
-
-class MilestoneForm(forms.ModelForm):
-    """Form for creating and editing project milestones"""
-    
-    class Meta:
-        model = Milestone
-        fields = ['title', 'description', 'target_date', 'milestone_type', 'related_tasks', 'color']
-        widgets = {
-            'title': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Enter milestone name',
-                'maxlength': '200'
-            }),
-            'description': forms.Textarea(attrs={
-                'class': 'form-control',
-                'rows': 3,
-                'placeholder': 'Describe this milestone and its significance...'
-            }),
-            'target_date': forms.DateInput(attrs={
-                'class': 'form-control',
-                'type': 'date',
-                'title': 'Target date for achieving this milestone'
-            }),
-            'milestone_type': forms.Select(attrs={
-                'class': 'form-select',
-                'title': 'Type of milestone'
-            }),
-            'related_tasks': forms.SelectMultiple(attrs={
-                'class': 'form-select',
-                'size': '6',
-                'title': 'Select tasks that must be completed for this milestone'
-            }),
-            'color': forms.TextInput(attrs={
-                'class': 'form-control',
-                'type': 'color',
-                'title': 'Color for milestone marker on Gantt chart'
-            }),
-        }
-    
-    def __init__(self, *args, board=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-        if board:
-            # Only show tasks from this board
-            self.fields['related_tasks'].queryset = Task.objects.filter(
-                column__board=board
-            ).order_by('start_date', 'title')
-        else:
-            self.fields['related_tasks'].queryset = Task.objects.all().order_by('start_date', 'title')
-        
-        # Make fields optional
-        self.fields['description'].required = False
-        self.fields['related_tasks'].required = False
-        
-        # Set help text
-        self.fields['title'].help_text = 'Name of the milestone (e.g., "Phase 1 Complete", "MVP Launch")'
-        self.fields['description'].help_text = 'Optional detailed description of what this milestone represents'
-        self.fields['target_date'].help_text = 'Target date for achieving this milestone'
-        self.fields['milestone_type'].help_text = 'Category of milestone'
-        self.fields['related_tasks'].help_text = 'Tasks that must be completed for this milestone (optional). Hold Ctrl/Cmd to select multiple.'
-        self.fields['color'].help_text = 'Color for the milestone marker on Gantt chart (default: gold)'

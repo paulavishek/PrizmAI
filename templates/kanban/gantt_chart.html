@@ -445,6 +445,121 @@
         stroke-width: 1;
     }
 
+    /* ============================================
+       PHASE-BASED VIEW STYLES
+       ============================================ */
+
+    .phase-view-controls {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+    }
+
+    .phase-view-controls .btn {
+        transition: all 0.2s ease;
+    }
+
+    .phase-view-controls .btn.active {
+        background: #3b82f6;
+        border-color: #3b82f6;
+        color: white;
+    }
+
+    /* Phase bar styling */
+    .gantt .bar-wrapper .bar[data-is-phase="true"] {
+        fill: #6366f1 !important;
+        rx: 8;
+        ry: 8;
+        cursor: pointer;
+        filter: drop-shadow(0 3px 6px rgba(99, 102, 241, 0.3));
+    }
+
+    .gantt .bar-wrapper .bar[data-is-phase="true"]:hover {
+        filter: brightness(1.1) drop-shadow(0 4px 8px rgba(99, 102, 241, 0.4));
+    }
+
+    /* Phase expanded state */
+    .gantt .bar-wrapper .bar[data-is-phase="true"][data-expanded="true"] {
+        fill: #4f46e5 !important;
+    }
+
+    /* Milestone diamond marker styles */
+    .milestone-diamond {
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .milestone-diamond:hover {
+        transform: scale(1.2);
+        filter: brightness(1.2);
+    }
+
+    .gantt .bar-wrapper .bar[data-is-milestone="true"] {
+        fill: #f59e0b !important;
+        rx: 0;
+        ry: 0;
+    }
+
+    /* Phase collapse indicator */
+    .phase-indicator {
+        font-size: 0.75rem;
+        padding: 2px 8px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 4px;
+        margin-left: 8px;
+    }
+
+    /* Phase info panel */
+    .phase-info-panel {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 16px;
+    }
+
+    .phase-info-panel .phase-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        margin-bottom: 4px;
+        background: white;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .phase-info-panel .phase-item:hover {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+    }
+
+    .phase-info-panel .phase-item.expanded {
+        background: #eff6ff;
+        border-color: #3b82f6;
+    }
+
+    .phase-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.75rem;
+        padding: 2px 8px;
+        border-radius: 4px;
+    }
+
+    .phase-badge.tasks {
+        background: #dbeafe;
+        color: #1d4ed8;
+    }
+
+    .phase-badge.milestones {
+        background: #fef3c7;
+        color: #b45309;
+    }
+
 </style>
 {% endblock %}
 
@@ -485,12 +600,38 @@
     <div class="gantt-container" style="position: relative;">
         <div class="gantt-header">
             <h2>📊 Project Timeline</h2>
-            <div class="view-buttons">
-                <button class="view-btn" data-mode="Day">Day</button>
-                <button class="view-btn active" data-mode="Week">Week</button>
-                <button class="view-btn" data-mode="Month">Month</button>
+            <div class="d-flex align-items-center gap-3">
+                {% if has_phases %}
+                <!-- Phase/Task View Toggle -->
+                <div class="phase-view-controls btn-group" role="group">
+                    <button type="button" class="btn btn-outline-primary btn-sm active" id="phase-view-btn" onclick="setPhaseView()">
+                        <i class="fas fa-layer-group me-1"></i> Phase View
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="all-tasks-btn" onclick="setAllTasksView()">
+                        <i class="fas fa-tasks me-1"></i> All Tasks
+                    </button>
+                </div>
+                {% endif %}
+                <div class="view-buttons">
+                    <button class="view-btn" data-mode="Day">Day</button>
+                    <button class="view-btn active" data-mode="Week">Week</button>
+                    <button class="view-btn" data-mode="Month">Month</button>
+                </div>
             </div>
         </div>
+
+        {% if has_phases %}
+        <!-- Phase Information Panel -->
+        <div class="phase-info-panel" id="phase-info-panel">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <strong><i class="fas fa-layer-group me-1"></i> Phases</strong>
+                <small class="text-muted">Click a phase to expand/collapse</small>
+            </div>
+            <div id="phase-items-container">
+                <!-- Phase items will be populated by JavaScript -->
+            </div>
+        </div>
+        {% endif %}
 
         {% if tasks %}
             <svg id="gantt"></svg>
@@ -523,6 +664,18 @@
                         <text x="11" y="8" text-anchor="middle" dominant-baseline="middle" font-size="8" font-weight="700" fill="white">AB</text>
                     </svg>
                     <span>Assignee</span>
+                </div>
+                {% if has_phases %}
+                <div class="legend-item">
+                    <span class="legend-color" style="background: #6366f1;"></span>
+                    <span>Phase</span>
+                </div>
+                {% endif %}
+                <div class="legend-item">
+                    <svg width="20" height="20" style="vertical-align: middle;">
+                        <polygon points="10,2 18,10 10,18 2,10" fill="#f59e0b" stroke="#d97706" stroke-width="1"/>
+                    </svg>
+                    <span>Milestone</span>
                 </div>
                 <div class="legend-item" style="margin-left: auto;">
                     <svg width="40" height="12" style="vertical-align: middle;">
@@ -562,6 +715,15 @@
     console.log('Total tasks:', {{ tasks.count }});
     console.log('All task IDs:', Array.from(allTaskIds));
     
+    // Phase data from Django (for phase-based view)
+    const phasesData = {{ phases_data_json|safe }};
+    const hasPhases = {{ has_phases|yesno:"true,false" }};
+    const numPhases = {{ num_phases|default:0 }};
+
+    // View state
+    let currentView = hasPhases ? 'phases' : 'all';
+    let expandedPhases = new Set();
+
     // Prepare task data for Gantt chart with validated dependencies
     const tasks = [
         {% for task in tasks %}
@@ -578,7 +740,9 @@
             priority: '{{ task.priority }}',
             assigned_to: '{% if task.assigned_to %}{{ task.assigned_to.username }}{% else %}Unassigned{% endif %}',
             assignee_first_name: '{% if task.assigned_to %}{{ task.assigned_to.first_name|escapejs }}{% endif %}',
-            assignee_last_name: '{% if task.assigned_to %}{{ task.assigned_to.last_name|escapejs }}{% endif %}'
+            assignee_last_name: '{% if task.assigned_to %}{{ task.assigned_to.last_name|escapejs }}{% endif %}',
+            item_type: '{{ task.item_type|default:"task" }}',
+            phase: '{{ task.phase|default:""|escapejs }}'
         }{% if not forloop.last %},{% endif %}
         {% endfor %}
     ];
@@ -1209,7 +1373,247 @@
         });
     });
     {% endif %}
-    
+
+    // =====================================================
+    // PHASE-BASED VIEW FUNCTIONS
+    // =====================================================
+
+    // Set view to show only phases (collapsed)
+    function setPhaseView() {
+        currentView = 'phases';
+        expandedPhases.clear();
+        updateViewButtons();
+        updatePhaseInfoPanel();
+        // Re-render Gantt with phase view
+        if (hasPhases) {
+            renderGanttWithPhases();
+        }
+    }
+
+    // Set view to show all tasks
+    function setAllTasksView() {
+        currentView = 'all';
+        updateViewButtons();
+        // Re-render Gantt with all tasks
+        initGantt(currentViewMode);
+    }
+
+    // Toggle a phase expansion
+    function togglePhase(phaseName) {
+        if (expandedPhases.has(phaseName)) {
+            expandedPhases.delete(phaseName);
+        } else {
+            expandedPhases.add(phaseName);
+        }
+        updatePhaseInfoPanel();
+        renderGanttWithPhases();
+    }
+
+    // Update view toggle button states
+    function updateViewButtons() {
+        const phaseBtn = document.getElementById('phase-view-btn');
+        const allTasksBtn = document.getElementById('all-tasks-btn');
+        const phaseInfoPanel = document.getElementById('phase-info-panel');
+
+        if (phaseBtn && allTasksBtn) {
+            if (currentView === 'phases') {
+                phaseBtn.classList.add('active');
+                allTasksBtn.classList.remove('active');
+                if (phaseInfoPanel) phaseInfoPanel.style.display = '';
+            } else {
+                phaseBtn.classList.remove('active');
+                allTasksBtn.classList.add('active');
+                if (phaseInfoPanel) phaseInfoPanel.style.display = 'none';
+            }
+        }
+    }
+
+    // Update phase info panel with current state
+    function updatePhaseInfoPanel() {
+        const container = document.getElementById('phase-items-container');
+        if (!container || !hasPhases) return;
+
+        let html = '';
+        for (const [phaseName, data] of Object.entries(phasesData)) {
+            const isExpanded = expandedPhases.has(phaseName);
+            const expandIcon = isExpanded ? 'fa-chevron-down' : 'fa-chevron-right';
+
+            html += `
+                <div class="phase-item ${isExpanded ? 'expanded' : ''}" onclick="togglePhase('${phaseName}')">
+                    <div>
+                        <i class="fas ${expandIcon} me-2"></i>
+                        <strong>${phaseName}</strong>
+                        ${data.start && data.end ? `<small class="text-muted ms-2">${data.start} - ${data.end}</small>` : ''}
+                    </div>
+                    <div class="d-flex gap-2">
+                        <span class="phase-badge tasks">
+                            <i class="fas fa-tasks"></i> ${data.task_count || 0} tasks
+                        </span>
+                        <span class="phase-badge milestones">
+                            <i class="fas fa-flag"></i> ${data.milestone_count || 0} milestones
+                        </span>
+                    </div>
+                </div>
+            `;
+        }
+        container.innerHTML = html;
+    }
+
+    // Render Gantt chart with phase-based view
+    function renderGanttWithPhases() {
+        if (!hasPhases) {
+            initGantt(currentViewMode);
+            return;
+        }
+
+        let ganttData = [];
+
+        // Build data based on current view state
+        for (const [phaseName, data] of Object.entries(phasesData)) {
+            if (!data.start || !data.end) continue;
+
+            const phaseId = phaseName.replace(' ', '-').toLowerCase();
+            const isExpanded = expandedPhases.has(phaseName);
+
+            // Add phase bar
+            ganttData.push({
+                id: phaseId,
+                name: `${phaseName} ${isExpanded ? '▼' : '▶'} (${data.task_count} tasks, ${data.milestone_count} milestones)`,
+                fullName: phaseName,
+                start: data.start,
+                end: data.end,
+                progress: 0,
+                dependencies: '',
+                custom_class: 'phase-bar',
+                priority: 'phase',
+                isPhase: true,
+                phaseName: phaseName
+            });
+
+            // If expanded, add tasks and milestones for this phase
+            if (isExpanded) {
+                const phaseTasks = tasks.filter(t => t.phase === phaseName);
+                phaseTasks.forEach(task => {
+                    // Only include tasks/milestones with valid dates
+                    if (!task.start || !task.end || task.start === 'None' || task.end === 'None') return;
+
+                    if (task.item_type === 'milestone') {
+                        // Milestones: use due_date as both start and end
+                        ganttData.push({
+                            ...task,
+                            id: `milestone-${task.id}`,
+                            name: `◆ ${task.name}`,
+                            start: task.end,  // Milestones only have due_date
+                            isMilestone: true
+                        });
+                    } else {
+                        ganttData.push(task);
+                    }
+                });
+            }
+        }
+
+        // If no valid phase data, fall back to all tasks view
+        if (ganttData.length === 0) {
+            initGantt(currentViewMode);
+            return;
+        }
+
+        // Re-initialize Gantt with phase data
+        initGanttWithData(ganttData);
+    }
+
+    // Initialize Gantt with custom data
+    function initGanttWithData(data) {
+        const ganttElement = document.getElementById('gantt');
+
+        if (ganttChart) {
+            // Destroy existing chart
+            ganttElement.innerHTML = '';
+        }
+
+        if (data.length === 0) {
+            ganttElement.innerHTML = '<text x="50%" y="50" text-anchor="middle" fill="#64748b">No items to display</text>';
+            return;
+        }
+
+        ganttChart = new Gantt('#gantt', data, {
+            view_mode: currentViewMode,
+            bar_height: 32,
+            bar_corner_radius: 6,
+            arrow_curve: 10,
+            padding: 20,
+            date_format: 'YYYY-MM-DD',
+            language: 'en',
+            custom_popup_html: null,
+            popup_trigger: 'none',
+            on_click: function(task) {
+                if (task.isPhase) {
+                    togglePhase(task.phaseName);
+                } else if (task.isMilestone) {
+                    const milestoneId = task.id.replace('milestone-', '');
+                    window.location.href = `/tasks/${milestoneId}/`;
+                } else {
+                    window.location.href = `/tasks/${task.id}/`;
+                }
+            },
+            on_date_change: function(task, start, end) {
+                if (!task.isPhase && !task.isMilestone) {
+                    updateTaskDates(task.id, start, end);
+                }
+            },
+            on_progress_change: function(task, progress) {
+                if (!task.isPhase && !task.isMilestone) {
+                    updateTaskProgress(task.id, progress);
+                }
+            }
+        });
+
+        // Apply custom styling after render
+        setTimeout(() => {
+            applyPhaseAndMilestoneStyling();
+        }, 100);
+    }
+
+    // Apply custom styling for phases and milestones
+    function applyPhaseAndMilestoneStyling() {
+        // Style phase bars
+        document.querySelectorAll('.gantt .bar-wrapper').forEach(wrapper => {
+            const bar = wrapper.querySelector('.bar');
+            const label = wrapper.querySelector('.bar-label');
+
+            if (bar && label) {
+                const taskName = label.textContent || '';
+
+                // Check if this is a phase bar
+                if (taskName.includes('Phase') && (taskName.includes('tasks') || taskName.includes('milestones'))) {
+                    bar.setAttribute('data-is-phase', 'true');
+                    bar.style.cursor = 'pointer';
+                }
+
+                // Check if this is a milestone (starts with diamond symbol)
+                if (taskName.startsWith('◆')) {
+                    bar.setAttribute('data-is-milestone', 'true');
+                    // Transform bar to diamond shape (CSS will handle styling)
+                }
+            }
+        });
+
+        // Also apply standard styling
+        applyCustomStyling();
+    }
+
+    // Initialize phase view on load if phases exist
+    if (hasPhases) {
+        document.addEventListener('DOMContentLoaded', function() {
+            updatePhaseInfoPanel();
+            // Start with phase view
+            if (currentView === 'phases') {
+                renderGanttWithPhases();
+            }
+        });
+    }
+
     // Handle back navigation to previous page
     function goBack() {
         // Check if there's a previous page in history

@@ -863,7 +863,20 @@ def create_task(request, board_id, column_id=None):
             
             if form.is_valid():
                 task = form.save(commit=False)
-                task.column = column
+
+                # For milestones, prefer placing them in Backlog column
+                if task.item_type == 'milestone':
+                    backlog_column = Column.objects.filter(
+                        board=board,
+                        name__iregex=r'^(backlog)$'
+                    ).first()
+                    if backlog_column:
+                        task.column = backlog_column
+                    else:
+                        task.column = column
+                else:
+                    task.column = column
+
                 # For demo mode, use demo_admin if user is anonymous
                 if request.user.is_authenticated:
                     task.created_by = request.user
@@ -1359,15 +1372,63 @@ def gantt_chart(request, board_id):
     # Solo demo mode: full access, no restrictions
     
     # Get tasks for this board with dependencies prefetched for Gantt chart
-    tasks = Task.objects.filter(column__board=board).select_related('column', 'assigned_to').prefetch_related('dependencies').order_by('start_date', 'due_date')
-    
+    tasks = Task.objects.filter(column__board=board).select_related('column', 'assigned_to').prefetch_related('dependencies').order_by('phase', 'start_date', 'due_date')
+
+    # Calculate phase timelines for phase-based Gantt chart view
+    phases_data = {}
+    has_phases = board.num_phases > 0 if hasattr(board, 'num_phases') else False
+
+    if has_phases:
+        import json
+        from datetime import date
+
+        for i in range(1, board.num_phases + 1):
+            phase_name = f'Phase {i}'
+            phase_tasks = tasks.filter(phase=phase_name)
+
+            if phase_tasks.exists():
+                # Get earliest start_date (only from tasks, not milestones)
+                task_start_dates = list(phase_tasks.filter(
+                    item_type='task', start_date__isnull=False
+                ).values_list('start_date', flat=True))
+
+                # Get latest due_date (from both tasks and milestones)
+                task_due_dates = list(phase_tasks.filter(
+                    due_date__isnull=False
+                ).values_list('due_date', flat=True))
+
+                # Convert datetime to date for comparison
+                due_dates_as_date = [d.date() if hasattr(d, 'date') else d for d in task_due_dates]
+
+                phases_data[phase_name] = {
+                    'start': min(task_start_dates).isoformat() if task_start_dates else None,
+                    'end': max(due_dates_as_date).isoformat() if due_dates_as_date else None,
+                    'task_count': phase_tasks.filter(item_type='task').count(),
+                    'milestone_count': phase_tasks.filter(item_type='milestone').count(),
+                }
+            else:
+                phases_data[phase_name] = {
+                    'start': None,
+                    'end': None,
+                    'task_count': 0,
+                    'milestone_count': 0,
+                }
+
+        # Convert to JSON for JavaScript consumption
+        phases_data_json = json.dumps(phases_data)
+    else:
+        phases_data_json = '{}'
+
     context = {
         'board': board,
         'tasks': tasks,
         'is_demo_board': is_demo_board,
         'is_demo_mode': is_demo_mode,
+        'has_phases': has_phases,
+        'phases_data_json': phases_data_json,
+        'num_phases': board.num_phases if has_phases else 0,
     }
-    
+
     return render(request, 'kanban/gantt_chart.html', context)
 
 def move_task(request):

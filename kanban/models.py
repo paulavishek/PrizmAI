@@ -58,7 +58,13 @@ class Board(models.Model):
         default=False,
         help_text="True if this is original seed demo data (not user-created). Used for 48-hour cleanup."
     )
-    
+
+    # Phase Configuration for Gantt Chart
+    num_phases = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of phases for this board (0 means phases are disabled). Users set this during board creation."
+    )
+
     def __str__(self):
         return self.name
     
@@ -231,7 +237,27 @@ class Task(models.Model):
     assigned_to = models.ForeignKey(User, on_delete=models.SET_NULL, related_name='assigned_tasks', blank=True, null=True)
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_tasks')
     labels = models.ManyToManyField(TaskLabel, related_name='tasks', blank=True)
-    
+
+    # Item Type: Task or Milestone (for unified task/milestone management)
+    ITEM_TYPE_CHOICES = [
+        ('task', 'Task'),
+        ('milestone', 'Milestone'),
+    ]
+    item_type = models.CharField(
+        max_length=20,
+        choices=ITEM_TYPE_CHOICES,
+        default='task',
+        help_text="Type of item: task (has duration with start/end dates) or milestone (single date marker)"
+    )
+
+    # Phase Assignment (for Gantt chart phase-based grouping)
+    phase = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Phase this task/milestone belongs to (e.g., 'Phase 1', 'Phase 2'). Set via dropdown based on board's num_phases."
+    )
+
     # Lean Six Sigma Classification (Single-select, mutually exclusive)
     LSS_CLASSIFICATION_CHOICES = [
         ('value_added', 'Value-Added'),
@@ -524,7 +550,11 @@ class Task(models.Model):
         self.save()
     
     def save(self, *args, **kwargs):
-        """Override save to track completion and update predictions"""
+        """Override save to track completion, update predictions, and handle milestone constraints"""
+        # Milestone constraint: milestones have no start_date (only due_date)
+        if self.item_type == 'milestone':
+            self.start_date = None
+
         # Track completion timestamp
         if self.progress == 100 and not self.completed_at:
             self.completed_at = timezone.now()

@@ -92,14 +92,55 @@
                         {% endif %}
                         
                         <!-- ═══════════════════════════════════════════════════════════════════ -->
-                        <!-- SECTION 1: THE BASICS (Required)                                    -->
+                        <!-- SECTION 0: ITEM TYPE (Task or Milestone)                             -->
                         <!-- ═══════════════════════════════════════════════════════════════════ -->
                         <div class="mb-4">
+                            <h5 class="border-bottom pb-2 mb-3">
+                                <span class="badge bg-info me-2">0</span>
+                                <i class="fas fa-tag text-info me-1"></i> Item Type
+                            </h5>
+
+                            <!-- Item Type Selection -->
+                            <div class="mb-3">
+                                <label for="{{ form.item_type.id_for_label }}" class="form-label">
+                                    What are you creating? <span class="text-danger">*</span>
+                                </label>
+                                {{ form.item_type }}
+                                <small class="form-text text-muted">
+                                    <strong>Task:</strong> Has start date, end date, duration, assignee, and detailed fields.<br>
+                                    <strong>Milestone:</strong> Single date marker (no duration) - simplified form with only essential fields.
+                                </small>
+                                {% if form.item_type.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.item_type.errors }}</div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Phase Selection (only visible if board has phases) -->
+                            {% if board.num_phases > 0 %}
+                            <div class="mb-3" id="phase-field-container">
+                                <label for="{{ form.phase.id_for_label }}" class="form-label">
+                                    <i class="fas fa-layer-group me-1"></i> Phase <span class="text-danger">*</span>
+                                </label>
+                                {{ form.phase }}
+                                <small class="form-text text-muted">
+                                    Select which phase this item belongs to (this board has {{ board.num_phases }} phase(s)).
+                                </small>
+                                {% if form.phase.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.phase.errors }}</div>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- ═══════════════════════════════════════════════════════════════════ -->
+                        <!-- SECTION 1: THE BASICS (Required)                                    -->
+                        <!-- ═══════════════════════════════════════════════════════════════════ -->
+                        <div class="mb-4" id="section-basics">
                             <h5 class="border-bottom pb-2 mb-3">
                                 <span class="badge bg-primary me-2">1</span>
                                 <i class="fas fa-edit text-primary me-1"></i> The Basics
                             </h5>
-                            
+
                             <!-- Title -->
                             <div class="mb-3">
                                 <label for="{{ form.title.id_for_label }}" class="form-label">Title <span class="text-danger">*</span></label>
@@ -108,12 +149,12 @@
                                     <div class="invalid-feedback d-block">{{ form.title.errors }}</div>
                                 {% endif %}
                             </div>
-                            
+
                             <!-- Description with AI Generation -->
                             <div class="mb-3">
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <label for="{{ form.description.id_for_label }}" class="form-label mb-0">Description</label>
-                                    <button type="button" id="generate-ai-description" class="btn btn-sm btn-outline-primary">
+                                    <button type="button" id="generate-ai-description" class="btn btn-sm btn-outline-primary task-only-field">
                                         <i class="fas fa-robot me-1"></i> Generate with AI
                                     </button>
                                 </div>
@@ -659,8 +700,99 @@
         document.getElementById('task-create-form').submit();
     }
     
+    // Toggle fields visibility based on item_type (Task vs Milestone)
+    function toggleMilestoneFields(itemType) {
+        const isMilestone = (itemType === 'milestone');
+
+        // Sections to hide for milestones (keep only basics - title, description, due_date, phase)
+        const sectionsToHide = [
+            '#advancedConstraintsSection',           // Risk, complexity, workload
+            '[data-bs-target="#advancedConstraintsSection"]', // Collapse header
+            '#section-task-structure',               // Dependencies, parent task
+            '#section-ai-analysis',                  // AI predictions
+            '#section-lean-six-sigma',               // LSS classification
+        ];
+
+        // Individual fields to hide for milestones
+        const fieldsToHide = [
+            'start_date',
+            'assigned_to',
+            'progress',
+            'complexity_score',
+            'workload_impact',
+            'skill_match_score',
+            'collaboration_required',
+            'risk_likelihood',
+            'risk_impact',
+            'risk_level',
+            'dependencies',
+            'parent_task',
+            'related_tasks',
+            'required_skills',
+            'labels',
+            'lss_classification',
+        ];
+
+        // Toggle sections
+        sectionsToHide.forEach(selector => {
+            const elements = document.querySelectorAll(selector);
+            elements.forEach(el => {
+                if (isMilestone) {
+                    el.style.display = 'none';
+                } else {
+                    el.style.display = '';
+                }
+            });
+        });
+
+        // Toggle individual fields by finding their container
+        fieldsToHide.forEach(fieldName => {
+            const field = document.querySelector(`[name="${fieldName}"]`);
+            if (field) {
+                // Find the closest parent .mb-3 or similar container
+                const container = field.closest('.mb-3, .mb-4, .col-md-4, .col-md-6, .col-md-12');
+                if (container) {
+                    if (isMilestone) {
+                        container.style.display = 'none';
+                    } else {
+                        container.style.display = '';
+                    }
+                }
+            }
+        });
+
+        // Update section headers to show milestone-appropriate titles
+        const basicsHeader = document.querySelector('#section-basics h5');
+        if (basicsHeader) {
+            if (isMilestone) {
+                basicsHeader.innerHTML = '<span class="badge bg-primary me-2">1</span>' +
+                    '<i class="fas fa-flag text-primary me-1"></i> Milestone Details';
+            } else {
+                basicsHeader.innerHTML = '<span class="badge bg-primary me-2">1</span>' +
+                    '<i class="fas fa-edit text-primary me-1"></i> The Basics';
+            }
+        }
+
+        // Hide/show task-only elements (like AI description button)
+        document.querySelectorAll('.task-only-field').forEach(el => {
+            el.style.display = isMilestone ? 'none' : '';
+        });
+    }
+
     // Handle complexity score slider display
     document.addEventListener('DOMContentLoaded', function() {
+        // Initialize item_type toggle on page load
+        const itemTypeSelect = document.getElementById('id_item_type');
+        if (itemTypeSelect) {
+            // Set initial state based on current value
+            toggleMilestoneFields(itemTypeSelect.value);
+
+            // Listen for changes
+            itemTypeSelect.addEventListener('change', function() {
+                toggleMilestoneFields(this.value);
+            });
+        }
+
         const complexitySlider = document.querySelector('input[name="complexity_score"]');
         const complexityOutput = document.getElementById('complexity-output');
         

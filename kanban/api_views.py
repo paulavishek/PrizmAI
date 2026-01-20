@@ -4086,3 +4086,129 @@ Only include tasks with relevance_score >= 0.3"""
             'fallback': True
         })
 
+
+# =====================================================
+# Phase Management API Endpoints
+# =====================================================
+
+@login_required
+@require_http_methods(["POST"])
+def delete_phase(request, board_id, phase_number):
+    """
+    Delete a phase from a board.
+
+    This endpoint:
+    1. Checks if any tasks exist in the phase to be deleted
+    2. If tasks exist, returns an error with the count
+    3. If no tasks, shifts higher phases down and decrements num_phases
+
+    Args:
+        board_id: The board ID
+        phase_number: The phase number to delete (1-indexed)
+
+    Returns:
+        JSON response with success/error status
+    """
+    from kanban.permission_utils import user_has_board_permission
+
+    board = get_object_or_404(Board, id=board_id)
+
+    # Check permissions
+    if not user_has_board_permission(request.user, board, 'board.edit'):
+        return JsonResponse({
+            'success': False,
+            'error': 'You do not have permission to modify this board.'
+        }, status=403)
+
+    # Validate phase number
+    if not hasattr(board, 'num_phases') or board.num_phases == 0:
+        return JsonResponse({
+            'success': False,
+            'error': 'This board does not have phases configured.'
+        }, status=400)
+
+    if phase_number < 1 or phase_number > board.num_phases:
+        return JsonResponse({
+            'success': False,
+            'error': f'Invalid phase number. Must be between 1 and {board.num_phases}.'
+        }, status=400)
+
+    phase_name = f'Phase {phase_number}'
+
+    # Check if tasks exist in this phase
+    tasks_in_phase = Task.objects.filter(
+        column__board=board,
+        phase=phase_name
+    ).count()
+
+    if tasks_in_phase > 0:
+        return JsonResponse({
+            'success': False,
+            'error': f'Cannot delete {phase_name}. {tasks_in_phase} task(s) are assigned to this phase. Please reassign them first.',
+            'task_count': tasks_in_phase
+        }, status=400)
+
+    # Shift tasks in higher phases down
+    for i in range(phase_number + 1, board.num_phases + 1):
+        old_phase_name = f'Phase {i}'
+        new_phase_name = f'Phase {i - 1}'
+        Task.objects.filter(
+            column__board=board,
+            phase=old_phase_name
+        ).update(phase=new_phase_name)
+
+    # Decrement num_phases
+    board.num_phases -= 1
+    board.save()
+
+    return JsonResponse({
+        'success': True,
+        'message': f'{phase_name} deleted successfully.',
+        'new_num_phases': board.num_phases
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def add_phase(request, board_id):
+    """
+    Add a new phase to a board (increments num_phases).
+
+    Args:
+        board_id: The board ID
+
+    Returns:
+        JSON response with success/error status and new phase count
+    """
+    from kanban.permission_utils import user_has_board_permission
+
+    board = get_object_or_404(Board, id=board_id)
+
+    # Check permissions
+    if not user_has_board_permission(request.user, board, 'board.edit'):
+        return JsonResponse({
+            'success': False,
+            'error': 'You do not have permission to modify this board.'
+        }, status=403)
+
+    # Validate max phases (reasonable limit)
+    max_phases = 10
+    current_phases = board.num_phases if hasattr(board, 'num_phases') else 0
+
+    if current_phases >= max_phases:
+        return JsonResponse({
+            'success': False,
+            'error': f'Maximum number of phases ({max_phases}) reached.'
+        }, status=400)
+
+    # Increment num_phases
+    board.num_phases = current_phases + 1
+    board.save()
+
+    return JsonResponse({
+        'success': True,
+        'message': f'Phase {board.num_phases} added successfully.',
+        'new_num_phases': board.num_phases,
+        'new_phase_name': f'Phase {board.num_phases}'
+    })
+
