@@ -193,6 +193,11 @@ def _refresh_task_dates(now, base_date):
     """
     Refresh task due_date and start_date fields.
     ONLY refreshes original seed demo data, not user-created content.
+    
+    IMPORTANT: This function now respects phase ordering to ensure that:
+    - Phase 1 tasks have dates BEFORE Phase 2 tasks
+    - Phase 2 tasks have dates BEFORE Phase 3 tasks
+    This maintains proper Gantt chart display order.
     """
     try:
         from kanban.models import Task
@@ -217,54 +222,65 @@ def _refresh_task_dates(now, base_date):
         if not tasks:
             return 0
         
-        # Identify tasks for overdue scenarios (keep a consistent small number overdue)
-        incomplete_tasks = [t for t in tasks if t.progress < 100 and 
-                          t.column and t.column.name.lower() not in ['done', 'closed', 'completed']]
-        target_overdue_count = 5
-        overdue_candidates = incomplete_tasks[:target_overdue_count]
+        # Define phase date ranges to ensure strict chronological order
+        # Each phase spans about 3 weeks with clear gaps between phases
+        # Phase 1: day -5 to day 16 (about 3 weeks, mostly past/current)
+        # Phase 2: day 18 to day 39 (about 3 weeks, current/future)
+        # Phase 3: day 41 to day 62 (about 3 weeks, future)
+        phase_config = {
+            'Phase 1': {'start_offset': -5, 'end_offset': 16, 'duration': 21},
+            'Phase 2': {'start_offset': 18, 'end_offset': 39, 'duration': 21},
+            'Phase 3': {'start_offset': 41, 'end_offset': 62, 'duration': 21},
+        }
+        
+        # Default phase config for tasks without a phase
+        default_phase = {'start_offset': -30, 'end_offset': 30, 'duration': 60}
         
         tasks_to_update = []
-        overdue_set_count = 0
         
         for task in tasks:
             if not task.due_date and not task.start_date:
                 continue
             
+            # Get phase configuration
+            phase_name = getattr(task, 'phase', None) or ''
+            phase_cfg = phase_config.get(phase_name, default_phase)
+            
+            # Get task's position within its phase (based on task ID for consistency)
+            # This ensures tasks within a phase are spread across the phase's date range
+            phase_start = phase_cfg['start_offset']
+            phase_duration = phase_cfg['duration']
+            
+            # Calculate position within phase based on task ID
+            # Use modulo to get a value between 0 and phase_duration
+            position_in_phase = task.id % phase_duration
+            
+            # Adjust position based on column status (earlier for done, later for backlog)
             column_name = task.column.name.lower() if task.column else ''
             
-            # Determine if this should be an overdue task
-            is_designated_overdue = (task in overdue_candidates and 
-                                    overdue_set_count < target_overdue_count)
-            
-            if is_designated_overdue:
-                days_offset = -(3 + (task.id % 8))  # -3 to -10 days
-                overdue_set_count += 1
-            elif column_name in ['done', 'closed', 'completed']:
-                if task.progress == 100:
-                    days_offset = -(task.id % 60 + 3)  # -3 to -63 days
-                else:
-                    days_offset = -(task.id % 10 + 1)  # -1 to -11 days
+            if column_name in ['done', 'closed', 'completed']:
+                # Completed tasks should be in the earlier portion of the phase
+                position_in_phase = min(position_in_phase, phase_duration // 2)
             elif column_name in ['review', 'testing', 'reviewing', 'in review']:
-                days_offset = (task.id % 11) - 5  # -5 to +5 days
+                # Review tasks should be in the middle portion
+                position_in_phase = (phase_duration // 4) + (position_in_phase % (phase_duration // 2))
             elif column_name in ['in progress', 'in-progress', 'working', 'investigating']:
-                days_offset = (task.id % 26) - 10  # -10 to +15 days
-            elif column_name in ['to do', 'to-do', 'todo', 'planning', 'ready']:
-                days_offset = (task.id % 19) + 2  # +2 to +20 days
-            elif column_name in ['backlog', 'ideas', 'future', 'new']:
-                days_offset = (task.id % 46) + 15  # +15 to +60 days
-            else:
-                days_offset = (task.id % 61) - 30  # -30 to +30 days
+                # In progress tasks should be around the middle-to-later portion
+                position_in_phase = (phase_duration // 3) + (position_in_phase % (phase_duration // 2))
+            elif column_name in ['to do', 'to-do', 'todo', 'planning', 'ready', 'backlog']:
+                # To do/backlog tasks should be in the later portion of the phase
+                position_in_phase = (phase_duration // 2) + (position_in_phase % (phase_duration // 2))
             
-            # Set the new due date
-            if task.due_date:
-                task.due_date = now + timedelta(days=days_offset)
+            # Calculate the start date within the phase
+            start_days_offset = phase_start + position_in_phase
             
-            # Set start_date based on complexity or fixed duration
-            if task.start_date or task.due_date:
-                duration = getattr(task, 'complexity_score', 5) or 5
-                duration = max(3, min(duration * 2, 21))  # 3-21 days
-                if task.due_date:
-                    task.start_date = base_date + timedelta(days=days_offset - duration)
+            # Task duration based on complexity (3-7 days)
+            duration = getattr(task, 'complexity_score', 5) or 5
+            duration = max(3, min((duration // 2) + 2, 7))  # 3-7 days
+            
+            # Set start_date and due_date
+            task.start_date = base_date + timedelta(days=start_days_offset)
+            task.due_date = now + timedelta(days=start_days_offset + duration)
             
             tasks_to_update.append(task)
         
@@ -277,7 +293,6 @@ def _refresh_task_dates(now, base_date):
             for task in tasks_to_update:
                 if task.start_date:
                     # created_at should be 1-7 days before start_date
-                    import random
                     days_before = (task.id % 7) + 1  # Deterministic based on task ID
                     if hasattr(task.start_date, 'date'):
                         created_date = task.start_date - timedelta(days=days_before)
