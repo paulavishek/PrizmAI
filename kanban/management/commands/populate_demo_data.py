@@ -811,44 +811,44 @@ class Command(BaseCommand):
         # Software dependencies - within phases
         if len(software_tasks) >= 20:
             # Phase 1 dependencies
-            software_tasks[2].blocked_by.add(software_tasks[0])  # Auth depends on env setup
-            software_tasks[3].blocked_by.add(software_tasks[1])  # API depends on schema
-            software_tasks[6].blocked_by.add(software_tasks[2])  # Registration depends on auth
+            software_tasks[2].dependencies.add(software_tasks[0])  # Auth depends on env setup
+            software_tasks[3].dependencies.add(software_tasks[1])  # API depends on schema
+            software_tasks[6].dependencies.add(software_tasks[2])  # Registration depends on auth
 
             # Phase 2 dependencies
-            software_tasks[10].blocked_by.add(software_tasks[3])  # Dashboard depends on API
-            software_tasks[13].blocked_by.add(software_tasks[3])  # User API depends on base API
+            software_tasks[10].dependencies.add(software_tasks[3])  # Dashboard depends on API
+            software_tasks[13].dependencies.add(software_tasks[3])  # User API depends on base API
 
             # Cross-phase dependencies
-            software_tasks[20].blocked_by.add(software_tasks[10])  # Perf opt depends on dashboard
+            software_tasks[20].dependencies.add(software_tasks[10])  # Perf opt depends on dashboard
 
         self.stdout.write('   ✅ Software Development dependencies created')
 
         # Marketing dependencies
         if len(marketing_tasks) >= 20:
-            marketing_tasks[4].blocked_by.add(marketing_tasks[2])  # Content strategy after personas
-            marketing_tasks[10].blocked_by.add(marketing_tasks[4])  # Blog posts after strategy
-            marketing_tasks[15].blocked_by.add(marketing_tasks[14])  # Design pages after copy
-            marketing_tasks[20].blocked_by.add(marketing_tasks[19])  # Launch after calendar
+            marketing_tasks[4].dependencies.add(marketing_tasks[2])  # Content strategy after personas
+            marketing_tasks[10].dependencies.add(marketing_tasks[4])  # Blog posts after strategy
+            marketing_tasks[15].dependencies.add(marketing_tasks[14])  # Design pages after copy
+            marketing_tasks[20].dependencies.add(marketing_tasks[19])  # Launch after calendar
 
         self.stdout.write('   ✅ Marketing Campaign dependencies created')
 
         # Bug dependencies
         if len(bug_tasks) >= 20:
-            bug_tasks[3].blocked_by.add(bug_tasks[0])  # Password hash after SQL fix
-            bug_tasks[10].blocked_by.add(bug_tasks[5])  # Memory leak after DB leak
+            bug_tasks[3].dependencies.add(bug_tasks[0])  # Password hash after SQL fix
+            bug_tasks[10].dependencies.add(bug_tasks[5])  # Memory leak after DB leak
 
         self.stdout.write('   ✅ Bug Tracking dependencies created')
 
     def create_lean_labels(self, software_board, marketing_board, bug_board):
         """Create Lean Six Sigma labels for all boards"""
         lean_labels = [
-            {'name': 'Muda', 'color': '#dc3545', 'description': 'Waste - Non-value adding activity'},
-            {'name': 'Mura', 'color': '#fd7e14', 'description': 'Unevenness - Irregular workload'},
-            {'name': 'Muri', 'color': '#ffc107', 'description': 'Overburden - Excessive strain'},
-            {'name': 'Kaizen', 'color': '#28a745', 'description': 'Continuous improvement opportunity'},
-            {'name': '5S', 'color': '#17a2b8', 'description': 'Sort, Set, Shine, Standardize, Sustain'},
-            {'name': 'Poka-yoke', 'color': '#6f42c1', 'description': 'Error-proofing needed'},
+            {'name': 'Muda', 'color': '#dc3545'},
+            {'name': 'Mura', 'color': '#fd7e14'},
+            {'name': 'Muri', 'color': '#ffc107'},
+            {'name': 'Kaizen', 'color': '#28a745'},
+            {'name': '5S', 'color': '#17a2b8'},
+            {'name': 'Poka-yoke', 'color': '#6f42c1'},
         ]
 
         for board in [software_board, marketing_board, bug_board]:
@@ -858,7 +858,7 @@ class Command(BaseCommand):
                     name=label_data['name'],
                     defaults={
                         'color': label_data['color'],
-                        'description': label_data['description'],
+                        'category': 'lean',
                     }
                 )
 
@@ -984,7 +984,7 @@ class Command(BaseCommand):
                         user=user,
                         hours_spent=hours,
                         description=f"Worked on {task.title[:30]}",
-                        entry_date=entry_date.date(),
+                        work_date=entry_date,
                     )
                     entries_created += 1
 
@@ -992,6 +992,7 @@ class Command(BaseCommand):
 
     def create_budget_roi_data(self, software_board, marketing_board, bug_board, admin_user):
         """Create budget and ROI data for all demo boards"""
+        now = timezone.now().date()
         budget_configs = [
             {'board': software_board, 'budget': Decimal('75000.00'), 'hours': Decimal('1200.0'), 'name': 'Software Development'},
             {'board': marketing_board, 'budget': Decimal('35000.00'), 'hours': Decimal('600.0'), 'name': 'Marketing Campaign'},
@@ -1029,10 +1030,8 @@ class Command(BaseCommand):
                 # Some tasks over budget for realistic demo
                 if i % 5 == 0:
                     actual_cost = estimated_cost * Decimal('1.25')
-                    actual_hours = estimated_hours * Decimal('1.3')
                 else:
                     actual_cost = estimated_cost * Decimal(random.uniform(0.7, 1.1))
-                    actual_hours = estimated_hours * Decimal(random.uniform(0.8, 1.1))
 
                 TaskCost.objects.get_or_create(
                     task=task,
@@ -1040,20 +1039,22 @@ class Command(BaseCommand):
                         'estimated_cost': estimated_cost,
                         'actual_cost': actual_cost.quantize(Decimal('0.01')),
                         'estimated_hours': estimated_hours,
-                        'actual_hours': actual_hours.quantize(Decimal('0.01')),
-                        'created_by': admin_user,
                     }
                 )
                 task_costs_created += 1
 
             # Create ROI record
+            total_tasks = Task.objects.filter(column__board=board).count()
+            completed_tasks = Task.objects.filter(column__board=board, progress=100).count()
             roi, created = ProjectROI.objects.get_or_create(
                 board=board,
+                snapshot_date__date=now,
                 defaults={
-                    'expected_revenue': config['budget'] * Decimal('2.5'),
-                    'expected_cost_savings': config['budget'] * Decimal('0.3'),
-                    'strategic_value_score': random.randint(7, 10),
-                    'risk_adjustment_factor': Decimal(random.uniform(0.8, 0.95)).quantize(Decimal('0.01')),
+                    'expected_value': config['budget'] * Decimal('2.5'),
+                    'realized_value': config['budget'] * Decimal('0.3'),
+                    'total_cost': config['budget'] * Decimal('0.8'),
+                    'total_tasks': total_tasks,
+                    'completed_tasks': completed_tasks,
                     'created_by': admin_user,
                 }
             )
@@ -1065,28 +1066,54 @@ class Command(BaseCommand):
         now = timezone.now().date()
 
         for board in [software_board, marketing_board, bug_board]:
+            # Clean up old burndown predictions for this board
+            BurndownPrediction.objects.filter(board=board).delete()
+            TeamVelocitySnapshot.objects.filter(board=board).delete()
+            
             # Create 4 weeks of velocity snapshots
             for week in range(4):
-                snapshot_date = now - timedelta(weeks=week)
+                period_end = now - timedelta(weeks=week)
+                period_start = period_end - timedelta(days=7)
 
                 TeamVelocitySnapshot.objects.get_or_create(
                     board=board,
-                    snapshot_date=snapshot_date.date(),
+                    period_start=period_start,
+                    period_end=period_end,
                     defaults={
-                        'completed_points': random.randint(15, 35),
-                        'planned_points': random.randint(25, 40),
-                        'team_capacity': random.randint(30, 45),
+                        'period_type': 'weekly',
+                        'tasks_completed': random.randint(8, 15),
+                        'story_points_completed': Decimal(random.randint(15, 35)),
+                        'hours_completed': Decimal(random.randint(30, 50)),
+                        'active_team_members': random.randint(3, 6),
                     }
                 )
 
             # Create burndown prediction
+            total_tasks = random.randint(25, 40)
+            completed_tasks = random.randint(10, 20)
+            remaining_tasks = total_tasks - completed_tasks
+            days_until_completion = random.randint(20, 45)
+            
             BurndownPrediction.objects.get_or_create(
                 board=board,
                 defaults={
-                    'predicted_completion_date': now + timedelta(days=random.randint(20, 45)),
-                    'confidence_level': random.randint(70, 95),
-                    'remaining_points': random.randint(30, 80),
-                    'average_velocity': Decimal(random.uniform(20, 35)).quantize(Decimal('0.01')),
+                    'prediction_type': 'burndown',
+                    'total_tasks': total_tasks,
+                    'completed_tasks': completed_tasks,
+                    'remaining_tasks': remaining_tasks,
+                    'total_story_points': Decimal(random.randint(80, 120)),
+                    'completed_story_points': Decimal(random.randint(30, 50)),
+                    'remaining_story_points': Decimal(random.randint(30, 70)),
+                    'current_velocity': Decimal(random.uniform(5, 10)).quantize(Decimal('0.01')),
+                    'average_velocity': Decimal(random.uniform(6, 12)).quantize(Decimal('0.01')),
+                    'velocity_std_dev': Decimal(random.uniform(1, 3)).quantize(Decimal('0.01')),
+                    'velocity_trend': 'stable',
+                    'predicted_completion_date': now + timedelta(days=days_until_completion),
+                    'completion_date_lower_bound': now + timedelta(days=days_until_completion - 5),
+                    'completion_date_upper_bound': now + timedelta(days=days_until_completion + 10),
+                    'days_until_completion_estimate': days_until_completion,
+                    'days_margin_of_error': 7,
+                    'confidence_percentage': 90,
                 }
             )
 
@@ -1094,6 +1121,7 @@ class Command(BaseCommand):
 
     def create_retrospective_data(self, software_board, marketing_board, bug_board, alex, sam, jordan):
         """Create retrospective data for demo boards"""
+        now = timezone.now().date()
         boards = [
             (software_board, 'Software Development Sprint'),
             (marketing_board, 'Marketing Campaign Review'),
@@ -1101,13 +1129,26 @@ class Command(BaseCommand):
         ]
 
         for board, title_prefix in boards:
+            week_num = random.randint(1, 12)
             retro, created = ProjectRetrospective.objects.get_or_create(
                 board=board,
-                title=f'{title_prefix} - Week {random.randint(1, 12)}',
+                title=f'{title_prefix} - Week {week_num}',
                 defaults={
-                    'status': 'completed',
-                    'facilitator': alex,
-                    'summary': f'Team reviewed progress and identified improvement areas for {board.name}.',
+                    'retrospective_type': 'sprint',
+                    'status': 'finalized',
+                    'period_start': now - timedelta(weeks=2),
+                    'period_end': now - timedelta(weeks=1),
+                    'what_went_well': f'Team showed good collaboration and met sprint goals for {board.name}.',
+                    'what_needs_improvement': 'Consider improving code review turnaround time.',
+                    'lessons_learned': [
+                        {'title': 'Daily standups improve coordination', 'category': 'process'},
+                        {'title': 'Clear requirements reduce rework', 'category': 'communication'}
+                    ],
+                    'improvement_recommendations': [
+                        {'title': 'Add code review guidelines', 'priority': 'high'},
+                        {'title': 'Implement pair programming for complex tasks', 'priority': 'medium'}
+                    ],
+                    'created_by': alex,
                 }
             )
 
@@ -1122,20 +1163,24 @@ class Command(BaseCommand):
                 for lesson in lessons:
                     LessonLearned.objects.create(
                         retrospective=retro,
+                        board=board,
                         category=lesson['category'],
                         title=lesson['title'],
                         description=f'Detailed insight about {lesson["title"].lower()}',
-                        impact_level='high' if random.random() > 0.5 else 'medium',
-                        created_by=random.choice([alex, sam, jordan]),
+                        recommended_action=f'Apply {lesson["title"].lower()} in next sprint',
+                        priority='high' if random.random() > 0.5 else 'medium',
+                        status='identified',
                     )
 
                 # Add action items
                 RetrospectiveActionItem.objects.create(
                     retrospective=retro,
+                    board=board,
                     title='Implement suggested improvement',
                     description='Follow up on retrospective discussion',
+                    action_type='process_change',
                     assigned_to=sam,
-                    due_date=(timezone.now() + timedelta(days=14)).date(),
+                    target_completion_date=(timezone.now() + timedelta(days=14)).date(),
                     priority='high',
                     status='in_progress',
                 )
@@ -1146,22 +1191,22 @@ class Command(BaseCommand):
         """Create AI coaching suggestions for demo boards"""
         suggestions = [
             {
-                'category': 'workload',
+                'suggestion_type': 'resource_overload',
                 'title': 'Team workload imbalance detected',
-                'description': 'Sam has 60% more tasks than other team members. Consider redistributing work.',
-                'priority': 'high',
+                'message': 'Sam has 60% more tasks than other team members. Consider redistributing work.',
+                'severity': 'high',
             },
             {
-                'category': 'deadline',
+                'suggestion_type': 'deadline_risk',
                 'title': 'Deadline risk identified',
-                'description': 'Based on current velocity, the beta release milestone may slip by 3 days.',
-                'priority': 'medium',
+                'message': 'Based on current velocity, the beta release milestone may slip by 3 days.',
+                'severity': 'medium',
             },
             {
-                'category': 'efficiency',
+                'suggestion_type': 'best_practice',
                 'title': 'Process improvement opportunity',
-                'description': 'Tasks in review stage average 4 days. Consider adding reviewers.',
-                'priority': 'low',
+                'message': 'Tasks in review stage average 4 days. Consider adding reviewers.',
+                'severity': 'low',
             },
         ]
 
@@ -1171,24 +1216,12 @@ class Command(BaseCommand):
                     board=board,
                     title=suggestion['title'],
                     defaults={
-                        'category': suggestion['category'],
-                        'description': suggestion['description'],
-                        'priority': suggestion['priority'],
-                        'is_dismissed': False,
+                        'suggestion_type': suggestion['suggestion_type'],
+                        'message': suggestion['message'],
+                        'severity': suggestion['severity'],
+                        'status': 'active',
                     }
                 )
-
-            # Create PM metrics
-            PMMetrics.objects.get_or_create(
-                board=board,
-                defaults={
-                    'overall_health_score': random.randint(70, 95),
-                    'schedule_performance_index': Decimal(random.uniform(0.85, 1.15)).quantize(Decimal('0.01')),
-                    'cost_performance_index': Decimal(random.uniform(0.9, 1.1)).quantize(Decimal('0.01')),
-                    'team_utilization': random.randint(75, 95),
-                    'risk_score': random.randint(20, 50),
-                }
-            )
 
         self.stdout.write('   ✅ AI coaching suggestions created')
 
@@ -1244,9 +1277,8 @@ class Command(BaseCommand):
             TaskActivity.objects.create(
                 task=task,
                 user=task.created_by or alex,
-                action_type='created',
+                activity_type='created',
                 description=random.choice(ACTIVITY_TEMPLATES['created']),
-                created_at=now - timedelta(days=random.randint(7, 30)),
             )
             activities_created += 1
 
@@ -1255,8 +1287,8 @@ class Command(BaseCommand):
                 num_activities = random.randint(1, 3)
 
                 for i in range(num_activities):
-                    action_type = random.choice(['updated', 'moved', 'commented'])
-                    templates = ACTIVITY_TEMPLATES.get(action_type, ['performed an action'])
+                    activity_type = random.choice(['updated', 'moved', 'commented'])
+                    templates = ACTIVITY_TEMPLATES.get(activity_type, ['performed an action'])
                     description = random.choice(templates)
 
                     # Fill in template variables
@@ -1272,9 +1304,8 @@ class Command(BaseCommand):
                     TaskActivity.objects.create(
                         task=task,
                         user=random.choice(users),
-                        action_type=action_type,
+                        activity_type=activity_type,
                         description=description,
-                        created_at=now - timedelta(days=random.randint(1, 7)),
                     )
                     activities_created += 1
 
@@ -1295,11 +1326,12 @@ class Command(BaseCommand):
                 stakeholder, created = ProjectStakeholder.objects.get_or_create(
                     board=board,
                     email=data['email'],
+                    name=data['name'],
                     defaults={
-                        'name': data['name'],
                         'role': data['role'],
                         'influence_level': data['influence'],
-                        'communication_preference': random.choice(['email', 'slack', 'meeting']),
+                        'interest_level': 'medium',
+                        'created_by': alex,
                     }
                 )
 
@@ -1315,8 +1347,9 @@ class Command(BaseCommand):
                 stakeholder=stakeholder,
                 task=task,
                 defaults={
-                    'involvement_type': random.choice(['reviewer', 'informed', 'consulted']),
-                    'notes': f'Involved in {task.title[:30]}',
+                    'involvement_type': random.choice(['reviewer', 'observer', 'contributor']),
+                    'engagement_status': random.choice(['informed', 'consulted', 'involved']),
+                    'feedback': f'Involved in {task.title[:30]}',
                 }
             )
 
@@ -1324,36 +1357,9 @@ class Command(BaseCommand):
 
     def create_file_attachments(self, tasks, alex, sam, jordan):
         """Create simulated file attachment metadata for tasks"""
-        users = [alex, sam, jordan]
-        file_types = [
-            {'name': 'requirements.pdf', 'type': 'application/pdf', 'size': 245000},
-            {'name': 'mockup.png', 'type': 'image/png', 'size': 1250000},
-            {'name': 'data_export.csv', 'type': 'text/csv', 'size': 89000},
-            {'name': 'meeting_notes.docx', 'type': 'application/docx', 'size': 156000},
-            {'name': 'screenshot.jpg', 'type': 'image/jpeg', 'size': 420000},
-            {'name': 'design_spec.pdf', 'type': 'application/pdf', 'size': 890000},
-        ]
-
-        attachments_created = 0
-        tasks_only = [t for t in tasks if t.item_type == 'task']
-
-        for task in tasks_only:
-            # 30% chance of having attachments
-            if random.random() < 0.3:
-                num_files = random.randint(1, 3)
-                for _ in range(num_files):
-                    file_data = random.choice(file_types)
-                    TaskFile.objects.create(
-                        task=task,
-                        uploaded_by=random.choice(users),
-                        original_filename=file_data['name'],
-                        file_type=file_data['type'],
-                        file_size=file_data['size'],
-                        # Note: file field left empty as these are simulated
-                    )
-                    attachments_created += 1
-
-        self.stdout.write(f'   ✅ Created {attachments_created} file attachments')
+        # Skip file attachments since they require actual file uploads
+        # which can't be simulated in demo data
+        self.stdout.write('   ✅ File attachments skipped (requires actual file uploads)')
 
     def create_wiki_links(self, tasks, demo_org, alex):
         """Create wiki links for tasks (if wiki system exists)"""
