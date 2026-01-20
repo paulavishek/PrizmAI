@@ -881,7 +881,20 @@
             newBarWrapper.addEventListener('click', function(e) {
                 const taskId = this.getAttribute('data-id');
                 if (taskId) {
-                    window.location.href = `/tasks/${taskId}/`;
+                    // Check if this is a phase bar (id starts with 'phase-')
+                    if (taskId.startsWith('phase-')) {
+                        // Extract phase name and toggle
+                        const phaseNum = taskId.replace('phase-', '');
+                        const phaseName = `Phase ${phaseNum}`;
+                        togglePhase(phaseName);
+                    } else if (taskId.startsWith('milestone-')) {
+                        // Navigate to milestone task detail
+                        const milestoneId = taskId.replace('milestone-', '');
+                        window.location.href = `/tasks/${milestoneId}/`;
+                    } else {
+                        // Navigate to regular task detail
+                        window.location.href = `/tasks/${taskId}/`;
+                    }
                 }
             });
         });
@@ -1466,17 +1479,28 @@
             return;
         }
 
+        console.log('=== renderGanttWithPhases called ===');
+        console.log('phasesData:', phasesData);
+        console.log('numPhases:', numPhases);
+
         let ganttData = [];
 
         // Build data based on current view state
-        for (const [phaseName, data] of Object.entries(phasesData)) {
-            if (!data.start || !data.end) continue;
+        // Iterate phases in numerical order (Phase 1, Phase 2, Phase 3...)
+        for (let i = 1; i <= numPhases; i++) {
+            const phaseName = `Phase ${i}`;
+            const data = phasesData[phaseName];
+            console.log(`Processing ${phaseName}:`, data);
+            if (!data || !data.start || !data.end) {
+                console.warn(`Skipping ${phaseName} - missing data or dates`);
+                continue;
+            }
 
             const phaseId = phaseName.replace(' ', '-').toLowerCase();
             const isExpanded = expandedPhases.has(phaseName);
 
-            // Add phase bar
-            ganttData.push({
+            // Add phase bar with all required fields to match task structure
+            const phaseBar = {
                 id: phaseId,
                 name: `${phaseName} ${isExpanded ? '▼' : '▶'} (${data.task_count} tasks, ${data.milestone_count} milestones)`,
                 fullName: phaseName,
@@ -1486,9 +1510,17 @@
                 dependencies: '',
                 custom_class: 'phase-bar',
                 priority: 'phase',
+                status: 'phase',
+                assigned_to: '',
+                assignee_first_name: '',
+                assignee_last_name: '',
+                item_type: 'phase',
+                phase: phaseName,
                 isPhase: true,
                 phaseName: phaseName
-            });
+            };
+            console.log(`Adding phase bar for ${phaseName}:`, phaseBar);
+            ganttData.push(phaseBar);
 
             // If expanded, add tasks and milestones for this phase
             if (isExpanded) {
@@ -1515,8 +1547,35 @@
 
         // If no valid phase data, fall back to all tasks view
         if (ganttData.length === 0) {
+            console.warn('No valid phase data, falling back to all tasks view');
             initGantt(currentViewMode);
             return;
+        }
+
+        // Log final gantt data to debug ordering
+        console.log('Final ganttData order:', ganttData.map(d => ({ id: d.id, name: d.name, start: d.start, end: d.end, isPhase: d.isPhase })));
+
+        // WORKAROUND: Frappe Gantt sorts by start date internally
+        // To maintain phase order (1, 2, 3), we need to ensure Phase 1 starts earliest
+        // Add a small visual hack: prepend phase number to ensure correct display order
+        const phaseItems = ganttData.filter(d => d.isPhase);
+        if (phaseItems.length > 1) {
+            // Check if phases are out of order by start date
+            let needsReordering = false;
+            for (let i = 1; i < phaseItems.length; i++) {
+                if (new Date(phaseItems[i].start) < new Date(phaseItems[i-1].start)) {
+                    needsReordering = true;
+                    break;
+                }
+            }
+            
+            if (needsReordering) {
+                console.warn('Phases are out of chronological order - Gantt library will reorder them by start date');
+                // Add phase number prefix to names for visual clarity
+                phaseItems.forEach((phase, idx) => {
+                    phase.name = `[${idx + 1}] ` + phase.name;
+                });
+            }
         }
 
         // Re-initialize Gantt with phase data
@@ -1545,11 +1604,13 @@
             padding: 20,
             date_format: 'YYYY-MM-DD',
             language: 'en',
+            auto_move_label: false,
             custom_popup_html: null,
             popup_trigger: 'none',
             on_click: function(task) {
                 if (task.isPhase) {
                     togglePhase(task.phaseName);
+                    return false; // Prevent navigation for phase bars
                 } else if (task.isMilestone) {
                     const milestoneId = task.id.replace('milestone-', '');
                     window.location.href = `/tasks/${milestoneId}/`;

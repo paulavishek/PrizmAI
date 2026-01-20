@@ -1372,7 +1372,9 @@ def gantt_chart(request, board_id):
     # Solo demo mode: full access, no restrictions
     
     # Get tasks for this board with dependencies prefetched for Gantt chart
-    tasks = Task.objects.filter(column__board=board).select_related('column', 'assigned_to').prefetch_related('dependencies').order_by('phase', 'start_date', 'due_date')
+    # Don't order by 'phase' field as string since it causes Phase 2 to come before Phase 1
+    # Instead, we'll sort phases numerically in JavaScript when rendering
+    tasks = Task.objects.filter(column__board=board).select_related('column', 'assigned_to').prefetch_related('dependencies').order_by('start_date', 'due_date')
 
     # Calculate phase timelines for phase-based Gantt chart view
     phases_data = {}

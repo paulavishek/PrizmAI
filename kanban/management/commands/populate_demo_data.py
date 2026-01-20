@@ -478,7 +478,8 @@ class Command(BaseCommand):
         items = []
         now = timezone.now().date()
 
-        # Phase 1: Foundation & Setup (days -45 to -15)
+        # Phase 1: Foundation & Setup (days -60 to -31)
+        # Ensure phases don't overlap for proper Gantt chart ordering
         phase1_tasks = [
             {'title': 'Set up development environment', 'desc': 'Configure Docker, CI/CD pipelines, and development tools', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 100, 'column': done_col},
             {'title': 'Design database schema', 'desc': 'Create ERD and define core database models for multi-tenancy', 'priority': 'high', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': done_col},
@@ -493,11 +494,11 @@ class Command(BaseCommand):
         ]
 
         phase1_milestones = [
-            {'title': 'Project Kickoff', 'desc': 'Development environment ready and team onboarded', 'due_offset': -45, 'progress': 100},
-            {'title': 'Foundation Complete', 'desc': 'Core infrastructure and authentication ready', 'due_offset': -15, 'progress': 100},
+            {'title': 'Project Kickoff', 'desc': 'Development environment ready and team onboarded', 'due_offset': -60, 'progress': 100},
+            {'title': 'Foundation Complete', 'desc': 'Core infrastructure and authentication ready', 'due_offset': -31, 'progress': 100},
         ]
 
-        # Phase 2: Core Features (days -14 to +14)
+        # Phase 2: Core Features (days -30 to -1)
         phase2_tasks = [
             {'title': 'Build dashboard UI', 'desc': 'Create responsive dashboard with charts and widgets', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 80, 'column': review_col},
             {'title': 'Implement file upload system', 'desc': 'Support multiple file types with S3 storage', 'priority': 'medium', 'complexity': 6, 'assignee': sam, 'progress': 60, 'column': in_progress_col},
@@ -512,11 +513,11 @@ class Command(BaseCommand):
         ]
 
         phase2_milestones = [
-            {'title': 'MVP Features Complete', 'desc': 'Core user-facing features implemented', 'due_offset': 0, 'progress': 0},
-            {'title': 'Internal Beta Ready', 'desc': 'Application ready for internal testing', 'due_offset': 14, 'progress': 0},
+            {'title': 'MVP Features Complete', 'desc': 'Core user-facing features implemented', 'due_offset': -15, 'progress': 0},
+            {'title': 'Internal Beta Ready', 'desc': 'Application ready for internal testing', 'due_offset': -1, 'progress': 0},
         ]
 
-        # Phase 3: Polish & Launch (days +15 to +45)
+        # Phase 3: Polish & Launch (days 0 to +45)
         phase3_tasks = [
             {'title': 'Performance optimization', 'desc': 'Database query optimization and caching', 'priority': 'high', 'complexity': 8, 'assignee': sam, 'progress': 0, 'column': backlog_col},
             {'title': 'Security audit fixes', 'desc': 'Address findings from penetration testing', 'priority': 'urgent', 'complexity': 7, 'assignee': sam, 'progress': 0, 'column': backlog_col},
@@ -537,7 +538,7 @@ class Command(BaseCommand):
 
         # Create Phase 1 items
         for i, t in enumerate(phase1_tasks):
-            start = now + timedelta(days=-45 + i * 3)
+            start = now + timedelta(days=-60 + i * 3)
             due = start + timedelta(days=random.randint(3, 7))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
@@ -559,7 +560,7 @@ class Command(BaseCommand):
 
         # Create Phase 2 items
         for i, t in enumerate(phase2_tasks):
-            start = now + timedelta(days=-14 + i * 3)
+            start = now + timedelta(days=-30 + i * 3)
             due = start + timedelta(days=random.randint(5, 10))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
@@ -581,7 +582,7 @@ class Command(BaseCommand):
 
         # Create Phase 3 items
         for i, t in enumerate(phase3_tasks):
-            start = now + timedelta(days=15 + i * 3)
+            start = now + timedelta(days=0 + i * 4)
             due = start + timedelta(days=random.randint(5, 10))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
@@ -613,7 +614,8 @@ class Command(BaseCommand):
         items = []
         now = timezone.now().date()
 
-        # Phase 1: Planning & Strategy (days -30 to -10)
+        # Phase 1: Planning & Strategy (days -60 to -31)
+        # Ensure phases don't overlap for proper Gantt chart ordering
         phase1_tasks = [
             {'title': 'Market research analysis', 'desc': 'Analyze target audience and competitor landscape', 'priority': 'high', 'complexity': 7, 'assignee': jordan, 'progress': 100, 'column': done_col},
             {'title': 'Define campaign objectives', 'desc': 'Set SMART goals and KPIs for the campaign', 'priority': 'high', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done_col},
@@ -628,11 +630,11 @@ class Command(BaseCommand):
         ]
 
         phase1_milestones = [
-            {'title': 'Strategy Approved', 'desc': 'Campaign strategy signed off by stakeholders', 'due_offset': -25, 'progress': 100},
-            {'title': 'Planning Complete', 'desc': 'All planning deliverables finalized', 'due_offset': -10, 'progress': 100},
+            {'title': 'Strategy Approved', 'desc': 'Campaign strategy signed off by stakeholders', 'due_offset': -55, 'progress': 100},
+            {'title': 'Planning Complete', 'desc': 'All planning deliverables finalized', 'due_offset': -31, 'progress': 100},
         ]
 
-        # Phase 2: Content Creation (days -9 to +10)
+        # Phase 2: Content Creation (days -30 to -1)
         phase2_tasks = [
             {'title': 'Write blog posts', 'desc': 'Create 5 SEO-optimized blog articles', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 80, 'column': review_col},
             {'title': 'Design social media graphics', 'desc': 'Create visual assets for all platforms', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 60, 'column': in_progress_col},
@@ -647,11 +649,11 @@ class Command(BaseCommand):
         ]
 
         phase2_milestones = [
-            {'title': 'Content Review', 'desc': 'All content reviewed and approved', 'due_offset': 5, 'progress': 0},
-            {'title': 'Assets Ready', 'desc': 'All creative assets finalized', 'due_offset': 10, 'progress': 0},
+            {'title': 'Content Review', 'desc': 'All content reviewed and approved', 'due_offset': -15, 'progress': 0},
+            {'title': 'Assets Ready', 'desc': 'All creative assets finalized', 'due_offset': -1, 'progress': 0},
         ]
 
-        # Phase 3: Launch & Optimization (days +11 to +30)
+        # Phase 3: Launch & Optimization (days 0 to +45)
         phase3_tasks = [
             {'title': 'Launch social campaigns', 'desc': 'Activate campaigns across social platforms', 'priority': 'urgent', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
             {'title': 'Start email campaigns', 'desc': 'Launch automated email sequences', 'priority': 'high', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
@@ -667,7 +669,7 @@ class Command(BaseCommand):
 
         phase3_milestones = [
             {'title': 'Campaign Launch', 'desc': 'Official campaign launch across all channels', 'due_offset': 15, 'progress': 0},
-            {'title': 'Campaign Completion', 'desc': 'Campaign ended and results documented', 'due_offset': 30, 'progress': 0},
+            {'title': 'Campaign Completion', 'desc': 'Campaign ended and results documented', 'due_offset': 45, 'progress': 0},
         ]
 
         # Create all phases
@@ -677,7 +679,7 @@ class Command(BaseCommand):
             (phase3_tasks, phase3_milestones),
         ], start=1):
             phase_name = f'Phase {phase_num}'
-            base_offset = [-30, -9, 11][phase_num - 1]
+            base_offset = [-60, -30, 0][phase_num - 1]
 
             for i, t in enumerate(tasks):
                 start = now + timedelta(days=base_offset + i * 2)
@@ -712,7 +714,7 @@ class Command(BaseCommand):
         items = []
         now = timezone.now().date()
 
-        # Phase 1: Critical & Security Bugs (days -20 to -5)
+        # Phase 1: Critical & Security Bugs (days -60 to -31)
         phase1_tasks = [
             {'title': 'Fix SQL injection vulnerability', 'desc': 'Patch user input sanitization in search', 'priority': 'urgent', 'complexity': 7, 'assignee': sam, 'progress': 100, 'column': done_col},
             {'title': 'Fix authentication bypass', 'desc': 'Close security hole in session handling', 'priority': 'urgent', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': done_col},
@@ -727,11 +729,11 @@ class Command(BaseCommand):
         ]
 
         phase1_milestones = [
-            {'title': 'Critical Bugs Fixed', 'desc': 'All critical/urgent bugs resolved', 'due_offset': -10, 'progress': 100},
-            {'title': 'Security Audit Passed', 'desc': 'External security audit complete', 'due_offset': -5, 'progress': 100},
+            {'title': 'Critical Bugs Fixed', 'desc': 'All critical/urgent bugs resolved', 'due_offset': -45, 'progress': 100},
+            {'title': 'Security Audit Passed', 'desc': 'External security audit complete', 'due_offset': -31, 'progress': 100},
         ]
 
-        # Phase 2: High Priority Bugs (days -4 to +10)
+        # Phase 2: High Priority Bugs (days -30 to -1)
         phase2_tasks = [
             {'title': 'Fix memory leak in worker', 'desc': 'Background worker memory grows over time', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 80, 'column': review_col},
             {'title': 'Fix slow dashboard load', 'desc': 'Dashboard takes 10+ seconds to load', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 60, 'column': in_progress_col},
@@ -746,11 +748,11 @@ class Command(BaseCommand):
         ]
 
         phase2_milestones = [
-            {'title': 'High Priority Fixed', 'desc': 'All high priority bugs resolved', 'due_offset': 5, 'progress': 0},
-            {'title': 'Performance Targets Met', 'desc': 'All pages load under 2 seconds', 'due_offset': 10, 'progress': 0},
+            {'title': 'High Priority Fixed', 'desc': 'All high priority bugs resolved', 'due_offset': -15, 'progress': 0},
+            {'title': 'Performance Targets Met', 'desc': 'All pages load under 2 seconds', 'due_offset': -1, 'progress': 0},
         ]
 
-        # Phase 3: Medium/Low Priority & Polish (days +11 to +25)
+        # Phase 3: Medium/Low Priority & Polish (days 0 to +45)
         phase3_tasks = [
             {'title': 'Fix form validation messages', 'desc': 'Error messages not displaying correctly', 'priority': 'medium', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
             {'title': 'Fix print stylesheet', 'desc': 'Reports don\'t print correctly', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
@@ -765,8 +767,8 @@ class Command(BaseCommand):
         ]
 
         phase3_milestones = [
-            {'title': 'All Bugs Resolved', 'desc': 'Zero known bugs remaining', 'due_offset': 20, 'progress': 0},
-            {'title': 'QA Sign-off', 'desc': 'Quality assurance approved for release', 'due_offset': 25, 'progress': 0},
+            {'title': 'All Bugs Resolved', 'desc': 'Zero known bugs remaining', 'due_offset': 25, 'progress': 0},
+            {'title': 'QA Sign-off', 'desc': 'Quality assurance approved for release', 'due_offset': 45, 'progress': 0},
         ]
 
         # Create all phases
@@ -776,7 +778,7 @@ class Command(BaseCommand):
             (phase3_tasks, phase3_milestones),
         ], start=1):
             phase_name = f'Phase {phase_num}'
-            base_offset = [-20, -4, 11][phase_num - 1]
+            base_offset = [-60, -30, 0][phase_num - 1]
 
             for i, t in enumerate(tasks):
                 start = now + timedelta(days=base_offset + i * 2)
