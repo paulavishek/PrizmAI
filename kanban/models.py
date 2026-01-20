@@ -1,4 +1,5 @@
-﻿from django.db import models
+﻿from datetime import date
+from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.db.models import Q, Sum, Avg, Count
@@ -561,7 +562,11 @@ class Task(models.Model):
             
             # Calculate actual duration if start_date exists
             if self.start_date:
-                duration = (self.completed_at.date() - self.start_date).days
+                # start_date is a DateField (datetime.date), completed_at is DateTimeField
+                # Convert to dates before subtraction
+                completion_date = self.completed_at.date() if hasattr(self.completed_at, 'date') else self.completed_at
+                start_date_val = self.start_date if isinstance(self.start_date, date) else self.start_date.date()
+                duration = (completion_date - start_date_val).days
                 self.actual_duration_days = max(0.5, duration)  # Minimum 0.5 days
         
         # Reset completion if progress drops below 100

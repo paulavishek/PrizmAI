@@ -476,7 +476,7 @@ class Command(BaseCommand):
         review_col = columns.get('In Review') or in_progress_col
         done_col = columns.get('Done') or review_col
         items = []
-        now = timezone.now()
+        now = timezone.now().date()
 
         # Phase 1: Foundation & Setup (days -45 to -15)
         phase1_tasks = [
@@ -611,7 +611,7 @@ class Command(BaseCommand):
         review_col = columns.get('In Review') or in_progress_col
         done_col = columns.get('Done') or review_col
         items = []
-        now = timezone.now()
+        now = timezone.now().date()
 
         # Phase 1: Planning & Strategy (days -30 to -10)
         phase1_tasks = [
@@ -710,7 +710,7 @@ class Command(BaseCommand):
         review_col = columns.get('In Review') or in_progress_col
         done_col = columns.get('Done') or review_col
         items = []
-        now = timezone.now()
+        now = timezone.now().date()
 
         # Phase 1: Critical & Security Bugs (days -20 to -5)
         phase1_tasks = [
@@ -963,7 +963,7 @@ class Command(BaseCommand):
     def create_time_tracking_data(self, tasks, alex, sam, jordan):
         """Create time entries for tasks"""
         users = [alex, sam, jordan]
-        now = timezone.now()
+        now = timezone.now().date()
         entries_created = 0
 
         for task in tasks:
@@ -1062,7 +1062,7 @@ class Command(BaseCommand):
 
     def create_burndown_data(self, software_board, marketing_board, bug_board):
         """Create burndown and velocity snapshot data"""
-        now = timezone.now()
+        now = timezone.now().date()
 
         for board in [software_board, marketing_board, bug_board]:
             # Create 4 weeks of velocity snapshots
@@ -1196,7 +1196,7 @@ class Command(BaseCommand):
         """Create realistic comments for tasks"""
         users = [alex, sam, jordan]
         comments_created = 0
-        now = timezone.now()
+        now = timezone.now().date()
 
         for task in tasks:
             if task.item_type == 'milestone':
@@ -1234,7 +1234,7 @@ class Command(BaseCommand):
         """Create activity logs for tasks"""
         users = [alex, sam, jordan]
         activities_created = 0
-        now = timezone.now()
+        now = timezone.now().date()
 
         for task in tasks:
             if task.item_type == 'milestone':
