@@ -536,10 +536,20 @@ class Command(BaseCommand):
             {'title': 'Production Launch', 'desc': 'Official production release', 'due_offset': 45, 'progress': 0},
         ]
 
+        # Define phase date ranges to ensure strict chronological order without overlap
+        # Phase 1: day -5 to day 16 (about 3 weeks)
+        # Phase 2: day 18 to day 39 (about 3 weeks)  
+        # Phase 3: day 41 to day 62 (about 3 weeks)
+        phase_config = [
+            {'start_offset': -5, 'milestone_offsets': [0, 16]},   # Phase 1
+            {'start_offset': 18, 'milestone_offsets': [30, 39]},  # Phase 2
+            {'start_offset': 41, 'milestone_offsets': [55, 62]},  # Phase 3
+        ]
+        
         # Create Phase 1 items
         for i, t in enumerate(phase1_tasks):
-            start = now + timedelta(days=-60 + i * 3)
-            due = start + timedelta(days=random.randint(3, 7))
+            start = now + timedelta(days=phase_config[0]['start_offset'] + i * 2)
+            due = start + timedelta(days=random.randint(3, 5))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -549,19 +559,19 @@ class Command(BaseCommand):
             )
             items.append(task)
 
-        for m in phase1_milestones:
+        for idx, m in enumerate(phase1_milestones):
             milestone = Task.objects.create(
                 column=backlog_col, title=m['title'], description=m['desc'],
                 priority='high', created_by=alex, progress=m['progress'],
-                due_date=now + timedelta(days=m['due_offset']),
+                due_date=now + timedelta(days=phase_config[0]['milestone_offsets'][idx]),
                 item_type='milestone', phase='Phase 1', is_seed_demo_data=True,
             )
             items.append(milestone)
 
         # Create Phase 2 items
         for i, t in enumerate(phase2_tasks):
-            start = now + timedelta(days=-30 + i * 3)
-            due = start + timedelta(days=random.randint(5, 10))
+            start = now + timedelta(days=phase_config[1]['start_offset'] + i * 2)
+            due = start + timedelta(days=random.randint(3, 5))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -571,19 +581,19 @@ class Command(BaseCommand):
             )
             items.append(task)
 
-        for m in phase2_milestones:
+        for idx, m in enumerate(phase2_milestones):
             milestone = Task.objects.create(
                 column=backlog_col, title=m['title'], description=m['desc'],
                 priority='high', created_by=alex, progress=m['progress'],
-                due_date=now + timedelta(days=m['due_offset']),
+                due_date=now + timedelta(days=phase_config[1]['milestone_offsets'][idx]),
                 item_type='milestone', phase='Phase 2', is_seed_demo_data=True,
             )
             items.append(milestone)
 
         # Create Phase 3 items
         for i, t in enumerate(phase3_tasks):
-            start = now + timedelta(days=0 + i * 4)
-            due = start + timedelta(days=random.randint(5, 10))
+            start = now + timedelta(days=phase_config[2]['start_offset'] + i * 2)
+            due = start + timedelta(days=random.randint(3, 5))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -593,11 +603,11 @@ class Command(BaseCommand):
             )
             items.append(task)
 
-        for m in phase3_milestones:
+        for idx, m in enumerate(phase3_milestones):
             milestone = Task.objects.create(
                 column=backlog_col, title=m['title'], description=m['desc'],
                 priority='high', created_by=alex, progress=m['progress'],
-                due_date=now + timedelta(days=m['due_offset']),
+                due_date=now + timedelta(days=phase_config[2]['milestone_offsets'][idx]),
                 item_type='milestone', phase='Phase 3', is_seed_demo_data=True,
             )
             items.append(milestone)
@@ -672,6 +682,14 @@ class Command(BaseCommand):
             {'title': 'Campaign Completion', 'desc': 'Campaign ended and results documented', 'due_offset': 45, 'progress': 0},
         ]
 
+        # Define phase date ranges to ensure strict chronological order without overlap
+        # Phase 1: day -5 to day 16, Phase 2: day 18 to day 39, Phase 3: day 41 to day 62
+        phase_config = [
+            {'start_offset': -5, 'milestone_offsets': [0, 16]},   # Phase 1
+            {'start_offset': 18, 'milestone_offsets': [30, 39]},  # Phase 2
+            {'start_offset': 41, 'milestone_offsets': [55, 62]},  # Phase 3
+        ]
+        
         # Create all phases
         for phase_num, (tasks, milestones) in enumerate([
             (phase1_tasks, phase1_milestones),
@@ -679,11 +697,11 @@ class Command(BaseCommand):
             (phase3_tasks, phase3_milestones),
         ], start=1):
             phase_name = f'Phase {phase_num}'
-            base_offset = [-60, -30, 0][phase_num - 1]
+            config = phase_config[phase_num - 1]
 
             for i, t in enumerate(tasks):
-                start = now + timedelta(days=base_offset + i * 2)
-                due = start + timedelta(days=random.randint(3, 7))
+                start = now + timedelta(days=config['start_offset'] + i * 2)
+                due = start + timedelta(days=random.randint(3, 5))
                 task = Task.objects.create(
                     column=t['column'], title=t['title'], description=t['desc'],
                     priority=t['priority'], complexity_score=t['complexity'],
@@ -693,11 +711,11 @@ class Command(BaseCommand):
                 )
                 items.append(task)
 
-            for m in milestones:
+            for idx, m in enumerate(milestones):
                 milestone = Task.objects.create(
                     column=backlog_col, title=m['title'], description=m['desc'],
                     priority='high', created_by=jordan, progress=m['progress'],
-                    due_date=now + timedelta(days=m['due_offset']),
+                    due_date=now + timedelta(days=config['milestone_offsets'][idx]),
                     item_type='milestone', phase=phase_name, is_seed_demo_data=True,
                 )
                 items.append(milestone)
@@ -771,6 +789,14 @@ class Command(BaseCommand):
             {'title': 'QA Sign-off', 'desc': 'Quality assurance approved for release', 'due_offset': 45, 'progress': 0},
         ]
 
+        # Define phase date ranges to ensure strict chronological order without overlap
+        # Phase 1: day -5 to day 16, Phase 2: day 18 to day 39, Phase 3: day 41 to day 62
+        phase_config = [
+            {'start_offset': -5, 'milestone_offsets': [0, 16]},   # Phase 1
+            {'start_offset': 18, 'milestone_offsets': [30, 39]},  # Phase 2
+            {'start_offset': 41, 'milestone_offsets': [55, 62]},  # Phase 3
+        ]
+        
         # Create all phases
         for phase_num, (tasks, milestones) in enumerate([
             (phase1_tasks, phase1_milestones),
@@ -778,11 +804,11 @@ class Command(BaseCommand):
             (phase3_tasks, phase3_milestones),
         ], start=1):
             phase_name = f'Phase {phase_num}'
-            base_offset = [-60, -30, 0][phase_num - 1]
+            config = phase_config[phase_num - 1]
 
             for i, t in enumerate(tasks):
-                start = now + timedelta(days=base_offset + i * 2)
-                due = start + timedelta(days=random.randint(2, 5))
+                start = now + timedelta(days=config['start_offset'] + i * 2)
+                due = start + timedelta(days=random.randint(2, 4))
                 task = Task.objects.create(
                     column=t['column'], title=t['title'], description=t['desc'],
                     priority=t['priority'], complexity_score=t['complexity'],
@@ -792,11 +818,11 @@ class Command(BaseCommand):
                 )
                 items.append(task)
 
-            for m in milestones:
+            for idx, m in enumerate(milestones):
                 milestone = Task.objects.create(
                     column=backlog_col, title=m['title'], description=m['desc'],
                     priority='high', created_by=sam, progress=m['progress'],
-                    due_date=now + timedelta(days=m['due_offset']),
+                    due_date=now + timedelta(days=config['milestone_offsets'][idx]),
                     item_type='milestone', phase=phase_name, is_seed_demo_data=True,
                 )
                 items.append(milestone)
