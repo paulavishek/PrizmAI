@@ -772,10 +772,10 @@
             id: '{{ task.id }}',
             name: '{{ task.title|escapejs }}',
             fullName: '{{ task.title|escapejs }}',
-            start: '{{ task.start_date|date:"Y-m-d" }}',
+            start: '{% if task.item_type == "milestone" %}{{ task.due_date|date:"Y-m-d" }}{% else %}{{ task.start_date|date:"Y-m-d" }}{% endif %}',
             end: '{{ task.due_date|date:"Y-m-d" }}',
             progress: {{ task.progress|default:0 }},
-            dependencies: '{% with deps=task.dependencies.all %}{% if deps %}{% for dep in deps %}{% if dep.start_date and dep.due_date %}{{ dep.id }}{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}{% endif %}{% endwith %}',
+            dependencies: '{% with deps=task.dependencies.all %}{% if deps %}{% for dep in deps %}{% if dep.due_date %}{{ dep.id }}{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}{% endif %}{% endwith %}',
             custom_class: 'status-{{ task.column.name|lower|cut:" " }}',
             status: '{% if "done" in task.column.name|lower %}done{% elif "progress" in task.column.name|lower %}in_progress{% else %}todo{% endif %}',
             priority: '{{ task.priority }}',
@@ -783,7 +783,8 @@
             assignee_first_name: '{% if task.assigned_to %}{{ task.assigned_to.first_name|escapejs }}{% endif %}',
             assignee_last_name: '{% if task.assigned_to %}{{ task.assigned_to.last_name|escapejs }}{% endif %}',
             item_type: '{{ task.item_type|default:"task" }}',
-            phase: '{{ task.phase|default:""|escapejs }}'
+            phase: '{{ task.phase|default:""|escapejs }}',
+            isMilestone: {% if task.item_type == "milestone" %}true{% else %}false{% endif %}
         }{% if not forloop.last %},{% endif %}
         {% endfor %}
     ];
@@ -907,10 +908,21 @@
     function applyCustomStyling() {
         // Add custom attributes for styling
         tasks.forEach(task => {
-            const barElement = document.querySelector(`.bar-wrapper[data-id="${task.id}"] .bar`);
+            const barWrapper = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
+            if (!barWrapper) return;
+            
+            const barElement = barWrapper.querySelector('.bar');
             if (barElement) {
                 // Set priority attribute for color styling
                 barElement.setAttribute('data-priority', task.priority);
+                
+                // Handle milestones - render as diamonds
+                if (task.isMilestone || task.item_type === 'milestone') {
+                    barWrapper.setAttribute('data-is-milestone', 'true');
+                    barElement.setAttribute('data-is-milestone', 'true');
+                    const label = barWrapper.querySelector('.bar-label');
+                    createMilestoneDiamond(barWrapper, barElement, label, task.fullName || task.name);
+                }
             }
         });
 
@@ -1593,19 +1605,21 @@
             if (isExpanded) {
                 const phaseTasks = tasks.filter(t => t.phase === phaseName);
                 phaseTasks.forEach(task => {
-                    // Only include tasks/milestones with valid dates
-                    if (!task.start || !task.end || task.start === 'None' || task.end === 'None') return;
+                    // Only include tasks/milestones with valid end date
+                    if (!task.end || task.end === 'None' || task.end === '') return;
 
-                    if (task.item_type === 'milestone') {
+                    if (task.item_type === 'milestone' || task.isMilestone) {
                         // Milestones: use due_date as both start and end
+                        // Keep the original ID so dependencies work correctly
                         ganttData.push({
                             ...task,
-                            id: `milestone-${task.id}`,
                             name: `◆ ${task.name}`,
                             start: task.end,  // Milestones only have due_date
                             isMilestone: true
                         });
                     } else {
+                        // Regular tasks - only include if they have valid start date
+                        if (!task.start || task.start === 'None' || task.start === '') return;
                         ganttData.push(task);
                     }
                 });
@@ -1721,6 +1735,9 @@
         // Remove existing milestone diamonds to prevent duplicates
         ganttSvg.querySelectorAll('.milestone-diamond-group').forEach(el => el.remove());
 
+        // Get the current gantt data to check isMilestone property
+        const currentTasks = ganttChart ? ganttChart.tasks : tasks;
+
         // Style phase bars and create milestone diamonds
         document.querySelectorAll('.gantt .bar-wrapper').forEach(wrapper => {
             const bar = wrapper.querySelector('.bar');
@@ -1736,8 +1753,14 @@
                     bar.style.cursor = 'pointer';
                 }
 
-                // Check if this is a milestone (starts with diamond symbol or has milestone id)
-                if (taskName.startsWith('◆') || (taskId && taskId.startsWith('milestone-'))) {
+                // Check if this is a milestone
+                // Look for: diamond symbol in name, milestone- prefix in ID, or isMilestone in task data
+                const taskData = currentTasks.find(t => String(t.id) === String(taskId));
+                const isMilestone = taskName.startsWith('\u25c6') || 
+                                   (taskId && taskId.startsWith('milestone-')) ||
+                                   (taskData && (taskData.isMilestone || taskData.item_type === 'milestone'));
+                
+                if (isMilestone) {
                     wrapper.setAttribute('data-is-milestone', 'true');
                     bar.setAttribute('data-is-milestone', 'true');
                     
