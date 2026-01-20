@@ -236,53 +236,51 @@ def _refresh_task_dates(now, base_date):
         # Default phase config for tasks without a phase
         default_phase = {'start_offset': -30, 'end_offset': 30, 'duration': 60}
         
-        tasks_to_update = []
-        
+        # Group tasks by phase for even distribution
+        tasks_by_phase = {}
         for task in tasks:
             if not task.due_date and not task.start_date:
                 continue
-            
-            # Get phase configuration
-            phase_name = getattr(task, 'phase', None) or ''
+            phase_name = getattr(task, 'phase', None) or 'No Phase'
+            if phase_name not in tasks_by_phase:
+                tasks_by_phase[phase_name] = []
+            tasks_by_phase[phase_name].append(task)
+        
+        tasks_to_update = []
+        
+        for phase_name, phase_tasks in tasks_by_phase.items():
             phase_cfg = phase_config.get(phase_name, default_phase)
-            
-            # Get task's position within its phase (based on task ID for consistency)
-            # This ensures tasks within a phase are spread across the phase's date range
             phase_start = phase_cfg['start_offset']
             phase_duration = phase_cfg['duration']
             
-            # Calculate position within phase based on task ID
-            # Use modulo to get a value between 0 and phase_duration
-            position_in_phase = task.id % phase_duration
+            # Calculate spacing to distribute tasks evenly across the phase
+            num_tasks = len(phase_tasks)
+            if num_tasks <= 1:
+                spacing = 0
+            else:
+                # Leave room for task duration at the end (about 5 days)
+                usable_duration = max(phase_duration - 5, phase_duration // 2)
+                spacing = usable_duration / (num_tasks - 1) if num_tasks > 1 else 0
             
-            # Adjust position based on column status (earlier for done, later for backlog)
-            column_name = task.column.name.lower() if task.column else ''
+            # Sort tasks by ID for consistent ordering
+            phase_tasks_sorted = sorted(phase_tasks, key=lambda t: t.id)
             
-            if column_name in ['done', 'closed', 'completed']:
-                # Completed tasks should be in the earlier portion of the phase
-                position_in_phase = min(position_in_phase, phase_duration // 2)
-            elif column_name in ['review', 'testing', 'reviewing', 'in review']:
-                # Review tasks should be in the middle portion
-                position_in_phase = (phase_duration // 4) + (position_in_phase % (phase_duration // 2))
-            elif column_name in ['in progress', 'in-progress', 'working', 'investigating']:
-                # In progress tasks should be around the middle-to-later portion
-                position_in_phase = (phase_duration // 3) + (position_in_phase % (phase_duration // 2))
-            elif column_name in ['to do', 'to-do', 'todo', 'planning', 'ready', 'backlog']:
-                # To do/backlog tasks should be in the later portion of the phase
-                position_in_phase = (phase_duration // 2) + (position_in_phase % (phase_duration // 2))
-            
-            # Calculate the start date within the phase
-            start_days_offset = phase_start + position_in_phase
-            
-            # Task duration based on complexity (3-7 days)
-            duration = getattr(task, 'complexity_score', 5) or 5
-            duration = max(3, min((duration // 2) + 2, 7))  # 3-7 days
-            
-            # Set start_date and due_date
-            task.start_date = base_date + timedelta(days=start_days_offset)
-            task.due_date = now + timedelta(days=start_days_offset + duration)
-            
-            tasks_to_update.append(task)
+            for idx, task in enumerate(phase_tasks_sorted):
+                # Calculate position within phase - evenly distributed
+                position_in_phase = int(idx * spacing) if spacing > 0 else 0
+                
+                # Calculate the start date within the phase
+                start_days_offset = phase_start + position_in_phase
+                
+                # Task duration based on complexity (3-6 days)
+                complexity = getattr(task, 'complexity_score', 5) or 5
+                duration = max(3, min((complexity // 2) + 3, 6))  # 3-6 days
+                
+                # Set start_date and due_date
+                task.start_date = base_date + timedelta(days=start_days_offset)
+                task.due_date = now + timedelta(days=start_days_offset + duration)
+                
+                tasks_to_update.append(task)
         
         if tasks_to_update:
             Task.objects.bulk_update(tasks_to_update, ['due_date', 'start_date'], batch_size=500)

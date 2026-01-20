@@ -706,6 +706,19 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/frappe-gantt@0.6.1/dist/frappe-gantt.min.js"></script>
 <script>
+    // Suppress known Frappe Gantt library errors related to $bar
+    // These occur during mouse interactions when bars are not yet rendered
+    window.addEventListener('error', function(event) {
+        if (event.message && (
+            event.message.includes("Cannot read properties of undefined (reading '$bar')") ||
+            event.message.includes("Cannot read properties of undefined (reading 'group')")
+        )) {
+            event.preventDefault();
+            event.stopPropagation();
+            return true; // Suppress the error
+        }
+    }, true);
+    
     {% if tasks %}
     // Collect all task IDs for validation
     const allTaskIds = new Set([{% for task in tasks %}'{{ task.id }}'{% if not forloop.last %},{% endif %}{% endfor %}]);
