@@ -500,6 +500,34 @@
         ry: 0;
     }
 
+    /* Hide the regular bar for milestones - we'll draw a diamond instead */
+    .gantt .bar-wrapper[data-is-milestone="true"] .bar {
+        opacity: 0 !important;
+    }
+
+    /* Milestone diamond SVG element */
+    .milestone-diamond-shape {
+        fill: #f59e0b;
+        stroke: #d97706;
+        stroke-width: 1.5;
+        cursor: pointer;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
+        transition: all 0.2s ease;
+    }
+
+    .milestone-diamond-shape:hover {
+        fill: #fbbf24;
+        filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25));
+        transform-origin: center;
+    }
+
+    .milestone-label {
+        font-size: 11px;
+        font-weight: 600;
+        fill: #92400e !important;
+        pointer-events: none;
+    }
+
     /* Phase collapse indicator */
     .phase-indicator {
         font-size: 0.75rem;
@@ -867,6 +895,11 @@
             setTimeout(() => {
                 enhanceDependencyArrows();
             }, 600);
+            
+            // Final cleanup pass for any remaining arrow issues
+            setTimeout(() => {
+                enhanceDependencyArrows();
+            }, 1000);
         }
     }
 
@@ -934,44 +967,65 @@
             ganttSvg.insertBefore(defs, ganttSvg.firstChild);
         }
 
-        // Remove ALL existing markers to start fresh
-        defs.querySelectorAll('marker').forEach(m => m.remove());
+        // Check if our custom arrowhead already exists
+        let existingMarker = defs.querySelector('#arrowhead-custom');
+        if (!existingMarker) {
+            // Create ONE clean arrowhead marker with unique ID
+            const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+            marker.setAttribute('id', 'arrowhead-custom');
+            marker.setAttribute('markerWidth', '10');
+            marker.setAttribute('markerHeight', '10');
+            marker.setAttribute('refX', '9');
+            marker.setAttribute('refY', '5');
+            marker.setAttribute('orient', 'auto');
+            marker.setAttribute('markerUnits', 'strokeWidth');
 
-        // Create ONE clean arrowhead marker
-        const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-        marker.setAttribute('id', 'arrowhead');
-        marker.setAttribute('markerWidth', '6');
-        marker.setAttribute('markerHeight', '6');
-        marker.setAttribute('refX', '5');
-        marker.setAttribute('refY', '3');
-        marker.setAttribute('orient', 'auto');
+            // Clean filled triangle arrowhead
+            const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            polygon.setAttribute('points', '0,0 10,5 0,10 2,5');
+            polygon.setAttribute('fill', '#64748b');
 
-        // Simple clean triangle
-        const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-        polygon.setAttribute('points', '0,0 6,3 0,6');
-        polygon.setAttribute('fill', '#64748b');
+            marker.appendChild(polygon);
+            defs.appendChild(marker);
+        }
 
-        marker.appendChild(polygon);
-        defs.appendChild(marker);
-
-        // Remove ALL standalone polygons (the distorted default arrows)
+        // Remove ALL standalone polygons outside of defs (the distorted default arrows)
         ganttSvg.querySelectorAll('polygon').forEach(polygon => {
-            if (!polygon.closest('defs')) {
+            // Keep polygons in defs (markers) and milestone diamonds
+            if (!polygon.closest('defs') && !polygon.classList.contains('milestone-diamond-shape')) {
                 polygon.remove();
             }
         });
 
-        // Style all arrow paths
+        // Style all arrow paths with proper attributes
         ganttSvg.querySelectorAll('path').forEach(path => {
             const className = path.getAttribute('class') || '';
 
-            // Only target arrow paths
+            // Only target arrow paths (frappe-gantt uses 'arrow' class)
             if (className.includes('arrow')) {
+                // Apply clean styling
                 path.setAttribute('stroke', '#64748b');
                 path.setAttribute('stroke-width', '2');
+                path.setAttribute('stroke-linecap', 'round');
+                path.setAttribute('stroke-linejoin', 'round');
                 path.setAttribute('fill', 'none');
-                path.setAttribute('marker-end', 'url(#arrowhead)');
+                path.setAttribute('marker-end', 'url(#arrowhead-custom)');
+                path.style.opacity = '0.85';
+                
+                // Remove any inline polygon styling that might interfere
+                path.querySelectorAll('polygon').forEach(p => p.remove());
             }
+        });
+
+        // Also look for paths inside .arrow groups
+        ganttSvg.querySelectorAll('.arrow path, g.arrow path').forEach(path => {
+            path.setAttribute('stroke', '#64748b');
+            path.setAttribute('stroke-width', '2');
+            path.setAttribute('stroke-linecap', 'round');
+            path.setAttribute('stroke-linejoin', 'round');
+            path.setAttribute('fill', 'none');
+            path.setAttribute('marker-end', 'url(#arrowhead-custom)');
+            path.style.opacity = '0.85';
         });
     }
 
@@ -1643,18 +1697,35 @@
             }
         });
 
-        // Apply custom styling after render
+        // Apply custom styling after render with multiple passes for reliability
         setTimeout(() => {
             applyPhaseAndMilestoneStyling();
-        }, 100);
+        }, 150);
+        
+        // Additional pass for dependency arrows (they render later)
+        setTimeout(() => {
+            enhanceDependencyArrows();
+        }, 400);
+        
+        // Final cleanup pass
+        setTimeout(() => {
+            enhanceDependencyArrows();
+        }, 800);
     }
 
     // Apply custom styling for phases and milestones
     function applyPhaseAndMilestoneStyling() {
-        // Style phase bars
+        const ganttSvg = document.querySelector('#gantt');
+        if (!ganttSvg) return;
+
+        // Remove existing milestone diamonds to prevent duplicates
+        ganttSvg.querySelectorAll('.milestone-diamond-group').forEach(el => el.remove());
+
+        // Style phase bars and create milestone diamonds
         document.querySelectorAll('.gantt .bar-wrapper').forEach(wrapper => {
             const bar = wrapper.querySelector('.bar');
             const label = wrapper.querySelector('.bar-label');
+            const taskId = wrapper.getAttribute('data-id');
 
             if (bar && label) {
                 const taskName = label.textContent || '';
@@ -1665,16 +1736,82 @@
                     bar.style.cursor = 'pointer';
                 }
 
-                // Check if this is a milestone (starts with diamond symbol)
-                if (taskName.startsWith('◆')) {
+                // Check if this is a milestone (starts with diamond symbol or has milestone id)
+                if (taskName.startsWith('◆') || (taskId && taskId.startsWith('milestone-'))) {
+                    wrapper.setAttribute('data-is-milestone', 'true');
                     bar.setAttribute('data-is-milestone', 'true');
-                    // Transform bar to diamond shape (CSS will handle styling)
+                    
+                    // Create actual diamond shape
+                    createMilestoneDiamond(wrapper, bar, label, taskName);
                 }
             }
         });
 
         // Also apply standard styling
         applyCustomStyling();
+    }
+
+    // Create a diamond shape for milestones
+    function createMilestoneDiamond(wrapper, bar, label, taskName) {
+        const ganttSvg = document.querySelector('#gantt');
+        if (!ganttSvg) return;
+
+        let barRect;
+        try {
+            barRect = bar.getBBox();
+        } catch (e) {
+            return;
+        }
+
+        if (barRect.width <= 0 || barRect.height <= 0) return;
+
+        // Create SVG group for the diamond
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.setAttribute('class', 'milestone-diamond-group');
+
+        // Diamond size and position (centered on the bar position)
+        const diamondSize = 16;
+        const centerX = barRect.x + barRect.width / 2;
+        const centerY = barRect.y + barRect.height / 2;
+
+        // Create diamond polygon (rotated square)
+        const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        const points = [
+            `${centerX},${centerY - diamondSize}`,      // top
+            `${centerX + diamondSize},${centerY}`,      // right
+            `${centerX},${centerY + diamondSize}`,      // bottom
+            `${centerX - diamondSize},${centerY}`       // left
+        ].join(' ');
+        diamond.setAttribute('points', points);
+        diamond.setAttribute('class', 'milestone-diamond-shape');
+        group.appendChild(diamond);
+
+        // Create label text (positioned to the right of diamond)
+        const milestoneLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        const displayName = taskName.replace('◆ ', '').substring(0, 20) + (taskName.length > 22 ? '...' : '');
+        milestoneLabel.textContent = displayName;
+        milestoneLabel.setAttribute('x', centerX + diamondSize + 8);
+        milestoneLabel.setAttribute('y', centerY);
+        milestoneLabel.setAttribute('class', 'milestone-label');
+        milestoneLabel.setAttribute('dominant-baseline', 'middle');
+        group.appendChild(milestoneLabel);
+
+        // Hide the original bar and label
+        bar.style.opacity = '0';
+        label.style.display = 'none';
+
+        // Add click handler to diamond
+        const taskId = wrapper.getAttribute('data-id');
+        diamond.style.cursor = 'pointer';
+        diamond.addEventListener('click', function() {
+            if (taskId && taskId.startsWith('milestone-')) {
+                const milestoneId = taskId.replace('milestone-', '');
+                window.location.href = `/tasks/${milestoneId}/`;
+            }
+        });
+
+        // Insert diamond group into the wrapper
+        wrapper.appendChild(group);
     }
 
     // Initialize phase view on load if phases exist
