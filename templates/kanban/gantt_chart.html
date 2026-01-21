@@ -1734,6 +1734,18 @@
             return;
         }
 
+        // IMPORTANT: Filter out dependencies that point to tasks not in current view
+        // This prevents frappe-gantt errors when it tries to render arrows to non-existent tasks
+        const visibleTaskIds = new Set(ganttData.map(d => d.id));
+        ganttData.forEach(task => {
+            if (task.dependencies) {
+                const validDeps = task.dependencies.split(',')
+                    .map(id => id.trim())
+                    .filter(id => id && visibleTaskIds.has(id));
+                task.dependencies = validDeps.join(',');
+            }
+        });
+
         // Log final gantt data to debug ordering
         console.log('Final ganttData order:', ganttData.map(d => ({ id: d.id, name: d.name, start: d.start, end: d.end, isPhase: d.isPhase })));
 

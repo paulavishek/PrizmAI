@@ -2633,6 +2633,7 @@ def get_board_dependency_graph_api(request, board_id):
 def update_task_dates_api(request):
     """
     Update task start_date and due_date from Gantt chart
+    Supports both authenticated users and demo mode (anonymous users)
     """
     try:
         data = json.loads(request.body)
@@ -2647,8 +2648,24 @@ def update_task_dates_api(request):
         
         # Verify user has access
         board = task.column.board
-        if not (request.user in board.members.all() or board.created_by == request.user):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        
+        # Check if this is a demo board
+        is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
+        is_demo_mode = request.session.get('is_demo_mode', False)
+        demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
+        
+        # For non-demo boards, require authentication and membership
+        if not (is_demo_board and is_demo_mode):
+            if not request.user.is_authenticated:
+                return JsonResponse({'error': 'Authentication required'}, status=401)
+            if not (request.user in board.members.all() or board.created_by == request.user):
+                return JsonResponse({'error': 'Access denied'}, status=403)
+        elif demo_mode_type == 'team':
+            # Demo team mode: check role-based permissions
+            from kanban.utils.demo_permissions import DemoPermissions
+            if not DemoPermissions.can_perform_action(request, 'can_edit_tasks'):
+                return JsonResponse({'error': 'Permission denied for this demo role'}, status=403)
+        # Solo demo mode: full access, no restrictions
         
         # Update dates
         if start_date:
@@ -2666,15 +2683,23 @@ def update_task_dates_api(request):
                 # Set to end of day
                 task.due_date = datetime.strptime(due_date + ' 23:59:59', '%Y-%m-%d %H:%M:%S')
         
+        # For demo mode, mark the task as user-modified so date refresh won't overwrite
+        if is_demo_board and is_demo_mode:
+            session_id = request.session.get('browser_fingerprint') or request.session.session_key
+            if session_id and not task.created_by_session:
+                task.created_by_session = session_id
+            task.is_seed_demo_data = False
+        
         task.save()
         
-        # Log activity
-        TaskActivity.objects.create(
-            task=task,
-            user=request.user,
-            activity_type='updated',
-            description=f'Updated task dates: {start_date} to {due_date}'
-        )
+        # Log activity (only for authenticated users)
+        if request.user.is_authenticated:
+            TaskActivity.objects.create(
+                task=task,
+                user=request.user,
+                activity_type='updated',
+                description=f'Updated task dates: {start_date} to {due_date}'
+            )
         
         return JsonResponse({
             'success': True,

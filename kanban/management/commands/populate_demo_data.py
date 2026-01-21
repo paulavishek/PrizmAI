@@ -837,99 +837,65 @@ class Command(BaseCommand):
         return items
 
     def create_dependencies(self, software_tasks, marketing_tasks, bug_tasks):
-        """Create comprehensive task dependencies within each board for proper Gantt chart visualization"""
+        """Create task dependencies WITHIN each phase only (no inter-phase dependencies)
+        
+        This simplifies the Gantt chart visualization by keeping dependencies
+        contained within each phase, making it easier to view and understand.
+        """
         # Filter to only tasks (not milestones)
         software_tasks = [t for t in software_tasks if t.item_type == 'task']
         marketing_tasks = [t for t in marketing_tasks if t.item_type == 'task']
         bug_tasks = [t for t in bug_tasks if t.item_type == 'task']
 
-        # Software Development dependencies - create a realistic workflow
+        # Software Development dependencies - INTRA-PHASE ONLY
         # Phase 1 (indices 0-9): Foundation & Setup
-        # Phase 2 (indices 10-19): Core Features
+        # Phase 2 (indices 10-19): Core Features  
         # Phase 3 (indices 20-29): Polish & Launch
         if len(software_tasks) >= 30:
-            # Phase 1 dependency chain (Foundation)
+            # Phase 1 dependency chain (tasks 0-9)
             # Task 0: Set up dev environment (no dependencies - first task)
-            # Task 1: Design database schema
             software_tasks[1].dependencies.add(software_tasks[0])  # Schema depends on env
-            # Task 2: Implement user authentication
             software_tasks[2].dependencies.add(software_tasks[0])  # Auth depends on env
             software_tasks[2].dependencies.add(software_tasks[1])  # Auth depends on schema
-            # Task 3: Create base API structure
             software_tasks[3].dependencies.add(software_tasks[1])  # API depends on schema
-            # Task 4: Set up automated testing
             software_tasks[4].dependencies.add(software_tasks[0])  # Testing depends on env
-            # Task 5: Implement logging system
             software_tasks[5].dependencies.add(software_tasks[0])  # Logging depends on env
-            # Task 6: Create user registration flow
             software_tasks[6].dependencies.add(software_tasks[2])  # Registration depends on auth
-            # Task 7: Set up development database
             software_tasks[7].dependencies.add(software_tasks[1])  # Dev DB depends on schema
-            # Task 8: Implement password reset
             software_tasks[8].dependencies.add(software_tasks[2])  # Password reset depends on auth
             software_tasks[8].dependencies.add(software_tasks[6])  # Password reset depends on registration
-            # Task 9: Create project documentation
             software_tasks[9].dependencies.add(software_tasks[3])  # Docs depend on API
 
-            # Phase 2 dependency chain (Core Features) - depends on Phase 1 completion
-            # Task 10: Build dashboard UI
-            software_tasks[10].dependencies.add(software_tasks[3])  # Dashboard depends on API
-            software_tasks[10].dependencies.add(software_tasks[2])  # Dashboard depends on auth
-            # Task 11: Implement file upload system
-            software_tasks[11].dependencies.add(software_tasks[3])  # File upload depends on API
-            # Task 12: Create notification system
-            software_tasks[12].dependencies.add(software_tasks[6])  # Notifications depend on registration
-            # Task 13: Build user management API
-            software_tasks[13].dependencies.add(software_tasks[3])  # User API depends on base API
-            software_tasks[13].dependencies.add(software_tasks[2])  # User API depends on auth
-            # Task 14: Implement search functionality
-            software_tasks[14].dependencies.add(software_tasks[7])  # Search depends on database
-            # Task 15: Create settings page
+            # Phase 2 dependency chain (tasks 10-19) - NO Phase 1 dependencies
+            # Task 10: Build dashboard UI (no dependencies - first task of phase 2)
+            software_tasks[11].dependencies.add(software_tasks[10])  # File upload depends on dashboard
+            software_tasks[12].dependencies.add(software_tasks[10])  # Notifications depend on dashboard
+            software_tasks[13].dependencies.add(software_tasks[10])  # User API depends on dashboard
+            software_tasks[14].dependencies.add(software_tasks[10])  # Search depends on dashboard
             software_tasks[15].dependencies.add(software_tasks[10])  # Settings depends on dashboard
-            # Task 16: Build audit logging
-            software_tasks[16].dependencies.add(software_tasks[5])  # Audit depends on logging
             software_tasks[16].dependencies.add(software_tasks[13])  # Audit depends on user API
-            # Task 17: Implement data export
             software_tasks[17].dependencies.add(software_tasks[14])  # Export depends on search
-            # Task 18: Create email templates
             software_tasks[18].dependencies.add(software_tasks[12])  # Email templates depend on notifications
-            # Task 19: Add two-factor authentication
-            software_tasks[19].dependencies.add(software_tasks[2])  # 2FA depends on auth
-            software_tasks[19].dependencies.add(software_tasks[8])  # 2FA depends on password reset
+            software_tasks[19].dependencies.add(software_tasks[13])  # 2FA depends on user API
 
-            # Phase 3 dependency chain (Polish & Launch) - depends on Phase 2 completion
-            # Task 20: Performance optimization
-            software_tasks[20].dependencies.add(software_tasks[10])  # Perf opt depends on dashboard
-            software_tasks[20].dependencies.add(software_tasks[14])  # Perf opt depends on search
-            # Task 21: Security audit fixes
-            software_tasks[21].dependencies.add(software_tasks[19])  # Security depends on 2FA
-            software_tasks[21].dependencies.add(software_tasks[16])  # Security depends on audit logging
-            # Task 22: Mobile responsive polish
-            software_tasks[22].dependencies.add(software_tasks[10])  # Mobile depends on dashboard
-            software_tasks[22].dependencies.add(software_tasks[15])  # Mobile depends on settings
-            # Task 23: Load testing
+            # Phase 3 dependency chain (tasks 20-29) - NO Phase 1/2 dependencies
+            # Task 20: Performance optimization (no dependencies - first task of phase 3)
+            software_tasks[21].dependencies.add(software_tasks[20])  # Security depends on perf opt
+            software_tasks[22].dependencies.add(software_tasks[20])  # Mobile depends on perf opt
             software_tasks[23].dependencies.add(software_tasks[20])  # Load testing depends on perf opt
-            # Task 24: Create user onboarding
             software_tasks[24].dependencies.add(software_tasks[22])  # Onboarding depends on mobile polish
-            # Task 25: Set up monitoring
-            software_tasks[25].dependencies.add(software_tasks[5])  # Monitoring depends on logging
             software_tasks[25].dependencies.add(software_tasks[20])  # Monitoring depends on perf opt
-            # Task 26: Documentation review
-            software_tasks[26].dependencies.add(software_tasks[9])  # Doc review depends on initial docs
             software_tasks[26].dependencies.add(software_tasks[24])  # Doc review depends on onboarding
-            # Task 27: Accessibility improvements
             software_tasks[27].dependencies.add(software_tasks[22])  # A11y depends on mobile polish
-            # Task 28: Deployment automation
             software_tasks[28].dependencies.add(software_tasks[25])  # Deployment depends on monitoring
             software_tasks[28].dependencies.add(software_tasks[23])  # Deployment depends on load testing
-            # Task 29: Launch preparation
             software_tasks[29].dependencies.add(software_tasks[21])  # Launch depends on security
             software_tasks[29].dependencies.add(software_tasks[26])  # Launch depends on docs
             software_tasks[29].dependencies.add(software_tasks[28])  # Launch depends on deployment
 
-        self.stdout.write('   ✅ Software Development dependencies created (comprehensive)')
+        self.stdout.write('   ✅ Software Development dependencies created (intra-phase only)')
 
-        # Marketing Campaign dependencies
+        # Marketing Campaign dependencies - INTRA-PHASE ONLY
         if len(marketing_tasks) >= 30:
             # Phase 1: Planning & Strategy (0-9)
             marketing_tasks[1].dependencies.add(marketing_tasks[0])  # Objectives depend on research
@@ -942,33 +908,31 @@ class Command(BaseCommand):
             marketing_tasks[8].dependencies.add(marketing_tasks[0])  # Competitor analysis depends on research
             marketing_tasks[9].dependencies.add(marketing_tasks[7])  # Brand guidelines depend on brief
 
-            # Phase 2: Content Creation (10-19)
-            marketing_tasks[10].dependencies.add(marketing_tasks[4])  # Blog posts depend on content strategy
-            marketing_tasks[11].dependencies.add(marketing_tasks[9])  # Social graphics depend on brand guidelines
+            # Phase 2: Content Creation (10-19) - NO Phase 1 dependencies
+            marketing_tasks[11].dependencies.add(marketing_tasks[10])  # Social graphics depend on blog posts
             marketing_tasks[12].dependencies.add(marketing_tasks[11])  # Video depends on graphics
             marketing_tasks[13].dependencies.add(marketing_tasks[10])  # Email sequences depend on blog posts
-            marketing_tasks[14].dependencies.add(marketing_tasks[4])  # Landing page copy depends on strategy
+            marketing_tasks[14].dependencies.add(marketing_tasks[10])  # Landing page copy depends on blog posts
             marketing_tasks[15].dependencies.add(marketing_tasks[14])  # Landing page design depends on copy
             marketing_tasks[16].dependencies.add(marketing_tasks[11])  # Infographics depend on graphics
             marketing_tasks[17].dependencies.add(marketing_tasks[10])  # Case studies depend on blog posts
             marketing_tasks[18].dependencies.add(marketing_tasks[11])  # Ad creatives depend on graphics
             marketing_tasks[19].dependencies.add(marketing_tasks[13])  # Content calendar depends on email
 
-            # Phase 3: Launch & Optimization (20-29)
-            marketing_tasks[20].dependencies.add(marketing_tasks[19])  # Social launch depends on calendar
-            marketing_tasks[21].dependencies.add(marketing_tasks[13])  # Email launch depends on sequences
-            marketing_tasks[22].dependencies.add(marketing_tasks[18])  # Paid ads depend on creatives
+            # Phase 3: Launch & Optimization (20-29) - NO Phase 1/2 dependencies
+            marketing_tasks[21].dependencies.add(marketing_tasks[20])  # Email launch depends on social launch
+            marketing_tasks[22].dependencies.add(marketing_tasks[20])  # Paid ads depend on social launch
             marketing_tasks[23].dependencies.add(marketing_tasks[20])  # Monitoring depends on social launch
-            marketing_tasks[24].dependencies.add(marketing_tasks[15])  # A/B test depends on landing pages
+            marketing_tasks[24].dependencies.add(marketing_tasks[20])  # A/B test depends on social launch
             marketing_tasks[25].dependencies.add(marketing_tasks[22])  # Optimize spend depends on paid ads
             marketing_tasks[26].dependencies.add(marketing_tasks[20])  # Influencer depends on social launch
-            marketing_tasks[27].dependencies.add(marketing_tasks[17])  # PR depends on case studies
+            marketing_tasks[27].dependencies.add(marketing_tasks[20])  # PR depends on social launch
             marketing_tasks[28].dependencies.add(marketing_tasks[23])  # Weekly report depends on monitoring
             marketing_tasks[29].dependencies.add(marketing_tasks[28])  # Retrospective depends on reports
 
-        self.stdout.write('   ✅ Marketing Campaign dependencies created (comprehensive)')
+        self.stdout.write('   ✅ Marketing Campaign dependencies created (intra-phase only)')
 
-        # Bug Tracking dependencies
+        # Bug Tracking dependencies - INTRA-PHASE ONLY
         if len(bug_tasks) >= 30:
             # Phase 1: Critical Bugs (0-9)
             bug_tasks[1].dependencies.add(bug_tasks[0])  # XSS depends on SQL injection
@@ -981,8 +945,7 @@ class Command(BaseCommand):
             bug_tasks[8].dependencies.add(bug_tasks[5])  # Token expiry depends on API auth
             bug_tasks[9].dependencies.add(bug_tasks[6])  # Encryption depends on input validation
 
-            # Phase 2: Performance Bugs (10-19)
-            bug_tasks[10].dependencies.add(bug_tasks[5])  # DB leak depends on API auth
+            # Phase 2: Performance Bugs (10-19) - NO Phase 1 dependencies
             bug_tasks[11].dependencies.add(bug_tasks[10])  # N+1 depends on DB leak
             bug_tasks[12].dependencies.add(bug_tasks[11])  # Slow query depends on N+1
             bug_tasks[13].dependencies.add(bug_tasks[10])  # Memory leak depends on DB leak
@@ -993,8 +956,7 @@ class Command(BaseCommand):
             bug_tasks[18].dependencies.add(bug_tasks[15])  # Timeout depends on connection pool
             bug_tasks[19].dependencies.add(bug_tasks[16])  # Response size depends on payload
 
-            # Phase 3: UX Bugs (20-29)
-            bug_tasks[20].dependencies.add(bug_tasks[12])  # Infinite scroll depends on slow query
+            # Phase 3: UX Bugs (20-29) - NO Phase 1/2 dependencies
             bug_tasks[21].dependencies.add(bug_tasks[20])  # Form validation depends on scroll
             bug_tasks[22].dependencies.add(bug_tasks[21])  # Modal close depends on form
             bug_tasks[23].dependencies.add(bug_tasks[20])  # Tooltip depends on scroll
@@ -1005,7 +967,7 @@ class Command(BaseCommand):
             bug_tasks[28].dependencies.add(bug_tasks[27])  # Touch events depend on responsive
             bug_tasks[29].dependencies.add(bug_tasks[28])  # Keyboard nav depends on touch
 
-        self.stdout.write('   ✅ Bug Tracking dependencies created (comprehensive)')
+        self.stdout.write('   ✅ Bug Tracking dependencies created (intra-phase only)')
 
     def create_lean_labels(self, software_board, marketing_board, bug_board):
         """Create Lean Six Sigma labels for all boards"""
