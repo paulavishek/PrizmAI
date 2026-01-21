@@ -45,27 +45,37 @@
        PROFESSIONAL DEPENDENCY ARROWS
        ============================================ */
 
-    /* Hide ALL default frappe-gantt arrow polygons */
-    .gantt polygon {
+    /* Hide ALL default frappe-gantt arrow polygons (they appear as distorted Y-shapes) */
+    .gantt polygon:not(.milestone-diamond-shape) {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
     }
 
-    /* Main arrow path styling */
+    /* But show polygons inside our custom markers (defs) */
+    .gantt defs marker polygon {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+    }
+
+    /* Main arrow path styling - clean, consistent look */
     .gantt .arrow,
-    .gantt path.arrow {
+    .gantt path.arrow,
+    .gantt g.arrow path {
         fill: none !important;
         stroke: #64748b !important;
         stroke-width: 2px !important;
         stroke-linecap: round !important;
         stroke-linejoin: round !important;
-        opacity: 0.85 !important;
+        opacity: 0.8 !important;
+        marker-end: url(#arrowhead-custom) !important;
     }
 
     .gantt .arrow:hover,
-    .gantt path.arrow:hover {
-        stroke: #475569 !important;
+    .gantt path.arrow:hover,
+    .gantt g.arrow path:hover {
+        stroke: #3b82f6 !important;
         stroke-width: 2.5px !important;
         opacity: 1 !important;
     }
@@ -967,7 +977,7 @@
         addTooltipHandlers();
     }
 
-    // Fix frappe-gantt's arrow rendering
+    // Fix frappe-gantt's arrow rendering - remove distorted polygons and use clean arrowheads
     function enhanceDependencyArrows() {
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
@@ -985,26 +995,35 @@
             // Create ONE clean arrowhead marker with unique ID
             const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
             marker.setAttribute('id', 'arrowhead-custom');
-            marker.setAttribute('markerWidth', '10');
-            marker.setAttribute('markerHeight', '10');
-            marker.setAttribute('refX', '9');
-            marker.setAttribute('refY', '5');
+            marker.setAttribute('markerWidth', '8');
+            marker.setAttribute('markerHeight', '8');
+            marker.setAttribute('refX', '7');
+            marker.setAttribute('refY', '4');
             marker.setAttribute('orient', 'auto');
             marker.setAttribute('markerUnits', 'strokeWidth');
 
-            // Clean filled triangle arrowhead
+            // Clean filled triangle arrowhead (pointing right)
             const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-            polygon.setAttribute('points', '0,0 10,5 0,10 2,5');
+            polygon.setAttribute('points', '0,0 8,4 0,8');
             polygon.setAttribute('fill', '#64748b');
+            polygon.classList.add('custom-arrowhead');
 
             marker.appendChild(polygon);
             defs.appendChild(marker);
         }
 
-        // Remove ALL standalone polygons outside of defs (the distorted default arrows)
+        // Remove ALL standalone polygons outside of defs that are frappe-gantt's default arrow heads
+        // These appear as distorted Y-shapes or horizontal Y patterns
         ganttSvg.querySelectorAll('polygon').forEach(polygon => {
-            // Keep polygons in defs (markers) and milestone diamonds
-            if (!polygon.closest('defs') && !polygon.classList.contains('milestone-diamond-shape')) {
+            // Keep polygons that are:
+            // 1. Inside defs (our custom markers)
+            // 2. Milestone diamonds (have the class)
+            // 3. Our custom arrowhead class
+            const isInDefs = polygon.closest('defs');
+            const isMilestone = polygon.classList.contains('milestone-diamond-shape');
+            const isCustomArrow = polygon.classList.contains('custom-arrowhead');
+            
+            if (!isInDefs && !isMilestone && !isCustomArrow) {
                 polygon.remove();
             }
         });
@@ -1022,14 +1041,14 @@
                 path.setAttribute('stroke-linejoin', 'round');
                 path.setAttribute('fill', 'none');
                 path.setAttribute('marker-end', 'url(#arrowhead-custom)');
-                path.style.opacity = '0.85';
+                path.style.opacity = '0.8';
                 
-                // Remove any inline polygon styling that might interfere
+                // Remove any inline polygon children that might interfere
                 path.querySelectorAll('polygon').forEach(p => p.remove());
             }
         });
 
-        // Also look for paths inside .arrow groups
+        // Also look for paths inside .arrow groups and apply same styling
         ganttSvg.querySelectorAll('.arrow path, g.arrow path').forEach(path => {
             path.setAttribute('stroke', '#64748b');
             path.setAttribute('stroke-width', '2');
@@ -1037,7 +1056,16 @@
             path.setAttribute('stroke-linejoin', 'round');
             path.setAttribute('fill', 'none');
             path.setAttribute('marker-end', 'url(#arrowhead-custom)');
-            path.style.opacity = '0.85';
+            path.style.opacity = '0.8';
+        });
+        
+        // Handle arrow groups (g.arrow) - remove any child polygons
+        ganttSvg.querySelectorAll('g.arrow').forEach(group => {
+            group.querySelectorAll('polygon').forEach(p => {
+                if (!p.classList.contains('custom-arrowhead')) {
+                    p.remove();
+                }
+            });
         });
     }
 

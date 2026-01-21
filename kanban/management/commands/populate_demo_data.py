@@ -537,20 +537,20 @@ class Command(BaseCommand):
         ]
 
         # Define phase date ranges to ensure strict chronological order without overlap
-        # Phase 1: day -6 to day 24 (about 4 weeks) - Foundation work
-        # Phase 2: day 28 to day 58 (about 4 weeks) - Core features  
-        # Phase 3: day 62 to day 92 (about 4 weeks) - Polish & Launch
-        # Each task gets 3 days spacing to avoid cramming
+        # Phase 1: day -10 to day 35 (about 6 weeks) - Foundation work
+        # Phase 2: day 40 to day 85 (about 6 weeks) - Core features  
+        # Phase 3: day 90 to day 135 (about 6 weeks) - Polish & Launch
+        # Each task gets 4-5 days spacing to avoid cramming and show proper Gantt bars
         phase_config = [
-            {'start_offset': -6, 'task_spacing': 3, 'milestone_offsets': [-4, 24]},   # Phase 1
-            {'start_offset': 28, 'task_spacing': 3, 'milestone_offsets': [45, 58]},   # Phase 2
-            {'start_offset': 62, 'task_spacing': 3, 'milestone_offsets': [80, 92]},   # Phase 3
+            {'start_offset': -10, 'task_spacing': 4, 'milestone_offsets': [-8, 35]},   # Phase 1: kickoff milestone near start, completion at end
+            {'start_offset': 40, 'task_spacing': 4, 'milestone_offsets': [62, 85]},    # Phase 2: mid-phase and end-phase milestones
+            {'start_offset': 90, 'task_spacing': 4, 'milestone_offsets': [112, 135]},  # Phase 3: mid-phase and end-phase milestones
         ]
         
         # Create Phase 1 items
         for i, t in enumerate(phase1_tasks):
             start = now + timedelta(days=phase_config[0]['start_offset'] + i * phase_config[0]['task_spacing'])
-            due = start + timedelta(days=random.randint(4, 6))
+            due = start + timedelta(days=random.randint(3, 5))  # 3-5 day duration for good visual appearance
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -572,7 +572,7 @@ class Command(BaseCommand):
         # Create Phase 2 items
         for i, t in enumerate(phase2_tasks):
             start = now + timedelta(days=phase_config[1]['start_offset'] + i * phase_config[1]['task_spacing'])
-            due = start + timedelta(days=random.randint(4, 6))
+            due = start + timedelta(days=random.randint(3, 5))  # 3-5 day duration for good visual appearance
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -594,7 +594,7 @@ class Command(BaseCommand):
         # Create Phase 3 items
         for i, t in enumerate(phase3_tasks):
             start = now + timedelta(days=phase_config[2]['start_offset'] + i * phase_config[2]['task_spacing'])
-            due = start + timedelta(days=random.randint(4, 6))
+            due = start + timedelta(days=random.randint(3, 5))  # 3-5 day duration for good visual appearance
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -684,11 +684,14 @@ class Command(BaseCommand):
         ]
 
         # Define phase date ranges to ensure strict chronological order without overlap
-        # Phase 1: day -5 to day 16, Phase 2: day 18 to day 39, Phase 3: day 41 to day 62
+        # Phase 1: day -10 to day 35 - Planning phase with wider spacing
+        # Phase 2: day 40 to day 85 - Content creation phase
+        # Phase 3: day 90 to day 135 - Launch phase
+        # Task spacing of 4 days ensures proper visual separation in Gantt chart
         phase_config = [
-            {'start_offset': -5, 'milestone_offsets': [0, 16]},   # Phase 1
-            {'start_offset': 18, 'milestone_offsets': [30, 39]},  # Phase 2
-            {'start_offset': 41, 'milestone_offsets': [55, 62]},  # Phase 3
+            {'start_offset': -10, 'task_spacing': 4, 'milestone_offsets': [-8, 35]},   # Phase 1
+            {'start_offset': 40, 'task_spacing': 4, 'milestone_offsets': [62, 85]},    # Phase 2
+            {'start_offset': 90, 'task_spacing': 4, 'milestone_offsets': [112, 135]},  # Phase 3
         ]
         
         # Create all phases
@@ -701,8 +704,8 @@ class Command(BaseCommand):
             config = phase_config[phase_num - 1]
 
             for i, t in enumerate(tasks):
-                start = now + timedelta(days=config['start_offset'] + i * 2)
-                due = start + timedelta(days=random.randint(3, 5))
+                start = now + timedelta(days=config['start_offset'] + i * config['task_spacing'])
+                due = start + timedelta(days=random.randint(3, 5))  # 3-5 day duration
                 task = Task.objects.create(
                     column=t['column'], title=t['title'], description=t['desc'],
                     priority=t['priority'], complexity_score=t['complexity'],
@@ -791,11 +794,14 @@ class Command(BaseCommand):
         ]
 
         # Define phase date ranges to ensure strict chronological order without overlap
-        # Phase 1: day -5 to day 16, Phase 2: day 18 to day 39, Phase 3: day 41 to day 62
+        # Phase 1: day -10 to day 35 - Critical bugs phase
+        # Phase 2: day 40 to day 85 - Performance bugs phase
+        # Phase 3: day 90 to day 135 - UX bugs phase
+        # Task spacing of 4 days ensures proper visual separation in Gantt chart
         phase_config = [
-            {'start_offset': -5, 'milestone_offsets': [0, 16]},   # Phase 1
-            {'start_offset': 18, 'milestone_offsets': [30, 39]},  # Phase 2
-            {'start_offset': 41, 'milestone_offsets': [55, 62]},  # Phase 3
+            {'start_offset': -10, 'task_spacing': 4, 'milestone_offsets': [-8, 35]},   # Phase 1
+            {'start_offset': 40, 'task_spacing': 4, 'milestone_offsets': [62, 85]},    # Phase 2
+            {'start_offset': 90, 'task_spacing': 4, 'milestone_offsets': [112, 135]},  # Phase 3
         ]
         
         # Create all phases
@@ -808,8 +814,8 @@ class Command(BaseCommand):
             config = phase_config[phase_num - 1]
 
             for i, t in enumerate(tasks):
-                start = now + timedelta(days=config['start_offset'] + i * 2)
-                due = start + timedelta(days=random.randint(2, 4))
+                start = now + timedelta(days=config['start_offset'] + i * config['task_spacing'])
+                due = start + timedelta(days=random.randint(3, 5))  # 3-5 day duration for good visual appearance
                 task = Task.objects.create(
                     column=t['column'], title=t['title'], description=t['desc'],
                     priority=t['priority'], complexity_score=t['complexity'],
