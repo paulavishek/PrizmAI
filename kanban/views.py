@@ -626,10 +626,24 @@ def task_detail(request, task_id):
                     description=f"Updated task details for '{task.title}'"
                 )
             else:
-                # Demo mode - just save without audit trail
-                task = form.save()
+                # Demo mode - save and mark as user-modified to prevent date refresh overwriting
+                task = form.save(commit=False)
+                # Mark this task as user-modified so the demo date refresh won't overwrite it
+                # Set created_by_session to the user's session ID
+                session_id = request.session.get('browser_fingerprint') or request.session.session_key
+                if session_id and not task.created_by_session:
+                    task.created_by_session = session_id
+                # Also mark it as not seed data so the date refresh skips it
+                task.is_seed_demo_data = False
+                task.save()
+                form.save_m2m()
             
             messages.success(request, 'Task updated successfully!')
+            
+            # Redirect to the referring page if provided, otherwise back to task detail
+            next_url = request.POST.get('next') or request.GET.get('next')
+            if next_url:
+                return redirect(next_url)
             return redirect('task_detail', task_id=task.id)
     else:
         form = TaskForm(instance=task, board=board)

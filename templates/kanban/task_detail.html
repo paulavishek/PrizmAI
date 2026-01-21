@@ -54,6 +54,9 @@
                 <form method="post" class="task-form">
                     {% csrf_token %}
                     
+                    <!-- Hidden field to track where to redirect after save -->
+                    <input type="hidden" name="next" id="next-url" value="">
+                    
                     <!-- Display all form errors at the top -->
                     {% if form.errors %}
                     <div class="alert alert-danger mb-4">
@@ -2033,13 +2036,41 @@
         return '<div class="ai-summary-formatted">' + formatted + '</div>';
     }
     
+    // Store the original referrer URL on page load (before any navigation)
+    // This captures where the user came from (e.g., Gantt chart)
+    const originalReferrer = (function() {
+        // First check if there's a 'next' parameter in the URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const nextParam = urlParams.get('next');
+        if (nextParam) {
+            return nextParam;
+        }
+        
+        // Otherwise use document.referrer if it's a valid internal page
+        const referrer = document.referrer;
+        if (referrer && !referrer.includes('/tasks/')) {
+            // Only use referrer if it's not another task page
+            // This prevents going back to task detail after form submit
+            return referrer;
+        }
+        return null;
+    })();
+    
+    // Set the hidden next field for form submission
+    document.addEventListener('DOMContentLoaded', function() {
+        const nextInput = document.getElementById('next-url');
+        if (nextInput && originalReferrer) {
+            nextInput.value = originalReferrer;
+        }
+    });
+    
     // Handle back navigation to previous page
     function goBack() {
-        // Check if there's a previous page in history
-        if (document.referrer && document.referrer !== window.location.href) {
-            window.history.back();
+        // Use the original referrer captured on page load
+        if (originalReferrer) {
+            window.location.href = originalReferrer;
         } else {
-            // Fallback to board detail if no history (demo-aware)
+            // Fallback to board detail if no referrer (demo-aware)
             {% if is_demo_mode %}
             window.location.href = '{% url "demo_board_detail" task.column.board.id %}';
             {% else %}

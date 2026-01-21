@@ -894,8 +894,9 @@
                 custom_popup_html: null, // Disable default popup
                 popup_trigger: 'none', // Disable popup entirely for cleaner navigation
                 on_click: function(task) {
-                    // Redirect to task detail page immediately without showing popup
-                    window.location.href = `/tasks/${task.id}/`;
+                    // Redirect to task detail page with current page as return URL
+                    const currentUrl = encodeURIComponent(window.location.href);
+                    window.location.href = `/tasks/${task.id}/?next=${currentUrl}`;
                     return false; // Prevent default behavior
                 },
                 on_date_change: function(task, start, end) {
@@ -969,12 +970,14 @@
                         const phaseName = `Phase ${phaseNum}`;
                         togglePhase(phaseName);
                     } else if (taskId.startsWith('milestone-')) {
-                        // Navigate to milestone task detail
+                        // Navigate to milestone task detail with return URL
                         const milestoneId = taskId.replace('milestone-', '');
-                        window.location.href = `/tasks/${milestoneId}/`;
+                        const currentUrl = encodeURIComponent(window.location.href);
+                        window.location.href = `/tasks/${milestoneId}/?next=${currentUrl}`;
                     } else {
-                        // Navigate to regular task detail
-                        window.location.href = `/tasks/${taskId}/`;
+                        // Navigate to regular task detail with return URL
+                        const currentUrl = encodeURIComponent(window.location.href);
+                        window.location.href = `/tasks/${taskId}/?next=${currentUrl}`;
                     }
                 }
             });
@@ -1792,9 +1795,11 @@
                     return false; // Prevent navigation for phase bars
                 } else if (task.isMilestone) {
                     const milestoneId = task.id.replace('milestone-', '');
-                    window.location.href = `/tasks/${milestoneId}/`;
+                    const currentUrl = encodeURIComponent(window.location.href);
+                    window.location.href = `/tasks/${milestoneId}/?next=${currentUrl}`;
                 } else {
-                    window.location.href = `/tasks/${task.id}/`;
+                    const currentUrl = encodeURIComponent(window.location.href);
+                    window.location.href = `/tasks/${task.id}/?next=${currentUrl}`;
                 }
             },
             on_date_change: function(task, start, end) {
@@ -1927,7 +1932,8 @@
         diamond.addEventListener('click', function() {
             if (taskId && taskId.startsWith('milestone-')) {
                 const milestoneId = taskId.replace('milestone-', '');
-                window.location.href = `/tasks/${milestoneId}/`;
+                const currentUrl = encodeURIComponent(window.location.href);
+                window.location.href = `/tasks/${milestoneId}/?next=${currentUrl}`;
             }
         });
 
