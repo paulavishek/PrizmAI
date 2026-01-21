@@ -566,6 +566,14 @@ def task_detail(request, task_id):
     is_demo_mode = request.session.get('is_demo_mode', False)
     demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
     
+    # If accessing an official demo board without demo mode active, re-establish demo mode
+    # This handles cases where demo session expired but user is still browsing demo content
+    if is_demo_board and not is_demo_mode and not request.user.is_authenticated:
+        request.session['is_demo_mode'] = True
+        request.session['demo_mode'] = 'solo'
+        is_demo_mode = True
+        demo_mode_type = 'solo'
+    
     # For non-demo boards, require authentication
     if not (is_demo_board and is_demo_mode):
         if not request.user.is_authenticated:
@@ -1348,11 +1356,18 @@ def gantt_chart(request, board_id):
     
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
+    # Check if this is a demo board (prefer is_official_demo_board flag)
+    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
     is_demo_mode = request.session.get('is_demo_mode', False)
     demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
+    
+    # If accessing an official demo board without demo mode active, re-establish demo mode
+    # This handles cases where demo session expired but user is still browsing demo content
+    if is_demo_board and not is_demo_mode and not request.user.is_authenticated:
+        request.session['is_demo_mode'] = True
+        request.session['demo_mode'] = 'solo'
+        is_demo_mode = True
+        demo_mode_type = 'solo'
     
     # For non-demo boards, require authentication
     if not (is_demo_board and is_demo_mode):
