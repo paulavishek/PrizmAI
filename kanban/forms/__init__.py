@@ -97,18 +97,13 @@ class TaskForm(forms.ModelForm):
     class Meta:
         model = Task
         fields = [
-            'item_type', 'title', 'description', 'phase',
+            'title', 'description', 'phase',
             'start_date', 'due_date', 'assigned_to', 'labels', 'lss_classification', 'priority', 'progress',
             'dependencies', 'parent_task', 'complexity_score', 'required_skills', 'skill_match_score',
             'collaboration_required', 'workload_impact', 'related_tasks',
             'risk_likelihood', 'risk_impact', 'risk_level'
         ]
         widgets = {
-            'item_type': forms.Select(attrs={
-                'class': 'form-select',
-                'id': 'id_item_type',
-                'title': 'Select whether this is a Task (with duration) or a Milestone (single date marker)'
-            }),
             'title': forms.TextInput(attrs={'class': 'form-control'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
             'phase': forms.Select(attrs={
@@ -306,9 +301,6 @@ class TaskForm(forms.ModelForm):
         self.fields['parent_task'].required = False
         self.fields['complexity_score'].required = False
         self.fields['progress'].required = False  # Progress defaults to 0 for new tasks
-
-        # Configure item_type field
-        self.fields['item_type'].help_text = 'Task: has start date, end date, duration, and assignee. Milestone: single date marker with no duration.'
 
         # Configure phase field based on board's num_phases
         if board and board.num_phases > 0:

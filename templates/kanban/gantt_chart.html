@@ -506,51 +506,6 @@
         fill: #4f46e5 !important;
     }
 
-    /* Milestone diamond marker styles */
-    .milestone-diamond {
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-
-    .milestone-diamond:hover {
-        transform: scale(1.2);
-        filter: brightness(1.2);
-    }
-
-    .gantt .bar-wrapper .bar[data-is-milestone="true"] {
-        fill: #f59e0b !important;
-        rx: 0;
-        ry: 0;
-    }
-
-    /* Hide the regular bar for milestones - we'll draw a diamond instead */
-    .gantt .bar-wrapper[data-is-milestone="true"] .bar {
-        opacity: 0 !important;
-    }
-
-    /* Milestone diamond SVG element */
-    .milestone-diamond-shape {
-        fill: #f59e0b;
-        stroke: #d97706;
-        stroke-width: 1.5;
-        cursor: pointer;
-        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));
-        transition: all 0.2s ease;
-    }
-
-    .milestone-diamond-shape:hover {
-        fill: #fbbf24;
-        filter: drop-shadow(0 4px 8px rgba(0,0,0,0.25));
-        transform-origin: center;
-    }
-
-    .milestone-label {
-        font-size: 11px;
-        font-weight: 600;
-        fill: #92400e !important;
-        pointer-events: none;
-    }
-
     /* Phase collapse indicator */
     .phase-indicator {
         font-size: 0.75rem;
@@ -722,12 +677,6 @@
                     <span>Phase</span>
                 </div>
                 {% endif %}
-                <div class="legend-item">
-                    <svg width="20" height="20" style="vertical-align: middle;">
-                        <polygon points="10,2 18,10 10,18 2,10" fill="#f59e0b" stroke="#d97706" stroke-width="1"/>
-                    </svg>
-                    <span>Milestone</span>
-                </div>
                 <div class="legend-item" style="margin-left: auto;">
                     <svg width="40" height="12" style="vertical-align: middle;">
                         <defs>
@@ -795,19 +744,17 @@
             id: '{{ task.id }}',
             name: '{{ task.title|escapejs }}',
             fullName: '{{ task.title|escapejs }}',
-            start: '{% if task.item_type == "milestone" %}{{ task.due_date|date:"Y-m-d" }}{% else %}{{ task.start_date|date:"Y-m-d" }}{% endif %}',
+            start: '{{ task.start_date|date:"Y-m-d" }}',
             end: '{{ task.due_date|date:"Y-m-d" }}',
             progress: {{ task.progress|default:0 }},
             dependencies: '{% with deps=task.dependencies.all %}{% if deps %}{% for dep in deps %}{% if dep.due_date %}{{ dep.id }}{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}{% endif %}{% endwith %}',
-            custom_class: 'status-{{ task.column.name|lower|cut:" " }}',
+            custom_class: 'status-{{ task.column.name|lower|cut:" "}}',
             status: '{% if "done" in task.column.name|lower %}done{% elif "progress" in task.column.name|lower %}in_progress{% else %}todo{% endif %}',
             priority: '{{ task.priority }}',
             assigned_to: '{% if task.assigned_to %}{{ task.assigned_to.username }}{% else %}Unassigned{% endif %}',
             assignee_first_name: '{% if task.assigned_to %}{{ task.assigned_to.first_name|escapejs }}{% endif %}',
             assignee_last_name: '{% if task.assigned_to %}{{ task.assigned_to.last_name|escapejs }}{% endif %}',
-            item_type: '{{ task.item_type|default:"task" }}',
-            phase: '{{ task.phase|default:""|escapejs }}',
-            isMilestone: {% if task.item_type == "milestone" %}true{% else %}false{% endif %}
+            phase: '{{ task.phase|default:""|escapejs }}'
         }{% if not forloop.last %},{% endif %}
         {% endfor %}
     ];
@@ -948,14 +895,6 @@
             if (barElement) {
                 // Set priority attribute for color styling
                 barElement.setAttribute('data-priority', task.priority);
-                
-                // Handle milestones - render as diamonds
-                if (task.isMilestone || task.item_type === 'milestone') {
-                    barWrapper.setAttribute('data-is-milestone', 'true');
-                    barElement.setAttribute('data-is-milestone', 'true');
-                    const label = barWrapper.querySelector('.bar-label');
-                    createMilestoneDiamond(barWrapper, barElement, label, task.fullName || task.name);
-                }
             }
         });
 
@@ -978,11 +917,6 @@
                         const phaseNum = taskId.replace('phase-', '');
                         const phaseName = `Phase ${phaseNum}`;
                         togglePhase(phaseName);
-                    } else if (taskId.startsWith('milestone-')) {
-                        // Navigate to milestone task detail with return URL
-                        const milestoneId = taskId.replace('milestone-', '');
-                        const currentUrl = encodeURIComponent(window.location.href);
-                        window.location.href = `/tasks/${milestoneId}/?next=${currentUrl}`;
                     } else {
                         // Navigate to regular task detail with return URL
                         const currentUrl = encodeURIComponent(window.location.href);
@@ -1042,13 +976,11 @@
         ganttSvg.querySelectorAll('polygon').forEach(polygon => {
             // Keep polygons that are:
             // 1. Inside defs (our custom markers)
-            // 2. Milestone diamonds (have the class)
-            // 3. Our custom arrowhead class
+            // 2. Our custom arrowhead class
             const isInDefs = polygon.closest('defs');
-            const isMilestone = polygon.classList.contains('milestone-diamond-shape');
             const isCustomArrow = polygon.classList.contains('custom-arrowhead');
             
-            if (!isInDefs && !isMilestone && !isCustomArrow) {
+            if (!isInDefs && !isCustomArrow) {
                 // First try to remove it
                 try {
                     polygon.remove();
@@ -1079,7 +1011,7 @@
                 
                 // Remove any inline polygon children that might interfere
                 path.querySelectorAll('polygon').forEach(p => {
-                    if (!p.classList.contains('custom-arrowhead') && !p.classList.contains('milestone-diamond-shape')) {
+                    if (!p.classList.contains('custom-arrowhead')) {
                         p.remove();
                     }
                 });
@@ -1100,7 +1032,7 @@
         // Handle arrow groups (g.arrow) - remove any child polygons aggressively
         ganttSvg.querySelectorAll('g.arrow, g[class*="arrow"]').forEach(group => {
             group.querySelectorAll('polygon').forEach(p => {
-                if (!p.classList.contains('custom-arrowhead') && !p.classList.contains('milestone-diamond-shape')) {
+                if (!p.classList.contains('custom-arrowhead')) {
                     try {
                         p.remove();
                     } catch (e) {
@@ -1445,9 +1377,8 @@
                             // If a polygon is added that isn't our custom ones, remove it
                             if (node.nodeName === 'polygon' || node.tagName === 'polygon') {
                                 const isInDefs = node.closest && node.closest('defs');
-                                const isMilestone = node.classList && node.classList.contains('milestone-diamond-shape');
                                 const isCustom = node.classList && node.classList.contains('custom-arrowhead');
-                                if (!isInDefs && !isMilestone && !isCustom) {
+                                if (!isInDefs && !isCustom) {
                                     node.remove();
                                 }
                             }
@@ -1455,9 +1386,8 @@
                             if (node.querySelectorAll) {
                                 node.querySelectorAll('polygon').forEach(function(p) {
                                     const isInDefs = p.closest('defs');
-                                    const isMilestone = p.classList.contains('milestone-diamond-shape');
                                     const isCustom = p.classList.contains('custom-arrowhead');
-                                    if (!isInDefs && !isMilestone && !isCustom) {
+                                    if (!isInDefs && !isCustom) {
                                         p.remove();
                                     }
                                 });
@@ -1719,31 +1649,19 @@
                     .filter(t => t.phase === phaseName)
                     .sort((a, b) => parseInt(a.id) - parseInt(b.id));
                 
-                // Separate milestones and regular tasks
+                // Process tasks
                 const regularTasks = [];
-                const milestones = [];
                 
                 phaseTasks.forEach(task => {
-                    // Only include tasks/milestones with valid end date
+                    // Only include tasks with valid start and end date
                     if (!task.end || task.end === 'None' || task.end === '') return;
-
-                    if (task.item_type === 'milestone' || task.isMilestone) {
-                        milestones.push({
-                            ...task,
-                            name: `◆ ${task.name}`,
-                            start: task.end,  // Milestones only have due_date
-                            isMilestone: true
-                        });
-                    } else {
-                        // Regular tasks - only include if they have valid start date
-                        if (!task.start || task.start === 'None' || task.start === '') return;
-                        regularTasks.push(task);
-                    }
+                    if (!task.start || task.start === 'None' || task.start === '') return;
+                    
+                    regularTasks.push(task);
                 });
                 
-                // Add regular tasks first, then milestones at the end
+                // Add all tasks to gantt data
                 regularTasks.forEach(task => ganttData.push(task));
-                milestones.forEach(milestone => ganttData.push(milestone));
             }
         }
 
@@ -1857,7 +1775,7 @@
 
         // Apply custom styling after render with multiple passes for reliability
         setTimeout(() => {
-            applyPhaseAndMilestoneStyling();
+            applyPhaseStyling();
         }, 150);
         
         // Additional pass for dependency arrows (they render later)
@@ -1871,18 +1789,15 @@
         }, 800);
     }
 
-    // Apply custom styling for phases and milestones
-    function applyPhaseAndMilestoneStyling() {
+    // Apply custom styling for phases
+    function applyPhaseStyling() {
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
 
-        // Remove existing milestone diamonds to prevent duplicates
-        ganttSvg.querySelectorAll('.milestone-diamond-group').forEach(el => el.remove());
-
-        // Get the current gantt data to check isMilestone property
+        // Get the current gantt data
         const currentTasks = ganttChart ? ganttChart.tasks : tasks;
 
-        // Style phase bars and create milestone diamonds
+        // Style phase bars
         document.querySelectorAll('.gantt .bar-wrapper').forEach(wrapper => {
             const bar = wrapper.querySelector('.bar');
             const label = wrapper.querySelector('.bar-label');
@@ -1892,94 +1807,15 @@
                 const taskName = label.textContent || '';
 
                 // Check if this is a phase bar
-                if (taskName.includes('Phase') && (taskName.includes('tasks') || taskName.includes('milestones'))) {
+                if (taskName.includes('Phase') && taskName.includes('tasks')) {
                     bar.setAttribute('data-is-phase', 'true');
                     bar.style.cursor = 'pointer';
-                }
-
-                // Check if this is a milestone
-                // Look for: diamond symbol in name, milestone- prefix in ID, or isMilestone in task data
-                const taskData = currentTasks.find(t => String(t.id) === String(taskId));
-                const isMilestone = taskName.startsWith('\u25c6') || 
-                                   (taskId && taskId.startsWith('milestone-')) ||
-                                   (taskData && (taskData.isMilestone || taskData.item_type === 'milestone'));
-                
-                if (isMilestone) {
-                    wrapper.setAttribute('data-is-milestone', 'true');
-                    bar.setAttribute('data-is-milestone', 'true');
-                    
-                    // Create actual diamond shape
-                    createMilestoneDiamond(wrapper, bar, label, taskName);
                 }
             }
         });
 
         // Also apply standard styling
         applyCustomStyling();
-    }
-
-    // Create a diamond shape for milestones
-    function createMilestoneDiamond(wrapper, bar, label, taskName) {
-        const ganttSvg = document.querySelector('#gantt');
-        if (!ganttSvg) return;
-
-        let barRect;
-        try {
-            barRect = bar.getBBox();
-        } catch (e) {
-            return;
-        }
-
-        if (barRect.width <= 0 || barRect.height <= 0) return;
-
-        // Create SVG group for the diamond
-        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-        group.setAttribute('class', 'milestone-diamond-group');
-
-        // Diamond size and position (centered on the bar position)
-        const diamondSize = 16;
-        const centerX = barRect.x + barRect.width / 2;
-        const centerY = barRect.y + barRect.height / 2;
-
-        // Create diamond polygon (rotated square)
-        const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-        const points = [
-            `${centerX},${centerY - diamondSize}`,      // top
-            `${centerX + diamondSize},${centerY}`,      // right
-            `${centerX},${centerY + diamondSize}`,      // bottom
-            `${centerX - diamondSize},${centerY}`       // left
-        ].join(' ');
-        diamond.setAttribute('points', points);
-        diamond.setAttribute('class', 'milestone-diamond-shape');
-        group.appendChild(diamond);
-
-        // Create label text (positioned to the right of diamond)
-        const milestoneLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        const displayName = taskName.replace('◆ ', '').substring(0, 20) + (taskName.length > 22 ? '...' : '');
-        milestoneLabel.textContent = displayName;
-        milestoneLabel.setAttribute('x', centerX + diamondSize + 8);
-        milestoneLabel.setAttribute('y', centerY);
-        milestoneLabel.setAttribute('class', 'milestone-label');
-        milestoneLabel.setAttribute('dominant-baseline', 'middle');
-        group.appendChild(milestoneLabel);
-
-        // Hide the original bar and label
-        bar.style.opacity = '0';
-        label.style.display = 'none';
-
-        // Add click handler to diamond
-        const taskId = wrapper.getAttribute('data-id');
-        diamond.style.cursor = 'pointer';
-        diamond.addEventListener('click', function() {
-            if (taskId && taskId.startsWith('milestone-')) {
-                const milestoneId = taskId.replace('milestone-', '');
-                const currentUrl = encodeURIComponent(window.location.href);
-                window.location.href = `/tasks/${milestoneId}/?next=${currentUrl}`;
-            }
-        });
-
-        // Insert diamond group into the wrapper
-        wrapper.appendChild(group);
     }
 
     // Initialize phase view on load if phases exist

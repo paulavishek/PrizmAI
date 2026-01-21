@@ -239,24 +239,12 @@ class Task(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_tasks')
     labels = models.ManyToManyField(TaskLabel, related_name='tasks', blank=True)
 
-    # Item Type: Task or Milestone (for unified task/milestone management)
-    ITEM_TYPE_CHOICES = [
-        ('task', 'Task'),
-        ('milestone', 'Milestone'),
-    ]
-    item_type = models.CharField(
-        max_length=20,
-        choices=ITEM_TYPE_CHOICES,
-        default='task',
-        help_text="Type of item: task (has duration with start/end dates) or milestone (single date marker)"
-    )
-
     # Phase Assignment (for Gantt chart phase-based grouping)
     phase = models.CharField(
         max_length=50,
         blank=True,
         null=True,
-        help_text="Phase this task/milestone belongs to (e.g., 'Phase 1', 'Phase 2'). Set via dropdown based on board's num_phases."
+        help_text="Phase this task belongs to (e.g., 'Phase 1', 'Phase 2'). Set via dropdown based on board's num_phases."
     )
 
     # Lean Six Sigma Classification (Single-select, mutually exclusive)
@@ -551,11 +539,7 @@ class Task(models.Model):
         self.save()
     
     def save(self, *args, **kwargs):
-        """Override save to track completion, update predictions, and handle milestone constraints"""
-        # Milestone constraint: milestones have no start_date (only due_date)
-        if self.item_type == 'milestone':
-            self.start_date = None
-
+        """Override save to track completion and update predictions"""
         # Track completion timestamp
         if self.progress == 100 and not self.completed_at:
             self.completed_at = timezone.now()
