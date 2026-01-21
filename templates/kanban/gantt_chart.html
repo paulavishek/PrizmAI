@@ -1713,15 +1713,22 @@
 
             // If expanded, add tasks and milestones for this phase
             if (isExpanded) {
-                const phaseTasks = tasks.filter(t => t.phase === phaseName);
+                // Get phase tasks and sort by ID to maintain consistent order
+                // (regardless of date changes)
+                const phaseTasks = tasks
+                    .filter(t => t.phase === phaseName)
+                    .sort((a, b) => parseInt(a.id) - parseInt(b.id));
+                
+                // Separate milestones and regular tasks
+                const regularTasks = [];
+                const milestones = [];
+                
                 phaseTasks.forEach(task => {
                     // Only include tasks/milestones with valid end date
                     if (!task.end || task.end === 'None' || task.end === '') return;
 
                     if (task.item_type === 'milestone' || task.isMilestone) {
-                        // Milestones: use due_date as both start and end
-                        // Keep the original ID so dependencies work correctly
-                        ganttData.push({
+                        milestones.push({
                             ...task,
                             name: `◆ ${task.name}`,
                             start: task.end,  // Milestones only have due_date
@@ -1730,9 +1737,13 @@
                     } else {
                         // Regular tasks - only include if they have valid start date
                         if (!task.start || task.start === 'None' || task.start === '') return;
-                        ganttData.push(task);
+                        regularTasks.push(task);
                     }
                 });
+                
+                // Add regular tasks first, then milestones at the end
+                regularTasks.forEach(task => ganttData.push(task));
+                milestones.forEach(milestone => ganttData.push(milestone));
             }
         }
 
