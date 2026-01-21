@@ -846,8 +846,17 @@
     // Validate and clean up dependencies
     tasks.forEach(task => {
         if (task.dependencies) {
-            const depIds = task.dependencies.split(',').filter(id => {
-                const trimmedId = id.trim();
+            // Handle both string and array dependencies
+            let depList;
+            if (typeof task.dependencies === 'string') {
+                depList = task.dependencies.split(',');
+            } else if (Array.isArray(task.dependencies)) {
+                depList = task.dependencies;
+            } else {
+                depList = [];
+            }
+            const depIds = depList.filter(id => {
+                const trimmedId = String(id).trim();
                 // Only include dependencies that exist in our task list
                 // and are not self-referencing
                 return trimmedId && allTaskIds.has(trimmedId) && trimmedId !== task.id;
@@ -1739,8 +1748,17 @@
         const visibleTaskIds = new Set(ganttData.map(d => d.id));
         ganttData.forEach(task => {
             if (task.dependencies) {
-                const validDeps = task.dependencies.split(',')
-                    .map(id => id.trim())
+                // Handle both string and array dependencies
+                let depList;
+                if (typeof task.dependencies === 'string') {
+                    depList = task.dependencies.split(',');
+                } else if (Array.isArray(task.dependencies)) {
+                    depList = task.dependencies;
+                } else {
+                    depList = [];
+                }
+                const validDeps = depList
+                    .map(id => String(id).trim())
                     .filter(id => id && visibleTaskIds.has(id));
                 task.dependencies = validDeps.join(',');
             }
