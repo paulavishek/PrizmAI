@@ -408,24 +408,21 @@ class Command(BaseCommand):
         self.create_lean_labels(software_board, marketing_board, bug_board)
         self.assign_lean_labels(software_tasks, marketing_tasks, bug_tasks)
 
-        # Enhance tasks with comprehensive demo data (skip milestones)
+        # Enhance tasks with comprehensive demo data
         self.stdout.write(self.style.SUCCESS('\n📊 Enriching tasks with comprehensive demo data...\n'))
-        tasks_only = [t for t in software_tasks if t.item_type == 'task']
-        self.enhance_tasks_with_demo_data(tasks_only, SOFTWARE_SKILLS, 'software')
-        tasks_only = [t for t in marketing_tasks if t.item_type == 'task']
-        self.enhance_tasks_with_demo_data(tasks_only, MARKETING_SKILLS, 'marketing')
-        tasks_only = [t for t in bug_tasks if t.item_type == 'task']
-        self.enhance_tasks_with_demo_data(tasks_only, BUG_TRACKING_SKILLS, 'bug_tracking')
+        self.enhance_tasks_with_demo_data(software_tasks, SOFTWARE_SKILLS, 'software')
+        self.enhance_tasks_with_demo_data(marketing_tasks, MARKETING_SKILLS, 'marketing')
+        self.enhance_tasks_with_demo_data(bug_tasks, BUG_TRACKING_SKILLS, 'bug_tracking')
 
         # Create related task relationships
         self.stdout.write(self.style.SUCCESS('\n🔄 Creating related task relationships...\n'))
-        self.create_related_tasks([t for t in software_tasks if t.item_type == 'task'])
-        self.create_related_tasks([t for t in marketing_tasks if t.item_type == 'task'])
-        self.create_related_tasks([t for t in bug_tasks if t.item_type == 'task'])
+        self.create_related_tasks(software_tasks)
+        self.create_related_tasks(marketing_tasks)
+        self.create_related_tasks(bug_tasks)
 
-        # Create time tracking data for all demo users (tasks only)
+        # Create time tracking data for all demo users
         self.stdout.write(self.style.SUCCESS('\n⏱️  Creating time tracking data...\n'))
-        all_tasks = [t for t in (software_tasks + marketing_tasks + bug_tasks) if t.item_type == 'task']
+        all_tasks = software_tasks + marketing_tasks + bug_tasks
         self.create_time_tracking_data(all_tasks, alex, sam, jordan)
 
         # Create budget and ROI data
@@ -555,19 +552,10 @@ class Command(BaseCommand):
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
                 assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
-                start_date=start, due_date=due, item_type='task', phase='Phase 1',
+                start_date=start, due_date=due, phase='Phase 1',
                 is_seed_demo_data=True,
             )
             items.append(task)
-
-        for idx, m in enumerate(phase1_milestones):
-            milestone = Task.objects.create(
-                column=backlog_col, title=m['title'], description=m['desc'],
-                priority='high', created_by=alex, progress=m['progress'],
-                due_date=now + timedelta(days=phase_config[0]['milestone_offsets'][idx]),
-                item_type='milestone', phase='Phase 1', is_seed_demo_data=True,
-            )
-            items.append(milestone)
 
         # Create Phase 2 items
         for i, t in enumerate(phase2_tasks):
@@ -577,19 +565,10 @@ class Command(BaseCommand):
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
                 assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
-                start_date=start, due_date=due, item_type='task', phase='Phase 2',
+                start_date=start, due_date=due, phase='Phase 2',
                 is_seed_demo_data=True,
             )
             items.append(task)
-
-        for idx, m in enumerate(phase2_milestones):
-            milestone = Task.objects.create(
-                column=backlog_col, title=m['title'], description=m['desc'],
-                priority='high', created_by=alex, progress=m['progress'],
-                due_date=now + timedelta(days=phase_config[1]['milestone_offsets'][idx]),
-                item_type='milestone', phase='Phase 2', is_seed_demo_data=True,
-            )
-            items.append(milestone)
 
         # Create Phase 3 items
         for i, t in enumerate(phase3_tasks):
@@ -599,19 +578,10 @@ class Command(BaseCommand):
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
                 assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
-                start_date=start, due_date=due, item_type='task', phase='Phase 3',
+                start_date=start, due_date=due, phase='Phase 3',
                 is_seed_demo_data=True,
             )
             items.append(task)
-
-        for idx, m in enumerate(phase3_milestones):
-            milestone = Task.objects.create(
-                column=backlog_col, title=m['title'], description=m['desc'],
-                priority='high', created_by=alex, progress=m['progress'],
-                due_date=now + timedelta(days=phase_config[2]['milestone_offsets'][idx]),
-                item_type='milestone', phase='Phase 3', is_seed_demo_data=True,
-            )
-            items.append(milestone)
 
         return items
 
@@ -710,19 +680,10 @@ class Command(BaseCommand):
                     column=t['column'], title=t['title'], description=t['desc'],
                     priority=t['priority'], complexity_score=t['complexity'],
                     assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
-                    start_date=start, due_date=due, item_type='task', phase=phase_name,
+                    start_date=start, due_date=due, phase=phase_name,
                     is_seed_demo_data=True,
                 )
                 items.append(task)
-
-            for idx, m in enumerate(milestones):
-                milestone = Task.objects.create(
-                    column=backlog_col, title=m['title'], description=m['desc'],
-                    priority='high', created_by=jordan, progress=m['progress'],
-                    due_date=now + timedelta(days=config['milestone_offsets'][idx]),
-                    item_type='milestone', phase=phase_name, is_seed_demo_data=True,
-                )
-                items.append(milestone)
 
         return items
 
@@ -820,19 +781,10 @@ class Command(BaseCommand):
                     column=t['column'], title=t['title'], description=t['desc'],
                     priority=t['priority'], complexity_score=t['complexity'],
                     assigned_to=t['assignee'], created_by=sam, progress=t['progress'],
-                    start_date=start, due_date=due, item_type='task', phase=phase_name,
+                    start_date=start, due_date=due, phase=phase_name,
                     is_seed_demo_data=True,
                 )
                 items.append(task)
-
-            for idx, m in enumerate(milestones):
-                milestone = Task.objects.create(
-                    column=backlog_col, title=m['title'], description=m['desc'],
-                    priority='high', created_by=sam, progress=m['progress'],
-                    due_date=now + timedelta(days=config['milestone_offsets'][idx]),
-                    item_type='milestone', phase=phase_name, is_seed_demo_data=True,
-                )
-                items.append(milestone)
 
         return items
 
@@ -842,11 +794,7 @@ class Command(BaseCommand):
         This simplifies the Gantt chart visualization by keeping dependencies
         contained within each phase, making it easier to view and understand.
         """
-        # Filter to only tasks (not milestones)
-        software_tasks = [t for t in software_tasks if t.item_type == 'task']
-        marketing_tasks = [t for t in marketing_tasks if t.item_type == 'task']
-        bug_tasks = [t for t in bug_tasks if t.item_type == 'task']
-
+        # All tasks are now regular tasks (no milestones)
         # Software Development dependencies - INTRA-PHASE ONLY
         # Phase 1 (indices 0-9): Foundation & Setup
         # Phase 2 (indices 10-19): Core Features  
@@ -996,9 +944,8 @@ class Command(BaseCommand):
     def assign_lean_labels(self, software_tasks, marketing_tasks, bug_tasks):
         """Assign Lean Six Sigma labels to appropriate tasks"""
         all_tasks = software_tasks + marketing_tasks + bug_tasks
-        tasks_only = [t for t in all_tasks if t.item_type == 'task']
 
-        for task in tasks_only:
+        for task in all_tasks:
             board = task.column.board
             labels = list(TaskLabel.objects.filter(board=board))
 
@@ -1026,10 +973,6 @@ class Command(BaseCommand):
     def enhance_tasks_with_demo_data(self, tasks, skill_pool, board_type):
         """Add comprehensive demo data to tasks including risk, skills, and collaboration"""
         for task in tasks:
-            # Skip milestones
-            if task.item_type == 'milestone':
-                continue
-
             complexity = task.complexity_score or random.randint(3, 8)
             priority = task.priority or 'medium'
             progress = task.progress or 0
@@ -1075,11 +1018,10 @@ class Command(BaseCommand):
         # Group tasks by phase
         phase_groups = {}
         for task in tasks:
-            if task.item_type == 'task':
-                phase = task.phase or 'No Phase'
-                if phase not in phase_groups:
-                    phase_groups[phase] = []
-                phase_groups[phase].append(task)
+            phase = task.phase or 'No Phase'
+            if phase not in phase_groups:
+                phase_groups[phase] = []
+            phase_groups[phase].append(task)
 
         # Create relationships within phases
         for phase, phase_tasks in phase_groups.items():
@@ -1096,9 +1038,6 @@ class Command(BaseCommand):
         entries_created = 0
 
         for task in tasks:
-            if task.item_type == 'milestone':
-                continue
-
             if task.progress > 0:
                 # Create 1-3 time entries for tasks in progress or done
                 num_entries = random.randint(1, 3)
@@ -1149,7 +1088,7 @@ class Command(BaseCommand):
                 self.stdout.write(f'   ✅ Created budget for {config["name"]}: ${config["budget"]}')
 
             # Create task costs
-            tasks = Task.objects.filter(column__board=board, item_type='task')[:15]
+            tasks = Task.objects.filter(column__board=board)[:15]
             task_costs_created = 0
 
             for i, task in enumerate(tasks):
@@ -1361,9 +1300,6 @@ class Command(BaseCommand):
         now = timezone.now().date()
 
         for task in tasks:
-            if task.item_type == 'milestone':
-                continue
-
             # Create 0-4 comments per task
             num_comments = random.randint(0, 4)
 
@@ -1399,9 +1335,6 @@ class Command(BaseCommand):
         now = timezone.now().date()
 
         for task in tasks:
-            if task.item_type == 'milestone':
-                continue
-
             # Always create a 'created' activity
             TaskActivity.objects.create(
                 task=task,
@@ -1469,8 +1402,7 @@ class Command(BaseCommand):
             board__in=[software_board, marketing_board, bug_board]
         ))
 
-        tasks_only = [t for t in tasks if t.item_type == 'task']
-        for task in tasks_only[:20]:  # Link to first 20 tasks
+        for task in tasks[:20]:  # Link to first 20 tasks
             stakeholder = random.choice(stakeholders)
             StakeholderTaskInvolvement.objects.get_or_create(
                 stakeholder=stakeholder,

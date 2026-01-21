@@ -886,18 +886,12 @@ def create_task(request, board_id, column_id=None):
             if form.is_valid():
                 task = form.save(commit=False)
 
-                # For milestones, prefer placing them in Backlog column
-                if task.item_type == 'milestone':
-                    backlog_column = Column.objects.filter(
-                        board=board,
-                        name__iregex=r'^(backlog)$'
-                    ).first()
-                    if backlog_column:
-                        task.column = backlog_column
-                    else:
-                        task.column = column
-                else:
+                # Set the column for the task
+                if column:
                     task.column = column
+                else:
+                    # If no column specified, use the first column of the board
+                    task.column = board.columns.first()
 
                 # For demo mode, use demo_admin if user is anonymous
                 if request.user.is_authenticated:
@@ -1418,9 +1412,9 @@ def gantt_chart(request, board_id):
             phase_tasks = tasks.filter(phase=phase_name)
 
             if phase_tasks.exists():
-                # Get earliest start_date (only from tasks, not milestones)
+                # Get earliest start_date
                 task_start_dates = list(phase_tasks.filter(
-                    item_type='task', start_date__isnull=False
+                    start_date__isnull=False
                 ).values_list('start_date', flat=True))
 
                 # Get latest due_date (from both tasks and milestones)
@@ -1434,15 +1428,13 @@ def gantt_chart(request, board_id):
                 phases_data[phase_name] = {
                     'start': min(task_start_dates).isoformat() if task_start_dates else None,
                     'end': max(due_dates_as_date).isoformat() if due_dates_as_date else None,
-                    'task_count': phase_tasks.filter(item_type='task').count(),
-                    'milestone_count': phase_tasks.filter(item_type='milestone').count(),
+                    'task_count': phase_tasks.count(),
                 }
             else:
                 phases_data[phase_name] = {
                     'start': None,
                     'end': None,
                     'task_count': 0,
-                    'milestone_count': 0,
                 }
 
         # Convert to JSON for JavaScript consumption
