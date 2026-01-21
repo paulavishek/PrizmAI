@@ -1581,9 +1581,6 @@
                         <span class="phase-badge tasks">
                             <i class="fas fa-tasks"></i> ${data.task_count || 0} tasks
                         </span>
-                        <span class="phase-badge milestones">
-                            <i class="fas fa-flag"></i> ${data.milestone_count || 0} milestones
-                        </span>
                     </div>
                 </div>
             `;
@@ -1621,7 +1618,7 @@
             // Add phase bar with all required fields to match task structure
             const phaseBar = {
                 id: phaseId,
-                name: `${phaseName} ${isExpanded ? '▼' : '▶'} (${data.task_count} tasks, ${data.milestone_count} milestones)`,
+                name: `${phaseName} ${isExpanded ? '▼' : '▶'} (${data.task_count} tasks)`,
                 fullName: phaseName,
                 start: data.start,
                 end: data.end,
