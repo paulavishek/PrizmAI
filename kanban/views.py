@@ -15,7 +15,7 @@ from django.core.management import call_command
 # Configure logger
 logger = logging.getLogger(__name__)
 
-from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Milestone
+from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile
 from .forms import BoardForm, ColumnForm, TaskForm, TaskLabelForm, CommentForm, TaskMoveForm, TaskSearchForm, TaskFileForm
 from accounts.models import UserProfile, Organization
 from .stakeholder_models import StakeholderTaskInvolvement

@@ -11,7 +11,7 @@ from django.utils import timezone
 from datetime import timedelta, datetime
 import json
 
-from kanban.models import Board, Task, Milestone
+from kanban.models import Board, Task
 from kanban.burndown_models import (
     TeamVelocitySnapshot,
     BurndownPrediction,

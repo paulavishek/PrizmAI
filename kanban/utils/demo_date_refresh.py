@@ -101,22 +101,19 @@ def refresh_all_demo_dates():
             # 1. Refresh Task dates
             stats['tasks_updated'] = _refresh_task_dates(now, base_date)
             
-            # 2. Refresh Milestone dates
-            stats['milestones_updated'] = _refresh_milestone_dates(now, base_date)
-            
-            # 3. Refresh Time Entry dates
+            # 2. Refresh Time Entry dates
             stats['time_entries_updated'] = _refresh_time_entry_dates(base_date)
             
-            # 4. Refresh Stakeholder Engagement dates
+            # 3. Refresh Stakeholder Engagement dates
             stats['engagement_records_updated'] = _refresh_engagement_dates(base_date)
             
-            # 5. Refresh Retrospective dates
+            # 4. Refresh Retrospective dates
             stats['retrospectives_updated'] = _refresh_retrospective_dates(base_date)
             
-            # 6. Refresh Velocity Snapshot dates
+            # 5. Refresh Velocity Snapshot dates
             stats['velocity_snapshots_updated'] = _refresh_velocity_snapshot_dates(base_date)
             
-            # 7. Refresh Coaching Suggestion dates
+            # 6. Refresh Coaching Suggestion dates
             stats['coaching_suggestions_updated'] = _refresh_coaching_suggestion_dates(now)
             
             # 8. Refresh PM Metrics dates
@@ -330,70 +327,6 @@ def _refresh_task_dates(now, base_date):
         
     except Exception as e:
         logger.warning(f"Error refreshing task dates: {e}")
-        return 0
-
-
-def _refresh_milestone_dates(now, base_date):
-    """
-    Refresh milestone target_date and completed_date fields.
-    
-    NOTE: Milestones do not have created_by_session because users cannot
-    create milestones in demo mode. All milestones are seed data.
-    """
-    try:
-        from kanban.models import Milestone
-        
-        demo_org_ids = _get_demo_organizations()
-        milestones = list(Milestone.objects.filter(
-            board__organization_id__in=demo_org_ids
-        ))
-        
-        if not milestones:
-            return 0
-        
-        milestones_to_update = []
-        
-        for milestone in milestones:
-            if not milestone.target_date:
-                continue
-            
-            milestone_type = getattr(milestone, 'milestone_type', 'deliverable')
-            
-            if milestone.is_completed:
-                if milestone_type == 'project_start':
-                    days_offset = -60
-                elif milestone_type == 'phase_completion':
-                    days_offset = -(milestone.id % 40 + 10)
-                elif milestone_type == 'deliverable':
-                    days_offset = -(milestone.id % 30 + 5)
-                else:
-                    days_offset = -(milestone.id % 20 + 10)
-                
-                if milestone.completed_date:
-                    milestone.completed_date = base_date + timedelta(days=days_offset + 2)
-            else:
-                if milestone_type == 'project_end':
-                    days_offset = 60
-                elif milestone_type == 'phase_completion':
-                    days_offset = (milestone.id % 30) + 10
-                elif milestone_type == 'deliverable':
-                    days_offset = (milestone.id % 25) + 5
-                elif milestone_type == 'review':
-                    days_offset = (milestone.id % 20) + 3
-                else:
-                    days_offset = (milestone.id % 15) + 5
-            
-            milestone.target_date = base_date + timedelta(days=days_offset)
-            milestones_to_update.append(milestone)
-        
-        if milestones_to_update:
-            Milestone.objects.bulk_update(milestones_to_update, 
-                                         ['target_date', 'completed_date'], batch_size=100)
-        
-        return len(milestones_to_update)
-        
-    except Exception as e:
-        logger.warning(f"Error refreshing milestone dates: {e}")
         return 0
 
 
