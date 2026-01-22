@@ -1440,7 +1440,7 @@ On-call engineer acknowledges alert within:
 | Performance Optimization | In Progress | Engineering |
 | Mobile App Refresh | Planning | Mobile Team |
 
-**Key Milestone:** New dashboard launch (Jan 15)
+**Key Target:** New dashboard launch (Jan 15)
 
 ---
 
@@ -1453,7 +1453,7 @@ On-call engineer acknowledges alert within:
 | Enterprise SSO | In Progress | Security |
 | API v2 Launch | Planning | Engineering |
 
-**Key Milestone:** Enterprise beta program launch (Feb 1)
+**Key Target:** Enterprise beta program launch (Feb 1)
 
 ---
 
@@ -1466,7 +1466,7 @@ On-call engineer acknowledges alert within:
 | Integration Marketplace | Planning | Partnerships |
 | Mobile Native Features | Planning | Mobile Team |
 
-**Key Milestone:** Public launch of enterprise tier (Mar 15)
+**Key Target:** Public launch of enterprise tier (Mar 15)
 
 ---
 

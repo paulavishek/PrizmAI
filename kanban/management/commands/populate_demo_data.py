@@ -1,7 +1,7 @@
 """
 Management command to populate demo boards with realistic tasks
 Creates 90 tasks across 3 demo boards (30 per board) with proper assignments, dates, dependencies, and skills
-Each board has 3 phases with 10 tasks + 2 milestones per phase
+Each board has 3 phases with 10 tasks per phase
 Includes comprehensive demo data for all task fields including risk, skills, and collaboration
 Also includes comments, activity logs, stakeholders, wiki links, and file attachment metadata
 """
@@ -173,7 +173,7 @@ RISK_INDICATORS = [
     'Verify resource allocation',
     'Monitor technical blockers',
     'Track stakeholder feedback',
-    'Review milestone deadlines',
+    'Review project deadlines',
     'Check integration points',
     'Monitor external dependencies',
     'Track skill availability',
@@ -378,8 +378,8 @@ class Command(BaseCommand):
             ))
             return
 
-        # Create tasks for each board (30 tasks + 6 milestones per board)
-        self.stdout.write(self.style.SUCCESS('📝 Creating demo tasks and milestones...\n'))
+        # Create tasks for each board (30 tasks per board)
+        self.stdout.write(self.style.SUCCESS('📝 Creating demo tasks...\n'))
 
         software_tasks = self.create_software_tasks(software_board, alex, sam, jordan)
         self.stdout.write(self.style.SUCCESS(
@@ -441,7 +441,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('\n🤖 Creating AI coaching suggestions...\n'))
         self.create_coaching_data(software_board, marketing_board, bug_board)
 
-        # Create comments for all tasks (not milestones)
+        # Create comments for all tasks
         self.stdout.write(self.style.SUCCESS('\n💬 Creating task comments...\n'))
         self.create_comments(all_tasks, alex, sam, jordan)
 
@@ -466,7 +466,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))
 
     def create_software_tasks(self, board, alex, sam, jordan):
-        """Create 30 tasks + 6 milestones for Software Development board (3 phases)"""
+        """Create 30 tasks for Software Development board (3 phases)"""
         columns = {col.name: col for col in Column.objects.filter(board=board)}
         backlog_col = columns.get('To Do') or columns.get('Backlog') or list(columns.values())[0]
         in_progress_col = columns.get('In Progress') or backlog_col
@@ -490,11 +490,6 @@ class Command(BaseCommand):
             {'title': 'Create project documentation', 'desc': 'Set up documentation site with API reference', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 100, 'column': done_col},
         ]
 
-        phase1_milestones = [
-            {'title': 'Project Kickoff', 'desc': 'Development environment ready and team onboarded', 'due_offset': -60, 'progress': 100},
-            {'title': 'Foundation Complete', 'desc': 'Core infrastructure and authentication ready', 'due_offset': -31, 'progress': 100},
-        ]
-
         # Phase 2: Core Features (days -30 to -1)
         phase2_tasks = [
             {'title': 'Build dashboard UI', 'desc': 'Create responsive dashboard with charts and widgets', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 80, 'column': review_col},
@@ -509,11 +504,6 @@ class Command(BaseCommand):
             {'title': 'Add two-factor authentication', 'desc': 'TOTP-based 2FA with recovery codes', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 45, 'column': in_progress_col},
         ]
 
-        phase2_milestones = [
-            {'title': 'MVP Features Complete', 'desc': 'Core user-facing features implemented', 'due_offset': -15, 'progress': 0},
-            {'title': 'Internal Beta Ready', 'desc': 'Application ready for internal testing', 'due_offset': -1, 'progress': 0},
-        ]
-
         # Phase 3: Polish & Launch (days 0 to +45)
         phase3_tasks = [
             {'title': 'Performance optimization', 'desc': 'Database query optimization and caching', 'priority': 'high', 'complexity': 8, 'assignee': sam, 'progress': 0, 'column': backlog_col},
@@ -526,11 +516,6 @@ class Command(BaseCommand):
             {'title': 'Accessibility improvements', 'desc': 'WCAG 2.1 compliance updates', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
             {'title': 'Deployment automation', 'desc': 'One-click deployment to production', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 0, 'column': backlog_col},
             {'title': 'Launch preparation', 'desc': 'Final checklist and go-live preparation', 'priority': 'urgent', 'complexity': 4, 'assignee': alex, 'progress': 0, 'column': backlog_col},
-        ]
-
-        phase3_milestones = [
-            {'title': 'Beta Release', 'desc': 'Public beta launch with select users', 'due_offset': 30, 'progress': 0},
-            {'title': 'Production Launch', 'desc': 'Official production release', 'due_offset': 45, 'progress': 0},
         ]
 
         # Create Phase 1 items with improved date logic
@@ -586,7 +571,7 @@ class Command(BaseCommand):
         return items
 
     def create_marketing_tasks(self, board, alex, sam, jordan):
-        """Create 30 tasks + 6 milestones for Marketing Campaign board (3 phases)"""
+        """Create 30 tasks for Marketing Campaign board (3 phases)"""
         columns = {col.name: col for col in Column.objects.filter(board=board)}
         backlog_col = columns.get('To Do') or columns.get('Backlog') or list(columns.values())[0]
         in_progress_col = columns.get('In Progress') or backlog_col
@@ -610,11 +595,6 @@ class Command(BaseCommand):
             {'title': 'Brand guidelines review', 'desc': 'Update brand guidelines for campaign', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 100, 'column': done_col},
         ]
 
-        phase1_milestones = [
-            {'title': 'Strategy Approved', 'desc': 'Campaign strategy signed off by stakeholders', 'due_offset': -55, 'progress': 100},
-            {'title': 'Planning Complete', 'desc': 'All planning deliverables finalized', 'due_offset': -31, 'progress': 100},
-        ]
-
         # Phase 2: Content Creation (days -30 to -1)
         phase2_tasks = [
             {'title': 'Write blog posts', 'desc': 'Create 5 SEO-optimized blog articles', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 80, 'column': review_col},
@@ -627,11 +607,6 @@ class Command(BaseCommand):
             {'title': 'Write case studies', 'desc': 'Document customer success stories', 'priority': 'medium', 'complexity': 6, 'assignee': jordan, 'progress': 20, 'column': in_progress_col},
             {'title': 'Create ad creatives', 'desc': 'Design paid advertising visuals and copy', 'priority': 'high', 'complexity': 5, 'assignee': jordan, 'progress': 65, 'column': in_progress_col},
             {'title': 'Develop content calendar', 'desc': 'Schedule all content across channels', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 100, 'column': done_col},
-        ]
-
-        phase2_milestones = [
-            {'title': 'Content Review', 'desc': 'All content reviewed and approved', 'due_offset': -15, 'progress': 0},
-            {'title': 'Assets Ready', 'desc': 'All creative assets finalized', 'due_offset': -1, 'progress': 0},
         ]
 
         # Phase 3: Launch & Optimization (days 0 to +45)
@@ -648,21 +623,12 @@ class Command(BaseCommand):
             {'title': 'Campaign retrospective', 'desc': 'Document learnings and recommendations', 'priority': 'low', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': backlog_col},
         ]
 
-        phase3_milestones = [
-            {'title': 'Campaign Launch', 'desc': 'Official campaign launch across all channels', 'due_offset': 15, 'progress': 0},
-            {'title': 'Campaign Completion', 'desc': 'Campaign ended and results documented', 'due_offset': 45, 'progress': 0},
-        ]
-
         # Create all phases with improved date logic
         # Each task starts 0 to +3 days from the previous task's due date (no overlap)
         # First task starts on day -10
         prev_due_date = now + timedelta(days=-10)
         
-        for phase_num, (tasks, milestones) in enumerate([
-            (phase1_tasks, phase1_milestones),
-            (phase2_tasks, phase2_milestones),
-            (phase3_tasks, phase3_milestones),
-        ], start=1):
+        for phase_num, tasks in enumerate([phase1_tasks, phase2_tasks, phase3_tasks], start=1):
             phase_name = f'Phase {phase_num}'
             
             # Add a small gap between phases (3-6 days) for visual separation
@@ -686,7 +652,7 @@ class Command(BaseCommand):
         return items
 
     def create_bug_tasks(self, board, alex, sam, jordan):
-        """Create 30 tasks + 6 milestones for Bug Tracking board (3 phases)"""
+        """Create 30 tasks for Bug Tracking board (3 phases)"""
         columns = {col.name: col for col in Column.objects.filter(board=board)}
         backlog_col = columns.get('To Do') or columns.get('Backlog') or list(columns.values())[0]
         in_progress_col = columns.get('In Progress') or backlog_col
@@ -709,11 +675,6 @@ class Command(BaseCommand):
             {'title': 'Fix sensitive data exposure', 'desc': 'Remove PII from error logs', 'priority': 'high', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done_col},
         ]
 
-        phase1_milestones = [
-            {'title': 'Critical Bugs Fixed', 'desc': 'All critical/urgent bugs resolved', 'due_offset': -45, 'progress': 100},
-            {'title': 'Security Audit Passed', 'desc': 'External security audit complete', 'due_offset': -31, 'progress': 100},
-        ]
-
         # Phase 2: High Priority Bugs (days -30 to -1)
         phase2_tasks = [
             {'title': 'Fix memory leak in worker', 'desc': 'Background worker memory grows over time', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 80, 'column': review_col},
@@ -726,11 +687,6 @@ class Command(BaseCommand):
             {'title': 'Fix export timeout', 'desc': 'Large exports timeout before completing', 'priority': 'medium', 'complexity': 6, 'assignee': sam, 'progress': 20, 'column': in_progress_col},
             {'title': 'Fix mobile menu collapse', 'desc': 'Menu doesn\'t collapse properly on mobile', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 100, 'column': done_col},
             {'title': 'Fix autocomplete delay', 'desc': 'Search autocomplete is too slow', 'priority': 'low', 'complexity': 4, 'assignee': sam, 'progress': 65, 'column': in_progress_col},
-        ]
-
-        phase2_milestones = [
-            {'title': 'High Priority Fixed', 'desc': 'All high priority bugs resolved', 'due_offset': -15, 'progress': 0},
-            {'title': 'Performance Targets Met', 'desc': 'All pages load under 2 seconds', 'due_offset': -1, 'progress': 0},
         ]
 
         # Phase 3: Medium/Low Priority & Polish (days 0 to +45)
@@ -747,21 +703,12 @@ class Command(BaseCommand):
             {'title': 'Fix avatar upload preview', 'desc': 'Avatar preview not updating', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
         ]
 
-        phase3_milestones = [
-            {'title': 'All Bugs Resolved', 'desc': 'Zero known bugs remaining', 'due_offset': 25, 'progress': 0},
-            {'title': 'QA Sign-off', 'desc': 'Quality assurance approved for release', 'due_offset': 45, 'progress': 0},
-        ]
-
         # Create all phases with improved date logic
         # Each task starts 0 to +3 days from the previous task's due date (no overlap)
         # First task starts on day -10
         prev_due_date = now + timedelta(days=-10)
         
-        for phase_num, (tasks, milestones) in enumerate([
-            (phase1_tasks, phase1_milestones),
-            (phase2_tasks, phase2_milestones),
-            (phase3_tasks, phase3_milestones),
-        ], start=1):
+        for phase_num, tasks in enumerate([phase1_tasks, phase2_tasks, phase3_tasks], start=1):
             phase_name = f'Phase {phase_num}'
             
             # Add a small gap between phases (3-6 days) for visual separation
@@ -1195,7 +1142,7 @@ class Command(BaseCommand):
             {
                 'suggestion_type': 'deadline_risk',
                 'title': 'Deadline risk identified',
-                'message': 'Based on current velocity, the beta release milestone may slip by 3 days.',
+                'message': 'Based on current velocity, the beta release may slip by 3 days.',
                 'severity': 'medium',
             },
             {

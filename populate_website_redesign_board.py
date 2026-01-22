@@ -66,13 +66,6 @@ WEBSITE_REDESIGN_TASKS = {
     ]
 }
 
-# Milestone data for each phase (will be created as tasks with item_type='milestone')
-MILESTONES = [
-    {'title': 'Research Complete', 'phase': 'Phase 1', 'desc': 'User research and planning finalized', 'due_offset': -50, 'milestone_title': 'Research Complete'},
-    {'title': 'Design Approved', 'phase': 'Phase 2', 'desc': 'All designs approved by stakeholders', 'due_offset': -20, 'milestone_title': 'Design Approved'},
-    {'title': 'Website Launch', 'phase': 'Phase 3', 'desc': 'New website live in production', 'due_offset': 15, 'milestone_title': 'Website Launch'},
-]
-
 
 def populate_board():
     """Main function to populate the Website Redesign board"""
@@ -128,7 +121,7 @@ def populate_board():
     users = [alex, sam, jordan, demo_admin]
     now = timezone.now().date()
     
-    # Delete existing tasks if any (including milestone-type tasks)
+    # Delete existing tasks if any
     existing_tasks = Task.objects.filter(column__board=board)
     if existing_tasks.exists():
         count = existing_tasks.count()
@@ -240,10 +233,6 @@ def populate_board():
         prev_due_date = due
         print(f"    ✓ {task.title}")
     
-    # Note: Milestones are not created in this script since the Task model
-    # doesn't have item_type and milestone_title fields yet.
-    # You can add milestone support after implementing those fields in the Task model.
-    
     # Create some dependencies between tasks for Gantt chart
     print("\n🔗 Creating task dependencies...")
     # Phase 1 dependencies
@@ -276,7 +265,6 @@ def populate_board():
     print(f"   • Phase 3 (Upcoming): 10 tasks")
     print(f"   • Dependencies: Multiple")
     print(f"\n🎯 You can now test the Gantt chart with this board!")
-    print(f"\nℹ️  Note: Milestones not created (Task model needs item_type field)")
     print(f"\n⚠️  REMEMBER: Delete this script after testing")
     print(f"   Command: del populate_website_redesign_board.py")
     print()
