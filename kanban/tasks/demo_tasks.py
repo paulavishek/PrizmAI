@@ -231,31 +231,61 @@ def _reset_demo_boards(demo_org):
     """
     Reset official demo boards to their original state.
     Called after expired session cleanup to ensure fresh demo data.
+    
+    IMPORTANT: This uses the same management commands as the manual reset button
+    to ensure consistent demo data across both reset mechanisms.
     """
-    from kanban.models import Task, Board
+    from django.core.management import call_command
+    from io import StringIO
     
-    demo_boards = Board.objects.filter(
-        organization=demo_org,
-        is_official_demo_board=True
-    )
+    # Capture output for logging
+    out = StringIO()
     
-    for board in demo_boards:
-        tasks = list(Task.objects.filter(column__board=board))
+    try:
+        # 1. Repopulate wiki demo data first (pages needed for task wiki links)
+        try:
+            call_command('populate_wiki_demo_data', '--reset', stdout=out, stderr=out)
+            logger.info("Wiki demo data repopulated")
+        except Exception as e:
+            logger.warning(f"Wiki demo data repopulation failed (optional): {e}")
         
-        for task in tasks:
-            # Reset progress based on column type
-            if task.column.name in ['Done', 'Closed', 'Published']:
-                task.progress = 100
-            else:
-                task.progress = 0
-            # Clear any session assignments
-            task.assigned_to = None
+        # 2. Repopulate main demo tasks (with --reset to clear and recreate)
+        call_command('populate_demo_data', '--reset', stdout=out, stderr=out)
+        logger.info("Main demo data repopulated via populate_demo_data")
         
-        # Bulk update for performance
-        if tasks:
-            Task.objects.bulk_update(tasks, ['progress', 'assigned_to'], batch_size=100)
-    
-    logger.info(f"Reset {demo_boards.count()} demo boards to original state")
+        # 3. Repopulate AI assistant data
+        try:
+            call_command('populate_ai_assistant_demo_data', '--reset', stdout=out, stderr=out)
+            logger.info("AI assistant demo data repopulated")
+        except Exception as e:
+            logger.warning(f"AI assistant demo data repopulation failed (optional): {e}")
+        
+        # 4. Repopulate messaging data
+        try:
+            call_command('populate_messaging_demo_data', '--clear', stdout=out, stderr=out)
+            logger.info("Messaging demo data repopulated")
+        except Exception as e:
+            logger.warning(f"Messaging demo data repopulation failed (optional): {e}")
+        
+        # 5. Refresh all dates to current (burndown, retrospectives, etc.)
+        try:
+            call_command('refresh_demo_dates', '--force', stdout=out, stderr=out)
+            logger.info("Demo dates refreshed")
+        except Exception as e:
+            logger.warning(f"Demo dates refresh failed (optional): {e}")
+        
+        # 6. Detect conflicts for fresh data
+        try:
+            call_command('detect_conflicts', stdout=out, stderr=out)
+            logger.info("Conflicts detection completed")
+        except Exception as e:
+            logger.warning(f"Conflicts detection failed (optional): {e}")
+        
+        logger.info("Demo boards reset to original state via management commands")
+        
+    except Exception as e:
+        logger.error(f"Critical error resetting demo boards: {e}")
+        raise
 
 
 @shared_task(name='kanban.send_demo_expiry_warning')
