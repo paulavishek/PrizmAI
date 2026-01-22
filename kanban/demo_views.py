@@ -968,7 +968,7 @@ def reset_demo_data(request):
             
             # 6. Detect conflicts for fresh data
             try:
-                call_command('detect_conflicts', stdout=out, stderr=out)
+                call_command('detect_conflicts', '--clear', stdout=out, stderr=out)
             except Exception:
                 pass  # Conflicts detection is optional
             

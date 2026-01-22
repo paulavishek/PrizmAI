@@ -276,7 +276,7 @@ def _reset_demo_boards(demo_org):
         
         # 6. Detect conflicts for fresh data
         try:
-            call_command('detect_conflicts', stdout=out, stderr=out)
+            call_command('detect_conflicts', '--clear', stdout=out, stderr=out)
             logger.info("Conflicts detection completed")
         except Exception as e:
             logger.warning(f"Conflicts detection failed (optional): {e}")
