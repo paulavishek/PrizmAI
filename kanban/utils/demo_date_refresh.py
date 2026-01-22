@@ -222,65 +222,89 @@ def _refresh_task_dates(now, base_date):
         if not tasks:
             return 0
         
-        # Define phase date ranges to ensure strict chronological order
-        # Each phase spans about 3 weeks with clear gaps between phases
-        # Phase 1: day -5 to day 16 (about 3 weeks, mostly past/current)
-        # Phase 2: day 18 to day 39 (about 3 weeks, current/future)
-        # Phase 3: day 41 to day 62 (about 3 weeks, future)
-        phase_config = {
-            'Phase 1': {'start_offset': -5, 'end_offset': 16, 'duration': 21},
-            'Phase 2': {'start_offset': 18, 'end_offset': 39, 'duration': 21},
-            'Phase 3': {'start_offset': 41, 'end_offset': 62, 'duration': 21},
-        }
-        
-        # Default phase config for tasks without a phase
-        default_phase = {'start_offset': -30, 'end_offset': 30, 'duration': 60}
-        
-        # Group tasks by phase for even distribution
-        tasks_by_phase = {}
+        # Group tasks by phase and board for proper staggered scheduling
+        # Tasks within the same board/phase should be sequential (no overlaps)
+        tasks_by_board_phase = {}
         for task in tasks:
             if not task.due_date and not task.start_date:
                 continue
             phase_name = getattr(task, 'phase', None) or 'No Phase'
-            if phase_name not in tasks_by_phase:
-                tasks_by_phase[phase_name] = []
-            tasks_by_phase[phase_name].append(task)
+            board_id = task.column.board_id if task.column else 0
+            key = (board_id, phase_name)
+            if key not in tasks_by_board_phase:
+                tasks_by_board_phase[key] = []
+            tasks_by_board_phase[key].append(task)
         
         tasks_to_update = []
         
-        for phase_name, phase_tasks in tasks_by_phase.items():
-            phase_cfg = phase_config.get(phase_name, default_phase)
-            phase_start = phase_cfg['start_offset']
-            phase_duration = phase_cfg['duration']
+        # Process each board separately so their tasks don't interfere
+        boards_processed = set()
+        for (board_id, phase_name), _ in tasks_by_board_phase.items():
+            boards_processed.add(board_id)
+        
+        for board_id in boards_processed:
+            # Process all phases for this board in order
+            # Start from a fixed offset for the board
+            board_start_offset = -10  # Start tasks 10 days before today
+            prev_due_date = base_date + timedelta(days=board_start_offset)
             
-            # Calculate spacing to distribute tasks evenly across the phase
-            num_tasks = len(phase_tasks)
-            if num_tasks <= 1:
-                spacing = 0
-            else:
-                # Leave room for task duration at the end (about 5 days)
-                usable_duration = max(phase_duration - 5, phase_duration // 2)
-                spacing = usable_duration / (num_tasks - 1) if num_tasks > 1 else 0
+            for phase_num in range(1, 4):  # Phase 1, 2, 3
+                phase_name = f'Phase {phase_num}'
+                key = (board_id, phase_name)
+                
+                if key not in tasks_by_board_phase:
+                    continue
+                
+                phase_tasks = tasks_by_board_phase[key]
+                
+                # Add a small gap between phases (3-5 days) for visual separation
+                if phase_num > 1:
+                    prev_due_date = prev_due_date + timedelta(days=(board_id % 3) + 3)
+                
+                # Sort tasks by ID for consistent ordering
+                phase_tasks_sorted = sorted(phase_tasks, key=lambda t: t.id)
+                
+                for idx, task in enumerate(phase_tasks_sorted):
+                    # Each task starts 0-2 days after the previous task's due date
+                    # This creates staggered, non-overlapping tasks in the Gantt chart
+                    gap = (task.id + idx) % 3  # 0, 1, or 2 days gap (deterministic)
+                    task_start = prev_due_date + timedelta(days=gap)
+                    
+                    # Task duration based on complexity (3-6 days)
+                    complexity = getattr(task, 'complexity_score', 5) or 5
+                    duration = max(3, min((complexity // 2) + 3, 6))  # 3-6 days
+                    
+                    task_due = task_start + timedelta(days=duration)
+                    
+                    # Set start_date and due_date
+                    task.start_date = task_start
+                    task.due_date = task_due
+                    
+                    # Update prev_due_date for the next task
+                    prev_due_date = task_due
+                    
+                    tasks_to_update.append(task)
             
-            # Sort tasks by ID for consistent ordering
-            phase_tasks_sorted = sorted(phase_tasks, key=lambda t: t.id)
-            
-            for idx, task in enumerate(phase_tasks_sorted):
-                # Calculate position within phase - evenly distributed
-                position_in_phase = int(idx * spacing) if spacing > 0 else 0
+            # Also handle tasks without a phase (if any)
+            key = (board_id, 'No Phase')
+            if key in tasks_by_board_phase:
+                phase_tasks = tasks_by_board_phase[key]
+                phase_tasks_sorted = sorted(phase_tasks, key=lambda t: t.id)
                 
-                # Calculate the start date within the phase
-                start_days_offset = phase_start + position_in_phase
-                
-                # Task duration based on complexity (3-6 days)
-                complexity = getattr(task, 'complexity_score', 5) or 5
-                duration = max(3, min((complexity // 2) + 3, 6))  # 3-6 days
-                
-                # Set start_date and due_date
-                task.start_date = base_date + timedelta(days=start_days_offset)
-                task.due_date = now + timedelta(days=start_days_offset + duration)
-                
-                tasks_to_update.append(task)
+                for idx, task in enumerate(phase_tasks_sorted):
+                    gap = (task.id + idx) % 3
+                    task_start = prev_due_date + timedelta(days=gap)
+                    
+                    complexity = getattr(task, 'complexity_score', 5) or 5
+                    duration = max(3, min((complexity // 2) + 3, 6))
+                    
+                    task_due = task_start + timedelta(days=duration)
+                    
+                    task.start_date = task_start
+                    task.due_date = task_due
+                    prev_due_date = task_due
+                    
+                    tasks_to_update.append(task)
         
         if tasks_to_update:
             Task.objects.bulk_update(tasks_to_update, ['due_date', 'start_date'], batch_size=500)
