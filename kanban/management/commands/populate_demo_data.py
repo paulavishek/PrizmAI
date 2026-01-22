@@ -358,7 +358,55 @@ class Command(BaseCommand):
 
         # Reset existing demo tasks if requested
         if options['reset']:
-            self.stdout.write(self.style.WARNING('🔄 Resetting existing demo tasks...'))
+            self.stdout.write(self.style.WARNING('🔄 Resetting demo data...'))
+            
+            # Delete ALL user-created boards in demo org
+            # This includes:
+            # 1. Boards with is_official_demo_board=False
+            # 2. Boards with is_seed_demo_data=False (user-created, even if marked as official)
+            # We protect only the 3 official seed boards: Software Development, Marketing Campaign, Bug Tracking
+            from django.db.models import Q
+            from kanban.models import Column, Comment, TaskActivity, TaskFile
+            from kanban.resource_leveling_models import TaskAssignmentHistory
+            from kanban.stakeholder_models import StakeholderTaskInvolvement
+            
+            official_board_names = ['Software Development', 'Marketing Campaign', 'Bug Tracking']
+            
+            # Find user-created boards to delete
+            user_boards = Board.objects.filter(
+                organization=demo_org
+            ).exclude(
+                name__in=official_board_names,
+                is_official_demo_board=True
+            )
+            
+            if user_boards.exists():
+                # First delete all tasks on these boards (to handle FK constraints)
+                user_board_tasks = Task.objects.filter(column__board__in=user_boards)
+                task_ids = list(user_board_tasks.values_list('id', flat=True))
+                
+                if task_ids:
+                    # Delete related records first
+                    TaskActivity.objects.filter(task_id__in=task_ids).delete()
+                    Comment.objects.filter(task_id__in=task_ids).delete()
+                    TaskFile.objects.filter(task_id__in=task_ids).delete()
+                    TaskAssignmentHistory.objects.filter(task_id__in=task_ids).delete()
+                    StakeholderTaskInvolvement.objects.filter(task_id__in=task_ids).delete()
+                    
+                    # Clear dependencies
+                    for task in Task.objects.filter(id__in=task_ids):
+                        task.dependencies.clear()
+                        task.dependent_tasks.clear()
+                        task.related_tasks.clear()
+                    
+                    # Delete the tasks
+                    user_board_tasks.delete()
+                
+                # Now delete the boards (columns will cascade)
+                deleted_boards = user_boards.delete()[0]
+                self.stdout.write(self.style.WARNING(f'   Deleted {deleted_boards} user-created boards'))
+            
+            # Delete ALL tasks on official demo boards (both user-created and demo data)
             deleted_count = Task.objects.filter(
                 column__board__in=[software_board, marketing_board, bug_board]
             ).delete()[0]
