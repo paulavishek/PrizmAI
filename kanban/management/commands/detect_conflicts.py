@@ -29,6 +29,11 @@ class Command(BaseCommand):
             action='store_true',
             help='Detect conflicts across all boards',
         )
+        parser.add_argument(
+            '--clear',
+            action='store_true',
+            help='Clear existing conflicts before detecting new ones',
+        )
 
     def handle(self, *args, **options):
         self.stdout.write(self.style.NOTICE('Starting conflict detection...'))
@@ -37,11 +42,15 @@ class Command(BaseCommand):
         board_id = options.get('board_id')
         all_boards = options.get('all_boards')
         with_ai = options.get('with_ai', False)
+        clear_existing = options.get('clear', False)
         
         if board_id:
             # Detect for specific board
             try:
                 board = Board.objects.get(id=board_id)
+                if clear_existing:
+                    deleted = ConflictDetection.objects.filter(board=board).delete()[0]
+                    self.stdout.write(self.style.WARNING(f'Cleared {deleted} existing conflicts for board {board.name}'))
                 self.detect_board_conflicts(board, with_ai)
             except Board.DoesNotExist:
                 self.stdout.write(self.style.ERROR(f'Board with ID {board_id} not found'))
@@ -50,6 +59,9 @@ class Command(BaseCommand):
         elif all_boards:
             # Detect for all boards
             boards = Board.objects.all()
+            if clear_existing:
+                deleted = ConflictDetection.objects.filter(board__in=boards).delete()[0]
+                self.stdout.write(self.style.WARNING(f'Cleared {deleted} existing conflicts across all boards'))
             self.stdout.write(self.style.NOTICE(f'Analyzing {boards.count()} boards...'))
             
             total_conflicts = 0
@@ -65,9 +77,14 @@ class Command(BaseCommand):
             from django.utils import timezone
             
             thirty_days_ago = timezone.now() - timedelta(days=30)
+            # Tasks are related to boards through columns, use correct relationship path
             boards = Board.objects.filter(
-                tasks__updated_at__gte=thirty_days_ago
+                columns__tasks__updated_at__gte=thirty_days_ago
             ).distinct()
+            
+            if clear_existing:
+                deleted = ConflictDetection.objects.filter(board__in=boards).delete()[0]
+                self.stdout.write(self.style.WARNING(f'Cleared {deleted} existing conflicts'))
             
             self.stdout.write(self.style.NOTICE(f'Analyzing {boards.count()} active boards...'))
             

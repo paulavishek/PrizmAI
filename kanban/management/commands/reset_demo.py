@@ -130,7 +130,7 @@ class Command(BaseCommand):
             # Step 6: Detect conflicts for fresh data
             self.stdout.write('[6/6] Detecting conflicts...')
             try:
-                call_command('detect_conflicts', stdout=out, stderr=out)
+                call_command('detect_conflicts', '--clear', stdout=out, stderr=out)
                 self.stdout.write(self.style.SUCCESS('  Done'))
             except Exception as e:
                 self.stdout.write(self.style.WARNING(f'  Skipped: {str(e)}'))
