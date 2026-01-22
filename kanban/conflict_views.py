@@ -107,11 +107,14 @@ def conflict_dashboard(request):
         ).order_by('-severity', '-detected_at')
         
         # Get user's notifications (only for authenticated users)
+        # Filter by board if a specific board is selected
         if request.user.is_authenticated:
-            user_notifications = ConflictNotification.objects.filter(
+            notification_query = ConflictNotification.objects.filter(
                 user=request.user,
-                acknowledged=False
+                acknowledged=False,
+                conflict__board__in=boards_to_show  # Filter by selected board(s)
             ).select_related('conflict').order_by('-sent_at')[:10]
+            user_notifications = notification_query
         else:
             user_notifications = []
         
