@@ -533,21 +533,14 @@ class Command(BaseCommand):
             {'title': 'Production Launch', 'desc': 'Official production release', 'due_offset': 45, 'progress': 0},
         ]
 
-        # Define phase date ranges to ensure strict chronological order without overlap
-        # Phase 1: day -10 to day 35 (about 6 weeks) - Foundation work
-        # Phase 2: day 40 to day 85 (about 6 weeks) - Core features  
-        # Phase 3: day 90 to day 135 (about 6 weeks) - Polish & Launch
-        # Each task gets 4-5 days spacing to avoid cramming and show proper Gantt bars
-        phase_config = [
-            {'start_offset': -10, 'task_spacing': 4, 'milestone_offsets': [-8, 35]},   # Phase 1: kickoff milestone near start, completion at end
-            {'start_offset': 40, 'task_spacing': 4, 'milestone_offsets': [62, 85]},    # Phase 2: mid-phase and end-phase milestones
-            {'start_offset': 90, 'task_spacing': 4, 'milestone_offsets': [112, 135]},  # Phase 3: mid-phase and end-phase milestones
-        ]
-        
-        # Create Phase 1 items
+        # Create Phase 1 items with improved date logic
+        # Each task starts 0 to +3 days from the previous task's due date (no overlap)
+        # First task starts on day -10
+        prev_due_date = now + timedelta(days=-10)
         for i, t in enumerate(phase1_tasks):
-            start = now + timedelta(days=phase_config[0]['start_offset'] + i * phase_config[0]['task_spacing'])
-            due = start + timedelta(days=random.randint(3, 5))  # 3-5 day duration for good visual appearance
+            # Start date is 0 to +3 days from previous task's due date (ensures no overlap)
+            start = prev_due_date + timedelta(days=random.randint(0, 3))
+            due = start + timedelta(days=random.randint(3, 6))  # 3-6 day duration
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -556,11 +549,14 @@ class Command(BaseCommand):
                 is_seed_demo_data=True,
             )
             items.append(task)
+            prev_due_date = due
 
         # Create Phase 2 items
+        # Add a small gap between phases (3-6 days) for visual separation
+        prev_due_date = prev_due_date + timedelta(days=random.randint(3, 6))
         for i, t in enumerate(phase2_tasks):
-            start = now + timedelta(days=phase_config[1]['start_offset'] + i * phase_config[1]['task_spacing'])
-            due = start + timedelta(days=random.randint(3, 5))  # 3-5 day duration for good visual appearance
+            start = prev_due_date + timedelta(days=random.randint(0, 3))
+            due = start + timedelta(days=random.randint(3, 6))  # 3-6 day duration
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -569,11 +565,14 @@ class Command(BaseCommand):
                 is_seed_demo_data=True,
             )
             items.append(task)
+            prev_due_date = due
 
         # Create Phase 3 items
+        # Add a small gap between phases (3-6 days) for visual separation
+        prev_due_date = prev_due_date + timedelta(days=random.randint(3, 6))
         for i, t in enumerate(phase3_tasks):
-            start = now + timedelta(days=phase_config[2]['start_offset'] + i * phase_config[2]['task_spacing'])
-            due = start + timedelta(days=random.randint(3, 5))  # 3-5 day duration for good visual appearance
+            start = prev_due_date + timedelta(days=random.randint(0, 3))
+            due = start + timedelta(days=random.randint(3, 6))  # 3-6 day duration
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -582,6 +581,7 @@ class Command(BaseCommand):
                 is_seed_demo_data=True,
             )
             items.append(task)
+            prev_due_date = due
 
         return items
 
@@ -653,29 +653,26 @@ class Command(BaseCommand):
             {'title': 'Campaign Completion', 'desc': 'Campaign ended and results documented', 'due_offset': 45, 'progress': 0},
         ]
 
-        # Define phase date ranges to ensure strict chronological order without overlap
-        # Phase 1: day -10 to day 35 - Planning phase with wider spacing
-        # Phase 2: day 40 to day 85 - Content creation phase
-        # Phase 3: day 90 to day 135 - Launch phase
-        # Task spacing of 4 days ensures proper visual separation in Gantt chart
-        phase_config = [
-            {'start_offset': -10, 'task_spacing': 4, 'milestone_offsets': [-8, 35]},   # Phase 1
-            {'start_offset': 40, 'task_spacing': 4, 'milestone_offsets': [62, 85]},    # Phase 2
-            {'start_offset': 90, 'task_spacing': 4, 'milestone_offsets': [112, 135]},  # Phase 3
-        ]
+        # Create all phases with improved date logic
+        # Each task starts 0 to +3 days from the previous task's due date (no overlap)
+        # First task starts on day -10
+        prev_due_date = now + timedelta(days=-10)
         
-        # Create all phases
         for phase_num, (tasks, milestones) in enumerate([
             (phase1_tasks, phase1_milestones),
             (phase2_tasks, phase2_milestones),
             (phase3_tasks, phase3_milestones),
         ], start=1):
             phase_name = f'Phase {phase_num}'
-            config = phase_config[phase_num - 1]
+            
+            # Add a small gap between phases (3-6 days) for visual separation
+            if phase_num > 1:
+                prev_due_date = prev_due_date + timedelta(days=random.randint(3, 6))
 
             for i, t in enumerate(tasks):
-                start = now + timedelta(days=config['start_offset'] + i * config['task_spacing'])
-                due = start + timedelta(days=random.randint(3, 5))  # 3-5 day duration
+                # Start date is 0 to +3 days from previous task's due date (ensures no overlap)
+                start = prev_due_date + timedelta(days=random.randint(0, 3))
+                due = start + timedelta(days=random.randint(3, 6))  # 3-6 day duration
                 task = Task.objects.create(
                     column=t['column'], title=t['title'], description=t['desc'],
                     priority=t['priority'], complexity_score=t['complexity'],
@@ -684,6 +681,7 @@ class Command(BaseCommand):
                     is_seed_demo_data=True,
                 )
                 items.append(task)
+                prev_due_date = due
 
         return items
 
@@ -754,29 +752,26 @@ class Command(BaseCommand):
             {'title': 'QA Sign-off', 'desc': 'Quality assurance approved for release', 'due_offset': 45, 'progress': 0},
         ]
 
-        # Define phase date ranges to ensure strict chronological order without overlap
-        # Phase 1: day -10 to day 35 - Critical bugs phase
-        # Phase 2: day 40 to day 85 - Performance bugs phase
-        # Phase 3: day 90 to day 135 - UX bugs phase
-        # Task spacing of 4 days ensures proper visual separation in Gantt chart
-        phase_config = [
-            {'start_offset': -10, 'task_spacing': 4, 'milestone_offsets': [-8, 35]},   # Phase 1
-            {'start_offset': 40, 'task_spacing': 4, 'milestone_offsets': [62, 85]},    # Phase 2
-            {'start_offset': 90, 'task_spacing': 4, 'milestone_offsets': [112, 135]},  # Phase 3
-        ]
+        # Create all phases with improved date logic
+        # Each task starts 0 to +3 days from the previous task's due date (no overlap)
+        # First task starts on day -10
+        prev_due_date = now + timedelta(days=-10)
         
-        # Create all phases
         for phase_num, (tasks, milestones) in enumerate([
             (phase1_tasks, phase1_milestones),
             (phase2_tasks, phase2_milestones),
             (phase3_tasks, phase3_milestones),
         ], start=1):
             phase_name = f'Phase {phase_num}'
-            config = phase_config[phase_num - 1]
+            
+            # Add a small gap between phases (3-6 days) for visual separation
+            if phase_num > 1:
+                prev_due_date = prev_due_date + timedelta(days=random.randint(3, 6))
 
             for i, t in enumerate(tasks):
-                start = now + timedelta(days=config['start_offset'] + i * config['task_spacing'])
-                due = start + timedelta(days=random.randint(3, 5))  # 3-5 day duration for good visual appearance
+                # Start date is 0 to +3 days from previous task's due date (ensures no overlap)
+                start = prev_due_date + timedelta(days=random.randint(0, 3))
+                due = start + timedelta(days=random.randint(3, 6))  # 3-6 day duration for good visual appearance
                 task = Task.objects.create(
                     column=t['column'], title=t['title'], description=t['desc'],
                     priority=t['priority'], complexity_score=t['complexity'],
@@ -785,6 +780,7 @@ class Command(BaseCommand):
                     is_seed_demo_data=True,
                 )
                 items.append(task)
+                prev_due_date = due
 
         return items
 
