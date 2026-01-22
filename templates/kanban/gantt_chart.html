@@ -640,7 +640,10 @@
         {% endif %}
 
         {% if tasks %}
-            <svg id="gantt"></svg>
+            <!-- Gantt Chart Wrapper - this div will be cleared and recreated on each render -->
+            <div id="gantt-chart-wrapper">
+                <svg id="gantt"></svg>
+            </div>
             
             <!-- Custom Tooltip -->
             <div class="gantt-tooltip" id="gantt-tooltip"></div>
@@ -822,24 +825,39 @@
 
     // Initialize Gantt chart
     function initGantt(viewMode = 'Week') {
-        const ganttElement = document.getElementById('gantt');
+        const chartWrapper = document.getElementById('gantt-chart-wrapper');
         currentViewMode = viewMode;
         
         if (ganttChart) {
-            ganttChart.change_view_mode(viewMode);
-            // After changing view mode, reapply custom attributes and enhancements
-            setTimeout(() => {
-                applyCustomStyling();
-            }, 300);
-        } else {
-            // Debug: Log tasks with dependencies
-            console.log('Tasks with dependencies:', tasks.filter(t => t.dependencies).map(t => ({
-                id: t.id,
-                name: t.name,
-                dependencies: t.dependencies
-            })));
-            
-            ganttChart = new Gantt('#gantt', tasks, {
+            // If chart exists and we're just changing view mode, use the built-in method
+            try {
+                ganttChart.change_view_mode(viewMode);
+                // After changing view mode, reapply custom attributes and enhancements
+                setTimeout(() => {
+                    applyCustomStyling();
+                }, 300);
+                return;
+            } catch (e) {
+                console.warn('Error changing view mode, reinitializing chart:', e);
+                // If there's an error, fall through to recreate the chart
+                ganttChart = null;
+            }
+        }
+        
+        // Completely clear the wrapper and recreate fresh SVG
+        chartWrapper.innerHTML = '<svg id="gantt"></svg>';
+        
+        // Force a reflow to ensure DOM is updated
+        void chartWrapper.offsetHeight;
+        
+        // Debug: Log tasks with dependencies
+        console.log('Tasks with dependencies:', tasks.filter(t => t.dependencies).map(t => ({
+            id: t.id,
+            name: t.name,
+            dependencies: t.dependencies
+        })));
+        
+        ganttChart = new Gantt('#gantt', tasks, {
                 view_mode: viewMode,
                 bar_height: 32,
                 bar_corner_radius: 6,
@@ -852,7 +870,6 @@
                 on_click: function(task) {
                     // Redirect to task detail page with current page as return URL
                     const currentUrl = encodeURIComponent(window.location.href);
-                    window.location.href = `/tasks/${task.id}/?next=${currentUrl}`;
                     return false; // Prevent default behavior
                 },
                 on_date_change: function(task, start, end) {
@@ -867,21 +884,20 @@
                 }
             });
 
-            // Apply custom styling for the first time
-            setTimeout(() => {
-                applyCustomStyling();
-            }, 300);
-            
-            // Apply arrow styling again after a longer delay to ensure all SVG elements are rendered
-            setTimeout(() => {
-                enhanceDependencyArrows();
-            }, 600);
-            
-            // Final cleanup pass for any remaining arrow issues
-            setTimeout(() => {
-                enhanceDependencyArrows();
-            }, 1000);
-        }
+        // Apply custom styling for the first time
+        setTimeout(() => {
+            applyCustomStyling();
+        }, 300);
+        
+        // Apply arrow styling again after a longer delay to ensure all SVG elements are rendered
+        setTimeout(() => {
+            enhanceDependencyArrows();
+        }, 600);
+        
+        // Final cleanup pass for any remaining arrow issues
+        setTimeout(() => {
+            enhanceDependencyArrows();
+        }, 1000);
     }
 
     // Apply all custom styling, attributes, and enhancements
@@ -909,14 +925,18 @@
             barWrapper.parentNode.replaceChild(newBarWrapper, barWrapper);
             
             newBarWrapper.addEventListener('click', function(e) {
+                e.stopPropagation(); // Prevent event bubbling
                 const taskId = this.getAttribute('data-id');
                 if (taskId) {
                     // Check if this is a phase bar (id starts with 'phase-')
                     if (taskId.startsWith('phase-')) {
-                        // Extract phase name and toggle
-                        const phaseNum = taskId.replace('phase-', '');
-                        const phaseName = `Phase ${phaseNum}`;
-                        togglePhase(phaseName);
+                        // Extract phase name by converting ID back to proper case
+                        // 'phase-1' -> 'Phase 1', 'phase-2' -> 'Phase 2', etc.
+                        const phaseIdPart = taskId.replace('phase-', '');
+                        const phaseName = 'Phase ' + phaseIdPart.split('-').map(word => 
+                            word.charAt(0).toUpperCase() + word.slice(1)
+                        ).join(' ');
+                        togglePhase(phaseName, e);
                     } else {
                         // Navigate to regular task detail with return URL
                         const currentUrl = encodeURIComponent(window.location.href);
@@ -1531,7 +1551,13 @@
     }
 
     // Toggle a phase expansion
-    function togglePhase(phaseName) {
+    function togglePhase(phaseName, event) {
+        // Prevent event bubbling to avoid duplicate calls
+        if (event) {
+            event.stopPropagation();
+            event.preventDefault();
+        }
+        
         if (expandedPhases.has(phaseName)) {
             expandedPhases.delete(phaseName);
         } else {
@@ -1571,7 +1597,7 @@
             const expandIcon = isExpanded ? 'fa-chevron-down' : 'fa-chevron-right';
 
             html += `
-                <div class="phase-item ${isExpanded ? 'expanded' : ''}" onclick="togglePhase('${phaseName}')">
+                <div class="phase-item ${isExpanded ? 'expanded' : ''}" onclick="togglePhase('${phaseName}', event)">
                     <div>
                         <i class="fas ${expandIcon} me-2"></i>
                         <strong>${phaseName}</strong>
@@ -1612,7 +1638,7 @@
                 continue;
             }
 
-            const phaseId = phaseName.replace(' ', '-').toLowerCase();
+            const phaseId = phaseName.replace(/\s+/g, '-').toLowerCase();
             const isExpanded = expandedPhases.has(phaseName);
 
             // Add phase bar with all required fields to match task structure
@@ -1722,15 +1748,19 @@
 
     // Initialize Gantt with custom data
     function initGanttWithData(data) {
-        const ganttElement = document.getElementById('gantt');
-
-        if (ganttChart) {
-            // Destroy existing chart
-            ganttElement.innerHTML = '';
-        }
+        const chartWrapper = document.getElementById('gantt-chart-wrapper');
+        
+        // Clear the gantt reference
+        ganttChart = null;
+        
+        // Completely clear the wrapper and recreate fresh SVG
+        chartWrapper.innerHTML = '<svg id="gantt"></svg>';
+        
+        // Force a reflow to ensure DOM is updated
+        void chartWrapper.offsetHeight;
 
         if (data.length === 0) {
-            ganttElement.innerHTML = '<text x="50%" y="50" text-anchor="middle" fill="#64748b">No items to display</text>';
+            chartWrapper.innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;">No items to display</div>';
             return;
         }
 
@@ -1747,8 +1777,9 @@
             popup_trigger: 'none',
             on_click: function(task) {
                 if (task.isPhase) {
-                    togglePhase(task.phaseName);
-                    return false; // Prevent navigation for phase bars
+                    // Don't call togglePhase here as it will be handled by the bar wrapper click
+                    // Just return false to prevent default behavior
+                    return false;
                 } else if (task.isMilestone) {
                     const milestoneId = task.id.replace('milestone-', '');
                     const currentUrl = encodeURIComponent(window.location.href);
