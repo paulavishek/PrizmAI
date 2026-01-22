@@ -105,7 +105,7 @@ urlpatterns = [
     path('board/<int:board_id>/burndown/velocity-data/', burndown_views.velocity_chart_data, name='velocity_chart_data'),
     path('board/<int:board_id>/burndown/alerts/<int:alert_id>/acknowledge/', burndown_views.acknowledge_burndown_alert, name='acknowledge_burndown_alert'),
     path('board/<int:board_id>/burndown/alerts/<int:alert_id>/resolve/', burndown_views.resolve_burndown_alert, name='resolve_burndown_alert'),
-    path('board/<int:board_id>/burndown/milestones/', burndown_views.manage_milestones, name='manage_milestones'),
+
     path('board/<int:board_id>/burndown/history/', burndown_views.prediction_history, name='prediction_history'),
     path('board/<int:board_id>/burndown/suggestions/', burndown_views.actionable_suggestions_api, name='actionable_suggestions_api'),
 

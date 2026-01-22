@@ -360,42 +360,6 @@ def resolve_burndown_alert(request, board_id, alert_id):
     return JsonResponse({'success': False, 'error': 'POST required'}, status=400)
 
 
-def manage_milestones(request, board_id):
-    """
-    Manage project milestones
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
-    """
-    board = get_object_or_404(Board, id=board_id)
-    
-    # Check access
-    has_access, error_response = check_board_access_for_demo(request, board)
-    if not has_access:
-        if error_response:
-            return error_response
-        messages.error(request, "You don't have access to this board.")
-        return redirect('dashboard')
-    
-    # Get demo mode status
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    
-    # Get all milestones for this board
-    milestones = Milestone.objects.filter(board=board).order_by('target_date')
-    
-    context = {
-        'board': board,
-        'milestones': milestones,
-        'upcoming_milestones': milestones.filter(is_completed=False, target_date__gte=timezone.now().date()),
-        'completed_milestones': milestones.filter(is_completed=True),
-        'overdue_milestones': milestones.filter(is_completed=False, target_date__lt=timezone.now().date()),
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
-    }
-    
-    return render(request, 'kanban/manage_milestones.html', context)
-
-
 def prediction_history(request, board_id):
     """
     View historical predictions and accuracy
