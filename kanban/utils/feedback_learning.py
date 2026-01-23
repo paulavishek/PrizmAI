@@ -354,9 +354,17 @@ class FeedbackLearningSystem:
         if total_suggestions == 0:
             return {
                 'total_suggestions': 0,
+                'feedback_count': 0,
+                'helpful_count': 0,
+                'acted_on': 0,
+                'dismissed_count': 0,
                 'effectiveness_score': 0,
+                'overall_score': 0,
                 'action_rate': 0,
+                'helpful_rate': 0,
+                'dismissal_rate': 0,
                 'avg_relevance': 0,
+                'avg_confidence': 0,
                 'message': 'No suggestions generated yet'
             }
         
@@ -378,6 +386,15 @@ class FeedbackLearningSystem:
             Avg('relevance_score')
         )['relevance_score__avg'] or 0
         
+        # Calculate dismissal metrics
+        dismissed_count = suggestions.filter(status='dismissed').count()
+        dismissal_rate = (dismissed_count / total_suggestions * 100) if total_suggestions > 0 else 0
+        
+        # Calculate average confidence score
+        avg_confidence = suggestions.aggregate(
+            Avg('confidence_score')
+        )['confidence_score__avg'] or 0
+        
         # Calculate rates
         action_rate = (acted_on / total_suggestions * 100) if total_suggestions > 0 else 0
         helpful_rate = (helpful_count / feedback_count * 100) if feedback_count > 0 else 0
@@ -394,10 +411,14 @@ class FeedbackLearningSystem:
             'feedback_count': feedback_count,
             'helpful_count': helpful_count,
             'acted_on': acted_on,
+            'dismissed_count': dismissed_count,
             'action_rate': round(action_rate, 1),
             'helpful_rate': round(helpful_rate, 1),
+            'dismissal_rate': round(dismissal_rate, 1),
             'avg_relevance': round(avg_relevance, 2),
+            'avg_confidence': round(float(avg_confidence), 2),
             'effectiveness_score': round(effectiveness_score, 1),
+            'overall_score': round(effectiveness_score, 1),  # Alias for template compatibility
             'message': self._generate_effectiveness_message(effectiveness_score)
         }
     
