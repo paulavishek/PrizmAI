@@ -15,7 +15,7 @@ from kanban.permission_models import Role
 from kanban.budget_models import TimeEntry, ProjectBudget, TaskCost, ProjectROI
 from kanban.burndown_models import TeamVelocitySnapshot, BurndownPrediction
 from kanban.retrospective_models import ProjectRetrospective, LessonLearned, ImprovementMetric, RetrospectiveActionItem
-from kanban.coach_models import CoachingSuggestion, PMMetrics
+from kanban.coach_models import CoachingSuggestion, PMMetrics, CoachingInsight
 from kanban.stakeholder_models import ProjectStakeholder, StakeholderTaskInvolvement
 import random
 import os
@@ -1313,42 +1313,322 @@ class Command(BaseCommand):
         self.stdout.write('   ✅ Retrospective data created')
 
     def create_coaching_data(self, software_board, marketing_board, bug_board):
-        """Create AI coaching suggestions for demo boards"""
+        """Create AI-enhanced coaching suggestions for demo boards
+        
+        This creates detailed suggestions matching the AI-enhanced format:
+        - Comprehensive reasoning (why this matters)
+        - 3-5 detailed action steps with rationale, expected outcomes, and implementation hints
+        - Expected impact with quantifiable outcomes
+        - Proper metrics snapshot
+        """
+        # Delete existing suggestions first to avoid duplicates
+        CoachingSuggestion.objects.filter(
+            board__in=[software_board, marketing_board, bug_board]
+        ).delete()
+        
+        # AI-Enhanced suggestions with detailed format
         suggestions = [
+            # Suggestion 1: Resource Overload (High Severity)
             {
                 'suggestion_type': 'resource_overload',
                 'title': 'Team workload imbalance detected',
-                'message': 'Sam has 60% more tasks than other team members. Consider redistributing work.',
+                'message': 'Sam has 60% more tasks than other team members. Consider redistributing work to prevent burnout and ensure timely delivery.',
                 'severity': 'high',
+                'reasoning': 'Workload imbalances can lead to burnout, reduced productivity, and potential project delays. When one team member has significantly more tasks than others, it creates a single point of failure. If Sam becomes unavailable or overwhelmed, critical work could stall. Additionally, uneven workloads can impact team morale as other members may feel underutilized.',
+                'recommended_actions': [
+                    "Conduct a workload review meeting with the team • Rationale: Creates transparency about current assignments and identifies immediate redistribution opportunities • Expected outcome: Identify 3-5 tasks that can be reassigned immediately • How to: Schedule 30-minute meeting, use task board to visualize assignments per person",
+                    "Prioritize Sam's tasks and identify which can be delegated • Rationale: Not all high-priority tasks require Sam's specific expertise • Expected outcome: Reduce Sam's workload by 30% without impacting critical deliverables • How to: Review each task for skill requirements, pair junior members with Sam for knowledge transfer",
+                    "Implement work-in-progress (WIP) limits • Rationale: Prevents any team member from accumulating too many tasks • Expected outcome: Even distribution of work across the team • How to: Set WIP limit of 5 tasks per person, add to team working agreement",
+                    "Schedule regular capacity planning reviews • Rationale: Proactive monitoring prevents future imbalances • Expected outcome: Early detection of workload issues • How to: Weekly 15-minute standup focused on capacity, rotate facilitator role"
+                ],
+                'expected_impact': 'Rebalancing workload can improve team velocity by 15-20%, reduce burnout risk, and improve overall team satisfaction. Even task distribution also builds redundancy into the team.',
+                'confidence_score': 0.88,
+                'metrics_snapshot': {'imbalanced_member': 'Sam', 'task_variance': '60%', 'team_avg_tasks': 8, 'overloaded_tasks': 13}
             },
+            # Suggestion 2: Deadline Risk (Medium Severity)
             {
                 'suggestion_type': 'deadline_risk',
                 'title': 'Deadline risk identified',
-                'message': 'Based on current velocity, the beta release may slip by 3 days.',
+                'message': 'Based on current velocity, the beta release may slip by 3 days. Immediate attention needed to mitigate timeline risk.',
                 'severity': 'medium',
+                'reasoning': 'Current velocity metrics show the team completing 8 tasks per week, but 12 tasks remain for the beta release with only 1 week left. This 3-day projected slip could cascade into downstream dependencies including marketing launch dates and customer commitments. Early identification allows for scope adjustment or resource reallocation.',
+                'recommended_actions': [
+                    "Review remaining tasks and identify scope reduction opportunities • Rationale: Some features may be deferrable to post-beta without impacting core functionality • Expected outcome: Reduce remaining work by 20-30% • How to: Hold scope review with product owner, use MoSCoW prioritization",
+                    "Identify and remove blockers immediately • Rationale: Blocked tasks directly impact velocity and create uncertainty • Expected outcome: Increase effective velocity by 15% • How to: Daily blocker review, escalate dependencies same-day",
+                    "Consider focused sprint with reduced meetings • Rationale: Meeting overhead reduces productive coding time • Expected outcome: Gain 2-3 hours per developer per day • How to: Cancel non-essential meetings, move standups to async format",
+                    "Communicate proactively with stakeholders • Rationale: Managing expectations early preserves trust and allows for contingency planning • Expected outcome: Stakeholder alignment on realistic timeline • How to: Send status update email, propose adjusted date with confidence level"
+                ],
+                'expected_impact': 'Addressing deadline risk early can reduce actual slip from 3 days to 1 day or less. Proactive communication maintains stakeholder trust and allows for better planning.',
+                'confidence_score': 0.82,
+                'metrics_snapshot': {'current_velocity': 8, 'remaining_tasks': 12, 'days_remaining': 7, 'projected_slip_days': 3}
             },
+            # Suggestion 3: Best Practice (Low Severity)
             {
                 'suggestion_type': 'best_practice',
                 'title': 'Process improvement opportunity',
-                'message': 'Tasks in review stage average 4 days. Consider adding reviewers.',
+                'message': 'Tasks in review stage average 4 days. Consider adding reviewers or streamlining the review process.',
                 'severity': 'low',
+                'reasoning': 'A 4-day average review time creates bottlenecks and slows down delivery. Industry best practice targets 1-2 days for code review. Extended review periods indicate potential issues with reviewer availability, unclear acceptance criteria, or overly complex code changes. Long reviews also increase context-switching costs when changes are requested.',
+                'recommended_actions': [
+                    "Establish a reviewer rotation schedule • Rationale: Dedicated review time ensures consistent throughput • Expected outcome: Reduce review wait time by 50% • How to: Assign review slots (morning/afternoon) to specific team members, update working agreement",
+                    "Create a review checklist and guidelines • Rationale: Clear criteria speeds up reviews and reduces back-and-forth • Expected outcome: More consistent, faster reviews • How to: Document 5-10 key items to check, include in PR template",
+                    "Implement automated pre-review checks • Rationale: Catches common issues before human review, reducing cognitive load • Expected outcome: 20% fewer review comments on trivial issues • How to: Set up linting, formatting, and basic test gates in CI/CD",
+                    "Consider pair programming for complex changes • Rationale: Real-time collaboration eliminates post-hoc review delays • Expected outcome: Near-zero review time for paired work • How to: Identify complex tasks upfront, schedule pairing sessions"
+                ],
+                'expected_impact': 'Reducing review time from 4 days to 2 days can improve team velocity by 15-20%, accelerate feature delivery, and reduce developer frustration with waiting.',
+                'confidence_score': 0.85,
+                'metrics_snapshot': {'avg_review_days': 4, 'target_review_days': 2, 'tasks_in_review': 5, 'longest_review_days': 7}
             },
         ]
 
-        for board in [software_board, marketing_board, bug_board]:
-            for suggestion in suggestions:
-                CoachingSuggestion.objects.get_or_create(
-                    board=board,
-                    title=suggestion['title'],
-                    defaults={
-                        'suggestion_type': suggestion['suggestion_type'],
-                        'message': suggestion['message'],
-                        'severity': suggestion['severity'],
-                        'status': 'active',
-                    }
-                )
+        # Board-specific additional suggestions
+        software_specific = {
+            'suggestion_type': 'dependency_blocker',
+            'title': 'Dependency chain creating risk',
+            'message': 'Three tasks have dependencies that could delay the API integration milestone.',
+            'severity': 'high',
+            'reasoning': 'Sequential dependencies create a critical path where delays compound. The current dependency chain (Database Schema → API Structure → Authentication) means any slip in early tasks directly impacts all downstream work. This pattern also limits parallel work opportunities.',
+            'recommended_actions': [
+                "Map and visualize the complete dependency chain • Rationale: Understanding the full impact helps prioritize interventions • Expected outcome: Clear view of critical path and risk points • How to: Use Gantt chart or dependency graph, mark critical path items",
+                "Identify opportunities to parallelize work • Rationale: Breaking dependencies enables concurrent progress • Expected outcome: Reduce critical path length by 20% • How to: Mock interfaces early, use feature flags for partial integration",
+                "Add buffer time to critical path estimates • Rationale: Dependencies have higher uncertainty requiring risk buffer • Expected outcome: More realistic project timeline • How to: Add 20% buffer to dependent task estimates",
+                "Daily sync on dependency status • Rationale: Early warning of slips enables faster response • Expected outcome: Issues identified within 24 hours • How to: Add dependency check to daily standup agenda"
+            ],
+            'expected_impact': 'Proactive dependency management can reduce schedule risk by 30% and enable more parallel work streams.',
+            'confidence_score': 0.80,
+            'metrics_snapshot': {'dependent_tasks': 3, 'max_chain_length': 4, 'critical_path_days': 12}
+        }
 
-        self.stdout.write('   ✅ AI coaching suggestions created')
+        marketing_specific = {
+            'suggestion_type': 'scope_creep',
+            'title': 'Campaign scope expanding',
+            'message': 'The marketing campaign has grown by 25% since initial planning. Consider a scope review.',
+            'severity': 'medium',
+            'reasoning': 'Scope creep often occurs gradually through well-intentioned additions. A 25% growth indicates potential misalignment between resources and objectives. Without adjustment, this leads to quality compromises, missed deadlines, or team burnout.',
+            'recommended_actions': [
+                "Conduct a scope review session with stakeholders • Rationale: Realign expectations with available resources • Expected outcome: Clear agreement on essential vs nice-to-have deliverables • How to: List all additions since kickoff, apply MoSCoW prioritization",
+                "Document and communicate the scope baseline • Rationale: Creates shared understanding and change control process • Expected outcome: Reduced ad-hoc scope additions • How to: Create scope document, require sign-off for changes",
+                "Evaluate resource needs if scope must stay • Rationale: Expanding scope requires expanding capacity • Expected outcome: Realistic plan with adequate resources • How to: Calculate effort for additions, identify resource gaps",
+                "Implement a change request process • Rationale: Formal process slows uncontrolled growth • Expected outcome: Deliberate decisions about scope changes • How to: Create simple change request form, require impact assessment"
+            ],
+            'expected_impact': 'Managing scope creep can improve delivery success rate by 40% and maintain team sustainable pace.',
+            'confidence_score': 0.78,
+            'metrics_snapshot': {'original_tasks': 20, 'current_tasks': 25, 'scope_growth_percent': 25}
+        }
+
+        bug_specific = {
+            'suggestion_type': 'quality_issue',
+            'title': 'Bug recurrence pattern detected',
+            'message': 'Similar bugs are reappearing in the authentication module. Root cause analysis recommended.',
+            'severity': 'high',
+            'reasoning': 'Recurring bugs indicate systemic issues rather than isolated defects. The authentication module pattern suggests potential gaps in testing coverage, unclear requirements, or architectural weaknesses. Each recurrence wastes fix time and erodes user trust.',
+            'recommended_actions': [
+                "Conduct root cause analysis on recurring bugs • Rationale: Surface fixes don't address underlying issues • Expected outcome: Identify systemic causes and prevention strategies • How to: Use 5 Whys technique, involve senior engineers",
+                "Increase test coverage for authentication module • Rationale: Gaps in testing allow regressions • Expected outcome: Prevent 80% of bug recurrence • How to: Add integration tests, implement mutation testing",
+                "Review and clarify authentication requirements • Rationale: Ambiguous requirements lead to implementation gaps • Expected outcome: Clearer acceptance criteria • How to: Document edge cases, validate with security team",
+                "Consider architectural review of authentication • Rationale: Pattern may indicate design issues • Expected outcome: More robust implementation • How to: Schedule architecture review session, consider refactoring"
+            ],
+            'expected_impact': 'Addressing root causes can reduce bug recurrence by 70% and improve overall code quality.',
+            'confidence_score': 0.85,
+            'metrics_snapshot': {'recurring_bugs': 5, 'affected_module': 'authentication', 'recurrence_rate': '30%'}
+        }
+
+        # Create suggestions for each board
+        created_count = 0
+        
+        for board, specific_suggestion in [
+            (software_board, software_specific),
+            (marketing_board, marketing_specific),
+            (bug_board, bug_specific)
+        ]:
+            # Create common suggestions for each board
+            for suggestion in suggestions:
+                CoachingSuggestion.objects.create(
+                    board=board,
+                    suggestion_type=suggestion['suggestion_type'],
+                    title=suggestion['title'],
+                    message=suggestion['message'],
+                    severity=suggestion['severity'],
+                    status='active',
+                    reasoning=suggestion['reasoning'],
+                    recommended_actions=suggestion['recommended_actions'],
+                    expected_impact=suggestion['expected_impact'],
+                    confidence_score=suggestion['confidence_score'],
+                    metrics_snapshot=suggestion['metrics_snapshot'],
+                    ai_model_used='gemini-2.0-flash-exp',
+                    generation_method='hybrid',  # Indicates AI-enhanced format
+                )
+                created_count += 1
+            
+            # Create board-specific suggestion
+            CoachingSuggestion.objects.create(
+                board=board,
+                suggestion_type=specific_suggestion['suggestion_type'],
+                title=specific_suggestion['title'],
+                message=specific_suggestion['message'],
+                severity=specific_suggestion['severity'],
+                status='active',
+                reasoning=specific_suggestion['reasoning'],
+                recommended_actions=specific_suggestion['recommended_actions'],
+                expected_impact=specific_suggestion['expected_impact'],
+                confidence_score=specific_suggestion['confidence_score'],
+                metrics_snapshot=specific_suggestion['metrics_snapshot'],
+                ai_model_used='gemini-2.0-flash-exp',
+                generation_method='hybrid',
+            )
+            created_count += 1
+
+        self.stdout.write(f'   ✅ AI coaching suggestions created ({created_count} total, all AI-enhanced)')
+        
+        # Create PM Metrics for analytics dashboard
+        self.create_pm_metrics(software_board, marketing_board, bug_board)
+
+    def create_pm_metrics(self, software_board, marketing_board, bug_board):
+        """Create PM performance metrics for analytics dashboard
+        
+        Creates historical metrics data so the coaching analytics page has
+        meaningful data to display immediately.
+        """
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        
+        # Get demo users
+        demo_admin = User.objects.filter(
+            username__in=['demo_pm', 'alex_demo', 'admin']
+        ).first()
+        
+        if not demo_admin:
+            self.stdout.write('   ⚠️  PM metrics skipped (no demo user found)')
+            return
+        
+        # Delete existing metrics
+        PMMetrics.objects.filter(
+            board__in=[software_board, marketing_board, bug_board]
+        ).delete()
+        
+        now = timezone.now().date()
+        
+        # Create 4 weeks of historical metrics for each board
+        metrics_created = 0
+        
+        for board in [software_board, marketing_board, bug_board]:
+            for week_offset in range(4):
+                period_end = now - timedelta(weeks=week_offset)
+                period_start = period_end - timedelta(days=7)
+                
+                # Vary metrics to show realistic patterns
+                if week_offset == 0:  # Current week
+                    suggestions_received = random.randint(3, 5)
+                    suggestions_acted = random.randint(2, 4)
+                    velocity_trend = 'stable'
+                    risk_rate = random.uniform(70, 85)
+                    deadline_rate = random.uniform(80, 95)
+                    effectiveness = random.uniform(70, 85)
+                elif week_offset == 1:  # Last week
+                    suggestions_received = random.randint(4, 6)
+                    suggestions_acted = random.randint(3, 5)
+                    velocity_trend = 'improving'
+                    risk_rate = random.uniform(65, 80)
+                    deadline_rate = random.uniform(75, 90)
+                    effectiveness = random.uniform(65, 80)
+                else:  # Older weeks
+                    suggestions_received = random.randint(2, 4)
+                    suggestions_acted = random.randint(1, 3)
+                    velocity_trend = random.choice(['stable', 'improving', 'declining'])
+                    risk_rate = random.uniform(60, 75)
+                    deadline_rate = random.uniform(70, 85)
+                    effectiveness = random.uniform(55, 70)
+                
+                PMMetrics.objects.create(
+                    board=board,
+                    pm_user=demo_admin,
+                    period_start=period_start,
+                    period_end=period_end,
+                    suggestions_received=suggestions_received,
+                    suggestions_acted_on=suggestions_acted,
+                    avg_response_time_hours=Decimal(str(round(random.uniform(4, 48), 2))),
+                    velocity_trend=velocity_trend,
+                    risk_mitigation_success_rate=Decimal(str(round(risk_rate, 2))),
+                    deadline_hit_rate=Decimal(str(round(deadline_rate, 2))),
+                    team_satisfaction_score=Decimal(str(round(random.uniform(3.5, 4.5), 1))),
+                    improvement_areas=['communication', 'planning'] if week_offset < 2 else ['risk management'],
+                    struggle_areas=['scope management'] if week_offset == 0 else [],
+                    coaching_effectiveness_score=Decimal(str(round(effectiveness, 2))),
+                    calculated_by='demo_data_population',
+                )
+                metrics_created += 1
+        
+        self.stdout.write(f'   ✅ PM metrics created ({metrics_created} total)')
+        
+        # Create coaching insights for analytics
+        self.create_coaching_insights()
+
+    def create_coaching_insights(self):
+        """Create coaching insights for analytics dashboard
+        
+        Insights represent learned patterns from coaching interactions
+        that help improve future suggestions.
+        """
+        # Delete existing insights
+        CoachingInsight.objects.all().delete()
+        
+        insights_data = [
+            {
+                'insight_type': 'pattern',
+                'title': 'Resource overload correlates with deadline misses',
+                'description': 'Teams with workload imbalances above 50% show a 35% higher rate of deadline misses. Early intervention when imbalance exceeds 40% significantly improves outcomes.',
+                'confidence_score': Decimal('0.85'),
+                'sample_size': 150,
+                'applicable_to_suggestion_types': ['resource_overload', 'deadline_risk'],
+                'rule_adjustments': {'threshold_adjustment': -10, 'severity_boost': True},
+                'is_active': True,
+            },
+            {
+                'insight_type': 'effectiveness',
+                'title': 'Review time suggestions have high action rate',
+                'description': 'Suggestions about reducing review time are acted upon 78% of the time, with 82% of users reporting positive outcomes. This category of suggestions is highly effective.',
+                'confidence_score': Decimal('0.82'),
+                'sample_size': 95,
+                'applicable_to_suggestion_types': ['best_practice', 'quality_issue'],
+                'rule_adjustments': {},
+                'is_active': True,
+            },
+            {
+                'insight_type': 'pm_behavior',
+                'title': 'PMs respond faster to high-severity suggestions',
+                'description': 'Average response time for critical/high severity suggestions is 4.2 hours compared to 18.5 hours for low severity. Consider severity escalation for time-sensitive issues.',
+                'confidence_score': Decimal('0.90'),
+                'sample_size': 280,
+                'applicable_to_suggestion_types': ['deadline_risk', 'resource_overload', 'quality_issue'],
+                'rule_adjustments': {'auto_escalate_after_days': 2},
+                'is_active': True,
+            },
+            {
+                'insight_type': 'team_dynamics',
+                'title': 'Small teams respond better to specific recommendations',
+                'description': 'Teams of 3-5 members show 40% higher action rate on specific, actionable recommendations compared to general guidance. Larger teams prefer strategic suggestions.',
+                'confidence_score': Decimal('0.75'),
+                'sample_size': 120,
+                'applicable_to_suggestion_types': ['best_practice', 'communication_gap'],
+                'rule_adjustments': {'team_size_threshold': 5},
+                'is_active': True,
+            },
+            {
+                'insight_type': 'context_factor',
+                'title': 'End-of-sprint suggestions less effective',
+                'description': 'Suggestions generated in the final 2 days of a sprint have 45% lower action rates. Teams are focused on completion rather than process improvements during this time.',
+                'confidence_score': Decimal('0.78'),
+                'sample_size': 200,
+                'applicable_to_suggestion_types': ['best_practice', 'scope_creep'],
+                'rule_adjustments': {'suppress_in_final_days': 2},
+                'is_active': True,
+            },
+        ]
+        
+        for insight in insights_data:
+            CoachingInsight.objects.create(**insight)
+        
+        self.stdout.write(f'   ✅ Coaching insights created ({len(insights_data)} total)')
 
     def create_comments(self, tasks, alex, sam, jordan):
         """Create realistic comments for tasks"""
