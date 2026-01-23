@@ -1,10 +1,24 @@
 """
 Test script to verify AI enhancement is working
 Run this with: python manage.py shell < test_ai_enhancement.py
+             OR: python test_ai_enhancement.py (standalone)
 """
 
+# Setup Django environment if running standalone
+import os
+import sys
+
+if __name__ == '__main__':
+    # Add the project directory to the path
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    
+    # Setup Django
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'kanban_board.settings')
+    
+    import django
+    django.setup()
+
 from kanban.utils.ai_coach_service import AICoachService
-from kanban.models import Board
 
 print("=" * 60)
 print("AI Coach Enhancement Test")
