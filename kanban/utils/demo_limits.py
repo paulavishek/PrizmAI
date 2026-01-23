@@ -8,6 +8,9 @@ Demo Limits:
 - AI generations limited to 20
 
 These limits create conversion incentives while still demonstrating product value.
+
+IMPORTANT: Authenticated users with real accounts are NOT subject to demo limitations.
+They have their own monthly AI quota (1000 requests/month) tracked via AIUsageQuota.
 """
 from django.utils import timezone
 import logging
@@ -23,8 +26,52 @@ DEMO_LIMITS = {
 }
 
 
+def is_authenticated_real_user(request):
+    """
+    Check if the user is a real authenticated user (not an anonymous demo session).
+    Real authenticated users are NOT subject to demo limitations.
+    """
+    if not request.user.is_authenticated:
+        return False
+    
+    # Check if this is an anonymous demo session (logged in as virtual demo admin)
+    if request.session.get('is_anonymous_demo', False):
+        return False
+    
+    # Check if user has a real email (not a demo placeholder)
+    if hasattr(request.user, 'email') and request.user.email:
+        # Demo admin emails typically contain 'demo' in them
+        email = request.user.email.lower()
+        if 'demo_admin' in email or email.startswith('virtual_demo'):
+            return False
+        return True
+    
+    return False
+
+
 def is_demo_mode(request):
-    """Check if the current session is in demo mode"""
+    """
+    Check if the current session is in demo mode AND user is subject to demo limitations.
+    
+    Returns False for authenticated users with real accounts - they are NOT limited by demo rules.
+    """
+    # If session says demo mode
+    if not request.session.get('is_demo_mode', False):
+        return False
+    
+    # Authenticated real users are NOT subject to demo limitations
+    # They have their own AI quota (1000/month via AIUsageQuota)
+    if is_authenticated_real_user(request):
+        return False
+    
+    return True
+
+
+def is_viewing_demo_content(request):
+    """
+    Check if user is viewing demo content (even if not subject to demo limitations).
+    This is useful for UI purposes - showing demo boards, etc.
+    """
     return request.session.get('is_demo_mode', False)
 
 

@@ -1,5 +1,8 @@
 {% load static %}
 
+{# Only show demo limitations for true demo users, not authenticated users exploring demo content #}
+{% if show_demo_limitations %}
+
 <!-- Demo Limitations Banner - Highlights key restrictions to drive conversion -->
 <style>
     .demo-limitations-banner {
@@ -322,3 +325,18 @@ function trackLimitationBannerClick() {
 // Note: Demo timer is now handled by the unified navbar timer in base.html
 // The limitations banner shows a static hours remaining value that updates on page reload
 </script>
+
+{% else %}
+{# Authenticated user exploring demo - show a helpful info banner instead #}
+{% if is_authenticated_exploring_demo %}
+<div class="alert alert-info mb-4" style="border-radius: 12px;">
+    <div class="d-flex align-items-center">
+        <i class="fas fa-info-circle me-2" style="font-size: 1.5rem;"></i>
+        <div>
+            <strong>You're exploring demo content</strong>
+            <p class="mb-0 small">As a registered user, you're not subject to demo limitations. Your AI usage is tracked separately in your <a href="{% url 'ai_usage_dashboard' %}">AI Usage Dashboard</a> ({{ user.ai_usage_quota.requests_used|default:0 }}/{{ user.ai_usage_quota.monthly_quota|default:1000 }} requests this month).</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endif %}

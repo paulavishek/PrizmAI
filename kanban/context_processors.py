@@ -9,8 +9,38 @@ def demo_context(request):
     """
     Add demo session information to template context
     Makes demo variables available globally without repeating in every view
+    
+    IMPORTANT: Distinguishes between:
+    1. True demo users (anonymous or session-based demo) - subject to demo limitations
+    2. Authenticated users exploring demo content - NOT subject to demo limitations
     """
     context = {}
+    
+    # Determine if user is authenticated with a real account
+    # Exclude demo admin accounts and virtual demo users
+    is_authenticated_user = False
+    if request.user.is_authenticated:
+        # Check if this is NOT an anonymous demo session
+        if not request.session.get('is_anonymous_demo', False):
+            # Check if user has a real email (not a demo placeholder)
+            if hasattr(request.user, 'email') and request.user.email:
+                email = request.user.email.lower()
+                # Exclude virtual demo admin emails
+                if not ('demo_admin' in email or email.startswith('virtual_demo')):
+                    is_authenticated_user = True
+    
+    # Check if this authenticated user is just exploring demo content
+    # They should NOT see demo limitations - they have their own quota
+    context['is_authenticated_exploring_demo'] = (
+        is_authenticated_user and 
+        request.session.get('is_demo_mode', False)
+    )
+    
+    # Demo limitations only apply to non-authenticated demo users
+    context['show_demo_limitations'] = (
+        request.session.get('is_demo_mode', False) and 
+        not is_authenticated_user
+    )
     
     # Check if user is in demo mode
     if request.session.get('is_demo_mode'):
