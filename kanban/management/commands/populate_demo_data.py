@@ -1142,6 +1142,7 @@ class Command(BaseCommand):
             total_cost = sum([tc.actual_cost or Decimal('0.00') for tc in task_costs_qs]) if task_costs_qs else config['budget'] * Decimal('0.8')
             
             # Set initial values based on board type for realistic data
+            board_name = config['name']
             if board_name == 'Software Development':
                 base_expected = config['budget'] * Decimal('2.0')  # 100% ROI expected
                 base_realized_ratio = Decimal('0.4')  # Starting at 40% realization
