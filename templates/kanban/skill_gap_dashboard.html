@@ -804,13 +804,99 @@
             // Show success message
             showNotification('Development plan deleted successfully', 'success');
             
-            // Reload the skill gap analyzer
+            // Remove the plan card from the DOM
+            // Look for plan cards in both server-rendered and JS-rendered sections
+            let cardRemoved = false;
+            
+            // First try to find and remove from server-rendered section
+            const serverRenderedSection = document.querySelector('.col-md-6.mb-4 .card-body');
+            if (serverRenderedSection) {
+                const serverCards = serverRenderedSection.querySelectorAll('.plan-card');
+                console.log('Server-rendered plan cards found:', serverCards.length);
+                serverCards.forEach(card => {
+                    const detailsButton = card.querySelector(`button[onclick*="viewPlanDetails(${planId})"]`);
+                    if (detailsButton) {
+                        console.log('Removing server-rendered card for plan ID:', planId);
+                        card.remove();
+                        cardRemoved = true;
+                    }
+                });
+            }
+            
+            // Also check JS-rendered sections
+            const jsRenderedSection = document.getElementById('development-plans-section');
+            if (jsRenderedSection) {
+                const jsCards = jsRenderedSection.querySelectorAll('.plan-card');
+                console.log('JS-rendered plan cards found:', jsCards.length);
+            }
+            
+            // Reload the development plans via JavaScript to sync the state
             if (window.skillGapAnalyzer) {
                 await window.skillGapAnalyzer.loadDevelopmentPlans();
                 window.skillGapAnalyzer.renderPlansSection();
+            }
+            
+            // Count ALL remaining plans on the page
+            const allPlanCards = document.querySelectorAll('.plan-card');
+            const remainingPlans = allPlanCards.length;
+            
+            console.log('Total remaining plans after deletion:', remainingPlans);
+            
+            // Update the count in the summary card at the top
+            const summaryCard = document.querySelector('.stat-card.info h3');
+            if (summaryCard) {
+                summaryCard.textContent = remainingPlans;
+                console.log('Updated summary card count');
+            }
+            
+            // Update the count in the Development Plans section header
+            // Target the specific blue header section with bg-primary
+            const blueHeader = document.querySelector('.col-md-6 .card-header.bg-primary.text-white h5.mb-0');
+            if (blueHeader) {
+                blueHeader.innerHTML = `<i class="fas fa-graduation-cap me-2"></i>Development Plans (${remainingPlans})`;
+                console.log('Updated blue header count to:', remainingPlans);
             } else {
-                // Fallback: reload page
-                location.reload();
+                console.log('Blue header not found');
+            }
+            
+            // Also update any other headers with graduation cap icon (for dynamic sections)
+            document.querySelectorAll('.card-header h5').forEach(header => {
+                const iconElement = header.querySelector('.fa-graduation-cap');
+                if (iconElement && !header.classList.contains('mb-0')) {
+                    // This is a dynamic development plans header - update it
+                    header.innerHTML = `<i class="fas fa-graduation-cap me-2"></i>Development Plans (${remainingPlans})`;
+                    console.log('Updated dynamic header count');
+                }
+            });
+            
+            // If no plans left, show empty state
+            if (remainingPlans === 0) {
+                // Update summary card subtitle
+                const summarySubtitle = document.querySelector('.stat-card.info small');
+                if (summarySubtitle) {
+                    summarySubtitle.textContent = '0 Active • 0 Proposed';
+                }
+                
+                // Show empty state in the plans section
+                const plansSections = document.querySelectorAll('.col-md-6 .card-body');
+                plansSections.forEach(cardBody => {
+                    // Check if this card body had plan cards and now is empty
+                    if (cardRemoved && cardBody.querySelector('.plan-card') === null && !cardBody.querySelector('.empty-state')) {
+                        cardBody.innerHTML = `
+                            <div class="empty-state">
+                                <i class="fas fa-clipboard-list"></i>
+                                <h5>No Development Plans</h5>
+                                <p class="text-muted">Create plans to address skill gaps.</p>
+                            </div>
+                        `;
+                    }
+                });
+            }
+            
+            // Also update the skill gap analyzer if available
+            if (window.skillGapAnalyzer) {
+                await window.skillGapAnalyzer.loadDevelopmentPlans();
+                window.skillGapAnalyzer.renderPlansSection();
             }
             
         } catch (error) {
