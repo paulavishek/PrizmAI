@@ -472,7 +472,8 @@ function generateSuggestions() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            alert(`✅ ${data.message}\n\nCreated: ${data.created}\nSkipped: ${data.skipped}`);
+            // Show only the user-friendly message, no technical details
+            alert(data.message);
             location.reload();
         } else {
             alert('Error: ' + data.error);
