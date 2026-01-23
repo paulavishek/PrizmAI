@@ -47,9 +47,9 @@
                     </nav>
                 </div>
                 <div>
-                    <button onclick="goBack()" class="btn btn-secondary me-2">
+                    <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-secondary me-2">
                         <i class="fas fa-arrow-left"></i> Back
-                    </button>
+                    </a>
                     <a href="{% url 'roi_dashboard' board.id %}" class="btn btn-success">
                         <i class="fas fa-chart-bar"></i> ROI
                     </a>

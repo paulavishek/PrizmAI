@@ -320,7 +320,7 @@ def budget_analytics(request, board_id):
     
     # Add these to metrics
     metrics['burn_rate'] = burn_rate_data.get('daily_burn_rate', 0)
-    metrics['days_remaining'] = burn_rate_data.get('days_until_depleted', 0)
+    metrics['days_remaining'] = burn_rate_data.get('days_remaining', 0)
     metrics['total_time_logged'] = float(total_time_logged)
     metrics['cost_per_hour'] = float(cost_per_hour)
     metrics['projected_final_cost'] = projected_final_cost
