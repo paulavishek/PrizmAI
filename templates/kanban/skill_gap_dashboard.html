@@ -220,10 +220,10 @@
                         Development Plans ({{ development_plans.count }})
                     </h5>
                 </div>
-                <div class="card-body">
+                <div class="card-body" id="development-plans-container">
                     {% if development_plans %}
                         {% for plan in development_plans %}
-                        <div class="plan-card p-3 mb-3 border rounded">
+                        <div class="plan-card p-3 mb-3 border rounded" data-plan-id="{{ plan.id }}" data-plan-status="{{ plan.status }}">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <div>
                                     <h6 class="mb-1">
@@ -784,6 +784,11 @@
     
     async function deletePlan(planId, modal) {
         try {
+            // First, find the plan card to get its status before deletion
+            const planCard = document.querySelector(`.plan-card[data-plan-id="${planId}"]`);
+            const deletedPlanStatus = planCard ? planCard.getAttribute('data-plan-status') : null;
+            console.log('Deleting plan ID:', planId, 'with status:', deletedPlanStatus);
+            
             const response = await fetch(`/api/development-plans/${planId}/delete/`, {
                 method: 'DELETE',
                 headers: {
@@ -804,30 +809,26 @@
             // Show success message
             showNotification('Development plan deleted successfully', 'success');
             
-            // Remove the plan card from the DOM
-            // Look for plan cards in both server-rendered and JS-rendered sections
+            // Remove the plan card from DOM using the data-plan-id attribute
             let cardRemoved = false;
             
-            // First try to find and remove from server-rendered section
-            const serverRenderedSection = document.querySelector('.col-md-6.mb-4 .card-body');
-            if (serverRenderedSection) {
-                const serverCards = serverRenderedSection.querySelectorAll('.plan-card');
-                console.log('Server-rendered plan cards found:', serverCards.length);
-                serverCards.forEach(card => {
+            // Find and remove the card by data-plan-id (most reliable method)
+            const cardToRemove = document.querySelector(`.plan-card[data-plan-id="${planId}"]`);
+            if (cardToRemove) {
+                console.log('Found and removing plan card with ID:', planId);
+                cardToRemove.remove();
+                cardRemoved = true;
+            } else {
+                console.log('Card not found by data-plan-id, trying button selector');
+                // Fallback: try to find by button onclick attribute
+                document.querySelectorAll('.plan-card').forEach(card => {
                     const detailsButton = card.querySelector(`button[onclick*="viewPlanDetails(${planId})"]`);
                     if (detailsButton) {
-                        console.log('Removing server-rendered card for plan ID:', planId);
+                        console.log('Removing card found by button onclick');
                         card.remove();
                         cardRemoved = true;
                     }
                 });
-            }
-            
-            // Also check JS-rendered sections
-            const jsRenderedSection = document.getElementById('development-plans-section');
-            if (jsRenderedSection) {
-                const jsCards = jsRenderedSection.querySelectorAll('.plan-card');
-                console.log('JS-rendered plan cards found:', jsCards.length);
             }
             
             // Reload the development plans via JavaScript to sync the state
@@ -836,67 +837,65 @@
                 window.skillGapAnalyzer.renderPlansSection();
             }
             
-            // Count ALL remaining plans on the page
-            const allPlanCards = document.querySelectorAll('.plan-card');
-            const remainingPlans = allPlanCards.length;
+            // Count remaining plans by status
+            const remainingPlanCards = document.querySelectorAll('#development-plans-container .plan-card');
+            const remainingPlans = remainingPlanCards.length;
             
-            console.log('Total remaining plans after deletion:', remainingPlans);
+            let activeCount = 0;
+            let proposedCount = 0;
+            remainingPlanCards.forEach(card => {
+                const status = card.getAttribute('data-plan-status');
+                if (status === 'approved' || status === 'in_progress') {
+                    activeCount++;
+                } else if (status === 'proposed') {
+                    proposedCount++;
+                }
+            });
             
-            // Update the count in the summary card at the top
+            console.log('Remaining plans:', remainingPlans, 'Active:', activeCount, 'Proposed:', proposedCount);
+            
+            // Update the count in the summary card (green info card) at the top
             const summaryCard = document.querySelector('.stat-card.info h3');
             if (summaryCard) {
                 summaryCard.textContent = remainingPlans;
-                console.log('Updated summary card count');
+                console.log('Updated summary card count to:', remainingPlans);
             }
             
-            // Update the count in the Development Plans section header
-            // Target the specific blue header section with bg-primary
+            // Update the subtitle in the summary card (Active • Proposed)
+            const summarySubtitle = document.querySelector('.stat-card.info small');
+            if (summarySubtitle) {
+                summarySubtitle.textContent = `${activeCount} Active • ${proposedCount} Proposed`;
+                console.log('Updated summary card subtitle');
+            }
+            
+            // Update the count in the Development Plans section header (blue header)
             const blueHeader = document.querySelector('.col-md-6 .card-header.bg-primary.text-white h5.mb-0');
             if (blueHeader) {
                 blueHeader.innerHTML = `<i class="fas fa-graduation-cap me-2"></i>Development Plans (${remainingPlans})`;
                 console.log('Updated blue header count to:', remainingPlans);
             } else {
-                console.log('Blue header not found');
-            }
-            
-            // Also update any other headers with graduation cap icon (for dynamic sections)
-            document.querySelectorAll('.card-header h5').forEach(header => {
-                const iconElement = header.querySelector('.fa-graduation-cap');
-                if (iconElement && !header.classList.contains('mb-0')) {
-                    // This is a dynamic development plans header - update it
-                    header.innerHTML = `<i class="fas fa-graduation-cap me-2"></i>Development Plans (${remainingPlans})`;
-                    console.log('Updated dynamic header count');
-                }
-            });
-            
-            // If no plans left, show empty state
-            if (remainingPlans === 0) {
-                // Update summary card subtitle
-                const summarySubtitle = document.querySelector('.stat-card.info small');
-                if (summarySubtitle) {
-                    summarySubtitle.textContent = '0 Active • 0 Proposed';
-                }
-                
-                // Show empty state in the plans section
-                const plansSections = document.querySelectorAll('.col-md-6 .card-body');
-                plansSections.forEach(cardBody => {
-                    // Check if this card body had plan cards and now is empty
-                    if (cardRemoved && cardBody.querySelector('.plan-card') === null && !cardBody.querySelector('.empty-state')) {
-                        cardBody.innerHTML = `
-                            <div class="empty-state">
-                                <i class="fas fa-clipboard-list"></i>
-                                <h5>No Development Plans</h5>
-                                <p class="text-muted">Create plans to address skill gaps.</p>
-                            </div>
-                        `;
+                console.log('Blue header not found, trying alternative selectors');
+                // Try alternative selectors
+                document.querySelectorAll('.card-header.bg-primary h5').forEach(header => {
+                    if (header.innerHTML.includes('Development Plans')) {
+                        header.innerHTML = `<i class="fas fa-graduation-cap me-2"></i>Development Plans (${remainingPlans})`;
+                        console.log('Updated header via alternative selector');
                     }
                 });
             }
             
-            // Also update the skill gap analyzer if available
-            if (window.skillGapAnalyzer) {
-                await window.skillGapAnalyzer.loadDevelopmentPlans();
-                window.skillGapAnalyzer.renderPlansSection();
+            // If no plans left, show empty state
+            if (remainingPlans === 0) {
+                const plansContainer = document.getElementById('development-plans-container');
+                if (plansContainer && !plansContainer.querySelector('.empty-state')) {
+                    plansContainer.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-clipboard-list"></i>
+                            <h5>No Development Plans</h5>
+                            <p class="text-muted">Create plans to address skill gaps.</p>
+                        </div>
+                    `;
+                }
             }
             
         } catch (error) {
