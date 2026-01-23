@@ -296,8 +296,20 @@ function initializeLeanChart() {
         return;
     }
     
-    if (leanData.length === 0) {
-        console.warn('No lean data available');
+    // Check if array is empty or all counts are zero
+    const totalCount = leanData.reduce((sum, item) => sum + item.count, 0);
+    
+    if (leanData.length === 0 || totalCount === 0) {
+        console.warn('No lean data available or all counts are zero');
+        // Display a message in the chart container
+        const chartContainer = leanCtx.parentElement;
+        chartContainer.innerHTML = `
+            <div class="text-center py-5">
+                <i class="fas fa-chart-pie fa-3x text-muted mb-3"></i>
+                <p class="text-muted">No Lean Six Sigma data available</p>
+                <small class="text-muted">Tasks need to be categorized as Value-Added, Necessary NVA, or Waste/Eliminate</small>
+            </div>
+        `;
         return;
     }
     
