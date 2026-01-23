@@ -1149,62 +1149,100 @@ class Command(BaseCommand):
         self.stdout.write('   ✅ Budget and ROI data created')
 
     def create_burndown_data(self, software_board, marketing_board, bug_board):
-        """Create burndown and velocity snapshot data"""
-        now = timezone.now().date()
-
+        """
+        Create burndown and velocity snapshot data with proper historical data.
+        This ensures the burndown chart displays correctly with historical progress,
+        projected completion, and confidence bands.
+        """
+        from kanban.utils.burndown_predictor import BurndownPredictor
+        
+        now = timezone.now()
+        
         for board in [software_board, marketing_board, bug_board]:
-            # Clean up old burndown predictions for this board
+            self.stdout.write(f'     Processing {board.name}...')
+            
+            # Step 1: Populate historical completion dates for completed tasks
+            completed_tasks = list(Task.objects.filter(column__board=board, progress=100))
+            
+            if completed_tasks:
+                # Distribute completion dates across past 6 weeks
+                weeks_back = 6
+                tasks_per_week = len(completed_tasks) // weeks_back if weeks_back > 0 else len(completed_tasks)
+                
+                task_index = 0
+                for week in range(weeks_back, 0, -1):
+                    # Calculate date range for this week
+                    week_end = now - timedelta(weeks=week-1)
+                    week_start = week_end - timedelta(days=7)
+                    
+                    # Determine how many tasks to complete this week (with variation)
+                    base_count = tasks_per_week
+                    variation = random.randint(-2, 3)
+                    tasks_this_week = max(1, base_count + variation)
+                    tasks_this_week = min(tasks_this_week, len(completed_tasks) - task_index)
+                    
+                    for i in range(tasks_this_week):
+                        if task_index >= len(completed_tasks):
+                            break
+                            
+                        task = completed_tasks[task_index]
+                        
+                        # Random completion time within the week
+                        days_offset = random.randint(0, 6)
+                        hours_offset = random.randint(0, 23)
+                        minutes_offset = random.randint(0, 59)
+                        
+                        completion_date = week_start + timedelta(
+                            days=days_offset,
+                            hours=hours_offset,
+                            minutes=minutes_offset
+                        )
+                        
+                        task.completed_at = completion_date
+                        task.progress = 100
+                        task.save(update_fields=['completed_at', 'progress'])
+                        
+                        task_index += 1
+                
+                # Mark remaining tasks as completed recently (current week)
+                current_week_start = now - timedelta(days=7)
+                while task_index < len(completed_tasks):
+                    task = completed_tasks[task_index]
+                    days_offset = random.randint(0, 6)
+                    hours_offset = random.randint(0, 23)
+                    
+                    completion_date = current_week_start + timedelta(
+                        days=days_offset,
+                        hours=hours_offset
+                    )
+                    
+                    task.completed_at = completion_date
+                    task.progress = 100
+                    task.save(update_fields=['completed_at', 'progress'])
+                    task_index += 1
+            
+            # Step 2: Clean up old burndown data
             BurndownPrediction.objects.filter(board=board).delete()
             TeamVelocitySnapshot.objects.filter(board=board).delete()
             
-            # Create 4 weeks of velocity snapshots
-            for week in range(4):
-                period_end = now - timedelta(weeks=week)
-                period_start = period_end - timedelta(days=7)
-
-                TeamVelocitySnapshot.objects.get_or_create(
-                    board=board,
-                    period_start=period_start,
-                    period_end=period_end,
-                    defaults={
-                        'period_type': 'weekly',
-                        'tasks_completed': random.randint(8, 15),
-                        'story_points_completed': Decimal(random.randint(15, 35)),
-                        'hours_completed': Decimal(random.randint(30, 50)),
-                        'active_team_members': random.randint(3, 6),
-                    }
-                )
-
-            # Create burndown prediction
-            total_tasks = random.randint(25, 40)
-            completed_tasks = random.randint(10, 20)
-            remaining_tasks = total_tasks - completed_tasks
-            days_until_completion = random.randint(20, 45)
+            # Step 3: Create velocity snapshots based on actual task completions
+            predictor = BurndownPredictor()
+            predictor._ensure_velocity_snapshots(board)
             
-            BurndownPrediction.objects.get_or_create(
-                board=board,
-                defaults={
-                    'prediction_type': 'burndown',
-                    'total_tasks': total_tasks,
-                    'completed_tasks': completed_tasks,
-                    'remaining_tasks': remaining_tasks,
-                    'total_story_points': Decimal(random.randint(80, 120)),
-                    'completed_story_points': Decimal(random.randint(30, 50)),
-                    'remaining_story_points': Decimal(random.randint(30, 70)),
-                    'current_velocity': Decimal(random.uniform(5, 10)).quantize(Decimal('0.01')),
-                    'average_velocity': Decimal(random.uniform(6, 12)).quantize(Decimal('0.01')),
-                    'velocity_std_dev': Decimal(random.uniform(1, 3)).quantize(Decimal('0.01')),
-                    'velocity_trend': 'stable',
-                    'predicted_completion_date': now + timedelta(days=days_until_completion),
-                    'completion_date_lower_bound': now + timedelta(days=days_until_completion - 5),
-                    'completion_date_upper_bound': now + timedelta(days=days_until_completion + 10),
-                    'days_until_completion_estimate': days_until_completion,
-                    'days_margin_of_error': 7,
-                    'confidence_percentage': 90,
-                }
-            )
+            # Step 4: Generate burndown prediction with proper chart data
+            result = predictor.generate_burndown_prediction(board)
+            
+            prediction = result.get('prediction')
+            if prediction:
+                curve = prediction.burndown_curve_data
+                self.stdout.write(
+                    f'       ✓ {len(curve.get("historical", []))} historical, '
+                    f'{len(curve.get("projected", []))} projected points'
+                )
+            else:
+                self.stdout.write(self.style.WARNING('       ⚠ Prediction generation failed'))
 
-        self.stdout.write('   ✅ Burndown and velocity data created')
+        self.stdout.write('   ✅ Burndown and velocity data created with full chart data')
 
     def create_retrospective_data(self, software_board, marketing_board, bug_board, alex, sam, jordan):
         """Create retrospective data for demo boards"""
