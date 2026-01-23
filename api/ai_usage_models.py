@@ -31,8 +31,23 @@ class AIUsageQuota(models.Model):
         help_text="Number of AI requests made in current period"
     )
     monthly_quota = models.IntegerField(
-        default=1000,
-        help_text="Maximum AI requests allowed per month"
+        default=50,
+        help_text="Maximum AI requests allowed per month (50 for free users)"
+    )
+    
+    # Daily limit tracking (cost control)
+    daily_requests_used = models.IntegerField(
+        default=0,
+        help_text="Number of AI requests made today"
+    )
+    daily_limit = models.IntegerField(
+        default=10,
+        help_text="Maximum AI requests allowed per day (10 for free users)"
+    )
+    last_daily_reset = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date of last daily counter reset"
     )
     
     # Period tracking
@@ -75,20 +90,43 @@ class AIUsageQuota(models.Model):
     def check_and_reset_if_needed(self):
         """Check if period has ended and reset if needed"""
         now = timezone.now()
+        today = now.date()
+        fields_to_update = []
         
+        # Check monthly reset
         if now >= self.period_end:
             # Reset for new period
             self.requests_used = 0
             self.period_start = now
             self.period_end = now + timedelta(days=30)
-            self.save(update_fields=['requests_used', 'period_start', 'period_end', 'updated_at'])
+            fields_to_update.extend(['requests_used', 'period_start', 'period_end'])
+        
+        # Check daily reset
+        if self.last_daily_reset is None or self.last_daily_reset < today:
+            self.daily_requests_used = 0
+            self.last_daily_reset = today
+            fields_to_update.extend(['daily_requests_used', 'last_daily_reset'])
+        
+        if fields_to_update:
+            fields_to_update.append('updated_at')
+            self.save(update_fields=fields_to_update)
             return True
         return False
     
     def has_quota_remaining(self):
-        """Check if user has remaining quota"""
+        """Check if user has remaining quota (both monthly and daily)"""
         self.check_and_reset_if_needed()
-        return self.requests_used < self.monthly_quota
+        return self.requests_used < self.monthly_quota and self.daily_requests_used < self.daily_limit
+    
+    def has_daily_quota_remaining(self):
+        """Check if user has remaining daily quota"""
+        self.check_and_reset_if_needed()
+        return self.daily_requests_used < self.daily_limit
+    
+    def get_remaining_daily_requests(self):
+        """Get number of remaining requests for today"""
+        self.check_and_reset_if_needed()
+        return max(0, self.daily_limit - self.daily_requests_used)
     
     def get_remaining_requests(self):
         """Get number of remaining requests"""
@@ -110,12 +148,13 @@ class AIUsageQuota(models.Model):
         return delta.days
     
     def increment_usage(self):
-        """Increment usage counter"""
+        """Increment usage counter (both monthly and daily)"""
         self.check_and_reset_if_needed()
         self.requests_used += 1
+        self.daily_requests_used += 1
         self.total_requests_all_time += 1
         self.last_request_at = timezone.now()
-        self.save(update_fields=['requests_used', 'total_requests_all_time', 'last_request_at', 'updated_at'])
+        self.save(update_fields=['requests_used', 'daily_requests_used', 'total_requests_all_time', 'last_request_at', 'updated_at'])
 
 
 class AIRequestLog(models.Model):

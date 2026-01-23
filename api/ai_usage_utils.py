@@ -21,9 +21,12 @@ def get_or_create_quota(user):
     quota, created = AIUsageQuota.objects.get_or_create(
         user=user,
         defaults={
-            'monthly_quota': 1000,
+            'monthly_quota': 50,  # Cost control: 50/month for free users
+            'daily_limit': 10,    # Cost control: 10/day for free users
             'requests_used': 0,
+            'daily_requests_used': 0,
             'period_start': timezone.now(),
+            'last_daily_reset': timezone.now().date(),
         }
     )
     
@@ -117,23 +120,43 @@ def require_ai_quota(feature_name, request_type=''):
                     'error': 'Authentication required'
                 }, status=401)
             
-            # Check quota
+            # Check quota (both monthly and daily)
             has_quota, quota, remaining = check_ai_quota(request.user)
             
             if not has_quota:
                 days_until_reset = quota.get_days_until_reset()
-                return JsonResponse({
-                    'success': False,
-                    'error': 'AI usage quota exceeded',
-                    'quota_exceeded': True,
-                    'quota_info': {
-                        'used': quota.requests_used,
-                        'limit': quota.monthly_quota,
-                        'days_until_reset': days_until_reset
-                    },
-                    'message': f'You have reached your monthly AI usage limit of {quota.monthly_quota} requests. '
-                               f'Your quota will reset in {days_until_reset} days.'
-                }, status=429)
+                daily_remaining = quota.get_remaining_daily_requests()
+                
+                # Determine if it's a daily or monthly limit
+                if daily_remaining <= 0:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Daily AI usage limit exceeded',
+                        'quota_exceeded': True,
+                        'daily_limit_exceeded': True,
+                        'quota_info': {
+                            'daily_used': quota.daily_requests_used,
+                            'daily_limit': quota.daily_limit,
+                            'monthly_used': quota.requests_used,
+                            'monthly_limit': quota.monthly_quota,
+                        },
+                        'message': f'You have reached your daily limit of {quota.daily_limit} AI requests. '
+                                   f'Your daily limit resets at midnight.'
+                    }, status=429)
+                else:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Monthly AI usage quota exceeded',
+                        'quota_exceeded': True,
+                        'monthly_limit_exceeded': True,
+                        'quota_info': {
+                            'used': quota.requests_used,
+                            'limit': quota.monthly_quota,
+                            'days_until_reset': days_until_reset
+                        },
+                        'message': f'You have reached your monthly limit of {quota.monthly_quota} AI requests. '
+                                   f'Your quota will reset in {days_until_reset} days.'
+                    }, status=429)
             
             # Add quota info to request for easy access
             request.ai_quota = quota

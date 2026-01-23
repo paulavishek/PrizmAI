@@ -383,15 +383,50 @@
         {% endif %}
     </div>
     
+    <!-- Daily Limit Card -->
+    <div class="usage-card" style="margin-top: 1.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+        <div class="card-header">
+            <div>
+                <h2 class="card-title" style="color: white;"><i class="fas fa-clock me-2"></i>Daily Limit</h2>
+                <p class="card-subtitle" style="color: rgba(255,255,255,0.8);">To ensure fair usage, there's a daily limit of {{ quota.daily_limit }} AI requests</p>
+            </div>
+            <div class="usage-percentage" id="daily-usage-percentage" style="background: rgba(255,255,255,0.2);">
+                {% widthratio quota.daily_requests_used quota.daily_limit 100 as daily_percent %}
+                {{ daily_percent|default:0 }}%
+            </div>
+        </div>
+        
+        <div class="progress-container" style="background: rgba(255,255,255,0.2);">
+            {% if daily_percent < 50 %}
+                <div class="progress-bar" style="width: {{ daily_percent }}%; background: #4CAF50;"></div>
+            {% elif daily_percent < 80 %}
+                <div class="progress-bar" style="width: {{ daily_percent }}%; background: #ff9800;"></div>
+            {% else %}
+                <div class="progress-bar" style="width: {{ daily_percent }}%; background: #f44336;"></div>
+            {% endif %}
+        </div>
+        
+        <div class="usage-stats" style="color: white;">
+            <span>
+                <strong>{{ quota.daily_requests_used }}</strong> of 
+                <strong>{{ quota.daily_limit }}</strong> daily requests used
+            </span>
+            <span>
+                <i class="fas fa-sync-alt"></i>
+                Resets at midnight
+            </span>
+        </div>
+    </div>
+    
     <!-- Stats Grid -->
     <div class="stats-grid">
         <div class="stat-box">
-            <div class="stat-label">Remaining</div>
+            <div class="stat-label">Monthly Remaining</div>
             <div class="stat-value highlight" id="requests-remaining">{{ quota.get_remaining_requests }}</div>
         </div>
         <div class="stat-box">
-            <div class="stat-label">Last 24 Hours</div>
-            <div class="stat-value">{{ recent_requests_24h }}</div>
+            <div class="stat-label">Daily Remaining</div>
+            <div class="stat-value highlight" style="color: #667eea;">{{ quota.get_remaining_daily_requests }}</div>
         </div>
         <div class="stat-box">
             <div class="stat-label">Total Lifetime</div>
