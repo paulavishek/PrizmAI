@@ -348,16 +348,24 @@ function initializeLeanChart() {
                     backgroundColor: 'rgba(0, 0, 0, 0.8)',
                     titleColor: '#ffffff',
                     bodyColor: '#ffffff',
-                    borderColor: '#ffffff',
-                    borderWidth: 1,
                     cornerRadius: 8,
                     padding: 12,
+                    displayColors: true,
                     callbacks: {
                         label: function(context) {
                             const value = context.raw;
                             const total = context.dataset.data.reduce((a, b) => a + b, 0);
                             const percentage = Math.round((value / total) * 100);
                             return `${context.label}: ${value} tasks (${percentage}%)`;
+                        },
+                        labelColor: function(context) {
+                            // Ensure tooltip color box matches the actual segment
+                            return {
+                                borderColor: context.dataset.backgroundColor[context.dataIndex],
+                                backgroundColor: context.dataset.backgroundColor[context.dataIndex],
+                                borderWidth: 2,
+                                borderRadius: 2
+                            };
                         }
                     }
                 }
@@ -368,8 +376,8 @@ function initializeLeanChart() {
                 }
             },
             interaction: {
-                intersect: false,
-                mode: 'index'
+                intersect: true,
+                mode: 'point'
             },
             animation: {
                 animateRotate: true,
