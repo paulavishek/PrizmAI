@@ -263,11 +263,21 @@ def generate_suggestions(request, board_id):
                 logger.error(f"AI enhancement failed for '{suggestion_data['title']}': {enhance_error}")
             
             # Check if similar suggestion already exists
+            # Block if recent suggestion exists in these statuses:
+            # - active: already showing
+            # - acknowledged: user is aware, don't nag (3 days)
+            # - in_progress: user is working on it (7 days)
+            # - resolved: user fixed it, don't show again (30 days)
+            from django.db.models import Q
+            
             existing = CoachingSuggestion.objects.filter(
                 board=board,
-                suggestion_type=suggestion_data['suggestion_type'],
-                status__in=['active', 'acknowledged'],
-                created_at__gte=timezone.now() - timedelta(days=3)
+                suggestion_type=suggestion_data['suggestion_type']
+            ).filter(
+                Q(status='active', created_at__gte=timezone.now() - timedelta(days=3)) |
+                Q(status='acknowledged', created_at__gte=timezone.now() - timedelta(days=3)) |
+                Q(status='in_progress', created_at__gte=timezone.now() - timedelta(days=7)) |
+                Q(status='resolved', created_at__gte=timezone.now() - timedelta(days=30))
             ).exists()
             
             if existing:
@@ -283,13 +293,21 @@ def generate_suggestions(request, board_id):
             f"enhanced {enhanced_count} with AI, skipped {skipped_count}"
         )
         
+        # Create user-friendly message
+        if created_count == 0:
+            message = "No new suggestions - your project is running smoothly! 🎉"
+        elif created_count == 1:
+            message = f"✅ Generated 1 new suggestion"
+        else:
+            message = f"✅ Generated {created_count} new suggestions"
+        
         return JsonResponse({
             'success': True,
             'created': created_count,
             'enhanced': enhanced_count,
             'skipped': skipped_count,
             'ai_available': ai_coach.gemini_available,
-            'message': f"Generated {created_count} new coaching suggestions ({enhanced_count} AI-enhanced)"
+            'message': message
         })
         
     except Exception as e:

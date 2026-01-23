@@ -142,12 +142,21 @@ class Command(BaseCommand):
                             logger.error(f"AI enhancement failed: {e}")
                             # Continue with rule-based suggestion
                     
-                    # Check for duplicate (same type, active, created recently)
+                    # Check for duplicate (same type, recent timeframe)
+                    # Block based on status and appropriate time periods:
+                    # - active/acknowledged: 3 days
+                    # - in_progress: 7 days  
+                    # - resolved: 30 days (issue was fixed!)
+                    from django.db.models import Q
+                    
                     duplicate = CoachingSuggestion.objects.filter(
                         board=board,
-                        suggestion_type=suggestion_data['suggestion_type'],
-                        status__in=['active', 'acknowledged'],
-                        created_at__gte=timezone.now() - timedelta(days=3)
+                        suggestion_type=suggestion_data['suggestion_type']
+                    ).filter(
+                        Q(status='active', created_at__gte=timezone.now() - timedelta(days=3)) |
+                        Q(status='acknowledged', created_at__gte=timezone.now() - timedelta(days=3)) |
+                        Q(status='in_progress', created_at__gte=timezone.now() - timedelta(days=7)) |
+                        Q(status='resolved', created_at__gte=timezone.now() - timedelta(days=30))
                     ).exists()
                     
                     if duplicate and not force:
