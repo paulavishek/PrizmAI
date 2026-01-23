@@ -26,6 +26,7 @@ urlpatterns = [
     path('demo/exit/', demo_views.exit_demo, name='exit_demo'),
     path('demo/extend/', demo_views.extend_demo_session, name='extend_demo_session'),
     path('demo/status/', demo_views.get_demo_status, name='get_demo_status'),
+    path('demo/fingerprint/', demo_views.receive_client_fingerprint, name='receive_client_fingerprint'),
     path('demo/track-event/', demo_views.track_demo_event, name='track_demo_event'),
     path('demo/check-nudge/', demo_views.check_nudge, name='check_nudge'),
     path('demo/track-nudge/', demo_views.track_nudge, name='track_nudge'),

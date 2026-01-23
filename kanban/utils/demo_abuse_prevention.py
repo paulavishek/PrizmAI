@@ -10,6 +10,7 @@ Tracks usage at the IP + fingerprint level, not just session level.
 """
 import hashlib
 import logging
+import os
 from django.utils import timezone
 from datetime import timedelta
 from django.conf import settings
@@ -27,15 +28,24 @@ if settings.DEBUG:
         'max_sessions_total': 1000,           # Effectively unlimited
         'cooldown_after_abuse_hours': 24,
     }
+    # PRODUCTION SAFEGUARD: Log a critical warning if DEBUG=True in production
+    # This helps catch accidental deployment with relaxed limits
+    if os.environ.get('PRODUCTION_SERVER') == 'true' or os.environ.get('RAILWAY_ENVIRONMENT'):
+        logger.critical(
+            "⚠️ SECURITY WARNING: DEBUG=True detected in what appears to be a production environment! "
+            "Demo abuse prevention limits are set to development values (500 AI generations instead of 30). "
+            "This is a security risk. Set DEBUG=False in production settings."
+        )
 else:
     GLOBAL_DEMO_LIMITS = {
-        'max_ai_generations_global': 50,      # Across all sessions
+        'max_ai_generations_global': 30,      # Across all sessions (lowered for cost control)
         'max_projects_global': 5,              # Across all sessions
         'max_sessions_per_hour': 3,            # Rate limit
         'max_sessions_per_24h': 5,             # Daily limit
         'max_sessions_total': 20,              # Before blocking
         'cooldown_after_abuse_hours': 24,      # Cooldown period
     }
+    logger.info(f"Demo abuse prevention initialized with production limits: {GLOBAL_DEMO_LIMITS['max_ai_generations_global']} global AI generations")
 
 
 def get_client_ip(request):
@@ -177,12 +187,15 @@ def check_global_ai_limit(request):
     """
     Check if this visitor can use AI features (global check across all sessions).
     
+    VPN users get reduced limits (50%) to minimize abuse potential.
+    
     Returns:
         dict with:
         - can_generate: bool
         - current_count: int (global count)
         - max_allowed: int
         - message: str
+        - is_vpn_user: bool
     """
     record = get_or_create_abuse_record(request)
     
@@ -194,9 +207,14 @@ def check_global_ai_limit(request):
             'max_allowed': GLOBAL_DEMO_LIMITS['max_ai_generations_global'],
             'message': None,
             'is_global_check': True,
+            'is_vpn_user': False,
         }
     
+    # Apply reduced limits for VPN users (50% of normal)
     max_allowed = GLOBAL_DEMO_LIMITS['max_ai_generations_global']
+    if record.is_vpn_user:
+        max_allowed = max_allowed // 2  # 15 instead of 30
+    
     current_count = record.total_ai_generations
     can_generate = current_count < max_allowed
     
@@ -218,14 +236,82 @@ def check_global_ai_limit(request):
         'max_allowed': max_allowed,
         'message': message,
         'is_global_check': True,
+        'is_vpn_user': record.is_vpn_user if record else False,
     }
 
 
+def check_ai_rate_limit(request):
+    """
+    Check if this visitor is generating AI content too quickly.
+    Implements a sliding window rate limit: max 5 AI calls per 10 minutes.
+    
+    This prevents rapid abuse even within the global limit.
+    
+    Returns:
+        dict with:
+        - allowed: bool
+        - wait_seconds: int (seconds to wait if not allowed)
+        - message: str
+    """
+    record = get_or_create_abuse_record(request)
+    
+    if not record:
+        return {'allowed': True, 'wait_seconds': 0, 'message': None}
+    
+    # Sliding window: max 5 AI calls per 10 minutes
+    MAX_CALLS_PER_WINDOW = 5
+    WINDOW_MINUTES = 10
+    
+    # For VPN users, be more restrictive: 3 calls per 10 minutes
+    if record.is_vpn_user:
+        MAX_CALLS_PER_WINDOW = 3
+    
+    now = timezone.now()
+    window_start = now - timedelta(minutes=WINDOW_MINUTES)
+    
+    # Get timestamps from the record
+    timestamps = record.ai_generation_timestamps or []
+    
+    # Filter to only recent timestamps within the window
+    recent_timestamps = [
+        ts for ts in timestamps 
+        if isinstance(ts, str) and timezone.datetime.fromisoformat(ts) > window_start
+    ]
+    
+    if len(recent_timestamps) >= MAX_CALLS_PER_WINDOW:
+        # Calculate when the oldest call in the window will expire
+        oldest_ts = min(recent_timestamps)
+        oldest_dt = timezone.datetime.fromisoformat(oldest_ts)
+        wait_until = oldest_dt + timedelta(minutes=WINDOW_MINUTES)
+        wait_seconds = max(0, int((wait_until - now).total_seconds()))
+        
+        return {
+            'allowed': False,
+            'wait_seconds': wait_seconds,
+            'message': f"You're using AI features too quickly. Please wait {wait_seconds // 60} minutes and try again."
+        }
+    
+    return {'allowed': True, 'wait_seconds': 0, 'message': None}
+
+
 def increment_global_ai_count(request, count=1):
-    """Increment global AI generation count for abuse prevention."""
+    """Increment global AI generation count and record timestamp for rate limiting."""
     record = get_or_create_abuse_record(request)
     if record:
         record.increment_ai_count(count)
+        
+        # Also record timestamp for rate limiting
+        now = timezone.now()
+        timestamps = record.ai_generation_timestamps or []
+        timestamps.append(now.isoformat())
+        
+        # Keep only last 20 timestamps to prevent unbounded growth
+        if len(timestamps) > 20:
+            timestamps = timestamps[-20:]
+        
+        record.ai_generation_timestamps = timestamps
+        record.save(update_fields=['ai_generation_timestamps'])
+        
         logger.debug(f"Incremented global AI count: IP={record.ip_address}, total={record.total_ai_generations}")
 
 
@@ -264,6 +350,10 @@ def can_create_demo_session(request):
     Check if this visitor can create a new demo session.
     Use this before allowing demo mode entry.
     
+    Also checks for VPN/proxy usage and adjusts limits accordingly.
+    VPN users get reduced limits (50%) to minimize abuse potential
+    while still allowing legitimate VPN users to try the demo.
+    
     Returns:
         tuple: (allowed: bool, message: str or None)
     """
@@ -273,9 +363,30 @@ def can_create_demo_session(request):
         return False, status['reason']
     
     record = status['record']
+    
+    # Check for VPN/proxy usage
+    is_vpn = False
+    try:
+        from kanban.utils.vpn_detection import is_datacenter_ip
+        ip_address = get_client_ip(request)
+        is_vpn = is_datacenter_ip(ip_address)
+        
+        if is_vpn and record:
+            # Mark the record as VPN user
+            if not record.is_vpn_user:
+                record.is_vpn_user = True
+                record.save(update_fields=['is_vpn_user'])
+            logger.info(f"VPN/datacenter IP detected: {ip_address}")
+    except Exception as e:
+        logger.warning(f"Could not check VPN status: {e}")
+    
     if record:
-        # Check if too many sessions
-        if record.total_sessions_created >= GLOBAL_DEMO_LIMITS['max_sessions_total']:
+        # For VPN users, apply stricter session limits (50% reduction)
+        max_sessions = GLOBAL_DEMO_LIMITS['max_sessions_total']
+        if is_vpn or record.is_vpn_user:
+            max_sessions = max_sessions // 2  # 10 instead of 20
+        
+        if record.total_sessions_created >= max_sessions:
             return False, (
                 "You've used demo mode many times. "
                 "Create a free account to get unlimited access!"

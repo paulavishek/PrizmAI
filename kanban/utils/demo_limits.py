@@ -143,9 +143,10 @@ def check_ai_generation_limit(request):
     """
     Check if user can use more AI generations in demo mode.
     
-    Checks BOTH:
-    1. Per-session limit (20 AI generations per session)
+    Checks THREE layers of protection:
+    1. Rate limit (sliding window - max 5 calls per 10 minutes)
     2. Global limit across all sessions (prevents abuse via new accounts)
+    3. Per-session limit (20 AI generations per session)
     
     Returns dict with:
     - can_generate: bool
@@ -162,7 +163,24 @@ def check_ai_generation_limit(request):
             'is_demo': False
         }
     
-    # Check global limit first (prevents abuse)
+    # Check rate limit first (prevents rapid abuse)
+    try:
+        from kanban.utils.demo_abuse_prevention import check_ai_rate_limit
+        rate_limit_status = check_ai_rate_limit(request)
+        if not rate_limit_status['allowed']:
+            return {
+                'can_generate': False,
+                'current_count': 0,
+                'max_allowed': 5,  # Per 10-minute window
+                'message': rate_limit_status['message'],
+                'is_demo': True,
+                'is_rate_limited': True,
+                'wait_seconds': rate_limit_status['wait_seconds']
+            }
+    except Exception as e:
+        logger.warning(f"Could not check AI rate limit: {e}")
+    
+    # Check global limit (prevents abuse across sessions)
     try:
         from kanban.utils.demo_abuse_prevention import check_global_ai_limit
         global_status = check_global_ai_limit(request)

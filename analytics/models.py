@@ -443,6 +443,17 @@ class DemoSession(models.Model):
         db_index=True,
         help_text="Browser fingerprint to track demo across sessions"
     )
+    client_fingerprint = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Client-side JS fingerprint (more robust than server-side)"
+    )
+    is_vpn_detected = models.BooleanField(
+        default=False,
+        help_text="Whether VPN/proxy was detected for this session"
+    )
     user = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -1072,6 +1083,22 @@ class DemoAbusePrevention(models.Model):
         db_index=True,
         help_text="SHA256 hash of browser attributes"
     )
+    client_fingerprint = models.CharField(
+        max_length=64,
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text="Client-side JS fingerprint (canvas, webgl, audio)"
+    )
+    is_vpn_user = models.BooleanField(
+        default=False,
+        help_text="Whether this visitor uses VPN/proxy"
+    )
+    ai_generation_timestamps = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Timestamps of recent AI generations for rate limiting"
+    )
     
     # Aggregated limits across ALL sessions from this IP/fingerprint
     total_ai_generations = models.IntegerField(
@@ -1177,7 +1204,9 @@ class DemoAbusePrevention(models.Model):
     def check_ai_limit(self):
         """Check if this IP/fingerprint has exceeded global AI limits"""
         # Global limit across ALL sessions (prevents account cycling)
-        GLOBAL_AI_LIMIT = 50  # More generous than per-session limit
+        # Use centralized limit from demo_abuse_prevention
+        from kanban.utils.demo_abuse_prevention import GLOBAL_DEMO_LIMITS
+        GLOBAL_AI_LIMIT = GLOBAL_DEMO_LIMITS.get('max_ai_generations_global', 30)
         
         if self.total_ai_generations >= GLOBAL_AI_LIMIT:
             return False, f"You've used {self.total_ai_generations} AI generations across demo sessions. Create a free account for unlimited AI."

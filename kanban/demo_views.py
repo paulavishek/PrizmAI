@@ -1720,3 +1720,94 @@ def demo_all_tasks_list(request):
     }
     
     return render(request, 'kanban/demo_all_tasks_list.html', context)
+
+
+@require_POST
+def receive_client_fingerprint(request):
+    """
+    Receive and store the client-side JavaScript fingerprint.
+    This endpoint is called by fingerprint.js after generating a robust fingerprint
+    using canvas, WebGL, audio context, and other browser attributes.
+    
+    This provides stronger abuse prevention than server-side fingerprinting alone.
+    """
+    import json
+    
+    if not request.session.get('is_demo_mode'):
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Not in demo mode'
+        }, status=403)
+    
+    try:
+        data = json.loads(request.body)
+        client_fingerprint = data.get('fingerprint')
+        canvas_hash = data.get('canvas')
+        webgl_hash = data.get('webgl')
+        audio_hash = data.get('audio')
+        local_usage = data.get('localUsage', {})
+        
+        if not client_fingerprint:
+            return JsonResponse({
+                'status': 'error',
+                'message': 'No fingerprint provided'
+            }, status=400)
+        
+        # Update the current DemoSession with client fingerprint
+        try:
+            from analytics.models import DemoSession, DemoAbusePrevention
+            session_id = request.session.session_key
+            
+            if session_id:
+                demo_session = DemoSession.objects.filter(session_id=session_id).first()
+                if demo_session:
+                    demo_session.client_fingerprint = client_fingerprint
+                    demo_session.save(update_fields=['client_fingerprint'])
+                    logger.info(f"Updated DemoSession with client fingerprint: {client_fingerprint[:16]}...")
+            
+            # Also update/create the abuse prevention record with client fingerprint
+            # This allows cross-session tracking even when cookies are cleared
+            from kanban.utils.demo_abuse_prevention import get_client_ip, get_or_create_abuse_record
+            
+            ip_address = get_client_ip(request)
+            
+            # Try to find existing record by client fingerprint (more robust matching)
+            existing_by_client_fp = DemoAbusePrevention.objects.filter(
+                client_fingerprint=client_fingerprint
+            ).first()
+            
+            if existing_by_client_fp:
+                # Update existing record - user returned with cleared cookies
+                existing_by_client_fp.last_seen = timezone.now()
+                if not existing_by_client_fp.browser_fingerprint:
+                    existing_by_client_fp.browser_fingerprint = request.session.get('browser_fingerprint')
+                existing_by_client_fp.save()
+                logger.info(f"Found existing abuse record by client fingerprint, IP history: {existing_by_client_fp.ip_address}")
+            else:
+                # Update current record with client fingerprint
+                record = get_or_create_abuse_record(request)
+                if record and not record.client_fingerprint:
+                    record.client_fingerprint = client_fingerprint
+                    record.save(update_fields=['client_fingerprint', 'last_seen'])
+                    logger.info(f"Added client fingerprint to abuse record: {client_fingerprint[:16]}...")
+            
+        except Exception as e:
+            logger.warning(f"Could not update fingerprint records: {e}")
+        
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Fingerprint received',
+            'fingerprint_stored': True,
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Invalid JSON'
+        }, status=400)
+    except Exception as e:
+        logger.error(f"Error receiving client fingerprint: {e}")
+        return JsonResponse({
+            'status': 'error',
+            'message': 'Server error'
+        }, status=500)
