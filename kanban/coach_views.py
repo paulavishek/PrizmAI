@@ -219,8 +219,15 @@ def generate_suggestions(request, board_id):
         ai_coach = AICoachService()
         learning_system = FeedbackLearningSystem()
         
+        # Log AI availability status
+        if ai_coach.gemini_available:
+            logger.info(f"AI enhancement enabled for board {board.name}")
+        else:
+            logger.warning(f"AI enhancement not available - suggestions will be basic format only")
+        
         created_count = 0
         skipped_count = 0
+        enhanced_count = 0
         
         for suggestion_data in suggestions_data:
             # Check if we should generate this based on learning
@@ -242,10 +249,18 @@ def generate_suggestions(request, board_id):
             )
             suggestion_data['confidence_score'] = adjusted_confidence
             
-            # Enhance with AI (if available)
-            suggestion_data = ai_coach.enhance_suggestion_with_ai(
-                suggestion_data, context
-            )
+            # Always attempt AI enhancement for detailed format
+            try:
+                original_method = suggestion_data.get('generation_method', 'rule')
+                suggestion_data = ai_coach.enhance_suggestion_with_ai(
+                    suggestion_data, context
+                )
+                # Track if enhancement was successful
+                if suggestion_data.get('generation_method') == 'hybrid':
+                    enhanced_count += 1
+                    logger.debug(f"Successfully enhanced: {suggestion_data['title']}")
+            except Exception as enhance_error:
+                logger.error(f"AI enhancement failed for '{suggestion_data['title']}': {enhance_error}")
             
             # Check if similar suggestion already exists
             existing = CoachingSuggestion.objects.filter(
@@ -265,14 +280,16 @@ def generate_suggestions(request, board_id):
         
         logger.info(
             f"Generated {created_count} suggestions for board {board.name}, "
-            f"skipped {skipped_count}"
+            f"enhanced {enhanced_count} with AI, skipped {skipped_count}"
         )
         
         return JsonResponse({
             'success': True,
             'created': created_count,
+            'enhanced': enhanced_count,
             'skipped': skipped_count,
-            'message': f"Generated {created_count} new coaching suggestions"
+            'ai_available': ai_coach.gemini_available,
+            'message': f"Generated {created_count} new coaching suggestions ({enhanced_count} AI-enhanced)"
         })
         
     except Exception as e:

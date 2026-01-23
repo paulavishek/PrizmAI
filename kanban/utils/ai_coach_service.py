@@ -61,13 +61,42 @@ class AICoachService:
                 ai_insights = self._parse_ai_enhancement(response.text)
                 
                 # Merge AI insights with base suggestion
-                suggestion_data['reasoning'] = ai_insights.get('reasoning', suggestion_data['reasoning'])
-                suggestion_data['recommended_actions'] = (
-                    ai_insights.get('actions', suggestion_data['recommended_actions'])
-                )
+                suggestion_data['reasoning'] = ai_insights.get('reasoning', suggestion_data.get('reasoning', ''))
+                
+                # Format actions properly - convert from detailed dict to string list for template
+                ai_actions = ai_insights.get('actions', [])
+                if ai_actions and isinstance(ai_actions, list):
+                    formatted_actions = []
+                    for action in ai_actions:
+                        if isinstance(action, dict):
+                            # Format: "Action: rationale → outcome"
+                            action_text = action.get('action', '')
+                            rationale = action.get('rationale', '')
+                            outcome = action.get('expected_outcome', '')
+                            hint = action.get('implementation_hint', '')
+                            
+                            # Build comprehensive action text
+                            full_action = action_text
+                            if rationale:
+                                full_action += f" • Rationale: {rationale}"
+                            if outcome:
+                                full_action += f" • Expected outcome: {outcome}"
+                            if hint:
+                                full_action += f" • How to: {hint}"
+                            formatted_actions.append(full_action)
+                        else:
+                            formatted_actions.append(str(action))
+                    suggestion_data['recommended_actions'] = formatted_actions
+                else:
+                    # Keep original if AI didn't provide actions
+                    if not suggestion_data.get('recommended_actions'):
+                        suggestion_data['recommended_actions'] = []
+                
                 suggestion_data['expected_impact'] = (
-                    ai_insights.get('impact', suggestion_data['expected_impact'])
+                    ai_insights.get('impact', suggestion_data.get('expected_impact', ''))
                 )
+                
+                # Add explainability fields
                 suggestion_data['ai_model_used'] = 'gemini-2.0-flash-exp'
                 suggestion_data['generation_method'] = 'hybrid'
                 suggestion_data['confidence_score'] = max(
@@ -76,17 +105,26 @@ class AICoachService:
                 )
                 
                 logger.info(f"Enhanced suggestion with AI insights: {suggestion_data['title']}")
+            else:
+                logger.warning(f"No AI response received for: {suggestion_data['title']}")
             
             return suggestion_data
             
         except Exception as e:
             logger.error(f"Failed to enhance suggestion with AI: {e}")
+            # Ensure base suggestions still have required fields
+            if not suggestion_data.get('reasoning'):
+                suggestion_data['reasoning'] = suggestion_data.get('message', '')
+            if not suggestion_data.get('recommended_actions'):
+                suggestion_data['recommended_actions'] = ["Review this issue with your team", "Monitor the situation closely"]
+            if not suggestion_data.get('expected_impact'):
+                suggestion_data['expected_impact'] = "Addressing this issue can help improve project outcomes."
             return suggestion_data
     
     def _build_enhancement_prompt(self, suggestion: Dict, context: Dict) -> str:
         """Build prompt for AI enhancement with full explainability"""
         return f"""You are an experienced project management coach helping a PM improve their project.
-Your advice must be transparent and explainable so the PM understands your reasoning.
+Your advice must be transparent, actionable, and concise.
 
 ## Current Situation:
 {suggestion['message']}
@@ -105,50 +143,46 @@ Your advice must be transparent and explainable so the PM understands your reaso
 {json.dumps(suggestion.get('metrics_snapshot', {}), indent=2)}
 
 ## Task:
-As an expert PM coach, provide FULLY EXPLAINABLE coaching advice:
+Provide comprehensive coaching advice in JSON format.
 
-Format your response as JSON WITH FULL EXPLAINABILITY:
+**IMPORTANT FORMATTING RULES:**
+1. "reasoning": 2-3 sentences max explaining root causes and business impact
+2. "actions": Array of 3-5 detailed action objects, each with:
+   - "action": Clear, specific step (1 sentence)
+   - "rationale": Why it helps (1 sentence)
+   - "expected_outcome": Measurable result (1 sentence)
+   - "implementation_hint": Practical how-to (1 sentence, 30-60 minutes timeframe when applicable)
+3. "impact": 1-2 sentences with quantifiable improvements if possible
+4. "confidence": Number between 0.70 and 0.95 based on data quality
+
+JSON Format:
 {{
-    "reasoning": "Detailed explanation of WHY this situation needs attention - identify root causes and their business impact",
-    "reasoning_factors": [
-        {{
-            "factor": "Key factor identified",
-            "weight": "high|medium|low",
-            "evidence": "What data supports this"
-        }}
-    ],
+    "reasoning": "A 20% decrease in velocity signals potential team or process issues. This could stem from increased complexity, blockers, or team capacity problems. Addressing this prevents project delays and identifies systemic issues early.",
     "actions": [
         {{
-            "action": "Specific actionable step",
-            "rationale": "Why this action addresses the issue",
-            "expected_outcome": "What improvement to expect",
-            "implementation_hint": "How to implement this"
-        }}
-    ],
-    "impact": "Expected positive outcomes with quantifiable improvements where possible",
-    "impact_timeline": "short_term|medium_term|long_term",
-    "confidence": 0.XX,
-    "confidence_factors": [
+            "action": "Hold a brief team retrospective focused on the past sprint/week",
+            "rationale": "A retrospective provides a safe space for the team to discuss what went well and what didn't, helping identify impediments, distractions, or process inefficiencies",
+            "expected_outcome": "Identify specific blockers or process issues causing the velocity drop",
+            "implementation_hint": "Schedule a 30-60 minute session. Use Start, Stop, Continue format. Ensure psychological safety"
+        }},
         {{
-            "factor": "What influences confidence",
-            "direction": "increases|decreases",
-            "explanation": "Why this affects confidence"
-        }}
-    ],
-    "assumptions": [
-        "Key assumption made in this advice"
-    ],
-    "alternative_approaches": [
+            "action": "Review the current sprint/week's task breakdown to identify task complexity changes",
+            "rationale": "Tasks might be more complex than previously estimated, requiring more time and effort than anticipated",
+            "expected_outcome": "Understand if task estimation needs adjustment or if complexity has genuinely increased",
+            "implementation_hint": "Compare actual effort spent vs. estimated effort for completed tasks. Look for patterns"
+        }},
         {{
-            "approach": "Alternative strategy",
-            "tradeoff": "What you gain/lose with this approach"
+            "action": "Conduct brief 1-on-1 check-ins with each team member",
+            "rationale": "Individual conversations can uncover personal blockers, skill gaps, or external factors affecting productivity that might not surface in group settings",
+            "expected_outcome": "Identify individual challenges and provide targeted support",
+            "implementation_hint": "15-minute conversations. Ask: 'What's blocking you?' and 'What support do you need?'"
         }}
     ],
-    "risk_of_inaction": "What happens if this advice is not followed"
+    "impact": "Addressing velocity drops early can improve team morale by 15-20%, increase productivity by resolving bottlenecks, and enable more accurate project forecasting.",
+    "confidence": 0.85
 }}
 
-Focus on actionable advice that a PM can implement immediately. Consider the specific context and metrics provided.
-Be transparent about your reasoning so the PM can make an informed decision.
+Generate a response following this exact structure. Be specific, actionable, and concise.
 """
     
     def _parse_ai_enhancement(self, ai_response: str) -> Dict:
