@@ -183,7 +183,7 @@ class BudgetAnalyzer:
         completed_tasks = tasks.filter(progress=100).count()
         total_tasks = tasks.count()
         
-        # Calculate ROI
+        # Calculate ROI - use snapshot data consistently for historical tracking
         roi_percentage = None
         expected_value = Decimal('0.00')
         realized_value = Decimal('0.00')
@@ -191,9 +191,10 @@ class BudgetAnalyzer:
         if latest_roi:
             expected_value = latest_roi.expected_value or Decimal('0.00')
             realized_value = latest_roi.realized_value or Decimal('0.00')
-            value = realized_value or expected_value
-            if total_cost > 0 and value > 0:
-                roi_percentage = float(((value - total_cost) / total_cost) * 100)
+            # Use snapshot's total_cost instead of mixing with current costs
+            roi_percentage = float(latest_roi.roi_percentage) if latest_roi.roi_percentage else 0
+            # Use snapshot's cost for display consistency
+            total_cost = latest_roi.total_cost
         
         # Calculate completion rate
         completion_rate = (completed_tasks / total_tasks * 100) if total_tasks > 0 else 0
@@ -372,8 +373,9 @@ class BudgetAnalyzer:
         # Calculate remaining budget and days
         remaining_budget = budget.get_remaining_budget()
         days_remaining = 0
-        if daily_burn_rate > 0:
+        if daily_burn_rate > 0 and remaining_budget > 0:
             days_remaining = int(remaining_budget / daily_burn_rate)
+        # If remaining budget is negative or zero, days_remaining stays 0
         
         # Calculate projected end date
         projected_end_date = None
