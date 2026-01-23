@@ -1130,23 +1130,61 @@ class Command(BaseCommand):
                 )
                 task_costs_created += 1
 
-            # Create ROI record
+            # Create historical ROI snapshots (10 months of data)
             total_tasks = Task.objects.filter(column__board=board).count()
             completed_tasks = Task.objects.filter(column__board=board, progress=100).count()
-            roi, created = ProjectROI.objects.get_or_create(
-                board=board,
-                snapshot_date__date=now,
-                defaults={
-                    'expected_value': config['budget'] * Decimal('2.5'),
-                    'realized_value': config['budget'] * Decimal('0.3'),
-                    'total_cost': config['budget'] * Decimal('0.8'),
-                    'total_tasks': total_tasks,
-                    'completed_tasks': completed_tasks,
-                    'created_by': admin_user,
-                }
-            )
+            
+            # Delete existing ROI snapshots for this board to recreate fresh
+            ProjectROI.objects.filter(board=board).delete()
+            
+            # Calculate actual costs for this board
+            task_costs_qs = TaskCost.objects.filter(task__column__board=board)
+            total_cost = sum([tc.actual_cost or Decimal('0.00') for tc in task_costs_qs]) if task_costs_qs else config['budget'] * Decimal('0.8')
+            
+            # Set initial values based on board type for realistic data
+            if board_name == 'Software Development':
+                base_expected = config['budget'] * Decimal('2.0')  # 100% ROI expected
+                base_realized_ratio = Decimal('0.4')  # Starting at 40% realization
+            elif board_name == 'Marketing Campaign':
+                base_expected = config['budget'] * Decimal('1.8')  # 80% ROI expected
+                base_realized_ratio = Decimal('0.35')  # Starting at 35% realization
+            else:  # Bug Tracking
+                base_expected = config['budget'] * Decimal('1.5')  # 50% ROI expected
+                base_realized_ratio = Decimal('0.45')  # Starting at 45% realization
+            
+            # Create 10 historical snapshots over the past 10 months
+            for i in range(10):
+                snapshot_date = now - timedelta(days=30 * (9 - i))  # Go back 9 months, then forward
+                
+                # Calculate progressive improvement
+                progress_factor = Decimal(str(i / 9))  # 0 to 1 over time
+                
+                # Realized value improves over time (from base to 80% of expected)
+                realized_value = base_expected * (base_realized_ratio + (Decimal('0.4') * progress_factor))
+                
+                # Cost also increases progressively
+                snapshot_cost = total_cost * (Decimal('0.3') + (Decimal('0.7') * progress_factor))
+                
+                # Calculate ROI percentage
+                if snapshot_cost > 0:
+                    roi_percentage = ((realized_value - snapshot_cost) / snapshot_cost) * 100
+                else:
+                    roi_percentage = Decimal('0.00')
+                
+                # Create snapshot
+                ProjectROI.objects.create(
+                    board=board,
+                    snapshot_date=snapshot_date,
+                    expected_value=base_expected,
+                    realized_value=realized_value,
+                    roi_percentage=roi_percentage,
+                    total_cost=snapshot_cost,
+                    total_tasks=total_tasks,
+                    completed_tasks=int(completed_tasks * float(progress_factor)),  # Progressive completion
+                    created_by=admin_user
+                )
 
-        self.stdout.write('   ✅ Budget and ROI data created')
+        self.stdout.write('   ✅ Budget and ROI data created (10 historical snapshots per board)')
 
     def create_burndown_data(self, software_board, marketing_board, bug_board):
         """
