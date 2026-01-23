@@ -535,8 +535,16 @@ function provideFeedback(suggestionId) {
 
 // Handle back navigation
 function goBack() {
-    // Check if there's a previous page in history
-    if (document.referrer && document.referrer !== window.location.href) {
+    // Don't use browser back if coming from suggestion detail (prevents loop)
+    if (document.referrer && document.referrer.includes('/coach/suggestion/')) {
+        // Coming from suggestion detail, go directly to board
+        {% if is_demo_mode %}
+        window.location.href = '{% url "demo_board_detail" board.id %}';
+        {% else %}
+        window.location.href = '{% url "board_detail" board.id %}';
+        {% endif %}
+    } else if (document.referrer && document.referrer !== window.location.href) {
+        // Normal back navigation
         window.history.back();
     } else {
         // Fallback to board detail if no history (demo-aware)
