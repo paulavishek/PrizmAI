@@ -237,9 +237,9 @@
             <p class="text-muted mb-0">{{ board.description }}</p>
         {% endif %}
     </div>    <div class="btn-group">
-        <button onclick="goBack()" class="btn btn-outline-secondary">
+        <a href="{% if is_demo_board %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left me-1"></i> Back
-        </button>
+        </a>
         <a href="{% url 'board_analytics' board.id %}" class="btn btn-outline-primary">
             <i class="fas fa-chart-pie me-1"></i> Analytics
         </a>
@@ -1265,17 +1265,6 @@
         bsModal.show();
         modal.addEventListener('hidden.bs.modal', () => modal.remove());
     };
-    
-    // Handle back navigation to previous page
-    function goBack() {
-        // Check if there's a previous page in history
-        if (document.referrer && document.referrer !== window.location.href) {
-            window.history.back();
-        } else {
-            // Fallback to board list if no history
-            window.location.href = '{% url "board_list" %}';
-        }
-    }
     
     </script>
 
