@@ -283,8 +283,8 @@
         </div>
 
         <div class="d-flex gap-2 mt-3">
-            <button onclick="location.href='{% url 'coach_dashboard' board.id %}'" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-2"></i>Back to Coach
+            <button onclick="location.href='{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}'" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back to Board
             </button>
             {% if suggestion.status == 'active' %}
             <button onclick="acknowledgeSuggestion()" class="btn btn-primary">

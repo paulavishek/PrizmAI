@@ -295,7 +295,7 @@ def generate_suggestions(request, board_id):
         
         # Create user-friendly message
         if created_count == 0:
-            message = "No new suggestions - your project is running smoothly! 🎉"
+            message = "No new suggestions at this time"
         elif created_count == 1:
             message = f"✅ Generated 1 new suggestion"
         else:
