@@ -334,7 +334,7 @@ function trackLimitationBannerClick() {
         <i class="fas fa-info-circle me-2" style="font-size: 1.5rem;"></i>
         <div>
             <strong>You're exploring demo content</strong>
-            <p class="mb-0 small">As a registered user, you're not subject to demo limitations. Your AI usage is tracked separately in your <a href="{% url 'ai_usage_dashboard' %}">AI Usage Dashboard</a> ({{ user.ai_usage_quota.requests_used|default:0 }}/{{ user.ai_usage_quota.monthly_quota|default:1000 }} requests this month).</p>
+            <p class="mb-0 small">As a registered user, you're not subject to demo limitations. Your AI usage is tracked separately in your <a href="{% url 'ai_usage:dashboard' %}">AI Usage Dashboard</a>.</p>
         </div>
     </div>
 </div>

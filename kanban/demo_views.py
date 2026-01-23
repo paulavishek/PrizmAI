@@ -67,11 +67,22 @@ def demo_mode_selection(request):
         was_authenticated = request.user.is_authenticated
         original_user_id = request.user.id if was_authenticated else None
         
+        # Check if user is a REAL authenticated user (not a demo admin)
+        # Real authenticated users should NOT be switched to demo_admin
+        is_real_authenticated_user = False
+        if was_authenticated and hasattr(request.user, 'email') and request.user.email:
+            email = request.user.email.lower()
+            # Check if this is NOT a demo admin account
+            if not ('demo_admin' in email or email.startswith('virtual_demo')):
+                is_real_authenticated_user = True
+                logger.info(f"Real authenticated user '{request.user.username}' entering demo mode - keeping their session")
+        
         # For SOLO mode: Log in as virtual demo admin for full access
-        if mode == 'solo':
+        # BUT ONLY for anonymous users - real authenticated users keep their own session
+        if mode == 'solo' and not is_real_authenticated_user:
             success = login_as_demo_admin(request)
             if success:
-                logger.info(f"Solo demo: User logged in as virtual admin")
+                logger.info(f"Solo demo: Anonymous user logged in as virtual admin")
             else:
                 logger.warning(f"Solo demo: Failed to login as virtual admin, continuing with session-based access")
         
@@ -92,7 +103,12 @@ def demo_mode_selection(request):
         request.session['demo_mode_selected'] = True
         request.session['demo_role'] = 'admin'  # Start as admin in both modes
         request.session['demo_session_id'] = request.session.session_key
-        request.session['is_anonymous_demo'] = not was_authenticated
+        # Real authenticated users are NOT anonymous demo users
+        request.session['is_anonymous_demo'] = not is_real_authenticated_user
+        # Store original user info for authenticated users exploring demo
+        if is_real_authenticated_user:
+            request.session['original_user_id'] = original_user_id
+            request.session['original_username'] = request.user.username
         request.session['browser_fingerprint'] = browser_fingerprint
         
         # Check if this browser has an existing demo session (within valid timeframe)
