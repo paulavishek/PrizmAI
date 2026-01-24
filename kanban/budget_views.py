@@ -930,13 +930,15 @@ def my_timesheet(request, board_id=None):
         }
         for day in week_days:
             entry = entries_by_task_date.get((task.id, day['date']))
+            hours = entry.hours_spent if entry else Decimal('0.00')
             row['entries'].append({
                 'date': day['date'],
                 'entry': entry,
-                'hours': entry.hours_spent if entry else Decimal('0.00'),
+                'hours': round(hours, 2),
             })
             if entry:
                 row['total_hours'] += entry.hours_spent
+        row['total_hours'] = round(row['total_hours'], 2)
         task_rows.append(row)
     
     # Calculate daily totals
@@ -945,9 +947,9 @@ def my_timesheet(request, board_id=None):
         total = entries.filter(work_date=day['date']).aggregate(
             total=Sum('hours_spent')
         )['total'] or Decimal('0.00')
-        daily_totals.append(total)
+        daily_totals.append(round(total, 2))
     
-    week_total = sum(daily_totals, Decimal('0.00'))
+    week_total = round(sum(daily_totals, Decimal('0.00')), 2)
     
     # Previous/next week dates
     prev_week = week_offset - 1
@@ -1005,20 +1007,24 @@ def time_tracking_dashboard(request, board_id=None):
     today_hours = entries.filter(work_date=today).aggregate(
         total=Sum('hours_spent')
     )['total'] or Decimal('0.00')
+    today_hours = round(today_hours, 2)
     
     week_hours = entries.filter(
         work_date__gte=week_start,
         work_date__lte=today
     ).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
+    week_hours = round(week_hours, 2)
     
     month_hours = entries.filter(
         work_date__gte=month_start,
         work_date__lte=today
     ).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
+    month_hours = round(month_hours, 2)
     
     total_hours = entries.aggregate(
         total=Sum('hours_spent')
     )['total'] or Decimal('0.00')
+    total_hours = round(total_hours, 2)
     
     # Recent entries
     recent_entries = entries.select_related(
@@ -1036,6 +1042,12 @@ def time_tracking_dashboard(request, board_id=None):
         total_hours=Sum('time_entries__hours_spent')
     ).order_by('-total_hours')[:10]
     
+    # Round total_hours for display
+    tasks_with_time_list = list(tasks_with_time)
+    for task in tasks_with_time_list:
+        if task.total_hours:
+            task.total_hours = round(task.total_hours, 2)
+    
     # Daily chart data (last 14 days)
     chart_data = []
     for i in range(13, -1, -1):
@@ -1046,7 +1058,7 @@ def time_tracking_dashboard(request, board_id=None):
         chart_data.append({
             'date': date.strftime('%Y-%m-%d'),
             'day': date.strftime('%a'),
-            'hours': float(daily_hours),
+            'hours': float(round(daily_hours, 2)),
         })
     
     # My tasks needing time entry (assigned and not done)
@@ -1071,7 +1083,7 @@ def time_tracking_dashboard(request, board_id=None):
         'month_hours': month_hours,
         'total_hours': total_hours,
         'recent_entries': recent_entries,
-        'tasks_with_time': tasks_with_time,
+        'tasks_with_time': tasks_with_time_list,
         'chart_data': chart_data_json,
         'my_tasks': my_tasks,
     }
@@ -1140,13 +1152,13 @@ def team_timesheet(request, board_id):
         row = {
             'user': user_data['user'],
             'daily_hours': [],
-            'total_hours': user_data['total_hours'],
+            'total_hours': round(user_data['total_hours'], 2),
             'entries_count': user_data['entries_count'],
         }
         for day in week_days:
             date_str = day['date'].isoformat()
             hours = user_data['daily_hours'].get(date_str, Decimal('0.00'))
-            row['daily_hours'].append(hours)
+            row['daily_hours'].append(round(hours, 2))
         user_rows.append(row)
     
     # Calculate daily totals
@@ -1155,9 +1167,9 @@ def team_timesheet(request, board_id):
         total = entries.filter(work_date=day['date']).aggregate(
             total=Sum('hours_spent')
         )['total'] or Decimal('0.00')
-        daily_totals.append(total)
+        daily_totals.append(round(total, 2))
     
-    week_total = sum(daily_totals, Decimal('0.00'))
+    week_total = round(sum(daily_totals, Decimal('0.00')), 2)
     
     prev_week = week_offset - 1
     next_week = week_offset + 1
