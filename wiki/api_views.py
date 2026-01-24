@@ -327,6 +327,7 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
         board_id = data.get('board_id')
         selected_indices = data.get('selected_action_items', [])
         column_id = data.get('column_id')  # Optional: specific column
+        phase = data.get('phase')  # Optional: phase assignment
         
         if not board_id:
             return JsonResponse({'error': 'board_id is required'}, status=400)
@@ -393,7 +394,8 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                         priority=priority,
                         created_by=request.user,
                         created_by_session=created_by_session,
-                        is_seed_demo_data=False  # User-created, not seed data
+                        is_seed_demo_data=False,  # User-created, not seed data
+                        phase=phase  # Set phase if provided (None if not)
                     )
                     
                     # Try to assign if suggested
@@ -583,7 +585,8 @@ def get_boards_for_organization(request):
                 'id': board.id,
                 'name': board.name,
                 'description': board.description,
-                'columns': columns
+                'columns': columns,
+                'num_phases': board.num_phases
             })
         
         return JsonResponse({

@@ -465,16 +465,36 @@ async function loadAvailableBoards() {
 function updateColumnSelect() {
     const boardId = document.getElementById('boardSelect').value;
     const columnSelect = document.getElementById('columnSelect');
+    const phaseSelectContainer = document.getElementById('phaseSelectContainer');
+    const phaseSelect = document.getElementById('phaseSelect');
     
     if (!boardId) {
-        columnSelect.innerHTML = '<option value="">-- Default column --</option>';
+        columnSelect.innerHTML = '<option value="">To Do (Default)</option>';
+        if (phaseSelectContainer) phaseSelectContainer.style.display = 'none';
         return;
     }
     
     const board = availableBoards.find(b => b.id == boardId);
     if (board && board.columns) {
-        columnSelect.innerHTML = '<option value="">-- Default column --</option>' +
+        // Find "To Do" column for default text
+        const todoColumn = board.columns.find(col => col.name.toLowerCase().includes('to do') || col.name.toLowerCase().includes('todo'));
+        const defaultText = todoColumn ? `${todoColumn.name} (Default)` : 'To Do (Default)';
+        
+        columnSelect.innerHTML = `<option value="">${defaultText}</option>` +
             board.columns.map(col => `<option value="${col.id}">${col.name}</option>`).join('');
+        
+        // Show/hide phase selector based on board configuration
+        if (board.num_phases && board.num_phases > 0 && phaseSelectContainer && phaseSelect) {
+            phaseSelectContainer.style.display = 'block';
+            // Populate phase options
+            let phaseOptions = '<option value="">No Phase</option>';
+            for (let i = 1; i <= board.num_phases; i++) {
+                phaseOptions += `<option value="Phase ${i}">Phase ${i}</option>`;
+            }
+            phaseSelect.innerHTML = phaseOptions;
+        } else if (phaseSelectContainer) {
+            phaseSelectContainer.style.display = 'none';
+        }
     }
 }
 
@@ -488,6 +508,8 @@ async function confirmTaskCreation() {
     }
     
     const columnId = document.getElementById('columnSelect').value;
+    const phaseSelect = document.getElementById('phaseSelect');
+    const phase = phaseSelect && phaseSelect.value ? phaseSelect.value : null;
     
     document.getElementById('confirmCreateTasksBtn').disabled = true;
     document.getElementById('taskCreationProgress').style.display = 'block';
@@ -502,6 +524,7 @@ async function confirmTaskCreation() {
             requestBody = {
                 board_id: boardId,
                 column_id: columnId || null,
+                phase: phase,
                 selected_action_items: Array.from(selectedActionItems)
             };
         } else {
