@@ -72,6 +72,9 @@ def chat_interface(request, session_id=None):
     else:
         user_boards = Board.objects.none()
     
+    # Count active boards for welcome message
+    active_boards_count = user_boards.count()
+    
     # Get initial query from URL parameter (e.g., from wiki quick queries)
     initial_query = request.GET.get('q', '')
     
@@ -80,6 +83,7 @@ def chat_interface(request, session_id=None):
         'boards': user_boards,
         'user_preferences': user_pref,
         'initial_query': initial_query,
+        'active_boards_count': active_boards_count,
     }
     return render(request, 'ai_assistant/chat.html', context)
 
