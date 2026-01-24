@@ -330,80 +330,74 @@ Mitigation Strategies:
         return count
 
     def create_analytics(self, demo_users, demo_boards):
-        """Create analytics data - summary records for past activity"""
+        """Create analytics data - realistic summary records matching demo sessions"""
         self.stdout.write('\n4. Creating Analytics Data...')
         
         # Delete existing analytics for demo users
         AIAssistantAnalytics.objects.filter(user__in=demo_users).delete()
         
         count = 0
-        # Prioritize demo_admin_solo for solo demo mode
-        primary_user = demo_users.filter(username='demo_admin_solo').first() or demo_users.first()
-        boards_list = list(demo_boards)
-        
-        # Ensure demo_admin_solo is in the list if it exists
-        users_to_process = []
+        # Get demo_admin_solo as the primary demo user
         demo_admin_solo = demo_users.filter(username='demo_admin_solo').first()
-        if demo_admin_solo:
-            users_to_process.append(demo_admin_solo)
-        # Add other demo users (up to 2 more)
-        for user in demo_users.exclude(username='demo_admin_solo')[:2]:
-            users_to_process.append(user)
         
-        # Create a single analytics record per user/board combination
-        # (since date uses auto_now_add, we can only create "today" records)
-        for user in users_to_process:
-            for board in boards_list:
-                # Calculate aggregate stats that would represent historical usage
-                is_primary = (user == primary_user)
-                multiplier = 30 if is_primary else 10  # 30 days of activity for primary
-                
-                analytics = AIAssistantAnalytics.objects.create(
-                    user=user,
-                    board=board,
-                    sessions_created=random.randint(5, 15) * (3 if is_primary else 1),
-                    messages_sent=random.randint(20, 100) * (3 if is_primary else 1),
-                    gemini_requests=random.randint(15, 80) * (3 if is_primary else 1),
-                    web_searches_performed=random.randint(5, 20),
-                    knowledge_base_queries=random.randint(10, 50),
-                    total_tokens_used=random.randint(10000, 50000) * (3 if is_primary else 1),
-                    input_tokens=random.randint(2000, 10000) * (3 if is_primary else 1),
-                    output_tokens=random.randint(8000, 40000) * (3 if is_primary else 1),
-                    helpful_responses=random.randint(15, 60) * (3 if is_primary else 1),
-                    unhelpful_responses=random.randint(0, 5),
-                    avg_response_time_ms=random.randint(800, 2500),
-                )
-                count += 1
+        if not demo_admin_solo:
+            self.stdout.write('  Skipped (no demo_admin_solo user found)')
+            return 0
         
-        # Also create records without board context (general queries)
-        # Prioritize demo_admin_solo first
-        users_for_general = []
-        if demo_admin_solo:
-            users_for_general.append(demo_admin_solo)
-        # Add one more user
-        other_user = demo_users.exclude(username='demo_admin_solo').first()
-        if other_user:
-            users_for_general.append(other_user)
+        # Count actual messages for this user to base analytics on real data
+        from ai_assistant.models import AIAssistantMessage, AIAssistantSession
+        user_sessions = AIAssistantSession.objects.filter(user=demo_admin_solo)
         
-        for user in users_for_general:
+        # Create per-board analytics with realistic values based on actual data
+        boards_list = list(demo_boards)
+        for board in boards_list:
+            # Get sessions for this board
+            board_sessions = user_sessions.filter(board=board)
+            board_messages = AIAssistantMessage.objects.filter(session__in=board_sessions).count()
+            
+            if board_messages == 0:
+                board_messages = 2  # Minimum for display purposes
+            
             analytics = AIAssistantAnalytics.objects.create(
-                user=user,
-                board=None,  # No specific board context
-                sessions_created=random.randint(2, 8),
-                messages_sent=random.randint(10, 40),
-                gemini_requests=random.randint(8, 30),
-                web_searches_performed=random.randint(3, 15),
-                knowledge_base_queries=random.randint(5, 20),
-                total_tokens_used=random.randint(5000, 20000),
-                input_tokens=random.randint(1000, 5000),
-                output_tokens=random.randint(4000, 15000),
-                helpful_responses=random.randint(8, 30),
-                unhelpful_responses=random.randint(0, 2),
-                avg_response_time_ms=random.randint(900, 2200),
+                user=demo_admin_solo,
+                board=board,
+                sessions_created=max(1, board_sessions.count()),
+                messages_sent=board_messages,
+                gemini_requests=board_messages // 2 + 1,
+                web_searches_performed=random.randint(0, 2),
+                knowledge_base_queries=random.randint(1, 4),
+                total_tokens_used=board_messages * 450,
+                input_tokens=board_messages * 150,
+                output_tokens=board_messages * 300,
+                helpful_responses=board_messages // 2,
+                unhelpful_responses=0,
+                avg_response_time_ms=random.randint(900, 1400),
             )
             count += 1
         
-        self.stdout.write(f'  Created {count} analytics records (30 days)')
+        # Create a record for sessions without a specific board (general queries)
+        sessions_without_board = user_sessions.filter(board__isnull=True)
+        general_messages = AIAssistantMessage.objects.filter(session__in=sessions_without_board).count()
+        
+        if general_messages > 0:
+            analytics = AIAssistantAnalytics.objects.create(
+                user=demo_admin_solo,
+                board=None,  # General analytics for non-board sessions
+                sessions_created=sessions_without_board.count(),
+                messages_sent=general_messages,
+                gemini_requests=general_messages // 2 + 1,
+                web_searches_performed=1,
+                knowledge_base_queries=2,
+                total_tokens_used=general_messages * 450,
+                input_tokens=general_messages * 150,
+                output_tokens=general_messages * 300,
+                helpful_responses=general_messages // 2,
+                unhelpful_responses=0,
+                avg_response_time_ms=1100,
+            )
+            count += 1
+        
+        self.stdout.write(f'  Created {count} analytics records')
         return count
 
     def create_recommendations(self, demo_boards, demo_tasks):
