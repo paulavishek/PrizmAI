@@ -364,13 +364,14 @@ def get_session_messages(request, session_id):
         page = int(request.GET.get('page', 1))
         per_page = int(request.GET.get('per_page', user_pref.messages_per_page))
         
+        # Get messages ordered by creation time and ID for consistent ordering
         messages_qs = AIAssistantMessage.objects.filter(session=session).order_by('created_at', 'id')
         
         # Calculate pagination
         total = messages_qs.count()
         start = (page - 1) * per_page
         end = start + per_page
-        messages = messages_qs[start:end]
+        messages = list(messages_qs[start:end])
         
         data = {
             'session_id': session.id,

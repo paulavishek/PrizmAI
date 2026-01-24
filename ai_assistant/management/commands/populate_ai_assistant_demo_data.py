@@ -197,18 +197,24 @@ class Command(BaseCommand):
                 total_tokens_used=random.randint(500, 3000),
             )
             
-            # Backdate the session
+            # Backdate the session - use update() to bypass auto_now
             days_ago = session_data.get('days_ago', 0)
-            session.created_at = timezone.now() - timedelta(days=days_ago, hours=random.randint(1, 8))
-            session.updated_at = session.created_at + timedelta(minutes=random.randint(5, 60))
-            session.save()
+            hours_offset = random.randint(1, 8)
+            backdated_created = timezone.now() - timedelta(days=days_ago, hours=hours_offset)
+            backdated_updated = backdated_created + timedelta(minutes=random.randint(5, 60))
+            AIAssistantSession.objects.filter(pk=session.pk).update(
+                created_at=backdated_created,
+                updated_at=backdated_updated
+            )
+            session.refresh_from_db()
             
             sessions_count += 1
             self.stdout.write(f'  Created session: {session.title}')
             
-            # Create messages
+            # Create messages with proper sequential timestamps
+            # Use update() to bypass auto_now_add for accurate backdating
             message_time = session.created_at
-            for msg_data in session_data['messages']:
+            for msg_idx, msg_data in enumerate(session_data['messages']):
                 message = AIAssistantMessage.objects.create(
                     session=session,
                     role=msg_data['role'],
@@ -219,10 +225,13 @@ class Command(BaseCommand):
                     used_web_search=msg_data.get('used_web_search', False),
                     search_sources=msg_data.get('search_sources', []),
                 )
-                message.created_at = message_time
-                message.save()
+                # Use update() to bypass auto_now_add and set proper sequential timestamps
+                AIAssistantMessage.objects.filter(pk=message.pk).update(
+                    created_at=message_time
+                )
                 
-                message_time += timedelta(seconds=random.randint(2, 30))
+                # Increment time for next message (5-30 seconds between messages)
+                message_time += timedelta(seconds=5 + msg_idx * 10)
                 messages_count += 1
         
         return sessions_count, messages_count
