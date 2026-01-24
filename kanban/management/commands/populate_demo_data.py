@@ -517,6 +517,14 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('\n📚 Creating wiki links...\n'))
         self.create_wiki_links(all_tasks, demo_org, alex)
 
+        # Populate AI Assistant demo data (chat sessions and messages)
+        self.stdout.write(self.style.SUCCESS('\n🤖 Creating AI Assistant chat sessions...\n'))
+        from django.core.management import call_command
+        try:
+            call_command('populate_ai_assistant_demo_data', '--reset')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'   ⚠️  AI Assistant demo data skipped: {e}'))
+
         self.stdout.write(self.style.SUCCESS('\n' + '='*70))
         self.stdout.write(self.style.SUCCESS('✅ DEMO DATA POPULATION COMPLETE'))
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))

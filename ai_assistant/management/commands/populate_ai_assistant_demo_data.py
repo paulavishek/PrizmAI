@@ -212,9 +212,14 @@ class Command(BaseCommand):
             self.stdout.write(f'  Created session: {session.title}')
             
             # Create messages with proper sequential timestamps
-            # Use update() to bypass auto_now_add for accurate backdating
-            message_time = session.created_at
+            # Each message gets a timestamp that is progressively later
+            base_time = session.created_at
+            message_objects = []
+            
             for msg_idx, msg_data in enumerate(session_data['messages']):
+                # Calculate timestamp: each message is 10 seconds after the previous
+                msg_timestamp = base_time + timedelta(seconds=msg_idx * 10)
+                
                 message = AIAssistantMessage.objects.create(
                     session=session,
                     role=msg_data['role'],
@@ -225,14 +230,12 @@ class Command(BaseCommand):
                     used_web_search=msg_data.get('used_web_search', False),
                     search_sources=msg_data.get('search_sources', []),
                 )
-                # Use update() to bypass auto_now_add and set proper sequential timestamps
-                AIAssistantMessage.objects.filter(pk=message.pk).update(
-                    created_at=message_time
-                )
-                
-                # Increment time for next message (5-30 seconds between messages)
-                message_time += timedelta(seconds=5 + msg_idx * 10)
+                message_objects.append((message.pk, msg_timestamp))
                 messages_count += 1
+            
+            # Update all message timestamps using update() to bypass auto_now_add
+            for msg_pk, msg_timestamp in message_objects:
+                AIAssistantMessage.objects.filter(pk=msg_pk).update(created_at=msg_timestamp)
         
         return sessions_count, messages_count
 
