@@ -68,7 +68,7 @@ class AIAssistantMessage(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
-        ordering = ['created_at']
+        ordering = ['created_at', 'id']
     
     def __str__(self):
         preview = self.content[:50] + '...' if len(self.content) > 50 else self.content

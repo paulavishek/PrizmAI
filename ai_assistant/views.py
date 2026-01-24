@@ -47,6 +47,14 @@ def chat_interface(request, session_id=None):
     # Get or create user preferences
     user_pref, created = UserPreference.objects.get_or_create(user=request.user)
     
+    # Check for session in query parameter first
+    session_param = request.GET.get('session')
+    if session_param:
+        try:
+            session_id = int(session_param)
+        except (ValueError, TypeError):
+            session_id = None
+    
     # Get session or create new one
     if session_id:
         session = get_object_or_404(AIAssistantSession, id=session_id, user=request.user)
@@ -356,7 +364,7 @@ def get_session_messages(request, session_id):
         page = int(request.GET.get('page', 1))
         per_page = int(request.GET.get('per_page', user_pref.messages_per_page))
         
-        messages_qs = AIAssistantMessage.objects.filter(session=session).order_by('created_at')
+        messages_qs = AIAssistantMessage.objects.filter(session=session).order_by('created_at', 'id')
         
         # Calculate pagination
         total = messages_qs.count()
