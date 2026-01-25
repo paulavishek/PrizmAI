@@ -271,26 +271,38 @@ class ConflictResolution(models.Model):
             return date_str
         
         if resolution_type == 'reassign' and 'task_id' in data and 'new_assignee_id' in data:
-            task = Task.objects.get(id=data['task_id'])
-            new_assignee = User.objects.get(id=data['new_assignee_id'])
-            task.assigned_to = new_assignee
-            task.save()
+            try:
+                task = Task.objects.get(id=data['task_id'])
+                new_assignee = User.objects.get(id=data['new_assignee_id'])
+                task.assigned_to = new_assignee
+                task.save()
+            except (Task.DoesNotExist, User.DoesNotExist):
+                # Task or user no longer exists, skip auto-apply
+                pass
         
         elif resolution_type == 'reschedule' and 'task_id' in data:
-            task = Task.objects.get(id=data['task_id'])
-            if 'new_start_date' in data:
-                task.start_date = parse_date(data['new_start_date'])
-            if 'new_due_date' in data:
-                task.due_date = parse_date(data['new_due_date'])
-            task.save()
+            try:
+                task = Task.objects.get(id=data['task_id'])
+                if 'new_start_date' in data:
+                    task.start_date = parse_date(data['new_start_date'])
+                if 'new_due_date' in data:
+                    task.due_date = parse_date(data['new_due_date'])
+                task.save()
+            except Task.DoesNotExist:
+                # Task no longer exists, skip auto-apply
+                pass
         
         elif resolution_type == 'adjust_dates' and 'task_id' in data:
-            task = Task.objects.get(id=data['task_id'])
-            if 'new_start_date' in data:
-                task.start_date = parse_date(data['new_start_date'])
-            if 'new_due_date' in data:
-                task.due_date = parse_date(data['new_due_date'])
-            task.save()
+            try:
+                task = Task.objects.get(id=data['task_id'])
+                if 'new_start_date' in data:
+                    task.start_date = parse_date(data['new_start_date'])
+                if 'new_due_date' in data:
+                    task.due_date = parse_date(data['new_due_date'])
+                task.save()
+            except Task.DoesNotExist:
+                # Task no longer exists, skip auto-apply
+                pass
         
         # Add more auto-apply logic for other resolution types as needed
 
