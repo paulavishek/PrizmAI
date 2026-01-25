@@ -367,6 +367,16 @@ CHANNEL_LAYERS = {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
             "hosts": [('127.0.0.1', 6379)],
+            "capacity": 1500,  # Maximum number of messages to hold per channel (default: 100)
+            "expiry": 10,  # Message expiry in seconds (default: 60) - reduced for faster delivery
+            "group_expiry": 86400,  # Group membership expiry in seconds (24 hours)
+            "channel_capacity": {
+                "http.request": 200,
+                "http.response!*": 10,
+                "websocket.send!*": 20,  # Prioritize WebSocket message delivery
+            },
+            # Connection pool settings for better performance
+            "symmetric_encryption_keys": [SECRET_KEY],  # Optional: encrypt messages
         },
     },
 }
@@ -398,6 +408,14 @@ CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True  # Fix Celery 6.0 deprecation warning
+
+# Redis optimization for better messaging performance
+CELERY_BROKER_TRANSPORT_OPTIONS = {
+    'visibility_timeout': 3600,  # 1 hour
+    'fanout_prefix': True,
+    'fanout_patterns': True,
+}
+CELERY_RESULT_EXPIRES = 3600  # Results expire after 1 hour
 
 # ============================================
 # REST FRAMEWORK CONFIGURATION
