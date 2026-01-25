@@ -1,11 +1,16 @@
 """
 Demo Mode Views
-Provides a consistent demo environment for all users without RBAC restrictions
+Provides a consistent demo environment for all users
 
-ARCHITECTURE:
+SIMPLIFIED MODE (January 2026):
+- Single authenticated environment
+- All users get full access to demo boards
+- No Solo/Team mode selection required
+- Pre-populated demo data for immediate exploration
+
+LEGACY ARCHITECTURE (disabled when SIMPLIFIED_MODE=True):
 - SOLO MODE: Users are logged in as a virtual admin user (demo_admin_solo)
-             This gives them full access everywhere without view-level checks
-- TEAM MODE: Users stay as themselves or anonymous, RBAC applies via DemoPermissions
+- TEAM MODE: Users stay as themselves, RBAC applies via DemoPermissions
 """
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
@@ -33,19 +38,87 @@ DEMO_BOARD_NAMES = ['Software Development', 'Bug Tracking', 'Marketing Campaign'
 from kanban.utils.demo_settings import (
     MAX_DEMO_EXTENSIONS, 
     EXTENSION_DURATION_HOURS, 
-    INITIAL_DEMO_DURATION_HOURS
+    INITIAL_DEMO_DURATION_HOURS,
+    SIMPLIFIED_MODE
 )
+
+
+def _auto_grant_demo_access(request):
+    """
+    Automatically grant the authenticated user access to demo boards.
+    
+    In simplified mode, users automatically become members of demo boards
+    so they can explore the pre-populated data immediately.
+    """
+    if not request.user.is_authenticated:
+        return
+    
+    try:
+        # Get demo organization
+        demo_orgs = Organization.objects.filter(name__in=DEMO_ORG_NAMES)
+        if not demo_orgs.exists():
+            logger.warning("No demo organizations found for auto-grant")
+            return
+        
+        # Get demo boards
+        demo_boards = Board.objects.filter(
+            organization__in=demo_orgs,
+            name__in=DEMO_BOARD_NAMES
+        )
+        
+        for board in demo_boards:
+            # Add user to board members (simple M2M relationship)
+            if request.user not in board.members.all():
+                board.members.add(request.user)
+                logger.info(f"Auto-granted {request.user.username} access to demo board: {board.name}")
+            
+            # Add user to chat rooms for this board
+            chat_rooms = ChatRoom.objects.filter(board=board)
+            for room in chat_rooms:
+                if request.user not in room.members.all():
+                    room.members.add(request.user)
+        
+    except Exception as e:
+        logger.error(f"Error auto-granting demo access: {e}")
 
 
 def demo_mode_selection(request):
     """
-    Demo mode selection screen - choose between Solo or Team mode
-    This is the entry point for the new demo experience
-    ANONYMOUS ACCESS: No login required for demo mode
+    Demo mode selection screen - entry point for demo experience
     
-    SOLO MODE: User is logged in as virtual admin → full access everywhere
-    TEAM MODE: User stays as themselves → RBAC applies via session role
+    SIMPLIFIED MODE (January 2026):
+    - No Solo/Team selection required
+    - All authenticated users get full access
+    - Pre-populated demo data available immediately
+    - Automatically redirects to dashboard if already authenticated
+    
+    LEGACY MODE:
+    - Choose between Solo or Team mode
+    - SOLO MODE: User is logged in as virtual admin
+    - TEAM MODE: User experiences RBAC via session role
     """
+    # SIMPLIFIED MODE: Skip mode selection entirely
+    # Authenticated users go directly to dashboard
+    if SIMPLIFIED_MODE:
+        if request.user.is_authenticated:
+            # Mark session as demo-ready and redirect to main dashboard
+            request.session['demo_mode_selected'] = True
+            request.session['is_demo_mode'] = True
+            request.session['demo_mode'] = 'simplified'  # New simplified mode
+            request.session['demo_role'] = 'admin'  # Everyone is admin in simplified mode
+            request.session.modified = True
+            
+            # Add user to demo boards if not already a member
+            _auto_grant_demo_access(request)
+            
+            return redirect('dashboard')
+        else:
+            # Not authenticated - redirect to login with message
+            from django.contrib import messages
+            messages.info(request, 'Please sign in or create a free account to explore the demo.')
+            return redirect('account_login')
+    
+    # LEGACY MODE: Original Solo/Team selection flow
     if request.method == 'POST':
         mode = request.POST.get('mode', 'solo')  # 'solo' or 'team'
         selection_method = request.POST.get('selection_method', 'selected')  # 'selected' or 'skipped'

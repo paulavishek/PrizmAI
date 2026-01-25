@@ -199,6 +199,9 @@ def check_global_ai_limit(request):
     """
     record = get_or_create_abuse_record(request)
     
+    # Import simplified mode settings
+    from kanban.utils.demo_settings import SIMPLIFIED_MODE, APPLY_VPN_PENALTIES, VPN_PENALTY_MULTIPLIER
+    
     if not record:
         # If we can't track, allow but with per-session limits
         return {
@@ -210,10 +213,13 @@ def check_global_ai_limit(request):
             'is_vpn_user': False,
         }
     
-    # Apply reduced limits for VPN users (50% of normal)
+    # Base limit
     max_allowed = GLOBAL_DEMO_LIMITS['max_ai_generations_global']
-    if record.is_vpn_user:
-        max_allowed = max_allowed // 2  # 15 instead of 30
+    
+    # SIMPLIFIED MODE: No VPN penalty - all users get same limits
+    # OLD BEHAVIOR (disabled): VPN users got 50% reduced limits
+    if APPLY_VPN_PENALTIES and record.is_vpn_user:
+        max_allowed = int(max_allowed * VPN_PENALTY_MULTIPLIER)  # Only applies if enabled
     
     current_count = record.total_ai_generations
     can_generate = current_count < max_allowed
@@ -247,6 +253,10 @@ def check_ai_rate_limit(request):
     
     This prevents rapid abuse even within the global limit.
     
+    SIMPLIFIED MODE (January 2026):
+    VPN users are NO LONGER penalized with stricter rate limits.
+    All users get the same rate limit (5 per 10 minutes).
+    
     Returns:
         dict with:
         - allowed: bool
@@ -255,16 +265,20 @@ def check_ai_rate_limit(request):
     """
     record = get_or_create_abuse_record(request)
     
+    # Import simplified mode settings
+    from kanban.utils.demo_settings import SIMPLIFIED_MODE, APPLY_VPN_PENALTIES, AI_RATE_LIMIT_REQUESTS, AI_RATE_LIMIT_WINDOW_MINUTES
+    
     if not record:
         return {'allowed': True, 'wait_seconds': 0, 'message': None}
     
-    # Sliding window: max 5 AI calls per 10 minutes
-    MAX_CALLS_PER_WINDOW = 5
-    WINDOW_MINUTES = 10
+    # Sliding window rate limit - same for all users in simplified mode
+    MAX_CALLS_PER_WINDOW = AI_RATE_LIMIT_REQUESTS  # Default: 5
+    WINDOW_MINUTES = AI_RATE_LIMIT_WINDOW_MINUTES  # Default: 10
     
-    # For VPN users, be more restrictive: 3 calls per 10 minutes
-    if record.is_vpn_user:
-        MAX_CALLS_PER_WINDOW = 3
+    # SIMPLIFIED MODE: No VPN penalty - all users get same rate limit
+    # OLD BEHAVIOR (disabled): VPN users got 3 calls per 10 minutes instead of 5
+    if APPLY_VPN_PENALTIES and record.is_vpn_user:
+        MAX_CALLS_PER_WINDOW = 3  # Only applies if VPN penalties are enabled
     
     now = timezone.now()
     window_start = now - timedelta(minutes=WINDOW_MINUTES)
@@ -350,13 +364,18 @@ def can_create_demo_session(request):
     Check if this visitor can create a new demo session.
     Use this before allowing demo mode entry.
     
-    Also checks for VPN/proxy usage and adjusts limits accordingly.
-    VPN users get reduced limits (50%) to minimize abuse potential
-    while still allowing legitimate VPN users to try the demo.
+    Also checks for VPN/proxy usage for analytics tracking.
+    
+    SIMPLIFIED MODE (January 2026):
+    VPN users are NO LONGER penalized with reduced limits.
+    VPN detection is kept for analytics only, not enforcement.
     
     Returns:
         tuple: (allowed: bool, message: str or None)
     """
+    # Import simplified mode setting
+    from kanban.utils.demo_settings import SIMPLIFIED_MODE, APPLY_VPN_PENALTIES
+    
     status = check_abuse_status(request)
     
     if not status['allowed']:
@@ -364,7 +383,7 @@ def can_create_demo_session(request):
     
     record = status['record']
     
-    # Check for VPN/proxy usage
+    # Check for VPN/proxy usage (for analytics only in simplified mode)
     is_vpn = False
     try:
         from kanban.utils.vpn_detection import is_datacenter_ip
@@ -372,19 +391,21 @@ def can_create_demo_session(request):
         is_vpn = is_datacenter_ip(ip_address)
         
         if is_vpn and record:
-            # Mark the record as VPN user
+            # Mark the record as VPN user (for analytics tracking)
             if not record.is_vpn_user:
                 record.is_vpn_user = True
                 record.save(update_fields=['is_vpn_user'])
-            logger.info(f"VPN/datacenter IP detected: {ip_address}")
+            logger.info(f"VPN/datacenter IP detected (analytics only): {ip_address}")
     except Exception as e:
         logger.warning(f"Could not check VPN status: {e}")
     
     if record:
-        # For VPN users, apply stricter session limits (50% reduction)
         max_sessions = GLOBAL_DEMO_LIMITS['max_sessions_total']
-        if is_vpn or record.is_vpn_user:
-            max_sessions = max_sessions // 2  # 10 instead of 20
+        
+        # SIMPLIFIED MODE: No VPN penalty - all users get same limits
+        # OLD BEHAVIOR (disabled): VPN users got 50% reduced limits
+        if APPLY_VPN_PENALTIES and (is_vpn or record.is_vpn_user):
+            max_sessions = max_sessions // 2  # Only applies if APPLY_VPN_PENALTIES is True
         
         if record.total_sessions_created >= max_sessions:
             return False, (

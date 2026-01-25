@@ -31,16 +31,26 @@ def dashboard(request):
             profile.completed_wizard = True
             profile.save()
         
+        # Import simplified mode setting
+        from kanban.utils.demo_settings import SIMPLIFIED_MODE
+        
         # Get boards from user's organization OR where user is a member
-        # EXCLUDE demo boards - demo environment is isolated and accessed via demo dashboard
         demo_org_names = ['Demo - Acme Corporation']
+        
+        # Base query: boards in user's org or where user is a member
         boards = Board.objects.filter(
             Q(organization=organization) | Q(members=request.user)
         ).filter(
             Q(created_by=request.user) | Q(members=request.user)
-        ).exclude(
-            organization__name__in=demo_org_names
-        ).distinct()
+        )
+        
+        # SIMPLIFIED MODE: Include demo boards in main dashboard
+        # Users see all boards they have access to in one place
+        if not SIMPLIFIED_MODE:
+            # LEGACY: Exclude demo boards - demo accessed via separate demo dashboard
+            boards = boards.exclude(organization__name__in=demo_org_names)
+        
+        boards = boards.distinct()
         
         # Get analytics data
         task_count = Task.objects.filter(column__board__in=boards).count()

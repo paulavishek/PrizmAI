@@ -1,5 +1,10 @@
 """
 Context processors for conflict detection and demo mode
+
+SIMPLIFIED MODE (January 2026):
+- No demo limitations for authenticated users
+- All users have same access level
+- No role switching or permission errors
 """
 from kanban.conflict_models import ConflictDetection
 from django.utils import timezone
@@ -10,12 +15,46 @@ def demo_context(request):
     Add demo session information to template context
     Makes demo variables available globally without repeating in every view
     
-    IMPORTANT: Distinguishes between:
-    1. True demo users (anonymous or session-based demo) - subject to demo limitations
-    2. Authenticated users exploring demo content - NOT subject to demo limitations
-    """
-    context = {}
+    SIMPLIFIED MODE (January 2026):
+    - Authenticated users have full access (no demo limitations)
+    - Demo mode session variables are simplified
+    - No VPN penalties or complex abuse prevention
     
+    LEGACY MODE:
+    - Distinguishes between anonymous demo users and authenticated users
+    - Applies demo limitations to anonymous users
+    """
+    # Import simplified mode setting
+    from kanban.utils.demo_settings import SIMPLIFIED_MODE
+    
+    context = {
+        'simplified_mode': SIMPLIFIED_MODE,
+    }
+    
+    # SIMPLIFIED MODE: Much simpler logic
+    if SIMPLIFIED_MODE:
+        context['is_demo_mode'] = False  # No special demo mode in simplified
+        context['show_demo_limitations'] = False  # No limitations for authenticated users
+        context['is_authenticated_exploring_demo'] = False
+        
+        # User gets their standard quotas (not demo quotas)
+        if request.user.is_authenticated:
+            try:
+                from api.ai_usage_models import AIUsageQuota
+                quota = AIUsageQuota.objects.filter(user=request.user).first()
+                if quota:
+                    context['user_ai_remaining'] = quota.monthly_quota - quota.requests_used
+                    context['user_ai_quota'] = quota.monthly_quota
+                else:
+                    context['user_ai_remaining'] = 50  # Default
+                    context['user_ai_quota'] = 50
+            except Exception:
+                context['user_ai_remaining'] = 50
+                context['user_ai_quota'] = 50
+        
+        return context
+    
+    # LEGACY MODE: Original complex demo tracking
     # Determine if user is authenticated with a real account
     # Exclude demo admin accounts and virtual demo users
     is_authenticated_user = False

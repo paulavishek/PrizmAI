@@ -1,14 +1,113 @@
 """
 Permission Checking Utilities
-Helper functions for RBAC enforcement
+
+SIMPLIFIED VERSION (January 2026):
+This module now uses simple access control instead of complex RBAC.
+All functions are imported from simple_access.py for backwards compatibility.
+
+Original RBAC system has been replaced with:
+- Board creator = full access (can delete, manage members)
+- Board members = full CRUD (tasks, columns, comments)
+- No role selection, no permission errors
+
+The old RBAC code is preserved below but not used.
+All imports redirect to simple_access.py functions.
 """
+
+# ============================================================================
+# SIMPLIFIED ACCESS CONTROL - All functions redirect here
+# ============================================================================
+from kanban.simple_access import (
+    # Core access checks
+    can_access_board,
+    can_manage_board,
+    can_modify_board_content,
+    can_access_task,
+    can_modify_task,
+    
+    # Decorators
+    require_board_access,
+    require_board_management,
+    require_task_access,
+    
+    # Utilities
+    check_access_or_403,
+    check_management_or_403,
+    get_accessible_boards,
+    
+    # Backwards compatibility functions
+    user_has_board_permission,
+    user_has_task_permission,
+    user_has_column_permission,
+    get_user_board_membership,
+    get_column_permissions_for_user,
+    user_can_move_task_to_column,
+    user_can_create_task_in_column,
+    user_can_edit_task_in_column,
+    user_can_manage_board_members,
+    user_can_delete_board,
+    filter_boards_by_permission,
+    assign_default_role_to_user,
+    get_user_permissions_for_board,
+    check_permission_or_403,
+    get_permission_display_name,
+    get_available_roles_for_organization,
+    require_board_permission,
+    require_task_permission,
+)
+
+# Re-export all for backwards compatibility
+__all__ = [
+    'can_access_board',
+    'can_manage_board',
+    'can_modify_board_content',
+    'can_access_task',
+    'can_modify_task',
+    'require_board_access',
+    'require_board_management',
+    'require_task_access',
+    'check_access_or_403',
+    'check_management_or_403',
+    'get_accessible_boards',
+    'user_has_board_permission',
+    'user_has_task_permission',
+    'user_has_column_permission',
+    'get_user_board_membership',
+    'get_column_permissions_for_user',
+    'user_can_move_task_to_column',
+    'user_can_create_task_in_column',
+    'user_can_edit_task_in_column',
+    'user_can_manage_board_members',
+    'user_can_delete_board',
+    'filter_boards_by_permission',
+    'assign_default_role_to_user',
+    'get_user_permissions_for_board',
+    'check_permission_or_403',
+    'get_permission_display_name',
+    'get_available_roles_for_organization',
+    'require_board_permission',
+    'require_task_permission',
+]
+
+
+# ============================================================================
+# LEGACY CODE BELOW - Kept for reference but no longer executed
+# The imports above override these functions
+# ============================================================================
+
 from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseForbidden
 from functools import wraps
-from kanban.permission_models import BoardMembership, PermissionOverride
+
+# Try to import old models - may not exist after cleanup
+try:
+    from kanban.permission_models import BoardMembership, PermissionOverride
+except ImportError:
+    BoardMembership = None
+    PermissionOverride = None
 
 
-def get_user_board_membership(user, board):
+def _legacy_get_user_board_membership(user, board):
     """
     Get active board membership for a user
     
@@ -33,7 +132,7 @@ def get_user_board_membership(user, board):
         return None
 
 
-def user_has_board_permission(user, board, permission):
+def _legacy_user_has_board_permission(user, board, permission):
     """
     Check if user has a specific permission on a board
     
