@@ -166,6 +166,35 @@
 
 {% block extra_js %}
 <script>
+    // ============================================================
+    // Demo Banner Management - MUST BE DEFINED FIRST
+    // ============================================================
+    function dismissDemoBanner() {
+        const banner = document.getElementById('demoMultiUserBanner');
+        const showBtn = document.getElementById('showDemoBannerBtn');
+        if (banner) {
+            banner.style.display = 'none';
+            // Remember dismissal in localStorage
+            localStorage.setItem('demoMultiUserBannerDismissed', 'true');
+            // Show the "Show Instructions" button
+            if (showBtn) showBtn.style.display = 'inline-block';
+        }
+    }
+
+    function showDemoBanner() {
+        const banner = document.getElementById('demoMultiUserBanner');
+        const showBtn = document.getElementById('showDemoBannerBtn');
+        if (banner) {
+            banner.style.display = 'block';
+            // Clear dismissal from localStorage
+            localStorage.removeItem('demoMultiUserBannerDismissed');
+            // Hide the "Show Instructions" button
+            if (showBtn) showBtn.style.display = 'none';
+            // Scroll to banner
+            banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
     // Auto-scroll to bottom of messages
     const chatMessages = document.querySelector('.chat-messages');
     if (chatMessages) {
@@ -462,11 +491,15 @@
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
             
             // Auto-mark as read if this is not the sender's message (recipient is viewing)
-            if (data.user_id !== currentUserId && data.message_id) {
+            if (data.user_id !== currentUserId && data.id) {
+                console.log(`[Auto-mark] Message ${data.id} from user ${data.user_id}, current user ${currentUserId} - marking as read in 500ms`);
                 // Wait a moment to ensure message is displayed, then auto-mark as read
                 setTimeout(() => {
-                    markMessageAsRead(data.message_id);
+                    console.log(`[Auto-mark] Executing markMessageAsRead(${data.id})`);
+                    markMessageAsRead(data.id);
                 }, 500);
+            } else {
+                console.log(`[Auto-mark] Skipping auto-mark: user_id=${data.user_id}, currentUserId=${currentUserId}, id=${data.id}`);
             }
         }
         else if (data.type === 'message_marked_read') {
@@ -699,7 +732,7 @@
             {% elif is_demo_mode %}
             <div class="chat-header-actions">
                 <div></div>
-                <button type="button" id="showDemoBannerBtn" class="btn btn-sm btn-outline-success" onclick="showDemoBanner()" style="display: none;">
+                <button type="button" id="showDemoBannerBtn" class="btn btn-sm btn-success" onclick="showDemoBanner()" style="display: none;">
                     <i class="fas fa-info-circle me-1"></i> Show Multi-User Test Instructions
                 </button>
             </div>
@@ -707,7 +740,7 @@
 
             <!-- Demo Mode Info Banner (Dismissible) -->
             {% if is_demo_mode %}
-            <div id="demoMultiUserBanner" class="alert alert-success mb-0" style="border-radius: 0; border-left: 4px solid #4caf50; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); position: relative; display: none;">
+            <div id="demoMultiUserBanner" class="alert alert-success mb-0" style="border-radius: 0; border-left: 4px solid #4caf50; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); position: relative;">
                 <button type="button" class="btn-close" onclick="dismissDemoBanner()" style="position: absolute; top: 10px; right: 10px; font-size: 0.8rem;" aria-label="Close"></button>
                 <div class="d-flex align-items-start">
                     <div class="flex-shrink-0 me-3">
@@ -935,13 +968,13 @@
     let messageToDeleteId = null;
 
     function markMessageAsRead(messageId) {
+        console.log(`[Mark Read] Marking message ${messageId} as read...`);
+        
         // Send read notification via WebSocket
-        if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
-            chatSocket.send(JSON.stringify({
-                'type': 'message_read',
-                'message_id': messageId
-            }));
-        }
+        chatSocketManager.send({
+            'type': 'message_read',
+            'message_id': messageId
+        });
         
         // Also send to server via HTTP for persistence
         fetch(`{% url 'messaging:mark_chat_message_read' message_id=0 %}`.replace('0', messageId), {
@@ -974,6 +1007,7 @@
                             }
                         }
                     }
+                }
                 }
                 
                 // Update the notification badge in navbar
@@ -1181,36 +1215,7 @@
         }
     }
 
-    // ============================================================
-    // Demo Banner Management
-    // ============================================================
-    function dismissDemoBanner() {
-        const banner = document.getElementById('demoMultiUserBanner');
-        const showBtn = document.getElementById('showDemoBannerBtn');
-        if (banner) {
-            banner.style.display = 'none';
-            // Remember dismissal in localStorage
-            localStorage.setItem('demoMultiUserBannerDismissed', 'true');
-            // Show the "Show Instructions" button
-            if (showBtn) showBtn.style.display = 'inline-block';
-        }
-    }
-
-    function showDemoBanner() {
-        const banner = document.getElementById('demoMultiUserBanner');
-        const showBtn = document.getElementById('showDemoBannerBtn');
-        if (banner) {
-            banner.style.display = 'block';
-            // Clear dismissal from localStorage
-            localStorage.removeItem('demoMultiUserBannerDismissed');
-            // Hide the "Show Instructions" button
-            if (showBtn) showBtn.style.display = 'none';
-            // Scroll to banner
-            banner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-    }
-
-    // Show banner on page load if not dismissed
+    // Show banner on page load if not dismissed (already initialized at top)
     (function() {
         const banner = document.getElementById('demoMultiUserBanner');
         const showBtn = document.getElementById('showDemoBannerBtn');
