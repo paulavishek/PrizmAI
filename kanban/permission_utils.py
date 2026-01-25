@@ -681,42 +681,7 @@ def filter_tasks_by_permission(user, queryset, permission='task.view'):
     return queryset.filter(id__in=accessible_tasks)
 
 
-def get_column_permissions_for_user(user, column):
-    """
-    Get all column permissions for a user
-    
-    Args:
-        user: User object
-        column: Column object
-    
-    Returns:
-        dict with permission flags or None if no restrictions
-    """
-    from kanban.permission_models import ColumnPermission
-    
-    membership = get_user_board_membership(user, column.board)
-    if not membership:
-        return None
-    
-    try:
-        col_perm = ColumnPermission.objects.get(
-            column=column,
-            role=membership.role
-        )
-        return {
-            'can_move_to': col_perm.can_move_to,
-            'can_move_from': col_perm.can_move_from,
-            'can_create_in': col_perm.can_create_in,
-            'can_edit_in': col_perm.can_edit_in,
-        }
-    except ColumnPermission.DoesNotExist:
-        # No restrictions - all allowed
-        return {
-            'can_move_to': True,
-            'can_move_from': True,
-            'can_create_in': True,
-            'can_edit_in': True,
-        }
+# get_column_permissions_for_user is imported from simple_access.py at the top of this file
 
 
 def bulk_assign_role(users, board, role, added_by=None):
