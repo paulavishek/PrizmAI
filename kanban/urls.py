@@ -171,6 +171,7 @@ urlpatterns = [
     path('conflicts/<int:conflict_id>/', conflict_views.conflict_detail, name='conflict_detail'),
     path('conflicts/<int:conflict_id>/resolutions/<int:resolution_id>/apply/', conflict_views.apply_resolution, name='apply_resolution'),
     path('conflicts/<int:conflict_id>/ignore/', conflict_views.ignore_conflict, name='ignore_conflict'),
+    path('conflicts/<int:conflict_id>/feedback/', conflict_views.conflict_feedback, name='conflict_feedback'),
     path('conflicts/trigger/all/', conflict_views.trigger_detection_all, name='trigger_detection_all'),
     path('conflicts/trigger/<int:board_id>/', conflict_views.trigger_detection, name='trigger_detection_board'),
     path('conflicts/notifications/<int:notification_id>/acknowledge/', conflict_views.acknowledge_notification, name='acknowledge_notification'),

@@ -444,12 +444,91 @@
     </div>
 </div>
 
+<!-- Resolution Feedback Modal -->
+<div class="modal fade" id="feedbackModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-check-circle"></i> Resolution Applied Successfully!
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">Help us improve AI suggestions by rating this resolution:</p>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">How effective was this resolution?</label>
+                    <div class="d-flex justify-content-center gap-2 mb-2" id="starRating">
+                        <i class="fas fa-star star-rating" data-rating="1" style="font-size: 2rem; cursor: pointer; color: #ddd;"></i>
+                        <i class="fas fa-star star-rating" data-rating="2" style="font-size: 2rem; cursor: pointer; color: #ddd;"></i>
+                        <i class="fas fa-star star-rating" data-rating="3" style="font-size: 2rem; cursor: pointer; color: #ddd;"></i>
+                        <i class="fas fa-star star-rating" data-rating="4" style="font-size: 2rem; cursor: pointer; color: #ddd;"></i>
+                        <i class="fas fa-star star-rating" data-rating="5" style="font-size: 2rem; cursor: pointer; color: #ddd;"></i>
+                    </div>
+                    <small class="text-muted d-block text-center" id="ratingLabel">Click to rate (1-5 stars)</small>
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Additional feedback (optional)</label>
+                    <textarea class="form-control" id="feedbackText" rows="3" 
+                              placeholder="What worked well? What could be improved?"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="skipFeedback()">
+                    Skip
+                </button>
+                <button type="button" class="btn btn-primary" onclick="submitFeedback()">
+                    <i class="fas fa-paper-plane"></i> Submit Feedback
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
 let selectedResolutionId = null;
 let appliedResolutionId = null;
+let selectedRating = 0;
+
+// Star rating interaction
+document.addEventListener('DOMContentLoaded', function() {
+    const stars = document.querySelectorAll('.star-rating');
+    stars.forEach(star => {
+        star.addEventListener('click', function() {
+            selectedRating = parseInt(this.dataset.rating);
+            updateStarDisplay();
+        });
+        
+        star.addEventListener('mouseenter', function() {
+            const rating = parseInt(this.dataset.rating);
+            stars.forEach((s, idx) => {
+                if (idx < rating) {
+                    s.style.color = '#ffc107';
+                } else {
+                    s.style.color = selectedRating > idx ? '#ffc107' : '#ddd';
+                }
+            });
+        });
+    });
+    
+    document.getElementById('starRating').addEventListener('mouseleave', function() {
+        updateStarDisplay();
+    });
+});
+
+function updateStarDisplay() {
+    const stars = document.querySelectorAll('.star-rating');
+    const labels = ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
+    stars.forEach((star, idx) => {
+        star.style.color = idx < selectedRating ? '#ffc107' : '#ddd';
+    });
+    document.getElementById('ratingLabel').textContent = selectedRating > 0 ? labels[selectedRating] : 'Click to rate (1-5 stars)';
+}
 
 // Toggle resolution explainability section
 function toggleResolutionExplain(resolutionId) {
@@ -498,6 +577,7 @@ function applyResolution() {
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Applying...';
     
+    // Apply the resolution (this will mark conflict as resolved)
     fetch(`/conflicts/{{ conflict.id }}/resolutions/${selectedResolutionId}/apply/`, {
         method: 'POST',
         headers: {
@@ -507,9 +587,12 @@ function applyResolution() {
       .then(data => {
           if (data.success) {
               appliedResolutionId = selectedResolutionId;
-              // Show success message and redirect
-              alert('Resolution applied successfully!');
-              window.location.href = '{% url "conflict_dashboard" %}';
+              // Show feedback modal
+              const modal = new bootstrap.Modal(document.getElementById('feedbackModal'));
+              modal.show();
+              // Reset button
+              btn.disabled = false;
+              btn.innerHTML = '<i class="fas fa-check"></i> Apply Selected Resolution';
           } else {
               alert('Error: ' + data.error);
               btn.disabled = false;
@@ -520,6 +603,42 @@ function applyResolution() {
           btn.disabled = false;
           btn.innerHTML = '<i class="fas fa-check"></i> Apply Selected Resolution';
       });
+}
+
+// Submit feedback and rating
+function submitFeedback() {
+    const feedback = document.getElementById('feedbackText').value;
+    
+    // Only send feedback if there's a rating or comment
+    if (selectedRating > 0 || feedback.trim()) {
+        const formData = new FormData();
+        formData.append('feedback', feedback);
+        if (selectedRating > 0) {
+            formData.append('effectiveness', selectedRating);
+        }
+        
+        // Update the conflict with feedback
+        fetch(`/conflicts/{{ conflict.id }}/feedback/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: formData
+        }).then(() => {
+            window.location.href = '{% url "conflict_dashboard" %}';
+        }).catch(() => {
+            // Even if feedback fails, redirect
+            window.location.href = '{% url "conflict_dashboard" %}';
+        });
+    } else {
+        // No feedback provided, just redirect
+        window.location.href = '{% url "conflict_dashboard" %}';
+    }
+}
+
+// Skip feedback
+function skipFeedback() {
+    window.location.href = '{% url "conflict_dashboard" %}';
 }
 
 // Ignore conflict

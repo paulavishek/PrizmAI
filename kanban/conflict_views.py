@@ -437,6 +437,84 @@ def acknowledge_notification(request, notification_id):
 
 
 @require_POST
+def conflict_feedback(request, conflict_id):
+    """
+    Add feedback and effectiveness rating to a resolved conflict.
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
+    """
+    try:
+        # Check demo access first (requires write permission)
+        has_access, error_response, is_demo_mode = check_demo_access_for_conflicts(request, require_write=True)
+        if not has_access:
+            return JsonResponse({
+                'success': False,
+                'error': "You don't have permission"
+            }, status=403)
+        
+        # Get conflict based on access mode
+        if is_demo_mode:
+            demo_org_names = ['Demo - Acme Corporation']
+            from kanban.models import Organization
+            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+            conflict = get_object_or_404(
+                ConflictDetection,
+                id=conflict_id,
+                board__organization__in=demo_orgs,
+                status='resolved'
+            )
+        else:
+            profile = request.user.profile
+            organization = profile.organization
+            conflict = get_object_or_404(
+                ConflictDetection,
+                id=conflict_id,
+                board__organization=organization,
+                status='resolved'
+            )
+        
+        # Get feedback and rating
+        feedback = request.POST.get('feedback', '')
+        effectiveness = request.POST.get('effectiveness')
+        
+        if effectiveness:
+            try:
+                effectiveness = int(effectiveness)
+                if not (1 <= effectiveness <= 5):
+                    effectiveness = None
+            except (ValueError, TypeError):
+                effectiveness = None
+        
+        # Update conflict with feedback
+        if feedback:
+            conflict.resolution_feedback = feedback
+        if effectiveness:
+            conflict.resolution_effectiveness = effectiveness
+            # Update the resolution pattern learning
+            if conflict.chosen_resolution:
+                ResolutionPattern.learn_from_resolution(conflict, conflict.chosen_resolution, effectiveness)
+        
+        conflict.save()
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Feedback saved'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error saving conflict feedback: {e}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+    except Exception as e:
+        logger.error(f"Error acknowledging notification: {e}", exc_info=True)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@require_POST
 def trigger_detection_all(request):
     """
     Manually trigger conflict detection for all accessible boards.
