@@ -30,6 +30,10 @@
         font-size: 0.75rem;
         padding: 0.25rem 0.5rem;
     }
+    .badge.bg-critical {
+        background-color: #dc2626 !important;
+        color: white !important;
+    }
     .stat-card {
         border-radius: 10px;
         padding: 1.5rem;
@@ -196,7 +200,7 @@
                                         <span class="badge bg-{{ conflict.get_severity_color }} conflict-badge">
                                             {{ conflict.get_severity_display }}
                                         </span>
-                                        <span class="badge bg-secondary conflict-badge">
+                                        <span class="badge bg-light text-dark border border-secondary conflict-badge">
                                             {{ conflict.get_conflict_type_display }}
                                         </span>
                                     </div>

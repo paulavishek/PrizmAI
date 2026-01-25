@@ -140,7 +140,7 @@ class ConflictDetection(models.Model):
             'low': 'info',
             'medium': 'warning',
             'high': 'danger',
-            'critical': 'dark'
+            'critical': 'critical'
         }
         return colors.get(self.severity, 'secondary')
 
