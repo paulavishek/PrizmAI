@@ -152,11 +152,11 @@
                         <div class="pattern-card">
                             <div class="row align-items-center">
                                 <div class="col-md-5">
-                                    <h6 class="mb-1">
-                                        <span class="badge bg-secondary">{{ pattern.get_conflict_type_display }}</span>
-                                        <i class="fas fa-arrow-right mx-2"></i>
-                                        <span class="badge bg-primary">{{ pattern.get_resolution_type_display }}</span>
-                                    </h6>
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <span class="badge bg-light text-dark border border-secondary text-nowrap">{{ pattern.get_conflict_type_display }}</span>
+                                        <i class="fas fa-arrow-right text-muted"></i>
+                                        <span class="badge bg-primary text-nowrap">{{ pattern.get_resolution_type_display }}</span>
+                                    </div>
                                     {% if pattern.board %}
                                     <small class="text-muted">
                                         <i class="fas fa-project-diagram"></i> {{ pattern.board.name }}

@@ -761,14 +761,11 @@ def conflict_analytics(request):
                     date_key = detected_date_only.strftime('%Y-%m-%d')
                     detected_by_date[date_key] = detected_by_date.get(date_key, 0) + 1
         
-        # Generate complete 30-day range with cumulative counts
+        # Generate complete 30-day range with daily counts
         import json
         trend_labels = []
-        trend_detected = []  # Cumulative: total conflicts detected (running total)
-        trend_resolved = []  # Cumulative: total conflicts resolved (running total)
-        
-        cumulative_detected = 0
-        cumulative_resolved = 0
+        trend_detected = []  # Daily count: conflicts detected each day
+        trend_resolved = []  # Daily count: conflicts resolved each day
         
         # Use 31 days to ensure we capture data from today
         for i in range(31):
@@ -776,16 +773,13 @@ def conflict_analytics(request):
             date_str = date.strftime('%Y-%m-%d')
             label = date.strftime('%b %d').replace(' 0', ' ')
             
-            # Add daily counts to cumulative totals
+            # Get daily counts (not cumulative)
             daily_detected = detected_by_date.get(date_str, 0)
             daily_resolved = resolved_by_date.get(date_str, 0)
             
-            cumulative_detected += daily_detected
-            cumulative_resolved += daily_resolved
-            
             trend_labels.append(label)
-            trend_detected.append(cumulative_detected)
-            trend_resolved.append(cumulative_resolved)
+            trend_detected.append(daily_detected)
+            trend_resolved.append(daily_resolved)
         
         context = {
             'patterns': patterns,
