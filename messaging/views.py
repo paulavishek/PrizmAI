@@ -105,7 +105,14 @@ def chat_room_detail(request, room_id):
     
     # Get recent messages (last 50)
     chat_messages = chat_room.messages.all().order_by('-created_at')[:50]
-    chat_messages = reversed(list(chat_messages))
+    chat_messages = list(chat_messages)
+    
+    # Auto-mark all displayed messages as read since user is viewing the chat
+    for msg in chat_messages:
+        if request.user not in msg.read_by.all():
+            msg.read_by.add(request.user)
+    
+    chat_messages = reversed(chat_messages)
     
     form = ChatMessageForm()
     
@@ -647,6 +654,9 @@ def upload_chat_room_file(request, room_id):
                 author=request.user,
                 content=system_message_text
             )
+            
+            # Auto-mark the uploader as having read the file upload message
+            system_message.read_by.add(request.user)
             
             # Create notifications for other room members
             for member in chat_room.members.all():

@@ -460,6 +460,14 @@
             `;
             messagesDiv.appendChild(messageEl);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            // Auto-mark as read if this is not the sender's message (recipient is viewing)
+            if (data.user_id !== currentUserId && data.message_id) {
+                // Wait a moment to ensure message is displayed, then auto-mark as read
+                setTimeout(() => {
+                    markMessageAsRead(data.message_id);
+                }, 500);
+            }
         }
         else if (data.type === 'message_marked_read') {
             // Update message read status
