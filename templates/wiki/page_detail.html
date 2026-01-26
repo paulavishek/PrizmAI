@@ -1201,6 +1201,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         .replace(/^-+|-+$/g, '');
                 }
                 
+                // Skip the first header (usually Overview/Vision/Purpose) as it's already visible
+                if (index === 0 && header.tagName === 'H2') {
+                    const headerText = header.textContent.toLowerCase().trim();
+                    const commonFirstHeaders = ['overview', 'vision', 'purpose', 'introduction', 'summary'];
+                    if (commonFirstHeaders.some(term => headerText.includes(term))) {
+                        return; // Skip this header in TOC
+                    }
+                }
+                
                 const tocItem = document.createElement('a');
                 tocItem.href = '#' + header.id;
                 tocItem.className = 'list-group-item list-group-item-action';

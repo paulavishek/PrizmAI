@@ -53,12 +53,21 @@ class WikiPageForm(forms.ModelForm):
     def __init__(self, *args, organization=None, **kwargs):
         super().__init__(*args, **kwargs)
         if organization:
-            # Filter categories to organization
-            self.fields['category'].queryset = WikiCategory.objects.filter(organization=organization)
-            # Filter parent pages to organization
+            from django.db.models import Q
+            from accounts.models import Organization
+            
+            # Include demo organization content for all users
+            demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+            org_filter = Q(organization=organization)
+            if demo_org:
+                org_filter |= Q(organization=demo_org)
+            
+            # Filter categories to organization (including demo)
+            self.fields['category'].queryset = WikiCategory.objects.filter(org_filter).distinct()
+            # Filter parent pages to organization (including demo)
             self.fields['parent_page'].queryset = WikiPage.objects.filter(
-                organization=organization
-            ).exclude(pk=self.instance.pk if self.instance.pk else None)
+                org_filter
+            ).exclude(pk=self.instance.pk if self.instance.pk else None).distinct()
     
     def clean_tags(self):
         """Convert comma-separated tags to list"""
