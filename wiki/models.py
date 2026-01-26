@@ -109,7 +109,14 @@ class WikiPage(models.Model):
                 'markdown.extensions.fenced_code',
                 'markdown.extensions.tables',
                 'markdown.extensions.nl2br',
-            ]
+                'markdown.extensions.toc',  # Table of Contents - adds IDs to headings
+            ],
+            extension_configs={
+                'markdown.extensions.toc': {
+                    'slugify': lambda value, separator: slugify(value),
+                    'anchorlink': False,  # Don't add anchor links automatically
+                }
+            }
         )
         
         # Define allowed HTML tags and attributes (security whitelist)
@@ -129,6 +136,12 @@ class WikiPage(models.Model):
             'pre': ['class'],
             'div': ['class'],
             'span': ['class'],
+            'h1': ['id'],  # Allow id for anchor links
+            'h2': ['id'],
+            'h3': ['id'],
+            'h4': ['id'],
+            'h5': ['id'],
+            'h6': ['id'],
         }
         
         # Allowed protocols for links (prevent javascript: and data: URLs)
@@ -310,7 +323,14 @@ class MeetingNotes(models.Model):
                 'markdown.extensions.fenced_code',
                 'markdown.extensions.tables',
                 'markdown.extensions.nl2br',
-            ]
+                'markdown.extensions.toc',  # Table of Contents - adds IDs to headings
+            ],
+            extension_configs={
+                'markdown.extensions.toc': {
+                    'slugify': lambda value, separator: slugify(value),
+                    'anchorlink': False,  # Don't add anchor links automatically
+                }
+            }
         )
         
         # Define allowed HTML tags and attributes (security whitelist)
@@ -330,6 +350,12 @@ class MeetingNotes(models.Model):
             'pre': ['class'],
             'div': ['class'],
             'span': ['class'],
+            'h1': ['id'],  # Allow id for anchor links
+            'h2': ['id'],
+            'h3': ['id'],
+            'h4': ['id'],
+            'h5': ['id'],
+            'h6': ['id'],
         }
         
         # Allowed protocols for links (prevent javascript: and data: URLs)

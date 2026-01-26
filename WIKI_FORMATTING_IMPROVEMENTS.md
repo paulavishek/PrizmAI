@@ -9,6 +9,21 @@ Enhanced the wiki page detail template with modern styling, better visual hierar
 
 ## Changes Made
 
+### 0. Fixed Broken Anchor Links (Update - Jan 27, 2026)
+
+**Problem**: Table of Contents links and internal page links were not working properly. Clicking on links like "Vision Statement" or "Quarter Goals" would just refresh the page instead of scrolling to the section.
+
+**Root Cause**: The markdown renderer was not generating IDs for headings, so anchor links like `#vision-statement` had no corresponding HTML element to jump to.
+
+**Solution**: 
+- Added `markdown.extensions.toc` extension to the markdown processor
+- Configured it to use Django's `slugify` function for consistent ID generation
+- Added `id` attribute to the allowed attributes for all heading tags (h1-h6) in the security whitelist
+- Now all headings automatically get proper IDs: "Vision Statement" → `id="vision-statement"`
+
+**Files Modified**:
+- `wiki/models.py` - Updated both `WikiPage.get_html_content()` and `MeetingNotes.get_html_content()` methods
+
 ### 1. Enhanced CSS Styling
 
 #### Typography Improvements
