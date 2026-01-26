@@ -506,6 +506,33 @@
         fill: #4f46e5 !important;
     }
 
+    /* IMPORTANT: Default blue color for ALL bars to prevent grey flash */
+    /* Priority colors below use !important and will override this for tasks */
+    /* Phase bars without data-priority will remain blue (phase-1, phase-2, etc.) */
+    .gantt .bar-wrapper .bar:not([data-priority]) {
+        fill: #6366f1 !important;
+    }
+
+    /* Gantt chart wrapper - hide until chart is ready to prevent shrink/expand animation */
+    #gantt-chart-wrapper {
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+    }
+
+    #gantt-chart-wrapper.chart-ready {
+        opacity: 1;
+    }
+    
+    /* While transitioning views, keep the wrapper visible but prevent flash */
+    #gantt-chart-wrapper.transitioning {
+        opacity: 1;
+    }
+    
+    /* Ensure bars inside transitioning wrapper maintain their colors */
+    #gantt-chart-wrapper.transitioning .gantt .bar-wrapper .bar:not([data-priority]) {
+        fill: #6366f1 !important;
+    }
+
     /* Phase collapse indicator */
     .phase-indicator {
         font-size: 0.75rem;
@@ -820,11 +847,26 @@
         if (ganttChart) {
             // If chart exists and we're just changing view mode, use the built-in method
             try {
+                // Add transitioning class to maintain visibility during view change
+                chartWrapper.classList.add('transitioning');
+                
+                // Apply styling BEFORE view mode change to prevent color flash
+                applyCustomStyling();
+                
                 ganttChart.change_view_mode(viewMode);
+                
                 // After changing view mode, reapply custom attributes and enhancements
-                setTimeout(() => {
+                // Use requestAnimationFrame for smoother rendering
+                requestAnimationFrame(() => {
                     applyCustomStyling();
-                }, 300);
+                    // Second pass to ensure all elements are styled
+                    requestAnimationFrame(() => {
+                        applyCustomStyling();
+                        enhanceDependencyArrows();
+                        // Remove transitioning class after styling is complete
+                        chartWrapper.classList.remove('transitioning');
+                    });
+                });
                 return;
             } catch (e) {
                 console.warn('Error changing view mode, reinitializing chart:', e);
@@ -832,6 +874,9 @@
                 ganttChart = null;
             }
         }
+        
+        // Hide chart during reconstruction to prevent visual glitch
+        chartWrapper.classList.remove('chart-ready');
         
         // Completely clear the wrapper and recreate fresh SVG
         chartWrapper.innerHTML = '<svg id="gantt"></svg>';
@@ -873,20 +918,32 @@
                 }
             });
 
-        // Apply custom styling for the first time
-        setTimeout(() => {
+        // Apply custom styling for the first time - use requestAnimationFrame for smoother rendering
+        requestAnimationFrame(() => {
             applyCustomStyling();
-        }, 300);
-        
-        // Apply arrow styling again after a longer delay to ensure all SVG elements are rendered
-        setTimeout(() => {
-            enhanceDependencyArrows();
-        }, 600);
-        
-        // Final cleanup pass for any remaining arrow issues
-        setTimeout(() => {
-            enhanceDependencyArrows();
-        }, 1000);
+            
+            // Show chart with smooth transition after initial styling
+            requestAnimationFrame(() => {
+                applyCustomStyling();
+                const chartWrapper = document.getElementById('gantt-chart-wrapper');
+                if (chartWrapper) {
+                    chartWrapper.classList.add('chart-ready');
+                }
+                
+                // Set up arrow polygon observer for this chart instance
+                setupArrowPolygonObserver();
+                
+                // Apply arrow styling after chart is visible
+                requestAnimationFrame(() => {
+                    enhanceDependencyArrows();
+                    
+                    // Final cleanup pass for any remaining arrow issues
+                    setTimeout(() => {
+                        enhanceDependencyArrows();
+                    }, 200);
+                });
+            });
+        });
     }
 
     // Apply all custom styling, attributes, and enhancements
@@ -1373,10 +1430,16 @@
 
     // Initialize Gantt chart on page load
     document.addEventListener('DOMContentLoaded', function() {
-        initGantt('Week');
-        
-        // Set up a MutationObserver to continuously remove frappe-gantt's default arrow polygons
-        // as they may be re-added during user interactions (hover, scroll, etc.)
+        // If phases exist, the phase-specific handler below will initialize the chart
+        // This prevents double initialization which causes the shrink/expand flash
+        if (!hasPhases) {
+            initGantt('Week');
+        }
+    });
+    
+    // Set up a MutationObserver to continuously remove frappe-gantt's default arrow polygons
+    // as they may be re-added during user interactions (hover, scroll, etc.)
+    function setupArrowPolygonObserver() {
         const ganttSvg = document.querySelector('#gantt');
         if (ganttSvg) {
             const observer = new MutationObserver(function(mutations) {
@@ -1411,7 +1474,7 @@
                 subtree: true
             });
         }
-    });
+    }
 
     // Update task dates
     function updateTaskDates(taskId, start, end) {
@@ -1739,6 +1802,9 @@
     function initGanttWithData(data) {
         const chartWrapper = document.getElementById('gantt-chart-wrapper');
         
+        // Hide chart during reconstruction to prevent visual glitch
+        chartWrapper.classList.remove('chart-ready');
+        
         // Clear the gantt reference
         ganttChart = null;
         
@@ -1750,6 +1816,7 @@
 
         if (data.length === 0) {
             chartWrapper.innerHTML = '<div style="text-align: center; padding: 40px; color: #64748b;">No items to display</div>';
+            chartWrapper.classList.add('chart-ready');
             return;
         }
 
@@ -1790,20 +1857,29 @@
             }
         });
 
-        // Apply custom styling after render with multiple passes for reliability
-        setTimeout(() => {
+        // Apply custom styling after render - use requestAnimationFrame for smoother rendering
+        requestAnimationFrame(() => {
             applyPhaseStyling();
-        }, 150);
-        
-        // Additional pass for dependency arrows (they render later)
-        setTimeout(() => {
-            enhanceDependencyArrows();
-        }, 400);
-        
-        // Final cleanup pass
-        setTimeout(() => {
-            enhanceDependencyArrows();
-        }, 800);
+            
+            // Show chart with smooth transition after initial styling
+            requestAnimationFrame(() => {
+                applyPhaseStyling();
+                chartWrapper.classList.add('chart-ready');
+                
+                // Set up arrow polygon observer for this chart instance
+                setupArrowPolygonObserver();
+                
+                // Additional pass for dependency arrows
+                requestAnimationFrame(() => {
+                    enhanceDependencyArrows();
+                    
+                    // Final cleanup pass
+                    setTimeout(() => {
+                        enhanceDependencyArrows();
+                    }, 200);
+                });
+            });
+        });
     }
 
     // Apply custom styling for phases
