@@ -332,8 +332,17 @@ def send_message(request):
 
 @login_required(login_url='accounts:login')
 def get_sessions(request):
-    """Get user's chat sessions"""
-    sessions = AIAssistantSession.objects.filter(user=request.user).order_by('-updated_at')
+    """Get user's chat sessions - includes demo sessions for demo boards"""
+    from accounts.models import Organization
+    
+    # Get demo organization for showing demo sessions
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    demo_boards = Board.objects.filter(organization=demo_org, is_official_demo_board=True) if demo_org else Board.objects.none()
+    
+    # Include both user's own sessions and demo sessions
+    sessions = AIAssistantSession.objects.filter(
+        Q(user=request.user) | Q(board__in=demo_boards)
+    ).order_by('-updated_at')
     
     data = {
         'sessions': [
@@ -344,6 +353,7 @@ def get_sessions(request):
                 'message_count': s.message_count,
                 'is_active': s.is_active,
                 'updated_at': s.updated_at.isoformat(),
+                'is_demo': s.board in demo_boards if s.board else False,
             }
             for s in sessions
         ]
@@ -354,8 +364,21 @@ def get_sessions(request):
 @login_required(login_url='accounts:login')
 def get_session_messages(request, session_id):
     """Get messages for a specific session"""
+    from accounts.models import Organization
+    
     try:
-        session = get_object_or_404(AIAssistantSession, id=session_id, user=request.user)
+        # Get demo organization for allowing access to demo sessions
+        demo_org = Organization.objects.filter(is_demo=True).first()
+        demo_boards = Board.objects.filter(organization=demo_org, is_official_demo_board=True) if demo_org else Board.objects.none()
+        
+        # Allow access to user's own sessions OR demo sessions
+        session = AIAssistantSession.objects.filter(
+            Q(user=request.user) | Q(board__in=demo_boards),
+            id=session_id
+        ).first()
+        
+        if not session:
+            return JsonResponse({'error': 'Session not found'}, status=404)
         
         # Get user preferences for messages per page
         user_pref, _ = UserPreference.objects.get_or_create(user=request.user)
@@ -586,6 +609,8 @@ def submit_feedback(request, message_id):
 @login_required(login_url='accounts:login')
 def analytics_dashboard(request):
     """View analytics dashboard"""
+    from accounts.models import Organization
+    
     board_id = request.GET.get('board_id')
     
     # Get user preferences
@@ -595,9 +620,14 @@ def analytics_dashboard(request):
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=30)
     
-    # Get analytics
+    # Get demo organization for showing demo analytics
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    demo_boards = Board.objects.filter(organization=demo_org, is_official_demo_board=True) if demo_org else Board.objects.none()
+    
+    # Get analytics - include both user's own and demo data
+    # This allows users to see demo analytics even if they haven't used the AI yet
     analytics_qs = AIAssistantAnalytics.objects.filter(
-        user=request.user,
+        Q(user=request.user) | Q(board__in=demo_boards),
         date__gte=start_date,
         date__lte=end_date
     )
@@ -619,15 +649,15 @@ def analytics_dashboard(request):
     context_aware_requests = kb_queries + web_searches
     context_aware_rate = round((context_aware_requests / gemini_requests * 100), 1) if gemini_requests > 0 else 0
     
-    # Get active sessions count and multi-turn conversations
+    # Get active sessions count and multi-turn conversations (include demo sessions)
     active_sessions = AIAssistantSession.objects.filter(
-        user=request.user,
+        Q(user=request.user) | Q(board__in=demo_boards),
         updated_at__gte=timezone.now() - timedelta(days=30)
     ).count()
     
     # Count multi-turn conversations (sessions with 3+ messages)
     multi_turn_sessions = AIAssistantSession.objects.filter(
-        user=request.user,
+        Q(user=request.user) | Q(board__in=demo_boards),
         updated_at__gte=timezone.now() - timedelta(days=30),
         message_count__gte=3
     ).count()
@@ -658,13 +688,20 @@ def analytics_dashboard(request):
 @login_required(login_url='accounts:login')
 def get_analytics_data(request):
     """Get analytics data for charts"""
+    from accounts.models import Organization
+    
     board_id = request.GET.get('board_id')
     
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=30)
     
+    # Get demo organization for showing demo analytics
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    demo_boards = Board.objects.filter(organization=demo_org, is_official_demo_board=True) if demo_org else Board.objects.none()
+    
+    # Include both user's own analytics and demo board analytics
     analytics_qs = AIAssistantAnalytics.objects.filter(
-        user=request.user,
+        Q(user=request.user) | Q(board__in=demo_boards),
         date__gte=start_date,
         date__lte=end_date
     ).order_by('date')

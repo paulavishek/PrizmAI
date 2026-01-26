@@ -148,7 +148,9 @@ class Command(BaseCommand):
             self.stdout.write(self.style.NOTICE('\n🤖 PHASE 5: Creating AI Assistant Demo Data...'))
             ai_stats = self.create_ai_assistant_demo_data()
             self.stdout.write(self.style.SUCCESS(
-                f'   ✅ AI Assistant: {ai_stats["sessions"]} sessions, {ai_stats["messages"]} messages'
+                f'   ✅ AI Assistant: {ai_stats["sessions"]} sessions, {ai_stats["messages"]} messages, '
+                f'{ai_stats["analytics"]} analytics, {ai_stats["knowledge_base"]} KB entries, '
+                f'{ai_stats["recommendations"]} recommendations'
             ))
 
         # Final Summary
@@ -582,7 +584,10 @@ POST /api/auth/token/
             for config in conflict_configs[board_name]:
                 # Get tasks for this conflict
                 task1 = tasks[config.get('task1_idx', 0) % len(tasks)]
-                task2 = tasks[config.get('task2_idx', 1) % len(tasks)] if config.get('task2_idx') else None
+                task2_idx = config.get('task2_idx')
+                task2 = tasks[task2_idx % len(tasks)] if task2_idx else None
+                
+                affected_user = self.get_user_by_key(config.get('affected_user', 'sam'))
                 
                 conflict = ConflictDetection.objects.create(
                     board=board,
@@ -590,25 +595,41 @@ POST /api/auth/token/
                     severity=config['severity'],
                     title=config['title'],
                     description=config['description'],
-                    task1=task1,
-                    task2=task2,
-                    affected_user=self.get_user_by_key(config.get('affected_user', 'sam')),
                     status=config.get('status', 'active'),
-                    ai_confidence=Decimal(str(config.get('confidence', 0.85))),
+                    ai_confidence_score=int(config.get('confidence', 0.85) * 100),
                     detected_at=now - timedelta(days=config.get('days_ago', 1)),
-                    ai_recommendation=config.get('recommendation', ''),
+                    suggested_resolutions=[
+                        {
+                            'action': config.get('recommendation', ''),
+                            'confidence': config.get('confidence', 0.85),
+                        }
+                    ],
                 )
+                
+                # Add tasks
+                conflict.tasks.add(task1)
+                if task2:
+                    conflict.tasks.add(task2)
+                
+                # Add affected user
+                if affected_user:
+                    conflict.affected_users.add(affected_user)
+                
                 conflicts_created += 1
                 
                 # Create resolution if resolved
                 if config.get('status') == 'resolved':
-                    ConflictResolution.objects.create(
+                    resolution = ConflictResolution.objects.create(
                         conflict=conflict,
-                        resolution_type=config.get('resolution_type', 'manual'),
-                        resolution_action=config.get('resolution_action', 'Manually resolved'),
-                        resolved_by=self.demo_admin,
-                        resolution_notes='Resolved after team discussion.',
+                        resolution_type=config.get('resolution_type', 'custom'),
+                        title=config.get('resolution_action', 'Manually resolved'),
+                        description='Resolved after team discussion.',
+                        ai_confidence=int(config.get('confidence', 0.85) * 100),
+                        applied_by=self.demo_admin,
                     )
+                    # Update the conflict to point to this resolution
+                    conflict.chosen_resolution = resolution
+                    conflict.save()
                     resolutions_created += 1
         
         return {'conflicts': conflicts_created, 'resolutions': resolutions_created}
@@ -669,22 +690,29 @@ POST /api/auth/token/
     # AI ASSISTANT DEMO DATA
     # =========================================================================
     def create_ai_assistant_demo_data(self):
-        """Create AI assistant sessions and messages"""
+        """Create AI assistant sessions, messages, analytics, and recommendations"""
         sessions_created = 0
         messages_created = 0
+        analytics_created = 0
+        recommendations_created = 0
+        kb_created = 0
+        now = timezone.now()
         
         primary_user = self.demo_admin or self.alex
         
-        # Create user preferences
-        UserPreference.objects.get_or_create(
-            user=primary_user,
-            defaults={
-                'enable_web_search': True,
-                'enable_task_insights': True,
-                'enable_risk_alerts': True,
-            }
-        )
+        # Create user preferences for all demo users
+        for user in self.demo_users:
+            UserPreference.objects.get_or_create(
+                user=user,
+                defaults={
+                    'enable_web_search': True,
+                    'enable_task_insights': True,
+                    'enable_risk_alerts': True,
+                    'enable_resource_recommendations': True,
+                }
+            )
         
+        # Create sessions with rich data
         sessions_data = self.get_ai_sessions_data()
         
         for session_data in sessions_data:
@@ -696,6 +724,9 @@ POST /api/auth/token/
             elif session_data.get('board') == 'bug':
                 board = self.bug_board
             
+            # Calculate tokens
+            total_tokens = sum(msg_data.get('tokens', 150) for msg_data in session_data['messages'])
+            
             session = AIAssistantSession.objects.create(
                 user=primary_user,
                 board=board,
@@ -703,26 +734,232 @@ POST /api/auth/token/
                 description=session_data.get('description', ''),
                 is_active=session_data.get('is_active', False),
                 message_count=len(session_data['messages']),
+                total_tokens_used=total_tokens,
             )
             
             # Backdate session
             days_ago = session_data.get('days_ago', 0)
-            backdated = timezone.now() - timedelta(days=days_ago)
-            AIAssistantSession.objects.filter(pk=session.pk).update(created_at=backdated)
+            backdated = now - timedelta(days=days_ago)
+            AIAssistantSession.objects.filter(pk=session.pk).update(
+                created_at=backdated, 
+                updated_at=backdated
+            )
             
             sessions_created += 1
             
-            # Create messages
-            for msg_data in session_data['messages']:
-                AIAssistantMessage.objects.create(
+            # Create messages with realistic timing
+            for idx, msg_data in enumerate(session_data['messages']):
+                msg_time = backdated + timedelta(minutes=idx * 2)
+                msg = AIAssistantMessage.objects.create(
                     session=session,
                     role=msg_data['role'],
                     content=msg_data['content'],
                     model='gemini' if msg_data['role'] == 'assistant' else None,
+                    tokens_used=msg_data.get('tokens', 150),
+                    used_web_search=msg_data.get('web_search', False),
+                    context_data={'knowledge_base_used': msg_data.get('kb_used', False)},
                 )
+                AIAssistantMessage.objects.filter(pk=msg.pk).update(created_at=msg_time)
                 messages_created += 1
         
-        return {'sessions': sessions_created, 'messages': messages_created}
+        # Create analytics for the last 30 days
+        analytics_created = self.create_ai_analytics(primary_user)
+        
+        # Create knowledge base entries
+        kb_created = self.create_knowledge_base()
+        
+        # Create task recommendations
+        recommendations_created = self.create_task_recommendations()
+        
+        return {
+            'sessions': sessions_created, 
+            'messages': messages_created,
+            'analytics': analytics_created,
+            'knowledge_base': kb_created,
+            'recommendations': recommendations_created,
+        }
+    
+    def create_ai_analytics(self, user):
+        """Create analytics data for the last 30 days"""
+        from django.db import IntegrityError
+        analytics_created = 0
+        now = timezone.now()
+        
+        # First, delete any existing analytics for demo boards to avoid conflicts
+        if self.software_board:
+            AIAssistantAnalytics.objects.filter(board=self.software_board).delete()
+        if self.marketing_board:
+            AIAssistantAnalytics.objects.filter(board=self.marketing_board).delete()
+        
+        # Create analytics for last 31 days with realistic progression
+        # Note: date field has auto_now_add=True, so we need to update it after creation
+        for days_back in range(30, -1, -1):
+            target_date = (now - timedelta(days=days_back)).date()
+            
+            # Vary activity by day (less on weekends)
+            is_weekend = target_date.weekday() >= 5
+            multiplier = 0.3 if is_weekend else 1.0
+            
+            # Always create analytics for software board (main board)
+            if self.software_board:
+                messages = max(1, int(random.randint(5, 15) * multiplier))
+                gemini = messages
+                kb_queries = max(1, int(random.randint(2, 8) * multiplier))
+                web_searches = max(0, int(random.randint(1, 4) * multiplier))
+                
+                try:
+                    with transaction.atomic():
+                        obj = AIAssistantAnalytics.objects.create(
+                            user=user,
+                            board=self.software_board,
+                            sessions_created=random.randint(1, 3),
+                            messages_sent=messages,
+                            gemini_requests=gemini,
+                            web_searches_performed=web_searches,
+                            knowledge_base_queries=kb_queries,
+                            total_tokens_used=messages * random.randint(100, 250),
+                            input_tokens=messages * random.randint(40, 80),
+                            output_tokens=messages * random.randint(60, 170),
+                            helpful_responses=int(messages * 0.8),
+                            unhelpful_responses=int(messages * 0.1),
+                            avg_response_time_ms=random.randint(800, 2500),
+                        )
+                        # Update the date field (bypasses auto_now_add)
+                        AIAssistantAnalytics.objects.filter(pk=obj.pk).update(date=target_date)
+                        analytics_created += 1
+                except IntegrityError:
+                    pass  # Record already exists
+            
+            # Create analytics for marketing board every 3-4 days
+            if self.marketing_board and days_back % 3 == 0:
+                messages = max(1, int(random.randint(2, 8) * multiplier))
+                gemini = messages
+                
+                try:
+                    with transaction.atomic():
+                        obj = AIAssistantAnalytics.objects.create(
+                            user=user,
+                            board=self.marketing_board,
+                            sessions_created=random.randint(0, 2),
+                            messages_sent=messages,
+                            gemini_requests=gemini,
+                            web_searches_performed=max(0, int(random.randint(0, 2) * multiplier)),
+                            knowledge_base_queries=max(1, int(random.randint(1, 4) * multiplier)),
+                            total_tokens_used=messages * random.randint(100, 200),
+                            input_tokens=messages * random.randint(40, 70),
+                            output_tokens=messages * random.randint(60, 130),
+                            helpful_responses=int(messages * 0.85),
+                            unhelpful_responses=int(messages * 0.05),
+                            avg_response_time_ms=random.randint(700, 2000),
+                        )
+                        # Update the date field (bypasses auto_now_add)
+                        AIAssistantAnalytics.objects.filter(pk=obj.pk).update(date=target_date)
+                        analytics_created += 1
+                except IntegrityError:
+                    pass  # Record already exists
+        
+        return analytics_created
+    
+    def create_knowledge_base(self):
+        """Create knowledge base entries"""
+        kb_created = 0
+        demo_user = self.demo_admin or self.alex
+        
+        kb_entries = [
+            {
+                'board': self.software_board,
+                'content_type': 'project_overview',
+                'title': 'Software Development Sprint Goals',
+                'content': 'Focus on user authentication, API development, and dashboard improvements. Team includes 4 developers working on 2-week sprints.',
+            },
+            {
+                'board': self.software_board,
+                'content_type': 'risk_assessment',
+                'title': 'Technical Debt Analysis',
+                'content': 'Database migration pending. Security vulnerabilities identified in authentication module. Performance optimization needed for dashboard queries.',
+            },
+            {
+                'board': self.marketing_board,
+                'content_type': 'project_overview',
+                'title': 'Q1 Marketing Campaign',
+                'content': 'Social media campaign launch planned. Focus on brand awareness and lead generation. Budget allocated for ads and content creation.',
+            },
+            {
+                'board': self.bug_board,
+                'content_type': 'documentation',
+                'title': 'Bug Tracking Process',
+                'content': 'All production bugs should be logged immediately. Critical bugs require immediate attention. Security bugs must be escalated.',
+            },
+        ]
+        
+        for entry_data in kb_entries:
+            if entry_data['board']:
+                ProjectKnowledgeBase.objects.create(
+                    board=entry_data['board'],
+                    content_type=entry_data['content_type'],
+                    title=entry_data['title'],
+                    content=entry_data['content'],
+                    summary=entry_data['content'][:200],
+                    is_active=True,
+                )
+                kb_created += 1
+        
+        return kb_created
+    
+    def create_task_recommendations(self):
+        """Create AI task recommendations"""
+        recommendations_created = 0
+        
+        # Get some tasks from software board
+        software_tasks = list(Task.objects.filter(column__board=self.software_board)[:5])
+        
+        if len(software_tasks) >= 3:
+            # Optimization recommendation
+            AITaskRecommendation.objects.create(
+                task=software_tasks[0],
+                board=self.software_board,
+                recommendation_type='optimization',
+                title='Consider breaking down this large task',
+                description='This task has high complexity. Breaking it into smaller subtasks could improve tracking and reduce risk.',
+                potential_impact='medium',
+                confidence_score=Decimal('0.82'),
+                suggested_action='Split into 3-4 smaller tasks focusing on: authentication logic, API integration, testing, documentation',
+                expected_benefit='Better progress tracking, easier to assign, reduced delivery risk',
+                status='pending',
+            )
+            recommendations_created += 1
+            
+            # Resource allocation recommendation
+            AITaskRecommendation.objects.create(
+                task=software_tasks[1],
+                board=self.software_board,
+                recommendation_type='resource_allocation',
+                title='Sam Rivera may be overloaded',
+                description='Sam Rivera is assigned to 8 concurrent tasks. This task might benefit from reassignment.',
+                potential_impact='high',
+                confidence_score=Decimal('0.89'),
+                suggested_action='Consider reassigning to Jordan Taylor who has capacity',
+                expected_benefit='Better workload distribution, faster task completion',
+                status='pending',
+            )
+            recommendations_created += 1
+            
+            # Priority recommendation
+            AITaskRecommendation.objects.create(
+                task=software_tasks[2],
+                board=self.software_board,
+                recommendation_type='priority',
+                title='This task blocks 3 other tasks',
+                description='Several tasks depend on this one. Prioritizing it could unblock team progress.',
+                potential_impact='high',
+                confidence_score=Decimal('0.91'),
+                suggested_action='Move to high priority and assign to available developer immediately',
+                expected_benefit='Unblock dependent tasks, maintain sprint velocity',
+                status='accepted',
+            )
+            recommendations_created += 1
+        
+        return recommendations_created
 
     def get_ai_sessions_data(self):
         """AI Assistant session configurations"""
@@ -734,7 +971,7 @@ POST /api/auth/token/
                 'days_ago': 0,
                 'board': 'software',
                 'messages': [
-                    {'role': 'user', 'content': 'What tasks should I prioritize for this sprint?'},
+                    {'role': 'user', 'content': 'What tasks should I prioritize for this sprint?', 'tokens': 80},
                     {'role': 'assistant', 'content': """Based on your current board status, I recommend prioritizing:
 
 **High Priority:**
@@ -746,7 +983,20 @@ POST /api/auth/token/
 4. **Build REST API endpoints** - Can proceed after auth
 5. **Create responsive dashboard** - Good for parallel work
 
-Would you like help with task estimation?"""},
+Would you like help with task estimation?""", 'tokens': 220, 'kb_used': True},
+                    {'role': 'user', 'content': 'Yes, how long should the authentication task take?', 'tokens': 75},
+                    {'role': 'assistant', 'content': """For the user authentication task, I estimate:
+
+**Development:** 3-5 days
+- Backend API: 2 days
+- Frontend integration: 1-2 days
+- Testing: 1 day
+
+**Dependencies:** Database schema must be ready first.
+
+**Risks:** Third-party OAuth integration may add 1-2 days if needed.
+
+This assumes one developer working full-time. Should I create subtasks?""", 'tokens': 195, 'kb_used': True, 'web_search': False},
                 ]
             },
             {
@@ -756,7 +1006,7 @@ Would you like help with task estimation?"""},
                 'days_ago': 2,
                 'board': 'software',
                 'messages': [
-                    {'role': 'user', 'content': 'Is anyone on my team overloaded?'},
+                    {'role': 'user', 'content': 'Is anyone on my team overloaded?', 'tokens': 60},
                     {'role': 'assistant', 'content': """I've analyzed the current workload:
 
 | Team Member | Tasks | Hours | Utilization |
@@ -767,17 +1017,24 @@ Would you like help with task estimation?"""},
 
 **⚠️ Alert:** Sam Rivera is overloaded.
 
-**Recommendation:** Reassign 1-2 tasks from Sam to Jordan."""},
+**Recommendation:** Reassign 1-2 tasks from Sam to Jordan.""", 'tokens': 245, 'kb_used': True},
+                    {'role': 'user', 'content': 'Which tasks should I reassign to Jordan?', 'tokens': 70},
+                    {'role': 'assistant', 'content': """I recommend reassigning these tasks to Jordan Taylor:
+
+1. **Create API Documentation** - Low complexity, matches Jordan's skills
+2. **Update User Guide** - Independent task, no blockers
+
+Both tasks are well-defined and don't require deep system knowledge. This will bring Sam down to 85% utilization while keeping Jordan at 65%.""", 'tokens': 180, 'kb_used': True},
                 ]
             },
             {
                 'title': 'Bug Prioritization Strategy',
                 'description': 'Help prioritizing bugs',
-                'is_active': True,
+                'is_active': False,
                 'days_ago': 1,
                 'board': 'bug',
                 'messages': [
-                    {'role': 'user', 'content': 'How should I prioritize the bugs in our backlog?'},
+                    {'role': 'user', 'content': 'How should I prioritize the bugs in our backlog?', 'tokens': 75},
                     {'role': 'assistant', 'content': """Here's a prioritization framework:
 
 **🔴 Critical Priority (Fix Immediately)**
@@ -791,7 +1048,113 @@ Would you like help with task estimation?"""},
 **🟡 Medium Priority (Next Sprint)**
 5. **UI Alignment Issues** - Minor UX issues
 
-Would you like a detailed fix plan?"""},
+Would you like a detailed fix plan?""", 'tokens': 230, 'kb_used': True},
+                ]
+            },
+            {
+                'title': 'Risk Assessment Query',
+                'description': 'Checking project risks',
+                'is_active': False,
+                'days_ago': 5,
+                'board': 'software',
+                'messages': [
+                    {'role': 'user', 'content': 'What are the biggest risks in my current sprint?', 'tokens': 75},
+                    {'role': 'assistant', 'content': """I've identified these key risks:
+
+**🔴 High Risk**
+- **Database Migration** - Not started, blocks 5 tasks
+- **Security Vulnerability** - Unpatched, production exposure
+
+**🟠 Medium Risk**
+- **API Dependencies** - External service reliability unknown
+- **Resource Overallocation** - Sam Rivera at 112% capacity
+
+**Mitigation Actions:**
+1. Start database migration immediately
+2. Apply security patch today
+3. Rebalance Sam's workload
+
+Would you like detailed mitigation plans?""", 'tokens': 280, 'kb_used': True, 'web_search': True},
+                    {'role': 'user', 'content': 'Yes, give me the security patch details', 'tokens': 70},
+                    {'role': 'assistant', 'content': """For the security vulnerability:
+
+**Issue:** SQL injection vulnerability in user input validation
+**Severity:** High - Production exposure
+**Fix:** Update to Django 4.2.8 (patch available)
+
+**Action Steps:**
+1. Update requirements.txt: `Django==4.2.8`
+2. Run: `pip install -r requirements.txt`
+3. Test authentication flows
+4. Deploy to staging, then production
+
+**Time Estimate:** 2-3 hours including testing
+
+This should be done today to prevent potential data breach.""", 'tokens': 240, 'web_search': True},
+                ]
+            },
+            {
+                'title': 'Marketing Campaign Insights',
+                'description': 'Strategy discussion',
+                'is_active': False,
+                'days_ago': 7,
+                'board': 'marketing',
+                'messages': [
+                    {'role': 'user', 'content': 'What should be our focus for the Q1 campaign?', 'tokens': 75},
+                    {'role': 'assistant', 'content': """Based on your board and project goals:
+
+**Primary Focus Areas:**
+1. **Social Media Campaign** - 40% of budget
+   - LinkedIn for B2B outreach
+   - Twitter for product updates
+   
+2. **Content Marketing** - 30% of budget
+   - Blog posts (2/week)
+   - Case studies (1/month)
+   
+3. **Email Marketing** - 20% of budget
+   - Newsletter series
+   - Product announcements
+
+**Success Metrics:**
+- Lead generation: 500+ qualified leads
+- Engagement rate: >5%
+- Conversion rate: >2%
+
+Should I help draft the campaign timeline?""", 'tokens': 320, 'kb_used': True, 'web_search': True},
+                ]
+            },
+            {
+                'title': 'Dependency Chain Analysis',
+                'description': 'Checking task dependencies',
+                'is_active': False,
+                'days_ago': 3,
+                'board': 'software',
+                'messages': [
+                    {'role': 'user', 'content': 'Show me the dependency chain for the API tasks', 'tokens': 75},
+                    {'role': 'assistant', 'content': """Here's the dependency chain:
+
+```
+Database Schema Design
+    ↓
+User Authentication API
+    ↓
+    ├→ Dashboard API Endpoints
+    ├→ Project Management API
+    └→ Reporting API
+        ↓
+        Frontend Integration
+```
+
+**Critical Path:** Database → Auth → Dashboard (12 days)
+
+**Parallel Work Possible:**
+- Documentation can start now
+- UI mockups independent of backend
+
+**Bottleneck:** User Authentication API - blocks 3 major tasks
+
+Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_used': True},
                 ]
             },
         ]
@@ -811,6 +1174,9 @@ Would you like a detailed fix plan?"""},
         conflicts = ConflictDetection.objects.filter(board__in=self.demo_boards).count()
         ai_sessions = AIAssistantSession.objects.filter(user__in=self.demo_users).count()
         ai_messages = AIAssistantMessage.objects.filter(session__user__in=self.demo_users).count()
+        ai_analytics = AIAssistantAnalytics.objects.filter(user__in=self.demo_users).count()
+        kb_entries = ProjectKnowledgeBase.objects.filter(board__in=self.demo_boards).count()
+        ai_recommendations = AITaskRecommendation.objects.filter(board__in=self.demo_boards).count()
         time_entries = TimeEntry.objects.filter(task__column__board__in=self.demo_boards).count()
         
         self.stdout.write(f'''
@@ -820,6 +1186,9 @@ Would you like a detailed fix plan?"""},
    ├── Messaging: {chat_rooms} rooms, {chat_messages} messages
    ├── Conflicts: {conflicts}
    ├── AI Assistant: {ai_sessions} sessions, {ai_messages} messages
+   │   ├── Analytics: {ai_analytics} daily records
+   │   ├── Knowledge Base: {kb_entries} entries
+   │   └── Recommendations: {ai_recommendations}
    └── Time Entries: {time_entries}
 
 🎉 Demo environment is now fully populated!
