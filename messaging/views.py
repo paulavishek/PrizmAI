@@ -17,13 +17,22 @@ from .forms import ChatRoomForm, ChatMessageForm, TaskThreadCommentForm, Mention
 @login_required
 def messaging_hub(request):
     """Main messaging hub showing all boards and recent notifications"""
+    from accounts.models import Organization
+    
     try:
         profile = request.user.profile
         organization = profile.organization
         
+        # Include demo organization boards for all authenticated users
+        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+        
         # Filter boards by organization and membership, consistent with board_list view
+        org_filter = Q(organization=organization)
+        if demo_org:
+            org_filter |= Q(organization=demo_org)
+        
         user_boards = Board.objects.filter(
-            Q(organization=organization) & 
+            org_filter & 
             (Q(created_by=request.user) | Q(members=request.user))
         ).distinct()
     except:

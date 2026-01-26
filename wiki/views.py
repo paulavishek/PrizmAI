@@ -53,7 +53,13 @@ class WikiBaseView(LoginRequiredMixin, UserPassesTestMixin):
         context = super().get_context_data(**kwargs)
         org = self.get_organization()
         context['organization'] = org
-        context['categories'] = WikiCategory.objects.filter(organization=org)
+        
+        # Include demo organization categories for all authenticated users
+        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+        org_filter = Q(organization=org)
+        if demo_org:
+            org_filter |= Q(organization=demo_org)
+        context['categories'] = WikiCategory.objects.filter(org_filter).distinct()
         return context
 
 
@@ -66,7 +72,14 @@ class WikiCategoryListView(WikiBaseView, ListView):
     
     def get_queryset(self):
         org = self.get_organization()
-        return WikiCategory.objects.filter(organization=org).prefetch_related('pages')
+        
+        # Include demo organization categories for all authenticated users
+        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+        org_filter = Q(organization=org)
+        if demo_org:
+            org_filter |= Q(organization=demo_org)
+        
+        return WikiCategory.objects.filter(org_filter).prefetch_related('pages').distinct()
 
 
 class WikiPageListView(WikiBaseView, ListView):
@@ -78,7 +91,14 @@ class WikiPageListView(WikiBaseView, ListView):
     
     def get_queryset(self):
         org = self.get_organization()
-        queryset = WikiPage.objects.filter(organization=org, is_published=True)
+        
+        # Include demo organization content for all authenticated users
+        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+        org_filter = Q(organization=org)
+        if demo_org:
+            org_filter |= Q(organization=demo_org)
+        
+        queryset = WikiPage.objects.filter(org_filter, is_published=True)
         
         category_id = self.kwargs.get('category_id')
         if category_id:
@@ -643,8 +663,14 @@ def knowledge_hub_home(request):
     # Get search query
     search_query = request.GET.get('q', '')
     
-    # Get wiki pages
-    wiki_pages = WikiPage.objects.filter(organization=org, is_published=True).select_related('category', 'created_by')
+    # Include demo organization content for all authenticated users
+    demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+    org_filter = Q(organization=org)
+    if demo_org:
+        org_filter |= Q(organization=demo_org)
+    
+    # Get wiki pages from user's org AND demo org
+    wiki_pages = WikiPage.objects.filter(org_filter, is_published=True).select_related('category', 'created_by')
     if search_query:
         wiki_pages = wiki_pages.filter(
             Q(title__icontains=search_query) |
@@ -653,13 +679,13 @@ def knowledge_hub_home(request):
         )
     wiki_pages = wiki_pages.order_by('-is_pinned', '-updated_at')[:20]
     
-    # Get statistics
-    total_wiki_pages = WikiPage.objects.filter(organization=org, is_published=True).count()
-    total_views = WikiPage.objects.filter(organization=org, is_published=True).aggregate(
+    # Get statistics (include demo org content)
+    total_wiki_pages = WikiPage.objects.filter(org_filter, is_published=True).count()
+    total_views = WikiPage.objects.filter(org_filter, is_published=True).aggregate(
         total=Sum('view_count'))['total'] or 0
     
-    # Get wiki categories
-    wiki_categories = WikiCategory.objects.filter(organization=org).prefetch_related('pages')
+    # Get wiki categories (include demo org categories)
+    wiki_categories = WikiCategory.objects.filter(org_filter).prefetch_related('pages').distinct()
     
     return render(request, 'wiki/knowledge_hub_home.html', {
         'organization': org,

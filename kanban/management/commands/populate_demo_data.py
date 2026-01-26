@@ -505,13 +505,30 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('\n📎 Creating file attachments...\n'))
         self.create_file_attachments(all_tasks, alex, sam, jordan)
 
-        # Create wiki links for tasks
-        self.stdout.write(self.style.SUCCESS('\n📚 Creating wiki links...\n'))
-        self.create_wiki_links(all_tasks, demo_org, alex)
+        # Populate Wiki demo data (pages, categories, links)
+        self.stdout.write(self.style.SUCCESS('\n📚 Creating Wiki demo data...\n'))
+        from django.core.management import call_command
+        try:
+            call_command('populate_wiki_demo_data', '--reset')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'   ⚠️  Wiki demo data skipped: {e}'))
+
+        # Populate Messaging demo data (chat rooms, messages, notifications)
+        self.stdout.write(self.style.SUCCESS('\n💬 Creating Messaging demo data...\n'))
+        try:
+            call_command('populate_messaging_demo_data', '--clear')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'   ⚠️  Messaging demo data skipped: {e}'))
+
+        # Populate Conflict demo data
+        self.stdout.write(self.style.SUCCESS('\n⚠️  Creating Conflict demo data...\n'))
+        try:
+            call_command('populate_conflict_demo_data', '--reset')
+        except Exception as e:
+            self.stdout.write(self.style.WARNING(f'   ⚠️  Conflict demo data skipped: {e}'))
 
         # Populate AI Assistant demo data (chat sessions and messages)
         self.stdout.write(self.style.SUCCESS('\n🤖 Creating AI Assistant chat sessions...\n'))
-        from django.core.management import call_command
         try:
             call_command('populate_ai_assistant_demo_data', '--reset')
         except Exception as e:

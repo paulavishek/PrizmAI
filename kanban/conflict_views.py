@@ -79,10 +79,18 @@ def conflict_dashboard(request):
             demo_orgs = Organization.objects.filter(name__in=demo_org_names)
             boards = Board.objects.filter(organization__in=demo_orgs).distinct()
         else:
+            from accounts.models import Organization
             profile = request.user.profile
             organization = profile.organization
+            
+            # Include demo organization boards for all authenticated users
+            demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+            org_filter = Q(organization=organization)
+            if demo_org:
+                org_filter |= Q(organization=demo_org)
+            
             boards = Board.objects.filter(
-                Q(organization=organization) &
+                org_filter &
                 (Q(created_by=request.user) | Q(members=request.user))
             ).distinct()
         
