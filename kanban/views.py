@@ -560,6 +560,7 @@ def task_detail(request, task_id):
     from django.db.models import Prefetch
     from kanban.permission_utils import user_has_task_permission, user_can_edit_task_in_column
     from kanban.audit_utils import log_model_change, AuditLogContext
+    from kanban.utils.demo_settings import SIMPLIFIED_MODE
     
     # Optimize query with select_related and prefetch_related to avoid N+1 queries
     task = get_object_or_404(

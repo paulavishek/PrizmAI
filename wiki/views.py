@@ -26,10 +26,16 @@ class WikiBaseView(LoginRequiredMixin, UserPassesTestMixin):
     """Base view for wiki operations"""
     
     def test_func(self):
-        """Check if user belongs to the organization"""
+        """Check if user belongs to the organization or accessing demo content"""
         org = self.get_organization()
         if not org:
             return False
+        
+        # Allow access to demo organization pages for all authenticated users
+        demo_org_names = ['Demo - Acme Corporation']
+        if org.name in demo_org_names:
+            return True
+        
         # Check if user has a profile in this organization
         return hasattr(self.request.user, 'profile') and self.request.user.profile.organization == org
     
@@ -114,9 +120,36 @@ class WikiPageDetailView(WikiBaseView, DetailView):
     slug_field = 'slug'
     slug_url_kwarg = 'slug'
     
+    def test_func(self):
+        """Allow access to user's org pages AND demo org pages"""
+        # First try to get the page to check its organization
+        slug = self.kwargs.get('slug')
+        if slug:
+            demo_org_names = ['Demo - Acme Corporation']
+            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+            
+            # Check if the page is in demo org
+            page = WikiPage.objects.filter(
+                Q(slug=slug),
+                Q(organization__in=demo_orgs)
+            ).first()
+            if page:
+                return True  # Allow access to demo pages
+        
+        # Otherwise, use the default test (user's org)
+        return super().test_func()
+    
     def get_queryset(self):
         org = self.get_organization()
-        return WikiPage.objects.filter(organization=org)
+        # Also allow access to demo organization wiki pages
+        demo_org_names = ['Demo - Acme Corporation']
+        demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+        
+        # Include both user's org and demo org pages
+        queryset = WikiPage.objects.filter(
+            Q(organization=org) | Q(organization__in=demo_orgs)
+        )
+        return queryset
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -482,10 +515,16 @@ def quick_link_wiki(request, content_type, object_id):
     if not org:
         return JsonResponse({'error': 'No organization found'}, status=400)
     
+    # Allow access to demo boards
+    demo_org_names = ['Demo - Acme Corporation']
+    demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+    
     if content_type == 'task':
-        item = get_object_or_404(Task, pk=object_id, column__board__organization=org)
+        # Allow tasks from user's org or demo org
+        item = get_object_or_404(Task, pk=object_id, column__board__organization__in=[org] + list(demo_orgs))
     elif content_type == 'board':
-        item = get_object_or_404(Board, pk=object_id, organization=org)
+        # Allow boards from user's org or demo org
+        item = get_object_or_404(Board, pk=object_id, organization__in=[org] + list(demo_orgs))
     else:
         return JsonResponse({'error': 'Invalid content type'}, status=400)
     

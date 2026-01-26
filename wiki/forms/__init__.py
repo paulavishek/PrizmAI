@@ -252,7 +252,14 @@ class QuickWikiLinkForm(forms.Form):
     def __init__(self, *args, organization=None, **kwargs):
         super().__init__(*args, **kwargs)
         if organization:
+            from django.db.models import Q
+            from accounts.models import Organization
+            
+            # Include demo organization pages along with user's org pages
+            demo_org_names = ['Demo - Acme Corporation']
+            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+            
             self.fields['wiki_pages'].queryset = WikiPage.objects.filter(
-                organization=organization,
+                Q(organization=organization) | Q(organization__in=demo_orgs),
                 is_published=True
             )

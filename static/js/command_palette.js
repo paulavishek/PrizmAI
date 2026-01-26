@@ -3,8 +3,11 @@
  * Always-visible search bar that filters tasks in real-time
  */
 
-// Use var instead of let to avoid duplicate declaration errors if script loads multiple times
-if (typeof searchState === 'undefined') {
+// Prevent duplicate execution if script is loaded multiple times
+if (typeof window.taskSearchInitialized === 'undefined') {
+    window.taskSearchInitialized = true;
+
+    // Initialize search state
     var searchState = {
         searchMode: 'keyword', // 'ai' or 'keyword'
         allTasks: [],
@@ -12,7 +15,6 @@ if (typeof searchState === 'undefined') {
         searchTimeout: null,
         currentQuery: ''
     };
-}
 
 document.addEventListener('DOMContentLoaded', function() {
     initializeTaskSearch();
@@ -410,3 +412,5 @@ window.addEventListener('taskUpdated', collectAllTasks);
 // Make functions available globally
 window.clearSearch = clearSearch;
 window.collectAllTasks = collectAllTasks;
+
+} // End of taskSearchInitialized check
