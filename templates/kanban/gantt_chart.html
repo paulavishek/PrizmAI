@@ -607,17 +607,6 @@
         <div class="gantt-header">
             <h2>📊 Project Timeline</h2>
             <div class="d-flex align-items-center gap-3">
-                {% if has_phases %}
-                <!-- Phase/Task View Toggle -->
-                <div class="phase-view-controls btn-group" role="group">
-                    <button type="button" class="btn btn-outline-primary btn-sm active" id="phase-view-btn" onclick="setPhaseView()">
-                        <i class="fas fa-layer-group me-1"></i> Phase View
-                    </button>
-                    <button type="button" class="btn btn-outline-primary btn-sm" id="all-tasks-btn" onclick="setAllTasksView()">
-                        <i class="fas fa-tasks me-1"></i> All Tasks
-                    </button>
-                </div>
-                {% endif %}
                 <div class="view-buttons">
                     <button class="view-btn" data-mode="Day">Day</button>
                     <button class="view-btn active" data-mode="Week">Week</button>
