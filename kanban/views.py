@@ -363,6 +363,7 @@ def create_board(request):
 def board_detail(request, board_id):
     from kanban.permission_utils import user_has_board_permission
     from kanban.audit_utils import log_audit
+    from kanban.utils.demo_settings import SIMPLIFIED_MODE
     
     board = get_object_or_404(Board, id=board_id)
     
@@ -370,9 +371,10 @@ def board_detail(request, board_id):
     demo_org_names = ['Demo - Acme Corporation']
     is_demo_board = board.organization.name in demo_org_names
     
-    # If in demo mode and viewing a demo board, redirect to demo board view
+    # In simplified mode: treat demo boards as regular boards, no redirect
+    # In legacy mode: redirect to demo board view if in demo mode
     is_demo_mode = request.session.get('is_demo_mode', False)
-    if is_demo_board and is_demo_mode:
+    if not SIMPLIFIED_MODE and is_demo_board and is_demo_mode:
         return redirect('demo_board_detail', board_id=board_id)
     
     # Check permission using RBAC (includes organization-level access for demo boards)
@@ -586,16 +588,20 @@ def task_detail(request, task_id):
     is_demo_mode = request.session.get('is_demo_mode', False)
     demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
     
-    # If accessing an official demo board without demo mode active, re-establish demo mode
-    # This handles cases where demo session expired but user is still browsing demo content
-    if is_demo_board and not is_demo_mode and not request.user.is_authenticated:
-        request.session['is_demo_mode'] = True
-        request.session['demo_mode'] = 'solo'
-        is_demo_mode = True
-        demo_mode_type = 'solo'
+    # SIMPLIFIED MODE: Don't re-establish demo mode, require authentication for all boards
+    # LEGACY MODE: Re-establish demo mode for anonymous users accessing demo boards
+    if not SIMPLIFIED_MODE:
+        # If accessing an official demo board without demo mode active, re-establish demo mode
+        # This handles cases where demo session expired but user is still browsing demo content
+        if is_demo_board and not is_demo_mode and not request.user.is_authenticated:
+            request.session['is_demo_mode'] = True
+            request.session['demo_mode'] = 'solo'
+            is_demo_mode = True
+            demo_mode_type = 'solo'
     
     # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
+    # In simplified mode, ALL boards require authentication
+    if SIMPLIFIED_MODE or not (is_demo_board and is_demo_mode):
         if not request.user.is_authenticated:
             from django.contrib.auth.views import redirect_to_login
             return redirect_to_login(request.get_full_path())
@@ -1378,9 +1384,11 @@ def board_analytics(request, board_id):
 
 def gantt_chart(request, board_id):
     """Display Gantt chart view for a board
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
+    ANONYMOUS ACCESS: Works for demo mode (Solo/Team) - LEGACY MODE ONLY
+    SIMPLIFIED MODE: Requires authentication for all boards
     """
     from kanban.permission_utils import user_has_board_permission
+    from kanban.utils.demo_settings import SIMPLIFIED_MODE
     
     board = get_object_or_404(Board, id=board_id)
     
@@ -1389,16 +1397,20 @@ def gantt_chart(request, board_id):
     is_demo_mode = request.session.get('is_demo_mode', False)
     demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
     
-    # If accessing an official demo board without demo mode active, re-establish demo mode
-    # This handles cases where demo session expired but user is still browsing demo content
-    if is_demo_board and not is_demo_mode and not request.user.is_authenticated:
-        request.session['is_demo_mode'] = True
-        request.session['demo_mode'] = 'solo'
-        is_demo_mode = True
-        demo_mode_type = 'solo'
+    # SIMPLIFIED MODE: Don't re-establish demo mode, require authentication for all boards
+    # LEGACY MODE: Re-establish demo mode for anonymous users accessing demo boards
+    if not SIMPLIFIED_MODE:
+        # If accessing an official demo board without demo mode active, re-establish demo mode
+        # This handles cases where demo session expired but user is still browsing demo content
+        if is_demo_board and not is_demo_mode and not request.user.is_authenticated:
+            request.session['is_demo_mode'] = True
+            request.session['demo_mode'] = 'solo'
+            is_demo_mode = True
+            demo_mode_type = 'solo'
     
     # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
+    # In simplified mode, ALL boards require authentication
+    if SIMPLIFIED_MODE or not (is_demo_board and is_demo_mode):
         if not request.user.is_authenticated:
             from django.contrib.auth.views import redirect_to_login
             return redirect_to_login(request.get_full_path())

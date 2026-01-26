@@ -91,6 +91,7 @@ def demo_mode_selection(request):
     - All authenticated users get full access
     - Pre-populated demo data available immediately
     - Automatically redirects to dashboard if already authenticated
+    - NO demo session variables set (just regular dashboard)
     
     LEGACY MODE:
     - Choose between Solo or Team mode
@@ -98,17 +99,11 @@ def demo_mode_selection(request):
     - TEAM MODE: User experiences RBAC via session role
     """
     # SIMPLIFIED MODE: Skip mode selection entirely
-    # Authenticated users go directly to dashboard
+    # Redirect directly to regular dashboard without setting demo session
     if SIMPLIFIED_MODE:
         if request.user.is_authenticated:
-            # Mark session as demo-ready and redirect to main dashboard
-            request.session['demo_mode_selected'] = True
-            request.session['is_demo_mode'] = True
-            request.session['demo_mode'] = 'simplified'  # New simplified mode
-            request.session['demo_role'] = 'admin'  # Everyone is admin in simplified mode
-            request.session.modified = True
-            
-            # Add user to demo boards if not already a member
+            # In simplified mode, just grant access to demo boards and redirect to regular dashboard
+            # DO NOT set is_demo_mode - we want demo boards to appear as regular boards
             _auto_grant_demo_access(request)
             
             return redirect('dashboard')
@@ -528,10 +523,21 @@ def demo_dashboard(request):
     Demo dashboard - shows demo boards to ALL users (including anonymous)
     This bypasses RBAC and provides a consistent tutorial environment
     
-    ANONYMOUS ACCESS: No login required for demo mode
-    Note: Anonymous users won't have board membership, but can view demo data
+    SIMPLIFIED MODE (January 2026):
+    - Redirect to regular dashboard (demo boards shown there)
+    - No separate demo dashboard needed
+    
+    LEGACY MODE:
+    - ANONYMOUS ACCESS: No login required for demo mode
+    - Note: Anonymous users won't have board membership, but can view demo data
     """
-    # Check if demo mode has been selected
+    # SIMPLIFIED MODE: Redirect to regular dashboard
+    if SIMPLIFIED_MODE:
+        if request.user.is_authenticated:
+            _auto_grant_demo_access(request)
+        return redirect('dashboard')
+    
+    # LEGACY MODE: Check if demo mode has been selected
     if not request.session.get('demo_mode_selected'):
         return redirect('demo_mode_selection')
     
@@ -752,10 +758,21 @@ def demo_board_detail(request, board_id):
     Demo board detail - shows a demo board to ALL users (including anonymous)
     This bypasses RBAC checks completely
     
-    ANONYMOUS ACCESS: No login required for demo mode
-    Authenticated users get automatic board membership
+    SIMPLIFIED MODE (January 2026):
+    - Redirect to regular board detail view
+    - Demo boards treated as regular boards
+    
+    LEGACY MODE:
+    - ANONYMOUS ACCESS: No login required for demo mode
+    - Authenticated users get automatic board membership
     """
-    # Get the demo organization - using constants
+    # SIMPLIFIED MODE: Redirect to regular board detail
+    if SIMPLIFIED_MODE:
+        if request.user.is_authenticated:
+            _auto_grant_demo_access(request)
+        return redirect('board_detail', board_id=board_id)
+    
+    # LEGACY MODE: Get the demo organization - using constants
     demo_orgs = Organization.objects.filter(name__in=DEMO_ORG_NAMES)
     browser_fingerprint = request.session.get('browser_fingerprint')
     
