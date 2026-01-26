@@ -317,20 +317,12 @@ class Command(BaseCommand):
         alex = User.objects.filter(email='alex.chen@demo.prizmai.local').first()
         sam = User.objects.filter(email='sam.rivera@demo.prizmai.local').first()
         jordan = User.objects.filter(email='jordan.taylor@demo.prizmai.local').first()
-        
-        # Also get demo_admin_solo for solo demo mode time tracking
-        demo_admin = User.objects.filter(username='demo_admin_solo').first()
 
         if not all([alex, sam, jordan]):
             self.stdout.write(self.style.ERROR(
                 '❌ Demo personas not found. Please run: python manage.py create_demo_organization'
             ))
             return
-        
-        if not demo_admin:
-            self.stdout.write(self.style.WARNING(
-                '⚠️  demo_admin_solo not found. Time tracking for demo mode will be limited.'
-            ))
 
         # Get demo boards
         software_board = Board.objects.filter(
@@ -479,7 +471,7 @@ class Command(BaseCommand):
         # Create time tracking data for all demo users
         self.stdout.write(self.style.SUCCESS('\n⏱️  Creating time tracking data...\n'))
         all_tasks = software_tasks + marketing_tasks + bug_tasks
-        self.create_time_tracking_data(all_tasks, alex, sam, jordan, demo_admin)
+        self.create_time_tracking_data(all_tasks, alex, sam, jordan)
 
         # Create budget and ROI data
         self.stdout.write(self.style.SUCCESS('\n💰 Creating budget and ROI data...\n'))
@@ -1010,54 +1002,11 @@ class Command(BaseCommand):
                     related = random.choice([t for t in phase_tasks if t != task])
                     task.related_tasks.add(related)
 
-    def create_time_tracking_data(self, tasks, alex, sam, jordan, demo_admin=None):
-        """Create time entries for tasks
-        
-        Also assigns some tasks to demo_admin_solo and creates time entries for them
-        so the Time tab has data in demo mode.
-        """
+    def create_time_tracking_data(self, tasks, alex, sam, jordan):
+        """Create time entries for tasks"""
         users = [alex, sam, jordan]
-        if demo_admin:
-            users.append(demo_admin)
         now = timezone.now().date()
         entries_created = 0
-        
-        # For demo_admin_solo, we need to assign some tasks to them first
-        # so they can see tasks in their timesheet
-        if demo_admin:
-            # Find tasks that are in progress or complete to assign to demo_admin
-            # We'll reassign some tasks from each board to demo_admin (3 per board = 9 total)
-            tasks_by_board = {}
-            for task in tasks:
-                board_name = task.column.board.name
-                if board_name not in tasks_by_board:
-                    tasks_by_board[board_name] = []
-                tasks_by_board[board_name].append(task)
-            
-            demo_admin_tasks = []
-            for board_name, board_tasks in tasks_by_board.items():
-                # Get tasks with progress > 0 (in progress or done)
-                in_progress_tasks = [t for t in board_tasks if t.progress and t.progress > 0]
-                # Assign 2-3 tasks per board to demo_admin
-                tasks_to_assign = in_progress_tasks[:3] if len(in_progress_tasks) >= 3 else in_progress_tasks
-                for task in tasks_to_assign:
-                    task.assigned_to = demo_admin
-                    task.save()
-                    demo_admin_tasks.append(task)
-            
-            self.stdout.write(f'   📝 Assigned {len(demo_admin_tasks)} tasks to demo_admin_solo')
-            
-            # Create time entries specifically for demo_admin's assigned tasks
-            for task in demo_admin_tasks:
-                # Create 2-4 time entries per task across the last 2 weeks
-                num_entries = random.randint(2, 4)
-                for i in range(num_entries):
-                    hours = Decimal(str(random.uniform(0.5, 4))).quantize(Decimal('0.01'))
-                    entry_date = now - timedelta(days=random.randint(0, 14))
-                    
-                    TimeEntry.objects.create(
-                        task=task,
-                        user=demo_admin,
                         hours_spent=hours,
                         description=f"Worked on {task.title[:30]}",
                         work_date=entry_date,

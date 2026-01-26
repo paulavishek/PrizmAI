@@ -97,7 +97,6 @@ def populate_board():
         alex = User.objects.get(username='alex_chen_demo')
         sam = User.objects.get(username='sam_rivera_demo')
         jordan = User.objects.get(username='jordan_taylor_demo')
-        demo_admin = User.objects.get(username='demo_admin_solo')
         print(f"✅ Found demo organization and users")
     except (Organization.DoesNotExist, User.DoesNotExist) as e:
         print(f"❌ Error finding demo data: {e}")
@@ -117,8 +116,8 @@ def populate_board():
     review_col = columns.get('Code Review') or columns.get('Testing/QA') or in_progress_col
     done_col = columns.get('Done') or columns.get('Ready for Deployment') or list(columns.values())[-1]
     
-    # Demo users for assignment
-    users = [alex, sam, jordan, demo_admin]
+    # Demo users for assignment (only the 3 visible demo personas)
+    users = [alex, sam, jordan]
     now = timezone.now().date()
     
     # Delete existing tasks if any
@@ -151,7 +150,7 @@ def populate_board():
             priority=task_data['priority'],
             complexity_score=task_data['complexity'],
             assigned_to=random.choice(users),
-            created_by=demo_admin,
+            created_by=alex,
             progress=100,
             start_date=start,
             due_date=due,
@@ -193,7 +192,7 @@ def populate_board():
             priority=task_data['priority'],
             complexity_score=task_data['complexity'],
             assigned_to=random.choice(users),
-            created_by=demo_admin,
+            created_by=alex,
             progress=progress,
             start_date=start,
             due_date=due,
@@ -221,7 +220,7 @@ def populate_board():
             priority=task_data['priority'],
             complexity_score=task_data['complexity'],
             assigned_to=random.choice(users),
-            created_by=demo_admin,
+            created_by=alex,
             progress=0,
             start_date=start,
             due_date=due,
