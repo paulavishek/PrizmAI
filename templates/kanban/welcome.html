@@ -1288,11 +1288,6 @@
                     <a class="nav-link" href="#ai-intelligence">AI Intelligence</a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link" href="{% url 'demo_mode_selection' %}" style="background: var(--success-gradient); border-radius: 25px; padding: 0.5rem 1.5rem !important; color: white !important;">
-                        <i class="fas fa-play-circle me-1"></i>Try Demo
-                    </a>
-                </li>
-                <li class="nav-item">
                     <a class="nav-link" href="{% url 'login' %}">Sign In</a>
                 </li>
                 <li class="nav-item">
@@ -1311,17 +1306,13 @@
                 <h1 class="hero-title">Transform Your Projects with AI-Powered Intelligence</h1>
                 <p class="hero-subtitle">The ultimate platform that combines Kanban boards, Gantt charts, real-time collaboration, and AI-driven insights—all in one seamless experience.</p>
                 <div class="hero-buttons">
-                    <a href="{% url 'demo_mode_selection' %}" class="btn-hero btn-primary-hero">
-                        <i class="fas fa-play-circle me-2"></i>Try Demo (No Signup Required)
+                    <a href="{% url 'register' %}" class="btn-hero btn-primary-hero">
+                        Create Account <i class="fas fa-rocket ms-2"></i>
                     </a>
-                    <a href="{% url 'register' %}" class="btn-hero btn-outline-hero">
-                        Create Account <i class="fas fa-arrow-right ms-2"></i>
+                    <a href="{% url 'login' %}" class="btn-hero btn-outline-hero">
+                        Sign In <i class="fas fa-arrow-right ms-2"></i>
                     </a>
                 </div>
-                <p class="text-white-50 mt-3 small">
-                    <i class="fas fa-info-circle me-1"></i>
-                    Try our interactive demo instantly, or create an account for full features
-                </p>
             </div>
             <div class="col-lg-6 hero-illustration d-none d-lg-block">
                 <div class="hero-brain-container">
@@ -1763,8 +1754,8 @@
                             <span>Data-driven predictions</span>
                         </div>
                     </div>
-                    <a href="{% url 'demo_mode_selection' %}" class="btn-ai-demo">
-                        <i class="fas fa-play-circle me-2"></i>Try AI Features Now
+                    <a href="{% url 'register' %}" class="btn-ai-demo">
+                        <i class="fas fa-rocket me-2"></i>Get Started
                     </a>
                 </div>
             </div>
