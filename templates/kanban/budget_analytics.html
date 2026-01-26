@@ -142,7 +142,7 @@
                                 {% for task in cost_breakdown %}
                                 <tr class="cost-breakdown-card">
                                     <td>
-                                        <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}#task-{{ task.task_id }}" class="text-decoration-none">
+                                        <a href="{% url 'task_detail' task.task_id %}" class="text-decoration-none">
                                             {{ task.task_title }}
                                         </a>
                                     </td>
@@ -208,7 +208,7 @@
                                 {% for overrun in overruns %}
                                 <tr>
                                     <td>
-                                        <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}#task-{{ overrun.task_id }}" class="text-decoration-none">
+                                        <a href="{% url 'task_detail' overrun.task_id %}" class="text-decoration-none">
                                             {{ overrun.task_title }}
                                         </a>
                                     </td>
