@@ -4,37 +4,200 @@
 
 {% block extra_css %}
 <style>
-/* Styles for clickable metric cards */
-.metrics-card {
-    cursor: pointer;
-    transition: transform 0.2s, box-shadow 0.2s;
-}
+    /* Styles for clickable metric cards */
+    .metrics-card {
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
 
-.metrics-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-}
+    .metrics-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+    }
 
-/* Badge styles for priorities */
-.badge.priority-low {
-    background-color: #28a745;
-    color: white;
-}
+    /* Badge styles for priorities */
+    .badge.priority-low {
+        background-color: #28a745;
+        color: white;
+    }
 
-.badge.priority-medium {
-    background-color: #ffc107;
-    color: black;
-}
+    .badge.priority-medium {
+        background-color: #ffc107;
+        color: black;
+    }
 
-.badge.priority-high {
-    background-color: #fd7e14;
-    color: white;
-}
+    .badge.priority-high {
+        background-color: #fd7e14;
+        color: white;
+    }
 
-.badge.priority-urgent {
-    background-color: #dc3545;
-    color: white;
-}
+    .badge.priority-urgent {
+        background-color: #dc3545;
+        color: white;
+    }
+
+    /* Collapsible Demo Credentials Banner */
+    .demo-credentials-banner {
+        background: linear-gradient(135deg, #e3f2fd 0%, #e1f5fe 100%);
+        border: 2px solid #0288d1;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        overflow: hidden;
+        box-shadow: 0 4px 12px rgba(2, 136, 209, 0.15);
+        transition: all 0.3s ease;
+    }
+
+    .demo-credentials-banner.expanded {
+        box-shadow: 0 6px 20px rgba(2, 136, 209, 0.25);
+    }
+
+    .demo-banner-header {
+        padding: 1rem 1.5rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        user-select: none;
+        transition: background-color 0.2s ease;
+    }
+
+    .demo-banner-header:hover {
+        background: rgba(2, 136, 209, 0.08);
+    }
+
+    .demo-banner-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #01579b;
+    }
+
+    .demo-banner-icon {
+        font-size: 1.3rem;
+        color: #0288d1;
+    }
+
+    .demo-toggle-icon {
+        font-size: 1.2rem;
+        color: #0288d1;
+        transition: transform 0.3s ease;
+    }
+
+    .demo-credentials-banner.expanded .demo-toggle-icon {
+        transform: rotate(180deg);
+    }
+
+    .demo-banner-content {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.4s ease, padding 0.4s ease;
+        padding: 0 1.5rem;
+    }
+
+    .demo-credentials-banner.expanded .demo-banner-content {
+        max-height: 500px;
+        padding: 0 1.5rem 1.5rem 1.5rem;
+    }
+
+    .demo-users-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        margin-top: 1rem;
+    }
+
+    @media (max-width: 992px) {
+        .demo-users-row {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .demo-user-box {
+        background: white;
+        border-radius: 10px;
+        padding: 1rem;
+        border: 1px solid #b3e5fc;
+        transition: all 0.3s ease;
+    }
+
+    .demo-user-box:hover {
+        box-shadow: 0 4px 12px rgba(2, 136, 209, 0.2);
+        transform: translateY(-3px);
+    }
+
+    .demo-user-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .demo-user-init {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: white;
+        flex-shrink: 0;
+    }
+
+    .demo-user-box.admin .demo-user-init {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .demo-user-box.developer .demo-user-init {
+        background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+    }
+
+    .demo-user-box.strategist .demo-user-init {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    }
+
+    .demo-user-info h6 {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #01579b;
+    }
+
+    .demo-user-role {
+        font-size: 0.75rem;
+        color: #0288d1;
+        margin: 0;
+    }
+
+    .demo-cred-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.5rem;
+        background: #f8f9fa;
+        border-radius: 6px;
+        margin-bottom: 0.4rem;
+        font-size: 0.85rem;
+    }
+
+    .demo-cred-label {
+        color: #6c757d;
+        font-weight: 600;
+    }
+
+    .demo-cred-value {
+        font-family: 'Courier New', monospace;
+        font-weight: 700;
+        color: #01579b;
+        background: white;
+        padding: 0.2rem 0.6rem;
+        border-radius: 4px;
+        border: 1px solid #b3e5fc;
+    }
 </style>
 {% endblock %}
 
@@ -52,10 +215,83 @@
     </div>
 </div>
 
+<!-- Collapsible Demo Credentials Banner -->
+<div class="demo-credentials-banner" id="demoCredentialsBanner">
+    <div class="demo-banner-header" onclick="toggleDemoBanner()">
+        <div class="demo-banner-title">
+            <i class="fas fa-user-shield demo-banner-icon"></i>
+            <span>Demo Credentials</span>
+            <small class="text-muted" style="font-weight: normal; font-size: 0.85rem;">(Click to expand)</small>
+        </div>
+        <i class="fas fa-chevron-down demo-toggle-icon"></i>
+    </div>
+    <div class="demo-banner-content">
+        <div class="demo-users-row">
+            <!-- Alex Chen - Admin -->
+            <div class="demo-user-box admin">
+                <div class="demo-user-header">
+                    <div class="demo-user-init">AC</div>
+                    <div class="demo-user-info">
+                        <h6>Alex Chen</h6>
+                        <p class="demo-user-role">Admin</p>
+                    </div>
+                </div>
+                <div class="demo-cred-item">
+                    <span class="demo-cred-label">Username:</span>
+                    <span class="demo-cred-value">alex_chen_demo</span>
+                </div>
+                <div class="demo-cred-item">
+                    <span class="demo-cred-label">Password:</span>
+                    <span class="demo-cred-value">demo123</span>
+                </div>
+            </div>
+
+            <!-- Sam Rivera - Developer -->
+            <div class="demo-user-box developer">
+                <div class="demo-user-header">
+                    <div class="demo-user-init">SR</div>
+                    <div class="demo-user-info">
+                        <h6>Sam Rivera</h6>
+                        <p class="demo-user-role">Developer</p>
+                    </div>
+                </div>
+                <div class="demo-cred-item">
+                    <span class="demo-cred-label">Username:</span>
+                    <span class="demo-cred-value">sam_rivera_demo</span>
+                </div>
+                <div class="demo-cred-item">
+                    <span class="demo-cred-label">Password:</span>
+                    <span class="demo-cred-value">demo123</span>
+                </div>
+            </div>
+
+            <!-- Jordan Taylor - Strategist -->
+            <div class="demo-user-box strategist">
+                <div class="demo-user-header">
+                    <div class="demo-user-init">JT</div>
+                    <div class="demo-user-info">
+                        <h6>Jordan Taylor</h6>
+                        <p class="demo-user-role">Strategist</p>
+                    </div>
+                </div>
+                <div class="demo-cred-item">
+                    <span class="demo-cred-label">Username:</span>
+                    <span class="demo-cred-value">jordan_taylor_demo</span>
+                </div>
+                <div class="demo-cred-item">
+                    <span class="demo-cred-label">Password:</span>
+                    <span class="demo-cred-value">demo123</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Analytics Cards -->
 <div class="row mb-4">
     <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card stats-card primary shadow h-100 py-2 metrics-card" data-bs-toggle="modal" data-bs-target="#totalTasksModal">
+        <div class="card stats-card primary shadow h-100 py-2 metrics-card" data-bs-toggle="modal"
+            data-bs-target="#totalTasksModal">
             <div class="card-body">
                 <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
@@ -71,7 +307,8 @@
     </div>
 
     <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card stats-card success shadow h-100 py-2 metrics-card" data-bs-toggle="modal" data-bs-target="#completedTasksModal">
+        <div class="card stats-card success shadow h-100 py-2 metrics-card" data-bs-toggle="modal"
+            data-bs-target="#completedTasksModal">
             <div class="card-body">
                 <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
@@ -84,8 +321,10 @@
                 </div>
             </div>
         </div>
-    </div>    <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card stats-card warning shadow h-100 py-2 metrics-card" data-bs-toggle="modal" data-bs-target="#completionRateModal">
+    </div>
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stats-card warning shadow h-100 py-2 metrics-card" data-bs-toggle="modal"
+            data-bs-target="#completionRateModal">
             <div class="card-body">
                 <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
@@ -98,8 +337,10 @@
                 </div>
             </div>
         </div>
-    </div>    <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card stats-card danger shadow h-100 py-2 metrics-card" data-bs-toggle="modal" data-bs-target="#overdueTasksModal">
+    </div>
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stats-card danger shadow h-100 py-2 metrics-card" data-bs-toggle="modal"
+            data-bs-target="#overdueTasksModal">
             <div class="card-body">
                 <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
@@ -112,8 +353,10 @@
                 </div>
             </div>
         </div>
-    </div>    <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card stats-card info shadow h-100 py-2 metrics-card" data-bs-toggle="modal" data-bs-target="#dueSoonTasksModal">
+    </div>
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stats-card info shadow h-100 py-2 metrics-card" data-bs-toggle="modal"
+            data-bs-target="#dueSoonTasksModal">
             <div class="card-body">
                 <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
@@ -133,7 +376,8 @@
 <!-- My Tasks Section -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card shadow mb-4">            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                 <div class="d-flex align-items-center">
                     <h6 class="m-0 font-weight-bold text-primary me-3">
                         <i class="fas fa-user-check me-2"></i>My Tasks
@@ -144,17 +388,18 @@
                 </div>
                 <div class="d-flex align-items-center">
                     <label for="taskSortSelect" class="form-label me-2 mb-0 small text-muted">Sort by:</label>
-                    <select id="taskSortSelect" class="form-select form-select-sm" style="width: auto;" onchange="changeSortOrder(this.value)">
-                        <option value="urgency" {% if my_tasks_sort_by == 'urgency' %}selected{% endif %}>
+                    <select id="taskSortSelect" class="form-select form-select-sm" style="width: auto;"
+                        onchange="changeSortOrder(this.value)">
+                        <option value="urgency" {% if my_tasks_sort_by=='urgency' %}selected{% endif %}>
                             🚨 Urgency (Overdue First)
                         </option>
-                        <option value="due_date" {% if my_tasks_sort_by == 'due_date' %}selected{% endif %}>
+                        <option value="due_date" {% if my_tasks_sort_by=='due_date' %}selected{% endif %}>
                             📅 Due Date (Chronological)
                         </option>
-                        <option value="priority" {% if my_tasks_sort_by == 'priority' %}selected{% endif %}>
+                        <option value="priority" {% if my_tasks_sort_by=='priority' %}selected{% endif %}>
                             🔥 Priority (High to Low)
                         </option>
-                        <option value="recent" {% if my_tasks_sort_by == 'recent' %}selected{% endif %}>
+                        <option value="recent" {% if my_tasks_sort_by=='recent' %}selected{% endif %}>
                             🕒 Recent (Latest First)
                         </option>
                     </select>
@@ -165,43 +410,48 @@
                 <div class="row">
                     {% for task in my_tasks %}
                     <div class="col-md-6 col-lg-4 mb-3">
-                        <div class="card h-100 border-left-{% if task.priority == 'urgent' %}danger{% elif task.priority == 'high' %}warning{% elif task.priority == 'medium' %}info{% else %}success{% endif %} shadow-sm">
+                        <div
+                            class="card h-100 border-left-{% if task.priority == 'urgent' %}danger{% elif task.priority == 'high' %}warning{% elif task.priority == 'medium' %}info{% else %}success{% endif %} shadow-sm">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start mb-2">
                                     <h6 class="card-title mb-0">{{ task.title|truncatechars:40 }}</h6>
                                     <span class="badge priority-{{ task.priority }}">{{ task.priority|title }}</span>
                                 </div>
-                                
+
                                 {% if task.description %}
                                 <p class="card-text text-muted small mb-2">{{ task.description|truncatechars:80 }}</p>
                                 {% endif %}
-                                
+
                                 <div class="mb-2">
                                     <small class="text-muted">
-                                        <i class="fas fa-project-diagram me-1"></i>{{ task.column.board.name }} - {{ task.column.name }}
+                                        <i class="fas fa-project-diagram me-1"></i>{{ task.column.board.name }} - {{
+                                        task.column.name }}
                                     </small>
                                 </div>
-                                
+
                                 {% if task.due_date %}
                                 <div class="mb-2">
-                                    <small class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
+                                    <small
+                                        class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
                                         <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
-                                        {% if task.due_date < now and task.progress < 100 %}<span class="badge bg-danger ms-1">Overdue</span>{% endif %}
+                                        {% if task.due_date < now and task.progress < 100 %}<span
+                                            class="badge bg-danger ms-1">Overdue</span>{% endif %}
                                     </small>
                                 </div>
                                 {% endif %}
-                                
+
                                 <div class="progress mb-2" style="height: 6px;">
-                                    <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}" 
-                                         role="progressbar" style="width: {{ task.progress }}%"></div>
+                                    <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                        role="progressbar" style="width: {{ task.progress }}%"></div>
                                 </div>
                                 <small class="text-muted">{{ task.progress }}% complete</small>
-                                
+
                                 <div class="text-end mt-2">
                                     <a href="{% url 'task_detail' task.id %}" class="btn btn-sm btn-primary">
                                         <i class="fas fa-eye"></i> View
                                     </a>
-                                    <a href="{% url 'board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-secondary">
+                                    <a href="{% url 'board_detail' task.column.board.id %}"
+                                        class="btn btn-sm btn-outline-secondary">
                                         <i class="fas fa-project-diagram"></i> Board
                                     </a>
                                 </div>
@@ -244,17 +494,20 @@
                                 <h5 class="card-title">{{ board.name }}</h5>
                                 <p class="card-text text-muted small">
                                     {% if board.description %}
-                                        {{ board.description|truncatechars:100 }}
+                                    {{ board.description|truncatechars:100 }}
                                     {% else %}
-                                        No description provided.
+                                    No description provided.
                                     {% endif %}
                                 </p>
                                 <div class="text-end mt-2">
-                                    <a href="{% url 'board_detail' board.id %}" class="btn btn-sm btn-primary">Open Board</a>
-                                    <a href="{% url 'board_analytics' board.id %}" class="btn btn-sm btn-outline-secondary" title="Analytics">
+                                    <a href="{% url 'board_detail' board.id %}" class="btn btn-sm btn-primary">Open
+                                        Board</a>
+                                    <a href="{% url 'board_analytics' board.id %}"
+                                        class="btn btn-sm btn-outline-secondary" title="Analytics">
                                         <i class="fas fa-chart-pie fa-sm"></i>
                                     </a>
-                                    <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-sm btn-outline-success" title="Budget & ROI">
+                                    <a href="{% url 'budget_dashboard' board.id %}"
+                                        class="btn btn-sm btn-outline-success" title="Budget & ROI">
                                         <i class="fas fa-dollar-sign fa-sm"></i>
                                     </a>
                                 </div>
@@ -276,7 +529,8 @@
                 </div>
                 {% endif %}
             </div>
-        </div>    </div>
+        </div>
+    </div>
 </div>
 
 <!-- Metric Detail Modals -->
@@ -286,7 +540,8 @@
         <div class="modal-content">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title" id="totalTasksModalLabel">All Tasks</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 {% if all_tasks %}
@@ -311,14 +566,16 @@
                             <td><span class="badge priority-{{ task.priority }}">{{ task.priority|title }}</span></td>
                             <td>
                                 <div class="progress" style="height: 15px;">
-                                    <div class="progress-bar bg-info" role="progressbar" style="width: {{ task.progress }}%">
+                                    <div class="progress-bar bg-info" role="progressbar"
+                                        style="width: {{ task.progress }}%">
                                         <small>{{ task.progress }}%</small>
                                     </div>
                                 </div>
                             </td>
                             <td>{{ task.assigned_to.username|default:"Unassigned" }}</td>
                             <td>
-                                <a href="{% url 'task_detail' task.id %}" class="btn btn-sm btn-outline-primary">View</a>
+                                <a href="{% url 'task_detail' task.id %}"
+                                    class="btn btn-sm btn-outline-primary">View</a>
                             </td>
                         </tr>
                         {% endfor %}
@@ -339,12 +596,14 @@
 </div>
 
 <!-- Completed Tasks Modal -->
-<div class="modal fade" id="completedTasksModal" tabindex="-1" aria-labelledby="completedTasksModalLabel" aria-hidden="true">
+<div class="modal fade" id="completedTasksModal" tabindex="-1" aria-labelledby="completedTasksModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
                 <h5 class="modal-title" id="completedTasksModalLabel">Completed Tasks</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 {% if completed_tasks %}
@@ -368,7 +627,8 @@
                             <td>{{ task.updated_at|date:"M d, Y" }}</td>
                             <td>{{ task.assigned_to.username|default:"Unassigned" }}</td>
                             <td>
-                                <a href="{% url 'task_detail' task.id %}" class="btn btn-sm btn-outline-primary">View</a>
+                                <a href="{% url 'task_detail' task.id %}"
+                                    class="btn btn-sm btn-outline-primary">View</a>
                             </td>
                         </tr>
                         {% endfor %}
@@ -389,7 +649,8 @@
 </div>
 
 <!-- Completion Rate Modal -->
-<div class="modal fade" id="completionRateModal" tabindex="-1" aria-labelledby="completionRateModalLabel" aria-hidden="true">
+<div class="modal fade" id="completionRateModal" tabindex="-1" aria-labelledby="completionRateModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-warning text-dark">
@@ -405,7 +666,8 @@
                                 <p>Completed Tasks</p>
                             </div>
                         </div>
-                    </div>                    <div class="col-md-6">
+                    </div>
+                    <div class="col-md-6">
                         <div class="card bg-primary bg-opacity-10">
                             <div class="card-body text-center">
                                 <h3 class="text-primary">{{ remaining_tasks }}</h3>
@@ -414,21 +676,24 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="progress mb-3" style="height: 30px;">
                     <div class="progress-bar bg-success" role="progressbar" style="width: {{ completion_rate }}%">
                         {{ completion_rate }}% Complete
                     </div>
                 </div>
-                
+
                 <div class="text-center">
                     <h4>Overall Completion Rate: {{ completion_rate }}%</h4>
                     {% if completion_rate >= 80 %}
-                    <p class="text-success"><i class="fas fa-check-circle"></i> Excellent progress! Keep up the great work!</p>
+                    <p class="text-success"><i class="fas fa-check-circle"></i> Excellent progress! Keep up the great
+                        work!</p>
                     {% elif completion_rate >= 60 %}
-                    <p class="text-warning"><i class="fas fa-clock"></i> Good progress, but there's room for improvement.</p>
+                    <p class="text-warning"><i class="fas fa-clock"></i> Good progress, but there's room for
+                        improvement.</p>
                     {% else %}
-                    <p class="text-danger"><i class="fas fa-exclamation-triangle"></i> Consider focusing on completing more tasks.</p>
+                    <p class="text-danger"><i class="fas fa-exclamation-triangle"></i> Consider focusing on completing
+                        more tasks.</p>
                     {% endif %}
                 </div>
             </div>
@@ -440,12 +705,14 @@
 </div>
 
 <!-- Overdue Tasks Modal -->
-<div class="modal fade" id="overdueTasksModal" tabindex="-1" aria-labelledby="overdueTasksModalLabel" aria-hidden="true">
+<div class="modal fade" id="overdueTasksModal" tabindex="-1" aria-labelledby="overdueTasksModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-danger text-white">
                 <h5 class="modal-title" id="overdueTasksModalLabel">Overdue Tasks</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 {% if overdue_tasks %}
@@ -473,7 +740,8 @@
                             <td><span class="badge priority-{{ task.priority }}">{{ task.priority|title }}</span></td>
                             <td>{{ task.assigned_to.username|default:"Unassigned" }}</td>
                             <td>
-                                <a href="{% url 'task_detail' task.id %}" class="btn btn-sm btn-outline-primary">View</a>
+                                <a href="{% url 'task_detail' task.id %}"
+                                    class="btn btn-sm btn-outline-primary">View</a>
                             </td>
                         </tr>
                         {% endfor %}
@@ -495,12 +763,14 @@
 </div>
 
 <!-- Due Soon Tasks Modal -->
-<div class="modal fade" id="dueSoonTasksModal" tabindex="-1" aria-labelledby="dueSoonTasksModalLabel" aria-hidden="true">
+<div class="modal fade" id="dueSoonTasksModal" tabindex="-1" aria-labelledby="dueSoonTasksModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
                 <h5 class="modal-title" id="dueSoonTasksModalLabel">Tasks Due Soon</h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 {% if due_soon_tasks %}
@@ -529,14 +799,16 @@
                             <td><span class="badge priority-{{ task.priority }}">{{ task.priority|title }}</span></td>
                             <td>
                                 <div class="progress" style="height: 15px;">
-                                    <div class="progress-bar bg-info" role="progressbar" style="width: {{ task.progress }}%">
+                                    <div class="progress-bar bg-info" role="progressbar"
+                                        style="width: {{ task.progress }}%">
                                         <small>{{ task.progress }}%</small>
                                     </div>
                                 </div>
                             </td>
                             <td>{{ task.assigned_to.username|default:"Unassigned" }}</td>
                             <td>
-                                <a href="{% url 'task_detail' task.id %}" class="btn btn-sm btn-outline-primary">View</a>
+                                <a href="{% url 'task_detail' task.id %}"
+                                    class="btn btn-sm btn-outline-primary">View</a>
                             </td>
                         </tr>
                         {% endfor %}
@@ -558,25 +830,31 @@
 </div>
 
 <!-- Lean Six Sigma Info Modal -->
-<div class="modal fade" id="leanSixSigmaInfoModal" tabindex="-1" aria-labelledby="leanSixSigmaInfoModalLabel" aria-hidden="true">
+<div class="modal fade" id="leanSixSigmaInfoModal" tabindex="-1" aria-labelledby="leanSixSigmaInfoModalLabel"
+    aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-info text-white">
                 <h5 class="modal-title" id="leanSixSigmaInfoModalLabel">
-                    <i class="fas fa-chart-line me-2"></i> Lean Six Sigma Features in Pri<span class="stylish-z">z</span>mAI
+                    <i class="fas fa-chart-line me-2"></i> Lean Six Sigma Features in Pri<span
+                        class="stylish-z">z</span>mAI
                 </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                    aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <div class="card mb-4">
                     <div class="card-body">
                         <h5>What is Lean Six Sigma?</h5>
-                        <p>Lean Six Sigma is a methodology that combines Lean (eliminating waste) and Six Sigma (reducing variation) to improve business processes. Pri<span class="stylish-z">z</span>mAI now integrates key Lean Six Sigma principles to help you visualize, categorize, and optimize your work.</p>
+                        <p>Lean Six Sigma is a methodology that combines Lean (eliminating waste) and Six Sigma
+                            (reducing variation) to improve business processes. Pri<span class="stylish-z">z</span>mAI
+                            now integrates key Lean Six Sigma principles to help you visualize, categorize, and optimize
+                            your work.</p>
                     </div>
                 </div>
 
                 <h5 class="mb-3">Key Features:</h5>
-                
+
                 <div class="row mb-4">
                     <div class="col-md-6">
                         <div class="card h-100">
@@ -586,15 +864,19 @@
                             <div class="card-body">
                                 <p>Categorize tasks using Lean Six Sigma labels:</p>
                                 <ul>
-                                    <li><strong class="text-success">Value-Added (VA):</strong> Activities customers value and would pay for</li>
-                                    <li><strong class="text-warning">Necessary Non-Value-Added (NNVA):</strong> Required but non-value adding activities</li>
-                                    <li><strong class="text-danger">Waste/Eliminate (NVA):</strong> Activities that should be eliminated</li>
+                                    <li><strong class="text-success">Value-Added (VA):</strong> Activities customers
+                                        value and would pay for</li>
+                                    <li><strong class="text-warning">Necessary Non-Value-Added (NNVA):</strong> Required
+                                        but non-value adding activities</li>
+                                    <li><strong class="text-danger">Waste/Eliminate (NVA):</strong> Activities that
+                                        should be eliminated</li>
                                 </ul>
-                                <p class="small text-muted">Access from: Task creation/editing forms and the label management page</p>
+                                <p class="small text-muted">Access from: Task creation/editing forms and the label
+                                    management page</p>
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-header bg-success text-white">
@@ -612,7 +894,7 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="row mb-4">
                     <div class="col-md-6">
                         <div class="card h-100">
@@ -630,7 +912,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="col-md-6">
                         <div class="card h-100">
                             <div class="card-header bg-warning text-dark">
@@ -648,14 +930,18 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <div class="alert alert-info">
                     <i class="fas fa-info-circle me-2"></i>
-                    <strong>Getting Started:</strong> Begin by adding Lean Six Sigma labels to your tasks. Visit the "Manage Labels" section within any board and click "Add Default Lean Six Sigma Labels".
+                    <strong>Getting Started:</strong> Begin by adding Lean Six Sigma labels to your tasks. Visit the
+                    "Manage Labels" section within any board and click "Add Default Lean Six Sigma Labels".
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>            </div>        </div>    </div>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -665,110 +951,131 @@
 <link rel="stylesheet" href="{% static 'css/analytics.css' %}">
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize metric cards to open modals when clicked
-    const metricCards = document.querySelectorAll('.metrics-card');
-    metricCards.forEach(card => {
-        card.addEventListener('click', function() {
-            const targetModal = this.getAttribute('data-bs-target');
-            const modalElement = document.querySelector(targetModal);
-            if (modalElement) {
-                const modalInstance = new bootstrap.Modal(modalElement);
-                modalInstance.show();
+    document.addEventListener('DOMContentLoaded', function () {
+        // Initialize metric cards to open modals when clicked
+        const metricCards = document.querySelectorAll('.metrics-card');
+        metricCards.forEach(card => {
+            card.addEventListener('click', function () {
+                const targetModal = this.getAttribute('data-bs-target');
+                const modalElement = document.querySelector(targetModal);
+                if (modalElement) {
+                    const modalInstance = new bootstrap.Modal(modalElement);
+                    modalInstance.show();
+                }
+            });
+        });
+
+        // Enhanced modal cleanup for proper scrolling restoration
+        const allModals = document.querySelectorAll('.modal');
+        allModals.forEach(modal => {
+            // Handle modal hide events
+            modal.addEventListener('hidden.bs.modal', function () {
+                // Ensure body can scroll again
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = '';
+                document.body.style.paddingRight = '';
+
+                // Remove any orphaned backdrops
+                document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
+                    backdrop.remove();
+                });
+
+                // Remove aria-hidden and restore focus
+                this.setAttribute('aria-hidden', 'true');
+                document.body.focus();
+            });
+
+            // Handle modal shown events
+            modal.addEventListener('shown.bs.modal', function () {
+                // Ensure modal is properly visible
+                this.removeAttribute('aria-hidden');
+            });
+        });
+
+        // Additional cleanup for close buttons
+        document.querySelectorAll('.modal button[data-bs-dismiss="modal"]').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const modal = this.closest('.modal');
+                if (modal) {
+                    const modalInstance = bootstrap.Modal.getInstance(modal);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+                }
+            });
+        });
+
+        // Global escape key handler for better modal management
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                const openModal = document.querySelector('.modal.show');
+                if (openModal) {
+                    const modalInstance = bootstrap.Modal.getInstance(openModal);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+                }
             }
         });
-    });
-    
-    // Enhanced modal cleanup for proper scrolling restoration
-    const allModals = document.querySelectorAll('.modal');
-    allModals.forEach(modal => {
-        // Handle modal hide events
-        modal.addEventListener('hidden.bs.modal', function () {
-            // Ensure body can scroll again
-            document.body.classList.remove('modal-open');
-            document.body.style.overflow = '';
-            document.body.style.paddingRight = '';
-            
-            // Remove any orphaned backdrops
+
+        // Fix any existing modal state issues on page load
+        setTimeout(function () {
+            // Ensure no modal backdrops are left over
             document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
                 backdrop.remove();
             });
-            
-            // Remove aria-hidden and restore focus
-            this.setAttribute('aria-hidden', 'true');
-            document.body.focus();
-        });
-        
-        // Handle modal shown events
-        modal.addEventListener('shown.bs.modal', function () {
-            // Ensure modal is properly visible
-            this.removeAttribute('aria-hidden');
-        });
+
+            // Ensure body can scroll
+            document.body.classList.remove('modal-open');
+            document.body.style.overflow = '';
+            document.body.style.paddingRight = '';
+        }, 100);
     });
-    
-    // Additional cleanup for close buttons
-    document.querySelectorAll('.modal button[data-bs-dismiss="modal"]').forEach(btn => {
-        btn.addEventListener('click', function() {
-            const modal = this.closest('.modal');
-            if (modal) {
-                const modalInstance = bootstrap.Modal.getInstance(modal);
-                if (modalInstance) {
-                    modalInstance.hide();
-                }
-            }
-        });
-    });
-    
-    // Global escape key handler for better modal management
-    document.addEventListener('keydown', function(event) {
-        if (event.key === 'Escape') {
-            const openModal = document.querySelector('.modal.show');
-            if (openModal) {
-                const modalInstance = bootstrap.Modal.getInstance(openModal);
-                if (modalInstance) {
-                    modalInstance.hide();
-                }
+
+    // Function to handle task sorting preference change
+    function changeSortOrder(sortBy) {
+        // Get current URL and update the sort parameter
+        const url = new URL(window.location);
+        url.searchParams.set('sort_tasks', sortBy);
+
+        // Add a subtle loading indication
+        const selectElement = document.getElementById('taskSortSelect');
+        const originalHtml = selectElement.innerHTML;
+        selectElement.disabled = true;
+
+        // Show loading state briefly
+        const loadingText = document.createElement('option');
+        loadingText.value = '';
+        loadingText.textContent = '🔄 Updating...';
+        loadingText.selected = true;
+        selectElement.innerHTML = '';
+        selectElement.appendChild(loadingText);
+
+        // Redirect to update the page with new sort order
+        setTimeout(() => {
+            window.location.href = url.toString();
+        }, 300);
+    }
+
+    // Toggle Demo Credentials Banner
+    function toggleDemoBanner() {
+        const banner = document.getElementById('demoCredentialsBanner');
+        banner.classList.toggle('expanded');
+
+        // Save state to localStorage
+        const isExpanded = banner.classList.contains('expanded');
+        localStorage.setItem('demoBannerExpanded', isExpanded);
+    }
+
+    // Restore demo banner state on page load
+    document.addEventListener('DOMContentLoaded', function () {
+        const banner = document.getElementById('demoCredentialsBanner');
+        if (banner) {
+            const wasExpanded = localStorage.getItem('demoBannerExpanded') === 'true';
+            if (wasExpanded) {
+                banner.classList.add('expanded');
             }
         }
     });
-    
-    // Fix any existing modal state issues on page load
-    setTimeout(function() {
-        // Ensure no modal backdrops are left over
-        document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
-            backdrop.remove();
-        });
-        
-    // Ensure body can scroll
-        document.body.classList.remove('modal-open');
-        document.body.style.overflow = '';
-        document.body.style.paddingRight = '';
-    }, 100);
-});
-
-// Function to handle task sorting preference change
-function changeSortOrder(sortBy) {
-    // Get current URL and update the sort parameter
-    const url = new URL(window.location);
-    url.searchParams.set('sort_tasks', sortBy);
-    
-    // Add a subtle loading indication
-    const selectElement = document.getElementById('taskSortSelect');
-    const originalHtml = selectElement.innerHTML;
-    selectElement.disabled = true;
-    
-    // Show loading state briefly
-    const loadingText = document.createElement('option');
-    loadingText.value = '';
-    loadingText.textContent = '🔄 Updating...';
-    loadingText.selected = true;
-    selectElement.innerHTML = '';
-    selectElement.appendChild(loadingText);
-    
-    // Redirect to update the page with new sort order
-    setTimeout(() => {
-        window.location.href = url.toString();
-    }, 300);
-}
 </script>
 {% endblock %}
