@@ -205,16 +205,26 @@ def board_list(request):
         profile = request.user.profile
         organization = profile.organization
         
+        # Import simplified mode setting
+        from kanban.utils.demo_settings import SIMPLIFIED_MODE
+        
         # Get boards from user's organization OR where user is a member
-        # EXCLUDE demo boards - demo environment is isolated
         demo_org_names = ['Demo - Acme Corporation']
+        
+        # Base query: boards in user's org or where user is a member
         boards = Board.objects.filter(
             Q(organization=organization) | Q(members=request.user)
         ).filter(
             Q(created_by=request.user) | Q(members=request.user)
-        ).exclude(
-            organization__name__in=demo_org_names
-        ).distinct()
+        )
+        
+        # SIMPLIFIED MODE: Include demo boards in board list
+        # Users see all boards they have access to in one place
+        if not SIMPLIFIED_MODE:
+            # LEGACY: Exclude demo boards - demo accessed via separate demo dashboard
+            boards = boards.exclude(organization__name__in=demo_org_names)
+        
+        boards = boards.distinct()
         
         # For board_list, we only display boards, creation is handled by create_board view
         form = BoardForm()

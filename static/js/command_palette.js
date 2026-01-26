@@ -3,13 +3,16 @@
  * Always-visible search bar that filters tasks in real-time
  */
 
-let searchState = {
-    searchMode: 'keyword', // 'ai' or 'keyword'
-    allTasks: [],
-    filteredTasks: [],
-    searchTimeout: null,
-    currentQuery: ''
-};
+// Use var instead of let to avoid duplicate declaration errors if script loads multiple times
+if (typeof searchState === 'undefined') {
+    var searchState = {
+        searchMode: 'keyword', // 'ai' or 'keyword'
+        allTasks: [],
+        filteredTasks: [],
+        searchTimeout: null,
+        currentQuery: ''
+    };
+}
 
 document.addEventListener('DOMContentLoaded', function() {
     initializeTaskSearch();
