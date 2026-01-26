@@ -251,15 +251,20 @@ def user_has_column_permission(user, column, action):
     if not membership:
         return False
     
-    try:
-        col_perm = ColumnPermission.objects.get(
-            column=column,
-            role=membership.role
-        )
-        return getattr(col_perm, f'can_{action}', True)
-    except ColumnPermission.DoesNotExist:
-        # No specific column permission, allow by default
-        return True
+    # Only check ColumnPermission if role is a real Role model (not SimpleRole)
+    if hasattr(membership.role, 'id'):
+        try:
+            col_perm = ColumnPermission.objects.get(
+                column=column,
+                role=membership.role
+            )
+            return getattr(col_perm, f'can_{action}', True)
+        except ColumnPermission.DoesNotExist:
+            # No specific column permission, allow by default
+            return True
+    
+    # For simplified access, allow by default
+    return True
 
 
 def require_board_permission(permission):
@@ -529,10 +534,10 @@ def user_can_move_task_to_column(user, task, target_column):
     if not user_has_task_permission(user, task, 'task.move'):
         return False, "You don't have permission to move tasks"
     
-    # Check if user can move FROM source column
+    # Check if user can move FROM source column (only if using full RBAC)
     source_column = task.column
     membership = get_user_board_membership(user, source_column.board)
-    if membership:
+    if membership and hasattr(membership.role, 'id'):
         try:
             source_perm = ColumnPermission.objects.get(
                 column=source_column,
@@ -543,8 +548,8 @@ def user_can_move_task_to_column(user, task, target_column):
         except ColumnPermission.DoesNotExist:
             pass  # No restriction
     
-    # Check if user can move TO target column
-    if membership:
+    # Check if user can move TO target column (only if using full RBAC)
+    if membership and hasattr(membership.role, 'id'):
         try:
             target_perm = ColumnPermission.objects.get(
                 column=target_column,
@@ -575,9 +580,10 @@ def user_can_create_task_in_column(user, column):
     if not user_has_board_permission(user, column.board, 'task.create'):
         return False, "You don't have permission to create tasks"
     
-    # Check column-level restriction
+    # Check column-level restriction (only if using full RBAC system)
     membership = get_user_board_membership(user, column.board)
-    if membership:
+    if membership and hasattr(membership.role, 'id'):
+        # Only check ColumnPermission if role is a real Role model (not SimpleRole)
         try:
             col_perm = ColumnPermission.objects.get(
                 column=column,
@@ -611,10 +617,10 @@ def user_can_edit_task_in_column(user, task):
     if not (can_edit or can_edit_own):
         return False, "You don't have permission to edit this task"
     
-    # Check column-level restriction
+    # Check column-level restriction (only if using full RBAC)
     column = task.column
     membership = get_user_board_membership(user, column.board)
-    if membership:
+    if membership and hasattr(membership.role, 'id'):
         try:
             col_perm = ColumnPermission.objects.get(
                 column=column,
