@@ -26,14 +26,24 @@ from .utils.chatbot_service import TaskFlowChatbotService
 @ensure_csrf_cookie
 def assistant_welcome(request):
     """Welcome page for AI Project Assistant"""
-    user_sessions = AIAssistantSession.objects.filter(user=request.user).order_by('-updated_at')[:5]
+    # Get user's own sessions
+    user_sessions = AIAssistantSession.objects.filter(user=request.user)
+    
+    # Also include demo sessions for recent conversations
+    from accounts.models import Organization
+    demo_orgs = Organization.objects.filter(is_demo=True)
+    demo_boards = Board.objects.filter(organization__in=demo_orgs, is_official_demo_board=True)
+    demo_sessions = AIAssistantSession.objects.filter(board__in=demo_boards)
+    
+    # Combine and order by updated_at, limit to 5
+    all_sessions = (user_sessions | demo_sessions).distinct().order_by('-updated_at')[:5]
     
     # Get or create user preferences
     user_pref, created = UserPreference.objects.get_or_create(user=request.user)
     
     context = {
-        'recent_sessions': user_sessions,
-        'total_sessions': AIAssistantSession.objects.filter(user=request.user).count(),
+        'recent_sessions': all_sessions,
+        'total_sessions': user_sessions.count(),
         'user_preferences': user_pref,
     }
     return render(request, 'ai_assistant/welcome.html', context)
@@ -57,7 +67,20 @@ def chat_interface(request, session_id=None):
     
     # Get session or create new one
     if session_id:
-        session = get_object_or_404(AIAssistantSession, id=session_id, user=request.user)
+        # Allow access to user's own sessions OR demo board sessions
+        from accounts.models import Organization
+        demo_orgs = Organization.objects.filter(is_demo=True)
+        demo_boards = Board.objects.filter(organization__in=demo_orgs, is_official_demo_board=True)
+        
+        session = AIAssistantSession.objects.filter(
+            Q(user=request.user) | Q(board__in=demo_boards),
+            id=session_id
+        ).first()
+        
+        if not session:
+            return render(request, 'error.html', {
+                'error_message': 'Session not found or access denied.'
+            }, status=404)
     else:
         # Get active session or create new one
         session = AIAssistantSession.objects.filter(user=request.user, is_active=True).first()
@@ -447,9 +470,18 @@ def rename_session(request, session_id):
 @login_required(login_url='accounts:login')
 @require_POST
 def delete_session(request, session_id):
-    """Delete a chat session"""
+    """Delete a chat session (only user's own sessions, not demo sessions)"""
     try:
         session = get_object_or_404(AIAssistantSession, id=session_id, user=request.user)
+        
+        # Prevent deleting demo sessions
+        from accounts.models import Organization
+        demo_orgs = Organization.objects.filter(is_demo=True)
+        demo_boards = Board.objects.filter(organization__in=demo_orgs, is_official_demo_board=True)
+        
+        if session.board and session.board in demo_boards:
+            return JsonResponse({'error': 'Cannot delete demo sessions'}, status=403)
+        
         session.delete()
         
         return JsonResponse({'status': 'success'})

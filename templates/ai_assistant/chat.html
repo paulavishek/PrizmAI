@@ -317,8 +317,12 @@
                     </ul>
                 </div>
                 
-                <button class="btn btn-sm btn-outline-danger" id="clear-chat-btn" title="Clear all messages">
+                <button class="btn btn-sm btn-outline-warning" id="clear-chat-btn" title="Clear all messages">
                     <i class="fas fa-eraser"></i> Clear
+                </button>
+                
+                <button class="btn btn-sm btn-outline-danger" id="delete-chat-btn" title="Delete this chat session">
+                    <i class="fas fa-trash"></i> Delete
                 </button>
                 
                 <button class="btn btn-sm btn-outline-secondary" id="refresh-btn" title="Refresh knowledge base and clear cache">
@@ -552,6 +556,37 @@
         })
         .catch(err => {
             alert('Error clearing chat: ' + err.message);
+        });
+    });
+    
+    // Delete chat session
+    document.getElementById('delete-chat-btn')?.addEventListener('click', function() {
+        const sessionId = {{ session.id }};
+        
+        if (!confirm('Are you sure you want to delete this entire chat session? This action cannot be undone.')) {
+            return;
+        }
+        
+        fetch(`/assistant/api/sessions/${sessionId}/delete/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                // Redirect to assistant welcome page
+                window.location.href = '{% url "ai_assistant:welcome" %}';
+            } else if (data.error) {
+                alert('Error deleting chat: ' + data.error);
+            } else {
+                alert('Error deleting chat: Unknown error');
+            }
+        })
+        .catch(err => {
+            alert('Error deleting chat: ' + err.message);
         });
     });
     
