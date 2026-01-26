@@ -299,10 +299,6 @@
                                         <span class="badge bg-secondary">{{ rec.get_recommendation_type_display }}</span>
                                         <span class="badge bg-{{ rec.priority }}">{{ rec.priority|upper }}</span>
                                         <span class="badge bg-info">{{ rec.confidence_score }}% confidence</span>
-                                        <button type="button" class="btn btn-sm btn-outline-info ms-2" 
-                                                onclick="event.stopPropagation(); toggleBudgetExplain({{ rec.id }})" title="Why this recommendation?">
-                                            <i class="fas fa-lightbulb"></i> Why?
-                                        </button>
                                     </div>
                                     <div>
                                         {% if rec.estimated_savings %}
@@ -328,46 +324,6 @@
                                         <p class="small text-muted mb-0">{{ rec.ai_reasoning }}</p>
                                     </div>
                                     {% endif %}
-                                </div>
-                                
-                                <!-- Explainability Section (Initially Hidden) -->
-                                <div id="budget-explain-{{ rec.id }}" class="why-this-section mt-3" style="display: none;">
-                                    <div class="why-this-content">
-                                        <div class="row">
-                                            <div class="col-md-6">
-                                                <h6 class="small text-primary fw-bold mb-2">
-                                                    <i class="bi bi-speedometer2 me-1"></i>CONFIDENCE BREAKDOWN
-                                                </h6>
-                                                <div class="progress mb-2" style="height: 20px;">
-                                                    <div class="progress-bar {% if rec.confidence_score >= 75 %}bg-success{% elif rec.confidence_score >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
-                                                         style="width: {{ rec.confidence_score }}%">
-                                                        {{ rec.confidence_score }}%
-                                                    </div>
-                                                </div>
-                                                <small class="text-muted">
-                                                    Based on historical spending patterns and project progress analysis
-                                                </small>
-                                            </div>
-                                            <div class="col-md-6">
-                                                <h6 class="small text-warning fw-bold mb-2">
-                                                    <i class="bi bi-exclamation-triangle me-1"></i>CONSIDERATIONS
-                                                </h6>
-                                                <ul class="small mb-0 ps-3 text-muted">
-                                                    <li>Market conditions may vary</li>
-                                                    <li>Based on current burn rate</li>
-                                                    <li>Assumes stable team size</li>
-                                                </ul>
-                                            </div>
-                                        </div>
-                                        {% if rec.reasoning %}
-                                        <div class="mt-3">
-                                            <h6 class="small text-success fw-bold mb-2">
-                                                <i class="bi bi-brain me-1"></i>AI REASONING
-                                            </h6>
-                                            <p class="small text-muted mb-0">{{ rec.reasoning }}</p>
-                                        </div>
-                                        {% endif %}
-                                    </div>
                                 </div>
                                 
                                 <small class="text-muted">{{ rec.created_at|timesince }} ago</small>
@@ -432,13 +388,6 @@ function toggleRecommendationCard(recId) {
             full.style.display = 'none';
             icon.style.transform = 'rotate(0deg)';
         }
-    }
-}
-
-function toggleBudgetExplain(recId) {
-    const section = document.getElementById(`budget-explain-${recId}`);
-    if (section) {
-        section.style.display = section.style.display === 'none' ? 'block' : 'none';
     }
 }
 
