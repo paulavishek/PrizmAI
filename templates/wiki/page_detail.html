@@ -1163,46 +1163,103 @@ document.addEventListener('DOMContentLoaded', function() {
     const allHeaders = contentArea?.querySelectorAll('h2, h3');
     
     if (allHeaders && allHeaders.length > 3) {
-        // Create TOC
-        const tocCard = document.createElement('div');
-        tocCard.className = 'card mb-4 border-primary';
-        tocCard.innerHTML = `
-            <div class="card-header bg-primary bg-opacity-10">
-                <h6 class="mb-0">
-                    <i class="fas fa-list"></i> Table of Contents
-                </h6>
-            </div>
-            <div class="card-body p-0">
-                <div class="list-group list-group-flush" id="tocList"></div>
-            </div>
-        `;
+        // Check if the page is actually long enough to need a TOC
+        // Only show TOC if content height is more than 2x viewport height
+        const contentHeight = contentArea?.scrollHeight || 0;
+        const viewportHeight = window.innerHeight;
+        const needsTOC = contentHeight > (viewportHeight * 2);
         
-        const tocList = tocCard.querySelector('#tocList');
+        // Check if TOC already exists in the markdown content
+        const existingTOC = contentArea?.querySelector('ul');
+        const hasManualTOC = existingTOC && existingTOC.textContent.toLowerCase().includes('table of contents');
         
-        allHeaders.forEach((header, index) => {
-            // Add ID to header if it doesn't have one
-            if (!header.id) {
-                header.id = 'heading-' + index;
-            }
+        // Only auto-generate TOC if there isn't a manual one AND the page is long enough
+        if (!hasManualTOC && needsTOC) {
+            // Create TOC
+            const tocCard = document.createElement('div');
+            tocCard.className = 'card mb-4 border-primary';
+            tocCard.innerHTML = `
+                <div class="card-header bg-primary bg-opacity-10">
+                    <h6 class="mb-0">
+                        <i class="fas fa-list"></i> Table of Contents
+                    </h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush" id="tocList"></div>
+                </div>
+            `;
             
-            const tocItem = document.createElement('a');
-            tocItem.href = '#' + header.id;
-            tocItem.className = 'list-group-item list-group-item-action';
-            if (header.tagName === 'H3') {
-                tocItem.style.paddingLeft = '2rem';
-                tocItem.style.fontSize = '0.9rem';
-            }
-            tocItem.textContent = header.textContent.replace(/[▼▲]/, '').trim();
+            const tocList = tocCard.querySelector('#tocList');
             
-            tocList.appendChild(tocItem);
-        });
-        
-        // Insert TOC after the first paragraph or at the beginning
-        const firstPara = contentArea?.querySelector('p');
-        if (firstPara) {
-            firstPara.insertAdjacentElement('afterend', tocCard);
+            allHeaders.forEach((header, index) => {
+                // Add ID to header if it doesn't have one
+                if (!header.id) {
+                    // Create a clean ID from the text content
+                    const cleanText = header.textContent.replace(/[▼▲]/g, '').trim();
+                    header.id = cleanText.toLowerCase()
+                        .replace(/[^a-z0-9]+/g, '-')
+                        .replace(/^-+|-+$/g, '');
+                }
+                
+                const tocItem = document.createElement('a');
+                tocItem.href = '#' + header.id;
+                tocItem.className = 'list-group-item list-group-item-action';
+                if (header.tagName === 'H3') {
+                    tocItem.style.paddingLeft = '2rem';
+                    tocItem.style.fontSize = '0.9rem';
+                }
+                tocItem.textContent = header.textContent.replace(/[▼▲]/, '').trim();
+                
+                tocList.appendChild(tocItem);
+            });
+            
+            // Insert TOC after the first paragraph or at the beginning
+            const firstPara = contentArea?.querySelector('p');
+            if (firstPara) {
+                firstPara.insertAdjacentElement('afterend', tocCard);
+            } else {
+                contentArea?.insertBefore(tocCard, contentArea.firstChild);
+            }
         } else {
-            contentArea?.insertBefore(tocCard, contentArea.firstChild);
+            // Manual TOC exists OR page is too short - still ensure all headings have IDs
+            allHeaders.forEach((header, index) => {
+                if (!header.id) {
+                    // Create a clean ID from the text content
+                    const cleanText = header.textContent.replace(/[▼▲]/g, '').trim();
+                    header.id = cleanText.toLowerCase()
+                        .replace(/[^a-z0-9]+/g, '-')
+                        .replace(/^-+|-+$/g, '');
+                }
+            });
+            
+            // If there's a manual TOC, make sure all links work by fixing IDs
+            const possibleTOCLinks = contentArea?.querySelectorAll('ul a, ol a');
+            
+            if (possibleTOCLinks && possibleTOCLinks.length > 0) {
+                console.log('Ensuring heading IDs match TOC links...');
+                possibleTOCLinks.forEach(link => {
+                    const href = link.getAttribute('href');
+                    if (href && href.startsWith('#')) {
+                        const targetId = href.substring(1);
+                        
+                        // Try to find the corresponding heading by text match
+                        const linkText = link.textContent.trim().toLowerCase();
+                        
+                        allHeaders.forEach(header => {
+                            const headerText = header.textContent.trim().toLowerCase();
+                            
+                            // If texts match or are very similar
+                            if (headerText.includes(linkText) || linkText.includes(headerText)) {
+                                // Set the header ID to match the link
+                                if (!header.id || header.id !== targetId) {
+                                    header.id = targetId;
+                                    console.log(`Fixed: "${header.textContent}" -> id="${targetId}"`);
+                                }
+                            }
+                        });
+                    }
+                });
+            }
         }
     }
     

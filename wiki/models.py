@@ -101,23 +101,25 @@ class WikiPage(models.Model):
     def get_html_content(self):
         """Convert markdown content to HTML and sanitize to prevent XSS"""
         import bleach
+        import re
         
-        # Convert markdown to HTML
-        html = markdown.markdown(
-            self.content,
+        # Convert markdown to HTML with TOC extension
+        md = markdown.Markdown(
             extensions=[
                 'markdown.extensions.fenced_code',
                 'markdown.extensions.tables',
                 'markdown.extensions.nl2br',
-                'markdown.extensions.toc',  # Table of Contents - adds IDs to headings
+                'markdown.extensions.toc',
             ],
             extension_configs={
                 'markdown.extensions.toc': {
                     'slugify': lambda value, separator: slugify(value),
-                    'anchorlink': False,  # Don't add anchor links automatically
+                    'anchorlink': False,
                 }
             }
         )
+        
+        html = md.convert(self.content)
         
         # Define allowed HTML tags and attributes (security whitelist)
         allowed_tags = [
@@ -316,22 +318,23 @@ class MeetingNotes(models.Model):
         """Convert markdown content to HTML and sanitize to prevent XSS"""
         import bleach
         
-        # Convert markdown to HTML
-        html = markdown.markdown(
-            self.content,
+        # Convert markdown to HTML with TOC extension
+        md = markdown.Markdown(
             extensions=[
                 'markdown.extensions.fenced_code',
                 'markdown.extensions.tables',
                 'markdown.extensions.nl2br',
-                'markdown.extensions.toc',  # Table of Contents - adds IDs to headings
+                'markdown.extensions.toc',
             ],
             extension_configs={
                 'markdown.extensions.toc': {
                     'slugify': lambda value, separator: slugify(value),
-                    'anchorlink': False,  # Don't add anchor links automatically
+                    'anchorlink': False,
                 }
             }
         )
+        
+        html = md.convert(self.content)
         
         # Define allowed HTML tags and attributes (security whitelist)
         allowed_tags = [
