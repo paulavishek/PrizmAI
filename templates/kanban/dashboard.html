@@ -198,6 +198,135 @@
         border-radius: 4px;
         border: 1px solid #b3e5fc;
     }
+
+    /* Demo Skills List */
+    .demo-skills-list {
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid #e3f2fd;
+    }
+
+    .demo-skill-tag {
+        display: inline-block;
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        color: #01579b;
+        padding: 0.25rem 0.6rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 0.3rem;
+        margin-bottom: 0.3rem;
+        border: 1px solid #90caf9;
+    }
+
+    /* Demo Login Button */
+    .demo-login-btn {
+        display: block;
+        width: 100%;
+        padding: 0.6rem;
+        margin-top: 0.75rem;
+        background: linear-gradient(135deg, #0288d1 0%, #0277bd 100%);
+        color: white;
+        text-align: center;
+        border-radius: 6px;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 0.85rem;
+        transition: all 0.3s ease;
+        border: none;
+    }
+
+    .demo-login-btn:hover {
+        background: linear-gradient(135deg, #0277bd 0%, #01579b 100%);
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(2, 136, 209, 0.3);
+    }
+
+    /* Demo Boards Section */
+    .demo-boards-section {
+        padding-top: 1rem;
+        border-top: 2px solid #b3e5fc;
+    }
+
+    .demo-boards-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #01579b;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+    }
+
+    .demo-boards-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+    }
+
+    @media (max-width: 992px) {
+        .demo-boards-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .demo-board-item {
+        background: white;
+        border-radius: 8px;
+        padding: 1rem;
+        border: 1px solid #e3f2fd;
+        text-align: center;
+        transition: all 0.3s ease;
+    }
+
+    .demo-board-item:hover {
+        border-color: #0288d1;
+        box-shadow: 0 4px 12px rgba(2, 136, 209, 0.15);
+        transform: translateY(-2px);
+    }
+
+    .demo-board-icon {
+        width: 50px;
+        height: 50px;
+        margin: 0 auto 0.75rem;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+    }
+
+    .demo-board-item.software .demo-board-icon {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .demo-board-item.marketing .demo-board-icon {
+        background: linear-gradient(135deg, #f857a6 0%, #ff5858 100%);
+    }
+
+    .demo-board-item.bug .demo-board-icon {
+        background: linear-gradient(135deg, #ffa726 0%, #fb8c00 100%);
+    }
+
+    .demo-board-name {
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: #01579b;
+        margin-bottom: 0.4rem;
+    }
+
+    .demo-board-desc {
+        font-size: 0.75rem;
+        color: #6c757d;
+        line-height: 1.3;
+    }
+
+    /* Adjust max-height for expanded content with new sections */
+    .demo-credentials-banner.expanded .demo-banner-content {
+        max-height: 800px;
+        padding: 0 1.5rem 1.5rem 1.5rem;
+    }
 </style>
 {% endblock %}
 
@@ -244,6 +373,15 @@
                     <span class="demo-cred-label">Password:</span>
                     <span class="demo-cred-value">demo123</span>
                 </div>
+                <div class="demo-skills-list">
+                    <p style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: #555;">Key Skills:</p>
+                    <span class="demo-skill-tag">Project Management</span>
+                    <span class="demo-skill-tag">Agile/Scrum</span>
+                    <span class="demo-skill-tag">Leadership</span>
+                </div>
+                <a href="{% url 'login' %}" class="demo-login-btn">
+                    <i class="fas fa-sign-in-alt me-1"></i>Login as Alex
+                </a>
             </div>
 
             <!-- Sam Rivera - Developer -->
@@ -263,6 +401,16 @@
                     <span class="demo-cred-label">Password:</span>
                     <span class="demo-cred-value">demo123</span>
                 </div>
+                <div class="demo-skills-list">
+                    <p style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: #555;">Key Skills:</p>
+                    <span class="demo-skill-tag">Python</span>
+                    <span class="demo-skill-tag">JavaScript</span>
+                    <span class="demo-skill-tag">Django</span>
+                    <span class="demo-skill-tag">React</span>
+                </div>
+                <a href="{% url 'login' %}" class="demo-login-btn">
+                    <i class="fas fa-sign-in-alt me-1"></i>Login as Sam
+                </a>
             </div>
 
             <!-- Jordan Taylor - Strategist -->
@@ -281,6 +429,49 @@
                 <div class="demo-cred-item">
                     <span class="demo-cred-label">Password:</span>
                     <span class="demo-cred-value">demo123</span>
+                </div>
+                <div class="demo-skills-list">
+                    <p style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: #555;">Key Skills:</p>
+                    <span class="demo-skill-tag">Strategic Planning</span>
+                    <span class="demo-skill-tag">Business Analysis</span>
+                </div>
+                <a href="{% url 'login' %}" class="demo-login-btn">
+                    <i class="fas fa-sign-in-alt me-1"></i>Login as Jordan
+                </a>
+            </div>
+        </div>
+
+        <!-- Demo Boards Section -->
+        <div class="demo-boards-section mt-4">
+            <h5 class="demo-boards-title">
+                <i class="fas fa-folder-open me-2"></i>3 Pre-Populated Demo Boards
+            </h5>
+            <div class="demo-boards-grid">
+                <!-- Software Development Board -->
+                <div class="demo-board-item software">
+                    <div class="demo-board-icon">
+                        <i class="fas fa-code"></i>
+                    </div>
+                    <div class="demo-board-name">Software Development</div>
+                    <div class="demo-board-desc">30 tasks with sprints, dependencies, and Gantt charts</div>
+                </div>
+
+                <!-- Marketing Campaign Board -->
+                <div class="demo-board-item marketing">
+                    <div class="demo-board-icon">
+                        <i class="fas fa-bullhorn"></i>
+                    </div>
+                    <div class="demo-board-name">Marketing Campaign</div>
+                    <div class="demo-board-desc">Content strategy, social media, and campaign execution</div>
+                </div>
+
+                <!-- Bug Tracking Board -->
+                <div class="demo-board-item bug">
+                    <div class="demo-board-icon">
+                        <i class="fas fa-bug"></i>
+                    </div>
+                    <div class="demo-board-name">Bug Tracking</div>
+                    <div class="demo-board-desc">Issue triage, priority management, and resolution</div>
                 </div>
             </div>
         </div>
@@ -390,16 +581,16 @@
                     <label for="taskSortSelect" class="form-label me-2 mb-0 small text-muted">Sort by:</label>
                     <select id="taskSortSelect" class="form-select form-select-sm" style="width: auto;"
                         onchange="changeSortOrder(this.value)">
-                        <option value="urgency" {% if my_tasks_sort_by=='urgency' %}selected{% endif %}>
+                        <option value="urgency" {% if my_tasks_sort_by == 'urgency' %}selected{% endif %}>
                             🚨 Urgency (Overdue First)
                         </option>
-                        <option value="due_date" {% if my_tasks_sort_by=='due_date' %}selected{% endif %}>
+                        <option value="due_date" {% if my_tasks_sort_by == 'due_date' %}selected{% endif %}>
                             📅 Due Date (Chronological)
                         </option>
-                        <option value="priority" {% if my_tasks_sort_by=='priority' %}selected{% endif %}>
+                        <option value="priority" {% if my_tasks_sort_by == 'priority' %}selected{% endif %}>
                             🔥 Priority (High to Low)
                         </option>
-                        <option value="recent" {% if my_tasks_sort_by=='recent' %}selected{% endif %}>
+                        <option value="recent" {% if my_tasks_sort_by == 'recent' %}selected{% endif %}>
                             🕒 Recent (Latest First)
                         </option>
                     </select>

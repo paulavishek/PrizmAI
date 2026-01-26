@@ -35,10 +35,13 @@
     }
     
     .page-header h1 {
-        font-size: 32px;
+        font-size: 36px;
         font-weight: 700;
         color: var(--text-primary);
         margin-bottom: 8px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
     }
     
     .page-header p {
@@ -49,24 +52,31 @@
     .usage-card {
         background: white;
         border: 1px solid var(--border-color);
-        border-radius: 12px;
-        padding: 28px;
+        border-radius: 16px;
+        padding: 32px;
         margin-bottom: 24px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        transition: box-shadow 0.3s ease, transform 0.3s ease;
+    }
+    
+    .usage-card:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        transform: translateY(-2px);
     }
     
     .card-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 20px;
+        margin-bottom: 24px;
     }
     
     .card-title {
-        font-size: 18px;
-        font-weight: 600;
+        font-size: 20px;
+        font-weight: 700;
         color: var(--text-primary);
         margin: 0;
+        letter-spacing: -0.5px;
     }
     
     .card-subtitle {
@@ -79,35 +89,62 @@
         font-size: 28px;
         font-weight: 700;
         color: var(--primary-color);
+        background: linear-gradient(135deg, #f0f4ff 0%, #e8edff 100%);
+        border: 2px solid #c7d2fe;
+        border-radius: 12px;
+        padding: 12px 20px;
+        min-width: 100px;
+        text-align: center;
     }
     
     .progress-container {
         position: relative;
         background: var(--bg-light);
-        height: 12px;
-        border-radius: 6px;
+        height: 14px;
+        border-radius: 8px;
         overflow: hidden;
         margin: 20px 0;
+        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
     }
     
     .progress-bar {
         height: 100%;
         background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-        border-radius: 6px;
-        transition: width 0.4s ease;
+        border-radius: 8px;
+        transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
         position: relative;
+        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    }
+    
+    .progress-bar::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+        animation: shimmer 2s infinite;
+    }
+    
+    @keyframes shimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
     }
     
     .progress-bar.low {
         background: linear-gradient(90deg, var(--success-color) 0%, #34d399 100%);
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
     }
     
     .progress-bar.medium {
         background: linear-gradient(90deg, var(--warning-color) 0%, #fbbf24 100%);
+        box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
     }
     
     .progress-bar.high {
         background: linear-gradient(90deg, var(--danger-color) 0%, #f87171 100%);
+        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
     }
     
     .usage-stats {
@@ -155,13 +192,41 @@
         margin-bottom: 24px;
     }
     
+    @media (max-width: 768px) {
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+        
+        .usage-card {
+            padding: 20px;
+        }
+        
+        .card-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 16px;
+        }
+        
+        .usage-percentage {
+            align-self: flex-end;
+        }
+    }
+    
     .stat-box {
         background: white;
         border: 1px solid var(--border-color);
         border-radius: 12px;
-        padding: 20px;
+        padding: 24px;
         text-align: center;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        transition: all 0.3s ease;
+    }
+    
+    .stat-box:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+        transform: translateY(-4px);
+        border-color: var(--primary-color);
     }
     
     .stat-label {
@@ -191,8 +256,14 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 14px 16px;
+        padding: 16px 18px;
         border-bottom: 1px solid var(--border-color);
+        transition: all 0.3s ease;
+    }
+    
+    .feature-item:hover {
+        background: linear-gradient(90deg, #f9fafb 0%, #f3f4f6 100%);
+        padding-left: 24px;
     }
     
     .feature-item:last-child {
@@ -209,14 +280,20 @@
     }
     
     .feature-icon {
-        width: 36px;
-        height: 36px;
-        border-radius: 8px;
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 16px;
+        font-size: 18px;
         color: white;
+        transition: transform 0.3s ease;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+    
+    .feature-item:hover .feature-icon {
+        transform: scale(1.1) rotate(5deg);
     }
     
     .feature-icon.coach {
@@ -384,36 +461,40 @@
     </div>
     
     <!-- Daily Limit Card -->
-    <div class="usage-card" style="margin-top: 1.5rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
-        <div class="card-header">
-            <div>
-                <h2 class="card-title" style="color: white;"><i class="fas fa-clock me-2"></i>Daily Limit</h2>
-                <p class="card-subtitle" style="color: rgba(255,255,255,0.8);">To ensure fair usage, there's a daily limit of {{ quota.daily_limit }} AI requests</p>
+    <div class="usage-card daily-limit-card" style="margin-top: 1.5rem; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%) !important; border: 2px solid #818cf8; box-shadow: 0 8px 24px rgba(99, 102, 241, 0.25);">
+        <div class="card-header" style="background: transparent !important;">
+            <div style="flex: 1; background: transparent !important;">
+                <h2 style="color: white !important; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 8px; margin: 0; background: transparent !important;">
+                    <i class="fas fa-clock" style="color: #fbbf24 !important;"></i><span style="color: white !important;">Daily Limit</span>
+                </h2>
+                <p style="color: white !important; font-size: 14px; margin-top: 8px; line-height: 1.5; background: transparent !important;">To ensure fair usage, there's a daily limit of <strong style="color: white !important;">{{ quota.daily_limit }}</strong> AI requests</p>
             </div>
-            <div class="usage-percentage" id="daily-usage-percentage" style="background: rgba(255,255,255,0.2);">
-                {% widthratio quota.daily_requests_used quota.daily_limit 100 as daily_percent %}
-                {{ daily_percent|default:0 }}%
+            <div style="background: rgba(255,255,255,0.25) !important; backdrop-filter: blur(10px); border: 2px solid rgba(255,255,255,0.3); border-radius: 12px; padding: 12px 20px; min-width: 100px; text-align: center;">
+                <div style="font-size: 28px; font-weight: 700; color: white !important; text-shadow: 0 2px 4px rgba(0,0,0,0.2);" id="daily-usage-percentage">
+                    {% widthratio quota.daily_requests_used quota.daily_limit 100 as daily_percent %}
+                    {{ daily_percent|default:0 }}%
+                </div>
             </div>
         </div>
         
-        <div class="progress-container" style="background: rgba(255,255,255,0.2);">
+        <div class="progress-container" style="background: rgba(255,255,255,0.25); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.3);">
             {% if daily_percent < 50 %}
-                <div class="progress-bar" style="width: {{ daily_percent }}%; background: #4CAF50;"></div>
+                <div class="progress-bar" style="width: {{ daily_percent }}%; background: linear-gradient(90deg, #10b981 0%, #34d399 100%); box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);"></div>
             {% elif daily_percent < 80 %}
-                <div class="progress-bar" style="width: {{ daily_percent }}%; background: #ff9800;"></div>
+                <div class="progress-bar" style="width: {{ daily_percent }}%; background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%); box-shadow: 0 0 10px rgba(245, 158, 11, 0.5);"></div>
             {% else %}
-                <div class="progress-bar" style="width: {{ daily_percent }}%; background: #f44336;"></div>
+                <div class="progress-bar" style="width: {{ daily_percent }}%; background: linear-gradient(90deg, #ef4444 0%, #f87171 100%); box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);"></div>
             {% endif %}
         </div>
         
-        <div class="usage-stats" style="color: white;">
-            <span>
-                <strong>{{ quota.daily_requests_used }}</strong> of 
-                <strong>{{ quota.daily_limit }}</strong> daily requests used
+        <div class="usage-stats" style="color: white !important; font-size: 15px;">
+            <span style="display: flex; align-items: center; gap: 8px; color: white !important;">
+                <strong style="font-size: 18px; color: white !important;">{{ quota.daily_requests_used }}</strong> of 
+                <strong style="font-size: 18px; color: white !important;">{{ quota.daily_limit }}</strong> daily requests used
             </span>
-            <span>
-                <i class="fas fa-sync-alt"></i>
-                Resets at midnight
+            <span style="display: flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.15); padding: 6px 12px; border-radius: 6px; color: white !important;">
+                <i class="fas fa-sync-alt" style="color: #fbbf24 !important;"></i>
+                <span style="font-weight: 500; color: white !important;">Resets at midnight</span>
             </span>
         </div>
     </div>
