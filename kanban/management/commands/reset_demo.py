@@ -90,45 +90,25 @@ class Command(BaseCommand):
             # Capture output for logging
             out = StringIO()
             
-            # Step 1: Repopulate wiki demo data first (pages needed for task wiki links)
-            self.stdout.write('[1/6] Repopulating wiki data...')
-            try:
-                call_command('populate_wiki_demo_data', '--reset', stdout=out, stderr=out)
-                self.stdout.write(self.style.SUCCESS('  Done'))
-            except Exception as e:
-                self.stdout.write(self.style.WARNING(f'  Skipped: {str(e)}'))
+            # ============================================================
+            # SINGLE CONSOLIDATED RESET: Use populate_all_demo_data
+            # This is the single source of truth for all demo data
+            # ============================================================
             
-            # Step 2: Repopulate main demo tasks (with --reset to clear and recreate)
-            self.stdout.write('[2/6] Repopulating demo tasks and data...')
-            call_command('populate_demo_data', '--reset', stdout=out, stderr=out)
+            self.stdout.write('[1/3] Resetting all demo data via populate_all_demo_data...')
+            call_command('populate_all_demo_data', '--reset', stdout=out, stderr=out)
             self.stdout.write(self.style.SUCCESS('  Done'))
             
-            # Step 3: Repopulate AI assistant data
-            self.stdout.write('[3/6] Repopulating AI assistant data...')
-            try:
-                call_command('populate_ai_assistant_demo_data', '--reset', stdout=out, stderr=out)
-                self.stdout.write(self.style.SUCCESS('  Done'))
-            except Exception as e:
-                self.stdout.write(self.style.WARNING(f'  Skipped: {str(e)}'))
-            
-            # Step 4: Repopulate messaging data
-            self.stdout.write('[4/6] Repopulating messaging data...')
-            try:
-                call_command('populate_messaging_demo_data', '--clear', stdout=out, stderr=out)
-                self.stdout.write(self.style.SUCCESS('  Done'))
-            except Exception as e:
-                self.stdout.write(self.style.WARNING(f'  Skipped: {str(e)}'))
-            
-            # Step 5: Refresh all dates to current
-            self.stdout.write('[5/6] Refreshing dates...')
+            # Step 2: Refresh all dates to current
+            self.stdout.write('[2/3] Refreshing dates...')
             try:
                 call_command('refresh_demo_dates', '--force', stdout=out, stderr=out)
                 self.stdout.write(self.style.SUCCESS('  Done'))
             except Exception as e:
                 self.stdout.write(self.style.WARNING(f'  Skipped: {str(e)}'))
             
-            # Step 6: Detect conflicts for fresh data
-            self.stdout.write('[6/6] Detecting conflicts...')
+            # Step 3: Detect conflicts for fresh data
+            self.stdout.write('[3/3] Detecting conflicts...')
             try:
                 call_command('detect_conflicts', '--clear', stdout=out, stderr=out)
                 self.stdout.write(self.style.SUCCESS('  Done'))

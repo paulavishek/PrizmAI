@@ -157,16 +157,77 @@ class Command(BaseCommand):
         self.print_final_summary()
 
     def reset_all_demo_data(self):
-        """Reset ALL demo data"""
+        """Reset ALL demo data - removes user-created content and prepares for fresh population"""
         self.stdout.write(self.style.WARNING('\n🗑️ Resetting ALL demo data...'))
 
-        # Wiki
+        # =====================================================================
+        # STEP 1: Delete user-created boards (non-official demo boards)
+        # =====================================================================
+        from kanban.models import Comment, TaskActivity, TaskFile
+        from kanban.resource_leveling_models import TaskAssignmentHistory
+        from kanban.stakeholder_models import StakeholderTaskInvolvement
+        
+        user_created_boards = Board.objects.filter(
+            organization=self.demo_org,
+            is_official_demo_board=False
+        )
+        
+        if user_created_boards.exists():
+            # Get task IDs for cleanup
+            user_board_tasks = Task.objects.filter(column__board__in=user_created_boards)
+            task_ids = list(user_board_tasks.values_list('id', flat=True))
+            
+            if task_ids:
+                # Clean up task-related data
+                TaskActivity.objects.filter(task_id__in=task_ids).delete()
+                Comment.objects.filter(task_id__in=task_ids).delete()
+                TaskFile.objects.filter(task_id__in=task_ids).delete()
+                try:
+                    TaskAssignmentHistory.objects.filter(task_id__in=task_ids).delete()
+                except:
+                    pass
+                try:
+                    StakeholderTaskInvolvement.objects.filter(task_id__in=task_ids).delete()
+                except:
+                    pass
+                
+                # Clear dependencies
+                for task in Task.objects.filter(id__in=task_ids):
+                    task.dependencies.clear()
+                    if hasattr(task, 'dependent_tasks'):
+                        task.dependent_tasks.clear()
+                    if hasattr(task, 'related_tasks'):
+                        task.related_tasks.clear()
+                
+                # Delete tasks
+                user_board_tasks.delete()
+            
+            # Delete the boards
+            deleted_count = user_created_boards.delete()[0]
+            self.stdout.write(f'   ✓ Deleted {deleted_count} user-created boards')
+
+        # =====================================================================
+        # STEP 2: Delete user-created tasks on official demo boards
+        # =====================================================================
+        user_tasks_on_demo_boards = Task.objects.filter(
+            column__board__in=self.demo_boards,
+            is_seed_demo_data=False
+        )
+        if user_tasks_on_demo_boards.exists():
+            deleted = user_tasks_on_demo_boards.delete()[0]
+            self.stdout.write(f'   ✓ Deleted {deleted} user-created tasks on demo boards')
+
+        # =====================================================================
+        # STEP 3: Clear Wiki data (all data in demo org, will be repopulated)
+        # =====================================================================
         WikiLink.objects.filter(wiki_page__organization=self.demo_org).delete()
         WikiPage.objects.filter(organization=self.demo_org).delete()
         WikiCategory.objects.filter(organization=self.demo_org).delete()
         self.stdout.write('   ✓ Cleared Wiki data')
 
-        # Messaging
+        # =====================================================================
+        # STEP 4: Clear Messaging data
+        # =====================================================================
         Notification.objects.filter(recipient__in=self.demo_users).delete()
         FileAttachment.objects.filter(chat_room__board__in=self.demo_boards).delete()
         ChatMessage.objects.filter(chat_room__board__in=self.demo_boards).delete()
@@ -174,17 +235,27 @@ class Command(BaseCommand):
         ChatRoom.objects.filter(board__in=self.demo_boards).delete()
         self.stdout.write('   ✓ Cleared Messaging data')
 
-        # Conflicts
+        # =====================================================================
+        # STEP 5: Clear Conflicts data
+        # =====================================================================
         ConflictNotification.objects.filter(conflict__board__in=self.demo_boards).delete()
         ConflictResolution.objects.filter(conflict__board__in=self.demo_boards).delete()
         ConflictDetection.objects.filter(board__in=self.demo_boards).delete()
         self.stdout.write('   ✓ Cleared Conflict data')
 
-        # AI Assistant
+        # =====================================================================
+        # STEP 6: Clear AI Assistant data
+        # =====================================================================
+        # Clear sessions for demo boards
+        AIAssistantMessage.objects.filter(session__board__in=self.demo_boards).delete()
+        AIAssistantSession.objects.filter(board__in=self.demo_boards).delete()
+        # Clear sessions for demo users (in case they have non-board sessions)
         AIAssistantMessage.objects.filter(session__user__in=self.demo_users).delete()
         AIAssistantSession.objects.filter(user__in=self.demo_users).delete()
+        # Clear analytics and knowledge base
         ProjectKnowledgeBase.objects.filter(board__in=self.demo_boards).delete()
         AIAssistantAnalytics.objects.filter(user__in=self.demo_users).delete()
+        AIAssistantAnalytics.objects.filter(board__in=self.demo_boards).delete()
         AITaskRecommendation.objects.filter(board__in=self.demo_boards).delete()
         self.stdout.write('   ✓ Cleared AI Assistant data')
 

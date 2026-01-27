@@ -918,7 +918,7 @@ function showErrorToast(message) {
 
 // Reset Demo Function
 function resetDemo() {
-    if (confirm('Reset demo to clean state?\n\nThis will:\n• Delete all your test data\n• Restore original demo boards\n• Keep you in demo mode')) {
+    if (confirm('Reset Demo Environment?\n\nThis will:\n• Delete all boards, tasks, and data you created\n• Restore all original demo data to its initial state\n• Fix any demo data you modified\n• Keep you in demo mode\n\nThis cannot be undone.')) {
         // Show loading
         const resetBtns = document.querySelectorAll('.demo-action-btn');
         resetBtns.forEach(btn => {
@@ -941,7 +941,7 @@ function resetDemo() {
         .then(data => {
             if (data.status === 'success') {
                 // Show success message and reload
-                alert('✅ Demo reset successfully!');
+                alert('✅ Demo reset successfully!\n\nAll demo data has been restored to its original state.');
                 location.reload();
             } else {
                 alert('Failed to reset demo: ' + (data.message || 'Unknown error'));

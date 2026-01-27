@@ -1007,7 +1007,7 @@ def reset_demo_data(request):
     
     if request.method == 'POST':
         try:
-            # Get demo boards
+            # Get demo organization
             demo_org = Organization.objects.filter(is_demo=True).first()
             if not demo_org:
                 raise Exception('Demo organization not found')
@@ -1016,6 +1016,10 @@ def reset_demo_data(request):
                 organization=demo_org,
                 is_official_demo_board=True
             )
+            
+            # ============================================================
+            # STEP 1: Clean up ALL user-created data in demo organization
+            # ============================================================
             
             # Delete session-created content (if any)
             # IMPORTANT: Content may be tagged with session_id OR browser_fingerprint
@@ -1043,36 +1047,41 @@ def reset_demo_data(request):
                     is_official_demo_board=False
                 ).delete()
             
-            # PROPER RESET: Repopulate demo data using management commands
-            # This ensures all demo data is restored to proper state with correct assignments
+            # Also delete ALL user-created boards (not just session-tagged ones)
+            # These are boards with is_official_demo_board=False or is_seed_demo_data=False
+            user_created_boards = Board.objects.filter(
+                organization=demo_org,
+                is_official_demo_board=False
+            )
+            user_created_boards.delete()
+            
+            # Delete user-created tasks on demo boards (is_seed_demo_data=False)
+            Task.objects.filter(
+                column__board__in=demo_boards,
+                is_seed_demo_data=False
+            ).delete()
+            
+            # ============================================================
+            # STEP 2: Use populate_all_demo_data to restore everything
+            # This is the single source of truth for all demo data
+            # ============================================================
             from django.core.management import call_command
             from io import StringIO
             
             # Capture output for logging
             out = StringIO()
             
-            # 1. Repopulate wiki demo data first (pages needed for task wiki links)
-            try:
-                call_command('populate_wiki_demo_data', '--reset', stdout=out, stderr=out)
-            except Exception:
-                pass  # Wiki is optional
+            # Use the consolidated command that handles ALL demo data
+            # The --reset flag ensures it clears and recreates everything
+            call_command('populate_all_demo_data', '--reset', stdout=out, stderr=out)
             
-            # 2. Repopulate main demo tasks (with --reset to clear and recreate)
-            call_command('populate_demo_data', '--reset', stdout=out, stderr=out)
-            
-            # 3. Repopulate AI assistant data
-            call_command('populate_ai_assistant_demo_data', '--reset', stdout=out, stderr=out)
-            
-            # 4. Repopulate messaging data
-            call_command('populate_messaging_demo_data', '--clear', stdout=out, stderr=out)
-            
-            # 5. Refresh all dates to current (burndown, retrospectives, etc.)
+            # Refresh all dates to current (burndown, retrospectives, etc.)
             try:
                 call_command('refresh_demo_dates', '--force', stdout=out, stderr=out)
             except Exception:
                 pass  # Date refresh is optional
             
-            # 6. Detect conflicts for fresh data
+            # Detect conflicts for fresh data
             try:
                 call_command('detect_conflicts', '--clear', stdout=out, stderr=out)
             except Exception:
