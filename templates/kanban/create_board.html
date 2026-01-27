@@ -117,24 +117,19 @@
                             <div class="row">
                                 <div class="col-md-6">
                                     <label for="project_type" class="form-label">Project Type</label>
-                                    <select class="form-select" id="project_type" name="project_type">
-                                        <option value="software">Software Development</option>
-                                        <option value="marketing">Marketing Campaign</option>
-                                        <option value="design">Design Project</option>
-                                        <option value="content">Content Creation</option>
-                                        <option value="research">Research & Development</option>
-                                        <option value="general" selected>General Project</option>
-                                        <option value="other">Other</option>
-                                    </select>
+                                    <input type="text" class="form-control" id="project_type" name="project_type" 
+                                           placeholder="e.g., Software Development, Marketing, Design" 
+                                           value="General Project">
+                                    <small class="form-text text-muted">Enter your project type</small>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="team_size" class="form-label">Team Size</label>
                                     <select class="form-select" id="team_size" name="team_size">
-                                        <option value="1">Solo (1 person)</option>
-                                        <option value="2-5" selected>Small (2-5 people)</option>
-                                        <option value="6-10">Medium (6-10 people)</option>
-                                        <option value="11-20">Large (11-20 people)</option>
-                                        <option value="20+">Enterprise (20+ people)</option>
+                                        <option value="solo">Solo</option>
+                                        <option value="small" selected>Small</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="large">Large</option>
+                                        <option value="enterprise">Enterprise</option>
                                     </select>
                                 </div>
                             </div>

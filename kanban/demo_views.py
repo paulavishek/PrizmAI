@@ -1059,7 +1059,27 @@ def reset_demo_data(request):
                 organization=demo_org,
                 is_official_demo_board=False
             )
+            user_created_boards_count = user_created_boards.count()
             user_created_boards.delete()
+            
+            # IMPORTANT: Also handle boards created by authenticated users in NON-demo organizations
+            # When users are logged in and click "New Board" from the demo dashboard,
+            # the board gets created in THEIR organization, not the demo organization
+            # We should delete these as well during a "Reset Demo Data" action
+            boards_deleted_from_user_org = 0
+            if request.user.is_authenticated and hasattr(request.user, 'profile'):
+                user_org = request.user.profile.organization
+                # Only process if user's org is NOT the demo org (to avoid double-deletion)
+                if user_org and user_org != demo_org:
+                    # Delete non-official boards created by this user
+                    # (boards they created for testing on the demo dashboard)
+                    user_test_boards = Board.objects.filter(
+                        organization=user_org,
+                        created_by=request.user,
+                        is_official_demo_board=False
+                    )
+                    boards_deleted_from_user_org = user_test_boards.count()
+                    user_test_boards.delete()
             
             # Delete user-created tasks on demo boards (is_seed_demo_data=False)
             Task.objects.filter(
