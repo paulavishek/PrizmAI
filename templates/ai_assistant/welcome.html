@@ -229,7 +229,12 @@
                 {% for session in recent_sessions %}
                 <div class="session-item">
                     <a href="{% url 'ai_assistant:chat' %}?session={{ session.id }}" class="session-link">
-                        <div class="session-title">{{ session.title }}</div>
+                        <div class="session-title">
+                            {{ session.title }}
+                            {% if session.is_demo %}
+                            <span style="background: #667eea; color: white; font-size: 10px; padding: 2px 6px; border-radius: 3px; margin-left: 8px;">DEMO</span>
+                            {% endif %}
+                        </div>
                         <div class="session-meta">{{ session.message_count }} messages • {{ session.updated_at|timesince }} ago</div>
                     </a>
                 </div>

@@ -325,6 +325,14 @@
                 <button class="btn btn-sm btn-outline-danger" id="delete-chat-btn" title="Delete this chat session">
                     <i class="fas fa-trash"></i> Delete
                 </button>
+                {% else %}
+                <button class="btn btn-sm btn-outline-warning disabled" title="Demo sessions are read-only" disabled>
+                    <i class="fas fa-eraser"></i> Clear
+                </button>
+                
+                <button class="btn btn-sm btn-outline-danger disabled" title="Demo sessions are read-only" disabled>
+                    <i class="fas fa-trash"></i> Delete
+                </button>
                 {% endif %}
                 
                 <button class="btn btn-sm btn-outline-secondary" id="refresh-btn" title="Refresh knowledge base and clear cache">

@@ -35,12 +35,15 @@ def assistant_welcome(request):
     # Combine and get recent sessions, limit to 5
     all_sessions = (user_sessions | demo_sessions).distinct().order_by('-updated_at')[:5]
     
+    # Total count includes both user sessions and demo sessions
+    total_sessions_count = (user_sessions | demo_sessions).distinct().count()
+    
     # Get or create user preferences
     user_pref, created = UserPreference.objects.get_or_create(user=request.user)
     
     context = {
         'recent_sessions': all_sessions,
-        'total_sessions': user_sessions.count(),
+        'total_sessions': total_sessions_count,
         'user_preferences': user_pref,
     }
     return render(request, 'ai_assistant/welcome.html', context)
@@ -95,14 +98,16 @@ def chat_interface(request, session_id=None):
             organization=user_org,
         ).filter(
             Q(created_by=request.user) | Q(members=request.user)
-        ).distinct()
+        )
     else:
         user_boards = Board.objects.none()
     
     # SIMPLIFIED MODE: Include official demo boards for all users
     if SIMPLIFIED_MODE:
         demo_boards = Board.objects.filter(is_official_demo_board=True)
-        user_boards = (user_boards | demo_boards).distinct()
+        user_boards = user_boards | demo_boards
+    
+    user_boards = user_boards.distinct()
     
     # Count active boards for welcome message
     active_boards_count = user_boards.count()
