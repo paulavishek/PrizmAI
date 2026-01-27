@@ -86,6 +86,9 @@ def chat_interface(request, session_id=None):
     # Get user's organization
     user_org = request.user.profile.organization if hasattr(request.user, 'profile') else None
     
+    # Import simplified mode setting
+    from kanban.utils.demo_settings import SIMPLIFIED_MODE
+    
     # Get user's boards for context selection - filtered by organization
     if user_org:
         user_boards = Board.objects.filter(
@@ -95,6 +98,11 @@ def chat_interface(request, session_id=None):
         ).distinct()
     else:
         user_boards = Board.objects.none()
+    
+    # SIMPLIFIED MODE: Include official demo boards for all users
+    if SIMPLIFIED_MODE:
+        demo_boards = Board.objects.filter(is_official_demo_board=True)
+        user_boards = (user_boards | demo_boards).distinct()
     
     # Count active boards for welcome message
     active_boards_count = user_boards.count()

@@ -46,7 +46,11 @@ def dashboard(request):
         
         # SIMPLIFIED MODE: Include demo boards in main dashboard
         # Users see all boards they have access to in one place
-        if not SIMPLIFIED_MODE:
+        if SIMPLIFIED_MODE:
+            # Include official demo boards for all users to explore features
+            demo_boards = Board.objects.filter(is_official_demo_board=True)
+            boards = boards | demo_boards
+        else:
             # LEGACY: Exclude demo boards - demo accessed via separate demo dashboard
             boards = boards.exclude(organization__name__in=demo_org_names)
         
