@@ -491,6 +491,10 @@ def clear_session(request, session_id):
     try:
         session = get_object_or_404(AIAssistantSession, id=session_id, user=request.user)
         
+        # Prevent clearing demo sessions
+        if session.is_demo:
+            return JsonResponse({'error': 'Cannot clear demo sessions'}, status=403)
+        
         # Delete all messages in the session
         AIAssistantMessage.objects.filter(session=session).delete()
         
@@ -512,7 +516,15 @@ def clear_session(request, session_id):
 def export_session(request, session_id):
     """Export chat session as JSON or Markdown"""
     try:
-        session = get_object_or_404(AIAssistantSession, id=session_id, user=request.user)
+        # Allow exporting user's own sessions OR demo sessions
+        session = AIAssistantSession.objects.filter(
+            Q(user=request.user) | Q(is_demo=True),
+            id=session_id
+        ).first()
+        
+        if not session:
+            return JsonResponse({'error': 'Session not found'}, status=404)
+        
         export_format = request.GET.get('format', 'json')  # 'json' or 'markdown'
         
         messages = AIAssistantMessage.objects.filter(session=session).order_by('created_at')

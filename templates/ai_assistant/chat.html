@@ -654,6 +654,11 @@
         window.location.href = `/assistant/api/sessions/${sessionId}/export/?format=${format}`;
     }
     
+    // Export button click handler (default to JSON)
+    document.getElementById('export-chat-btn')?.addEventListener('click', function() {
+        exportChat('json');
+    });
+    
     // Initialize
     loadSessions();
     loadMessages();
