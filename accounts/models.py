@@ -28,9 +28,24 @@ class Organization(models.Model):
 
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='members')
+    # Organization is now optional - MVP simplification (no multi-org support)
+    # All users effectively share the same space with demo users
+    organization = models.ForeignKey(
+        Organization, 
+        on_delete=models.SET_NULL, 
+        related_name='members',
+        null=True,
+        blank=True,
+        help_text="Organization (optional - MVP mode does not require organization)"
+    )
     is_admin = models.BooleanField(default=False)
     profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
+    
+    # Welcome modal tracking
+    has_seen_welcome = models.BooleanField(
+        default=False,
+        help_text="Whether user has seen the welcome modal explaining demo users"
+    )
     
     # AI-Powered Smart Resource Analysis Fields
     skills = models.JSONField(

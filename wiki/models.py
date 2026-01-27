@@ -20,7 +20,15 @@ class WikiCategory(models.Model):
     name = models.CharField(max_length=100)
     slug = models.SlugField()
     description = models.TextField(blank=True, null=True)
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='wiki_categories')
+    # Organization is now optional - MVP simplification
+    organization = models.ForeignKey(
+        Organization, 
+        on_delete=models.SET_NULL, 
+        related_name='wiki_categories',
+        null=True,
+        blank=True,
+        help_text="Organization (optional - MVP mode uses demo org for all wiki data)"
+    )
     icon = models.CharField(max_length=50, default='folder', help_text='Font Awesome icon name')
     color = models.CharField(max_length=7, default='#3498db', help_text='Hex color code')
     position = models.IntegerField(default=0)
@@ -36,7 +44,7 @@ class WikiCategory(models.Model):
     class Meta:
         ordering = ['position', 'name']
         verbose_name_plural = 'Wiki Categories'
-        unique_together = ('organization', 'name', 'slug')
+        # Remove unique_together constraint that requires organization
     
     def __str__(self):
         return self.name
@@ -53,7 +61,15 @@ class WikiPage(models.Model):
     slug = models.SlugField()
     content = models.TextField(help_text='Markdown supported')
     category = models.ForeignKey(WikiCategory, on_delete=models.CASCADE, related_name='pages')
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='wiki_pages')
+    # Organization is now optional - MVP simplification
+    organization = models.ForeignKey(
+        Organization, 
+        on_delete=models.SET_NULL, 
+        related_name='wiki_pages',
+        null=True,
+        blank=True,
+        help_text="Organization (optional - MVP mode uses demo org for all wiki data)"
+    )
     
     # Page metadata
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_wiki_pages')
@@ -84,11 +100,10 @@ class WikiPage(models.Model):
     class Meta:
         ordering = ['-is_pinned', '-updated_at']
         indexes = [
-            models.Index(fields=['organization', '-updated_at']),
             models.Index(fields=['slug']),
             models.Index(fields=['category']),
         ]
-        unique_together = ('organization', 'slug')
+        # Removed unique_together('organization', 'slug') for MVP simplification
     
     def __str__(self):
         return self.title
@@ -266,8 +281,15 @@ class MeetingNotes(models.Model):
     date = models.DateTimeField()
     content = models.TextField(help_text='Markdown supported - manual notes or AI-generated')
     
-    # Organization and participants
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='meeting_notes')
+    # Organization and participants - organization is optional for MVP simplification
+    organization = models.ForeignKey(
+        Organization, 
+        on_delete=models.SET_NULL, 
+        related_name='meeting_notes',
+        null=True,
+        blank=True,
+        help_text="Organization (optional - MVP mode uses demo org)"
+    )
     attendees = models.ManyToManyField(User, related_name='meeting_notes_attended')
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_meeting_notes')
     
@@ -452,7 +474,15 @@ class WikiMeetingAnalysis(models.Model):
     
     # Link to wiki page
     wiki_page = models.ForeignKey(WikiPage, on_delete=models.CASCADE, related_name='meeting_analyses')
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='wiki_meeting_analyses')
+    # Organization is optional for MVP simplification
+    organization = models.ForeignKey(
+        Organization, 
+        on_delete=models.SET_NULL, 
+        related_name='wiki_meeting_analyses',
+        null=True,
+        blank=True,
+        help_text="Organization (optional - MVP mode uses demo org)"
+    )
     
     # Processing metadata
     processed_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='processed_meeting_analyses')
