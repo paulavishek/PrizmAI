@@ -544,10 +544,18 @@ def trigger_detection_all(request):
             demo_orgs = Organization.objects.filter(name__in=demo_org_names)
             boards = Board.objects.filter(organization__in=demo_orgs).distinct()
         else:
+            from kanban.models import Organization
             profile = request.user.profile
             organization = profile.organization
+            
+            # Include demo organization boards for all authenticated users
+            demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+            org_filter = Q(organization=organization)
+            if demo_org:
+                org_filter |= Q(organization=demo_org)
+            
             boards = Board.objects.filter(
-                Q(organization=organization) &
+                org_filter &
                 (Q(created_by=request.user) | Q(members=request.user))
             ).distinct()
         
@@ -618,12 +626,20 @@ def trigger_detection(request, board_id):
                 organization__in=demo_orgs
             )
         else:
+            from kanban.models import Organization
             profile = request.user.profile
             organization = profile.organization
+            
+            # Include demo organization boards for authenticated users
+            demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+            org_filter = Q(organization=organization)
+            if demo_org:
+                org_filter |= Q(organization=demo_org)
+            
             board = get_object_or_404(
                 Board,
-                id=board_id,
-                organization=organization
+                org_filter,
+                id=board_id
             )
         
         # Check access (for non-demo mode)
