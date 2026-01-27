@@ -348,10 +348,10 @@ def send_message(request):
 
 @login_required(login_url='accounts:login')
 def get_sessions(request):
-    """Get user's chat sessions"""
-    # Only show user's own sessions (simplified mode - no demo sessions)
+    """Get user's chat sessions including demo sessions"""
+    # Show user's own sessions AND demo sessions
     sessions = AIAssistantSession.objects.filter(
-        user=request.user
+        Q(user=request.user) | Q(is_demo=True)
     ).order_by('-updated_at')
     
     data = {
@@ -363,6 +363,8 @@ def get_sessions(request):
                 'message_count': s.message_count,
                 'is_active': s.is_active,
                 'updated_at': s.updated_at.isoformat(),
+                'is_demo': s.is_demo,
+                'is_owner': s.user == request.user,
             }
             for s in sessions
         ]
@@ -631,10 +633,13 @@ def analytics_dashboard(request):
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=30)
     
-    # Get analytics - include user's own data AND demo data for examples
+    # Get analytics - include user's own data AND demo analytics (by user, not session)
+    # Get demo users to include their analytics
     demo_sessions = AIAssistantSession.objects.filter(is_demo=True)
+    demo_user_ids = demo_sessions.values_list('user_id', flat=True).distinct()
+    
     analytics_qs = AIAssistantAnalytics.objects.filter(
-        Q(user=request.user) | Q(session__in=demo_sessions),
+        Q(user=request.user) | Q(user_id__in=demo_user_ids),
         date__gte=start_date,
         date__lte=end_date
     )

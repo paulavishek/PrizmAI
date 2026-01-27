@@ -733,6 +733,7 @@ POST /api/auth/token/
                 title=session_data['title'],
                 description=session_data.get('description', ''),
                 is_active=session_data.get('is_active', False),
+                is_demo=True,  # Mark as demo session visible to all users
                 message_count=len(session_data['messages']),
                 total_tokens_used=total_tokens,
             )
