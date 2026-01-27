@@ -16,6 +16,7 @@ class AIAssistantSession(models.Model):
     description = models.TextField(blank=True, null=True, help_text="Session description")
     
     is_active = models.BooleanField(default=True, help_text="Is this session currently active?")
+    is_demo = models.BooleanField(default=False, help_text="Is this a demo/example session visible to all users?")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

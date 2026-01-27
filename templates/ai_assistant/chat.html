@@ -317,6 +317,7 @@
                     </ul>
                 </div>
                 
+                {% if session.user == request.user and not session.is_demo %}
                 <button class="btn btn-sm btn-outline-warning" id="clear-chat-btn" title="Clear all messages">
                     <i class="fas fa-eraser"></i> Clear
                 </button>
@@ -324,6 +325,7 @@
                 <button class="btn btn-sm btn-outline-danger" id="delete-chat-btn" title="Delete this chat session">
                     <i class="fas fa-trash"></i> Delete
                 </button>
+                {% endif %}
                 
                 <button class="btn btn-sm btn-outline-secondary" id="refresh-btn" title="Refresh knowledge base and clear cache">
                     <i class="fas fa-sync"></i> Refresh
@@ -373,8 +375,10 @@
                     item.className = 'session-item' + (session.id === sessionId ? ' active' : '');
                     item.onclick = () => window.location.href = `/assistant/chat/?session=${session.id}`;
                     
+                    const demoBadge = session.is_demo ? '<span style="background: #667eea; color: white; font-size: 10px; padding: 2px 6px; border-radius: 3px; margin-left: 5px;">DEMO</span>' : '';
+                    
                     item.innerHTML = `
-                        <div class="session-title">${session.title}</div>
+                        <div class="session-title">${session.title} ${demoBadge}</div>
                         <div class="session-meta">${session.message_count} messages</div>
                     `;
                     
@@ -577,8 +581,8 @@
         .then(response => response.json())
         .then(data => {
             if (data.status === 'success') {
-                // Redirect to assistant welcome page
-                window.location.href = '{% url "ai_assistant:welcome" %}';
+                // Redirect to chat page without session (will load or create a new one)
+                window.location.href = '/assistant/chat/';
             } else if (data.error) {
                 alert('Error deleting chat: ' + data.error);
             } else {

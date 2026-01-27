@@ -29,13 +29,10 @@ def assistant_welcome(request):
     # Get user's own sessions
     user_sessions = AIAssistantSession.objects.filter(user=request.user)
     
-    # Also include demo sessions for recent conversations
-    from accounts.models import Organization
-    demo_orgs = Organization.objects.filter(is_demo=True)
-    demo_boards = Board.objects.filter(organization__in=demo_orgs, is_official_demo_board=True)
-    demo_sessions = AIAssistantSession.objects.filter(board__in=demo_boards)
+    # Also include demo sessions for examples
+    demo_sessions = AIAssistantSession.objects.filter(is_demo=True)
     
-    # Combine and order by updated_at, limit to 5
+    # Combine and get recent sessions, limit to 5
     all_sessions = (user_sessions | demo_sessions).distinct().order_by('-updated_at')[:5]
     
     # Get or create user preferences
@@ -67,13 +64,9 @@ def chat_interface(request, session_id=None):
     
     # Get session or create new one
     if session_id:
-        # Allow access to user's own sessions OR demo board sessions
-        from accounts.models import Organization
-        demo_orgs = Organization.objects.filter(is_demo=True)
-        demo_boards = Board.objects.filter(organization__in=demo_orgs, is_official_demo_board=True)
-        
+        # Allow access to user's own sessions OR demo sessions
         session = AIAssistantSession.objects.filter(
-            Q(user=request.user) | Q(board__in=demo_boards),
+            Q(user=request.user) | Q(is_demo=True),
             id=session_id
         ).first()
         
@@ -355,16 +348,10 @@ def send_message(request):
 
 @login_required(login_url='accounts:login')
 def get_sessions(request):
-    """Get user's chat sessions - includes demo sessions for demo boards"""
-    from accounts.models import Organization
-    
-    # Get demo organization for showing demo sessions
-    demo_org = Organization.objects.filter(is_demo=True).first()
-    demo_boards = Board.objects.filter(organization=demo_org, is_official_demo_board=True) if demo_org else Board.objects.none()
-    
-    # Include both user's own sessions and demo sessions
+    """Get user's chat sessions"""
+    # Only show user's own sessions (simplified mode - no demo sessions)
     sessions = AIAssistantSession.objects.filter(
-        Q(user=request.user) | Q(board__in=demo_boards)
+        user=request.user
     ).order_by('-updated_at')
     
     data = {
@@ -376,7 +363,6 @@ def get_sessions(request):
                 'message_count': s.message_count,
                 'is_active': s.is_active,
                 'updated_at': s.updated_at.isoformat(),
-                'is_demo': s.board in demo_boards if s.board else False,
             }
             for s in sessions
         ]
@@ -390,13 +376,9 @@ def get_session_messages(request, session_id):
     from accounts.models import Organization
     
     try:
-        # Get demo organization for allowing access to demo sessions
-        demo_org = Organization.objects.filter(is_demo=True).first()
-        demo_boards = Board.objects.filter(organization=demo_org, is_official_demo_board=True) if demo_org else Board.objects.none()
-        
         # Allow access to user's own sessions OR demo sessions
         session = AIAssistantSession.objects.filter(
-            Q(user=request.user) | Q(board__in=demo_boards),
+            Q(user=request.user) | Q(is_demo=True),
             id=session_id
         ).first()
         
@@ -475,13 +457,10 @@ def delete_session(request, session_id):
         session = get_object_or_404(AIAssistantSession, id=session_id, user=request.user)
         
         # Prevent deleting demo sessions
-        from accounts.models import Organization
-        demo_orgs = Organization.objects.filter(is_demo=True)
-        demo_boards = Board.objects.filter(organization__in=demo_orgs, is_official_demo_board=True)
-        
-        if session.board and session.board in demo_boards:
+        if session.is_demo:
             return JsonResponse({'error': 'Cannot delete demo sessions'}, status=403)
         
+        # Users can delete their own non-demo sessions
         session.delete()
         
         return JsonResponse({'status': 'success'})
@@ -652,14 +631,10 @@ def analytics_dashboard(request):
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=30)
     
-    # Get demo organization for showing demo analytics
-    demo_org = Organization.objects.filter(is_demo=True).first()
-    demo_boards = Board.objects.filter(organization=demo_org, is_official_demo_board=True) if demo_org else Board.objects.none()
-    
-    # Get analytics - include both user's own and demo data
-    # This allows users to see demo analytics even if they haven't used the AI yet
+    # Get analytics - include user's own data AND demo data for examples
+    demo_sessions = AIAssistantSession.objects.filter(is_demo=True)
     analytics_qs = AIAssistantAnalytics.objects.filter(
-        Q(user=request.user) | Q(board__in=demo_boards),
+        Q(user=request.user) | Q(session__in=demo_sessions),
         date__gte=start_date,
         date__lte=end_date
     )
@@ -683,13 +658,13 @@ def analytics_dashboard(request):
     
     # Get active sessions count and multi-turn conversations (include demo sessions)
     active_sessions = AIAssistantSession.objects.filter(
-        Q(user=request.user) | Q(board__in=demo_boards),
+        Q(user=request.user) | Q(is_demo=True),
         updated_at__gte=timezone.now() - timedelta(days=30)
     ).count()
     
     # Count multi-turn conversations (sessions with 3+ messages)
     multi_turn_sessions = AIAssistantSession.objects.filter(
-        Q(user=request.user) | Q(board__in=demo_boards),
+        Q(user=request.user) | Q(is_demo=True),
         updated_at__gte=timezone.now() - timedelta(days=30),
         message_count__gte=3
     ).count()
