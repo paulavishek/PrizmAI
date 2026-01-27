@@ -1024,11 +1024,6 @@ class Command(BaseCommand):
         users = [alex, sam, jordan]
         now = timezone.now().date()
         entries_created = 0
-                        hours_spent=hours,
-                        description=f"Worked on {task.title[:30]}",
-                        work_date=entry_date,
-                    )
-                    entries_created += 1
 
         for task in tasks:
             if task.progress > 0:
