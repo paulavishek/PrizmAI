@@ -221,7 +221,15 @@ function skipTutorial() {
     <!-- Step 1: Personal Welcome -->
     <div class="wizard-step active" id="step-1">
         <div class="card shadow-lg border-0">
-            <div class="card-body text-center">                <div class="welcome-illustration">
+            <div class="card-body text-center">
+                <!-- Skip Wizard Option -->
+                <div class="text-end mb-3">
+                    <a href="{% url 'dashboard' %}" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-times me-1"></i> Skip Wizard
+                    </a>
+                </div>
+                
+                <div class="welcome-illustration">
                     <i class="fas fa-hand-wave"></i>
                     {% if is_repeat_visitor %}
                         <h1 class="display-4 mb-3">Welcome back, {{ user.first_name|default:user.username }}!</h1>

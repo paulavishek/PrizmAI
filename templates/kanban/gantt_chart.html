@@ -605,9 +605,9 @@
             </h1>
         </div>
         <div class="col-auto">
-            <button onclick="goBack()" class="btn btn-outline-secondary me-2">
-                <i class="fas fa-arrow-left me-1"></i> Back
-            </button>
+            <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-arrow-left me-1"></i> Back to Board
+            </a>
         </div>
     </div>
 

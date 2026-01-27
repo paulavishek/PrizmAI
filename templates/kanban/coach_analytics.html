@@ -14,9 +14,9 @@
                     <p class="text-muted">{{ board.name }} - Last {{ days }} days</p>
                 </div>
                 <div>
-                    <button onclick="goBack()" class="btn btn-outline-secondary">
-                        <i class="fas fa-arrow-left me-1"></i> Back
-                    </button>
+                    <a href="{% url 'coach_dashboard' board.id %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left me-1"></i> Back to Coach
+                    </a>
                 </div>
             </div>
         </div>

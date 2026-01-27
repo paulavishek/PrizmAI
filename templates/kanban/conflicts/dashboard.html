@@ -125,7 +125,10 @@
             {% endif %}
         </div>
         <div class="col-md-4 text-end">
-            <button class="btn btn-primary" onclick="triggerDetection()">
+            <button onclick="goBack()" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-arrow-left me-1"></i> Back
+            </button>
+            <button class="btn btn-primary me-2" onclick="triggerDetection()">
                 <i class="fas fa-sync-alt"></i> Scan Now
             </button>
             <a href="{% url 'conflict_analytics' %}" class="btn btn-outline-secondary">

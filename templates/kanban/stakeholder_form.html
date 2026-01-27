@@ -13,9 +13,9 @@
                         <i class="bi bi-person-plus"></i>
                         {% if action == 'Create' %}Add New Stakeholder{% else %}Edit Stakeholder{% endif %}
                     </h5>
-                    <button onclick="goBack()" class="btn btn-sm btn-outline-secondary">
-                        <i class="bi bi-arrow-left"></i> Back
-                    </button>
+                    <a href="{% url 'stakeholder:stakeholder_list' board.id %}" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-arrow-left"></i> Back to List
+                    </a>
                 </div>
                 <div class="card-body">
                     <form method="post" class="needs-validation" novalidate>

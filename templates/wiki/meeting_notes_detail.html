@@ -46,9 +46,9 @@
     <div class="col-lg-8">
         <!-- Back Button -->
         <div class="mb-3">
-            <button onclick="goBack()" class="btn btn-outline-secondary btn-sm">
-                <i class="fas fa-arrow-left"></i> Back
-            </button>
+            <a href="{% url 'wiki:meeting_hub_detail' meeting_notes.meeting_id %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left"></i> Back to Meeting
+            </a>
         </div>
         <!-- Header -->
         <div class="notes-header">

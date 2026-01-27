@@ -11,17 +11,14 @@
             <p class="text-muted">{{ stakeholder.role }} {% if stakeholder.organization %}- {{ stakeholder.organization }}{% endif %}</p>
         </div>
         <div class="col-md-4 text-end">
-            <button onclick="goBack()" class="btn btn-outline-secondary me-2">
-                <i class="bi bi-arrow-left"></i> Back
-            </button>
+            <a href="{% url 'stakeholder:stakeholder_list' board.id %}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Back to List
+            </a>
             <a href="{% url 'stakeholder:stakeholder_update' board.id stakeholder.id %}" class="btn btn-outline-primary me-2">
                 <i class="bi bi-pencil"></i> Edit
             </a>
-            <a href="{% url 'stakeholder:engagement_record_create' board.id stakeholder.id %}" class="btn btn-success me-2">
+            <a href="{% url 'stakeholder:engagement_record_create' board.id stakeholder.id %}" class="btn btn-success">
                 <i class="bi bi-plus-lg"></i> Record Engagement
-            </a>
-            <a href="{% url 'stakeholder:stakeholder_list' board.id %}" class="btn btn-outline-primary">
-                <i class="bi bi-list"></i> All Stakeholders
             </a>
         </div>
     </div>

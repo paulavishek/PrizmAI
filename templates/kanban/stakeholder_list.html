@@ -11,9 +11,9 @@
             <p class="text-muted">{{ board.name }}</p>
         </div>
         <div class="col-md-4 text-end">
-            <button onclick="goBack()" class="btn btn-outline-secondary me-2">
-                <i class="bi bi-arrow-left"></i> Back
-            </button>
+            <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-outline-secondary me-2">
+                <i class="bi bi-arrow-left"></i> Back to Board
+            </a>
             <a href="{% url 'stakeholder:stakeholder_create' board.id %}" class="btn btn-primary me-2">
                 <i class="bi bi-plus-lg"></i> Add Stakeholder
             </a>
