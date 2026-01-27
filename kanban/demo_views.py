@@ -990,13 +990,19 @@ def reset_demo_data(request):
     ANONYMOUS ACCESS: Works for both logged-in and anonymous users
     """
     from django.contrib import messages
+    from kanban.utils.demo_settings import SIMPLIFIED_MODE
     
     # Check if user is in demo mode (for session-based reset)
     is_demo_user = request.session.get('is_demo_mode', False)
     
     # Superusers can reset anytime, demo users (including anonymous) can reset their session
     is_superuser = request.user.is_authenticated and request.user.is_superuser
-    if not (is_superuser or is_demo_user):
+    
+    # In SIMPLIFIED_MODE, any authenticated user can reset demo data since they all
+    # interact with demo boards on the main dashboard
+    is_authenticated_user = request.user.is_authenticated
+    
+    if not (is_superuser or is_demo_user or (SIMPLIFIED_MODE and is_authenticated_user)):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({
                 'status': 'error',

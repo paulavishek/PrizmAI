@@ -669,6 +669,14 @@
             <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                 <h6 class="m-0 font-weight-bold text-primary">Your Boards</h6>
                 <div>
+                    {% regroup boards by is_official_demo_board as board_groups %}
+                    {% for group in board_groups %}
+                        {% if group.grouper %}
+                            <button onclick="resetDemoData()" class="btn btn-sm btn-warning me-2" title="Reset all demo data to its original state">
+                                <i class="fas fa-redo fa-sm"></i> Reset Demo Data
+                            </button>
+                        {% endif %}
+                    {% endfor %}
                     <a href="{% url 'create_board' %}" class="btn btn-sm btn-primary">
                         <i class="fas fa-plus fa-sm"></i> New Board
                     </a>
@@ -679,9 +687,16 @@
                 <div class="row">
                     {% for board in boards|slice:":6" %}
                     <div class="col-md-4 mb-4">
-                        <div class="card dashboard-card h-100 border-left-primary shadow-sm">
+                        <div class="card dashboard-card h-100 border-left-{% if board.is_official_demo_board %}warning{% else %}primary{% endif %} shadow-sm">
                             <div class="card-body">
-                                <h5 class="card-title">{{ board.name }}</h5>
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h5 class="card-title mb-0">{{ board.name }}</h5>
+                                    {% if board.is_official_demo_board %}
+                                        <span class="badge bg-warning text-dark" title="Demo board with sample data">
+                                            <i class="fas fa-graduation-cap"></i> DEMO
+                                        </span>
+                                    {% endif %}
+                                </div>
                                 <p class="card-text text-muted small">
                                     {% if board.description %}
                                     {{ board.description|truncatechars:100 }}
@@ -1255,6 +1270,60 @@
         // Save state to localStorage
         const isExpanded = banner.classList.contains('expanded');
         localStorage.setItem('demoBannerExpanded', isExpanded);
+    }
+
+    // Reset Demo Data Function
+    function resetDemoData() {
+        if (confirm('Reset Demo Environment?\n\nThis will:\n• Delete all boards, tasks, and data you created\n• Restore all original demo data to its initial state\n• Fix any demo data you modified\n\nThis cannot be undone.')) {
+            // Show loading indicator
+            const btn = event.target.closest('button');
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resetting...';
+            btn.disabled = true;
+            
+            // Make AJAX request to reset
+            fetch('/demo/reset/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    alert('✅ Demo reset successfully!\n\nAll demo data has been restored to its original state.');
+                    location.reload();
+                } else {
+                    alert('Failed to reset demo: ' + (data.message || 'Unknown error'));
+                    btn.innerHTML = originalHtml;
+                    btn.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error resetting demo:', error);
+                alert('Failed to reset demo. Please try again.');
+                btn.innerHTML = originalHtml;
+                btn.disabled = false;
+            });
+        }
+    }
+    
+    // Helper function to get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
     }
 
     // Restore demo banner state on page load
