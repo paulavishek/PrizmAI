@@ -93,6 +93,10 @@ class OrganizationForm(forms.ModelForm):
         return domain
 
 class RegistrationForm(UserCreationForm):
+    """
+    Simplified registration form for MVP mode.
+    No organization or domain validation required.
+    """
     email = forms.EmailField(
         required=True,
         widget=forms.EmailInput(attrs={'class': 'form-control'})
@@ -106,7 +110,8 @@ class RegistrationForm(UserCreationForm):
         }
     
     def __init__(self, *args, **kwargs):
-        self.organization = kwargs.pop('organization', None)
+        # Remove organization param if passed (for backward compatibility)
+        kwargs.pop('organization', None)
         super().__init__(*args, **kwargs)
         self.fields['password1'].widget = forms.PasswordInput(attrs={
             'class': 'form-control',
@@ -120,16 +125,14 @@ class RegistrationForm(UserCreationForm):
     def clean_email(self):
         email = self.cleaned_data.get('email')
         
-        # Validate email domain exists and is not disposable
+        # Basic email validation (no domain restriction for MVP)
         is_valid, error_message = validate_email_for_signup(email)
         if not is_valid:
             raise ValidationError(error_message)
         
-        # If registering for an organization, check domain match
-        if self.organization:
-            domain = email.split('@')[-1]
-            if domain != self.organization.domain:
-                raise ValidationError(f"Email must belong to the {self.organization.domain} domain.")
+        # Check for duplicate email
+        if User.objects.filter(email=email).exists():
+            raise ValidationError("A user with this email already exists.")
         
         return email
     
@@ -139,12 +142,13 @@ class RegistrationForm(UserCreationForm):
         
         if commit:
             user.save()
-            if self.organization:
-                UserProfile.objects.create(
-                    user=user,
-                    organization=self.organization,
-                    is_admin=False
-                )
+            # MVP Mode: Create profile without organization
+            UserProfile.objects.create(
+                user=user,
+                organization=None,
+                is_admin=False,
+                completed_wizard=True
+            )
         
         return user
 

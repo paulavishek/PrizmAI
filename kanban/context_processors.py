@@ -270,22 +270,28 @@ def demo_context(request):
 def conflict_count(request):
     """
     Add active conflict count to template context for all pages.
+    MVP Mode: Works without organization requirement.
     """
     if not request.user.is_authenticated:
         return {'active_conflict_count': 0}
     
     try:
         from kanban.models import Board
+        from accounts.models import UserProfile
         from django.db.models import Q
         
-        # Get user's accessible boards
-        profile = request.user.profile
-        organization = profile.organization
+        # Ensure user has a profile
+        try:
+            profile = request.user.profile
+        except UserProfile.DoesNotExist:
+            return {'active_conflict_count': 0}
         
-        boards = Board.objects.filter(
-            Q(organization=organization) &
-            (Q(created_by=request.user) | Q(members=request.user))
-        ).distinct()
+        # MVP Mode: Get all boards the user has access to
+        demo_boards = Board.objects.filter(is_official_demo_board=True)
+        user_boards = Board.objects.filter(
+            Q(created_by=request.user) | Q(members=request.user)
+        )
+        boards = (demo_boards | user_boards).distinct()
         
         # Count active conflicts
         count = ConflictDetection.objects.filter(

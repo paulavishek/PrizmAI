@@ -17,27 +17,26 @@ from .forms import ChatRoomForm, ChatMessageForm, TaskThreadCommentForm, Mention
 @login_required
 def messaging_hub(request):
     """Main messaging hub showing all boards and recent notifications"""
-    from accounts.models import Organization
+    from accounts.models import Organization, UserProfile
     
+    # Ensure user has a profile (MVP mode: auto-create without organization)
     try:
         profile = request.user.profile
-        organization = profile.organization
-        
-        # Include demo organization boards for all authenticated users
-        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-        
-        # Filter boards by organization and membership, consistent with board_list view
-        org_filter = Q(organization=organization)
-        if demo_org:
-            org_filter |= Q(organization=demo_org)
-        
-        user_boards = Board.objects.filter(
-            org_filter & 
-            (Q(created_by=request.user) | Q(members=request.user))
-        ).distinct()
-    except:
-        # If user has no profile/organization, show no boards
-        user_boards = Board.objects.none()
+    except UserProfile.DoesNotExist:
+        profile = UserProfile.objects.create(
+            user=request.user,
+            organization=None,
+            is_admin=False,
+            completed_wizard=True
+        )
+    
+    # MVP Mode: Get all boards the user has access to
+    # Include: 1) Official demo boards, 2) Boards user created, 3) Boards user is member of
+    demo_boards = Board.objects.filter(is_official_demo_board=True)
+    user_boards_query = Board.objects.filter(
+        Q(created_by=request.user) | Q(members=request.user)
+    )
+    user_boards = (demo_boards | user_boards_query).distinct()
     
     # Calculate unread messages per board
     boards_with_unread = []

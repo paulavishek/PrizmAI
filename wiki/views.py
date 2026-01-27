@@ -23,80 +23,76 @@ from accounts.models import Organization
 
 
 class WikiBaseView(LoginRequiredMixin, UserPassesTestMixin):
-    """Base view for wiki operations"""
+    """Base view for wiki operations - MVP mode without organization requirement"""
     
     def test_func(self):
-        """Check if user belongs to the organization or accessing demo content"""
-        org = self.get_organization()
-        if not org:
-            return False
-        
-        # Allow access to demo organization pages for all authenticated users
-        demo_org_names = ['Demo - Acme Corporation']
-        if org.name in demo_org_names:
-            return True
-        
-        # Check if user has a profile in this organization
-        return hasattr(self.request.user, 'profile') and self.request.user.profile.organization == org
+        """MVP Mode: All authenticated users can access wiki"""
+        # All authenticated users can access wiki content
+        return self.request.user.is_authenticated
     
     def get_organization(self):
-        """Get organization from URL or user's default"""
+        """
+        Get organization - MVP mode uses demo organization for all wiki data.
+        Returns demo org or user's org (can be None in MVP mode).
+        """
         org_id = self.kwargs.get('org_id')
         if org_id:
             return get_object_or_404(Organization, pk=org_id)
-        # Get organization from user's profile
-        if hasattr(self.request.user, 'profile') and self.request.user.profile:
+        
+        # MVP Mode: First try user's org, then fall back to demo org
+        if hasattr(self.request.user, 'profile') and self.request.user.profile and self.request.user.profile.organization:
             return self.request.user.profile.organization
-        return None
+        
+        # Fall back to demo organization for wiki content
+        return Organization.objects.filter(is_demo=True).first()
     
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         org = self.get_organization()
         context['organization'] = org
         
-        # Include demo organization categories for all authenticated users
-        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-        org_filter = Q(organization=org)
+        # MVP Mode: Show all wiki categories (from demo org)
+        demo_org = Organization.objects.filter(is_demo=True).first()
         if demo_org:
-            org_filter |= Q(organization=demo_org)
-        context['categories'] = WikiCategory.objects.filter(org_filter).distinct()
+            context['categories'] = WikiCategory.objects.filter(
+                Q(organization=demo_org) | Q(organization__isnull=True)
+            ).distinct()
+        else:
+            context['categories'] = WikiCategory.objects.all()
         return context
 
 
 class WikiCategoryListView(WikiBaseView, ListView):
-    """List all wiki categories for an organization"""
+    """List all wiki categories - MVP mode shows all categories"""
     model = WikiCategory
     template_name = 'wiki/category_list.html'
     context_object_name = 'categories'
     paginate_by = 20
     
     def get_queryset(self):
-        org = self.get_organization()
-        
-        # Include demo organization categories for all authenticated users
-        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-        org_filter = Q(organization=org)
+        # MVP Mode: Show all wiki categories (from demo org primarily)
+        demo_org = Organization.objects.filter(is_demo=True).first()
         if demo_org:
-            org_filter |= Q(organization=demo_org)
-        
-        return WikiCategory.objects.filter(org_filter).prefetch_related('pages').distinct()
+            return WikiCategory.objects.filter(
+                Q(organization=demo_org) | Q(organization__isnull=True)
+            ).prefetch_related('pages').distinct()
+        return WikiCategory.objects.all().prefetch_related('pages')
 
 
 class WikiPageListView(WikiBaseView, ListView):
-    """List all wiki pages for a category or organization"""
+    """List all wiki pages - MVP mode shows all pages"""
     model = WikiPage
     template_name = 'wiki/page_list.html'
     context_object_name = 'pages'
     paginate_by = 20
     
     def get_queryset(self):
-        org = self.get_organization()
-        
-        # Include demo organization content for all authenticated users
-        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-        org_filter = Q(organization=org)
+        # MVP Mode: Show all wiki pages (from demo org primarily)
+        demo_org = Organization.objects.filter(is_demo=True).first()
         if demo_org:
-            org_filter |= Q(organization=demo_org)
+            org_filter = Q(organization=demo_org) | Q(organization__isnull=True)
+        else:
+            org_filter = Q()
         
         queryset = WikiPage.objects.filter(org_filter, is_published=True)
         

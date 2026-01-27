@@ -70,17 +70,29 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('CONSOLIDATED DEMO DATA POPULATION'))
         self.stdout.write(self.style.SUCCESS('=' * 80 + '\n'))
 
-        # Get demo organization
+        # =====================================================================
+        # SELF-HEALING: Ensure demo organization exists before proceeding
+        # =====================================================================
         try:
             self.demo_org = Organization.objects.get(is_demo=True, name='Demo - Acme Corporation')
             self.stdout.write(self.style.SUCCESS(f'✅ Found organization: {self.demo_org.name}'))
         except Organization.DoesNotExist:
-            self.stdout.write(self.style.ERROR(
-                '❌ Demo organization not found. Please run: python manage.py create_demo_organization'
+            self.stdout.write(self.style.WARNING(
+                '⚠️ Demo organization not found. Auto-creating...'
             ))
-            return
+            # Self-healing: create demo organization
+            from django.core.management import call_command
+            call_command('create_demo_organization')
+            try:
+                self.demo_org = Organization.objects.get(is_demo=True)
+                self.stdout.write(self.style.SUCCESS(f'✅ Created organization: {self.demo_org.name}'))
+            except Organization.DoesNotExist:
+                self.stdout.write(self.style.ERROR(
+                    '❌ Failed to create demo organization.'
+                ))
+                return
 
-        # Get demo users
+        # Get demo users (self-healing: will be created by create_demo_organization if missing)
         self.demo_admin = User.objects.filter(username='demo_admin_solo').first()
         self.alex = User.objects.filter(username='alex_chen_demo').first()
         self.sam = User.objects.filter(username='sam_rivera_demo').first()
@@ -88,23 +100,37 @@ class Command(BaseCommand):
 
         self.demo_users = [u for u in [self.demo_admin, self.alex, self.sam, self.jordan] if u]
         if len(self.demo_users) < 3:
-            self.stdout.write(self.style.ERROR(
-                '❌ Demo users not found. Please run: python manage.py create_demo_organization'
+            self.stdout.write(self.style.WARNING(
+                '⚠️ Demo users not found. Running create_demo_organization to fix...'
             ))
-            return
+            from django.core.management import call_command
+            call_command('create_demo_organization')
+            # Refresh user references
+            self.alex = User.objects.filter(username='alex_chen_demo').first()
+            self.sam = User.objects.filter(username='sam_rivera_demo').first()
+            self.jordan = User.objects.filter(username='jordan_taylor_demo').first()
+            self.demo_users = [u for u in [self.alex, self.sam, self.jordan] if u]
+            
         self.stdout.write(f'   Found {len(self.demo_users)} demo users')
 
-        # Get demo boards
+        # Get demo boards (self-healing: recreate if missing)
         self.demo_boards = Board.objects.filter(organization=self.demo_org, is_official_demo_board=True)
         self.software_board = self.demo_boards.filter(name__icontains='software').first()
         self.marketing_board = self.demo_boards.filter(name__icontains='marketing').first()
         self.bug_board = self.demo_boards.filter(name__icontains='bug').first()
 
         if not all([self.software_board, self.marketing_board, self.bug_board]):
-            self.stdout.write(self.style.ERROR(
-                '❌ Demo boards not found. Please run: python manage.py create_demo_organization'
+            self.stdout.write(self.style.WARNING(
+                '⚠️ Demo boards not found. Running create_demo_organization to fix...'
             ))
-            return
+            from django.core.management import call_command
+            call_command('create_demo_organization')
+            # Refresh board references
+            self.demo_boards = Board.objects.filter(organization=self.demo_org, is_official_demo_board=True)
+            self.software_board = self.demo_boards.filter(name__icontains='software').first()
+            self.marketing_board = self.demo_boards.filter(name__icontains='marketing').first()
+            self.bug_board = self.demo_boards.filter(name__icontains='bug').first()
+            
         self.stdout.write(f'   Found {self.demo_boards.count()} demo boards')
 
         # Reset if requested

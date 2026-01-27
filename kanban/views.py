@@ -22,223 +22,220 @@ from .stakeholder_models import StakeholderTaskInvolvement
 
 @login_required
 def dashboard(request):
+    # Ensure user has a profile (MVP mode: auto-create without organization)
     try:
         profile = request.user.profile
-        organization = profile.organization
-        
-        # Mark wizard as completed for new users (we skip the wizard now)
-        if not profile.completed_wizard:
-            profile.completed_wizard = True
-            profile.save()
-        
-        # Import simplified mode setting
-        from kanban.utils.demo_settings import SIMPLIFIED_MODE
-        
-        # Get boards from user's organization OR where user is a member
-        demo_org_names = ['Demo - Acme Corporation']
-        
-        # Base query: boards in user's org or where user is a member
-        boards = Board.objects.filter(
-            Q(organization=organization) | Q(members=request.user)
-        ).filter(
-            Q(created_by=request.user) | Q(members=request.user)
+    except UserProfile.DoesNotExist:
+        profile = UserProfile.objects.create(
+            user=request.user,
+            organization=None,
+            is_admin=False,
+            completed_wizard=True
         )
-        
-        # SIMPLIFIED MODE: Include demo boards in main dashboard
-        # Users see all boards they have access to in one place
-        if SIMPLIFIED_MODE:
-            # Include official demo boards for all users to explore features
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            boards = boards | demo_boards
-        else:
-            # LEGACY: Exclude demo boards - demo accessed via separate demo dashboard
-            boards = boards.exclude(organization__name__in=demo_org_names)
-        
-        boards = boards.distinct()
-        
-        # Get analytics data
-        task_count = Task.objects.filter(column__board__in=boards).count()
-        completed_count = Task.objects.filter(
-            column__board__in=boards,
-            progress=100
-        ).count()
-        
-        # Get completion rate
-        completion_rate = 0
-        if task_count > 0:
-            completion_rate = (completed_count / task_count) * 100
-          # Get tasks due soon (next 3 days)
-        due_soon = Task.objects.filter(
-            column__board__in=boards,
-            due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
-        ).count()
-          # Get overdue tasks (due date in the past and not completed)
-        overdue_count = Task.objects.filter(
-            column__board__in=boards,
-            due_date__lt=timezone.now()
-        ).exclude(
-            progress=100
-        ).count()
-        
-        # Get detailed task data for modals
-        all_tasks = Task.objects.filter(column__board__in=boards).select_related('column', 'assigned_to', 'column__board')
-        completed_tasks = Task.objects.filter(
-            column__board__in=boards,
-            progress=100
-        ).select_related('column', 'assigned_to', 'column__board')
-        overdue_tasks = Task.objects.filter(
-            column__board__in=boards,
-            due_date__lt=timezone.now()
-        ).exclude(
-            progress=100
-        ).select_related('column', 'assigned_to', 'column__board')
-        due_soon_tasks = Task.objects.filter(
-            column__board__in=boards,
-            due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
-        ).select_related('column', 'assigned_to', 'column__board')
-        
-        # Get sort preference from request (default to 'urgency')
-        sort_by = request.GET.get('sort_tasks', 'urgency')
-        
-        # Base query for My Tasks - exclude only completed tasks (progress=100)
-        my_tasks_query = Task.objects.filter(
-            column__board__in=boards,
-            assigned_to=request.user
-        ).exclude(
-            progress=100
-        ).select_related('column', 'column__board', 'assigned_to')
-        
-        # Apply sorting based on user preference
-        if sort_by == 'due_date':
-            # Sort by: 1) Due date (soonest first), 2) Priority, 3) Creation date
-            my_tasks = my_tasks_query.extra(
-                select={
-                    'priority_order': """
-                        CASE priority 
-                            WHEN 'urgent' THEN 1 
-                            WHEN 'high' THEN 2 
-                            WHEN 'medium' THEN 3 
-                            WHEN 'low' THEN 4 
-                            ELSE 5 
-                        END
-                    """,
-                    'due_date_order': "CASE WHEN due_date IS NULL THEN 1 ELSE 0 END"
-                }
-            ).order_by('due_date_order', 'due_date', 'priority_order', 'created_at')[:8]
-        elif sort_by == 'priority':
-            # Sort by: 1) Priority level, 2) Due date, 3) Creation date
-            my_tasks = my_tasks_query.extra(
-                select={
-                    'priority_order': """
-                        CASE priority 
-                            WHEN 'urgent' THEN 1 
-                            WHEN 'high' THEN 2 
-                            WHEN 'medium' THEN 3 
-                            WHEN 'low' THEN 4 
-                            ELSE 5 
-                        END
-                    """,
-                    'due_date_order': "CASE WHEN due_date IS NULL THEN 1 ELSE 0 END"
-                }
-            ).order_by('priority_order', 'due_date_order', 'due_date', 'created_at')[:8]
-        elif sort_by == 'recent':
-            # Sort by: 1) Most recently created/updated, 2) Priority
-            my_tasks = my_tasks_query.extra(
-                select={
-                    'priority_order': """
-                        CASE priority 
-                            WHEN 'urgent' THEN 1 
-                            WHEN 'high' THEN 2 
-                            WHEN 'medium' THEN 3 
-                            WHEN 'low' THEN 4 
-                            ELSE 5 
-                        END
-                    """
-                }
-            ).order_by('-updated_at', '-created_at', 'priority_order')[:8]
-        else:  # Default: 'urgency'
-            # Sort by: 1) Overdue tasks first, 2) Priority level, 3) Due date, 4) Creation date
-            my_tasks = my_tasks_query.extra(
-                select={
-                    'is_overdue': "CASE WHEN due_date < datetime('now') THEN 1 ELSE 0 END",
-                    'priority_order': """
-                        CASE priority 
-                            WHEN 'urgent' THEN 1 
-                            WHEN 'high' THEN 2 
-                            WHEN 'medium' THEN 3 
-                            WHEN 'low' THEN 4 
-                            ELSE 5 
-                        END
-                    """
-                }
-            ).order_by('-is_overdue', 'priority_order', 'due_date', 'created_at')[:8]
-        
-        # Count of my tasks (for stats)
-        my_tasks_count = Task.objects.filter(
-            column__board__in=boards,
-            assigned_to=request.user
-        ).exclude(
-            Q(column__name__icontains='done') |
-            Q(column__name__icontains='closed') |
-            Q(column__name__icontains='completed') |
-            Q(progress=100)
-        ).count()        
-        return render(request, 'kanban/dashboard.html', {
-            'boards': boards,
-            'task_count': task_count,
-            'completed_count': completed_count,
-            'completion_rate': round(completion_rate, 1),
-            'due_soon': due_soon,
-            'overdue_count': overdue_count,
-            'all_tasks': all_tasks,
-            'completed_tasks': completed_tasks,
-            'overdue_tasks': overdue_tasks,
-            'due_soon_tasks': due_soon_tasks,
+    
+    # MVP Mode: Organization is optional (can be None)
+    organization = profile.organization
+    
+    # Mark wizard as completed for new users (we skip the wizard now)
+    if not profile.completed_wizard:
+        profile.completed_wizard = True
+        profile.save()
+    
+    # Track if this is first visit for welcome modal
+    show_welcome_modal = not profile.has_seen_welcome
+    if show_welcome_modal:
+        profile.has_seen_welcome = True
+        profile.save()
+    
+    # Import simplified mode setting
+    from kanban.utils.demo_settings import SIMPLIFIED_MODE
+    
+    # MVP Mode: Get all boards the user has access to
+    # Include: 1) Official demo boards, 2) Boards user created, 3) Boards user is member of
+    demo_boards = Board.objects.filter(is_official_demo_board=True)
+    user_boards = Board.objects.filter(
+        Q(created_by=request.user) | Q(members=request.user)
+    )
+    
+    # Combine and deduplicate
+    boards = (demo_boards | user_boards).distinct()
+    
+    # Get analytics data
+    task_count = Task.objects.filter(column__board__in=boards).count()
+    completed_count = Task.objects.filter(
+        column__board__in=boards,
+        progress=100
+    ).count()
+    
+    # Get completion rate
+    completion_rate = 0
+    if task_count > 0:
+        completion_rate = (completed_count / task_count) * 100
+      # Get tasks due soon (next 3 days)
+    due_soon = Task.objects.filter(
+        column__board__in=boards,
+        due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
+    ).count()
+      # Get overdue tasks (due date in the past and not completed)
+    overdue_count = Task.objects.filter(
+        column__board__in=boards,
+        due_date__lt=timezone.now()
+    ).exclude(
+        progress=100
+    ).count()
+    
+    # Get detailed task data for modals
+    all_tasks = Task.objects.filter(column__board__in=boards).select_related('column', 'assigned_to', 'column__board')
+    completed_tasks = Task.objects.filter(
+        column__board__in=boards,
+        progress=100
+    ).select_related('column', 'assigned_to', 'column__board')
+    overdue_tasks = Task.objects.filter(
+        column__board__in=boards,
+        due_date__lt=timezone.now()
+    ).exclude(
+        progress=100
+    ).select_related('column', 'assigned_to', 'column__board')
+    due_soon_tasks = Task.objects.filter(
+        column__board__in=boards,
+        due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
+    ).select_related('column', 'assigned_to', 'column__board')
+    
+    # Get sort preference from request (default to 'urgency')
+    sort_by = request.GET.get('sort_tasks', 'urgency')
+    
+    # Base query for My Tasks - exclude only completed tasks (progress=100)
+    my_tasks_query = Task.objects.filter(
+        column__board__in=boards,
+        assigned_to=request.user
+    ).exclude(
+        progress=100
+    ).select_related('column', 'column__board', 'assigned_to')
+    
+    # Apply sorting based on user preference
+    if sort_by == 'due_date':
+        # Sort by: 1) Due date (soonest first), 2) Priority, 3) Creation date
+        my_tasks = my_tasks_query.extra(
+            select={
+                'priority_order': """
+                    CASE priority 
+                        WHEN 'urgent' THEN 1 
+                        WHEN 'high' THEN 2 
+                        WHEN 'medium' THEN 3 
+                        WHEN 'low' THEN 4 
+                        ELSE 5 
+                    END
+                """,
+                'due_date_order': "CASE WHEN due_date IS NULL THEN 1 ELSE 0 END"
+            }
+        ).order_by('due_date_order', 'due_date', 'priority_order', 'created_at')[:8]
+    elif sort_by == 'priority':
+        # Sort by: 1) Priority level, 2) Due date, 3) Creation date
+        my_tasks = my_tasks_query.extra(
+            select={
+                'priority_order': """
+                    CASE priority 
+                        WHEN 'urgent' THEN 1 
+                        WHEN 'high' THEN 2 
+                        WHEN 'medium' THEN 3 
+                        WHEN 'low' THEN 4 
+                        ELSE 5 
+                    END
+                """,
+                'due_date_order': "CASE WHEN due_date IS NULL THEN 1 ELSE 0 END"
+            }
+        ).order_by('priority_order', 'due_date_order', 'due_date', 'created_at')[:8]
+    elif sort_by == 'recent':
+        # Sort by: 1) Most recently created/updated, 2) Priority
+        my_tasks = my_tasks_query.extra(
+            select={
+                'priority_order': """
+                    CASE priority 
+                        WHEN 'urgent' THEN 1 
+                        WHEN 'high' THEN 2 
+                        WHEN 'medium' THEN 3 
+                        WHEN 'low' THEN 4 
+                        ELSE 5 
+                    END
+                """
+            }
+        ).order_by('-updated_at', '-created_at', 'priority_order')[:8]
+    else:  # Default: 'urgency'
+        # Sort by: 1) Overdue tasks first, 2) Priority level, 3) Due date, 4) Creation date
+        my_tasks = my_tasks_query.extra(
+            select={
+                'is_overdue': "CASE WHEN due_date < datetime('now') THEN 1 ELSE 0 END",
+                'priority_order': """
+                    CASE priority 
+                        WHEN 'urgent' THEN 1 
+                        WHEN 'high' THEN 2 
+                        WHEN 'medium' THEN 3 
+                        WHEN 'low' THEN 4 
+                        ELSE 5 
+                    END
+                """
+            }
+        ).order_by('-is_overdue', 'priority_order', 'due_date', 'created_at')[:8]
+    
+    # Count of my tasks (for stats)
+    my_tasks_count = Task.objects.filter(
+        column__board__in=boards,
+        assigned_to=request.user
+    ).exclude(
+        Q(column__name__icontains='done') |
+        Q(column__name__icontains='closed') |
+        Q(column__name__icontains='completed') |
+        Q(progress=100)
+    ).count()        
+    return render(request, 'kanban/dashboard.html', {
+        'boards': boards,
+        'task_count': task_count,
+        'completed_count': completed_count,
+        'completion_rate': round(completion_rate, 1),
+        'due_soon': due_soon,
+        'overdue_count': overdue_count,
+        'all_tasks': all_tasks,
+        'completed_tasks': completed_tasks,
+        'overdue_tasks': overdue_tasks,
+        'due_soon_tasks': due_soon_tasks,
             'remaining_tasks': task_count - completed_count,
             'my_tasks': my_tasks,
             'my_tasks_count': my_tasks_count,
             'my_tasks_sort_by': sort_by,  # Current sort preference
             'now': timezone.now(),  # For comparing dates in the template
+            'show_welcome_modal': show_welcome_modal,  # Show welcome modal for first-time users
         })
-    except UserProfile.DoesNotExist:
-        return redirect('create_organization')
 
 @login_required
 def board_list(request):
+    # Ensure user has a profile (MVP mode: auto-create without organization)
     try:
         profile = request.user.profile
-        organization = profile.organization
-        
-        # Import simplified mode setting
-        from kanban.utils.demo_settings import SIMPLIFIED_MODE
-        
-        # Get boards from user's organization OR where user is a member
-        demo_org_names = ['Demo - Acme Corporation']
-        
-        # Base query: boards in user's org or where user is a member
-        boards = Board.objects.filter(
-            Q(organization=organization) | Q(members=request.user)
-        ).filter(
-            Q(created_by=request.user) | Q(members=request.user)
-        )
-        
-        # SIMPLIFIED MODE: Include demo boards in board list
-        # Users see all boards they have access to in one place
-        if not SIMPLIFIED_MODE:
-            # LEGACY: Exclude demo boards - demo accessed via separate demo dashboard
-            boards = boards.exclude(organization__name__in=demo_org_names)
-        
-        boards = boards.distinct()
-        
-        # For board_list, we only display boards, creation is handled by create_board view
-        form = BoardForm()
-        
-        return render(request, 'kanban/board_list.html', {
-            'boards': boards,
-            'form': form
-        })
     except UserProfile.DoesNotExist:
-        return redirect('create_organization')
+        profile = UserProfile.objects.create(
+            user=request.user,
+            organization=None,
+            is_admin=False,
+            completed_wizard=True
+        )
+    
+    # MVP Mode: Get all boards the user has access to
+    # Include: 1) Official demo boards, 2) Boards user created, 3) Boards user is member of
+    demo_boards = Board.objects.filter(is_official_demo_board=True)
+    user_boards = Board.objects.filter(
+        Q(created_by=request.user) | Q(members=request.user)
+    )
+    
+    # Combine and deduplicate
+    boards = (demo_boards | user_boards).distinct()
+    
+    # For board_list, we only display boards, creation is handled by create_board view
+    form = BoardForm()
+    
+    return render(request, 'kanban/board_list.html', {
+        'boards': boards,
+        'form': form
+    })
 
 @login_required
 def create_board(request):
@@ -260,42 +257,54 @@ def create_board(request):
             'demo_projects_max': project_limit_status['max_allowed'],
         })
     
+    # Ensure user has a profile (MVP mode: auto-create without organization)
     try:
         profile = request.user.profile
-        organization = profile.organization
+    except UserProfile.DoesNotExist:
+        profile = UserProfile.objects.create(
+            user=request.user,
+            organization=None,
+            is_admin=False,
+            completed_wizard=True
+        )
+    
+    # MVP Mode: Organization is optional (can be None)
+    organization = profile.organization
+    
+    if request.method == 'POST':
+        # Re-check limit before processing (in case of race condition)
+        project_limit_status = check_project_limit(request)
+        if project_limit_status['is_demo'] and not project_limit_status['can_create']:
+            record_limitation_hit(request, 'project_limit')
+            messages.warning(request, project_limit_status['message'])
+            return redirect('board_list')
         
-        if request.method == 'POST':
-            # Re-check limit before processing (in case of race condition)
-            project_limit_status = check_project_limit(request)
-            if project_limit_status['is_demo'] and not project_limit_status['can_create']:
-                record_limitation_hit(request, 'project_limit')
-                messages.warning(request, project_limit_status['message'])
-                return redirect('board_list')
+        form = BoardForm(request.POST)
+        if form.is_valid():
+            board = form.save(commit=False)
+            # MVP Mode: organization can be None
+            board.organization = organization
+            board.created_by = request.user
             
-            form = BoardForm(request.POST)
-            if form.is_valid():
-                board = form.save(commit=False)
-                board.organization = organization
-                board.created_by = request.user
-                
-                # If in demo mode, track this board as created by this demo session
-                is_demo_mode = request.session.get('is_demo_mode', False)
-                if is_demo_mode:
-                    # Use browser_fingerprint for persistent tracking across session changes
-                    browser_fingerprint = request.session.get('browser_fingerprint')
-                    if browser_fingerprint:
-                        board.created_by_session = browser_fingerprint
-                    else:
-                        # Fallback to session key if fingerprint not available
-                        board.created_by_session = request.session.session_key
-                
-                board.save()
-                board.members.add(request.user)
-                
-                # Increment demo project count if in demo mode
-                increment_project_count(request)
-                
-                # Assign creator as Admin in RBAC system
+            # If in demo mode, track this board as created by this demo session
+            is_demo_mode = request.session.get('is_demo_mode', False)
+            if is_demo_mode:
+                # Use browser_fingerprint for persistent tracking across session changes
+                browser_fingerprint = request.session.get('browser_fingerprint')
+                if browser_fingerprint:
+                    board.created_by_session = browser_fingerprint
+                else:
+                    # Fallback to session key if fingerprint not available
+                    board.created_by_session = request.session.session_key
+            
+            board.save()
+            board.members.add(request.user)
+            
+            # Increment demo project count if in demo mode
+            increment_project_count(request)
+            
+            # Assign creator as Admin in RBAC system (if organization exists)
+            if organization:
                 try:
                     from kanban.permission_models import Role, BoardMembership
                     admin_role = Role.objects.filter(
@@ -312,56 +321,54 @@ def create_board(request):
                 except Exception as e:
                     # Continue even if RBAC setup fails
                     pass
-                
-                # Log board creation
-                log_model_change('board.created', board, request.user, request)
-                  # Check if there are recommended columns to create
-                recommended_columns_json = request.POST.get('recommended_columns')
-                if recommended_columns_json:
-                    try:
-                        recommended_columns = json.loads(recommended_columns_json)
-                        
-                        # Create the recommended columns
-                        for i, column_data in enumerate(recommended_columns):
-                            Column.objects.create(
-                                name=column_data['name'],
-                                board=board,
-                                position=i
-                            )
-                        
-                        messages.success(request, f'Board "{board.name}" created successfully with {len(recommended_columns)} AI-recommended columns!')
-                    except (json.JSONDecodeError, KeyError) as e:
-                        # Fallback to default columns if there's an error with recommended columns
-                        default_columns = ['To Do', 'In Progress', 'Done']
-                        for i, name in enumerate(default_columns):
-                            Column.objects.create(name=name, board=board, position=i)
-                        messages.success(request, f'Board "{board.name}" created successfully with default columns!')
-                else:
-                    # No recommended columns, create default ones
+            
+            # Log board creation
+            log_model_change('board.created', board, request.user, request)
+              # Check if there are recommended columns to create
+            recommended_columns_json = request.POST.get('recommended_columns')
+            if recommended_columns_json:
+                try:
+                    recommended_columns = json.loads(recommended_columns_json)
+                    
+                    # Create the recommended columns
+                    for i, column_data in enumerate(recommended_columns):
+                        Column.objects.create(
+                            name=column_data['name'],
+                            board=board,
+                            position=i
+                        )
+                    
+                    messages.success(request, f'Board "{board.name}" created successfully with {len(recommended_columns)} AI-recommended columns!')
+                except (json.JSONDecodeError, KeyError) as e:
+                    # Fallback to default columns if there's an error with recommended columns
                     default_columns = ['To Do', 'In Progress', 'Done']
                     for i, name in enumerate(default_columns):
                         Column.objects.create(name=name, board=board, position=i)
-                    messages.success(request, f'Board "{board.name}" created successfully!')
-                
-                return redirect('board_detail', board_id=board.id)
-        else:
-            form = BoardForm()
-        
-        # Pass demo status to template
-        demo_context = {}
-        if project_limit_status['is_demo']:
-            demo_context = {
-                'demo_projects_created': project_limit_status['current_count'],
-                'demo_projects_max': project_limit_status['max_allowed'],
-                'demo_projects_remaining': project_limit_status['max_allowed'] - project_limit_status['current_count'],
-            }
-        
-        return render(request, 'kanban/create_board.html', {
-            'form': form,
-            **demo_context
-        })
-    except UserProfile.DoesNotExist:
-        return redirect('create_organization')
+                    messages.success(request, f'Board "{board.name}" created successfully with default columns!')
+            else:
+                # No recommended columns, create default ones
+                default_columns = ['To Do', 'In Progress', 'Done']
+                for i, name in enumerate(default_columns):
+                    Column.objects.create(name=name, board=board, position=i)
+                messages.success(request, f'Board "{board.name}" created successfully!')
+            
+            return redirect('board_detail', board_id=board.id)
+    else:
+        form = BoardForm()
+    
+    # Pass demo status to template
+    demo_context = {}
+    if project_limit_status['is_demo']:
+        demo_context = {
+            'demo_projects_created': project_limit_status['current_count'],
+            'demo_projects_max': project_limit_status['max_allowed'],
+            'demo_projects_remaining': project_limit_status['max_allowed'] - project_limit_status['current_count'],
+        }
+    
+    return render(request, 'kanban/create_board.html', {
+        'form': form,
+        **demo_context
+    })
 
 @login_required
 def board_detail(request, board_id):
@@ -371,9 +378,10 @@ def board_detail(request, board_id):
     
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
+    # Check if this is a demo board (MVP mode: organization can be null)
+    is_demo_board = board.is_official_demo_board or (
+        board.organization and board.organization.is_demo
+    )
     
     # In simplified mode: treat demo boards as regular boards, no redirect
     # In legacy mode: redirect to demo board view if in demo mode

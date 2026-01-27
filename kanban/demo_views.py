@@ -985,7 +985,8 @@ def demo_board_detail(request, board_id):
 
 def reset_demo_data(request):
     """
-    Reset demo data to original state
+    Reset demo data to original state with SELF-HEALING capability.
+    Can recover from any state including deleted demo data.
     Supports both AJAX (POST with JSON response) and regular form requests
     ANONYMOUS ACCESS: Works for both logged-in and anonymous users
     """
@@ -1013,10 +1014,29 @@ def reset_demo_data(request):
     
     if request.method == 'POST':
         try:
-            # Get demo organization
+            from django.core.management import call_command
+            from io import StringIO
+            
+            # Capture output for logging
+            out = StringIO()
+            
+            # ============================================================
+            # SELF-HEALING STEP 1: Ensure demo foundation exists
+            # This recreates demo org, users, and boards if they were deleted
+            # ============================================================
+            
+            # Always run create_demo_organization with --reset to ensure clean slate
+            try:
+                call_command('create_demo_organization', '--reset', stdout=out, stderr=out)
+            except Exception as e:
+                # If it fails, try without reset
+                call_command('create_demo_organization', stdout=out, stderr=out)
+            
+            # Now demo organization should exist
             demo_org = Organization.objects.filter(is_demo=True).first()
+            
             if not demo_org:
-                raise Exception('Demo organization not found')
+                raise Exception('Failed to create demo organization')
             
             demo_boards = Board.objects.filter(
                 organization=demo_org,
@@ -1024,15 +1044,13 @@ def reset_demo_data(request):
             )
             
             # ============================================================
-            # STEP 1: Clean up ALL user-created data in demo organization
+            # STEP 2: Clean up user-created data
             # ============================================================
             
             # Delete session-created content (if any)
-            # IMPORTANT: Content may be tagged with session_id OR browser_fingerprint
             session_id = request.session.get('demo_session_id')
             browser_fingerprint = request.session.get('browser_fingerprint')
             
-            # Build list of identifiers to clean (session_id and/or fingerprint)
             identifiers_to_clean = []
             if session_id:
                 identifiers_to_clean.append(session_id)
@@ -1040,64 +1058,40 @@ def reset_demo_data(request):
                 identifiers_to_clean.append(browser_fingerprint)
             
             if identifiers_to_clean:
-                # Delete tasks created by this session (by session_id OR fingerprint)
                 Task.objects.filter(
                     created_by_session__in=identifiers_to_clean,
                     column__board__organization=demo_org
                 ).delete()
                 
-                # Delete boards created by this session (by session_id OR fingerprint)
                 Board.objects.filter(
                     created_by_session__in=identifiers_to_clean,
                     organization=demo_org,
                     is_official_demo_board=False
                 ).delete()
             
-            # Also delete ALL user-created boards (not just session-tagged ones)
-            # These are boards with is_official_demo_board=False or is_seed_demo_data=False
-            user_created_boards = Board.objects.filter(
+            # Delete ALL user-created boards in demo org
+            Board.objects.filter(
                 organization=demo_org,
                 is_official_demo_board=False
-            )
-            user_created_boards_count = user_created_boards.count()
-            user_created_boards.delete()
+            ).delete()
             
-            # IMPORTANT: Also handle boards created by authenticated users in NON-demo organizations
-            # When users are logged in and click "New Board" from the demo dashboard,
-            # the board gets created in THEIR organization, not the demo organization
-            # We should delete these as well during a "Reset Demo Data" action
-            boards_deleted_from_user_org = 0
-            if request.user.is_authenticated and hasattr(request.user, 'profile'):
-                user_org = request.user.profile.organization
-                # Only process if user's org is NOT the demo org (to avoid double-deletion)
-                if user_org and user_org != demo_org:
-                    # Delete non-official boards created by this user
-                    # (boards they created for testing on the demo dashboard)
-                    user_test_boards = Board.objects.filter(
-                        organization=user_org,
-                        created_by=request.user,
-                        is_official_demo_board=False
-                    )
-                    boards_deleted_from_user_org = user_test_boards.count()
-                    user_test_boards.delete()
+            # MVP Mode: Also delete user-created boards with null organization
+            if request.user.is_authenticated:
+                Board.objects.filter(
+                    created_by=request.user,
+                    is_official_demo_board=False,
+                    organization__isnull=True
+                ).delete()
             
-            # Delete user-created tasks on demo boards (is_seed_demo_data=False)
+            # Delete user-created tasks on demo boards
             Task.objects.filter(
                 column__board__in=demo_boards,
                 is_seed_demo_data=False
             ).delete()
             
             # ============================================================
-            # STEP 2: Use populate_all_demo_data to restore everything
-            # This is the single source of truth for all demo data
+            # STEP 3: Populate all demo data
             # ============================================================
-            from django.core.management import call_command
-            from io import StringIO
-            
-            # Capture output for logging
-            out = StringIO()
-            
-            # Use the consolidated command that handles ALL demo data
             # The --reset flag ensures it clears and recreates everything
             call_command('populate_all_demo_data', '--reset', stdout=out, stderr=out)
             

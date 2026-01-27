@@ -71,7 +71,7 @@ def conflict_dashboard(request):
         
         demo_mode_type = request.session.get('demo_mode', 'solo')
         
-        # Get boards user has access to
+        # Get boards user has access to - MVP Mode without organization requirement
         if is_demo_mode:
             # In demo mode, only show demo organization boards
             demo_org_names = ['Demo - Acme Corporation']
@@ -79,20 +79,25 @@ def conflict_dashboard(request):
             demo_orgs = Organization.objects.filter(name__in=demo_org_names)
             boards = Board.objects.filter(organization__in=demo_orgs).distinct()
         else:
-            from accounts.models import Organization
-            profile = request.user.profile
-            organization = profile.organization
+            from accounts.models import Organization, UserProfile
             
-            # Include demo organization boards for all authenticated users
-            demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-            org_filter = Q(organization=organization)
-            if demo_org:
-                org_filter |= Q(organization=demo_org)
+            # Ensure user has a profile
+            try:
+                profile = request.user.profile
+            except UserProfile.DoesNotExist:
+                profile = UserProfile.objects.create(
+                    user=request.user,
+                    organization=None,
+                    is_admin=False,
+                    completed_wizard=True
+                )
             
-            boards = Board.objects.filter(
-                org_filter &
-                (Q(created_by=request.user) | Q(members=request.user))
-            ).distinct()
+            # MVP Mode: Get all boards the user has access to
+            demo_boards = Board.objects.filter(is_official_demo_board=True)
+            user_boards = Board.objects.filter(
+                Q(created_by=request.user) | Q(members=request.user)
+            )
+            boards = (demo_boards | user_boards).distinct()
         
         # Check if filtering by specific board
         board_filter_id = request.GET.get('board_id')

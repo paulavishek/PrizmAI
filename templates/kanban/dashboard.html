@@ -327,10 +327,129 @@
         max-height: 800px;
         padding: 0 1.5rem 1.5rem 1.5rem;
     }
+    
+    /* Welcome Modal Styles */
+    .welcome-modal .modal-header {
+        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+        color: white;
+        border-bottom: none;
+    }
+    .welcome-modal .modal-title {
+        font-weight: 700;
+    }
+    .welcome-modal .feature-item {
+        display: flex;
+        align-items: flex-start;
+        margin-bottom: 1rem;
+    }
+    .welcome-modal .feature-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 1rem;
+        flex-shrink: 0;
+    }
+    .welcome-modal .feature-icon.users { background: #dbeafe; color: #2563eb; }
+    .welcome-modal .feature-icon.boards { background: #dcfce7; color: #16a34a; }
+    .welcome-modal .feature-icon.reset { background: #fef3c7; color: #d97706; }
+    .welcome-modal .demo-user-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        background: #f3f4f6;
+        border-radius: 20px;
+        margin: 2px;
+        font-size: 0.85rem;
+    }
+    .welcome-modal .demo-user-badge i { margin-right: 5px; color: #6366f1; }
 </style>
 {% endblock %}
 
 {% block content %}
+<!-- Welcome Modal for First-time Users -->
+{% if show_welcome_modal %}
+<div class="modal fade welcome-modal" id="welcomeModal" tabindex="-1" aria-labelledby="welcomeModalLabel" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="welcomeModalLabel">
+                    <i class="fas fa-rocket me-2"></i>Welcome to PrizmAI!
+                </h5>
+            </div>
+            <div class="modal-body">
+                <p class="lead mb-4">
+                    Your intelligent project management platform is ready. Here's what you need to know:
+                </p>
+                
+                <div class="feature-item">
+                    <div class="feature-icon users">
+                        <i class="fas fa-users"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-1">Demo Team Members</h6>
+                        <p class="text-muted mb-2">
+                            Explore collaboration features with these pre-configured demo users:
+                        </p>
+                        <div>
+                            <span class="demo-user-badge"><i class="fas fa-user-tie"></i> Alex Chen (Admin)</span>
+                            <span class="demo-user-badge"><i class="fas fa-code"></i> Sam Rivera (Developer)</span>
+                            <span class="demo-user-badge"><i class="fas fa-chart-line"></i> Jordan Taylor (Analyst)</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="feature-item">
+                    <div class="feature-icon boards">
+                        <i class="fas fa-columns"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-1">Sample Project Boards</h6>
+                        <p class="text-muted mb-0">
+                            Three demo boards are pre-loaded with realistic project data:
+                            <strong>Software Development</strong>, <strong>Marketing Campaign</strong>, and <strong>Bug Tracking</strong>.
+                            Feel free to explore, edit, or create your own!
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="feature-item">
+                    <div class="feature-icon reset">
+                        <i class="fas fa-undo-alt"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-1">Reset Anytime</h6>
+                        <p class="text-muted mb-0">
+                            Made changes you want to undo? Use the <strong>Reset Demo Data</strong> button
+                            to restore all demo content to its original state. Your own boards and data are safe!
+                        </p>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info mt-3 mb-0">
+                    <i class="fas fa-lightbulb me-2"></i>
+                    <strong>Pro Tip:</strong> In your real workspace, you'll invite actual team members.
+                    The demo users help you explore features without needing a team right away!
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary btn-lg px-5" data-bs-dismiss="modal">
+                    <i class="fas fa-arrow-right me-2"></i>Get Started
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var welcomeModal = new bootstrap.Modal(document.getElementById('welcomeModal'));
+    welcomeModal.show();
+});
+</script>
+{% endif %}
+
 <div class="row mb-4">
     <div class="col-md-12">
         <div class="d-sm-flex align-items-center justify-content-between mb-4">
