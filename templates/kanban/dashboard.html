@@ -355,13 +355,18 @@
     .welcome-modal .feature-icon.users { background: #dbeafe; color: #2563eb; }
     .welcome-modal .feature-icon.boards { background: #dcfce7; color: #16a34a; }
     .welcome-modal .feature-icon.reset { background: #fef3c7; color: #d97706; }
+    .welcome-modal .demo-user-badges-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        text-align: left;
+    }
     .welcome-modal .demo-user-badge {
         display: inline-flex;
         align-items: center;
         padding: 4px 10px;
         background: #f3f4f6;
         border-radius: 20px;
-        margin: 2px;
         font-size: 0.85rem;
     }
     .welcome-modal .demo-user-badge i { margin-right: 5px; color: #6366f1; }
@@ -393,7 +398,7 @@
                         <p class="text-muted mb-2">
                             Explore collaboration features with these pre-configured demo users:
                         </p>
-                        <div>
+                        <div class="demo-user-badges-container">
                             <span class="demo-user-badge"><i class="fas fa-user-tie"></i> Alex Chen (Admin)</span>
                             <span class="demo-user-badge"><i class="fas fa-code"></i> Sam Rivera (Developer)</span>
                             <span class="demo-user-badge"><i class="fas fa-chart-line"></i> Jordan Taylor (Analyst)</span>
