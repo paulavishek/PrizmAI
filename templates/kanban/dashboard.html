@@ -350,6 +350,11 @@
         margin-bottom: 1rem;
         margin-left: 0;
         padding-left: 0;
+        width: 100%;
+    }
+    .welcome-modal .feature-item > div:last-child {
+        flex: 1;
+        min-width: 0;
     }
     .welcome-modal .feature-icon {
         width: 40px;
@@ -368,7 +373,9 @@
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
-        text-align: left;
+        margin-left: 0;
+        padding-left: 0;
+        justify-content: flex-start;
     }
     .welcome-modal .demo-user-badge {
         display: inline-flex;
@@ -379,6 +386,16 @@
         font-size: 0.85rem;
     }
     .welcome-modal .demo-user-badge i { margin-right: 5px; color: #6366f1; }
+    .welcome-modal h6 {
+        margin-left: 0;
+        padding-left: 0;
+        text-align: left;
+    }
+    .welcome-modal p {
+        margin-left: 0;
+        padding-left: 0;
+        text-align: left;
+    }
 </style>
 {% endblock %}
 
