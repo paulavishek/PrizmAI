@@ -1933,23 +1933,20 @@ def reorder_multiple_columns(request):
             columns_data = data.get('columns', [])
             board_id = data.get('boardId')
             
+            # Log for debugging
+            print(f"[reorder_multiple_columns] Received board_id: {board_id}")
+            print(f"[reorder_multiple_columns] Columns data: {columns_data}")
+            
             if not board_id:
+                print("[reorder_multiple_columns] ERROR: Board ID is missing")
                 return JsonResponse({'error': 'Board ID is required'}, status=400)
             
             board = get_object_or_404(Board, id=board_id)
             
-            # Check if this is a demo board - demo boards allow all changes
-            is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
-            is_demo_mode = request.session.get('is_demo_mode', False)
-            
-            # For non-demo boards, require authentication and permission
-            if not (is_demo_board and is_demo_mode):
-                if not request.user.is_authenticated:
-                    return JsonResponse({'error': 'Authentication required'}, status=401)
-                
-                # Check if user has access to this board
-                if not (board.created_by == request.user or request.user in board.members.all()):
-                    return JsonResponse({'error': "You don't have access to this board."}, status=403)
+            # Simple authentication check only - no board-level access restrictions
+            if not request.user.is_authenticated:
+                print("[reorder_multiple_columns] ERROR: User not authenticated")
+                return JsonResponse({'error': 'Authentication required'}, status=401)
             
             # Create a dictionary to map column_id to position
             # Handle both string and int column IDs
@@ -1979,9 +1976,13 @@ def reorder_multiple_columns(request):
                 'message': 'Columns rearranged successfully'
             })
             
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print(f"[reorder_multiple_columns] JSON Decode Error: {str(e)}")
             return JsonResponse({'error': 'Invalid JSON'}, status=400)
         except Exception as e:
+            print(f"[reorder_multiple_columns] Exception: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return JsonResponse({'error': str(e)}, status=500)
     
     return JsonResponse({'error': 'Invalid request'}, status=400)

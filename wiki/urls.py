@@ -51,6 +51,7 @@ urlpatterns = [
     # Wiki Links
     path('page/<slug:slug>/link/', views.WikiLinkCreateView.as_view(), name='link_create'),
     path('quick-link/<str:content_type>/<int:object_id>/', views.quick_link_wiki, name='quick_link'),
+    path('delete-link/<int:link_id>/', views.delete_wiki_link, name='delete_link'),
     
     # Search
     path('search/', views.wiki_search, name='search'),

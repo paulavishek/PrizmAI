@@ -552,7 +552,7 @@
                 {% if wiki_links %}
                     <div class="list-group list-group-flush">
                         {% for link in wiki_links %}
-                            <a href="{% url 'wiki:page_detail' link.wiki_page.slug %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-start">
+                            <div class="list-group-item d-flex justify-content-between align-items-start">
                                 <div class="flex-grow-1">
                                     <h6 class="mb-1">
                                         <i class="fas fa-book"></i> {{ link.wiki_page.title }}
@@ -565,8 +565,18 @@
                                         Last updated: {{ link.wiki_page.updated_at|date:"M d, Y" }}
                                     </small>
                                 </div>
-                                <span class="badge bg-info">View Page</span>
-                            </a>
+                                <div class="d-flex gap-2 align-items-center">
+                                    <a href="{% url 'wiki:page_detail' link.wiki_page.slug %}" class="btn btn-sm btn-info" title="View wiki page">
+                                        <i class="fas fa-eye"></i> View Page
+                                    </a>
+                                    <form method="post" action="{% url 'wiki:delete_link' link.id %}" class="d-inline" onsubmit="return confirm('Are you sure you want to remove this wiki link?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove link">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
                         {% endfor %}
                     </div>
                 {% else %}

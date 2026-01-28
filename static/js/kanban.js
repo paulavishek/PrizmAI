@@ -190,8 +190,11 @@ function columnDrop(e) {
         targetColumn.parentNode.insertBefore(draggedColumn, targetColumn);
     }
     
-    // Update backend
-    updateColumnPositionsOnServer(allColumns);
+    // Get the NEW column order after reordering
+    const reorderedColumns = Array.from(board.querySelectorAll('.kanban-column')).filter(col => col.id);
+    
+    // Update backend with the new order
+    updateColumnPositionsOnServer(reorderedColumns);
 }
 
 // ==========================================
@@ -622,6 +625,14 @@ function updateColumnPositionsOnServer(columnsInOrder) {
     }
     
     console.log('[Column DnD] Board ID:', boardId);
+    console.log('[Column DnD] Position data:', positionData);
+    
+    // Validate board ID exists
+    if (!boardId) {
+        console.error('[Column DnD] Board ID not found in URL');
+        showNotification('Error: Could not determine board ID', 'error');
+        return;
+    }
     
     fetch('/columns/reorder-multiple/', {
         method: 'POST',

@@ -4,7 +4,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.views.generic import ListView, DetailView, CreateView, UpdateView, DeleteView
 from django.db.models import Q, Sum, Count
 from django.http import JsonResponse
-from django.urls import reverse_lazy
+from django.urls import reverse_lazy, reverse
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
 from django.contrib import messages
@@ -607,6 +607,48 @@ def quick_link_wiki(request, content_type, object_id):
         'object_id': object_id,
         'item': item
     })
+
+
+@login_required
+def delete_wiki_link(request, link_id):
+    """Delete a wiki link"""
+    link = get_object_or_404(WikiLink, pk=link_id)
+    
+    # Check permission - user must be the creator or have appropriate access
+    can_delete = False
+    
+    if request.user == link.created_by:
+        can_delete = True
+    elif link.board and hasattr(request.user, 'profile'):
+        # Check if user has access to the board
+        board = link.board
+        if request.user == board.created_by or request.user in board.members.all():
+            can_delete = True
+    elif link.task and hasattr(request.user, 'profile'):
+        # Check if user has access to the task's board
+        task = link.task
+        board = task.column.board
+        if request.user == board.created_by or request.user in board.members.all():
+            can_delete = True
+    
+    if not can_delete:
+        messages.error(request, 'You do not have permission to delete this wiki link.')
+        return redirect('home')
+    
+    # Store the redirect URL before deleting
+    if link.board:
+        redirect_url = reverse('board_detail', kwargs={'board_id': link.board.id})
+    elif link.task:
+        redirect_url = reverse('task_detail', kwargs={'task_id': link.task.id})
+    else:
+        redirect_url = reverse('home')
+    
+    # Delete the link
+    wiki_page_title = link.wiki_page.title
+    link.delete()
+    
+    messages.success(request, f'Successfully removed link to "{wiki_page_title}"')
+    return redirect(redirect_url)
 
 
 @login_required
