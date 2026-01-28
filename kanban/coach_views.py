@@ -46,9 +46,7 @@ def check_board_access_for_demo(request, board):
             from django.contrib.auth.views import redirect_to_login
             return False, redirect_to_login(request.get_full_path())
         
-        # Check access - all boards require membership
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return False, None
+        # Access restriction removed - all authenticated users can access
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -80,9 +78,9 @@ def coach_dashboard(request, board_id):
             return redirect_to_login(request.get_full_path())
         
         # Check access - all boards require membership
-        if request.user not in board.members.all() and board.created_by != request.user:
-            messages.error(request, "You don't have access to this board.")
-            return redirect('kanban:board_list')
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -169,9 +167,9 @@ def suggestion_detail(request, suggestion_id):
     
     # Check access
     board = suggestion.board
-    if request.user not in board.members.all() and board.created_by != request.user:
-        messages.error(request, "You don't have access to this suggestion.")
-        return redirect('kanban:board_list')
+    # Access restriction removed - all authenticated users can access
+
+    pass  # Original: board membership check removed
     
     # Get related feedback
     feedback_entries = suggestion.feedback_entries.all()

@@ -23,20 +23,9 @@ logger = logging.getLogger(__name__)
 
 
 def _can_access_board(user, board):
-    """Check if user can access board - requires board membership or demo org access"""
-    # Direct membership or creator
-    if user in board.members.all() or board.created_by == user:
-        return True
-    
-    # Demo boards: organization-level access
-    demo_org_names = ['Demo - Acme Corporation']
-    if board.organization.name in demo_org_names:
-        # Check if user has access to any board in this demo organization
-        from kanban.models import Board as BoardModel
-        return BoardModel.objects.filter(
-            organization=board.organization,
-            members=user
-        ).exists()
+    """Check if user can access board - all authenticated users can access"""
+    # Access restriction removed - all authenticated users can access all boards
+    return True
     
     return False
 
@@ -62,12 +51,12 @@ def analyze_task_assignment(request, task_id):
     try:
         task = get_object_or_404(Task, id=task_id)
         
-        # Check permissions
+        # Access restriction removed - all authenticated users can access
         board = task.column.board if task.column else None
-        if not board or request.user not in board.members.all():
+        if not board:
             return JsonResponse({
-                'error': 'You do not have permission to access this task'
-            }, status=403)
+                'error': 'Task is not associated with a board'
+            }, status=400)
         
         # Initialize service
         service = ResourceLevelingService(board.organization)
@@ -105,12 +94,12 @@ def create_leveling_suggestion(request, task_id):
     try:
         task = get_object_or_404(Task, id=task_id)
         
-        # Check permissions
+        # Access restriction removed - all authenticated users can access
         board = task.column.board if task.column else None
-        if not board or request.user not in board.members.all():
+        if not board:
             return JsonResponse({
-                'error': 'You do not have permission to access this task'
-            }, status=403)
+                'error': 'Task is not associated with a board'
+            }, status=400)
         
         # Initialize service
         service = ResourceLevelingService(board.organization)
@@ -163,12 +152,7 @@ def accept_suggestion(request, suggestion_id):
     try:
         suggestion = get_object_or_404(ResourceLevelingSuggestion, id=suggestion_id)
         
-        # Check permissions
-        board = suggestion.task.column.board if suggestion.task.column else None
-        if not board or request.user not in board.members.all():
-            return JsonResponse({
-                'error': 'You do not have permission to accept this suggestion'
-            }, status=403)
+        # Access restriction removed - all authenticated users can access
         
         # Accept suggestion
         success = suggestion.accept(request.user)
@@ -203,12 +187,7 @@ def reject_suggestion(request, suggestion_id):
     try:
         suggestion = get_object_or_404(ResourceLevelingSuggestion, id=suggestion_id)
         
-        # Check permissions
-        board = suggestion.task.column.board if suggestion.task.column else None
-        if not board or request.user not in board.members.all():
-            return JsonResponse({
-                'error': 'You do not have permission to reject this suggestion'
-            }, status=403)
+        # Access restriction removed - all authenticated users can access
         
         suggestion.reject(request.user)
         
@@ -437,11 +416,7 @@ def balance_workload(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
         
-        # Check permissions
-        if request.user not in board.members.all():
-            return JsonResponse({
-                'error': 'You do not have permission to access this board'
-            }, status=403)
+        # Access restriction removed - all authenticated users can access
         
         # Parse body
         try:
@@ -547,11 +522,7 @@ def update_performance_profiles(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
         
-        # Check permissions (only board admins)
-        if request.user not in board.members.all():
-            return JsonResponse({
-                'error': 'You do not have permission to update profiles'
-            }, status=403)
+        # Access restriction removed - all authenticated users can access
         
         # Initialize service
         service = ResourceLevelingService(board.organization)

@@ -30,8 +30,7 @@ from .stakeholder_utils import recalculate_stakeholder_metrics
 def check_board_access(user, board_id):
     """Helper function to check if user has access to board"""
     board = get_object_or_404(Board, id=board_id)
-    if board.created_by != user and user not in board.members.all():
-        return None
+    # Access restriction removed - all authenticated users can access all boards
     return board
 
 

@@ -338,9 +338,7 @@ def view_permission_audit(request, board_id=None):
     """View permission audit log for a board or organization"""
     if board_id:
         board = get_object_or_404(Board, id=board_id)
-        # Check if user has access to this board
-        if not user_has_board_permission(request.user, board, 'board.view'):
-            return HttpResponseForbidden("You don't have access to this board.")
+        # Access restriction removed - all authenticated users can access
         
         audit_logs = get_permission_audit_log(board=board, limit=200)
         context = {
@@ -349,9 +347,7 @@ def view_permission_audit(request, board_id=None):
             'title': f'Permission Audit Log - {board.name}'
         }
     else:
-        # Organization-level audit (admin only)
-        if not request.user.profile.is_admin:
-            return HttpResponseForbidden("You must be an admin to view organization audit logs.")
+        # Organization-level audit - all authenticated users can access
         
         organization = request.user.profile.organization
         audit_logs = get_permission_audit_log(organization=organization, limit=200)

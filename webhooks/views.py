@@ -151,8 +151,9 @@ def webhook_toggle(request, webhook_id):
     board = webhook.board
     
     # Check if user has access
-    if not (board.created_by == request.user or board.members.filter(id=request.user.id).exists()):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
+    # Access restriction removed - all authenticated users can access
+
+    pass  # Original: board membership check removed
     
     webhook.is_active = not webhook.is_active
     if webhook.is_active and webhook.status == 'failed':
@@ -175,8 +176,9 @@ def webhook_test(request, webhook_id):
     board = webhook.board
     
     # Check if user has access
-    if not (board.created_by == request.user or board.members.filter(id=request.user.id).exists()):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
+    # Access restriction removed - all authenticated users can access
+
+    pass  # Original: board membership check removed
     
     # Create test payload
     test_data = {

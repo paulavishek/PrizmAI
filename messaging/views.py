@@ -67,10 +67,7 @@ def chat_room_list(request, board_id):
     """List all chat rooms for a board"""
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if user is board member
-    if request.user not in board.members.all():
-        django_messages.error(request, 'You do not have access to this board.')
-        return redirect('board_list')
+    # Access restriction removed - all authenticated users can access
     
     chat_rooms = board.chat_rooms.all()
     
@@ -99,10 +96,7 @@ def chat_room_detail(request, room_id):
     """Display a specific chat room"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    # Check if user is member
-    if request.user not in chat_room.members.all():
-        django_messages.error(request, 'You do not have access to this room.')
-        return redirect('board_list')
+    # Access restriction removed - all authenticated users can access chat rooms
     
     # Mark all notifications related to this chat room as read
     Notification.objects.filter(
@@ -145,10 +139,7 @@ def create_chat_room(request, board_id):
     """Create a new chat room for a board"""
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if user is board admin/creator
-    if request.user != board.created_by and request.user not in board.members.all():
-        django_messages.error(request, 'You do not have permission to create rooms.')
-        return redirect('chat_room_list', board_id=board_id)
+    # Access restriction removed - all authenticated users can create chat rooms
     
     if request.method == 'POST':
         form = ChatRoomForm(request.POST, board=board)
@@ -182,8 +173,7 @@ def send_chat_message(request, room_id):
     """Send a message to a chat room (for non-WebSocket clients)"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    if request.user not in chat_room.members.all():
-        return JsonResponse({'error': 'Unauthorized'}, status=403)
+    # Access restriction removed - all authenticated users can send messages
     
     form = ChatMessageForm(request.POST)
     if form.is_valid():
@@ -214,11 +204,8 @@ def task_thread_comments(request, task_id):
     """View and manage real-time task thread comments"""
     task = get_object_or_404(Task, id=task_id)
     
-    # Check if user has access to this task
+    # Access restriction removed - all authenticated users can access task threads
     board = task.column.board
-    if request.user not in board.members.all():
-        django_messages.error(request, 'You do not have access to this task.')
-        return redirect('board_list')
     
     if request.method == 'POST':
         form = TaskThreadCommentForm(request.POST)
@@ -335,8 +322,7 @@ def message_history(request, room_id):
     """Get message history for a chat room (pagination)"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    if request.user not in chat_room.members.all():
-        return JsonResponse({'error': 'Unauthorized'}, status=403)
+    # Access restriction removed - all authenticated users can access
     
     offset = int(request.GET.get('offset', 0))
     limit = 20
@@ -365,8 +351,7 @@ def task_comment_history(request, task_id):
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
-    if request.user not in board.members.all():
-        return JsonResponse({'error': 'Unauthorized'}, status=403)
+    # Access restriction removed - all authenticated users can access
     
     offset = int(request.GET.get('offset', 0))
     limit = 20
@@ -445,9 +430,7 @@ def mark_chat_message_read(request, message_id):
     """Mark a specific chat message as read by the current user"""
     message = get_object_or_404(ChatMessage, id=message_id)
     
-    # Check if user is member of the room
-    if request.user not in message.chat_room.members.all():
-        return JsonResponse({'error': 'Unauthorized'}, status=403)
+    # Access restriction removed - all authenticated users can access
     
     # Mark message as read by this user
     message.read_by.add(request.user)
@@ -514,8 +497,7 @@ def mark_room_messages_read(request, room_id):
     """Mark all messages in a chat room as read by the current user"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    if request.user not in chat_room.members.all():
-        return JsonResponse({'error': 'Unauthorized'}, status=403)
+    # Access restriction removed - all authenticated users can access
     
     # Get all messages the user hasn't read
     messages_to_mark = chat_room.messages.exclude(read_by=request.user)
@@ -627,10 +609,7 @@ def upload_chat_room_file(request, room_id):
     """Upload a file to a chat room"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    # Check if user is member
-    if request.user not in chat_room.members.all():
-        django_messages.error(request, 'You do not have access to this room.')
-        return redirect('messaging:chat_room_list', board_id=chat_room.board.id)
+    # Access restriction removed - all authenticated users can access
     
     if request.method == 'POST':
         form = ChatRoomFileForm(request.POST, request.FILES)
@@ -737,10 +716,7 @@ def download_chat_room_file(request, file_id):
     """Download a file from a chat room"""
     file_obj = get_object_or_404(FileAttachment, id=file_id)
     
-    # Check if user is member of the room
-    if request.user not in file_obj.chat_room.members.all():
-        django_messages.error(request, 'You do not have access to this file.')
-        return redirect('messaging:hub')
+    # Access restriction removed - all authenticated users can access
     
     # Serve the file
     if file_obj.file:
@@ -782,9 +758,7 @@ def list_chat_room_files(request, room_id):
     """Get a list of files in a chat room (JSON API)"""
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
-    # Check if user is member
-    if request.user not in chat_room.members.all():
-        return JsonResponse({'error': 'Access denied'}, status=403)
+    # Access restriction removed - all authenticated users can access
     
     # Get non-deleted files
     files = chat_room.file_attachments.filter(deleted_at__isnull=True).values(

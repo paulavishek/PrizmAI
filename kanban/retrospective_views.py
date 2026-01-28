@@ -88,8 +88,7 @@ def retrospective_list(request, board_id):
             return redirect_to_login(request.get_full_path())
         
         # Check access - all boards require membership
-        if not (request.user == board.created_by or request.user in board.members.all()):
-            return HttpResponseForbidden("You don't have access to this board")
+        # Access restriction removed - all authenticated users can access
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -169,8 +168,7 @@ def retrospective_detail(request, board_id, retro_id):
             return redirect_to_login(request.get_full_path())
         
         # Check access - all boards require membership
-        if not (request.user == board.created_by or request.user in board.members.all()):
-            return HttpResponseForbidden("You don't have access to this board")
+        # Access restriction removed - all authenticated users can access
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -230,8 +228,7 @@ def retrospective_create(request, board_id):
             return redirect_to_login(request.get_full_path())
         
         # Check permissions
-        if not (request.user == board.created_by or request.user in board.members.all()):
-            return HttpResponseForbidden("You don't have access to this board")
+        # Access restriction removed - all authenticated users can access
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -422,8 +419,7 @@ def retrospective_dashboard(request, board_id):
             return redirect_to_login(request.get_full_path())
         
         # Check access - all boards require membership
-        if not (request.user == board.created_by or request.user in board.members.all()):
-            return HttpResponseForbidden("You don't have access to this board")
+        # Access restriction removed - all authenticated users can access
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -523,8 +519,7 @@ def lesson_update_status(request, board_id, lesson_id):
     if not (is_demo_board and is_demo_mode):
         if not request.user.is_authenticated:
             return JsonResponse({'error': 'Authentication required'}, status=401)
-        if not (request.user == board.created_by or request.user in board.members.all()):
-            return JsonResponse({'error': 'Permission denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
         from kanban.utils.demo_permissions import DemoPermissions
@@ -570,8 +565,7 @@ def action_update_status(request, board_id, action_id):
     if not (is_demo_board and is_demo_mode):
         if not request.user.is_authenticated:
             return JsonResponse({'error': 'Authentication required'}, status=401)
-        if not (request.user == board.created_by or request.user in board.members.all()):
-            return JsonResponse({'error': 'Permission denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
         from kanban.utils.demo_permissions import DemoPermissions
@@ -624,8 +618,7 @@ def lessons_learned_list(request, board_id):
             return redirect_to_login(request.get_full_path())
         
         # Check permissions
-        if not (request.user == board.created_by or request.user in board.members.all()):
-            return HttpResponseForbidden("You don't have access to this board")
+        # Access restriction removed - all authenticated users can access
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -784,8 +777,7 @@ def retrospective_export(request, board_id, retro_id):
         if not request.user.is_authenticated:
             from django.contrib.auth.views import redirect_to_login
             return redirect_to_login(request.get_full_path())
-        if not (request.user == board.created_by or request.user in board.members.all()):
-            return HttpResponseForbidden("You don't have access to this board")
+        # Access restriction removed - all authenticated users can access
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
         from kanban.utils.demo_permissions import DemoPermissions
@@ -992,3 +984,4 @@ def retrospective_export(request, board_id, retro_id):
     response.write(pdf)
     
     return response
+

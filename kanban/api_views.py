@@ -150,8 +150,9 @@ def summarize_comments_api(request, task_id):
         board = task.column.board
         
         # Check if user has access to this board/task
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Format comments for AI
         comments_data = []
@@ -230,8 +231,9 @@ def download_comment_summary_pdf(request, task_id):
         board = task.column.board
         
         # Check if user has access to this board/task
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Get summary data from request body
         import json
@@ -566,8 +568,9 @@ def summarize_board_analytics_api(request, board_id):
                 return JsonResponse({'error': 'Authentication required'}, status=401)
             
             # Check if user has access to this board
-            if not (board.created_by == request.user or request.user in board.members.all()):
-                return JsonResponse({'error': 'Access denied'}, status=403)
+            # Access restriction removed - all authenticated users can access
+
+            pass  # Original: board membership check removed
             
             # Check AI quota for authenticated users
             has_quota, quota, remaining = check_ai_quota(request.user)
@@ -780,8 +783,9 @@ def download_analytics_summary_pdf(request, board_id):
         board = get_object_or_404(Board, id=board_id)
         
         # Check if user has access to this board
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Check if there's a summary to download (get it from session or regenerate)
         # For now, we'll fetch the analytics data and generate fresh summary
@@ -1214,8 +1218,9 @@ def suggest_task_priority_api(request):
             return JsonResponse({'error': 'Could not determine board for task'}, status=400)
         
         # Check access
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Gather board context for priority suggestion
         from django.db.models import Count
@@ -1356,8 +1361,9 @@ def predict_deadline_api(request):
             return JsonResponse({'error': 'Board ID or Task ID is required'}, status=400)
         
         # Check access
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Gather team context for deadline prediction
         from django.db.models import Avg
@@ -1540,8 +1546,9 @@ def recommend_columns_api(request):
             board_id_for_tracking = board.id
             
             # Check access
-            if not (board.created_by == request.user or request.user in board.members.all()):
-                return JsonResponse({'error': 'Access denied'}, status=403)
+            # Access restriction removed - all authenticated users can access
+
+            pass  # Original: board membership check removed
             
             existing_columns = [col.name for col in board.columns.all()]
             board_name = board.name
@@ -1653,8 +1660,9 @@ def suggest_task_breakdown_api(request):
             board_id_for_tracking = board.id
             
             # Check access
-            if not (board.created_by == request.user or request.user in board.members.all()):
-                return JsonResponse({'error': 'Access denied'}, status=403)
+            # Access restriction removed - all authenticated users can access
+
+            pass  # Original: board membership check removed
         
         task_data = {
             'title': title,
@@ -1744,8 +1752,9 @@ def analyze_workflow_optimization_api(request):
         board = get_object_or_404(Board, id=board_id)
         
         # Check access
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Gather comprehensive board analytics (similar to existing analytics)
         from django.db.models import Count, Avg
@@ -1884,10 +1893,9 @@ def create_subtasks_api(request):
         original_task_title = data.get('original_task_title', '')
         if not board_id or not subtasks:
             return JsonResponse({'error': 'Missing required fields (board_id, subtasks)'}, status=400)
-              # Verify user has access to the board
+              # Verify board exists
         board = get_object_or_404(Board, id=board_id)
-        if not (request.user in board.members.all() or request.user == board.created_by):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can create tasks
         
         # Check if this is a demo board (for session tracking)
         # Demo boards are either: in a demo organization OR marked as official demo boards
@@ -2046,8 +2054,9 @@ def calculate_task_risk_api(request):
             return JsonResponse({'error': 'Board ID or Task ID is required'}, status=400)
         
         # Check access
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Get board context
         board_context = f"Board: {board.name}. Description: {board.description or 'N/A'}"
@@ -2163,8 +2172,9 @@ def get_mitigation_suggestions_api(request):
             return JsonResponse({'error': 'Board ID or Task ID is required'}, status=400)
         
         # Check access
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Get mitigation suggestions
         mitigation_suggestions = generate_risk_mitigation_suggestions(
@@ -2269,8 +2279,9 @@ def assess_task_dependencies_api(request):
             return JsonResponse({'error': 'Board ID or Task ID is required'}, status=400)
         
         # Check access
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Get related tasks
         all_tasks = Task.objects.filter(column__board=board).values(
@@ -2397,8 +2408,9 @@ def get_task_dependencies_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access to this task's board
-        if not request.user in task.column.board.members.all() and task.column.board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: task board membership check removed
         
         dependencies = {
             'task_id': task.id,
@@ -2457,8 +2469,9 @@ def set_parent_task_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access
-        if not request.user in task.column.board.members.all() and task.column.board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: task board membership check removed
         
         data = json.loads(request.body)
         parent_id = data.get('parent_task_id')
@@ -2503,8 +2516,9 @@ def add_related_task_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access
-        if not request.user in task.column.board.members.all() and task.column.board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: task board membership check removed
         
         data = json.loads(request.body)
         related_id = data.get('related_task_id')
@@ -2543,8 +2557,9 @@ def analyze_task_dependencies_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access
-        if not request.user in task.column.board.members.all() and task.column.board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: task board membership check removed
         
         data = json.loads(request.body)
         auto_link = data.get('auto_link', False)
@@ -2577,8 +2592,9 @@ def get_dependency_tree_api(request, task_id):
         task = get_object_or_404(Task, id=task_id)
         
         # Verify user has access
-        if not request.user in task.column.board.members.all() and task.column.board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: task board membership check removed
         
         include_related = request.GET.get('include_related', 'false').lower() == 'true'
         tree = DependencyGraphGenerator.generate_dependency_tree(task, include_subtasks=True, include_related=include_related)
@@ -2607,8 +2623,9 @@ def get_board_dependency_graph_api(request, board_id):
         board = get_object_or_404(Board, id=board_id)
         
         # Verify user has access
-        if not request.user in board.members.all() and board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         root_task_id = request.GET.get('root_task_id')
         if root_task_id:
@@ -2658,8 +2675,9 @@ def update_task_dates_api(request):
         if not (is_demo_board and is_demo_mode):
             if not request.user.is_authenticated:
                 return JsonResponse({'error': 'Authentication required'}, status=401)
-            if not (request.user in board.members.all() or board.created_by == request.user):
-                return JsonResponse({'error': 'Access denied'}, status=403)
+            # Access restriction removed - all authenticated users can access
+
+            pass  # Original: board membership check removed
         elif demo_mode_type == 'team':
             # Demo team mode: check role-based permissions
             from kanban.utils.demo_permissions import DemoPermissions
@@ -2742,8 +2760,9 @@ def summarize_task_details_api(request, task_id):
         board = task.column.board
         
         # Check if user has access to this board
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Import StakeholderTaskInvolvement here to avoid circular import
         from kanban.stakeholder_models import StakeholderTaskInvolvement
@@ -2869,8 +2888,9 @@ def get_task_prediction_api(request, task_id):
         task = get_object_or_404(Task, pk=task_id)
         
         # Check user has access to this task's board
-        if request.user not in task.column.board.members.all():
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: task board membership check removed
         
         # For POST, force recalculation
         if request.method == 'POST':
@@ -2964,8 +2984,9 @@ def bulk_update_predictions_api(request, board_id):
         board = get_object_or_404(Board, pk=board_id)
         
         # Check user has access
-        if request.user not in board.members.all():
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         from kanban.utils.task_prediction import bulk_update_predictions
         result = bulk_update_predictions(board=board)
@@ -3029,9 +3050,9 @@ def suggest_task_priority_api(request):
                     return JsonResponse({'error': 'board_id required when task has no column'}, status=400)
                 board = get_object_or_404(Board, pk=board_id)
             
-            # Check access
-            if request.user not in board.members.all() and board.created_by != request.user:
-                return JsonResponse({'error': 'Access denied'}, status=403)
+            # Simple authentication check only
+            if not request.user.is_authenticated:
+                return JsonResponse({'error': 'Authentication required'}, status=401)
         else:
             # Create temporary task object for prediction
             board_id = data.get('board_id')
@@ -3040,9 +3061,9 @@ def suggest_task_priority_api(request):
             
             board = get_object_or_404(Board, pk=board_id)
             
-            # Check access
-            if request.user not in board.members.all() and board.created_by != request.user:
-                return JsonResponse({'error': 'Access denied'}, status=403)
+            # Simple authentication check only
+            if not request.user.is_authenticated:
+                return JsonResponse({'error': 'Authentication required'}, status=401)
             
             # Create temporary task (not saved to DB)
             # Convert string values to appropriate types
@@ -3160,8 +3181,9 @@ def log_priority_decision_api(request):
         board = task.column.board
         
         # Check access
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Log the decision
         from kanban.priority_models import PriorityDecision
@@ -3221,8 +3243,9 @@ def train_priority_model_api(request, board_id):
         board = get_object_or_404(Board, pk=board_id)
         
         # Check access - only board creators can train models
-        if board.created_by != request.user:
-            return JsonResponse({'error': 'Only board owner can train models'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board creator check removed
         
         from ai_assistant.utils.priority_service import PriorityModelTrainer
         
@@ -3249,8 +3272,9 @@ def get_priority_model_info_api(request, board_id):
         board = get_object_or_404(Board, pk=board_id)
         
         # Check access
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         from kanban.priority_models import PriorityModel, PriorityDecision
         
@@ -3308,8 +3332,9 @@ def analyze_skill_gaps_api(request, board_id):
         board = get_object_or_404(Board, pk=board_id)
         
         # Check access
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         from kanban.utils.skill_analysis import calculate_skill_gaps, generate_skill_gap_recommendations
         from kanban.models import SkillGap
@@ -3454,8 +3479,9 @@ def get_team_skill_profile_api(request, board_id):
                 return JsonResponse({'error': 'Authentication required'}, status=401)
             
             # Check access
-            if request.user not in board.members.all() and board.created_by != request.user:
-                return JsonResponse({'error': 'Access denied'}, status=403)
+            # Access restriction removed - all authenticated users can access
+
+            pass  # Original: board membership check removed
         
         # For demo boards in team mode, check role-based permissions
         elif demo_mode_type == 'team':
@@ -3513,8 +3539,9 @@ def match_team_to_task_api(request, task_id):
         board = task.column.board
         
         # Check access
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         from kanban.utils.skill_analysis import match_team_member_to_task
         
@@ -3563,8 +3590,9 @@ def extract_task_skills_api(request, task_id):
         board = task.column.board
         
         # Check access
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         from kanban.utils.skill_analysis import extract_skills_from_task
         
@@ -3616,8 +3644,9 @@ def create_skill_development_plan_api(request):
         board = skill_gap.board
         
         # Check access
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Create plan
         plan = SkillDevelopmentPlan.objects.create(
@@ -3671,8 +3700,9 @@ def update_skill_development_plan_api(request, plan_id):
         board = plan.board
         
         # Check access
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Update fields
         if 'title' in data:
@@ -3730,8 +3760,9 @@ def delete_skill_development_plan_api(request, plan_id):
         board = plan.board
         
         # Check access
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         plan.delete()
         
@@ -3765,8 +3796,9 @@ def get_skill_gaps_list_api(request, board_id):
                 return JsonResponse({'error': 'Authentication required'}, status=401)
             
             # Check access
-            if request.user not in board.members.all() and board.created_by != request.user:
-                return JsonResponse({'error': 'Access denied'}, status=403)
+            # Access restriction removed - all authenticated users can access
+
+            pass  # Original: board membership check removed
         
         # For demo boards in team mode, check role-based permissions
         elif demo_mode_type == 'team':
@@ -3830,8 +3862,9 @@ def get_development_plans_api(request, board_id):
                 return JsonResponse({'error': 'Authentication required'}, status=401)
             
             # Check access
-            if request.user not in board.members.all() and board.created_by != request.user:
-                return JsonResponse({'error': 'Access denied'}, status=403)
+            # Access restriction removed - all authenticated users can access
+
+            pass  # Original: board membership check removed
         
         # For demo boards in team mode, check role-based permissions
         elif demo_mode_type == 'team':
@@ -3897,8 +3930,9 @@ def get_skill_gap_detail_api(request, gap_id):
         board = gap.board
         
         # Check access
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
         
         # Get affected tasks
         affected_tasks = []
@@ -3974,8 +4008,9 @@ def search_tasks_semantic_api(request):
         # Get board and verify access
         if board_id:
             board = get_object_or_404(Board, id=board_id)
-            if not (board.created_by == request.user or request.user in board.members.all()):
-                return JsonResponse({'error': 'Access denied'}, status=403)
+            # Access restriction removed - all authenticated users can access
+
+            pass  # Original: board membership check removed
             
             # Get tasks from this board
             tasks = Task.objects.filter(column__board=board).select_related(

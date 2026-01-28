@@ -26,12 +26,9 @@ def can_access_board(user, board):
     """
     Check if user can access a board.
     
-    Rules:
-    - Superusers can access everything
-    - Board creator can access
-    - Board members can access
-    - Organization members can access their org's boards
-    - ALL authenticated users can access demo boards
+    Rules (SIMPLIFIED - Single Organization Model):
+    - All authenticated users can access all boards
+    - No board membership checks required
     
     Returns:
         Boolean
@@ -39,38 +36,16 @@ def can_access_board(user, board):
     if not user or not user.is_authenticated:
         return False
     
-    # Superusers bypass all checks
-    if user.is_superuser:
-        return True
-    
-    # ALL authenticated users can access official demo boards
-    # This allows real users to explore demo features and tasks
-    if hasattr(board, 'is_official_demo_board') and board.is_official_demo_board:
-        return True
-    
-    # Board creator always has access
-    if board.created_by == user:
-        return True
-    
-    # Board members have access
-    if user in board.members.all():
-        return True
-    
-    # Organization members can access org boards
-    if hasattr(user, 'profile') and user.profile.organization_id == board.organization_id:
-        return True
-    
-    return False
+    # All authenticated users can access all boards
+    return True
 
 
 def can_manage_board(user, board):
     """
     Check if user can manage a board (delete, manage members).
     
-    Only:
-    - Board creator
-    - Organization admins
-    - Superusers
+    Rules (SIMPLIFIED):
+    - All authenticated users can manage all boards
     
     Returns:
         Boolean
@@ -78,25 +53,15 @@ def can_manage_board(user, board):
     if not user or not user.is_authenticated:
         return False
     
-    if user.is_superuser:
-        return True
-    
-    if board.created_by == user:
-        return True
-    
-    # Organization admin
-    if hasattr(user, 'profile') and user.profile.is_admin:
-        if user.profile.organization_id == board.organization_id:
-            return True
-    
-    return False
+    # All authenticated users can manage all boards
+    return True
 
 
 def can_modify_board_content(user, board):
     """
     Check if user can create/edit/delete tasks, columns, comments, etc.
     
-    All board members (including creator) can modify content.
+    All authenticated users can modify content.
     
     Returns:
         Boolean

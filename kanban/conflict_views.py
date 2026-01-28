@@ -220,12 +220,7 @@ def conflict_detail(request, conflict_id):
                 board__in=accessible_boards
             )
         
-        # Check access (skip for demo mode and demo boards)
-        if not is_demo_mode:
-            if not (conflict.board.is_official_demo_board or
-                    conflict.board.created_by == request.user or 
-                    request.user in conflict.board.members.all()):
-                return HttpResponseForbidden("You don't have access to this conflict")
+        # Access restriction removed - all authenticated users can access
         
         # Get resolutions sorted by confidence
         resolutions = conflict.resolutions.all().order_by('-ai_confidence')
@@ -316,14 +311,7 @@ def apply_resolution(request, conflict_id, resolution_id):
             conflict=conflict
         )
         
-        # Check access (for non-demo mode)
-        if not is_demo_mode:
-            if not (conflict.board.created_by == request.user or 
-                    request.user in conflict.board.members.all()):
-                return JsonResponse({
-                    'success': False,
-                    'error': "You don't have permission to resolve this conflict"
-                }, status=403)
+        # Access restriction removed - all authenticated users can access
         
         # Get optional feedback from request
         feedback = request.POST.get('feedback', '')
@@ -396,14 +384,7 @@ def ignore_conflict(request, conflict_id):
                 status='active'
             )
         
-        # Check access (for non-demo mode)
-        if not is_demo_mode:
-            if not (conflict.board.created_by == request.user or 
-                    request.user in conflict.board.members.all()):
-                return JsonResponse({
-                    'success': False,
-                    'error': "You don't have permission"
-            }, status=403)
+        # Access restriction removed - all authenticated users can access
         
         reason = request.POST.get('reason', '')
         ignore_user = request.user if request.user.is_authenticated else None
@@ -655,14 +636,7 @@ def trigger_detection(request, board_id):
                 id=board_id
             )
         
-        # Check access (for non-demo mode)
-        if not is_demo_mode:
-            if not (board.created_by == request.user or 
-                    request.user in board.members.all()):
-                return JsonResponse({
-                    'success': False,
-                    'error': "You don't have permission"
-                }, status=403)
+        # Access restriction removed - all authenticated users can access
         
         # Try async detection first, fallback to sync if Redis unavailable
         try:

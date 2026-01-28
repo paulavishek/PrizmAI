@@ -614,26 +614,8 @@ def delete_wiki_link(request, link_id):
     """Delete a wiki link"""
     link = get_object_or_404(WikiLink, pk=link_id)
     
-    # Check permission - user must be the creator or have appropriate access
-    can_delete = False
-    
-    if request.user == link.created_by:
-        can_delete = True
-    elif link.board and hasattr(request.user, 'profile'):
-        # Check if user has access to the board
-        board = link.board
-        if request.user == board.created_by or request.user in board.members.all():
-            can_delete = True
-    elif link.task and hasattr(request.user, 'profile'):
-        # Check if user has access to the task's board
-        task = link.task
-        board = task.column.board
-        if request.user == board.created_by or request.user in board.members.all():
-            can_delete = True
-    
-    if not can_delete:
-        messages.error(request, 'You do not have permission to delete this wiki link.')
-        return redirect('home')
+    # Access restriction removed - all authenticated users can delete wiki links
+    can_delete = True
     
     # Store the redirect URL before deleting
     if link.board:

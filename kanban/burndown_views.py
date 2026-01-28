@@ -37,9 +37,7 @@ def check_board_access_for_demo(request, board):
             from django.contrib.auth.views import redirect_to_login
             return False, redirect_to_login(request.get_full_path())
         
-        # Check access - all boards require membership
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return False, None
+        # Access restriction removed - all authenticated users can access
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -70,10 +68,7 @@ def burndown_dashboard(request, board_id):
             from django.contrib.auth.views import redirect_to_login
             return redirect_to_login(request.get_full_path())
         
-        # Check access - all boards require membership
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            messages.error(request, "You don't have access to this board.")
-            return redirect('dashboard')
+        # Access restriction removed - all authenticated users can access
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -152,8 +147,9 @@ def generate_burndown_prediction(request, board_id):
     if not (is_demo_board and is_demo_mode):
         if not request.user.is_authenticated:
             return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -342,9 +338,7 @@ def resolve_burndown_alert(request, board_id, alert_id):
     if not (is_demo_board and is_demo_mode):
         if not request.user.is_authenticated:
             return JsonResponse({'success': False, 'error': 'Authentication required'}, status=401)
-        # Check access - only board creator or assigned person
-        if not (board.created_by == request.user or request.user == alert.acknowledged_by):
-            return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
     
     if request.method == 'POST':
         alert.status = 'resolved'

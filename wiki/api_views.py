@@ -65,9 +65,7 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
         # Get the wiki page
         wiki_page = get_object_or_404(WikiPage, id=wiki_page_id, organization=org)
         
-        # Check if user has access (must be in the organization)
-        if not (hasattr(request.user, 'profile') and request.user.profile.organization == org):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
         
         try:
             # Get available boards for context
@@ -187,9 +185,7 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
         # Get the wiki page
         wiki_page = get_object_or_404(WikiPage, id=wiki_page_id, organization=org)
         
-        # Check if user has access (must be in the organization)
-        if not (hasattr(request.user, 'profile') and request.user.profile.organization == org):
-            return JsonResponse({'error': 'Access denied'}, status=403)
+        # Access restriction removed - all authenticated users can access
         
         # Check if there's already a recent analysis for this content
         content_hash = hashlib.sha256(wiki_page.content.encode()).hexdigest()
@@ -336,9 +332,7 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
         analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id, organization=org)
         board = get_object_or_404(Board, id=board_id, organization=org)
         
-        # Check board access
-        if board.created_by != request.user and request.user not in board.members.all():
-            return JsonResponse({'error': 'Access denied to board'}, status=403)
+        # Access restriction removed - all authenticated users can access
         
         # Get target column
         if column_id:

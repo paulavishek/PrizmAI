@@ -56,8 +56,9 @@ def budget_dashboard(request, board_id):
             return redirect_to_login(request.get_full_path())
         
         # Check access - all boards require membership
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return HttpResponseForbidden("You don't have permission to access this board.")
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -270,8 +271,9 @@ def budget_analytics(request, board_id):
             return redirect_to_login(request.get_full_path())
         
         # Check access - all boards require membership
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return HttpResponseForbidden("You don't have permission to access this board.")
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -361,8 +363,9 @@ def roi_dashboard(request, board_id):
             return redirect_to_login(request.get_full_path())
         
         # Check access - all boards require membership
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return HttpResponseForbidden("You don't have permission to access this board.")
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -840,21 +843,8 @@ def _can_access_board(user, board):
     if not user.is_authenticated:
         return False
     
-    # Direct membership or creator
-    if board.created_by == user or user in board.members.all():
-        return True
-    
-    # Demo boards: organization-level access
-    demo_org_names = ['Demo - Acme Corporation']
-    if board.organization.name in demo_org_names:
-        # Check if user has access to any board in this demo organization
-        from kanban.models import Board as BoardModel
-        return BoardModel.objects.filter(
-            organization=board.organization,
-            members=user
-        ).exists()
-    
-    return False
+    # Access restriction removed - all authenticated users can access all boards
+    return True
 
 
 # ============================================================================

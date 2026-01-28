@@ -44,11 +44,7 @@ def check_demo_access_for_forecasting(request, board, require_write=False):
             from django.contrib.auth.views import redirect_to_login
             return False, redirect_to_login(request.get_full_path()), False
         
-        # Check board membership
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            messages.error(request, "You don't have access to this board.")
-            return False, redirect('dashboard'), False
-        
+        # Access restriction removed - all authenticated users can access
         return True, None, False
     
     # SOLO MODE: Full admin access, no restrictions
@@ -261,10 +257,7 @@ def resolve_alert(request, board_id, alert_id):
     if not has_access:
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
-    # For non-demo mode, only board creator can resolve
-    if not is_demo_mode and board.created_by != request.user:
-        return JsonResponse({'success': False, 'error': 'Only board creator can resolve alerts'}, status=403)
-    
+    # Access restriction removed - all authenticated users can resolve alerts
     # For team mode, check admin role
     demo_mode_type = request.session.get('demo_mode', 'solo')
     if is_demo_mode and demo_mode_type == 'team':

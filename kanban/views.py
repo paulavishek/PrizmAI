@@ -1147,8 +1147,9 @@ def create_label(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
     # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board.")
+    # Access restriction removed - all authenticated users can access
+
+    pass  # Original: board membership check removed
     
     if request.method == 'POST':
         form = TaskLabelForm(request.POST)
@@ -1173,8 +1174,9 @@ def delete_label(request, label_id):
     board = label.board
     
     # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board.")
+    # Access restriction removed - all authenticated users can access
+
+    pass  # Original: board membership check removed
     
     # Delete the label
     label_name = label.name
@@ -1208,8 +1210,9 @@ def board_analytics(request, board_id):
             return redirect_to_login(request.get_full_path())
         
         # Check if user has access to this board - all boards require membership
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return HttpResponseForbidden("You don't have access to this board.")
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -1832,8 +1835,9 @@ def move_column(request, column_id, direction):
     board = column.board
     
     # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board.")
+    # Access restriction removed - all authenticated users can access
+
+    pass  # Original: board membership check removed
     
     # Get all columns in order of position
     columns = list(Column.objects.filter(board=board).order_by('position'))
@@ -1890,14 +1894,12 @@ def reorder_columns(request):
         is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
         is_demo_mode = request.session.get('is_demo_mode', False)
         
-        # For non-demo boards, require authentication and permission
+        # For non-demo boards, require authentication
         if not (is_demo_board and is_demo_mode):
             if not request.user.is_authenticated:
                 return JsonResponse({'error': 'Authentication required'}, status=401)
             
-            # Check if user has access to this board
-            if not (board.created_by == request.user or request.user in board.members.all()):
-                return JsonResponse({'error': "You don't have access to this board."}, status=403)
+            # Access restriction removed - all authenticated users can access
         
         # Get all columns in order
         columns = list(Column.objects.filter(board=board).order_by('position'))
@@ -1994,8 +1996,9 @@ def delete_column(request, column_id):
     board = column.board
     
     # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board.")
+    # Access restriction removed - all authenticated users can access
+
+    pass  # Original: board membership check removed
     
     # Prevent deletion of "To Do" column as it's required for task creation
     if column.name.lower() in ['to do', 'todo']:
@@ -2040,14 +2043,12 @@ def update_task_progress(request, task_id):
             is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
             is_demo_mode = request.session.get('is_demo_mode', False)
             
-            # For non-demo boards, require authentication and permission
+            # For non-demo boards, require authentication
             if not (is_demo_board and is_demo_mode):
                 if not request.user.is_authenticated:
                     return JsonResponse({'error': 'Authentication required'}, status=401)
                 
-                # Check if user has access to this board
-                if not (board.created_by == request.user or request.user in board.members.all()):
-                    return JsonResponse({'error': "You don't have access to this task."}, status=403)
+                # Access restriction removed - all authenticated users can access
             
             data = json.loads(request.body)
             direction = data.get('direction')
@@ -2120,8 +2121,9 @@ def export_board(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
     # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board.")
+    # Access restriction removed - all authenticated users can access
+
+    pass  # Original: board membership check removed
     
     export_format = request.GET.get('format', 'json')
     
@@ -2315,8 +2317,9 @@ def add_lean_labels(request, board_id):
     board = get_object_or_404(Board, id=board_id)
     
     # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have access to this board.")
+    # Access restriction removed - all authenticated users can access
+
+    pass  # Original: board membership check removed
     
     if request.method == 'POST':
         # Call the management command to add the labels
@@ -2364,8 +2367,9 @@ def test_ai_features(request):
 def edit_board(request, board_id):
     board = get_object_or_404(Board, id=board_id)
       # Check if user is the board creator or a member
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        return HttpResponseForbidden("You don't have permission to edit this board.")
+    # Access restriction removed - all authenticated users can access
+
+    pass  # Original: board membership check removed
     
     if request.method == 'POST':
         form = BoardForm(request.POST, instance=board)
@@ -2520,8 +2524,9 @@ def wizard_create_task(request):
             
             # Get the board and verify access
             board = get_object_or_404(Board, id=board_id)
-            if not (board.created_by == request.user or request.user in board.members.all()):
-                return JsonResponse({'error': 'Access denied'}, status=403)
+            # Access restriction removed - all authenticated users can access
+
+            pass  # Original: board membership check removed
             
             # Get the first column (To Do column)
             first_column = board.columns.first()
@@ -2615,9 +2620,7 @@ def view_dependency_tree(request, task_id):
     try:
         task = get_object_or_404(Task, id=task_id)
         
-        # Check access permission
-        if request.user not in task.column.board.members.all() and task.column.board.created_by != request.user:
-            return HttpResponseForbidden("You don't have access to this board")
+        # Access restriction removed - all authenticated users can access
         
         # Get all relationships
         parent_task = task.parent_task
@@ -2649,9 +2652,7 @@ def board_dependency_graph(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
         
-        # Check access permission
-        if request.user not in board.members.all() and board.created_by != request.user:
-            return HttpResponseForbidden("You don't have access to this board")
+        # Access restriction removed - all authenticated users can access
         
         # Get all tasks with dependencies
         tasks = Task.objects.filter(column__board=board).prefetch_related(
@@ -2689,9 +2690,9 @@ def upload_task_file(request, task_id):
     board = task.column.board
     
     # Check if user is board member
-    if request.user not in board.members.all() and board.created_by != request.user:
-        messages.error(request, 'You do not have access to this task.')
-        return redirect('board_list')
+    # Access restriction removed - all authenticated users can access
+
+    pass  # Original: board membership check removed
     
     if request.method == 'POST':
         form = TaskFileForm(request.POST, request.FILES)
@@ -2732,9 +2733,9 @@ def download_task_file(request, file_id):
     board = file_obj.task.column.board
     
     # Check if user is board member
-    if request.user not in board.members.all() and board.created_by != request.user:
-        messages.error(request, 'You do not have access to this file.')
-        return redirect('board_list')
+    # Access restriction removed - all authenticated users can access
+
+    pass  # Original: board membership check removed
     
     # Serve the file
     if file_obj.file:
@@ -2779,8 +2780,9 @@ def list_task_files(request, task_id):
     board = task.column.board
     
     # Check if user is board member
-    if request.user not in board.members.all() and board.created_by != request.user:
-        return JsonResponse({'error': 'Access denied'}, status=403)
+    # Access restriction removed - all authenticated users can access
+
+    pass  # Original: board membership check removed
     
     # Get non-deleted files
     files = task.file_attachments.filter(deleted_at__isnull=True).values(
@@ -2814,8 +2816,9 @@ def skill_gap_dashboard(request, board_id):
             return redirect_to_login(request.get_full_path())
         
         # Check access - all boards require membership
-        if not (board.created_by == request.user or request.user in board.members.all()):
-            return HttpResponseForbidden("You don't have access to this board.")
+        # Access restriction removed - all authenticated users can access
+
+        pass  # Original: board membership check removed
     
     # For demo boards in team mode, check role-based permissions
     elif demo_mode_type == 'team':
@@ -2890,11 +2893,7 @@ def scope_tracking_dashboard(request, board_id):
     is_demo_board = board.organization.name in demo_org_names
     is_demo_mode = request.session.get('is_demo_mode', False)
     
-    # Check if user has access to this board
-    if not (board.created_by == request.user or request.user in board.members.all()):
-        # Allow demo mode access for demo boards
-        if not (is_demo_board and is_demo_mode):
-            return HttpResponseForbidden("You don't have access to this board.")
+    # Access restriction removed - all authenticated users can access
     
     # Get current scope status
     scope_status = board.get_current_scope_status()
