@@ -251,7 +251,11 @@ class TaskForm(forms.ModelForm):
         if board:
             # Filter out Lean Six Sigma labels - they have their own dedicated field
             self.fields['labels'].queryset = TaskLabel.objects.filter(board=board).exclude(category='lean')
-            self.fields['assigned_to'].queryset = board.members.all()
+            
+            # Show all users (no board-level or organization restrictions - simplified access model)
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            self.fields['assigned_to'].queryset = User.objects.all().order_by('username')
             
             # Filter dependencies to only show tasks from the same board with dates
             self.fields['dependencies'].queryset = Task.objects.filter(

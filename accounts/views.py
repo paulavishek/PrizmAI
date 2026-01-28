@@ -59,8 +59,8 @@ def logout_view(request):
 
 def register_view(request, org_id=None):
     """
-    Simplified registration - no organization required.
-    MVP mode: All users share the same space with demo users.
+    Simplified registration - automatically assigns users to the single organization.
+    All users (demo + real) belong to "Demo - Acme Corporation".
     """
     # org_id parameter is kept for backward compatibility but ignored
     
@@ -68,6 +68,19 @@ def register_view(request, org_id=None):
         form = RegistrationForm(request.POST)
         if form.is_valid():
             user = form.save()
+            
+            # Automatically assign user to Demo - Acme Corporation
+            demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+            if demo_org:
+                UserProfile.objects.get_or_create(
+                    user=user,
+                    defaults={
+                        'organization': demo_org,
+                        'is_admin': False,
+                        'completed_wizard': True
+                    }
+                )
+            
             messages.success(request, 'Registration successful! Please log in.')
             return redirect('login')
     else:
@@ -75,23 +88,30 @@ def register_view(request, org_id=None):
     
     return render(request, 'accounts/register.html', {
         'form': form,
-        'organization': None  # No organization in MVP mode
+        'organization': None  # No organization choice needed
     })
 
 @login_required
 def organization_choice(request):
     """
-    MVP Mode: Redirect to dashboard since organization is not required.
+    Single organization mode: Ensure user is assigned to Demo - Acme Corporation.
     Auto-create profile if missing.
     """
     try:
         profile = request.user.profile
+        # Ensure they're in the demo organization
+        if not profile.organization:
+            demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+            if demo_org:
+                profile.organization = demo_org
+                profile.save()
         return redirect('dashboard')
     except UserProfile.DoesNotExist:
-        # Auto-create profile without organization for MVP mode
+        # Auto-create profile and assign to demo organization
+        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
         UserProfile.objects.create(
             user=request.user,
-            organization=None,
+            organization=demo_org,
             is_admin=False,
             completed_wizard=True
         )
