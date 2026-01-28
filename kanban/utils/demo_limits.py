@@ -44,6 +44,9 @@ def is_authenticated_real_user(request):
         email = request.user.email.lower()
         if 'demo_admin' in email or email.startswith('virtual_demo'):
             return False
+        # Block named demo accounts (@demo.prizmai.local)
+        if '@demo.prizmai.local' in email:
+            return False
         return True
     
     return False

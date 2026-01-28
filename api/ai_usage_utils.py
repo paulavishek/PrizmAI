@@ -40,7 +40,18 @@ def check_ai_quota(user):
     """
     Check if user has remaining AI quota
     Returns: (has_quota: bool, quota_obj: AIUsageQuota, remaining: int)
+    
+    Note: Demo user accounts (@demo.prizmai.local) are blocked from using AI features
+    to prevent quota exploitation by switching between demo accounts.
     """
+    # Block AI features for demo user accounts
+    if hasattr(user, 'email') and user.email:
+        email = user.email.lower()
+        if '@demo.prizmai.local' in email:
+            # Return no quota for demo accounts
+            quota = get_or_create_quota(user)
+            return False, quota, 0
+    
     quota = get_or_create_quota(user)
     has_quota = quota.has_quota_remaining()
     remaining = quota.get_remaining_requests()
@@ -120,10 +131,27 @@ def require_ai_quota(feature_name, request_type=''):
                     'error': 'Authentication required'
                 }, status=401)
             
+            # Check if this is a demo user account
+            is_demo_user = False
+            if hasattr(request.user, 'email') and request.user.email:
+                if '@demo.prizmai.local' in request.user.email.lower():
+                    is_demo_user = True
+            
             # Check quota (both monthly and daily)
             has_quota, quota, remaining = check_ai_quota(request.user)
             
             if not has_quota:
+                # Special message for demo users
+                if is_demo_user:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'AI features not available for demo accounts',
+                        'quota_exceeded': True,
+                        'is_demo_account': True,
+                        'message': 'AI features are not available for demo accounts. '
+                                   'Please create a free account to access AI-powered features with 10 daily and 50 monthly requests.'
+                    }, status=403)
+                
                 days_until_reset = quota.get_days_until_reset()
                 daily_remaining = quota.get_remaining_daily_requests()
                 
