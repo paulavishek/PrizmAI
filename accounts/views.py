@@ -6,6 +6,34 @@ from django.contrib.auth.models import User
 from .forms import LoginForm, RegistrationForm, UserProfileForm
 from .models import Organization, UserProfile
 from kanban.permission_audit import log_permission_change
+import logging
+
+logger = logging.getLogger(__name__)
+
+def quick_demo_login(request, username):
+    """
+    Quick login for demo users with pre-set credentials.
+    Allows one-click login from the dashboard.
+    """
+    # Only allow login for demo users
+    demo_users = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+    
+    if username not in demo_users:
+        messages.error(request, 'Invalid demo user.')
+        return redirect('login')
+    
+    # Authenticate with the known demo password
+    user = authenticate(request=request, username=username, password='demo123')
+    
+    if user is not None:
+        login(request, user)
+        messages.success(request, f'Logged in as {user.get_full_name() or user.username}!')
+        logger.info(f"Quick demo login successful for user: {username}")
+        return redirect('dashboard')
+    else:
+        messages.error(request, 'Demo user not found or credentials invalid.')
+        logger.warning(f"Quick demo login failed for user: {username}")
+        return redirect('login')
 
 def login_view(request):
     if request.user.is_authenticated:

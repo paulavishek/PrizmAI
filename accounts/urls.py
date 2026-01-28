@@ -8,6 +8,7 @@ from analytics.views import CustomLogoutView
 
 urlpatterns = [
     path('login/', views.login_view, name='login'),
+    path('quick-demo-login/<str:username>/', views.quick_demo_login, name='quick_demo_login'),
     path('logout/', CustomLogoutView.as_view(), name='logout'),  # Use analytics logout view
     path('register/', views.register_view, name='register'),
     path('register/<int:org_id>/', views.register_view, name='register_with_org'),
