@@ -547,24 +547,39 @@ class ResourceLevelingService:
         Returns:
             Dict with team member workloads and recommendations
         """
-        # For demo boards, show demo users + real users from requesting user's org who are members
+        # For demo boards, show: hardcoded demo users + current user ONLY
+        # This ensures each user sees a clean demo experience without seeing other real users
         demo_org_names = ['Demo - Acme Corporation']
         if board.organization.name in demo_org_names and requesting_user:
             try:
                 from django.db.models import Q
-                from accounts.models import Organization
+                from django.contrib.auth import get_user_model
+                User = get_user_model()
                 
-                # Get demo organizations
-                demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-                user_org = requesting_user.profile.organization
+                # Hardcoded demo users - these are the ONLY demo users shown
+                DEMO_USERNAMES = ['sam_rivera_demo', 'jordan_taylor_demo', 'alex_chen_demo']
                 
-                # Show: demo users (from demo orgs) OR real users from requesting user's org
-                members = board.members.filter(
-                    Q(profile__organization__in=demo_orgs) |  # Demo users
-                    Q(profile__organization=user_org)  # Real users from same org
-                )
-            except Exception:
-                members = board.members.filter(id=requesting_user.id)
+                # Build list of user IDs to include
+                user_ids = set()
+                
+                # 1. Add hardcoded demo users (if they're board members)
+                demo_users = board.members.filter(username__in=DEMO_USERNAMES)
+                user_ids.update(demo_users.values_list('id', flat=True))
+                
+                # 2. Always add current requesting user
+                user_ids.add(requesting_user.id)
+                
+                # Note: We intentionally DON'T add other real users to keep demo experience clean
+                # Each user sees: 3 demo users + themselves
+                
+                # Get all users by IDs
+                members = User.objects.filter(id__in=user_ids)
+                
+            except Exception as e:
+                # Fallback: just show requesting user
+                from django.contrib.auth import get_user_model
+                User = get_user_model()
+                members = User.objects.filter(id=requesting_user.id)
         else:
             members = board.members.all()
         
