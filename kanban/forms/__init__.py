@@ -1,5 +1,6 @@
 from django import forms
 from ..models import Board, Column, Task, TaskLabel, Comment, TaskFile
+from django.contrib.auth.models import User
 from django.utils import timezone
 from datetime import datetime
 
