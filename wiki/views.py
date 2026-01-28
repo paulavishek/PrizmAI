@@ -527,20 +527,37 @@ def wiki_search(request):
 @require_http_methods(['GET', 'POST'])
 def quick_link_wiki(request, content_type, object_id):
     """Quick link wiki pages to tasks or boards"""
-    org = request.user.profile.organization if hasattr(request.user, 'profile') else None
-    if not org:
-        return JsonResponse({'error': 'No organization found'}, status=400)
+    # MVP Mode: Get organization, fall back to demo org if user doesn't have one
+    org = request.user.profile.organization if hasattr(request.user, 'profile') and request.user.profile.organization else None
     
-    # Allow access to demo boards
-    demo_org_names = ['Demo - Acme Corporation']
-    demo_orgs = Organization.objects.filter(name__in=demo_org_names)
+    # Get demo organization as fallback
+    demo_org = Organization.objects.filter(is_demo=True).first()
+    if not demo_org:
+        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+    
+    # Use user's org if available, otherwise use demo org
+    if not org:
+        org = demo_org
+    
+    # Build list of allowed organizations
+    allowed_orgs = []
+    if org:
+        allowed_orgs.append(org)
+    if demo_org and demo_org not in allowed_orgs:
+        allowed_orgs.append(demo_org)
     
     if content_type == 'task':
-        # Allow tasks from user's org or demo org
-        item = get_object_or_404(Task, pk=object_id, column__board__organization__in=[org] + list(demo_orgs))
+        # Allow tasks from allowed organizations
+        if allowed_orgs:
+            item = get_object_or_404(Task, pk=object_id, column__board__organization__in=allowed_orgs)
+        else:
+            item = get_object_or_404(Task, pk=object_id)
     elif content_type == 'board':
-        # Allow boards from user's org or demo org
-        item = get_object_or_404(Board, pk=object_id, organization__in=[org] + list(demo_orgs))
+        # Allow boards from allowed organizations
+        if allowed_orgs:
+            item = get_object_or_404(Board, pk=object_id, organization__in=allowed_orgs)
+        else:
+            item = get_object_or_404(Board, pk=object_id)
     else:
         return JsonResponse({'error': 'Invalid content type'}, status=400)
     
