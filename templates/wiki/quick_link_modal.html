@@ -13,6 +13,7 @@
         margin-bottom: 10px;
         cursor: pointer;
         transition: all 0.2s;
+        user-select: none;
     }
     
     .wiki-selection-card:hover {
@@ -27,6 +28,16 @@
     
     .wiki-selection-card input[type="checkbox"] {
         margin-right: 10px;
+        cursor: pointer;
+        width: 18px;
+        height: 18px;
+        vertical-align: middle;
+    }
+    
+    .wiki-selection-card strong {
+        vertical-align: middle;
+        display: inline-block;
+        margin-left: 5px;
     }
 </style>
 {% endblock %}
@@ -73,7 +84,7 @@
                             <div id="wiki-pages-container">
                                 {% if form.wiki_pages %}
                                     {% for checkbox in form.wiki_pages %}
-                                        <div class="wiki-selection-card" onclick="toggleCheckbox(this)">
+                                        <div class="wiki-selection-card" onclick="toggleCheckbox(this, event)">
                                             {{ checkbox.tag }}
                                             <strong>{{ checkbox.choice_label }}</strong>
                                         </div>
@@ -122,14 +133,29 @@
 </div>
 
 <script>
-    function toggleCheckbox(card) {
-        const checkbox = card.querySelector('input[type="checkbox"]');
-        checkbox.checked = !checkbox.checked;
+    function toggleCheckbox(card, event) {
+        // If the click was directly on the checkbox, let it handle itself
+        if (event && event.target.type === 'checkbox') {
+            // Update card styling based on checkbox state
+            const checkbox = event.target;
+            if (checkbox.checked) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
+            return;
+        }
         
-        if (checkbox.checked) {
-            card.classList.add('selected');
-        } else {
-            card.classList.remove('selected');
+        // Click was on the card (not checkbox), so toggle the checkbox
+        const checkbox = card.querySelector('input[type="checkbox"]');
+        if (checkbox) {
+            checkbox.checked = !checkbox.checked;
+            
+            if (checkbox.checked) {
+                card.classList.add('selected');
+            } else {
+                card.classList.remove('selected');
+            }
         }
     }
     
@@ -138,8 +164,20 @@
         const cards = document.querySelectorAll('.wiki-selection-card');
         cards.forEach(card => {
             const checkbox = card.querySelector('input[type="checkbox"]');
-            if (checkbox && checkbox.checked) {
-                card.classList.add('selected');
+            if (checkbox) {
+                // Initialize visual state
+                if (checkbox.checked) {
+                    card.classList.add('selected');
+                }
+                
+                // Add change listener to checkbox for direct clicks
+                checkbox.addEventListener('change', function() {
+                    if (this.checked) {
+                        card.classList.add('selected');
+                    } else {
+                        card.classList.remove('selected');
+                    }
+                });
             }
         });
     });
