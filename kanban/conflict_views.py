@@ -202,17 +202,28 @@ def conflict_detail(request, conflict_id):
         else:
             profile = request.user.profile
             organization = profile.organization
+            
+            # MVP Mode: Include both organization boards and demo boards
+            from kanban.models import Board
+            demo_boards = Board.objects.filter(is_official_demo_board=True)
+            org_boards = Board.objects.filter(organization=organization) if organization else Board.objects.none()
+            user_boards = Board.objects.filter(
+                Q(created_by=request.user) | Q(members=request.user)
+            )
+            accessible_boards = (demo_boards | org_boards | user_boards).distinct()
+            
             conflict = get_object_or_404(
                 ConflictDetection.objects.select_related('board', 'chosen_resolution').prefetch_related(
                     'tasks', 'affected_users', 'resolutions'
                 ),
                 id=conflict_id,
-                board__organization=organization
+                board__in=accessible_boards
             )
         
-        # Check access (skip for demo mode)
+        # Check access (skip for demo mode and demo boards)
         if not is_demo_mode:
-            if not (conflict.board.created_by == request.user or 
+            if not (conflict.board.is_official_demo_board or
+                    conflict.board.created_by == request.user or 
                     request.user in conflict.board.members.all()):
                 return HttpResponseForbidden("You don't have access to this conflict")
         
@@ -553,16 +564,13 @@ def trigger_detection_all(request):
             profile = request.user.profile
             organization = profile.organization
             
-            # Include demo organization boards for all authenticated users
-            demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-            org_filter = Q(organization=organization)
-            if demo_org:
-                org_filter |= Q(organization=demo_org)
-            
-            boards = Board.objects.filter(
-                org_filter &
-                (Q(created_by=request.user) | Q(members=request.user))
-            ).distinct()
+            # MVP Mode: Get all boards the user has access to (matching dashboard logic)
+            demo_boards = Board.objects.filter(is_official_demo_board=True)
+            org_boards = Board.objects.filter(organization=organization) if organization else Board.objects.none()
+            user_boards = Board.objects.filter(
+                Q(created_by=request.user) | Q(members=request.user)
+            )
+            boards = (demo_boards | org_boards | user_boards).distinct()
         
         # Trigger detection for each board
         count = 0
