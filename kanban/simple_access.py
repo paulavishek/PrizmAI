@@ -31,6 +31,7 @@ def can_access_board(user, board):
     - Board creator can access
     - Board members can access
     - Organization members can access their org's boards
+    - ALL authenticated users can access demo boards
     
     Returns:
         Boolean
@@ -40,6 +41,11 @@ def can_access_board(user, board):
     
     # Superusers bypass all checks
     if user.is_superuser:
+        return True
+    
+    # ALL authenticated users can access official demo boards
+    # This allows real users to explore demo features and tasks
+    if hasattr(board, 'is_official_demo_board') and board.is_official_demo_board:
         return True
     
     # Board creator always has access
