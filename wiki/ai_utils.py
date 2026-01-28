@@ -34,8 +34,8 @@ def generate_ai_content(prompt: str, task_type='simple') -> Optional[str]:
         
         genai.configure(api_key=settings.GEMINI_API_KEY)
         
-        # Smart routing: use Flash for complex analysis, Flash-Lite for simple tasks
-        model_name = 'gemini-2.0-flash-exp' if task_type == 'complex' else 'gemini-2.0-flash-exp'
+        # Smart routing: use Gemini 2.5 Flash for all tasks (best performance/price)
+        model_name = 'gemini-2.5-flash'
         model = genai.GenerativeModel(model_name)
         logger.debug(f"Using {model_name} for task_type: {task_type}")
         

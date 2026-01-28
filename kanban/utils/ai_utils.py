@@ -94,15 +94,15 @@ def get_model_for_task(task_type='simple'):
         
         if use_flash:
             if _model_flash is None:
-                _model_flash = genai.GenerativeModel('gemini-2.0-flash-exp')
+                _model_flash = genai.GenerativeModel('gemini-2.5-flash')
                 logger.info("Gemini 2.5 Flash model instance created")
             logger.debug(f"Using Gemini 2.5 Flash for task: {task_type}")
             return _model_flash
         else:
             if _model_flash_lite is None:
-                _model_flash_lite = genai.GenerativeModel('gemini-2.0-flash-exp')
-                logger.info("Gemini 2.5 Flash-Lite model instance created")
-            logger.debug(f"Using Gemini 2.5 Flash-Lite for task: {task_type}")
+                _model_flash_lite = genai.GenerativeModel('gemini-2.5-flash')
+                logger.info("Gemini 2.5 Flash model instance created")
+            logger.debug(f"Using Gemini 2.5 Flash for task: {task_type}")
             return _model_flash_lite
     except Exception as e:
         logger.error(f"Error getting Gemini model: {str(e)}")

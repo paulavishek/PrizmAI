@@ -583,8 +583,8 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
             
             genai.configure(api_key=settings.GEMINI_API_KEY)
             
-            # Use Gemini 2.0 Flash for complex financial analysis
-            model_name = 'gemini-2.0-flash-exp'
+            # Use Gemini 2.5 Flash for complex financial analysis
+            model_name = 'gemini-2.5-flash'
             model = genai.GenerativeModel(model_name)
             logger.debug(f"Using {model_name} for budget AI analysis")
             

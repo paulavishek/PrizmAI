@@ -53,7 +53,7 @@ class AICoachService:
             prompt = self._build_enhancement_prompt(suggestion_data, context)
             
             # Get AI response
-            model = self.genai.GenerativeModel('gemini-2.0-flash-exp')
+            model = self.genai.GenerativeModel('gemini-2.5-flash')
             response = model.generate_content(prompt)
             
             if response and response.text:
@@ -97,7 +97,7 @@ class AICoachService:
                 )
                 
                 # Add explainability fields
-                suggestion_data['ai_model_used'] = 'gemini-2.0-flash-exp'
+                suggestion_data['ai_model_used'] = 'gemini-2.5-flash'
                 suggestion_data['generation_method'] = 'hybrid'
                 suggestion_data['confidence_score'] = max(
                     suggestion_data['confidence_score'],
@@ -262,7 +262,7 @@ Respond directly to their question with helpful guidance.
 """
             
             # Get AI response
-            model = self.genai.GenerativeModel('gemini-2.0-flash-exp')
+            model = self.genai.GenerativeModel('gemini-2.5-flash')
             response = model.generate_content(prompt)
             
             if response and response.text:
@@ -389,7 +389,7 @@ Make your reasoning transparent so the PM understands how you arrived at each co
 """
             
             # Get AI response
-            model = self.genai.GenerativeModel('gemini-2.0-flash-exp')
+            model = self.genai.GenerativeModel('gemini-2.5-flash')
             response = model.generate_content(prompt)
             
             if response and response.text:
@@ -484,7 +484,7 @@ Explain the 'why' behind every recommendation.
 """
             
             # Get AI response
-            model = self.genai.GenerativeModel('gemini-2.0-flash-exp')
+            model = self.genai.GenerativeModel('gemini-2.5-flash')
             response = model.generate_content(prompt)
             
             if response and response.text:
