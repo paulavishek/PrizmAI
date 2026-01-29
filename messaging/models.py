@@ -145,6 +145,10 @@ class Notification(models.Model):
     notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
     text = models.TextField()
     
+    # AI-generated summary for concise notification display
+    ai_summary = models.CharField(max_length=200, blank=True, null=True, 
+                                   help_text="AI-generated concise summary of the notification")
+    
     # Links to related objects
     task_thread_comment = models.ForeignKey(TaskThreadComment, on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
     chat_message = models.ForeignKey(ChatMessage, on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
@@ -165,6 +169,70 @@ class Notification(models.Model):
         """Mark notification as read"""
         self.is_read = True
         self.save()
+    
+    def generate_ai_summary(self):
+        """Generate AI summary for the notification using Gemini"""
+        try:
+            from kanban.utils.ai_utils import generate_ai_content
+            
+            prompt = f"""Summarize this notification for a busy project manager in ONE short sentence (max 100 chars):
+
+Notification type: {self.get_notification_type_display()}
+From: {self.sender.get_full_name() or self.sender.username}
+Message: {self.text}
+
+Requirements:
+- Be actionable and direct
+- Keep it under 100 characters
+- Focus on what the PM needs to know/do
+- Don't include quotes or special formatting
+
+Example outputs:
+- "Sarah mentioned you on API redesign task"
+- "New comment on Sprint Planning - review needed"
+- "John replied to your design feedback"
+"""
+            summary = generate_ai_content(prompt, task_type='simple')
+            if summary:
+                # Clean up and truncate if needed
+                summary = summary.strip().strip('"').strip("'")
+                if len(summary) > 200:
+                    summary = summary[:197] + '...'
+                self.ai_summary = summary
+                self.save(update_fields=['ai_summary'])
+                return summary
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to generate AI summary for notification {self.id}: {e}")
+        return None
+    
+    def get_display_text(self):
+        """Return AI summary if available, otherwise return the full text"""
+        return self.ai_summary if self.ai_summary else self.text
+    
+    def save(self, *args, **kwargs):
+        """Override save to generate AI summary for new notifications"""
+        is_new = self.pk is None
+        super().save(*args, **kwargs)
+        
+        # Generate AI summary asynchronously for new notifications
+        # Only if not already being saved with ai_summary
+        if is_new and not self.ai_summary and 'update_fields' not in kwargs:
+            # Use a simple async approach - generate summary in background
+            try:
+                from threading import Thread
+                thread = Thread(target=self._generate_summary_background)
+                thread.daemon = True
+                thread.start()
+            except Exception:
+                pass  # Fail silently - AI summary is optional
+    
+    def _generate_summary_background(self):
+        """Background task to generate AI summary"""
+        import django
+        django.db.connections.close_all()
+        self.generate_ai_summary()
 
 
 class UserTypingStatus(models.Model):

@@ -152,7 +152,15 @@
                     </div>
 
                     <div class="notification-text">
-                        {{ notification.text }}
+                        {% if notification.ai_summary %}
+                            <div class="ai-summary mb-1">
+                                <i class="fas fa-magic text-primary me-1" title="AI Summary"></i>
+                                <strong>{{ notification.ai_summary }}</strong>
+                            </div>
+                            <small class="text-muted">{{ notification.text }}</small>
+                        {% else %}
+                            {{ notification.text }}
+                        {% endif %}
                     </div>
 
                     <div class="notification-actions">

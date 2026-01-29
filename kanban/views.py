@@ -1446,6 +1446,55 @@ def gantt_chart(request, board_id):
     # Order by phase and id to maintain consistent task order regardless of date changes
     # This ensures tasks stay in their original position even after editing dates
     tasks = Task.objects.filter(column__board=board).select_related('column', 'assigned_to').prefetch_related('dependencies').order_by('phase', 'id')
+    
+    # Process Gantt chart filters
+    search_query = request.GET.get('search', '').strip()
+    status_filter = request.GET.get('status', '')
+    priority_filter = request.GET.get('priority', '')
+    assignee_filter = request.GET.get('assignee', '')
+    
+    # Apply search filter (search in title and description)
+    if search_query:
+        tasks = tasks.filter(
+            Q(title__icontains=search_query) | Q(description__icontains=search_query)
+        )
+    
+    # Apply status filter (based on column name patterns)
+    if status_filter:
+        if status_filter == 'todo':
+            # Tasks not in progress or done columns
+            tasks = tasks.exclude(
+                Q(column__name__icontains='progress') | 
+                Q(column__name__icontains='done') | 
+                Q(column__name__icontains='complete')
+            )
+        elif status_filter == 'in_progress':
+            tasks = tasks.filter(column__name__icontains='progress')
+        elif status_filter == 'done':
+            tasks = tasks.filter(
+                Q(column__name__icontains='done') | Q(column__name__icontains='complete')
+            )
+        elif status_filter == 'active':
+            # Active = To Do + In Progress (exclude completed)
+            tasks = tasks.exclude(
+                Q(column__name__icontains='done') | Q(column__name__icontains='complete')
+            )
+    
+    # Apply priority filter
+    if priority_filter:
+        tasks = tasks.filter(priority=priority_filter)
+    
+    # Apply assignee filter
+    if assignee_filter:
+        if assignee_filter == 'unassigned':
+            tasks = tasks.filter(assigned_to__isnull=True)
+        else:
+            tasks = tasks.filter(assigned_to_id=assignee_filter)
+    
+    # Get unique assignees for filter dropdown
+    assignees = User.objects.filter(
+        assigned_tasks__column__board=board
+    ).distinct().order_by('username')
 
     # Calculate phase timelines for phase-based Gantt chart view
     phases_data = {}
@@ -1498,6 +1547,13 @@ def gantt_chart(request, board_id):
         'has_phases': has_phases,
         'phases_data_json': phases_data_json,
         'num_phases': board.num_phases if has_phases else 0,
+        # Gantt filter context
+        'search_query': search_query,
+        'status_filter': status_filter,
+        'priority_filter': priority_filter,
+        'assignee_filter': assignee_filter,
+        'assignees': assignees,
+        'priority_choices': Task.PRIORITY_CHOICES,
     }
 
     return render(request, 'kanban/gantt_chart.html', context)

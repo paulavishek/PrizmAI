@@ -593,6 +593,99 @@
         color: #b45309;
     }
 
+    /* ============================================
+       GANTT SEARCH & FILTER STYLES
+       ============================================ */
+
+    .gantt-filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 20px;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+    }
+
+    .gantt-filters .filter-group {
+        min-width: 140px;
+    }
+
+    .gantt-filters .form-select,
+    .gantt-filters .form-control {
+        font-size: 0.875rem;
+        border-color: #e2e8f0;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+    }
+
+    .gantt-filters .form-select:focus,
+    .gantt-filters .form-control:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .gantt-filters .input-group-text {
+        border-color: #e2e8f0;
+        border-radius: 6px 0 0 6px;
+    }
+
+    .gantt-filters .btn {
+        font-size: 0.875rem;
+        padding: 0.375rem 1rem;
+        border-radius: 6px;
+    }
+
+    .gantt-filters .btn-primary {
+        background: #3b82f6;
+        border-color: #3b82f6;
+    }
+
+    .gantt-filters .btn-primary:hover {
+        background: #2563eb;
+        border-color: #2563eb;
+    }
+
+    .gantt-filters .btn-outline-secondary {
+        border-color: #e2e8f0;
+        color: #64748b;
+    }
+
+    .gantt-filters .btn-outline-secondary:hover {
+        background: #f1f5f9;
+        border-color: #cbd5e1;
+        color: #475569;
+    }
+
+    .active-filters {
+        padding: 8px 12px;
+        background: #eff6ff;
+        border-radius: 6px;
+        border-left: 3px solid #3b82f6;
+    }
+
+    /* Responsive adjustments for filters */
+    @media (max-width: 768px) {
+        .gantt-filters {
+            flex-direction: column;
+            align-items: stretch;
+        }
+        
+        .gantt-filters .filter-group {
+            width: 100%;
+        }
+        
+        .gantt-filters form {
+            flex-direction: column;
+            width: 100%;
+        }
+        
+        .gantt-filters .d-flex {
+            flex-wrap: wrap;
+        }
+    }
+
 </style>
 {% endblock %}
 
@@ -640,6 +733,83 @@
                     <button class="view-btn" data-mode="Month">Month</button>
                 </div>
             </div>
+        </div>
+
+        <!-- Search and Filter Bar -->
+        <div class="gantt-filters mb-3">
+            <form method="GET" action="" class="d-flex flex-wrap align-items-center gap-2" id="gantt-filter-form">
+                <!-- Search Input -->
+                <div class="filter-group flex-grow-1" style="min-width: 200px; max-width: 300px;">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0">
+                            <i class="fas fa-search text-muted"></i>
+                        </span>
+                        <input type="text" name="search" class="form-control border-start-0" 
+                               placeholder="Search tasks..." 
+                               value="{{ search_query }}"
+                               id="gantt-search-input">
+                    </div>
+                </div>
+                
+                <!-- Status Filter -->
+                <div class="filter-group">
+                    <select name="status" class="form-select" id="gantt-status-filter" onchange="this.form.submit()">
+                        <option value="">All Status</option>
+                        <option value="active" {% if status_filter == 'active' %}selected{% endif %}>🟢 Active Only</option>
+                        <option value="todo" {% if status_filter == 'todo' %}selected{% endif %}>📋 To Do</option>
+                        <option value="in_progress" {% if status_filter == 'in_progress' %}selected{% endif %}>🔄 In Progress</option>
+                        <option value="done" {% if status_filter == 'done' %}selected{% endif %}>✅ Done</option>
+                    </select>
+                </div>
+                
+                <!-- Priority Filter -->
+                <div class="filter-group">
+                    <select name="priority" class="form-select" id="gantt-priority-filter" onchange="this.form.submit()">
+                        <option value="">All Priorities</option>
+                        {% for value, label in priority_choices %}
+                        <option value="{{ value }}" {% if priority_filter == value %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Assignee Filter -->
+                <div class="filter-group">
+                    <select name="assignee" class="form-select" id="gantt-assignee-filter" onchange="this.form.submit()">
+                        <option value="">All Assignees</option>
+                        <option value="unassigned" {% if assignee_filter == 'unassigned' %}selected{% endif %}>Unassigned</option>
+                        {% for user in assignees %}
+                        <option value="{{ user.id }}" {% if assignee_filter == user.id|stringformat:"s" %}selected{% endif %}>
+                            {{ user.get_full_name|default:user.username }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <!-- Search Button -->
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-filter me-1"></i> Apply
+                </button>
+                
+                <!-- Clear Filters -->
+                {% if search_query or status_filter or priority_filter or assignee_filter %}
+                <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-times me-1"></i> Clear
+                </a>
+                {% endif %}
+            </form>
+            
+            <!-- Active Filters Summary -->
+            {% if search_query or status_filter or priority_filter or assignee_filter %}
+            <div class="active-filters mt-2">
+                <small class="text-muted">
+                    <i class="fas fa-filter me-1"></i>
+                    Showing {{ tasks.count }} task{{ tasks.count|pluralize }}
+                    {% if search_query %} matching "{{ search_query }}"{% endif %}
+                    {% if status_filter %} with status: {{ status_filter }}{% endif %}
+                    {% if priority_filter %} with priority: {{ priority_filter }}{% endif %}
+                </small>
+            </div>
+            {% endif %}
         </div>
 
         {% if has_phases %}
