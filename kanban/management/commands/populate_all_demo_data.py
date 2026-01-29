@@ -93,12 +93,11 @@ class Command(BaseCommand):
                 return
 
         # Get demo users (self-healing: will be created by create_demo_organization if missing)
-        self.demo_admin = User.objects.filter(username='demo_admin_solo').first()
         self.alex = User.objects.filter(username='alex_chen_demo').first()
         self.sam = User.objects.filter(username='sam_rivera_demo').first()
         self.jordan = User.objects.filter(username='jordan_taylor_demo').first()
 
-        self.demo_users = [u for u in [self.demo_admin, self.alex, self.sam, self.jordan] if u]
+        self.demo_users = [u for u in [self.alex, self.sam, self.jordan] if u]
         if len(self.demo_users) < 3:
             self.stdout.write(self.style.WARNING(
                 '⚠️ Demo users not found. Running create_demo_organization to fix...'
@@ -292,7 +291,7 @@ class Command(BaseCommand):
     # =========================================================================
     def create_wiki_demo_data(self):
         """Create wiki categories, pages, and links"""
-        demo_user = self.demo_admin or self.alex
+        demo_user = self.alex
         
         # Create categories
         categories_data = self.get_wiki_categories_data()
@@ -570,7 +569,7 @@ POST /api/auth/token/
                 continue
             
             board_members = list(board.members.all())
-            creator = self.demo_admin if self.demo_admin in board_members else board_members[0] if board_members else self.demo_admin
+            creator = board_members[0] if board_members else self.alex
             
             for room_config in chat_configs[board_name]:
                 room, created = ChatRoom.objects.get_or_create(
@@ -606,7 +605,6 @@ POST /api/auth/token/
     def get_user_by_key(self, key):
         """Get user by short key name"""
         return {
-            'demo_admin': self.demo_admin,
             'alex': self.alex,
             'sam': self.sam,
             'jordan': self.jordan,
@@ -722,7 +720,7 @@ POST /api/auth/token/
                         title=config.get('resolution_action', 'Manually resolved'),
                         description='Resolved after team discussion.',
                         ai_confidence=int(config.get('confidence', 0.85) * 100),
-                        applied_by=self.demo_admin,
+                        applied_by=self.alex,
                     )
                     # Update the conflict to point to this resolution
                     conflict.chosen_resolution = resolution
@@ -795,7 +793,7 @@ POST /api/auth/token/
         kb_created = 0
         now = timezone.now()
         
-        primary_user = self.demo_admin or self.alex
+        primary_user = self.alex
         
         # Create user preferences for all demo users
         for user in self.demo_users:
@@ -961,7 +959,7 @@ POST /api/auth/token/
     def create_knowledge_base(self):
         """Create knowledge base entries"""
         kb_created = 0
-        demo_user = self.demo_admin or self.alex
+        demo_user = self.alex
         
         kb_entries = [
             {
