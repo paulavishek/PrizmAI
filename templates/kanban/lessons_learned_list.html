@@ -3,6 +3,23 @@
 
 {% block title %}Lessons Learned - {{ board.name }}{% endblock %}
 
+{% block extra_css %}
+<style>
+    .lessons-table tbody tr {
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+    }
+    
+    .lessons-table tbody tr:hover {
+        background-color: #f8f9fa !important;
+    }
+    
+    .lessons-table tbody tr.table-warning:hover {
+        background-color: #fff3cd !important;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid mt-4">
     <div class="row mb-4">
@@ -67,7 +84,7 @@
         <div class="card-body">
             {% if lessons %}
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover lessons-table">
                     <thead>
                         <tr>
                             <th>Lesson</th>
@@ -81,7 +98,7 @@
                     </thead>
                     <tbody>
                         {% for lesson in lessons %}
-                        <tr {% if lesson.is_overdue %}class="table-warning"{% endif %}>
+                        <tr {% if lesson.is_overdue %}class="table-warning"{% endif %} onclick="window.location='{% url 'retrospective_detail' lesson.board.id lesson.retrospective.id %}';">
                             <td>
                                 <strong>{{ lesson.title }}</strong>
                                 {% if lesson.ai_suggested %}<i class="fas fa-robot text-primary" title="AI Suggested"></i>{% endif %}
