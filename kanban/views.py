@@ -11,6 +11,7 @@ import json
 import csv
 from django.contrib.auth.models import User
 from django.core.management import call_command
+from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -84,22 +85,64 @@ def dashboard(request):
         progress=100
     ).count()
     
-    # Get detailed task data for modals
-    all_tasks = Task.objects.filter(column__board__in=boards).select_related('column', 'assigned_to', 'column__board')
-    completed_tasks = Task.objects.filter(
+    # Get detailed task data for modals with pagination
+    # Items per page
+    items_per_page = 10
+    
+    # All Tasks
+    all_tasks_list = Task.objects.filter(column__board__in=boards).select_related('column', 'assigned_to', 'column__board').order_by('-created_at')
+    all_tasks_page = request.GET.get('all_tasks_page', 1)
+    all_tasks_paginator = Paginator(all_tasks_list, items_per_page)
+    try:
+        all_tasks = all_tasks_paginator.page(all_tasks_page)
+    except PageNotAnInteger:
+        all_tasks = all_tasks_paginator.page(1)
+    except EmptyPage:
+        all_tasks = all_tasks_paginator.page(all_tasks_paginator.num_pages)
+    
+    # Completed Tasks
+    completed_tasks_list = Task.objects.filter(
         column__board__in=boards,
         progress=100
-    ).select_related('column', 'assigned_to', 'column__board')
-    overdue_tasks = Task.objects.filter(
+    ).select_related('column', 'assigned_to', 'column__board').order_by('-updated_at')
+    completed_tasks_page = request.GET.get('completed_tasks_page', 1)
+    completed_tasks_paginator = Paginator(completed_tasks_list, items_per_page)
+    try:
+        completed_tasks = completed_tasks_paginator.page(completed_tasks_page)
+    except PageNotAnInteger:
+        completed_tasks = completed_tasks_paginator.page(1)
+    except EmptyPage:
+        completed_tasks = completed_tasks_paginator.page(completed_tasks_paginator.num_pages)
+    
+    # Overdue Tasks
+    overdue_tasks_list = Task.objects.filter(
         column__board__in=boards,
         due_date__lt=timezone.now()
     ).exclude(
         progress=100
-    ).select_related('column', 'assigned_to', 'column__board')
-    due_soon_tasks = Task.objects.filter(
+    ).select_related('column', 'assigned_to', 'column__board').order_by('due_date')
+    overdue_tasks_page = request.GET.get('overdue_tasks_page', 1)
+    overdue_tasks_paginator = Paginator(overdue_tasks_list, items_per_page)
+    try:
+        overdue_tasks = overdue_tasks_paginator.page(overdue_tasks_page)
+    except PageNotAnInteger:
+        overdue_tasks = overdue_tasks_paginator.page(1)
+    except EmptyPage:
+        overdue_tasks = overdue_tasks_paginator.page(overdue_tasks_paginator.num_pages)
+    
+    # Due Soon Tasks
+    due_soon_tasks_list = Task.objects.filter(
         column__board__in=boards,
         due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
-    ).select_related('column', 'assigned_to', 'column__board')
+    ).select_related('column', 'assigned_to', 'column__board').order_by('due_date')
+    due_soon_tasks_page = request.GET.get('due_soon_tasks_page', 1)
+    due_soon_tasks_paginator = Paginator(due_soon_tasks_list, items_per_page)
+    try:
+        due_soon_tasks = due_soon_tasks_paginator.page(due_soon_tasks_page)
+    except PageNotAnInteger:
+        due_soon_tasks = due_soon_tasks_paginator.page(1)
+    except EmptyPage:
+        due_soon_tasks = due_soon_tasks_paginator.page(due_soon_tasks_paginator.num_pages)
     
     # Get sort preference from request (default to 'urgency')
     sort_by = request.GET.get('sort_tasks', 'urgency')
