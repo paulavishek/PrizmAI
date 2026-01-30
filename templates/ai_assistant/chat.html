@@ -4,6 +4,10 @@
 {% block title %}Chat - PrizmAI AI Assistant{% endblock %}
 
 {% block extra_css %}
+<!-- Markdown rendering library -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+
 <style>
     .chat-container {
         display: flex;
@@ -167,6 +171,10 @@
         background: white;
         color: #333;
         border: 1px solid #ddd;
+        max-width: 85%;
+        padding: 16px 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
     }
     
     .message-info {
@@ -272,6 +280,224 @@
         border-radius: 4px;
         font-size: 11px;
         margin-top: 5px;
+    }
+    
+    /* Markdown Content Styling */
+    .message.assistant .message-content {
+        line-height: 1.6;
+    }
+    
+    .message.assistant .message-content h1,
+    .message.assistant .message-content h2,
+    .message.assistant .message-content h3,
+    .message.assistant .message-content h4,
+    .message.assistant .message-content h5,
+    .message.assistant .message-content h6 {
+        margin-top: 1em;
+        margin-bottom: 0.5em;
+        font-weight: 600;
+        line-height: 1.3;
+        color: #1a1a2e;
+    }
+    
+    .message.assistant .message-content h1:first-child,
+    .message.assistant .message-content h2:first-child,
+    .message.assistant .message-content h3:first-child {
+        margin-top: 0;
+    }
+    
+    .message.assistant .message-content h1 { font-size: 1.5em; }
+    .message.assistant .message-content h2 { font-size: 1.3em; color: #667eea; }
+    .message.assistant .message-content h3 { font-size: 1.15em; }
+    .message.assistant .message-content h4 { font-size: 1.05em; }
+    
+    .message.assistant .message-content p {
+        margin: 0.75em 0;
+    }
+    
+    .message.assistant .message-content p:first-child {
+        margin-top: 0;
+    }
+    
+    .message.assistant .message-content p:last-child {
+        margin-bottom: 0;
+    }
+    
+    .message.assistant .message-content ul,
+    .message.assistant .message-content ol {
+        margin: 0.75em 0;
+        padding-left: 1.5em;
+    }
+    
+    .message.assistant .message-content li {
+        margin: 0.4em 0;
+        line-height: 1.5;
+    }
+    
+    .message.assistant .message-content li > ul,
+    .message.assistant .message-content li > ol {
+        margin: 0.25em 0;
+    }
+    
+    .message.assistant .message-content strong {
+        font-weight: 600;
+        color: #1a1a2e;
+    }
+    
+    .message.assistant .message-content em {
+        font-style: italic;
+        color: #555;
+    }
+    
+    .message.assistant .message-content code {
+        background: #f4f4f8;
+        padding: 0.15em 0.4em;
+        border-radius: 4px;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 0.9em;
+        color: #e83e8c;
+    }
+    
+    .message.assistant .message-content pre {
+        background: #1e1e2e;
+        color: #f8f8f2;
+        padding: 1em;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin: 1em 0;
+        font-size: 0.85em;
+        line-height: 1.5;
+    }
+    
+    .message.assistant .message-content pre code {
+        background: none;
+        padding: 0;
+        color: inherit;
+        font-size: inherit;
+    }
+    
+    .message.assistant .message-content blockquote {
+        border-left: 4px solid #667eea;
+        margin: 1em 0;
+        padding: 0.5em 1em;
+        background: #f8f9ff;
+        border-radius: 0 8px 8px 0;
+        color: #555;
+    }
+    
+    .message.assistant .message-content blockquote p {
+        margin: 0.25em 0;
+    }
+    
+    .message.assistant .message-content hr {
+        border: none;
+        border-top: 1px solid #e0e0e0;
+        margin: 1.5em 0;
+    }
+    
+    .message.assistant .message-content a {
+        color: #667eea;
+        text-decoration: none;
+    }
+    
+    .message.assistant .message-content a:hover {
+        text-decoration: underline;
+    }
+    
+    /* Table styling */
+    .message.assistant .message-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1em 0;
+        font-size: 0.9em;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .message.assistant .message-content thead {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    
+    .message.assistant .message-content th {
+        padding: 12px 15px;
+        text-align: left;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85em;
+        letter-spacing: 0.5px;
+    }
+    
+    .message.assistant .message-content td {
+        padding: 10px 15px;
+        border-bottom: 1px solid #eee;
+    }
+    
+    .message.assistant .message-content tbody tr:nth-child(even) {
+        background: #f8f9fa;
+    }
+    
+    .message.assistant .message-content tbody tr:hover {
+        background: #f0f4ff;
+    }
+    
+    .message.assistant .message-content tbody tr:last-child td {
+        border-bottom: none;
+    }
+    
+    /* Category/Section styling */
+    .message.assistant .message-content .category-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        margin: 1em 0 0.5em 0;
+        font-weight: 600;
+    }
+    
+    /* Insights and recommendations styling */
+    .message.assistant .message-content .insight-box {
+        background: #fff8e6;
+        border-left: 4px solid #ffc107;
+        padding: 12px 15px;
+        margin: 1em 0;
+        border-radius: 0 8px 8px 0;
+    }
+    
+    .message.assistant .message-content .recommendation-box {
+        background: #e8f5e9;
+        border-left: 4px solid #4caf50;
+        padding: 12px 15px;
+        margin: 1em 0;
+        border-radius: 0 8px 8px 0;
+    }
+    
+    /* Suggested action buttons */
+    .suggested-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+        padding-top: 12px;
+        border-top: 1px solid #eee;
+    }
+    
+    .suggested-action-btn {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-weight: 500;
+    }
+    
+    .suggested-action-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
     }
 </style>
 {% endblock %}
@@ -430,6 +656,58 @@
             });
     }
     
+    // Configure marked.js for better rendering
+    if (typeof marked !== 'undefined') {
+        marked.setOptions({
+            breaks: true,          // Convert line breaks to <br>
+            gfm: true,             // GitHub Flavored Markdown
+            headerIds: false,      // Don't add IDs to headers
+            mangle: false,         // Don't mangle email addresses
+        });
+    }
+    
+    // Parse markdown to HTML safely
+    function parseMarkdown(text) {
+        if (typeof marked === 'undefined') {
+            // Fallback: basic formatting if marked.js not loaded
+            return text
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.+?)\*/g, '<em>$1</em>')
+                .replace(/`(.+?)`/g, '<code>$1</code>')
+                .replace(/\n/g, '<br>');
+        }
+        
+        // Use marked.js for full markdown parsing
+        let html = marked.parse(text);
+        
+        // Sanitize HTML to prevent XSS (if DOMPurify is available)
+        if (typeof DOMPurify !== 'undefined') {
+            html = DOMPurify.sanitize(html);
+        }
+        
+        return html;
+    }
+    
+    // Extract suggested actions from content
+    function extractSuggestedActions(content) {
+        const actions = [];
+        const patterns = [
+            /(?:you (?:can|could|might|should)|try|consider)\s+(?:ask(?:ing)?|search(?:ing)?|look(?:ing)?|find(?:ing)?|show(?:ing)?)\s+(?:for\s+)?["']([^"']+)["']/gi,
+            /(?:example|sample)\s+(?:queries?|questions?):\s*["']([^"']+)["']/gi
+        ];
+        
+        patterns.forEach(pattern => {
+            let match;
+            while ((match = pattern.exec(content)) !== null) {
+                if (match[1] && match[1].length < 60) {
+                    actions.push(match[1]);
+                }
+            }
+        });
+        
+        return actions.slice(0, 3); // Max 3 suggestions
+    }
+    
     // Add message to UI
     function addMessageToUI(role, content, model = null) {
         const container = document.getElementById('chat-messages');
@@ -438,7 +716,14 @@
         
         const contentDiv = document.createElement('div');
         contentDiv.className = 'message-content';
-        contentDiv.innerHTML = content;
+        
+        if (role === 'assistant') {
+            // Parse markdown for assistant messages
+            contentDiv.innerHTML = parseMarkdown(content);
+        } else {
+            // For user messages, escape HTML and show as plain text
+            contentDiv.textContent = content;
+        }
         
         msgDiv.appendChild(contentDiv);
         
