@@ -169,6 +169,20 @@
         filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
         transition: all 0.2s ease;
     }
+    
+    /* Month view: enhance bar visibility with stronger shadows and borders */
+    body[data-view-mode="Month"] .gantt .bar-wrapper .bar {
+        filter: drop-shadow(0 3px 6px rgba(0,0,0,0.15));
+        stroke: rgba(255, 255, 255, 0.3);
+        stroke-width: 1;
+        /* Ensure minimum visual weight for bars in month view */
+        min-width: 4px !important;
+    }
+    
+    body[data-view-mode="Month"] .gantt .bar-wrapper:hover .bar {
+        filter: brightness(1.15) drop-shadow(0 5px 10px rgba(0,0,0,0.25));
+        stroke-width: 2;
+    }
 
     /* Make bars clearly clickable with hover effects */
     .gantt .bar-wrapper {
@@ -301,6 +315,13 @@
         text-anchor: middle !important;
         dominant-baseline: middle !important;
         letter-spacing: 0.02em;
+    }
+    
+    /* Month view: increase label font size for better readability */
+    body[data-view-mode="Month"] .gantt .bar-label {
+        font-size: 12px;
+        font-weight: 700;
+        text-shadow: 0 1px 4px rgba(0,0,0,0.5);
     }
 
     .gantt .bar-label.outside-left,
@@ -435,6 +456,13 @@
     .gantt .upper-text {
         fill: #475569;
         font-weight: 600;
+    }
+    
+    /* Month view: enhance grid text visibility */
+    body[data-view-mode="Month"] .gantt .lower-text,
+    body[data-view-mode="Month"] .gantt .upper-text {
+        font-weight: 600;
+        font-size: 13px;
     }
 
     /* ============================================
@@ -1014,6 +1042,13 @@
         const chartWrapper = document.getElementById('gantt-chart-wrapper');
         currentViewMode = viewMode;
         
+        // Set body attribute for view-specific CSS styling
+        document.body.setAttribute('data-view-mode', viewMode);
+        
+        // Adjust bar height based on view mode for better visibility
+        const barHeight = viewMode === 'Month' ? 40 : 32;
+        const barPadding = viewMode === 'Month' ? 24 : 20;
+        
         if (ganttChart) {
             // If chart exists and we're just changing view mode, use the built-in method
             try {
@@ -1063,10 +1098,10 @@
         
         ganttChart = new Gantt('#gantt', tasks, {
                 view_mode: viewMode,
-                bar_height: 32,
+                bar_height: barHeight,
                 bar_corner_radius: 6,
                 arrow_curve: 10, // Smooth curves for clean routing
-                padding: 20,
+                padding: barPadding,
                 date_format: 'YYYY-MM-DD',
                 language: 'en',
                 custom_popup_html: null, // Disable default popup
@@ -1972,6 +2007,9 @@
     function initGanttWithData(data) {
         const chartWrapper = document.getElementById('gantt-chart-wrapper');
         
+        // Set body attribute for view-specific CSS styling
+        document.body.setAttribute('data-view-mode', currentViewMode);
+        
         // Hide chart during reconstruction to prevent visual glitch
         chartWrapper.classList.remove('chart-ready');
         
@@ -1990,12 +2028,16 @@
             return;
         }
 
+        // Adjust bar height based on view mode for better visibility
+        const barHeight = currentViewMode === 'Month' ? 40 : 32;
+        const barPadding = currentViewMode === 'Month' ? 24 : 20;
+        
         ganttChart = new Gantt('#gantt', data, {
             view_mode: currentViewMode,
-            bar_height: 32,
+            bar_height: barHeight,
             bar_corner_radius: 6,
             arrow_curve: 10,
-            padding: 20,
+            padding: barPadding,
             date_format: 'YYYY-MM-DD',
             language: 'en',
             auto_move_label: false,
