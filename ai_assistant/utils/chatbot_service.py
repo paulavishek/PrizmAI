@@ -2424,12 +2424,17 @@ When context data is limited, acknowledge it briefly but still provide valuable 
                 logger.debug("Added KB context")
             
             # 18. Web search context for research and strategic queries
+            # SKIP web search if we already have wiki context (local documentation is preferred)
             search_context = ""
             used_web_search = False
             search_sources = []
             
+            # Check if wiki context was already added (indicates query is about internal docs)
+            has_wiki_context = is_wiki_query and any('wiki' in part.lower() or 'documentation' in part.lower() for part in context_parts)
+            
             # Trigger web search for search queries OR strategic queries (how-to, best practices, etc.)
-            if (is_search_query or is_strategic_query) and getattr(settings, 'ENABLE_WEB_SEARCH', False) and self.search_client:
+            # BUT skip if wiki context exists - local documentation takes priority
+            if (is_search_query or is_strategic_query) and not has_wiki_context and getattr(settings, 'ENABLE_WEB_SEARCH', False) and self.search_client:
                 try:
                     search_context = self.search_client.get_search_context(prompt, max_results=3)
                     if search_context:  # Only add if we got results (None = failed)
@@ -2444,6 +2449,8 @@ When context data is limited, acknowledge it briefly but still provide valuable 
                         logger.info(f"Web search failed or returned no results - AI will use project data and general knowledge")
                 except Exception as e:
                     logger.warning(f"Web search failed: {e} - AI will provide answer using project data and general knowledge")
+            elif has_wiki_context:
+                logger.info(f"Skipping web search - wiki context already found for this query")
             
             # Build system prompt
             system_prompt = self.generate_system_prompt()
