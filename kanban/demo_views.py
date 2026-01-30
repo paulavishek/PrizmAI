@@ -54,17 +54,14 @@ def _auto_grant_demo_access(request):
         return
     
     try:
-        # Get demo organization
-        demo_orgs = Organization.objects.filter(name__in=DEMO_ORG_NAMES)
-        if not demo_orgs.exists():
-            logger.warning("No demo organizations found for auto-grant")
-            return
-        
-        # Get demo boards
+        # Get all official demo boards
         demo_boards = Board.objects.filter(
-            organization__in=demo_orgs,
-            name__in=DEMO_BOARD_NAMES
+            is_official_demo_board=True
         )
+        
+        if not demo_boards.exists():
+            logger.warning("No demo boards found for auto-grant")
+            return
         
         for board in demo_boards:
             # Add user to board members (simple M2M relationship)
@@ -970,31 +967,20 @@ def demo_board_detail(request, board_id):
 
 def reset_demo_data(request):
     """
-    Reset demo data to original state with SELF-HEALING capability.
-    Can recover from any state including deleted demo data.
-    Supports both AJAX (POST with JSON response) and regular form requests
-    ANONYMOUS ACCESS: Works for both logged-in and anonymous users
+    Reset demo data to original state.
+    Available to all authenticated users.
+    Supports both AJAX (POST with JSON response) and regular form requests.
     """
     from django.contrib import messages
-    from kanban.utils.demo_settings import SIMPLIFIED_MODE
     
-    # Check if user is in demo mode (for session-based reset)
-    is_demo_user = request.session.get('is_demo_mode', False)
-    
-    # Superusers can reset anytime, demo users (including anonymous) can reset their session
-    is_superuser = request.user.is_authenticated and request.user.is_superuser
-    
-    # In SIMPLIFIED_MODE, any authenticated user can reset demo data since they all
-    # interact with demo boards on the main dashboard
-    is_authenticated_user = request.user.is_authenticated
-    
-    if not (is_superuser or is_demo_user or (SIMPLIFIED_MODE and is_authenticated_user)):
+    # Only authenticated users can reset demo data
+    if not request.user.is_authenticated:
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return JsonResponse({
                 'status': 'error',
-                'message': 'Only demo users or administrators can reset demo data.'
+                'message': 'You must be logged in to reset demo data.'
             }, status=403)
-        messages.error(request, 'Only administrators can reset demo data.')
+        messages.error(request, 'You must be logged in to reset demo data.')
         return redirect('demo_dashboard')
     
     if request.method == 'POST':
@@ -1006,27 +992,11 @@ def reset_demo_data(request):
             out = StringIO()
             
             # ============================================================
-            # SELF-HEALING STEP 1: Ensure demo foundation exists
-            # This recreates demo org, users, and boards if they were deleted
+            # STEP 1: Get demo boards
             # ============================================================
             
-            # Always run create_demo_organization with --reset to ensure clean slate
-            try:
-                call_command('create_demo_organization', '--reset', stdout=out, stderr=out)
-            except Exception as e:
-                # If it fails, try without reset
-                call_command('create_demo_organization', stdout=out, stderr=out)
-            
-            # Now demo organization should exist
-            demo_org = Organization.objects.filter(is_demo=True).first()
-            
-            if not demo_org:
-                raise Exception('Failed to create demo organization')
-            
-            demo_boards = Board.objects.filter(
-                organization=demo_org,
-                is_official_demo_board=True
-            )
+            # Get all official demo boards (no organization filter needed)
+            demo_boards = Board.objects.filter(is_official_demo_board=True)
             
             # ============================================================
             # STEP 2: Clean up user-created data
@@ -1043,29 +1013,22 @@ def reset_demo_data(request):
                 identifiers_to_clean.append(browser_fingerprint)
             
             if identifiers_to_clean:
+                # Delete tasks created by session on any board
                 Task.objects.filter(
-                    created_by_session__in=identifiers_to_clean,
-                    column__board__organization=demo_org
+                    created_by_session__in=identifiers_to_clean
                 ).delete()
                 
+                # Delete boards created by session (non-demo boards only)
                 Board.objects.filter(
                     created_by_session__in=identifiers_to_clean,
-                    organization=demo_org,
                     is_official_demo_board=False
                 ).delete()
             
-            # Delete ALL user-created boards in demo org
-            Board.objects.filter(
-                organization=demo_org,
-                is_official_demo_board=False
-            ).delete()
-            
-            # MVP Mode: Also delete user-created boards with null organization
+            # Delete ALL user-created boards (non-demo boards)
             if request.user.is_authenticated:
                 Board.objects.filter(
                     created_by=request.user,
-                    is_official_demo_board=False,
-                    organization__isnull=True
+                    is_official_demo_board=False
                 ).delete()
             
             # Delete user-created tasks on demo boards
@@ -1138,21 +1101,15 @@ def reset_demo_data(request):
             return redirect('demo_dashboard')
     
     # GET request - show confirmation page
-    demo_org = Organization.objects.filter(is_demo=True).first()
-    demo_boards = Board.objects.filter(organization=demo_org, is_official_demo_board=True) if demo_org else []
+    demo_boards = Board.objects.filter(is_official_demo_board=True)
     
-    task_count = Task.objects.filter(column__board__in=demo_boards).count() if demo_boards else 0
-    user_count = demo_boards.values('members').distinct().count() if demo_boards else 0
-    
-    # Count demo orgs for the template (always 1 in new system)
-    demo_orgs_count = 1 if demo_org else 0
+    task_count = Task.objects.filter(column__board__in=demo_boards).count() if demo_boards.exists() else 0
+    user_count = demo_boards.values('members').distinct().count() if demo_boards.exists() else 0
     
     context = {
         'demo_boards': demo_boards,
         'task_count': task_count,
         'user_count': user_count,
-        'demo_org': demo_org,
-        'demo_orgs': {'count': demo_orgs_count},  # For template compatibility
     }
     
     return render(request, 'kanban/reset_demo_confirm.html', context)
