@@ -1079,7 +1079,12 @@
         const toggleSearchIcon = document.getElementById('toggle-search-icon');
         
         if (toggleSearchBtn && searchFormContainer) {
-            toggleSearchBtn.addEventListener('click', function() {
+            console.log('Search panel toggle initialized successfully');
+            toggleSearchBtn.addEventListener('click', function(e) {
+                console.log('Toggle button clicked');
+                e.preventDefault();
+                e.stopPropagation();
+                
                 searchFormContainer.classList.toggle('d-none');
                 
                 // Update icon
@@ -1090,6 +1095,12 @@
                     toggleSearchIcon.classList.remove('fa-chevron-down');
                     toggleSearchIcon.classList.add('fa-chevron-up');
                 }
+            });
+        } else {
+            console.error('Search panel toggle elements not found:', {
+                toggleSearchBtn: !!toggleSearchBtn,
+                searchFormContainer: !!searchFormContainer,
+                toggleSearchIcon: !!toggleSearchIcon
             });
         }
         
