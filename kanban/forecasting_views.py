@@ -17,7 +17,6 @@ from kanban.models import (
     WorkloadDistributionRecommendation, Task
 )
 from kanban.utils.forecasting_service import DemandForecastingService, WorkloadAnalyzer
-from kanban.utils.demo_permissions import DemoPermissions
 
 
 def check_demo_access_for_forecasting(request, board, require_write=False):
@@ -47,16 +46,7 @@ def check_demo_access_for_forecasting(request, board, require_write=False):
         # Access restriction removed - all authenticated users can access
         return True, None, False
     
-    # SOLO MODE: Full admin access, no restrictions
-    if demo_mode_type == 'solo':
-        return True, None, True
-    
-    # TEAM MODE: Check role-based permissions
-    action = 'can_view_analytics' if not require_write else 'can_edit_tasks'
-    if not DemoPermissions.can_perform_action(request, action):
-        error_msg = "You don't have permission to access this feature in your current demo role."
-        return False, HttpResponseForbidden(error_msg), True
-    
+    # All restrictions removed - users have full access
     return True, None, True
 
 
@@ -295,10 +285,7 @@ def recommendation_detail(request, board_id, rec_id):
     demo_mode_type = request.session.get('demo_mode', 'solo')
     
     if request.method == 'POST':
-        # For POST requests, check write access
-        if is_demo_mode and demo_mode_type == 'team':
-            if not DemoPermissions.can_perform_action(request, 'can_edit_tasks'):
-                return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
+        # All restrictions removed - users have full access
         
         action = request.POST.get('action')
         

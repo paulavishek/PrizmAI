@@ -90,12 +90,7 @@ def retrospective_list(request, board_id):
         # Check access - all boards require membership
         # Access restriction removed - all authenticated users can access
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-            return HttpResponseForbidden("You don't have permission to view retrospectives in your current demo role.")
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     retrospectives = ProjectRetrospective.objects.filter(board=board).select_related(
         'created_by', 'finalized_by'
@@ -170,12 +165,7 @@ def retrospective_detail(request, board_id, retro_id):
         # Check access - all boards require membership
         # Access restriction removed - all authenticated users can access
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-            return HttpResponseForbidden("You don't have permission to view retrospectives in your current demo role.")
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     # Get related data
     lessons = retrospective.lessons.all().order_by('-priority', '-created_at')
@@ -230,12 +220,7 @@ def retrospective_create(request, board_id):
         # Check permissions
         # Access restriction removed - all authenticated users can access
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-            return HttpResponseForbidden("You don't have permission to create retrospectives in your current demo role.")
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     if request.method == 'GET':
         # Show form for date selection
@@ -382,12 +367,7 @@ def retrospective_finalize(request, board_id, retro_id):
         if not (request.user == board.created_by or request.user == retrospective.created_by):
             return HttpResponseForbidden("You don't have permission to finalize this retrospective")
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-            return HttpResponseForbidden("You don't have permission to finalize retrospectives in your current demo role.")
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     # Add team notes if provided
     team_notes = request.POST.get('team_notes', '')
@@ -421,12 +401,7 @@ def retrospective_dashboard(request, board_id):
         # Check access - all boards require membership
         # Access restriction removed - all authenticated users can access
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-            return HttpResponseForbidden("You don't have permission to view retrospectives in your current demo role.")
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     # Get recent retrospectives
     retrospectives = ProjectRetrospective.objects.filter(
@@ -520,12 +495,7 @@ def lesson_update_status(request, board_id, lesson_id):
         if not request.user.is_authenticated:
             return JsonResponse({'error': 'Authentication required'}, status=401)
         # Access restriction removed - all authenticated users can access
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_edit_tasks'):
-            return JsonResponse({'error': 'Permission denied in current demo role'}, status=403)
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     new_status = request.POST.get('status')
     if new_status not in dict(LessonLearned.STATUS_CHOICES):
@@ -566,12 +536,7 @@ def action_update_status(request, board_id, action_id):
         if not request.user.is_authenticated:
             return JsonResponse({'error': 'Authentication required'}, status=401)
         # Access restriction removed - all authenticated users can access
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_edit_tasks'):
-            return JsonResponse({'error': 'Permission denied in current demo role'}, status=403)
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     new_status = request.POST.get('status')
     progress = request.POST.get('progress')
@@ -620,12 +585,7 @@ def lessons_learned_list(request, board_id):
         # Check permissions
         # Access restriction removed - all authenticated users can access
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-            return HttpResponseForbidden("You don't have permission to view lessons learned in your current demo role.")
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     lessons = LessonLearned.objects.filter(board=board).select_related(
         'retrospective', 'action_owner'
@@ -778,12 +738,7 @@ def retrospective_export(request, board_id, retro_id):
             from django.contrib.auth.views import redirect_to_login
             return redirect_to_login(request.get_full_path())
         # Access restriction removed - all authenticated users can access
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_view_analytics'):
-            return HttpResponseForbidden("You don't have permission to export in your current demo role.")
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     # Get related data
     lessons = retrospective.lessons.all().order_by('-priority', '-created_at')

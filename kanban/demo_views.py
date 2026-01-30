@@ -869,7 +869,7 @@ def demo_board_detail(request, board_id):
     )[:5]  # Show first 5
     
     # Get permission information for UI feedback (same as real board)
-    # BUT only apply RBAC restrictions in TEAM mode, not SOLO mode
+    # All restrictions removed - users have full access
     from kanban.permission_utils import (
         get_user_board_membership, 
         get_column_permissions_for_user,
@@ -878,28 +878,13 @@ def demo_board_detail(request, board_id):
     
     demo_mode_type = request.session.get('demo_mode', 'solo')
     user_membership = None
-    user_role_name = 'Admin'  # Default for demo mode
+    user_role_name = 'Admin'  # Default - all users have full access
     column_permissions = {}
     can_manage_members = True
     can_edit_board = True
     can_create_tasks = True
     
-    # Only apply RBAC restrictions in TEAM mode
-    if demo_mode_type == 'team' and request.user.is_authenticated:
-        user_membership = get_user_board_membership(request.user, board)
-        user_role_name = user_membership.role.name if user_membership else 'Admin'
-        
-        # Get column permissions for visual feedback
-        for column in columns:
-            perms = get_column_permissions_for_user(request.user, column)
-            if perms:
-                column_permissions[column.id] = perms
-        
-        # Check key permissions for UI elements
-        can_manage_members = user_has_board_permission(request.user, board, 'board.manage_members')
-        can_edit_board = user_has_board_permission(request.user, board, 'board.edit')
-        can_create_tasks = user_has_board_permission(request.user, board, 'task.create')
-    # Solo mode: Full admin access, no restrictions
+    # All restrictions removed - all users have full admin access
     
     # Get board members - same logic as real board
     if request.user.is_authenticated:

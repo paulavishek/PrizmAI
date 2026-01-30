@@ -39,12 +39,7 @@ def check_board_access_for_demo(request, board):
         
         # Access restriction removed - all authenticated users can access
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_view_analytics'):
-            return False, None
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     return True, None
 
@@ -70,13 +65,7 @@ def burndown_dashboard(request, board_id):
         
         # Access restriction removed - all authenticated users can access
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_view_analytics'):
-            messages.error(request, "You don't have permission to view analytics in your current demo role.")
-            return redirect('demo_dashboard')
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     # Get or generate latest prediction
     predictor = BurndownPredictor()
@@ -151,12 +140,7 @@ def generate_burndown_prediction(request, board_id):
 
         pass  # Original: board membership check removed
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_view_analytics'):
-            return JsonResponse({'success': False, 'error': 'Permission denied in current demo role'}, status=403)
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     if request.method != 'POST':
         return JsonResponse({'success': False, 'error': 'POST required'}, status=400)

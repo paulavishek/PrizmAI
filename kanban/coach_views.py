@@ -48,12 +48,7 @@ def check_board_access_for_demo(request, board):
         
         # Access restriction removed - all authenticated users can access
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-            return False, None
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     return True, None
 
@@ -82,13 +77,7 @@ def coach_dashboard(request, board_id):
 
         pass  # Original: board membership check removed
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-            messages.error(request, "You don't have permission to use AI Coach in your current demo role.")
-            return redirect('demo_dashboard')
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     # Get active suggestions
     active_suggestions = CoachingSuggestion.objects.filter(
@@ -157,13 +146,7 @@ def suggestion_detail(request, suggestion_id):
             from django.contrib.auth.views import redirect_to_login
             return redirect_to_login(request.get_full_path())
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-            messages.error(request, "You don't have permission to view AI Coach suggestions in your current demo role.")
-            return redirect('demo_dashboard')
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     # Check access
     board = suggestion.board

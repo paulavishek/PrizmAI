@@ -694,25 +694,31 @@ import json
 def knowledge_hub_home(request):
     """Unified Knowledge Hub - Wiki Documentation with AI"""
     org = request.user.profile.organization if hasattr(request.user, 'profile') else None
-    if not org:
-        return redirect('dashboard')
     
     # Get search query
     search_query = request.GET.get('q', '')
     
     # Include demo organization content for all authenticated users
     demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-    org_filter = Q(organization=org)
-    if demo_org:
-        org_filter |= Q(organization=demo_org)
+    
+    # Build organization filter
+    if org:
+        org_filter = Q(organization=org)
+        if demo_org:
+            org_filter |= Q(organization=demo_org)
+    elif demo_org:
+        # If user has no org, show only demo org content
+        org_filter = Q(organization=demo_org)
+    else:
+        # No org at all, show empty results
+        org_filter = Q(pk=None)
     
     # Get wiki pages from user's org AND demo org
     wiki_pages = WikiPage.objects.filter(org_filter, is_published=True).select_related('category', 'created_by')
     if search_query:
         wiki_pages = wiki_pages.filter(
             Q(title__icontains=search_query) |
-            Q(content__icontains=search_query) |
-            Q(tags__contains=search_query)
+            Q(content__icontains=search_query)
         )
     wiki_pages = wiki_pages.order_by('-is_pinned', '-updated_at')[:20]
     

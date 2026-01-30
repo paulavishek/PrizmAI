@@ -17,7 +17,6 @@ from kanban.conflict_models import (
 )
 from kanban.tasks.conflict_tasks import detect_board_conflicts_task
 from kanban.utils.conflict_detection import ConflictDetectionService
-from kanban.utils.demo_permissions import DemoPermissions
 
 logger = logging.getLogger(__name__)
 
@@ -43,16 +42,7 @@ def check_demo_access_for_conflicts(request, require_write=False):
             return False, redirect_to_login(request.get_full_path()), False
         return True, None, False
     
-    # SOLO MODE: Full admin access, no restrictions
-    if demo_mode_type == 'solo':
-        return True, None, True
-    
-    # TEAM MODE: Check role-based permissions
-    action = 'can_edit_tasks' if require_write else 'can_view_board'
-    if not DemoPermissions.can_perform_action(request, action):
-        error_msg = "You don't have permission to perform this action in your current demo role."
-        return False, HttpResponseForbidden(error_msg), True
-    
+    # All restrictions removed - users have full access
     return True, None, True
 
 
@@ -239,10 +229,8 @@ def conflict_detail(request, conflict_id):
             status='resolved'
         ).exclude(id=conflict.id).select_related('chosen_resolution')[:5]
         
-        # TEAM MODE: Check if user can resolve conflicts (requires edit permission)
+        # All restrictions removed - users have full access
         can_resolve = True
-        if is_demo_mode and demo_mode_type == 'team':
-            can_resolve = DemoPermissions.can_perform_action(request, 'can_edit_tasks')
         
         context = {
             'conflict': conflict,

@@ -60,12 +60,7 @@ def budget_dashboard(request, board_id):
 
         pass  # Original: board membership check removed
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-            return HttpResponseForbidden("You don't have permission to view budget in your current demo role.")
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     # Get or create budget
     try:
@@ -275,12 +270,7 @@ def budget_analytics(request, board_id):
 
         pass  # Original: board membership check removed
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-            return HttpResponseForbidden("You don't have permission to view budget analytics in your current demo role.")
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     try:
         budget = ProjectBudget.objects.get(board=board)
@@ -367,12 +357,7 @@ def roi_dashboard(request, board_id):
 
         pass  # Original: board membership check removed
     
-    # For demo boards in team mode, check role-based permissions
-    elif demo_mode_type == 'team':
-        from kanban.utils.demo_permissions import DemoPermissions
-        if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-            return HttpResponseForbidden("You don't have permission to view ROI dashboard in your current demo role.")
-    # Solo demo mode: full access, no restrictions
+    # All restrictions removed - users have full access
     
     # Check if budget exists
     try:

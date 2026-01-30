@@ -998,9 +998,12 @@ class TaskFlowChatbotService:
                 (Q(created_by=self.user) | Q(members=self.user))
             ).distinct()
         else:
-            return Board.objects.filter(
+            # Include demo boards for users without organization
+            demo_boards = Board.objects.filter(is_official_demo_board=True)
+            user_boards = Board.objects.filter(
                 Q(created_by=self.user) | Q(members=self.user)
             ).distinct()
+            return (user_boards | demo_boards).distinct()
     
     def _get_organization_context(self, prompt):
         """
@@ -1689,18 +1692,25 @@ class TaskFlowChatbotService:
         """
         try:
             from wiki.models import WikiPage, WikiCategory
+            from accounts.models import Organization
+            from django.db.models import Q
             
             if not self.user:
                 logger.warning("Wiki query failed: No user context")
                 return None
             
-            # Get user's organization
+            # Get user's organization - use demo org as fallback
             org = None
             if hasattr(self.user, 'profile') and self.user.profile.organization:
                 org = self.user.profile.organization
             else:
-                logger.warning(f"Wiki query failed: User {self.user.username} has no organization")
-                return None
+                # Fallback to demo organization for users without org
+                org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+                if org:
+                    logger.info(f"User {self.user.username} has no org, using demo org for wiki queries")
+                else:
+                    logger.warning(f"Wiki query failed: No demo organization found")
+                    return None
             
             context = "**📚 Wiki & Documentation Context:**\n\n"
             
@@ -1823,18 +1833,25 @@ class TaskFlowChatbotService:
         """
         try:
             from wiki.models import MeetingNotes
+            from accounts.models import Organization
+            from django.db.models import Q
             
             if not self.user:
                 logger.warning("Meeting query failed: No user context")
                 return None
             
-            # Get user's organization
+            # Get user's organization - use demo org as fallback
             org = None
             if hasattr(self.user, 'profile') and self.user.profile.organization:
                 org = self.user.profile.organization
             else:
-                logger.warning(f"Meeting query failed: User {self.user.username} has no organization")
-                return None
+                # Fallback to demo organization for users without org
+                org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+                if org:
+                    logger.info(f"User {self.user.username} has no org, using demo org for meeting queries")
+                else:
+                    logger.warning(f"Meeting query failed: No demo organization found")
+                    return None
             
             context = "**🎤 Meeting & Discussion Context:**\n\n"
             

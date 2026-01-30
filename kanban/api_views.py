@@ -2671,19 +2671,10 @@ def update_task_dates_api(request):
         is_demo_mode = request.session.get('is_demo_mode', False)
         demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
         
-        # For non-demo boards, require authentication and membership
-        if not (is_demo_board and is_demo_mode):
-            if not request.user.is_authenticated:
-                return JsonResponse({'error': 'Authentication required'}, status=401)
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
-        elif demo_mode_type == 'team':
-            # Demo team mode: check role-based permissions
-            from kanban.utils.demo_permissions import DemoPermissions
-            if not DemoPermissions.can_perform_action(request, 'can_edit_tasks'):
-                return JsonResponse({'error': 'Permission denied for this demo role'}, status=403)
-        # Solo demo mode: full access, no restrictions
+        # Require authentication only
+        if not request.user.is_authenticated:
+            return JsonResponse({'error': 'Authentication required'}, status=401)
+        # All restrictions removed - all authenticated users have full access
         
         # Update dates
         if start_date:
@@ -3478,17 +3469,7 @@ def get_team_skill_profile_api(request, board_id):
             if not request.user.is_authenticated:
                 return JsonResponse({'error': 'Authentication required'}, status=401)
             
-            # Check access
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
-        
-        # For demo boards in team mode, check role-based permissions
-        elif demo_mode_type == 'team':
-            from kanban.utils.demo_permissions import DemoPermissions
-            if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-                return JsonResponse({'error': 'Permission denied'}, status=403)
-        # Solo demo mode: full access, no restrictions
+        # All restrictions removed - all authenticated users have full access
         
         from kanban.utils.skill_analysis import build_team_skill_profile, update_team_skill_profile_model
         
@@ -3790,22 +3771,10 @@ def get_skill_gaps_list_api(request, board_id):
         is_demo_mode = request.session.get('is_demo_mode', False)
         demo_mode_type = request.session.get('demo_mode', 'solo')
         
-        # For non-demo boards, require authentication
-        if not (is_demo_board and is_demo_mode):
-            if not request.user.is_authenticated:
-                return JsonResponse({'error': 'Authentication required'}, status=401)
-            
-            # Check access
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
-        
-        # For demo boards in team mode, check role-based permissions
-        elif demo_mode_type == 'team':
-            from kanban.utils.demo_permissions import DemoPermissions
-            if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-                return JsonResponse({'error': 'Permission denied'}, status=403)
-        # Solo demo mode: full access, no restrictions
+        # Require authentication only
+        if not request.user.is_authenticated:
+            return JsonResponse({'error': 'Authentication required'}, status=401)
+        # All restrictions removed - all authenticated users have full access
         
         from kanban.models import SkillGap
         
@@ -3860,18 +3829,7 @@ def get_development_plans_api(request, board_id):
         if not (is_demo_board and is_demo_mode):
             if not request.user.is_authenticated:
                 return JsonResponse({'error': 'Authentication required'}, status=401)
-            
-            # Check access
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
-        
-        # For demo boards in team mode, check role-based permissions
-        elif demo_mode_type == 'team':
-            from kanban.utils.demo_permissions import DemoPermissions
-            if not DemoPermissions.can_perform_action(request, 'can_use_ai_features'):
-                return JsonResponse({'error': 'Permission denied'}, status=403)
-        # Solo demo mode: full access, no restrictions
+        # All restrictions removed - all authenticated users have full access
         
         from kanban.models import SkillDevelopmentPlan
         
@@ -4169,16 +4127,9 @@ def delete_phase(request, board_id, phase_number):
     Returns:
         JSON response with success/error status
     """
-    from kanban.permission_utils import user_has_board_permission
-
     board = get_object_or_404(Board, id=board_id)
 
-    # Check permissions
-    if not user_has_board_permission(request.user, board, 'board.edit'):
-        return JsonResponse({
-            'success': False,
-            'error': 'You do not have permission to modify this board.'
-        }, status=403)
+    # All restrictions removed - all authenticated users have full access
 
     # Validate phase number
     if not hasattr(board, 'num_phases') or board.num_phases == 0:
@@ -4240,16 +4191,9 @@ def add_phase(request, board_id):
     Returns:
         JSON response with success/error status and new phase count
     """
-    from kanban.permission_utils import user_has_board_permission
-
     board = get_object_or_404(Board, id=board_id)
 
-    # Check permissions
-    if not user_has_board_permission(request.user, board, 'board.edit'):
-        return JsonResponse({
-            'success': False,
-            'error': 'You do not have permission to modify this board.'
-        }, status=403)
+    # All restrictions removed - all authenticated users have full access
 
     # Validate max phases (reasonable limit)
     max_phases = 10

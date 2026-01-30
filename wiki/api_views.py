@@ -17,6 +17,7 @@ from django.db import transaction
 from django.db import models
 
 from kanban.models import Board, Task, Column
+from accounts.models import Organization
 from .models import WikiPage, WikiMeetingAnalysis, WikiMeetingTask
 from .ai_utils import analyze_meeting_notes_from_wiki, analyze_wiki_documentation, parse_due_date
 from api.ai_usage_utils import track_ai_request, check_ai_quota
@@ -56,20 +57,24 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
                 'quota_exceeded': True
             }, status=429)
         
-        # Get organization
-        if not hasattr(request.user, 'profile') or not request.user.profile.organization:
-            return JsonResponse({'error': 'No organization found'}, status=400)
+        # Get organization - use user's org or demo org as fallback
+        org = None
+        if hasattr(request.user, 'profile') and request.user.profile.organization:
+            org = request.user.profile.organization
+        else:
+            org = Organization.objects.filter(name='Demo - Acme Corporation').first()
         
-        org = request.user.profile.organization
-        
-        # Get the wiki page
-        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id, organization=org)
+        # Get the wiki page - allow access to any published page
+        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id)
         
         # Access restriction removed - all authenticated users can access
         
         try:
-            # Get available boards for context
-            available_boards = Board.objects.filter(organization=org)
+            # Get available boards for context (user's boards or demo boards)
+            if org:
+                available_boards = Board.objects.filter(organization=org)
+            else:
+                available_boards = Board.objects.filter(is_official_demo_board=True)
             
             # Prepare wiki page context
             wiki_context = {
@@ -176,14 +181,15 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
                 'quota_exceeded': True
             }, status=429)
         
-        # Get organization
-        if not hasattr(request.user, 'profile') or not request.user.profile.organization:
-            return JsonResponse({'error': 'No organization found'}, status=400)
+        # Get organization - use user's org or demo org as fallback
+        org = None
+        if hasattr(request.user, 'profile') and request.user.profile.organization:
+            org = request.user.profile.organization
+        else:
+            org = Organization.objects.filter(name='Demo - Acme Corporation').first()
         
-        org = request.user.profile.organization
-        
-        # Get the wiki page
-        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id, organization=org)
+        # Get the wiki page - allow access to any published page
+        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id)
         
         # Access restriction removed - all authenticated users can access
         
@@ -314,10 +320,13 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
     Allows user to select which action items to convert to tasks
     """
     try:
-        if not hasattr(request.user, 'profile') or not request.user.profile.organization:
-            return JsonResponse({'error': 'No organization found'}, status=400)
+        # Get organization - use user's org or demo org as fallback
+        org = None
+        if hasattr(request.user, 'profile') and request.user.profile.organization:
+            org = request.user.profile.organization
+        else:
+            org = Organization.objects.filter(name='Demo - Acme Corporation').first()
         
-        org = request.user.profile.organization
         data = json.loads(request.body)
         
         board_id = data.get('board_id')
@@ -328,9 +337,9 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
         if not board_id:
             return JsonResponse({'error': 'board_id is required'}, status=400)
         
-        # Get analysis and board
-        analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id, organization=org)
-        board = get_object_or_404(Board, id=board_id, organization=org)
+        # Get analysis and board - allow access without org restriction
+        analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id)
+        board = get_object_or_404(Board, id=board_id)
         
         # Access restriction removed - all authenticated users can access
         
@@ -470,11 +479,8 @@ def get_meeting_analysis_details(request, analysis_id):
     API endpoint to get detailed meeting analysis information
     """
     try:
-        if not hasattr(request.user, 'profile') or not request.user.profile.organization:
-            return JsonResponse({'error': 'No organization found'}, status=400)
-        
-        org = request.user.profile.organization
-        analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id, organization=org)
+        # Get analysis - allow access without org restriction
+        analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id)
         
         # Get created tasks
         created_tasks = []
@@ -522,11 +528,8 @@ def mark_analysis_reviewed(request, analysis_id):
     Mark an analysis as reviewed by user, optionally with notes
     """
     try:
-        if not hasattr(request.user, 'profile') or not request.user.profile.organization:
-            return JsonResponse({'error': 'No organization found'}, status=400)
-        
-        org = request.user.profile.organization
-        analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id, organization=org)
+        # Get analysis - allow access without org restriction
+        analysis = get_object_or_404(WikiMeetingAnalysis, id=analysis_id)
         
         data = json.loads(request.body)
         user_notes = data.get('user_notes', '')
@@ -551,19 +554,24 @@ def mark_analysis_reviewed(request, analysis_id):
 @require_http_methods(["GET"])
 def get_boards_for_organization(request):
     """
-    Get all boards available in the user's organization
+    Get all boards available to the user
     Used for board selection when creating tasks
     """
     try:
-        if not hasattr(request.user, 'profile') or not request.user.profile.organization:
-            return JsonResponse({'error': 'No organization found'}, status=400)
+        # Get organization - use user's org or demo org as fallback
+        org = None
+        if hasattr(request.user, 'profile') and request.user.profile.organization:
+            org = request.user.profile.organization
+        else:
+            org = Organization.objects.filter(name='Demo - Acme Corporation').first()
         
-        org = request.user.profile.organization
-        
-        # Get boards user has access to
-        boards = Board.objects.filter(organization=org).filter(
-            models.Q(created_by=request.user) | models.Q(members=request.user)
-        ).distinct()
+        # Get boards user has access to - include demo boards for users without org
+        if org:
+            boards = Board.objects.filter(organization=org).filter(
+                models.Q(created_by=request.user) | models.Q(members=request.user) | models.Q(is_official_demo_board=True)
+            ).distinct()
+        else:
+            boards = Board.objects.filter(is_official_demo_board=True)
         
         boards_data = []
         for board in boards:
@@ -601,14 +609,15 @@ def import_transcript_to_wiki_page(request, wiki_page_id):
     Optionally runs AI analysis automatically
     """
     try:
-        # Get organization
-        if not hasattr(request.user, 'profile') or not request.user.profile.organization:
-            return JsonResponse({'error': 'No organization found'}, status=400)
+        # Get organization - use user's org or demo org as fallback
+        org = None
+        if hasattr(request.user, 'profile') and request.user.profile.organization:
+            org = request.user.profile.organization
+        else:
+            org = Organization.objects.filter(name='Demo - Acme Corporation').first()
         
-        org = request.user.profile.organization
-        
-        # Get the wiki page
-        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id, organization=org)
+        # Get the wiki page - allow access without org restriction
+        wiki_page = get_object_or_404(WikiPage, id=wiki_page_id)
         
         # Parse request body
         data = json.loads(request.body)
