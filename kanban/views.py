@@ -522,11 +522,8 @@ def board_detail(request, board_id):
     board_member_profiles = UserProfile.objects.filter(user_id__in=board_member_ids)
     
     # For adding new members: show all users who aren't on the board yet
-    # Exclude demo users from the list (they have 'demo' in username)
     available_org_members = UserProfile.objects.exclude(
         user_id__in=board_member_ids
-    ).exclude(
-        user__username__icontains='demo'
     ).select_related('user')
     
     # Get linked wiki pages for this board

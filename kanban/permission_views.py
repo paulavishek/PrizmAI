@@ -211,11 +211,8 @@ def manage_board_members(request, board_id):
     available_roles = Role.objects.all().order_by('name')
     
     # Get all users who aren't members yet (organization restrictions removed)
-    # Exclude demo users from the list (they have 'demo' in username)
     org_users = User.objects.exclude(
         id__in=memberships.values_list('user_id', flat=True)
-    ).exclude(
-        username__icontains='demo'
     ).select_related('profile')
     
     context = {

@@ -304,7 +304,8 @@ class Command(BaseCommand):
         return boards
 
     def assign_board_memberships(self, boards, personas):
-        """Assign all personas to all boards with appropriate roles"""
+        """Assign all personas to all boards with appropriate roles.
+        Preserves existing real user memberships (non-demo users)."""
         self.stdout.write('\n4. Assigning board memberships...')
         
         # Role mapping based on persona
@@ -317,6 +318,9 @@ class Command(BaseCommand):
         total_assigned = 0
         
         for board in boards:
+            # Get existing members (real users - not demo users)
+            existing_real_users = board.members.exclude(username__icontains='demo')
+            
             for persona in personas:
                 # Add persona to board members
                 if persona not in board.members.all():
@@ -337,6 +341,12 @@ class Command(BaseCommand):
                         user=persona,
                         defaults={'role': role}
                     )
+            
+            # Ensure all existing real users remain members
+            for real_user in existing_real_users:
+                if real_user not in board.members.all():
+                    board.members.add(real_user)
+                    self.stdout.write(f'    ✓ Preserved real user: {real_user.username} on {board.name}')
         
-        self.stdout.write(self.style.SUCCESS(f'  ✓ Assigned {len(personas)} personas to {len(boards)} boards'))
+        self.stdout.write(self.style.SUCCESS(f'  ✓ Assigned {len(personas)} demo personas to {len(boards)} boards'))
         self.stdout.write(f'    Total board memberships: {total_assigned}')

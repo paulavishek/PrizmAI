@@ -81,6 +81,12 @@ def register_view(request, org_id=None):
                     }
                 )
             
+            # Auto-add user to all official demo boards
+            from kanban.models import Board
+            demo_boards = Board.objects.filter(is_official_demo_board=True)
+            for board in demo_boards:
+                board.members.add(user)
+            
             messages.success(request, 'Registration successful! Please log in.')
             return redirect('login')
     else:
