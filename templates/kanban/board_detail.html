@@ -133,6 +133,14 @@
     .search-panel .form-group {
         margin-bottom: 10px;
     }
+    #search-form-container {
+        transition: all 0.3s ease;
+        overflow: hidden;
+    }
+    #search-form-container.d-none {
+        display: none !important;
+        max-height: 0;
+    }
     .active-filters {
         background-color: #e9ecef;
         border-radius: 5px;
@@ -425,12 +433,12 @@
 <div class="search-panel">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h5 class="mb-0">Search Tasks</h5>
-        <button type="button" class="btn btn-sm btn-outline-secondary" id="toggle-search-panel">
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#search-form-container" aria-expanded="true" aria-controls="search-form-container">
             <i class="fas fa-chevron-up" id="toggle-search-icon"></i>
         </button>
     </div>
     
-    <div id="search-form-container">
+    <div class="collapse show" id="search-form-container">
         <form method="get" class="row">            <div class="col-md-4 form-group">
                 <label for="{{ search_form.search_term.id_for_label }}" class="form-label">Search Term</label>
                 {{ search_form.search_term }}
@@ -1073,34 +1081,18 @@
             el.offsetHeight;
         });
         
-        // Set up search panel toggle
-        const toggleSearchBtn = document.getElementById('toggle-search-panel');
+        // Set up search panel toggle icon rotation using Bootstrap events
         const searchFormContainer = document.getElementById('search-form-container');
         const toggleSearchIcon = document.getElementById('toggle-search-icon');
         
-        if (toggleSearchBtn && searchFormContainer) {
-            console.log('Search panel toggle initialized successfully');
-            toggleSearchBtn.addEventListener('click', function(e) {
-                console.log('Toggle button clicked');
-                e.preventDefault();
-                e.stopPropagation();
-                
-                searchFormContainer.classList.toggle('d-none');
-                
-                // Update icon
-                if (searchFormContainer.classList.contains('d-none')) {
-                    toggleSearchIcon.classList.remove('fa-chevron-up');
-                    toggleSearchIcon.classList.add('fa-chevron-down');
-                } else {
-                    toggleSearchIcon.classList.remove('fa-chevron-down');
-                    toggleSearchIcon.classList.add('fa-chevron-up');
-                }
+        if (searchFormContainer && toggleSearchIcon) {
+            searchFormContainer.addEventListener('hide.bs.collapse', function() {
+                toggleSearchIcon.classList.remove('fa-chevron-up');
+                toggleSearchIcon.classList.add('fa-chevron-down');
             });
-        } else {
-            console.error('Search panel toggle elements not found:', {
-                toggleSearchBtn: !!toggleSearchBtn,
-                searchFormContainer: !!searchFormContainer,
-                toggleSearchIcon: !!toggleSearchIcon
+            searchFormContainer.addEventListener('show.bs.collapse', function() {
+                toggleSearchIcon.classList.remove('fa-chevron-down');
+                toggleSearchIcon.classList.add('fa-chevron-up');
             });
         }
         
