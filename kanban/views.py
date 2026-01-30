@@ -1108,6 +1108,9 @@ def board_analytics(request, board_id):
         return redirect_to_login(request.get_full_path())
     
     # All restrictions removed - all authenticated users can view analytics
+    # Demo mode removed - always False
+    is_demo_mode = False
+    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
     
     # Get columns for this board
     columns = Column.objects.filter(board=board)
@@ -1298,6 +1301,9 @@ def gantt_chart(request, board_id):
         return redirect_to_login(request.get_full_path())
     
     # All restrictions removed - all authenticated users can view Gantt chart
+    # Demo mode removed - always False
+    is_demo_mode = False
+    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
     
     # Get tasks for this board with dependencies prefetched for Gantt chart
     # Order by phase and id to maintain consistent task order regardless of date changes
