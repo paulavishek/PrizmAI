@@ -207,16 +207,15 @@ def manage_board_members(request, board_id):
         board=board
     ).select_related('user', 'user__profile', 'role', 'added_by').order_by('-added_at')
     
-    # Get available roles for this organization
-    available_roles = Role.objects.filter(
-        organization=board.organization
-    ).order_by('name')
+    # Get available roles (all roles since organization restrictions are removed)
+    available_roles = Role.objects.all().order_by('name')
     
-    # Get users from the same organization who aren't members yet
-    org_users = User.objects.filter(
-        profile__organization=board.organization
-    ).exclude(
+    # Get all users who aren't members yet (organization restrictions removed)
+    # Exclude demo users from the list (they have 'demo' in username)
+    org_users = User.objects.exclude(
         id__in=memberships.values_list('user_id', flat=True)
+    ).exclude(
+        username__icontains='demo'
     ).select_related('profile')
     
     context = {
@@ -272,12 +271,10 @@ def add_board_member_with_role(request, board_id):
     role_id = request.POST.get('role_id')
     
     user = get_object_or_404(User, id=user_id)
-    role = get_object_or_404(Role, id=role_id, organization=board.organization)
+    # Get role without organization filter since restrictions are removed
+    role = get_object_or_404(Role, id=role_id)
     
-    # Check if user is in the same organization
-    if user.profile.organization != board.organization:
-        messages.error(request, 'User must be in the same organization.')
-        return redirect('manage_board_members', board_id=board_id)
+    # Organization check removed - all users can be added to any board
     
     # Create or update membership
     membership, created = BoardMembership.objects.update_or_create(

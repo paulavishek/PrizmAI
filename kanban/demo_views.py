@@ -883,28 +883,18 @@ def demo_board_detail(request, board_id):
     
     # All restrictions removed - all users have full admin access
     
-    # Get board members - same logic as real board
-    if request.user.is_authenticated:
-        try:
-            # For demo boards: show only users from the viewer's REAL organization
-            user_org = request.user.profile.organization
-            # Get users from viewer's real org who are also members of this demo board
-            from accounts.models import UserProfile
-            board_member_profiles = UserProfile.objects.filter(
-                organization=user_org,
-                user__in=board.members.all()
-            )
-            # For adding new members: show other users from viewer's real organization
-            board_member_ids = board_member_profiles.values_list('user_id', flat=True)
-            available_org_members = UserProfile.objects.filter(
-                organization=user_org
-            ).exclude(user_id__in=board_member_ids)
-        except:
-            board_member_profiles = []
-            available_org_members = []
-    else:
-        board_member_profiles = []
-        available_org_members = []
+    # Get board members - show all board members
+    from accounts.models import UserProfile
+    board_member_ids = board.members.values_list('id', flat=True)
+    board_member_profiles = UserProfile.objects.filter(user_id__in=board_member_ids)
+    
+    # For adding new members: show all users who aren't on the board yet
+    # Exclude demo users from the list (they have 'demo' in username)
+    available_org_members = UserProfile.objects.exclude(
+        user_id__in=board_member_ids
+    ).exclude(
+        user__username__icontains='demo'
+    ).select_related('user')
     
     # Get linked wiki pages for this board
     from wiki.models import WikiLink
