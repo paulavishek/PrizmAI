@@ -695,7 +695,7 @@ def knowledge_hub_home(request):
     """Unified Knowledge Hub - Wiki Documentation with AI"""
     org = request.user.profile.organization if hasattr(request.user, 'profile') else None
     if not org:
-        return redirect('home')
+        return redirect('dashboard')
     
     # Get search query
     search_query = request.GET.get('q', '')
