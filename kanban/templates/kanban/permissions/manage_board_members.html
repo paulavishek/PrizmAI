@@ -38,41 +38,61 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for membership in memberships %}
+                            {% for member_data in all_members_data %}
                             <tr>
                                 <td>
-                                    <strong>{{ membership.user.username }}</strong>
-                                    {% if membership.user == board.created_by %}
+                                    <strong>{{ member_data.user.username }}</strong>
+                                    {% if member_data.user == board.created_by %}
                                     <span class="badge bg-warning">Creator</span>
                                     {% endif %}
                                 </td>
-                                <td>{{ membership.user.profile.organization.name }}</td>
+                                <td>{{ member_data.user.profile.organization.name|default:"—" }}</td>
                                 <td>
+                                    {% if member_data.has_role %}
                                     <select class="form-select form-select-sm" style="width: auto;" 
-                                            onchange="changeMemberRole({{ membership.id }}, this.value)"
-                                            {% if membership.user == board.created_by %}disabled{% endif %}>
+                                            onchange="changeMemberRole({{ member_data.membership.id }}, this.value)"
+                                            {% if member_data.user == board.created_by %}disabled{% endif %}>
                                         {% for role in available_roles %}
-                                        <option value="{{ role.id }}" {% if role.id == membership.role.id %}selected{% endif %}>
+                                        <option value="{{ role.id }}" {% if role.id == member_data.membership.role.id %}selected{% endif %}>
                                             {{ role.name }}
                                         </option>
                                         {% endfor %}
                                     </select>
-                                </td>
-                                <td>{{ membership.added_by.username|default:"System" }}</td>
-                                <td>{{ membership.added_at|date:"M d, Y" }}</td>
-                                <td>
-                                    {% if membership.is_active %}
-                                    <span class="badge bg-success">Active</span>
                                     {% else %}
-                                    <span class="badge bg-secondary">Inactive</span>
-                                    {% endif %}
-                                    {% if membership.expires_at %}
-                                    <br><small class="text-muted">Expires: {{ membership.expires_at|date:"M d, Y" }}</small>
+                                    <span class="badge bg-info">Member</span>
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if membership.user != board.created_by %}
-                                    <button class="btn btn-sm btn-danger" onclick="removeMember({{ membership.id }}, '{{ membership.user.username }}')">
+                                    {% if member_data.has_role %}
+                                    {{ member_data.membership.added_by.username|default:"System" }}
+                                    {% else %}
+                                    Auto-added
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if member_data.has_role %}
+                                    {{ member_data.membership.added_at|date:"M d, Y" }}
+                                    {% else %}
+                                    —
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if member_data.has_role %}
+                                        {% if member_data.membership.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                        {% endif %}
+                                        {% if member_data.membership.expires_at %}
+                                        <br><small class="text-muted">Expires: {{ member_data.membership.expires_at|date:"M d, Y" }}</small>
+                                        {% endif %}
+                                    {% else %}
+                                    <span class="badge bg-success">Active</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if member_data.user != board.created_by %}
+                                    <button class="btn btn-sm btn-danger" onclick="removeMemberFromBoard({{ board.id }}, {{ member_data.user.id }}, '{{ member_data.user.username }}')">
                                         <i class="fas fa-user-times"></i> Remove
                                     </button>
                                     {% endif %}

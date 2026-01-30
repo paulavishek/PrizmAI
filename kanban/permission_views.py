@@ -211,13 +211,34 @@ def manage_board_members(request, board_id):
     available_roles = Role.objects.all().order_by('name')
     
     # Get all users who aren't members yet (organization restrictions removed)
-    org_users = User.objects.exclude(
-        id__in=memberships.values_list('user_id', flat=True)
+    # Use board.members (M2M field) to check actual board membership
+    # Exclude inactive users and users with 'deleted' in username
+    org_users = User.objects.filter(
+        is_active=True
+    ).exclude(
+        id__in=board.members.values_list('id', flat=True)
+    ).exclude(
+        username__icontains='deleted'
     ).select_related('profile')
+    
+    # Get ALL board members (from M2M field) for display
+    # Create a dict mapping user_id to membership for quick lookup
+    membership_dict = {m.user_id: m for m in memberships}
+    
+    # Build list of all members with their membership info (if exists)
+    all_members_data = []
+    for member in board.members.all().select_related('profile'):
+        membership = membership_dict.get(member.id)
+        all_members_data.append({
+            'user': member,
+            'membership': membership,  # Will be None if no formal membership exists
+            'has_role': membership is not None
+        })
     
     context = {
         'board': board,
-        'memberships': memberships,
+        'memberships': memberships,  # Keep for backward compatibility
+        'all_members_data': all_members_data,  # New: all board members
         'available_roles': available_roles,
         'org_users': org_users,
     }

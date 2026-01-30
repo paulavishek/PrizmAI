@@ -303,21 +303,6 @@
 </div>
 
 <!-- Permission banner removed - no restrictions in simplified mode -->
-                                <i class="fas fa-ban me-1"></i>Cannot create in "{{ column.name }}"
-                            </span>
-                            {% endif %}
-                        {% endif %}
-                    {% endfor %}
-                {% endfor %}
-                <a href="{% url 'manage_board_members' board.id %}" class="badge bg-primary text-decoration-none">
-                    <i class="fas fa-cog me-1"></i>Manage Permissions
-                </a>
-            </div>
-        </div>
-    </div>
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-{% endif %}
 
 <!-- Scope Creep Alerts -->
 {% if active_scope_alerts %}
