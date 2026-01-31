@@ -42,28 +42,44 @@ Landing Page → Try Demo (instant) → Explore → Hit Limit → Convert to Acc
 
 ## ✨ Key Features
 
+### 📋 Project Management Core
 - ✅ **Visual Kanban Boards** - Drag & drop task management with smart column suggestions
-- 🧠 **AI-Powered Insights** - Intelligent recommendations for priorities, assignments, and deadlines
-- 📊 **Burndown Charts & Forecasting** - Real-time sprint progress with completion predictions
-- 🚨 **Scope Creep Detection** - Automatic alerts when project scope grows unexpectedly
-- ⚠️ **Conflict Detection** - Identifies resource, schedule, and dependency conflicts
-- 💰 **Budget & ROI Tracking** - Control finances with AI cost optimization
+- 📊 **Gantt Charts** - Interactive timelines with dependencies and milestone tracking
+- 📈 **Burndown Charts & Forecasting** - Real-time sprint progress with AI-powered completion predictions
 - ⏱️ **Time Tracking & Timesheets** - Log hours, track team utilization, manage labor costs
-- 🎓 **AI Coach** - Proactive suggestions to improve project management decisions
-- 🎮 **Interactive Demo Mode** - Try all features without signup with strategic limits for conversion
-- 📈 **User Feedback & Behavior Tracking** - Comprehensive feedback collection, sentiment analysis, and user behavior analytics
-- 📊 **Demo Analytics & Conversion Tracking** - GA4 events for limitation encounters and conversion optimization
-- 🤖 **AI Usage Monitoring** - Track and manage your monthly AI feature consumption with quota limits
-- 🔐 **Role-Based Access Control (RBAC)** - Advanced permissions with role management, approval workflows, and audit logging
-- 🔍 **Explainable AI** - Every recommendation includes "why" for full transparency
-- 📚 **Knowledge Base & Wiki** - Markdown documentation with AI-assisted insights
-- 📝 **Transcript Import** - Import meeting transcripts from Fireflies, Otter, Zoom, Teams, Meet with AI extraction
+- 💰 **Budget & ROI Tracking** - Multi-currency support, cost forecasting, and ROI analytics
+- 🔗 **Task Dependencies** - Parent-child, related tasks, and blocking dependencies with AI analysis
+
+### 🤖 AI Intelligence (Google Gemini Powered)
+- 🧠 **AI Project Assistant** - Natural language queries with RAG technology and web search
+- 🎓 **AI Coach** - Proactive coaching with explainable recommendations that learn from feedback
+- 🔍 **Explainable AI** - Every recommendation includes confidence scores, contributing factors, and alternatives
+- 🚨 **Scope Creep Detection** - Automatic baseline tracking and alerts when scope grows
+- ⚠️ **Conflict Detection** - AI-powered resource, schedule, and dependency conflict resolution
+- 🎯 **Smart Task Generation** - Auto-generate tasks from meeting transcripts and descriptions
+- ⚖️ **Resource Optimization** - Intelligent workload balancing and assignment suggestions
+- 💡 **AI Retrospectives** - Auto-generated lessons learned with improvement tracking
+
+### 🏢 Enterprise & Security
+- 🔐 **Role-Based Access Control (RBAC)** - 35+ granular permissions with approval workflows and audit logging
+- 👥 **Stakeholder Management** - Track influence, interest levels, and engagement analytics
+- 📊 **Skill Gap Analysis** - Team capability mapping with training recommendations
 - 🔒 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
+- 🤖 **AI Usage Monitoring** - Track and manage AI feature consumption with quota limits
+
+### 🤝 Collaboration & Knowledge
+- 💬 **Real-Time Messaging** - WebSocket-powered chat with @mentions and notifications
+- 📚 **Knowledge Base & Wiki** - Markdown documentation with AI-assisted meeting analysis
+- 📝 **Transcript Import** - Import from Fireflies, Otter, Zoom, Teams, Meet with AI extraction
+- 🔄 **Real-Time Collaboration** - Live updates and team chat with WebSocket support
+
+### 🔌 Integrations & Platform
 - 🌐 **RESTful API** - 20+ endpoints for integrations (Slack, Teams, Jira-ready)
-- 📱 **Mobile PWA Support** - Progressive Web App with offline capabilities and mobile-first design
-- 🔄 **Real-Time Collaboration** - WebSocket support for live updates and chat
 - 🔗 **Webhook Integration** - Event-driven automation with external apps
-- ♿ **Colorblind Accessibility** - Toggle colorblind-friendly mode with optimized palettes and pattern indicators
+- 📱 **Mobile PWA Support** - Progressive Web App with offline capabilities
+- 🎮 **Interactive Demo Mode** - Try all features without signup
+- ♿ **Colorblind Accessibility** - Optimized palettes and pattern indicators
+- 🧬 **Lean Six Sigma** - Built-in LSS classifications (Value-Added, NVA, Waste)
 
 **→ [See all features in detail](FEATURES.md)**
 
@@ -300,6 +316,12 @@ This removes duplicate boards and migrates users to the official demo boards.
 - Django Channels 4.1.0 (WebSockets)
 - PostgreSQL/SQLite
 
+**Caching & Performance:**
+- Redis (multi-tier caching)
+- django-redis 5.4.0 (cache backend)
+- Celery (async task processing)
+- WhiteNoise (static file serving)
+
 **Frontend:**
 - HTML5, CSS3, JavaScript
 - Bootstrap 5
@@ -315,6 +337,7 @@ This removes duplicate boards and migrates users to the official demo boards.
 
 **Deployment Ready:**
 - Docker containerization
+- Redis-based caching for cloud scalability
 - Self-hosted or cloud deployment
 - Kubernetes-ready
 
@@ -378,10 +401,49 @@ graph TB
 - **Django Backend** - Core application logic, business rules, and data processing
 - **WebSocket Server** - Real-time collaboration and live updates via Django Channels
 - **Celery Workers** - Asynchronous task processing for AI operations and scheduled jobs
-- **Redis** - Message broker for Celery and caching layer for performance
+- **Redis** - Message broker for Celery and multi-tier caching layer for performance
 - **Google Gemini API** - AI-powered recommendations, forecasting, and insights
 - **REST API** - 20+ endpoints for third-party integrations and mobile apps
 - **Webhook System** - Event-driven automation with external tools
+
+---
+
+## 🚀 Caching & Performance
+
+PrizmAI includes an extensive multi-tier caching system optimized for cloud deployment:
+
+**Cache Tiers:**
+- **L1 (Local Memory)** - Fastest, single-process caching for hot data
+- **L2 (Redis)** - Shared cache across processes with persistence
+- **Specialized Caches** - AI responses, sessions, and analytics have dedicated stores
+
+**Cache Features:**
+- Automatic cache invalidation on data changes via Django signals
+- Cache warmup utilities for boards and users
+- Tag-based group invalidation
+- ETag support for API responses
+- Compression for large cached values
+
+**Management Commands:**
+```bash
+# View cache statistics
+python manage.py cache_management --action=stats
+
+# Clear all caches
+python manage.py cache_management --action=clear-all
+
+# Warmup cache for a board
+python manage.py cache_management --action=warmup --board=123
+
+# Test cache connectivity
+python manage.py cache_management --action=test
+```
+
+**Cloud Cost Benefits:**
+- Reduced AI API calls through intelligent response caching
+- Minimized database queries with query result caching
+- Session data cached in Redis for horizontal scaling
+- Analytics computed once and cached for dashboard rendering
 
 ---
 

@@ -382,16 +382,126 @@ CHANNEL_LAYERS = {
 }
 
 # Cache Configuration (for caching AI responses and search results)
+# Multi-tier caching strategy for cloud cost optimization
+# ============================================
+
+# Redis connection URL (used by multiple services)
+REDIS_URL = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
+
+# Parse Redis URL for cache configuration
+import urllib.parse
+try:
+    _redis_parsed = urllib.parse.urlparse(REDIS_URL)
+    _redis_host = _redis_parsed.hostname or '127.0.0.1'
+    _redis_port = _redis_parsed.port or 6379
+    _redis_db = int(_redis_parsed.path.lstrip('/') or '0') if _redis_parsed.path else 0
+    _redis_password = _redis_parsed.password
+except Exception:
+    _redis_host = '127.0.0.1'
+    _redis_port = 6379
+    _redis_db = 0
+    _redis_password = None
+
 CACHES = {
+    # Default cache - Redis for production, LocMem for development fallback
     'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': REDIS_URL,
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'IGNORE_EXCEPTIONS': True,  # Graceful fallback if Redis unavailable
+            'SOCKET_CONNECT_TIMEOUT': 5,
+            'SOCKET_TIMEOUT': 5,
+            'CONNECTION_POOL_KWARGS': {
+                'max_connections': 50,
+                'retry_on_timeout': True,
+            },
+            'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',  # Compress large values
+        },
+        'KEY_PREFIX': 'prizmAI',
+        'TIMEOUT': 300,  # 5 minutes default
+    },
+    
+    # AI Response Cache - longer TTL for expensive AI calls
+    'ai_cache': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': REDIS_URL.replace('/0', '/1'),  # Use DB 1 for AI cache
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'IGNORE_EXCEPTIONS': True,
+            'SOCKET_CONNECT_TIMEOUT': 5,
+            'SOCKET_TIMEOUT': 5,
+            'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+        },
+        'KEY_PREFIX': 'prizmAI:ai',
+        'TIMEOUT': 1800,  # 30 minutes for AI responses
+    },
+    
+    # Session Cache - for storing session data
+    'session_cache': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': REDIS_URL.replace('/0', '/2'),  # Use DB 2 for sessions
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'IGNORE_EXCEPTIONS': True,
+            'SOCKET_CONNECT_TIMEOUT': 5,
+            'SOCKET_TIMEOUT': 5,
+        },
+        'KEY_PREFIX': 'prizmAI:session',
+        'TIMEOUT': 86400,  # 24 hours for sessions
+    },
+    
+    # Analytics Cache - for dashboard and analytics data
+    'analytics_cache': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': REDIS_URL.replace('/0', '/3'),  # Use DB 3 for analytics
+        'OPTIONS': {
+            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            'IGNORE_EXCEPTIONS': True,
+            'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+        },
+        'KEY_PREFIX': 'prizmAI:analytics',
+        'TIMEOUT': 600,  # 10 minutes for analytics
+    },
+    
+    # Local Memory Cache - fast fallback for single-process deployments
+    'local': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
+        'LOCATION': 'prizmAI-local-cache',
         'TIMEOUT': 300,
         'OPTIONS': {
-            'MAX_ENTRIES': 1000
-        }
-    }
+            'MAX_ENTRIES': 5000,
+        },
+    },
 }
+
+# Use local cache as fallback in development without Redis
+if DEBUG and not os.getenv('FORCE_REDIS_CACHE'):
+    CACHES['default'] = {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'prizmAI-default-cache',
+        'TIMEOUT': 300,
+        'OPTIONS': {
+            'MAX_ENTRIES': 2000,
+        },
+    }
+
+# Cache timeout presets (in seconds)
+CACHE_TIMEOUTS = {
+    'short': 60,           # 1 minute - for frequently changing data
+    'medium': 300,         # 5 minutes - for moderately static data  
+    'long': 3600,          # 1 hour - for stable data
+    'extended': 86400,     # 24 hours - for rarely changing data
+    'ai_response': 1800,   # 30 minutes - for AI-generated content
+    'user_session': 7200,  # 2 hours - for user session data
+    'burndown': 600,       # 10 minutes - for burndown charts
+    'dashboard': 120,      # 2 minutes - for dashboard stats
+    'permission': 3600,    # 1 hour - for permission checks
+}
+
+# Session backend - use cache-backed sessions for scalability
+SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+SESSION_CACHE_ALIAS = 'session_cache' if not DEBUG else 'default'
 
 # Create logs directory if it doesn't exist
 LOGS_DIR = os.path.join(BASE_DIR, 'logs')
