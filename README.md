@@ -16,26 +16,21 @@ PrizmAI combines visual project management with AI that helps you work smarter�
 
 ## 🎉 What's New
 
-### ⏱️ Demo Session Extension (January 2026)
-- **Extended exploration:** Users can extend their demo session up to 3 times
-- **Smart warnings:** Expiry notifications at 4 hours, 1 hour, and 15 minutes remaining
-- **Centralized configuration:** All demo settings managed in one place
+### 🚀 Simplified Access (January 2026)
+- **Easy onboarding:** Simple registration flow with no organization setup required
+- **Instant exploration:** Demo boards with sample data available immediately after signup
+- **No restrictions:** Full access to all features (AI, exports, unlimited projects)
+- **AI usage limits:** 50 requests/month and 10 requests/day to ensure fair usage
 
-### 🎮 Interactive Demo Mode
-- **Try without signup!** Anonymous users can now explore all features instantly
-- **Choose your path:** Solo Mode (5 min) or Team Mode (10 min)
-- **Full feature access:** AI, burndown charts, time tracking, and more
-- **Session-based:** 48-hour sessions with session extension option
-
-### 🎯 Demo Limitations & Conversion Analytics
-- **Strategic limits:** Max 2 projects, export blocked, 20 AI generations per session
-- **Conversion tracking:** GA4 events for limitation encounters and upgrade CTAs
-- **Workaround prevention:** Cumulative counters prevent exploit loops
+### 🎮 Demo Data & Test Accounts
+- **Pre-populated boards:** 3 demo boards with 1000+ tasks for immediate exploration
+- **Demo test accounts:** Try different roles using demo credentials (see below)
+- **Sample data everywhere:** Burndown charts, budgets, retrospectives - all with realistic data
 
 ### 🔄 User Flow
 ```
-Landing Page → Try Demo (instant) → Explore → Hit Limit → Convert to Account
-             ↘ Sign Up (traditional) → Full Access
+Landing Page → Sign Up → Dashboard with Demo Boards → Start Exploring!
+           → Or login with demo credentials to test different roles
 ```
 
 ---
@@ -77,7 +72,7 @@ Landing Page → Try Demo (instant) → Explore → Hit Limit → Convert to Acc
 - 🌐 **RESTful API** - 20+ endpoints for integrations (Slack, Teams, Jira-ready)
 - 🔗 **Webhook Integration** - Event-driven automation with external apps
 - 📱 **Mobile PWA Support** - Progressive Web App with offline capabilities
-- 🎮 **Interactive Demo Mode** - Try all features without signup
+- 🎮 **Demo Data Included** - Pre-populated boards with 1000+ sample tasks
 - ♿ **Colorblind Accessibility** - Optimized palettes and pattern indicators
 - 🧬 **Lean Six Sigma** - Built-in LSS classifications (Value-Added, NVA, Waste)
 
@@ -123,140 +118,41 @@ python manage.py runserver
 
 ---
 
-## 🎮 Try Demo Mode (No Signup Required!)
+## 🎮 Demo Data & Test Accounts
 
-**NEW:** Experience PrizmAI instantly without creating an account!
+### Explore with Demo Boards
 
-### User Flow Options:
+After signing up, you'll have immediate access to **3 pre-populated demo boards** with realistic data:
 
-```
-Landing Page (/)
-    ↓
-    ├─→ "Try Demo" (NO registration) ← Instant access!
-    │   ↓
-    │   Choose Demo Mode:
-    │   • Solo Mode (5 min) - Full access, explore independently
-    │   • Team Mode (10 min) - Collaborate with team features
-    │   ↓
-    │   Explore Features:
-    │   • 3 demo boards with 1000+ tasks
-    │   • AI features, burndown charts, time tracking
-    │   • Full collaboration features (Team mode)
-    │   ↓
-    │   Convert to Account (when ready):
-    │   • Click "Create Account" in demo
-    │   • Keep exploring or save your progress
-    │
-    └─→ "Get Started" (Traditional signup)
-        ↓
-        Register → Organization Setup → Full Access
-```
+| Board | Description | Tasks |
+|-------|-------------|-------|
+| **Software Development** | Sprint planning, feature development | 400+ tasks |
+| **Bug Tracking** | Issue management, QA workflows | 300+ tasks |
+| **Marketing Campaign** | Campaign planning, content tracking | 300+ tasks |
 
-### Demo Features:
+### Demo Test Accounts
 
-**Anonymous Users Can:**
-- ✅ Access demo instantly (no login)
-- ✅ Choose Solo or Team mode
-- ✅ Explore all features and boards
-- ✅ Switch roles in Team mode
-- ✅ Reset demo to clean state
-- ✅ Create up to 2 custom projects
-- ⚠️ Session lasts 48 hours (data resets)
-- ❌ Export blocked (upgrade to unlock)
-- ❌ AI limited to 20 generations
+To experience different user roles, you can log in with these demo credentials:
 
-**Authenticated Users Get:**
-- ✅ Everything above, PLUS:
-- ✅ Unlimited projects
-- ✅ Full export capabilities
-- ✅ Persistent data (never resets)
-- ✅ Chat room access
-- ✅ Full AI access based on plan
+| Username | Password | Role |
+|----------|----------|------|
+| `demo_admin_solo` | `demo123` | Admin - Full access to all features |
+| `sam_rivera_demo` | `demo123` | Team Member - Standard contributor |
+| `jordan_lee_demo` | `demo123` | Team Member - Budget/Finance focus |
 
-### Demo URLs:
+⚠️ **Note:** Demo accounts cannot access AI features. Create your own account to use AI-powered features.
 
-```bash
-# Landing page with "Try Demo" button
-http://localhost:8000/
+### AI Usage Limits
 
-# Direct demo access
-http://localhost:8000/demo/start/
-
-# Demo dashboard (after mode selection)
-http://localhost:8000/demo/
-```
-
----
-
-## 📊 Demo Analytics (Track User Behavior)
-
-Comprehensive tracking of anonymous and authenticated demo users with conversion optimization.
-
-### Hybrid Analytics Strategy:
-
-**Server-Side Tracking (100% Coverage):**
-- Session-based identification (works for anonymous users)
-- Cannot be blocked by ad-blockers
-- Tracks: features explored, limitations hit, conversions
-- Privacy-compliant (no PII required)
-
-**Client-Side GA4 (65-70% Coverage):**
-- Rich behavioral insights via Google Analytics 4
-- Limitation encounter events: `limitation_encountered`, `demo_export_blocked`
-- Conversion events: `demo_conversion_initiated`
-- Workaround detection: `board_deleted_in_demo` with flags
-
-### What Gets Tracked:
-
-```python
-# Demo Session Data
-{
-    'session_id': 'xyz789',
-    'demo_mode': 'solo',              # Solo or Team
-    'projects_created_in_demo': 2,    # Towards 2 max limit
-    'ai_generations_used': 12,        # Towards 20 limit
-    'export_attempts': 1,             # Blocked attempts
-    'limitations_hit': ['project_limit', 'export'],
-    'converted_to_signup': False,
-}
-```
-
-### View Analytics Report:
-
-```bash
-# Generate comprehensive demo analytics
-python manage.py demo_analytics_report --days 7
-
-# Output includes:
-# • Limitation encounter rates by type
-# • Conversion rate after hitting limits
-# • Most effective upgrade triggers
-# • Device breakdown (mobile vs desktop)
-```
-
-### Key Metrics Tracked:
-
-**Limitation Events:**
-- Project limit encounters (at 2 boards)
-- Export block encounters
-- AI generation limit hits
-- Workaround attempt detection
-
-**Value Recognition:**
-- Aha moments experienced
-- Triggers (AI suggestions, burndown forecasts, collaboration)
-- Correlation with conversion
-
-**Conversion Events:**
-- Limitation-triggered upgrade CTAs
-- Demo → Signup conversion rate
-- Which limitation drives most conversions
-- Exit points (where users leave)
+| User Type | Monthly Limit | Daily Limit |
+|-----------|---------------|-------------|
+| **Registered Users** | 50 requests | 10 requests |
+| **Demo Accounts** | ❌ No AI access | ❌ No AI access |
 
 ---
 
 **💡 Dynamic Demo Data:** Demo data is intelligently designed with dates relative to the current date, so tasks and milestones will always appear fresh and relevant. The system automatically:
-- Creates **3 official demo boards** with **1000+ tasks** in dedicated demo organizations
+- Creates **3 official demo boards** with **1000+ tasks** available to all users
 - Distributes tasks across past, present, and future based on their status
 - Keeps completed tasks in the past (last 60 days)
 - Places active tasks around the current date
@@ -302,7 +198,6 @@ This removes duplicate boards and migrates users to the official demo boards.
 | Document | Description |
 |----------|-------------|
 | **[🎯 Aha Moment Integration](docs/AHA_MOMENT_INTEGRATION_GUIDE.md)** | Guide for integrating aha moment detection into views |
-| **[⏱️ Demo Session Extension](docs/DEMO_SESSION_EXTENSION.md)** | Technical documentation for demo session extension feature |
 
 ---
 
@@ -454,7 +349,7 @@ python manage.py cache_management --action=test
 - **XSS & CSRF Protection** - HTML sanitization and token validation
 - **SQL Injection Prevention** - Django ORM with parameterized queries
 - **Secure File Uploads** - MIME type validation and malicious content detection
-- **Data Isolation** - Organization-based multi-tenancy
+- **Data Isolation** - Board-level access control
 - **Audit Logging** - Complete audit trail of sensitive operations
 - **HTTPS Enforcement** - Encrypted data in transit with HSTS
 
@@ -497,13 +392,11 @@ Open http://localhost:8080 on your mobile device and install the PWA!
 |---------|---------|--------|
 | **AI Recommendations** | ✅ Yes | Limited/No |
 | **Explainable AI** | ✅ Full transparency | N/A |
-| **Try Without Signup** | ✅ Anonymous demo mode | Signup required |
-| **Demo Analytics** | ✅ 100% tracking coverage | Limited/None |
+| **Demo Data Included** | ✅ 1000+ sample tasks | Often empty |
 | **Scope Creep Detection** | ✅ Automated | Manual |
 | **Burndown Forecasting** | ✅ AI-powered | Basic/No |
 | **Conflict Detection** | ✅ Real-time | Limited |
 | **Time Tracking & Timesheets** | ✅ Full-featured | Limited/Paywall |
-| **Role-Based Access Control** | ✅ Advanced with approval workflows | Limited/Paywall |
 | **Audit Logging** | ✅ Complete history with IP tracking | Limited |
 | **Self-Hosted** | ✅ Yes | Limited |
 | **Open Source** | ✅ MIT License | No |
@@ -580,12 +473,12 @@ Perfect for developers building their portfolio or evaluating production-ready P
 
 ## 🚀 Ready to Get Started?
 
-1. **[Try Demo Mode](http://localhost:8000/)** - No signup required! Experience PrizmAI instantly
-2. **[Install PrizmAI](SETUP.md)** - Follow the setup guide for local installation
-3. **[Explore Features](FEATURES.md)** - Learn what PrizmAI can do
-4. **[Read User Guide](USER_GUIDE.md)** - See practical examples
-5. **[API Reference](API_DOCUMENTATION.md)** - Build integrations with the REST API
-6. **Create Your First Board** - Start managing projects with AI
+1. **[Install PrizmAI](SETUP.md)** - Follow the setup guide for local installation
+2. **[Create an Account](http://localhost:8000/accounts/register/)** - Quick signup (no organization setup needed!)
+3. **[Explore Demo Boards](http://localhost:8000/)** - Start with 3 pre-populated demo boards
+4. **[Explore Features](FEATURES.md)** - Learn what PrizmAI can do
+5. **[Read User Guide](USER_GUIDE.md)** - See practical examples
+6. **[API Reference](API_DOCUMENTATION.md)** - Build integrations with the REST API
 
 ---
 
