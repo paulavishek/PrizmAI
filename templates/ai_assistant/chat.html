@@ -91,6 +91,37 @@
         font-size: 18px;
         font-weight: 600;
         color: #333;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    .chat-title-text {
+        cursor: pointer;
+    }
+    
+    .chat-title-text:hover {
+        color: #667eea;
+    }
+    
+    .chat-title-edit {
+        display: none;
+        padding: 5px 10px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 16px;
+        width: 300px;
+    }
+    
+    .title-edit-icon {
+        cursor: pointer;
+        color: #999;
+        font-size: 14px;
+        transition: color 0.3s;
+    }
+    
+    .title-edit-icon:hover {
+        color: #667eea;
     }
     
     .chat-toolbar {
@@ -507,6 +538,9 @@
     <!-- Sidebar -->
     <div class="chat-sidebar">
         <div class="chat-sidebar-header">
+            <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-sm w-100 mb-2">
+                <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+            </a>
             <button class="btn btn-primary btn-sm btn-new-session w-100" onclick="createNewSession()">
                 <i class="fas fa-plus me-2"></i> New Chat
             </button>
@@ -521,7 +555,11 @@
     <div class="chat-main">
         <!-- Header -->
         <div class="chat-header">
-            <div class="chat-title" id="chat-title">{{ session.title }}</div>
+            <div class="chat-title">
+                <span class="chat-title-text" id="chat-title-text">{{ session.title }}</span>
+                <input type="text" class="chat-title-edit" id="chat-title-edit" value="{{ session.title }}">
+                <i class="fas fa-pencil-alt title-edit-icon" id="edit-title-btn" title="Rename chat"></i>
+            </div>
             <div class="chat-toolbar">
                 <select id="board-selector" class="board-selector">
                     <option value="">All Projects</option>
@@ -970,6 +1008,123 @@
             titleElement.textContent = '{{ session.title }}';
         }
     });
+    
+    // Handle chat title rename
+    const editTitleBtn = document.getElementById('edit-title-btn');
+    const chatTitleText = document.getElementById('chat-title-text');
+    const chatTitleEdit = document.getElementById('chat-title-edit');
+    
+    if (editTitleBtn && chatTitleText && chatTitleEdit) {
+        // Click edit icon to start editing
+        editTitleBtn.addEventListener('click', function() {
+            chatTitleText.style.display = 'none';
+            chatTitleEdit.style.display = 'block';
+            chatTitleEdit.focus();
+            chatTitleEdit.select();
+        });
+        
+        // Click on title text to start editing
+        chatTitleText.addEventListener('click', function() {
+            chatTitleText.style.display = 'none';
+            chatTitleEdit.style.display = 'block';
+            chatTitleEdit.focus();
+            chatTitleEdit.select();
+        });
+        
+        // Save on Enter key
+        chatTitleEdit.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                saveTitleRename();
+            }
+        });
+        
+        // Save on blur (when clicking outside)
+        chatTitleEdit.addEventListener('blur', function() {
+            setTimeout(() => saveTitleRename(), 200);
+        });
+        
+        // Cancel on Escape key
+        chatTitleEdit.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                cancelTitleEdit();
+            }
+        });
+    }
+    
+    function saveTitleRename() {
+        const newTitle = chatTitleEdit.value.trim();
+        const oldTitle = chatTitleText.textContent;
+        
+        console.log('[Rename] Old title:', oldTitle, 'New title:', newTitle);
+        
+        if (!newTitle || newTitle === oldTitle) {
+            console.log('[Rename] No change or empty, canceling');
+            cancelTitleEdit();
+            return;
+        }
+        
+        // Update UI immediately
+        chatTitleText.textContent = newTitle;
+        chatTitleText.style.display = 'inline';
+        chatTitleEdit.style.display = 'none';
+        
+        // Send to server
+        const sessionId = getCurrentSessionId();
+        console.log('[Rename] Sending request for session:', sessionId);
+        
+        if (sessionId) {
+            fetch(`/assistant/api/sessions/${sessionId}/rename/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({ title: newTitle })
+            })
+            .then(response => {
+                console.log('[Rename] Response status:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('[Rename] Response data:', data);
+                if (data.success) {
+                    console.log('[Rename] Success! Reloading sessions...');
+                    // Reload sessions list to show updated name
+                    loadSessions();
+                } else {
+                    // Revert on error
+                    console.error('[Rename] Failed:', data.error);
+                    chatTitleText.textContent = oldTitle;
+                    alert('Failed to rename chat: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('[Rename] Error:', error);
+                chatTitleText.textContent = oldTitle;
+                alert('Failed to rename chat. Please try again.');
+            });
+        } else {
+            console.error('[Rename] No session ID found!');
+        }
+    }
+    
+    function cancelTitleEdit() {
+        chatTitleEdit.value = chatTitleText.textContent;
+        chatTitleText.style.display = 'inline';
+        chatTitleEdit.style.display = 'none';
+    }
+    
+    function getCurrentSessionId() {
+        // First try to get from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlSessionId = urlParams.get('session');
+        if (urlSessionId) {
+            return urlSessionId;
+        }
+        
+        // Otherwise use the session ID from the page context
+        return {{ session.id|default:"null" }};
+    }
     
     // Handle initial query from URL parameter (e.g., from wiki quick queries)
     {% if initial_query %}

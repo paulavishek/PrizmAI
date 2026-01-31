@@ -78,9 +78,24 @@
 
 {% block content %}
 <div class="container-fluid mt-4">
+    <div class="mb-3">
+        <a href="{% url 'ai_assistant:chat' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-2"></i>Back to Chat
+        </a>
+    </div>
+    
     <div class="analytics-header">
         <h2><i class="fas fa-chart-bar me-2"></i> Analytics of Spectra</h2>
         <p class="text-muted mb-0">Track your AI-assisted project management activity</p>
+    </div>
+    
+    <!-- Info Banner -->
+    <div class="alert alert-info d-flex align-items-start mb-4" style="background: linear-gradient(135deg, #e3f2fd 0%, #f0f7ff 100%); border-left: 4px solid #2196f3; border-radius: 8px;">
+        <i class="fas fa-info-circle me-3 mt-1" style="color: #2196f3; font-size: 1.2rem;"></i>
+        <div style="font-size: 0.95rem; line-height: 1.6;">
+            <strong>About this data:</strong> Analytics include demo sessions (visible in your sidebar) plus your own conversations with Spectra. 
+            Charts show daily aggregated activity over the past 30 days, tracking when AI interactions occurred, not just current session dates.
+        </div>
     </div>
     
     <!-- Stats Cards -->

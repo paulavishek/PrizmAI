@@ -450,18 +450,24 @@ def rename_session(request, session_id):
         data = json.loads(request.body)
         new_title = data.get('title', '').strip()
         
+        print(f"[DEBUG] Renaming session {session_id}: '{session.title}' -> '{new_title}'")
+        
         if not new_title:
-            return JsonResponse({'error': 'Title cannot be empty'}, status=400)
+            return JsonResponse({'success': False, 'error': 'Title cannot be empty'}, status=400)
         
         session.title = new_title
         session.save()
         
-        return JsonResponse({'status': 'success', 'title': session.title})
+        print(f"[DEBUG] Session saved successfully. New title: '{session.title}'")
+        
+        return JsonResponse({'success': True, 'title': session.title})
     
     except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        print(f"[DEBUG] JSON decode error in rename_session")
+        return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
     except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
+        print(f"[DEBUG] Error in rename_session: {str(e)}")
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 @login_required(login_url='accounts:login')
@@ -658,11 +664,17 @@ def analytics_dashboard(request):
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=30)
     
-    # Get analytics - include user's own data AND demo analytics (by user, not session)
-    # Get demo users to include their analytics
-    demo_sessions = AIAssistantSession.objects.filter(is_demo=True)
-    demo_user_ids = demo_sessions.values_list('user_id', flat=True).distinct()
+    # Get sessions - include demo sessions and user's own sessions
+    sessions_qs = AIAssistantSession.objects.filter(
+        Q(user=request.user) | Q(is_demo=True),
+        updated_at__gte=timezone.now() - timedelta(days=30)
+    )
     
+    if board_id:
+        sessions_qs = sessions_qs.filter(board_id=board_id)
+    
+    # Get analytics from both demo users and current user
+    demo_user_ids = AIAssistantSession.objects.filter(is_demo=True).values_list('user_id', flat=True).distinct()
     analytics_qs = AIAssistantAnalytics.objects.filter(
         Q(user=request.user) | Q(user_id__in=demo_user_ids),
         date__gte=start_date,
@@ -672,8 +684,10 @@ def analytics_dashboard(request):
     if board_id:
         analytics_qs = analytics_qs.filter(board_id=board_id)
     
-    # Aggregate metrics
-    total_messages = analytics_qs.aggregate(Sum('messages_sent'))['messages_sent__sum'] or 0
+    # Count total messages from actual sessions (not accumulated analytics)
+    total_messages = sessions_qs.aggregate(Sum('message_count'))['message_count__sum'] or 0
+    
+    # Aggregate other metrics from analytics
     total_tokens = analytics_qs.aggregate(Sum('total_tokens_used'))['total_tokens_used__sum'] or 0
     web_searches = analytics_qs.aggregate(Sum('web_searches_performed'))['web_searches_performed__sum'] or 0
     kb_queries = analytics_qs.aggregate(Sum('knowledge_base_queries'))['knowledge_base_queries__sum'] or 0
@@ -686,18 +700,11 @@ def analytics_dashboard(request):
     context_aware_requests = kb_queries + web_searches
     context_aware_rate = round((context_aware_requests / gemini_requests * 100), 1) if gemini_requests > 0 else 0
     
-    # Get active sessions count and multi-turn conversations (include demo sessions)
-    active_sessions = AIAssistantSession.objects.filter(
-        Q(user=request.user) | Q(is_demo=True),
-        updated_at__gte=timezone.now() - timedelta(days=30)
-    ).count()
+    # Get active sessions count and multi-turn conversations (demo + user sessions)
+    active_sessions = sessions_qs.count()
     
     # Count multi-turn conversations (sessions with 3+ messages)
-    multi_turn_sessions = AIAssistantSession.objects.filter(
-        Q(user=request.user) | Q(is_demo=True),
-        updated_at__gte=timezone.now() - timedelta(days=30),
-        message_count__gte=3
-    ).count()
+    multi_turn_sessions = sessions_qs.filter(message_count__gte=3).count()
     
     # Calculate average response time
     avg_response_time = analytics_qs.aggregate(Avg('avg_response_time_ms'))['avg_response_time_ms__avg'] or 0
@@ -732,13 +739,10 @@ def get_analytics_data(request):
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=30)
     
-    # Get demo organization for showing demo analytics
-    demo_org = Organization.objects.filter(is_demo=True).first()
-    demo_boards = Board.objects.filter(organization=demo_org, is_official_demo_board=True) if demo_org else Board.objects.none()
-    
-    # Include both user's own analytics and demo board analytics
+    # Include both user's own analytics and demo user analytics
+    demo_user_ids = AIAssistantSession.objects.filter(is_demo=True).values_list('user_id', flat=True).distinct()
     analytics_qs = AIAssistantAnalytics.objects.filter(
-        Q(user=request.user) | Q(board__in=demo_boards),
+        Q(user=request.user) | Q(user_id__in=demo_user_ids),
         date__gte=start_date,
         date__lte=end_date
     ).order_by('date')

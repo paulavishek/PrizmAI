@@ -5,6 +5,12 @@
 
 {% block content %}
 <div class="container-fluid mt-4">
+    <div class="mb-3">
+        <a href="{% url 'ai_assistant:chat' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-2"></i>Back to Chat
+        </a>
+    </div>
+    
     <div class="row mb-4">
         <div class="col-md-8">
             <h2><i class="fas fa-lightbulb me-2"></i> AI Recommendations</h2>
