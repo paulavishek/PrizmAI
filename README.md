@@ -24,7 +24,7 @@ PrizmAI combines visual project management with AI that helps you work smarter�
 ### 🎮 Interactive Demo Mode
 - **Try without signup!** Anonymous users can now explore all features instantly
 - **Choose your path:** Solo Mode (5 min) or Team Mode (10 min)
-- **Full feature access:** AI, burndown charts, time tracking, RBAC demo
+- **Full feature access:** AI, burndown charts, time tracking, and more
 - **Session-based:** 48-hour sessions with session extension option
 
 ### 🎯 Demo Limitations & Conversion Analytics
@@ -61,10 +61,10 @@ Landing Page → Try Demo (instant) → Explore → Hit Limit → Convert to Acc
 - 💡 **AI Retrospectives** - Auto-generated lessons learned with improvement tracking
 
 ### 🏢 Enterprise & Security
-- 🔐 **Role-Based Access Control (RBAC)** - 35+ granular permissions with approval workflows and audit logging
+- � **Secure Authentication** - OAuth 2.0 with Google login and brute-force protection
 - 👥 **Stakeholder Management** - Track influence, interest levels, and engagement analytics
 - 📊 **Skill Gap Analysis** - Team capability mapping with training recommendations
-- 🔒 **Enterprise Security** - 9.5/10 security rating with comprehensive protection
+- 🛡️ **Enterprise Security** - Comprehensive protection with XSS prevention and CSP
 - 🤖 **AI Usage Monitoring** - Track and manage AI feature consumption with quota limits
 
 ### 🤝 Collaboration & Knowledge
@@ -136,12 +136,12 @@ Landing Page (/)
     │   ↓
     │   Choose Demo Mode:
     │   • Solo Mode (5 min) - Full access, explore independently
-    │   • Team Mode (10 min) - Switch roles, experience RBAC
+    │   • Team Mode (10 min) - Collaborate with team features
     │   ↓
     │   Explore Features:
     │   • 3 demo boards with 1000+ tasks
     │   • AI features, burndown charts, time tracking
-    │   • Role-based permissions (Team mode)
+    │   • Full collaboration features (Team mode)
     │   ↓
     │   Convert to Account (when ready):
     │   • Click "Create Account" in demo
@@ -244,7 +244,7 @@ python manage.py demo_analytics_report --days 7
 
 **Value Recognition:**
 - Aha moments experienced
-- Triggers (AI suggestions, burndown forecasts, RBAC)
+- Triggers (AI suggestions, burndown forecasts, collaboration)
 - Correlation with conversion
 
 **Conversion Events:**
