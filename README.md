@@ -23,7 +23,7 @@ PrizmAI combines visual project management with AI that helps you work smarter�
 - **AI usage limits:** 50 requests/month and 10 requests/day to ensure fair usage
 
 ### 🎮 Demo Data & Test Accounts
-- **Pre-populated boards:** 3 demo boards with 1000+ tasks for immediate exploration
+- **Pre-populated boards:** 3 demo boards with 90 tasks for immediate exploration
 - **Demo test accounts:** Try different roles using demo credentials (see below)
 - **Sample data everywhere:** Burndown charts, budgets, retrospectives - all with realistic data
 
@@ -72,7 +72,7 @@ Landing Page → Sign Up → Dashboard with Demo Boards → Start Exploring!
 - 🌐 **RESTful API** - 20+ endpoints for integrations (Slack, Teams, Jira-ready)
 - 🔗 **Webhook Integration** - Event-driven automation with external apps
 - 📱 **Mobile PWA Support** - Progressive Web App with offline capabilities
-- 🎮 **Demo Data Included** - Pre-populated boards with 1000+ sample tasks
+- 🎮 **Demo Data Included** - Pre-populated boards with 90 sample tasks
 - ♿ **Colorblind Accessibility** - Optimized palettes and pattern indicators
 - 🧬 **Lean Six Sigma** - Built-in LSS classifications (Value-Added, NVA, Waste)
 
@@ -126,9 +126,9 @@ After signing up, you'll have immediate access to **3 pre-populated demo boards*
 
 | Board | Description | Tasks |
 |-------|-------------|-------|
-| **Software Development** | Sprint planning, feature development | 400+ tasks |
-| **Bug Tracking** | Issue management, QA workflows | 300+ tasks |
-| **Marketing Campaign** | Campaign planning, content tracking | 300+ tasks |
+| **Software Development** | Sprint planning, feature development | 30 tasks |
+| **Bug Tracking** | Issue management, QA workflows | 30 tasks |
+| **Marketing Campaign** | Campaign planning, content tracking | 30 tasks |
 
 ### Demo Test Accounts
 
@@ -136,9 +136,9 @@ To experience different user roles, you can log in with these demo credentials:
 
 | Username | Password | Role |
 |----------|----------|------|
-| `demo_admin_solo` | `demo123` | Admin - Full access to all features |
-| `sam_rivera_demo` | `demo123` | Team Member - Standard contributor |
-| `jordan_lee_demo` | `demo123` | Team Member - Budget/Finance focus |
+| `alex_chen_demo` | `demo123` | Admin/PM - Full access to all features |
+| `sam_rivera_demo` | `demo123` | Developer - Standard contributor |
+| `jordan_taylor_demo` | `demo123` | Analyst/Viewer - Read-focused access |
 
 ⚠️ **Note:** Demo accounts cannot access AI features. Create your own account to use AI-powered features.
 
@@ -152,7 +152,7 @@ To experience different user roles, you can log in with these demo credentials:
 ---
 
 **💡 Dynamic Demo Data:** Demo data is intelligently designed with dates relative to the current date, so tasks and milestones will always appear fresh and relevant. The system automatically:
-- Creates **3 official demo boards** with **1000+ tasks** available to all users
+- Creates **3 official demo boards** with **90 tasks** available to all users
 - Distributes tasks across past, present, and future based on their status
 - Keeps completed tasks in the past (last 60 days)
 - Places active tasks around the current date
@@ -160,8 +160,8 @@ To experience different user roles, you can log in with these demo credentials:
 - Historical tasks (for predictive analytics) span the last 180 days
 
 **📊 Demo Data Overview:**
-- ✅ 3 comprehensive demo boards (Software Project, Bug Tracking, Marketing Campaign)
-- ✅ 1000+ sample tasks with complete feature demonstrations
+- ✅ 3 comprehensive demo boards (Software Development, Bug Tracking, Marketing Campaign)
+- ✅ 90 sample tasks with complete feature demonstrations
 - ✅ Risk management, resource forecasting, budget tracking
 - ✅ Milestones, dependencies, stakeholder management
 - ✅ Dynamic dates that always appear current
@@ -392,7 +392,7 @@ Open http://localhost:8080 on your mobile device and install the PWA!
 |---------|---------|--------|
 | **AI Recommendations** | ✅ Yes | Limited/No |
 | **Explainable AI** | ✅ Full transparency | N/A |
-| **Demo Data Included** | ✅ 1000+ sample tasks | Often empty |
+| **Demo Data Included** | ✅ 90 sample tasks | Often empty |
 | **Scope Creep Detection** | ✅ Automated | Manual |
 | **Burndown Forecasting** | ✅ AI-powered | Basic/No |
 | **Conflict Detection** | ✅ Real-time | Limited |
