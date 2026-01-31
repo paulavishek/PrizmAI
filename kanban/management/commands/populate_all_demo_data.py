@@ -142,7 +142,10 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.NOTICE('\n📝 PHASE 1: Creating Tasks & Core Data...'))
                 from django.core.management import call_command
                 try:
-                    call_command('populate_demo_data', '--reset' if options['reset'] else '')
+                    if options['reset']:
+                        call_command('populate_demo_data', '--reset')
+                    else:
+                        call_command('populate_demo_data')
                 except Exception as e:
                     self.stdout.write(self.style.WARNING(f'   ⚠️ Task creation via existing command: {e}'))
                     self.stdout.write('   Creating tasks directly...')
