@@ -2076,7 +2076,16 @@ def export_board(request, board_id):
 
 @login_required
 def import_board(request):
-    """Import a board from a JSON file"""
+    """
+    Import a board from external PM tools (Trello, Jira, Asana) or CSV/JSON files.
+    
+    Supports multiple formats with automatic detection:
+    - PrizmAI native JSON
+    - Trello JSON export
+    - Jira CSV/JSON export
+    - Asana CSV/JSON export
+    - Generic CSV with field mapping
+    """
     if request.method != 'POST':
         return redirect('board_list')
     
@@ -2094,90 +2103,208 @@ def import_board(request):
         return redirect('board_list')
         
     import_file = request.FILES['import_file']
+    filename = import_file.name
     
-    # Check file extension
-    if not import_file.name.endswith('.json'):
-        messages.error(request, "Only JSON files are supported for import")
+    # Check file extension - now supports JSON and CSV
+    valid_extensions = ['.json', '.csv', '.tsv']
+    if not any(filename.lower().endswith(ext) for ext in valid_extensions):
+        messages.error(request, "Supported file formats: JSON, CSV, TSV")
         return redirect('board_list')
     
-    # Try to parse the JSON file
     try:
-        imported_data = json.load(import_file)
+        # Read file content
+        file_content = import_file.read()
         
-        # Basic validation of imported data structure
-        if 'board' not in imported_data or 'columns' not in imported_data:
-            messages.error(request, "Invalid board data format")
+        # Try to decode as text
+        try:
+            file_data = file_content.decode('utf-8')
+        except UnicodeDecodeError:
+            try:
+                file_data = file_content.decode('utf-8-sig')
+            except UnicodeDecodeError:
+                file_data = file_content.decode('latin-1')
+        
+        # Import using the adapter system
+        from kanban.utils.import_adapters import AdapterFactory, UserMatcher
+        
+        # Create user matcher for this organization
+        user_matcher = UserMatcher(organization=organization)
+        
+        # Check if a specific adapter was requested
+        adapter_name = request.POST.get('adapter')
+        
+        # Create factory and import
+        factory = AdapterFactory(user_matcher=user_matcher)
+        
+        if adapter_name:
+            result = factory.import_with_adapter(adapter_name, file_data, filename)
+        else:
+            result = factory.detect_and_import(file_data, filename)
+        
+        if not result.success:
+            error_msg = '; '.join(result.errors) if result.errors else 'Unknown import error'
+            messages.error(request, f"Import failed: {error_msg}")
             return redirect('board_list')
-            
-        # Create the new board
-        board_data = imported_data['board']
-        new_board = Board.objects.create(
-            name=board_data.get('name', 'Imported Board'),
-            description=board_data.get('description', ''),
-            organization=organization,
-            created_by=request.user
+        
+        # Create the board and its contents from the import result
+        new_board = _create_board_from_import_result(
+            result, 
+            request.user, 
+            organization, 
+            request.session
         )
-        new_board.members.add(request.user)
         
-        # Create columns
-        for col_index, column_data in enumerate(imported_data['columns']):
-            column = Column.objects.create(
-                name=column_data.get('name', f'Column {col_index+1}'),
-                board=new_board,
-                position=column_data.get('position', col_index)
-            )
-            
-            # Create tasks for this column
-            is_demo_mode = request.session.get('is_demo_mode', False)
-            for task_index, task_data in enumerate(column_data.get('tasks', [])):
-                # Create the task - mark as user-created in demo mode
-                created_by_session = None
-                if is_demo_mode:
-                    created_by_session = request.session.get('browser_fingerprint') or request.session.session_key
-                
-                new_task = Task.objects.create(
-                    title=task_data.get('title', f'Task {task_index+1}'),
-                    description=task_data.get('description', ''),
-                    column=column,
-                    position=task_data.get('position', task_index),
-                    created_by=request.user,
-                    priority=task_data.get('priority', 'medium'),
-                    progress=task_data.get('progress', 0),
-                    created_by_session=created_by_session
-                )
-                
-                # Handle assigned_to if provided
-                assigned_username = task_data.get('assigned_to')
-                if assigned_username:
-                    try:
-                        assigned_user = User.objects.get(username=assigned_username)
-                        # Only set if user is in the same organization
-                        if hasattr(assigned_user, 'profile') and assigned_user.profile.organization == organization:
-                            new_task.assigned_to = assigned_user
-                            new_task.save()
-                    except User.DoesNotExist:
-                        pass  # Skip if user doesn't exist
-                
-                # Handle labels if provided
-                label_names = task_data.get('labels', [])
-                for label_name in label_names:
-                    # Try to find an existing label with this name, or create a new one
-                    label, created = TaskLabel.objects.get_or_create(
-                        name=label_name,
-                        board=new_board,
-                        defaults={'color': '#FF5733'}  # Default color for new labels
-                    )
-                    new_task.labels.add(label)
+        # Build success message with statistics
+        stats_parts = []
+        if result.stats.get('columns_imported'):
+            stats_parts.append(f"{result.stats['columns_imported']} columns")
+        if result.stats.get('tasks_imported'):
+            stats_parts.append(f"{result.stats['tasks_imported']} tasks")
+        if result.stats.get('labels_imported'):
+            stats_parts.append(f"{result.stats['labels_imported']} labels")
         
-        messages.success(request, f"Board '{new_board.name}' imported successfully!")
+        stats_msg = ', '.join(stats_parts) if stats_parts else 'data'
+        source_msg = f" from {result.source_tool}" if result.source_tool else ""
+        
+        messages.success(request, f"Board '{new_board.name}' imported successfully{source_msg} ({stats_msg})!")
+        
+        # Add warnings if any
+        if result.warnings:
+            for warning in result.warnings[:3]:  # Show first 3 warnings
+                messages.warning(request, warning)
+        
         return redirect('board_detail', board_id=new_board.id)
         
-    except json.JSONDecodeError:
-        messages.error(request, "Invalid JSON file")
-        return redirect('board_list')
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.exception(f"Error importing board: {e}")
         messages.error(request, f"Error importing board: {str(e)}")
         return redirect('board_list')
+
+
+def _create_board_from_import_result(result, user, organization, session):
+    """
+    Create a Board and its contents from an ImportResult object.
+    
+    Args:
+        result: ImportResult from adapter
+        user: User creating the board
+        organization: Organization for the board
+        session: Request session for demo mode tracking
+    
+    Returns:
+        Created Board instance
+    """
+    # Create the board
+    board_data = result.board_data
+    new_board = Board.objects.create(
+        name=board_data.get('name', 'Imported Board'),
+        description=board_data.get('description', ''),
+        organization=organization,
+        created_by=user,
+        num_phases=board_data.get('num_phases', 0)
+    )
+    new_board.members.add(user)
+    
+    # Create labels first (so we can reference them from tasks)
+    labels_map = {}  # label_name -> TaskLabel instance
+    for label_data in result.labels_data:
+        label, created = TaskLabel.objects.get_or_create(
+            name=label_data.get('name'),
+            board=new_board,
+            defaults={'color': label_data.get('color', '#FF5733')}
+        )
+        labels_map[label_data.get('name')] = label
+    
+    # Create columns and build mapping
+    columns_map = {}  # temp_id -> Column instance
+    for col_data in result.columns_data:
+        column = Column.objects.create(
+            name=col_data.get('name', 'Column'),
+            board=new_board,
+            position=col_data.get('position', 0)
+        )
+        columns_map[col_data.get('temp_id')] = column
+    
+    # If no columns were created, create a default one
+    if not columns_map:
+        default_column = Column.objects.create(
+            name='To Do',
+            board=new_board,
+            position=0
+        )
+        columns_map['default'] = default_column
+    
+    # Create tasks
+    is_demo_mode = session.get('is_demo_mode', False)
+    created_by_session = None
+    if is_demo_mode:
+        created_by_session = session.get('browser_fingerprint') or session.session_key
+    
+    for task_data in result.tasks_data:
+        # Get the column for this task
+        column_temp_id = task_data.get('column_temp_id')
+        column = columns_map.get(column_temp_id)
+        
+        # Fall back to first column if column not found
+        if not column:
+            column = list(columns_map.values())[0]
+        
+        # Create the task
+        new_task = Task.objects.create(
+            title=task_data.get('title', 'Untitled Task')[:200],
+            description=task_data.get('description', '') or '',
+            column=column,
+            position=task_data.get('position', 0),
+            created_by=user,
+            priority=task_data.get('priority', 'medium'),
+            progress=task_data.get('progress', 0),
+            complexity_score=task_data.get('complexity_score', 5),
+            phase=task_data.get('phase'),
+            created_by_session=created_by_session
+        )
+        
+        # Handle dates
+        if task_data.get('start_date'):
+            new_task.start_date = task_data['start_date']
+        if task_data.get('due_date'):
+            new_task.due_date = task_data['due_date']
+        
+        # Handle assigned user
+        assigned_username = task_data.get('assigned_to_username')
+        if assigned_username:
+            try:
+                # Try exact username match first
+                assigned_user = User.objects.filter(username__iexact=assigned_username).first()
+                
+                # Try email match
+                if not assigned_user and '@' in assigned_username:
+                    assigned_user = User.objects.filter(email__iexact=assigned_username).first()
+                
+                # Verify user is in the same organization
+                if assigned_user:
+                    if hasattr(assigned_user, 'profile') and assigned_user.profile.organization == organization:
+                        new_task.assigned_to = assigned_user
+            except Exception:
+                pass  # Skip if user lookup fails
+        
+        new_task.save()
+        
+        # Handle labels
+        for label_name in task_data.get('label_names', []):
+            if label_name in labels_map:
+                new_task.labels.add(labels_map[label_name])
+            else:
+                # Create new label if not exists
+                label, _ = TaskLabel.objects.get_or_create(
+                    name=label_name,
+                    board=new_board,
+                    defaults={'color': '#FF5733'}
+                )
+                new_task.labels.add(label)
+    
+    return new_board
 
 @login_required
 def add_lean_labels(request, board_id):

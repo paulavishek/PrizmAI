@@ -1,3 +1,5 @@
+# Kanban Board Import Schema for PrizmAI
+
 You've hit on a key challenge in PM tool interoperability! Let me break this down:
 
 ## The Schema Problem
@@ -328,4 +330,3 @@ Start with these **import strategies in order of priority**:
 2. **CSV import with field mapping** - universal compatibility
 3. **Trello JSON importer** - Trello is most commonly exported from
 4. **API integrations** (later phase) - Asana, Jira, Monday
-
