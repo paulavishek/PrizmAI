@@ -499,7 +499,6 @@ class DemoSession(models.Model):
         blank=True,
         help_text="When user FIRST started demo (persists across logins)"
     )
-    expires_at = models.DateTimeField(help_text="Session expiration (48 hours default)")
     last_activity = models.DateTimeField(auto_now=True)
     session_end = models.DateTimeField(null=True, blank=True)
     duration_seconds = models.IntegerField(default=0, help_text="Total time in demo")
@@ -543,7 +542,6 @@ class DemoSession(models.Model):
     # Demo actions
     reset_count = models.IntegerField(default=0, help_text="Number of times demo was reset")
     role_switches = models.IntegerField(default=0, help_text="Number of role switches (Team mode)")
-    extensions_count = models.IntegerField(default=0, help_text="Number of times session was extended")
     
     # Device & metadata
     device_type = models.CharField(
@@ -565,49 +563,11 @@ class DemoSession(models.Model):
         help_text="Whether GA4 successfully tracked this session"
     )
     
-    # Email reminder tracking
-    reminder_24h_sent = models.BooleanField(
-        default=False,
-        help_text="Whether 24-hour reminder email was sent"
-    )
-    reminder_24h_sent_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When 24-hour reminder email was sent"
-    )
-    reminder_12h_sent = models.BooleanField(
-        default=False,
-        help_text="Whether 12-hour reminder email was sent"
-    )
-    reminder_12h_sent_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When 12-hour reminder email was sent"
-    )
-    
-    # Inactivity re-engagement tracking
-    inactivity_email_sent = models.BooleanField(
-        default=False,
-        help_text="Whether inactivity re-engagement email was sent"
-    )
-    inactivity_email_sent_at = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text="When inactivity email was sent"
-    )
-    
-    # User email for demo (optional - collected during demo or linked to account)
-    demo_user_email = models.EmailField(
-        blank=True,
-        null=True,
-        help_text="Email address for demo user (for sending reminders)"
-    )
-    
     class Meta:
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['session_id']),
-            models.Index(fields=['created_at', 'expires_at']),
+            models.Index(fields=['created_at']),
             models.Index(fields=['demo_mode']),
             models.Index(fields=['converted_to_signup']),
         ]
@@ -616,10 +576,6 @@ class DemoSession(models.Model):
     
     def __str__(self):
         return f"Demo Session {self.session_id[:8]} - {self.demo_mode}"
-    
-    def is_expired(self):
-        """Check if session has expired"""
-        return timezone.now() > self.expires_at
     
     def calculate_duration(self):
         """Calculate and update session duration"""

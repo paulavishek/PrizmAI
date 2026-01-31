@@ -121,32 +121,12 @@
                     {% endif %}
                 </ul>
                 <ul class="navbar-nav align-items-center">
-                    <!-- Demo Mode Badge and Timer (visible only in demo mode) -->
+                    <!-- Demo Mode Badge (visible only in demo mode) -->
                     {% if request.session.is_demo_mode %}
                         <li class="nav-item me-1">
                             <span class="badge bg-warning text-dark" style="font-size: 0.75rem; padding: 0.4rem 0.6rem;" title="Demo Mode Active">
                                 <i class="fas fa-graduation-cap"></i> DEMO
                             </span>
-                        </li>
-                        <!-- Demo Timer in Navbar -->
-                        <li class="nav-item me-2" id="navDemoTimerContainer">
-                            <div class="d-flex align-items-center px-2 py-1 rounded" 
-                                 style="background: rgba(102, 126, 234, 0.15); border: 1px solid rgba(102, 126, 234, 0.3); white-space: nowrap;"
-                                 title="Demo session time remaining" id="navDemoTimerDisplay">
-                                <i class="fas fa-clock me-1 text-primary" style="font-size: 0.75rem;"></i>
-                                {% if demo_expired %}
-                                    <span class="nav-demo-timer-expired text-danger fw-bold" style="font-size: 0.75rem;">Expired</span>
-                                {% elif demo_expires_at %}
-                                    <span class="nav-demo-timer-value fw-bold" 
-                                          id="navDemoCountdownTimer" 
-                                          data-expires="{{ demo_expires_at_iso }}"
-                                          style="font-family: 'Courier New', monospace; font-size: 0.8rem; letter-spacing: 0.3px; min-width: 75px;">
-                                        {{ demo_time_formatted|default:"48:00:00" }}
-                                    </span>
-                                {% else %}
-                                    <span class="text-muted" style="font-size: 0.75rem;">48:00:00</span>
-                                {% endif %}
-                            </div>
                         </li>
                     {% endif %}
                     <!-- Accessibility Toggle Button -->
@@ -303,154 +283,6 @@
     <!-- Demo Mode GA4 Analytics -->
     {% if request.session.is_demo_mode %}
     <script src="{% static 'js/demo_ga4_analytics.js' %}"></script>
-    
-    <!-- Unified Demo Timer in Navbar -->
-    <script>
-    (function() {
-        'use strict';
-        
-        function initNavDemoTimer() {
-            const timerElement = document.getElementById('navDemoCountdownTimer');
-            const displayContainer = document.getElementById('navDemoTimerDisplay');
-            const timerContainer = document.getElementById('navDemoTimerContainer');
-            
-            console.log('🕒 Timer Init - Element:', timerElement, 'Display:', displayContainer);
-            
-            if (!timerElement || !displayContainer) {
-                console.warn('⚠️ Timer elements not found. Timer will not start.');
-                return;
-            }
-            
-            let expiresAt = timerElement.getAttribute('data-expires');
-            if (!expiresAt) {
-                console.error('❌ No expiry date found in data-expires attribute');
-                return;
-            }
-            
-            console.log('✅ Timer initialized with expiry:', expiresAt);
-            
-            let expiryDate = new Date(expiresAt);
-            let lastSyncTime = Date.now();
-            let timerInterval = null;
-            let syncInterval = null;
-            
-            // Sync with server to get accurate time
-            async function syncWithServer() {
-                try {
-                    const response = await fetch("{% url 'get_demo_status' %}");
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.status === 'success' && data.expires_at) {
-                            const newExpiryDate = new Date(data.expires_at);
-                            // Update if there's any difference
-                            if (Math.abs(newExpiryDate - expiryDate) > 1000) {
-                                expiryDate = newExpiryDate;
-                                timerElement.setAttribute('data-expires', data.expires_at);
-                                console.log('✅ Navbar demo timer synced:', data.expires_at, '| Remaining:', data.hours_remaining, 'hours');
-                            }
-                        }
-                        if (data.is_expired) {
-                            window.location.href = "{% url 'demo_mode_selection' %}?expired=1";
-                        }
-                    }
-                } catch (error) {
-                    console.warn('⚠️ Failed to sync navbar demo timer:', error);
-                }
-                lastSyncTime = Date.now();
-            }
-            
-            function updateTimer() {
-                const now = new Date();
-                const diff = expiryDate - now;
-                
-                if (diff <= 0) {
-                    // Expired
-                    timerElement.innerHTML = '<span class="text-danger fw-bold">Expired</span>';
-                    displayContainer.style.background = 'rgba(220, 53, 69, 0.15)';
-                    displayContainer.style.borderColor = 'rgba(220, 53, 69, 0.3)';
-                    if (timerInterval) clearInterval(timerInterval);
-                    if (syncInterval) clearInterval(syncInterval);
-                    
-                    // Redirect to demo mode selection after 2 seconds
-                    setTimeout(() => {
-                        window.location.href = "{% url 'demo_mode_selection' %}?expired=1";
-                    }, 2000);
-                    return;
-                }
-                
-                // Calculate time components
-                const totalSeconds = Math.floor(diff / 1000);
-                const hours = Math.floor(totalSeconds / 3600);
-                const minutes = Math.floor((totalSeconds % 3600) / 60);
-                const seconds = totalSeconds % 60;
-                
-                // Format with leading zeros
-                const formattedTime = hours.toString().padStart(2, '0') + ':' + 
-                                      minutes.toString().padStart(2, '0') + ':' + 
-                                      seconds.toString().padStart(2, '0');
-                
-                // Update display
-                timerElement.textContent = formattedTime;
-                
-                // Debug: Log every 10 seconds
-                if (seconds % 10 === 0) {
-                    console.log('⏱️ Timer update:', formattedTime, '| Remaining:', hours, 'hrs', minutes, 'mins', seconds, 'secs');
-                }
-                
-                // Update visual state based on remaining time
-                if (hours < 1) {
-                    // Less than 1 hour - critical (red)
-                    displayContainer.style.background = 'rgba(220, 53, 69, 0.15)';
-                    displayContainer.style.borderColor = 'rgba(220, 53, 69, 0.3)';
-                    timerElement.classList.add('text-danger');
-                    timerElement.classList.remove('text-warning', 'text-primary');
-                } else if (hours < 4) {
-                    // Less than 4 hours - urgent (orange)
-                    displayContainer.style.background = 'rgba(255, 152, 0, 0.15)';
-                    displayContainer.style.borderColor = 'rgba(255, 152, 0, 0.3)';
-                    timerElement.classList.add('text-warning');
-                    timerElement.classList.remove('text-danger', 'text-primary');
-                } else if (hours < 12) {
-                    // Less than 12 hours - warning (yellow)
-                    displayContainer.style.background = 'rgba(255, 193, 7, 0.15)';
-                    displayContainer.style.borderColor = 'rgba(255, 193, 7, 0.3)';
-                    timerElement.classList.remove('text-danger', 'text-primary');
-                } else {
-                    // Normal state
-                    displayContainer.style.background = 'rgba(102, 126, 234, 0.15)';
-                    displayContainer.style.borderColor = 'rgba(102, 126, 234, 0.3)';
-                    timerElement.classList.remove('text-danger', 'text-warning');
-                }
-            }
-            
-            // Update immediately on page load
-            updateTimer();
-            
-            // Sync with server immediately on page load
-            syncWithServer();
-            
-            // Update every second
-            timerInterval = setInterval(updateTimer, 1000);
-            
-            // Sync with server every 15 seconds for accuracy
-            syncInterval = setInterval(syncWithServer, 15000);
-            
-            // Also sync when page becomes visible (user returns to tab)
-            document.addEventListener('visibilitychange', function() {
-                if (document.visibilityState === 'visible' && Date.now() - lastSyncTime > 10000) {
-                    syncWithServer();
-                }
-            });
-        }
-        
-        // Initialize timer when DOM is ready
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', initNavDemoTimer);
-        } else {
-            initNavDemoTimer();
-        }
-    })();
-    </script>
     {% endif %}
     
     <!-- Custom JS -->

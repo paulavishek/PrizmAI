@@ -11,8 +11,6 @@ from kanban.tasks.conflict_tasks import (
 )
 
 from kanban.tasks.demo_tasks import (
-    cleanup_expired_demo_sessions,
-    send_demo_expiry_warning,
     refresh_demo_dates_task,
 )
 
@@ -24,7 +22,5 @@ __all__ = [
     'cleanup_resolved_conflicts_task',
     'detect_board_conflicts_task',
     # Demo tasks
-    'cleanup_expired_demo_sessions',
-    'send_demo_expiry_warning',
     'refresh_demo_dates_task',
 ]

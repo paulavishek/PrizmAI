@@ -65,7 +65,7 @@ class Board(models.Model):
     )
     is_seed_demo_data = models.BooleanField(
         default=False,
-        help_text="True if this is original seed demo data (not user-created). Used for 48-hour cleanup."
+        help_text="True if this is original seed demo data (not user-created)."
     )
 
     # Phase Configuration for Gantt Chart
@@ -478,7 +478,7 @@ class Task(models.Model):
     )
     is_seed_demo_data = models.BooleanField(
         default=False,
-        help_text="True if this is original seed demo data (not user-created). Used for 48-hour cleanup."
+        help_text="True if this is original seed demo data (not user-created)."
     )
     
     class Meta:

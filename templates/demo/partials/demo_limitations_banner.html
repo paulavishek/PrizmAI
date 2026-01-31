@@ -206,30 +206,10 @@
 <div class="demo-limitations-banner">
     <div class="demo-limitations-title">
         <i class="fas fa-info-circle"></i>
-        <span>Demo Mode Limitations</span>
+        <span>Demo Mode</span>
     </div>
 
     <div class="demo-limitations-grid">
-        <!-- Time Limitation -->
-        <div class="demo-limitation-item {% if demo_hours_remaining|default:48 < 24 %}demo-limitation-urgent{% endif %}">
-            <span class="demo-limitation-icon">⏰</span>
-            <div class="demo-limitation-label">Session Timer</div>
-            <div class="demo-limitation-value">
-                {% if demo_expired %}
-                    <span class="demo-timer-expired-large">Expired</span>
-                {% else %}
-                    48 hours limit
-                {% endif %}
-            </div>
-            <div class="demo-limitation-desc">
-                {% if demo_expired %}
-                Session expired! Create a free account to start fresh.
-                {% else %}
-                Your demo session automatically resets after 48 hours. Check the navbar for live countdown. Create a free account to keep your work forever!
-                {% endif %}
-            </div>
-        </div>
-
         <!-- Project Limitation -->
         <div class="demo-limitation-item {% if demo_projects_remaining|default:2 == 0 %}demo-limitation-warning{% endif %}">
             <span class="demo-limitation-icon">📁</span>

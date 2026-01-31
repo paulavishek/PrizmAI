@@ -19,20 +19,6 @@ SIMPLIFIED MODE (January 2026):
 # ============================================================================
 SIMPLIFIED_MODE = True
 
-# ============================================================================
-# SESSION EXTENSION SETTINGS
-# ============================================================================
-
-# Maximum number of times a demo session can be extended
-MAX_DEMO_EXTENSIONS = 3
-
-# Duration of each extension in hours
-EXTENSION_DURATION_HOURS = 1
-
-# Initial demo session duration in hours (from first access)
-# In simplified mode, this is effectively unlimited (just a number for compatibility)
-INITIAL_DEMO_DURATION_HOURS = 48
-
 
 # ============================================================================
 # PROJECT & AI LIMITS (Same for all users in simplified mode)
@@ -68,32 +54,6 @@ VPN_PENALTY_MULTIPLIER = 1.0 if SIMPLIFIED_MODE else 0.5
 
 
 # ============================================================================
-# TIME-BASED WARNINGS
-# ============================================================================
-
-# Show critical warning when this many hours remain
-CRITICAL_WARNING_HOURS = 0.25  # 15 minutes
-
-# Show warning when this many hours remain
-WARNING_HOURS = 1.0  # 1 hour
-
-# Show info banner when this many hours remain
-INFO_HOURS = 4.0  # 4 hours
-
-
-# ============================================================================
-# DATA RETENTION
-# ============================================================================
-
-# How long to keep demo session data after expiration (in hours)
-# After this period, demo data is auto-deleted
-DEMO_DATA_RETENTION_HOURS = 24
-
-# How long before demo expiry to send reminder emails (in hours)
-DEMO_REMINDER_EMAIL_HOURS = 24
-
-
-# ============================================================================
 # ANTI-ABUSE SETTINGS
 # ============================================================================
 
@@ -111,15 +71,6 @@ MAX_DEMO_RESETS = 3
 # HELPER FUNCTIONS
 # ============================================================================
 
-def get_extension_settings():
-    """Return all extension-related settings as a dictionary."""
-    return {
-        'max_extensions': MAX_DEMO_EXTENSIONS,
-        'extension_duration_hours': EXTENSION_DURATION_HOURS,
-        'initial_duration_hours': INITIAL_DEMO_DURATION_HOURS,
-    }
-
-
 def get_limit_settings():
     """Return all demo limit settings as a dictionary."""
     return {
@@ -129,23 +80,10 @@ def get_limit_settings():
     }
 
 
-def get_warning_settings():
-    """Return warning threshold settings as a dictionary."""
-    return {
-        'critical_hours': CRITICAL_WARNING_HOURS,
-        'warning_hours': WARNING_HOURS,
-        'info_hours': INFO_HOURS,
-    }
-
-
 def get_all_settings():
     """Return all demo settings as a dictionary."""
     return {
-        'extensions': get_extension_settings(),
         'limits': get_limit_settings(),
-        'warnings': get_warning_settings(),
-        'data_retention_hours': DEMO_DATA_RETENTION_HOURS,
-        'reminder_email_hours': DEMO_REMINDER_EMAIL_HOURS,
         'max_sessions_per_fingerprint': MAX_SESSIONS_PER_FINGERPRINT,
         'fingerprint_cooldown_hours': FINGERPRINT_COOLDOWN_HOURS,
         'max_demo_resets': MAX_DEMO_RESETS,

@@ -8,12 +8,8 @@ IMPORTANT ARCHITECTURAL NOTES:
 1. This service ONLY refreshes SEED/ORIGINAL demo data, NOT user-created content.
    - Seed demo data: created_by_session is NULL or empty
    - User-created data: created_by_session is set to their session ID
-
-2. The 48-hour demo reset system (cleanup_demo_sessions) handles user-created content.
-   - After 48 hours, user-created tasks, boards, etc. are deleted
-   - This service does NOT touch that user-created content
    
-3. The refresh runs once per day (cached) to avoid performance impact.
+2. The refresh runs once per day (cached) to avoid performance impact.
    - First demo access of the day triggers the refresh
    - All subsequent accesses that day skip the refresh
 """

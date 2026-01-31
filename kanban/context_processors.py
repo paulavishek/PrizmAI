@@ -106,7 +106,6 @@ def demo_context(request):
             
             context['demo_export_allowed'] = demo_status['export']['allowed']
             context['demo_limitations_hit'] = demo_status.get('limitations_hit', [])
-            context['demo_data_reset_hours'] = DEMO_LIMITS['data_reset_hours']
         except Exception as e:
             # Fallback defaults if utility fails
             context['demo_projects_created'] = 0
@@ -114,90 +113,6 @@ def demo_context(request):
             context['demo_projects_remaining'] = 2
             context['demo_can_create_project'] = True
             context['demo_export_allowed'] = False
-            context['demo_data_reset_hours'] = 48
-        
-        # Expiry information - ensure demo_expires_at is always set
-        expires_at_str = request.session.get('demo_expires_at')
-        
-        # If no expiry is set, initialize it now (48 hours from now)
-        if not expires_at_str:
-            from datetime import timedelta
-            expires_at = timezone.now() + timedelta(hours=48)
-            request.session['demo_expires_at'] = expires_at.isoformat()
-            expires_at_str = request.session['demo_expires_at']
-            request.session.modified = True
-        
-        try:
-            from dateutil import parser
-            expires_at = parser.parse(expires_at_str)
-            
-            # Ensure timezone awareness
-            if expires_at.tzinfo is None:
-                from django.utils.timezone import make_aware
-                expires_at = make_aware(expires_at)
-            
-            context['demo_expires_at'] = expires_at
-            context['demo_expires_at_iso'] = expires_at.isoformat()
-            
-            # Calculate time remaining
-            time_remaining = expires_at - timezone.now()
-            total_seconds = time_remaining.total_seconds()
-            
-            # Handle negative time (expired)
-            if total_seconds < 0:
-                context['demo_time_remaining'] = None
-                context['demo_hours_remaining'] = 0
-                context['demo_hours_component'] = 0
-                context['demo_minutes_component'] = 0
-                context['demo_seconds_component'] = 0
-                context['demo_time_formatted'] = '00:00:00'
-                context['demo_expired'] = True
-            else:
-                context['demo_time_remaining'] = time_remaining
-                context['demo_hours_remaining'] = round(total_seconds / 3600, 1)
-                
-                # Add formatted time components for HH:MM:SS display
-                hours = int(total_seconds // 3600)
-                minutes = int((total_seconds % 3600) // 60)
-                seconds = int(total_seconds % 60)
-                context['demo_hours_component'] = hours
-                context['demo_minutes_component'] = minutes
-                context['demo_seconds_component'] = seconds
-                context['demo_time_formatted'] = f'{hours:02d}:{minutes:02d}:{seconds:02d}'
-                
-                context['demo_expired'] = False
-            
-            # Check if warning should be shown
-            hours_remaining = max(0, total_seconds / 3600)
-            if hours_remaining <= 0.25:  # 15 minutes
-                context['show_expiry_warning'] = True
-                context['expiry_warning_level'] = 'critical'
-                minutes_left = max(1, int(total_seconds / 60))
-                context['expiry_warning_message'] = f'Demo session expires in {minutes_left} minutes! Data will be reset.'
-            elif hours_remaining <= 1:  # 1 hour
-                context['show_expiry_warning'] = True
-                context['expiry_warning_level'] = 'warning'
-                minutes_left = max(1, int(total_seconds / 60))
-                context['expiry_warning_message'] = f'Demo session expires in {minutes_left} minutes. Create an account to save your work!'
-            elif hours_remaining <= 4:  # 4 hours
-                context['show_expiry_warning'] = True
-                context['expiry_warning_level'] = 'info'
-                # Show hours and minutes for accurate display
-                hours = int(hours_remaining)
-                minutes = int((hours_remaining - hours) * 60)
-                if hours > 0 and minutes > 0:
-                    time_str = f'{hours} hour{"s" if hours != 1 else ""} {minutes} minutes'
-                elif hours > 0:
-                    time_str = f'{hours} hour{"s" if hours != 1 else ""}'
-                else:
-                    time_str = f'{minutes} minutes'
-                context['expiry_warning_message'] = f'Demo session expires in {time_str}.'
-        except Exception as e:
-            # Fallback: set reasonable defaults
-            import logging
-            logging.getLogger(__name__).warning(f"Error parsing demo_expires_at: {e}")
-            context['demo_hours_remaining'] = 48
-            context['demo_expired'] = False
         
         # Track explored features
         features_explored = request.session.get('features_explored', [])
@@ -213,37 +128,6 @@ def demo_context(request):
         nudges_shown = request.session.get('nudges_shown', [])
         context['nudges_shown'] = nudges_shown
         context['nudges_shown_count'] = len(nudges_shown)
-        
-        # Extension limits information
-        try:
-            from analytics.models import DemoSession
-            session_id = request.session.session_key
-            if session_id:
-                demo_session = DemoSession.objects.filter(session_id=session_id).first()
-                if demo_session:
-                    # Import constants from demo_views
-                    from kanban.demo_views import MAX_DEMO_EXTENSIONS, EXTENSION_DURATION_HOURS
-                    context['demo_extensions_used'] = demo_session.extensions_count
-                    context['demo_extensions_max'] = MAX_DEMO_EXTENSIONS
-                    context['demo_extensions_remaining'] = MAX_DEMO_EXTENSIONS - demo_session.extensions_count
-                    context['demo_extension_duration'] = EXTENSION_DURATION_HOURS
-                else:
-                    context['demo_extensions_used'] = 0
-                    context['demo_extensions_max'] = 3
-                    context['demo_extensions_remaining'] = 3
-                    context['demo_extension_duration'] = 1
-            else:
-                context['demo_extensions_used'] = 0
-                context['demo_extensions_max'] = 3
-                context['demo_extensions_remaining'] = 3
-                context['demo_extension_duration'] = 1
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Error loading extension info: {e}")
-            context['demo_extensions_used'] = 0
-            context['demo_extensions_max'] = 3
-            context['demo_extensions_remaining'] = 3
-            context['demo_extension_duration'] = 1
         
         # Role display names
         role_names = {

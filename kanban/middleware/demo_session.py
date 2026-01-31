@@ -1,6 +1,6 @@
 """
 Demo Session Management Middleware
-Tracks demo sessions, updates activity, checks expiry, and provides warnings.
+Tracks demo sessions, updates activity.
 Automatically refreshes demo data dates to keep demo content fresh.
 """
 from django.utils import timezone
@@ -17,10 +17,7 @@ class DemoSessionMiddleware:
     """
     Middleware to manage demo sessions:
     - Track last activity
-    - Check for session expiry
     - Update DemoSession records
-    - Provide expiry warnings
-    - Handle session cleanup
     - Automatically refresh demo data dates (once per day)
     """
     
@@ -34,10 +31,6 @@ class DemoSessionMiddleware:
             self.refresh_demo_dates_if_needed()
             
             self.update_demo_session(request)
-            
-            # Check if session has expired
-            if self.is_session_expired(request):
-                return self.handle_expired_session(request)
         
         # Get response
         response = self.get_response(request)
@@ -78,7 +71,6 @@ class DemoSessionMiddleware:
                 defaults={
                     'demo_mode': request.session.get('demo_mode', 'solo'),
                     'current_role': request.session.get('demo_role', 'admin'),
-                    'expires_at': timezone.now() + timedelta(hours=48),
                 }
             )
             
@@ -98,79 +90,6 @@ class DemoSessionMiddleware:
         except Exception as e:
             # Analytics models may not exist - that's OK
             pass
-    
-    def is_session_expired(self, request):
-        """Check if demo session has expired"""
-        expires_at_str = request.session.get('demo_expires_at')
-        if not expires_at_str:
-            return False
-        
-        try:
-            from dateutil import parser
-            expires_at = parser.parse(expires_at_str)
-            return timezone.now() > expires_at
-        except:
-            return False
-    
-    def handle_expired_session(self, request):
-        """Handle expired demo session"""
-        # Clear demo session data
-        demo_keys = [
-            'is_demo_mode', 'demo_mode', 'demo_mode_selected', 
-            'demo_role', 'demo_session_id', 'demo_started_at',
-            'demo_expires_at', 'features_explored', 'aha_moments', 'nudges_shown'
-        ]
-        for key in demo_keys:
-            if key in request.session:
-                del request.session[key]
-        
-        request.session.modified = True
-        
-        # Track expiry event
-        try:
-            from analytics.models import DemoAnalytics
-            DemoAnalytics.objects.create(
-                session_id=request.session.session_key,
-                event_type='demo_expired',
-                event_data={'expired_at': timezone.now().isoformat()}
-            )
-        except:
-            pass
-        
-        # Redirect to demo start page with message
-        return redirect(reverse('demo_mode_selection') + '?expired=1')
-    
-    def get_time_until_expiry(self, request):
-        """Calculate time remaining until expiry"""
-        expires_at_str = request.session.get('demo_expires_at')
-        if not expires_at_str:
-            return None
-        
-        try:
-            from dateutil import parser
-            expires_at = parser.parse(expires_at_str)
-            time_remaining = expires_at - timezone.now()
-            return time_remaining
-        except:
-            return None
-    
-    def should_show_expiry_warning(self, request):
-        """Determine if expiry warning should be shown"""
-        time_remaining = self.get_time_until_expiry(request)
-        if not time_remaining:
-            return False, None
-        
-        hours_remaining = time_remaining.total_seconds() / 3600
-        
-        # Warning levels
-        if hours_remaining <= 0.25:  # 15 minutes
-            return True, 'critical'
-        elif hours_remaining <= 1:  # 1 hour
-            return True, 'warning'
-        elif hours_remaining <= 4:  # 4 hours
-            return True, 'info'
-        
-        return False, None
 
 
 class DemoAnalyticsMiddleware:
