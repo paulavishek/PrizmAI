@@ -4,6 +4,7 @@ Handles budget dashboard, analytics, and AI recommendations
 """
 import logging
 import time
+import random
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -13,6 +14,7 @@ from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.db.models import Sum, Avg, Count, Q
 from django.db import models
+from datetime import timedelta
 import json
 
 from kanban.models import Board, Task
@@ -34,6 +36,91 @@ from kanban.utils.demo_limits import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_demo_time_entries(user, boards):
+    """
+    Ensure a user has time entries for demo boards.
+    
+    This auto-populates time tracking demo data for users who haven't
+    logged time yet, so they can explore the Time Tracking feature
+    with pre-populated data.
+    """
+    # Skip if not demo boards
+    demo_boards = [b for b in boards if b.is_official_demo_board]
+    if not demo_boards:
+        return
+    
+    # Skip if user is a demo user (they already have data via populate_all_demo_data)
+    if '_demo' in user.username:
+        return
+    
+    # Check if user already has time entries in these boards
+    existing_entries = TimeEntry.objects.filter(
+        user=user,
+        task__column__board__in=demo_boards
+    ).exists()
+    
+    if existing_entries:
+        return  # User already has time tracking data
+    
+    try:
+        now = timezone.now().date()
+        
+        # Time entry descriptions for variety
+        descriptions = [
+            "Reviewed requirements and planning",
+            "Implementation work",
+            "Testing and validation",
+            "Code review participation",
+            "Documentation updates",
+            "Bug investigation",
+            "Feature development",
+            "Team collaboration session",
+            "Sprint planning activities",
+            "Technical design work",
+        ]
+        
+        entries_created = 0
+        
+        for board in demo_boards:
+            # Get some tasks that are in progress
+            available_tasks = Task.objects.filter(
+                column__board=board,
+                progress__gt=0
+            ).order_by('?')[:4]  # Random 4 tasks per board
+            
+            for task in available_tasks:
+                # Create 1-3 time entries per task
+                num_entries = random.randint(1, 3)
+                for i in range(num_entries):
+                    hours = Decimal(str(round(random.uniform(0.5, 3.5), 2)))
+                    
+                    # Spread entries over the last 14 days
+                    days_ago = random.randint(0, 13)
+                    entry_date = now - timedelta(days=days_ago)
+                    
+                    # Avoid weekends
+                    while entry_date.weekday() >= 5:
+                        days_ago += 1
+                        entry_date = now - timedelta(days=days_ago)
+                    
+                    description = random.choice(descriptions)
+                    
+                    TimeEntry.objects.create(
+                        task=task,
+                        user=user,
+                        hours_spent=hours,
+                        description=f"{description} - {task.title[:30]}",
+                        work_date=entry_date,
+                    )
+                    entries_created += 1
+        
+        if entries_created > 0:
+            logger.info(f"Auto-created {entries_created} demo time entries for user {user.username}")
+    
+    except Exception as e:
+        logger.error(f"Error creating demo time entries for {user.username}: {e}")
 
 
 def budget_dashboard(request, board_id):
@@ -871,6 +958,9 @@ def my_timesheet(request, board_id=None):
             assigned_to=request.user
         ).select_related('column', 'column__board')
     
+    # Auto-setup demo time tracking data for new users
+    _ensure_demo_time_entries(request.user, boards)
+    
     # Get time entries for the week
     entries = TimeEntry.objects.filter(
         user=request.user,
@@ -967,6 +1057,10 @@ def time_tracking_dashboard(request, board_id=None):
             models.Q(created_by=request.user) | models.Q(members=request.user)
         ).distinct()
         board = None
+    
+    # Auto-setup demo time tracking data for new users
+    # This ensures users have time entries to see in the dashboard
+    _ensure_demo_time_entries(request.user, boards)
     
     # Get time entries
     entries = TimeEntry.objects.filter(user=request.user)

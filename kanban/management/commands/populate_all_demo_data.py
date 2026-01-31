@@ -178,6 +178,13 @@ class Command(BaseCommand):
                 f'{ai_stats["recommendations"]} recommendations'
             ))
 
+            # 6. Time Tracking Demo Data
+            self.stdout.write(self.style.NOTICE('\n⏱️ PHASE 6: Creating Time Tracking Demo Data...'))
+            time_stats = self.create_time_tracking_demo_data()
+            self.stdout.write(self.style.SUCCESS(
+                f'   ✅ Time Tracking: {time_stats["entries"]} time entries for {time_stats["users"]} users'
+            ))
+
         # Final Summary
         self.print_final_summary()
 
@@ -283,6 +290,12 @@ class Command(BaseCommand):
         AIAssistantAnalytics.objects.filter(board__in=self.demo_boards).delete()
         AITaskRecommendation.objects.filter(board__in=self.demo_boards).delete()
         self.stdout.write('   ✓ Cleared AI Assistant data')
+
+        # =====================================================================
+        # STEP 7: Clear Time Tracking data
+        # =====================================================================
+        TimeEntry.objects.filter(task__column__board__in=self.demo_boards).delete()
+        self.stdout.write('   ✓ Cleared Time Tracking data')
 
         self.stdout.write(self.style.SUCCESS('   ✓ All demo data cleared\n'))
 
@@ -1254,6 +1267,142 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
                 ]
             },
         ]
+
+    # =========================================================================
+    # TIME TRACKING DEMO DATA
+    # =========================================================================
+    def create_time_tracking_demo_data(self):
+        """Create comprehensive time tracking demo data for all demo users"""
+        entries_created = 0
+        now = timezone.now().date()
+        
+        # Time entry descriptions for variety
+        descriptions = [
+            "Worked on core implementation",
+            "Code review and testing",
+            "Bug fixing and debugging",
+            "Feature development",
+            "Documentation updates",
+            "Meeting and planning session",
+            "Research and analysis",
+            "Deployment and configuration",
+            "Performance optimization",
+            "Unit testing",
+            "Integration work",
+            "Design review",
+            "Sprint planning activities",
+            "Client communication",
+            "Technical documentation",
+            "Code refactoring",
+            "Security review",
+            "Database optimization",
+            "API development",
+            "UI/UX improvements",
+        ]
+        
+        # Create time entries for each demo user
+        users_with_entries = set()
+        
+        for board in self.demo_boards:
+            # Get tasks from this board that are in progress or done
+            tasks = Task.objects.filter(
+                column__board=board,
+                progress__gt=0
+            ).select_related('assigned_to')
+            
+            for task in tasks:
+                # Determine which user should log time
+                # Use assigned user or cycle through demo users
+                if task.assigned_to in self.demo_users:
+                    primary_user = task.assigned_to
+                else:
+                    # Assign to a random demo user
+                    primary_user = random.choice(self.demo_users) if self.demo_users else None
+                
+                if not primary_user:
+                    continue
+                
+                users_with_entries.add(primary_user.username)
+                
+                # Create 1-4 time entries per task based on progress
+                num_entries = 1
+                if task.progress >= 75:
+                    num_entries = random.randint(2, 4)
+                elif task.progress >= 50:
+                    num_entries = random.randint(2, 3)
+                elif task.progress >= 25:
+                    num_entries = random.randint(1, 2)
+                
+                for i in range(num_entries):
+                    # Hours based on task complexity and progress
+                    base_hours = random.uniform(0.5, 4.0)
+                    if hasattr(task, 'complexity') and task.complexity:
+                        base_hours *= (1 + task.complexity * 0.1)
+                    hours = Decimal(str(round(base_hours, 2)))
+                    
+                    # Spread entries over the last 14 days with realistic distribution
+                    # More recent entries for tasks with higher progress
+                    max_days_ago = 14 if task.progress < 50 else 7
+                    days_ago = random.randint(0, max_days_ago)
+                    entry_date = now - timedelta(days=days_ago)
+                    
+                    # Avoid weekends for more realistic data
+                    while entry_date.weekday() >= 5:  # Saturday=5, Sunday=6
+                        days_ago += 1
+                        entry_date = now - timedelta(days=days_ago)
+                    
+                    description = random.choice(descriptions)
+                    
+                    # Check if entry already exists
+                    existing = TimeEntry.objects.filter(
+                        task=task,
+                        user=primary_user,
+                        work_date=entry_date
+                    ).exists()
+                    
+                    if not existing:
+                        TimeEntry.objects.create(
+                            task=task,
+                            user=primary_user,
+                            hours_spent=hours,
+                            description=f"{description} - {task.title[:30]}",
+                            work_date=entry_date,
+                        )
+                        entries_created += 1
+                
+                # Occasionally add a secondary collaborator's time
+                if task.progress >= 50 and random.random() < 0.3:
+                    other_users = [u for u in self.demo_users if u != primary_user]
+                    if other_users:
+                        collaborator = random.choice(other_users)
+                        users_with_entries.add(collaborator.username)
+                        collab_hours = Decimal(str(round(random.uniform(0.5, 2.0), 2)))
+                        collab_date = now - timedelta(days=random.randint(0, 7))
+                        
+                        # Avoid weekends
+                        while collab_date.weekday() >= 5:
+                            collab_date = collab_date - timedelta(days=1)
+                        
+                        existing = TimeEntry.objects.filter(
+                            task=task,
+                            user=collaborator,
+                            work_date=collab_date
+                        ).exists()
+                        
+                        if not existing:
+                            TimeEntry.objects.create(
+                                task=task,
+                                user=collaborator,
+                                hours_spent=collab_hours,
+                                description=f"Collaboration on {task.title[:30]}",
+                                work_date=collab_date,
+                            )
+                            entries_created += 1
+        
+        return {
+            'entries': entries_created,
+            'users': len(users_with_entries)
+        }
 
     def print_final_summary(self):
         """Print final summary of all demo data"""

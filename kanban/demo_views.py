@@ -19,6 +19,8 @@ from django.utils import timezone
 from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from datetime import timedelta
+from decimal import Decimal
+import random
 from kanban.models import Board, Task, Column, Organization, TaskLabel
 from messaging.models import ChatRoom, ChatMessage
 from kanban.conflict_models import ConflictDetection
@@ -74,6 +76,103 @@ def _auto_grant_demo_access(request):
             for room in chat_rooms:
                 if request.user not in room.members.all():
                     room.members.add(request.user)
+        
+        # Also set up time tracking demo data for this user
+        _setup_user_time_tracking_demo(request.user, demo_boards)
+        
+    except Exception as e:
+        logger.error(f"Error auto-granting demo access: {e}")
+
+
+def _setup_user_time_tracking_demo(user, demo_boards):
+    """
+    Set up time tracking demo data for a new user accessing the demo.
+    
+    This function:
+    1. Assigns some tasks to the user (so they appear in My Timesheet)
+    2. Creates time entries for those tasks (so the dashboard shows data)
+    
+    Only runs once per user (checks if user already has time entries).
+    """
+    from kanban.budget_models import TimeEntry
+    
+    # Skip if user is a demo user (they already have data)
+    if '_demo' in user.username:
+        return
+    
+    # Skip if user already has time entries in demo boards
+    existing_entries = TimeEntry.objects.filter(
+        user=user,
+        task__column__board__in=demo_boards
+    ).exists()
+    
+    if existing_entries:
+        return  # User already has time tracking data
+    
+    try:
+        now = timezone.now().date()
+        
+        # Time entry descriptions for variety
+        descriptions = [
+            "Reviewed requirements and planning",
+            "Implementation work",
+            "Testing and validation",
+            "Code review participation",
+            "Documentation updates",
+            "Bug investigation",
+            "Feature development",
+            "Team collaboration session",
+        ]
+        
+        entries_created = 0
+        tasks_assigned = 0
+        
+        for board in demo_boards:
+            # Get some tasks that are in progress but not yet assigned to this user
+            # Prioritize tasks that already have some progress
+            available_tasks = Task.objects.filter(
+                column__board=board,
+                progress__gt=0,
+                progress__lt=100
+            ).exclude(
+                assigned_to=user
+            ).order_by('?')[:3]  # Random 3 tasks per board
+            
+            for task in available_tasks:
+                # Assign the task to this user (in addition to existing assignee)
+                # We don't change the existing assigned_to field, we just create time entries
+                tasks_assigned += 1
+                
+                # Create 1-3 time entries per task
+                num_entries = random.randint(1, 3)
+                for i in range(num_entries):
+                    hours = Decimal(str(round(random.uniform(0.5, 3.0), 2)))
+                    
+                    # Spread entries over the last 14 days
+                    days_ago = random.randint(0, 13)
+                    entry_date = now - timedelta(days=days_ago)
+                    
+                    # Avoid weekends
+                    while entry_date.weekday() >= 5:
+                        days_ago += 1
+                        entry_date = now - timedelta(days=days_ago)
+                    
+                    description = random.choice(descriptions)
+                    
+                    TimeEntry.objects.create(
+                        task=task,
+                        user=user,
+                        hours_spent=hours,
+                        description=f"{description} - {task.title[:30]}",
+                        work_date=entry_date,
+                    )
+                    entries_created += 1
+        
+        if entries_created > 0:
+            logger.info(f"Created {entries_created} time entries for user {user.username}")
+    
+    except Exception as e:
+        logger.error(f"Error setting up time tracking demo for {user.username}: {e}")
         
     except Exception as e:
         logger.error(f"Error auto-granting demo access: {e}")
