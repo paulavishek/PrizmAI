@@ -346,6 +346,30 @@ class TaskFlowChatbotService:
                 column__board__in=user_boards
             ).count()
             
+            # Get total unique users across all boards
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            all_users = User.objects.filter(
+                Q(created_boards__in=user_boards) | Q(board_memberships__in=user_boards)
+            ).distinct()
+            total_users = all_users.count()
+            
+            # Separate demo users from real users
+            DEMO_EMAIL_DOMAIN = '@demo.prizmai.local'
+            demo_user_count = 0
+            real_user_count = 0
+            demo_user_names = []
+            real_user_names = []
+            
+            for user in all_users:
+                display_name = user.get_full_name() or user.username
+                if user.email and DEMO_EMAIL_DOMAIN in user.email.lower():
+                    demo_user_count += 1
+                    demo_user_names.append(display_name)
+                else:
+                    real_user_count += 1
+                    real_user_names.append(display_name)
+            
             # Get tasks by status
             tasks_by_status = Task.objects.filter(
                 column__board__in=user_boards
@@ -365,6 +389,9 @@ class TaskFlowChatbotService:
 
 - **Total Tasks:** {total_tasks}
 - **Total Boards:** {user_boards.count()}
+- **Total Users:** {total_users}
+  - Demo Users: {demo_user_count} ({', '.join(demo_user_names) if demo_user_names else 'None'})
+  - Real Users: {real_user_count} ({', '.join(real_user_names) if real_user_names else 'None'})
 
 **Tasks by Status:**
 """
@@ -431,6 +458,221 @@ class TaskFlowChatbotService:
         ]
         return any(kw in prompt.lower() for kw in org_keywords)
     
+    def _is_user_info_query(self, prompt):
+        """Detect if query is asking about users/team members (not the current user's tasks)"""
+        prompt_lower = prompt.lower()
+        
+        # First, check if this is a self-referential query (me/my/I) - those go to user_task_query
+        self_referential_keywords = [
+            'my task', 'my tasks', 'assigned to me', 'tasks for me',
+            'to me', 'for me', 'my work', 'my deadline', 'my overdue',
+            'i have', 'i need', 'do i have', 'am i', 'what do i', 'what should i',
+            'show me my', 'tell me my', 'give me my', 'list my'
+        ]
+        
+        # If it's about "me", don't trigger user info query
+        if any(kw in prompt_lower for kw in self_referential_keywords):
+            return False
+        
+        user_keywords = [
+            'user', 'users', 'member', 'members', 'team member', 'team members',
+            'who is', 'who has', 'who are', 'who works', 'person', 'people',
+            'assignee', 'developer', 'developers', 'colleague',
+            'coworker', 'teammate', 'teammates', 'staff', 'employee',
+            'alex', 'sam', 'jordan',  # Common demo user names
+            'demo user', 'demo users', 'real user', 'real users',
+            'tasks for', 'workload for', 'deadline for', 'overdue for',
+            'assigned to alex', 'assigned to sam', 'assigned to jordan'
+        ]
+        return any(kw in prompt_lower for kw in user_keywords)
+    
+    def _get_user_info_context(self, prompt):
+        """
+        Get comprehensive user/team member information.
+        Distinguishes between demo users and real users.
+        Handles questions like:
+        - "How many users are there?"
+        - "Who has overdue tasks?"
+        - "What tasks are assigned to Alex?"
+        - "Show me Sam's workload"
+        - "Which user has the most tasks?"
+        """
+        try:
+            if not self._is_user_info_query(prompt):
+                return None
+            
+            from django.contrib.auth import get_user_model
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            User = get_user_model()
+            
+            # Get user's boards
+            user_boards = self._get_user_boards()
+            if not user_boards.exists():
+                return "You don't have access to any boards yet."
+            
+            # Get all users associated with these boards
+            all_users = User.objects.filter(
+                Q(created_boards__in=user_boards) | Q(board_memberships__in=user_boards)
+            ).distinct().select_related('profile')
+            
+            # Separate demo users from real users
+            DEMO_EMAIL_DOMAIN = '@demo.prizmai.local'
+            demo_users = []
+            real_users = []
+            
+            for user in all_users:
+                if user.email and DEMO_EMAIL_DOMAIN in user.email.lower():
+                    demo_users.append(user)
+                else:
+                    real_users.append(user)
+            
+            today = timezone.now().date()
+            tomorrow = today + timedelta(days=1)
+            next_week = today + timedelta(days=7)
+            
+            context = f"""**User & Team Member Information:**
+
+**Summary:**
+- **Total Users:** {len(all_users)}
+- **Demo Users:** {len(demo_users)} (sample users for demonstration)
+- **Real Users:** {len(real_users)} (registered users)
+
+"""
+            
+            # Build detailed user information
+            def get_user_stats(user):
+                """Get detailed stats for a single user"""
+                user_tasks = Task.objects.filter(
+                    column__board__in=user_boards,
+                    assigned_to=user
+                ).select_related('column', 'column__board')
+                
+                total_tasks = user_tasks.count()
+                completed_tasks = user_tasks.filter(progress=100).count()
+                in_progress = user_tasks.filter(progress__gt=0, progress__lt=100).count()
+                not_started = user_tasks.filter(progress=0).count()
+                
+                # Overdue tasks
+                overdue_tasks = user_tasks.filter(
+                    due_date__lt=today,
+                    progress__lt=100
+                )
+                overdue_count = overdue_tasks.count()
+                overdue_list = list(overdue_tasks[:5])  # Top 5 overdue
+                
+                # Tasks due soon (within 7 days)
+                due_soon_tasks = user_tasks.filter(
+                    due_date__gte=today,
+                    due_date__lte=next_week,
+                    progress__lt=100
+                )
+                due_soon_count = due_soon_tasks.count()
+                due_soon_list = list(due_soon_tasks.order_by('due_date')[:5])
+                
+                # High priority tasks
+                high_priority = user_tasks.filter(priority__in=['high', 'urgent', 'critical'])
+                high_priority_count = high_priority.count()
+                
+                # Recent activity - tasks updated in last 7 days
+                recent_updated = user_tasks.filter(
+                    updated_at__gte=timezone.now() - timedelta(days=7)
+                ).count()
+                
+                return {
+                    'total': total_tasks,
+                    'completed': completed_tasks,
+                    'in_progress': in_progress,
+                    'not_started': not_started,
+                    'overdue_count': overdue_count,
+                    'overdue_list': overdue_list,
+                    'due_soon_count': due_soon_count,
+                    'due_soon_list': due_soon_list,
+                    'high_priority_count': high_priority_count,
+                    'recent_updated': recent_updated
+                }
+            
+            # Demo Users Section
+            if demo_users:
+                context += "---\n**🎭 Demo Users (Sample Data for Demonstration):**\n\n"
+                for user in demo_users:
+                    display_name = user.get_full_name() or user.username
+                    stats = get_user_stats(user)
+                    
+                    context += f"**{display_name}** ({user.email})\n"
+                    context += f"  • Total Tasks: {stats['total']}\n"
+                    context += f"  • Completed: {stats['completed']} | In Progress: {stats['in_progress']} | Not Started: {stats['not_started']}\n"
+                    
+                    if stats['overdue_count'] > 0:
+                        context += f"  • ⚠️ Overdue Tasks: {stats['overdue_count']}\n"
+                        for task in stats['overdue_list']:
+                            context += f"      - \"{task.title}\" (due: {task.due_date})\n"
+                    
+                    if stats['due_soon_count'] > 0:
+                        context += f"  • 📅 Due Soon (next 7 days): {stats['due_soon_count']}\n"
+                        for task in stats['due_soon_list']:
+                            context += f"      - \"{task.title}\" (due: {task.due_date})\n"
+                    
+                    if stats['high_priority_count'] > 0:
+                        context += f"  • 🔴 High Priority Tasks: {stats['high_priority_count']}\n"
+                    
+                    context += "\n"
+            
+            # Real Users Section
+            if real_users:
+                context += "---\n**👤 Real Users (Registered Accounts):**\n\n"
+                for user in real_users:
+                    display_name = user.get_full_name() or user.username
+                    stats = get_user_stats(user)
+                    
+                    context += f"**{display_name}** ({user.email})\n"
+                    context += f"  • Total Tasks: {stats['total']}\n"
+                    context += f"  • Completed: {stats['completed']} | In Progress: {stats['in_progress']} | Not Started: {stats['not_started']}\n"
+                    
+                    if stats['overdue_count'] > 0:
+                        context += f"  • ⚠️ Overdue Tasks: {stats['overdue_count']}\n"
+                        for task in stats['overdue_list']:
+                            context += f"      - \"{task.title}\" (due: {task.due_date})\n"
+                    
+                    if stats['due_soon_count'] > 0:
+                        context += f"  • 📅 Due Soon (next 7 days): {stats['due_soon_count']}\n"
+                        for task in stats['due_soon_list']:
+                            context += f"      - \"{task.title}\" (due: {task.due_date})\n"
+                    
+                    if stats['high_priority_count'] > 0:
+                        context += f"  • 🔴 High Priority Tasks: {stats['high_priority_count']}\n"
+                    
+                    context += "\n"
+            
+            # Team workload summary
+            context += "---\n**📊 Team Workload Summary:**\n"
+            all_user_stats = []
+            for user in all_users:
+                display_name = user.get_full_name() or user.username
+                is_demo = user.email and DEMO_EMAIL_DOMAIN in user.email.lower()
+                stats = get_user_stats(user)
+                all_user_stats.append({
+                    'name': display_name,
+                    'is_demo': is_demo,
+                    'stats': stats
+                })
+            
+            # Sort by total tasks
+            all_user_stats.sort(key=lambda x: x['stats']['total'], reverse=True)
+            
+            context += "\n| User | Type | Total | Completed | Overdue | Due Soon |\n"
+            context += "|------|------|-------|-----------|---------|----------|\n"
+            for u in all_user_stats:
+                user_type = "Demo" if u['is_demo'] else "Real"
+                context += f"| {u['name']} | {user_type} | {u['stats']['total']} | {u['stats']['completed']} | {u['stats']['overdue_count']} | {u['stats']['due_soon_count']} |\n"
+            
+            return context
+            
+        except Exception as e:
+            logger.error(f"Error getting user info context: {e}", exc_info=True)
+            return f"Error retrieving user information: {str(e)}"
+    
     def _is_critical_task_query(self, prompt):
         """Detect if query is about critical or high-priority tasks"""
         critical_keywords = [
@@ -451,13 +693,32 @@ class TaskFlowChatbotService:
         return any(kw in prompt.lower() for kw in mitigation_keywords)
     
     def _is_user_task_query(self, prompt):
-        """Detect if query is asking for tasks assigned to the current user"""
+        """Detect if query is asking for tasks assigned to the current user (me/my/I)"""
+        prompt_lower = prompt.lower()
+        
+        # Keywords that indicate the user is asking about themselves
         user_task_keywords = [
             'my task', 'my tasks', 'assigned to me', 'tasks for me',
             'what am i working on', 'my work', 'my assignments',
-            'tasks i have', 'tasks i need', 'my todo'
+            'tasks i have', 'tasks i need', 'my todo', 'my deadline',
+            'my overdue', 'my pending', 'my workload', 'my progress',
+            'i have', 'i need', 'i am working', 'i\'m working',
+            'do i have', 'am i assigned', 'what do i', 'what should i',
+            'show me my', 'list my', 'give me my', 'tell me my',
+            'how many tasks do i', 'how many tasks have i',
+            'tasks assigned to me', 'assigned tasks to me',
+            'been assigned to me', 'have been assigned to me'
         ]
-        return any(kw in prompt.lower() for kw in user_task_keywords)
+        
+        # Also check for patterns like "to me" at the end of task-related queries
+        if ' to me' in prompt_lower and any(kw in prompt_lower for kw in ['task', 'assign', 'deadline', 'overdue']):
+            return True
+        
+        # Check for "for me" in task context
+        if ' for me' in prompt_lower and any(kw in prompt_lower for kw in ['task', 'work', 'deadline', 'overdue']):
+            return True
+            
+        return any(kw in prompt_lower for kw in user_task_keywords)
     
     def _is_incomplete_task_query(self, prompt):
         """Detect if query is asking for incomplete/in-progress tasks"""
@@ -2277,6 +2538,7 @@ When context data is limited, acknowledge it briefly but still provide valuable 
             is_lean_query = self._is_lean_query(prompt)
             is_dependency_query = self._is_dependency_query(prompt)
             is_organization_query = self._is_organization_query(prompt)
+            is_user_info_query = self._is_user_info_query(prompt)
             is_critical_task_query = self._is_critical_task_query(prompt)
             is_mitigation_query = self._is_mitigation_query(prompt)
             is_user_task_query = self._is_user_task_query(prompt)
@@ -2311,6 +2573,13 @@ When context data is limited, acknowledge it briefly but still provide valuable 
                 if org_context:
                     context_parts.append(org_context)
                     logger.debug("Added organization context")
+            
+            # 4. User info context (team members, demo vs real users, user-specific questions)
+            if is_user_info_query:
+                user_info_context = self._get_user_info_context(prompt)
+                if user_info_context:
+                    context_parts.append(user_info_context)
+                    logger.debug("Added user info context")
             
             # 2. User-specific tasks (high priority - user asking about their tasks)
             if is_user_task_query:
