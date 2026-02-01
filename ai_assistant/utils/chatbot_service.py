@@ -346,13 +346,23 @@ class TaskFlowChatbotService:
                 column__board__in=user_boards
             ).count()
             
-            # Get total unique users across all boards
+            # Get total unique users across all boards - use set to avoid duplicate issues
             from django.contrib.auth import get_user_model
             User = get_user_model()
-            all_users = User.objects.filter(
-                Q(created_boards__in=user_boards) | Q(board_memberships__in=user_boards)
-            ).distinct()
-            total_users = all_users.count()
+            
+            # Collect users from board members and creators separately to avoid query issues
+            user_ids = set()
+            for board in user_boards:
+                # Add board creator
+                if board.created_by_id:
+                    user_ids.add(board.created_by_id)
+                # Add board members
+                for member in board.members.all():
+                    user_ids.add(member.id)
+            
+            # Get all users by their IDs
+            all_users = User.objects.filter(id__in=user_ids)
+            total_users = len(user_ids)
             
             # Separate demo users from real users
             DEMO_EMAIL_DOMAIN = '@demo.prizmai.local'
@@ -512,10 +522,15 @@ class TaskFlowChatbotService:
             if not user_boards.exists():
                 return "You don't have access to any boards yet."
             
-            # Get all users associated with these boards
-            all_users = User.objects.filter(
-                Q(created_boards__in=user_boards) | Q(board_memberships__in=user_boards)
-            ).distinct().select_related('profile')
+            # Get all users associated with these boards - collect IDs first to avoid query issues
+            user_ids = set()
+            for board in user_boards:
+                if board.created_by_id:
+                    user_ids.add(board.created_by_id)
+                for member in board.members.all():
+                    user_ids.add(member.id)
+            
+            all_users = list(User.objects.filter(id__in=user_ids).select_related('profile'))
             
             # Separate demo users from real users
             DEMO_EMAIL_DOMAIN = '@demo.prizmai.local'
