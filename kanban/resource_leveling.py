@@ -55,40 +55,20 @@ class ResourceLevelingService:
             task: Task object to analyze
             potential_assignees: Optional list of User objects to consider. 
                                 If None, considers all board members
-            requesting_user: User requesting the analysis (for demo board filtering)
+            requesting_user: User requesting the analysis (unused, kept for API compatibility)
         
         Returns:
             Dict with suggestions and impact analysis
         """
         from kanban.models import Task
         
-        # Get potential assignees
+        # Get potential assignees - all board members are eligible
         if potential_assignees is None:
             board = task.column.board if task.column else None
             if not board:
                 return {'error': 'Task must be in a column on a board'}
-            potential_assignees = board.members.all()
-            
-            # For demo boards, show demo users + real users from requesting user's org who are members
-            demo_org_names = ['Demo - Acme Corporation']
-            if board.organization.name in demo_org_names and requesting_user:
-                try:
-                    from django.db.models import Q
-                    from accounts.models import Organization
-                    
-                    # Get demo organizations
-                    demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-                    user_org = requesting_user.profile.organization
-                    
-                    # Show: demo users (from demo orgs) OR real users from requesting user's org
-                    potential_assignees = potential_assignees.filter(
-                        Q(profile__organization__in=demo_orgs) |  # Demo users
-                        Q(profile__organization=user_org)  # Real users from same org
-                    )
-                except Exception:
-                    potential_assignees = potential_assignees.filter(id=requesting_user.id)
-            
-            potential_assignees = list(potential_assignees)
+            # Show ALL board members as potential assignees
+            potential_assignees = list(board.members.all())
         
         if not potential_assignees:
             return {'error': 'No potential assignees available'}
@@ -438,7 +418,7 @@ class ResourceLevelingService:
         Args:
             board: Board object
             limit: Maximum number of suggestions to return
-            requesting_user: User requesting suggestions (for demo board filtering)
+            requesting_user: User requesting suggestions (unused, kept for API compatibility)
         
         Returns:
             List of ResourceLevelingSuggestion objects
@@ -452,7 +432,8 @@ class ResourceLevelingService:
             status='pending'
         ).update(status='expired')
         
-        # Get all incomplete tasks
+        # Get all incomplete tasks on the board - no filtering by organization
+        # All board members should see suggestions for all tasks
         tasks = Task.objects.filter(
             column__board=board,
             completed_at__isnull=True
@@ -460,31 +441,10 @@ class ResourceLevelingService:
             column__name__icontains='done'
         ).select_related('assigned_to', 'column')
         
-        # For demo boards, show tasks assigned to demo users + real users from requesting user's org
-        demo_org_names = ['Demo - Acme Corporation']
-        if board.organization.name in demo_org_names and requesting_user:
-            try:
-                from accounts.models import Organization
-                
-                # Get demo organizations
-                demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-                user_org = requesting_user.profile.organization
-                
-                # Show: unassigned tasks, tasks assigned to demo users, or tasks assigned to real users from same org
-                tasks = tasks.filter(
-                    Q(assigned_to__isnull=True) |  # Unassigned tasks
-                    Q(assigned_to__profile__organization__in=demo_orgs) |  # Tasks assigned to demo users
-                    Q(assigned_to__profile__organization=user_org)  # Tasks assigned to real users from same org
-                )
-            except Exception:
-                # If error, only show unassigned tasks
-                tasks = tasks.filter(assigned_to__isnull=True)
-        
         suggestions = []
         
         for task in tasks:
             # Always create fresh suggestion with current workload data
-            # For demo boards, this will only suggest users from requesting user's org
             suggestion = self.create_suggestion(task, requesting_user=requesting_user)
             if suggestion:
                 suggestions.append(suggestion)
@@ -542,46 +502,14 @@ class ResourceLevelingService:
         
         Args:
             board: Board object
-            requesting_user: User requesting the report (for demo board filtering)
+            requesting_user: User requesting the report (unused, kept for API compatibility)
         
         Returns:
             Dict with team member workloads and recommendations
         """
-        # For demo boards, show: hardcoded demo users + current user ONLY
-        # This ensures each user sees a clean demo experience without seeing other real users
-        demo_org_names = ['Demo - Acme Corporation']
-        if board.organization.name in demo_org_names and requesting_user:
-            try:
-                from django.db.models import Q
-                from django.contrib.auth import get_user_model
-                User = get_user_model()
-                
-                # Hardcoded demo users - these are the ONLY demo users shown
-                DEMO_USERNAMES = ['sam_rivera_demo', 'jordan_taylor_demo', 'alex_chen_demo']
-                
-                # Build list of user IDs to include
-                user_ids = set()
-                
-                # 1. Add hardcoded demo users (if they're board members)
-                demo_users = board.members.filter(username__in=DEMO_USERNAMES)
-                user_ids.update(demo_users.values_list('id', flat=True))
-                
-                # 2. Always add current requesting user
-                user_ids.add(requesting_user.id)
-                
-                # Note: We intentionally DON'T add other real users to keep demo experience clean
-                # Each user sees: 3 demo users + themselves
-                
-                # Get all users by IDs
-                members = User.objects.filter(id__in=user_ids)
-                
-            except Exception as e:
-                # Fallback: just show requesting user
-                from django.contrib.auth import get_user_model
-                User = get_user_model()
-                members = User.objects.filter(id=requesting_user.id)
-        else:
-            members = board.members.all()
+        # Show ALL board members - this is the expected UX behavior
+        # All members of a board should see all other members in the workload report
+        members = board.members.all()
         
         report = {
             'board': board.name,
