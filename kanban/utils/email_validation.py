@@ -13,6 +13,66 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+# Trusted/major email providers - suspicious local parts should be allowed on these
+# These are well-known email providers with their own abuse prevention
+TRUSTED_EMAIL_PROVIDERS = {
+    # Google
+    'gmail.com', 'googlemail.com',
+    # Microsoft
+    'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'outlook.co.uk',
+    'hotmail.co.uk', 'live.co.uk', 'outlook.in', 'hotmail.in',
+    # Yahoo
+    'yahoo.com', 'yahoo.co.uk', 'yahoo.in', 'ymail.com', 'rocketmail.com',
+    # Apple
+    'icloud.com', 'me.com', 'mac.com',
+    # ProtonMail
+    'protonmail.com', 'protonmail.ch', 'proton.me', 'pm.me',
+    # Other major providers
+    'aol.com', 'zoho.com', 'zohomail.com', 'mail.ru', 'yandex.com',
+    'tutanota.com', 'tutamail.com', 'fastmail.com', 'fastmail.fm',
+    'gmx.com', 'gmx.net', 'gmx.de', 'web.de',
+    # Corporate domains (common business email providers)
+    'amazon.com', 'microsoft.com', 'apple.com', 'google.com',
+    'facebook.com', 'meta.com', 'linkedin.com', 'twitter.com',
+    'github.com', 'gitlab.com', 'atlassian.com', 'slack.com',
+}
+
+# Reserved/Testing domains that should NEVER be allowed for registration
+# These are RFC-reserved or commonly used for testing purposes
+RESERVED_AND_TESTING_DOMAINS = {
+    # RFC 2606 - Reserved Top-Level DNS Names
+    'example.com', 'example.org', 'example.net', 'example.edu',
+    'example.co.uk', 'example.co', 'example.io',
+    
+    # RFC 6761 - Special-Use Domain Names
+    'test', 'test.com', 'test.org', 'test.net', 'test.co', 'test.io',
+    'localhost', 'localhost.localdomain',
+    'invalid', 'invalid.com',
+    
+    # Common testing/fake domains people use
+    'test.test', 'testing.com', 'testing.org', 'testing.test',
+    'fake.com', 'fake.org', 'fake.net', 'fake.email',
+    'fakemail.com', 'fakeemail.com',
+    'none.com', 'null.com', 'null.net',
+    'noemail.com', 'no-email.com', 'noreply.com', 'no-reply.com',
+    'nomail.com', 'no-mail.com',
+    'abc.com', 'xyz.com', 'asdf.com', 'qwerty.com',
+    'mail.com', 'email.com', 'address.com',
+    'user.com', 'username.com', 'admin.com',
+    'sample.com', 'sample.org', 'demo.com', 'demo.org',
+    'placeholder.com', 'placeholder.org',
+    
+    # Single-letter and extremely short domains (often fake)
+    'a.com', 'b.com', 'c.com', 'd.com', 'e.com',
+    'x.com', 'y.com', 'z.com',
+    'aa.com', 'bb.com', 'cc.com', 'xx.com', 'yy.com', 'zz.com',
+    
+    # Domains with "test" in them
+    'testmail.com', 'test-mail.com', 'testuser.com',
+    'tester.com', 'testemail.com', 'test-email.com',
+    'mailtest.com', 'emailtest.com',
+}
+
 # Comprehensive list of disposable email domains
 # Sources: https://github.com/disposable-email-domains/disposable-email-domains
 DISPOSABLE_EMAIL_DOMAINS = {
@@ -377,6 +437,23 @@ SUSPICIOUS_PATTERNS = [
     r'tempmail',
     r'mailinator',
     r'guerrilla.*mail',
+    # Additional patterns for test/fake emails
+    r'^test\d*@',  # test@, test1@, test123@
+    r'^testing\d*@',  # testing@, testing1@
+    r'^fake\d*@',  # fake@, fake1@
+    r'^user\d*@',  # user@, user1@, user123@
+    r'^admin\d*@',  # admin@, admin1@
+    r'^demo\d*@',  # demo@, demo1@
+    r'^sample\d*@',  # sample@, sample1@
+    r'^example\d*@',  # example@, example1@
+    r'^null@',  # null@
+    r'^void@',  # void@
+    r'^none@',  # none@
+    r'^asdf@',  # asdf@
+    r'^qwerty@',  # qwerty@
+    r'^aaa+@',  # aaa@, aaaa@, etc.
+    r'^xxx+@',  # xxx@, xxxx@, etc.
+    r'^zzz+@',  # zzz@, zzzz@, etc.
 ]
 
 
@@ -404,6 +481,19 @@ def is_disposable_email(email):
     except ValueError:
         return True, "Invalid email format"
     
+    # Check if domain is a reserved/testing domain (HIGHEST PRIORITY)
+    if domain in RESERVED_AND_TESTING_DOMAINS:
+        return True, f"The domain '{domain}' cannot be used for registration. Please use a real email address from a legitimate email provider."
+    
+    # Check for subdomains of reserved/testing domains
+    for reserved in RESERVED_AND_TESTING_DOMAINS:
+        if domain.endswith('.' + reserved) or domain.startswith(reserved + '.'):
+            return True, f"This email domain is not allowed for registration. Please use a real email address."
+    
+    # Check if domain contains 'test' or 'fake' as a word boundary
+    if re.search(r'\btest\b|\bfake\b|\bdemo\b|\bsample\b', domain, re.IGNORECASE):
+        return True, f"Test or fake email domains are not allowed. Please use your real email address."
+    
     # Check if domain is in disposable list
     if domain in DISPOSABLE_EMAIL_DOMAINS:
         return True, f"Disposable email domains like {domain} are not allowed. Please use your real email."
@@ -419,10 +509,12 @@ def is_disposable_email(email):
             # Don't block outright, but flag for additional verification
             logger.warning(f"Email with suspicious TLD: {email}")
     
-    # Check suspicious patterns
-    for pattern in SUSPICIOUS_PATTERNS:
-        if re.search(pattern, email, re.IGNORECASE):
-            return True, "This email address looks temporary. Please use your real email."
+    # Check suspicious patterns - BUT skip for trusted providers
+    # Trusted providers have their own abuse prevention, so "test123@gmail.com" is fine
+    if domain not in TRUSTED_EMAIL_PROVIDERS:
+        for pattern in SUSPICIOUS_PATTERNS:
+            if re.search(pattern, email, re.IGNORECASE):
+                return True, "This email address looks temporary. Please use your real email."
     
     # Check for plus addressing abuse (many + signs)
     if local_part.count('+') > 2:
