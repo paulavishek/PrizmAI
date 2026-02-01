@@ -153,6 +153,20 @@ class RegistrationForm(UserCreationForm):
         return user
 
 class UserProfileForm(forms.ModelForm):
+    # Add email and username fields from User model
+    email = forms.EmailField(
+        required=True,
+        widget=forms.EmailInput(attrs={'class': 'form-control'}),
+        help_text='Your email address'
+    )
+    
+    username = forms.CharField(
+        max_length=150,
+        required=True,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'readonly': 'readonly'}),
+        help_text='Username cannot be changed'
+    )
+    
     # Add a text field for entering skills (comma-separated)
     skills_input = forms.CharField(
         required=False,
@@ -193,8 +207,23 @@ class UserProfileForm(forms.ModelForm):
                 raise ValidationError("Weekly capacity hours cannot exceed 168 (hours in a week).")
         return hours
     
+    def clean_email(self):
+        """Validate email uniqueness (excluding current user)"""
+        email = self.cleaned_data.get('email')
+        if email and self.instance and self.instance.user:
+            # Check if another user has this email
+            existing_user = User.objects.filter(email=email).exclude(id=self.instance.user.id).first()
+            if existing_user:
+                raise ValidationError("A user with this email already exists.")
+        return email
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Pre-populate username and email from User model
+        if self.instance and self.instance.user:
+            self.fields['username'].initial = self.instance.user.username
+            self.fields['email'].initial = self.instance.user.email
+        
         # Pre-populate skills input with existing skills
         if self.instance and self.instance.pk and self.instance.skills:
             # Convert list of skill dicts to comma-separated string
@@ -208,6 +237,12 @@ class UserProfileForm(forms.ModelForm):
     
     def save(self, commit=True):
         instance = super().save(commit=False)
+        
+        # Update User model fields (email)
+        if self.instance and self.instance.user:
+            self.instance.user.email = self.cleaned_data.get('email')
+            if commit:
+                self.instance.user.save()
         
         # Process skills input
         skills_text = self.cleaned_data.get('skills_input', '')
