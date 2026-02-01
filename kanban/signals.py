@@ -4,7 +4,7 @@ Signal handlers for automatic workload and performance profile updates
 from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from django.contrib.auth.models import User
-from kanban.models import Task
+from kanban.models import Task, TaskActivity
 from kanban.resource_leveling_models import UserPerformanceProfile, TaskAssignmentHistory
 
 
@@ -93,6 +93,43 @@ def update_workload_on_assignment_change(sender, instance, created, **kwargs):
                 changed_by=getattr(instance, '_changed_by_user', instance.created_by),
                 reason='manual'
             )
+            
+            # Log assignment activity for new tasks
+            changed_by = getattr(instance, '_changed_by_user', instance.created_by)
+            if changed_by:
+                TaskActivity.objects.create(
+                    task=instance,
+                    user=changed_by,
+                    activity_type='assigned',
+                    description=f"assigned this task to {new_assignee.get_full_name() or new_assignee.username}"
+                )
+    
+    # Log activity for assignment changes on existing tasks
+    if not created and getattr(instance, '_assignment_changed', False):
+        changed_by = getattr(instance, '_changed_by_user', None)
+        if changed_by:
+            if new_assignee:
+                if old_assignee:
+                    TaskActivity.objects.create(
+                        task=instance,
+                        user=changed_by,
+                        activity_type='assigned',
+                        description=f"reassigned this task from {old_assignee.get_full_name() or old_assignee.username} to {new_assignee.get_full_name() or new_assignee.username}"
+                    )
+                else:
+                    TaskActivity.objects.create(
+                        task=instance,
+                        user=changed_by,
+                        activity_type='assigned',
+                        description=f"assigned this task to {new_assignee.get_full_name() or new_assignee.username}"
+                    )
+            elif old_assignee:
+                TaskActivity.objects.create(
+                    task=instance,
+                    user=changed_by,
+                    activity_type='assigned',
+                    description=f"unassigned this task from {old_assignee.get_full_name() or old_assignee.username}"
+                )
     
     # Invalidate stale AI suggestions after assignment change
     _invalidate_related_suggestions(instance, old_assignee, new_assignee, organization)
