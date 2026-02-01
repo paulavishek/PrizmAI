@@ -1,0 +1,147 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Complete Your Signup - PrizmAI{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">
+                    <i class="fas fa-user-plus me-2"></i>
+                    Complete Your Account Setup
+                </h4>
+            </div>
+            <div class="card-body">
+                <!-- Information Banner -->
+                <div class="alert alert-info mb-4">
+                    <div class="d-flex align-items-center">
+                        <i class="fab fa-google fa-2x text-danger me-3"></i>
+                        <div>
+                            <strong>Almost there!</strong>
+                            <p class="mb-0">
+                                You're signing up with your Google account. Please review and confirm your details below.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pre-filled information from Google -->
+                {% if sociallogin %}
+                <div class="card bg-light mb-4">
+                    <div class="card-body">
+                        <h6 class="card-title">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Information from Google
+                        </h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <small class="text-muted">Email:</small>
+                                <p class="mb-2"><strong>{{ sociallogin.account.extra_data.email }}</strong></p>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted">Name:</small>
+                                <p class="mb-2"><strong>{{ sociallogin.account.extra_data.name }}</strong></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Signup Form -->
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <h5 class="mb-3">
+                        <i class="fas fa-edit me-1"></i>
+                        Your Account Details
+                    </h5>
+                    
+                    <p class="text-muted mb-3">
+                        Please review and customize your account information. You can change the username if you'd like.
+                    </p>
+
+                    <!-- Username Field -->
+                    <div class="mb-3">
+                        <label for="{{ form.username.id_for_label }}" class="form-label">
+                            <i class="fas fa-user me-1"></i> Username <span class="text-danger">*</span>
+                        </label>
+                        {{ form.username }}
+                        {% if form.username.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.username.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        <small class="form-text text-muted">
+                            This will be your unique identifier on PrizmAI. It's pre-filled from your Google name but you can change it.
+                        </small>
+                    </div>
+
+                    <!-- Email Field (if shown) -->
+                    {% if form.email %}
+                    <div class="mb-3">
+                        <label for="{{ form.email.id_for_label }}" class="form-label">
+                            <i class="fas fa-envelope me-1"></i> Email
+                        </label>
+                        {{ form.email }}
+                        {% if form.email.errors %}
+                            <div class="invalid-feedback d-block">
+                                {% for error in form.email.errors %}
+                                    {{ error }}
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+
+                    <!-- Terms and Privacy Notice -->
+                    <div class="alert alert-secondary mb-4">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="terms-checkbox" required>
+                            <label class="form-check-label" for="terms-checkbox">
+                                I understand that by clicking "Create Account", a new account will be created for me on Pri<span class="stylish-z">z</span>mAI using my Google credentials.
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="{% url 'login' %}" class="btn btn-outline-secondary">
+                            <i class="fas fa-arrow-left me-1"></i>
+                            Cancel
+                        </a>
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-check me-1"></i>
+                            Create Account
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Additional Help -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="fas fa-question-circle me-1"></i>
+                    Already have an account?
+                </h6>
+                <p class="card-text text-muted mb-0">
+                    If you already have a Pri<span class="stylish-z">z</span>mAI account with a different email, 
+                    please <a href="{% url 'login' %}">login with that account</a> first, then connect your Google account from your profile settings.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .stylish-z {
+        font-style: italic;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}

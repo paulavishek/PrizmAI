@@ -331,3 +331,115 @@ class JoinOrganizationForm(forms.Form):
                 raise ValidationError(f"Organization '{organization_name}' not found. Please check the spelling.")
                 
         return cleaned_data
+
+
+class SocialSignupForm(forms.Form):
+    """
+    Form for users to confirm/customize their account when signing up via social auth (Google OAuth).
+    This form is shown when SOCIALACCOUNT_AUTO_SIGNUP = False, giving users the opportunity
+    to review their information before account creation.
+    """
+    username = forms.CharField(
+        max_length=150,
+        required=True,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Choose a username',
+            'autocomplete': 'username'
+        }),
+        help_text='Your unique username for PrizmAI. Letters, digits and . _ only.'
+    )
+    
+    email = forms.EmailField(
+        required=True,
+        widget=forms.EmailInput(attrs={
+            'class': 'form-control',
+            'readonly': 'readonly'  # Email comes from Google, shouldn't be editable
+        }),
+        help_text='Your email from Google (cannot be changed)'
+    )
+    
+    def __init__(self, *args, **kwargs):
+        # Extract sociallogin from kwargs if present
+        self.sociallogin = kwargs.pop('sociallogin', None)
+        super().__init__(*args, **kwargs)
+        
+        # Pre-populate from social account data
+        if self.sociallogin:
+            extra_data = self.sociallogin.account.extra_data
+            email = extra_data.get('email', '')
+            given_name = extra_data.get('given_name', '').lower()
+            family_name = extra_data.get('family_name', '').lower()
+            
+            # Set email (readonly)
+            self.initial['email'] = email
+            
+            # Generate suggested username
+            if given_name and family_name:
+                base_username = f"{given_name}.{family_name}"
+            elif email:
+                base_username = email.split('@')[0].lower()
+            else:
+                base_username = 'user'
+            
+            # Clean username
+            import re
+            base_username = re.sub(r'[^a-z0-9._]', '', base_username)
+            
+            # Ensure uniqueness
+            username = base_username
+            counter = 1
+            while User.objects.filter(username=username).exists():
+                username = f"{base_username}{counter}"
+                counter += 1
+            
+            self.initial['username'] = username
+    
+    def clean_username(self):
+        username = self.cleaned_data.get('username', '').strip().lower()
+        
+        if not username:
+            raise ValidationError('Username is required.')
+        
+        # Validate username format
+        import re
+        if not re.match(r'^[a-z0-9._]+$', username):
+            raise ValidationError('Username can only contain lowercase letters, numbers, dots, and underscores.')
+        
+        if len(username) < 3:
+            raise ValidationError('Username must be at least 3 characters long.')
+        
+        if len(username) > 30:
+            raise ValidationError('Username cannot be longer than 30 characters.')
+        
+        # Check for reserved usernames
+        reserved = ['admin', 'administrator', 'root', 'system', 'support', 'help', 
+                    'info', 'webmaster', 'postmaster', 'hostmaster', 'abuse']
+        if username in reserved:
+            raise ValidationError('This username is reserved. Please choose another.')
+        
+        # Check if username already exists
+        if User.objects.filter(username=username).exists():
+            raise ValidationError('This username is already taken. Please choose another.')
+        
+        return username
+    
+    def clean_email(self):
+        email = self.cleaned_data.get('email', '').strip().lower()
+        
+        # Email should come from Google and shouldn't be changed
+        if self.sociallogin:
+            google_email = self.sociallogin.account.extra_data.get('email', '').lower()
+            if email != google_email:
+                raise ValidationError('Email cannot be changed. It must match your Google account.')
+        
+        return email
+    
+    def signup(self, request, user):
+        """
+        Called after user is created. Can be used to add custom logic.
+        """
+        # Set the username from the form
+        user.username = self.cleaned_data.get('username')
+        user.save()
+        return user

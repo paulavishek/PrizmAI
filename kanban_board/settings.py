@@ -270,7 +270,7 @@ ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']  # R
 SOCIALACCOUNT_EMAIL_REQUIRED = True
 SOCIALACCOUNT_EMAIL_VERIFICATION = 'optional'
 SOCIALACCOUNT_QUERY_EMAIL = True
-SOCIALACCOUNT_AUTO_SIGNUP = True
+SOCIALACCOUNT_AUTO_SIGNUP = False  # Require user consent before account creation
 
 # Google OAuth2 settings
 SOCIALACCOUNT_PROVIDERS = {
@@ -294,6 +294,11 @@ GOOGLE_OAUTH2_CLIENT_SECRET = os.getenv('GOOGLE_OAUTH2_CLIENT_SECRET', '')
 # Custom adapters for handling organization assignment
 ACCOUNT_ADAPTER = 'accounts.adapters.CustomAccountAdapter'
 SOCIALACCOUNT_ADAPTER = 'accounts.adapters.CustomSocialAccountAdapter'
+
+# Custom forms for social account signup
+SOCIALACCOUNT_FORMS = {
+    'signup': 'accounts.forms.SocialSignupForm',
+}
 
 # ============================================
 # AI PROJECT ASSISTANT CONFIGURATION
