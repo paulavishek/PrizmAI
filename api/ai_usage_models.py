@@ -31,8 +31,8 @@ class AIUsageQuota(models.Model):
         help_text="Number of AI requests made in current period"
     )
     monthly_quota = models.IntegerField(
-        default=50,
-        help_text="Maximum AI requests allowed per month (50 for free users)"
+        default=999999,
+        help_text="Maximum AI requests allowed per month (unlimited for dev testing)"
     )
     
     # Daily limit tracking (cost control)
@@ -41,8 +41,8 @@ class AIUsageQuota(models.Model):
         help_text="Number of AI requests made today"
     )
     daily_limit = models.IntegerField(
-        default=10,
-        help_text="Maximum AI requests allowed per day (10 for free users)"
+        default=999999,
+        help_text="Maximum AI requests allowed per day (unlimited for dev testing)"
     )
     last_daily_reset = models.DateField(
         null=True,

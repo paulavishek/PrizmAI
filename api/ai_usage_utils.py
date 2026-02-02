@@ -21,8 +21,8 @@ def get_or_create_quota(user):
     quota, created = AIUsageQuota.objects.get_or_create(
         user=user,
         defaults={
-            'monthly_quota': 50,  # Cost control: 50/month for free users
-            'daily_limit': 10,    # Cost control: 10/day for free users
+            'monthly_quota': 999999,  # Unlimited for dev testing
+            'daily_limit': 999999,    # Unlimited for dev testing
             'requests_used': 0,
             'daily_requests_used': 0,
             'period_start': timezone.now(),
