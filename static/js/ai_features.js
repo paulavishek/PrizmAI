@@ -29,6 +29,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Initialize workflow optimization
     initWorkflowOptimization();
+    
+    // Initialize board setup AI recommendations
+    initBoardSetupAI();
 });
 
 /**
@@ -1596,6 +1599,308 @@ function formatDate(dateString) {
         month: 'long', 
         day: 'numeric' 
     });
+}
+
+/**
+ * Initialize AI Board Setup Recommendations
+ * Provides AI-powered suggestions for description, phases, and team size
+ */
+function initBoardSetupAI() {
+    const generateButton = document.getElementById('generate-board-setup-btn');
+    if (!generateButton) return;
+    
+    const nameInput = document.getElementById('id_name');
+    const descriptionTextarea = document.getElementById('id_description');
+    const numPhasesInput = document.getElementById('id_num_phases');
+    const teamSizeSelect = document.getElementById('team_size');
+    const projectTypeInput = document.getElementById('project_type');
+    const spinner = document.getElementById('board-setup-ai-spinner');
+    const resultDiv = document.getElementById('board-setup-recommendations');
+    
+    generateButton.addEventListener('click', function() {
+        const boardName = nameInput ? nameInput.value.trim() : '';
+        
+        if (!boardName) {
+            alert('Please enter a board name first.');
+            return;
+        }
+        
+        // Show spinner
+        if (spinner) spinner.classList.remove('d-none');
+        if (resultDiv) resultDiv.classList.add('d-none');
+        generateButton.disabled = true;
+        
+        const requestData = {
+            name: boardName,
+            project_type: projectTypeInput ? projectTypeInput.value : ''
+        };
+        
+        fetch('/api/generate-board-setup/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify(requestData)
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => { throw new Error(data.error || 'Network error'); });
+            }
+            return response.json();
+        })
+        .then(data => {
+            displayBoardSetupRecommendations(data, {
+                descriptionTextarea,
+                numPhasesInput,
+                teamSizeSelect,
+                projectTypeInput
+            });
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to generate recommendations: ' + error.message);
+        })
+        .finally(() => {
+            if (spinner) spinner.classList.add('d-none');
+            generateButton.disabled = false;
+        });
+    });
+}
+
+/**
+ * Display AI board setup recommendations with explainability
+ */
+function displayBoardSetupRecommendations(data, formElements) {
+    const resultDiv = document.getElementById('board-setup-recommendations');
+    if (!resultDiv) return;
+    
+    // Store for later use
+    window.currentBoardSetupRecommendations = data;
+    
+    // Build confidence badge
+    const confidencePercent = data.confidence_score ? Math.round(data.confidence_score * 100) : 75;
+    const confidenceLevel = data.confidence_level || 'medium';
+    const confidenceColor = confidenceLevel === 'high' ? 'success' : (confidenceLevel === 'medium' ? 'warning' : 'secondary');
+    
+    // Map team size to display text
+    const teamSizeDisplay = {
+        'solo': 'Solo (1 person)',
+        'small': 'Small (2-5 people)',
+        'medium': 'Medium (6-15 people)',
+        'large': 'Large (16-50 people)',
+        'enterprise': 'Enterprise (50+ people)'
+    };
+    
+    let html = `
+        <div class="alert alert-info border-info shadow-sm">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <h6 class="mb-0">
+                    <i class="fas fa-robot text-info me-2"></i>AI Recommendations
+                </h6>
+                <span class="badge bg-${confidenceColor}">${confidencePercent}% confident</span>
+            </div>
+            
+            <p class="small text-muted mb-3">
+                <i class="fas fa-lightbulb me-1"></i>
+                <strong>Project Type Detected:</strong> ${data.inferred_project_type || 'General Project'}
+            </p>
+            
+            <div class="row g-3">
+                <!-- Description Recommendation -->
+                <div class="col-12">
+                    <div class="card border-0 bg-light">
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small class="text-muted fw-bold"><i class="fas fa-align-left me-1"></i>Suggested Description</small>
+                                <button type="button" class="btn btn-sm btn-outline-success py-0" onclick="applyBoardDescription()">
+                                    <i class="fas fa-check me-1"></i>Apply
+                                </button>
+                            </div>
+                            <p class="mb-1 small">${data.description || 'No description generated'}</p>
+                            <details class="mt-1">
+                                <summary class="text-muted small cursor-pointer"><i class="fas fa-brain me-1"></i>Why this description?</summary>
+                                <p class="small text-muted mt-1 mb-0">${data.description_reasoning || 'Based on project name analysis.'}</p>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Phases Recommendation -->
+                <div class="col-md-6">
+                    <div class="card border-0 bg-light">
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small class="text-muted fw-bold"><i class="fas fa-layer-group me-1"></i>Phases</small>
+                                <button type="button" class="btn btn-sm btn-outline-success py-0" onclick="applyBoardPhases()">
+                                    <i class="fas fa-check me-1"></i>Apply
+                                </button>
+                            </div>
+                            <p class="mb-1">
+                                <span class="badge bg-primary fs-6">${data.recommended_phases || 3} phases</span>
+                            </p>
+                            ${data.phase_names && data.phase_names.length > 0 ? `
+                                <small class="text-muted">${data.phase_names.join(' → ')}</small>
+                            ` : ''}
+                            <details class="mt-1">
+                                <summary class="text-muted small cursor-pointer"><i class="fas fa-brain me-1"></i>Why this count?</summary>
+                                <p class="small text-muted mt-1 mb-0">${data.phases_reasoning || 'Based on project complexity.'}</p>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Team Size Recommendation -->
+                <div class="col-md-6">
+                    <div class="card border-0 bg-light">
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <small class="text-muted fw-bold"><i class="fas fa-users me-1"></i>Team Size</small>
+                                <button type="button" class="btn btn-sm btn-outline-success py-0" onclick="applyBoardTeamSize()">
+                                    <i class="fas fa-check me-1"></i>Apply
+                                </button>
+                            </div>
+                            <p class="mb-1">
+                                <span class="badge bg-info fs-6">${teamSizeDisplay[data.recommended_team_size] || data.recommended_team_size || 'Medium'}</span>
+                            </p>
+                            <details class="mt-1">
+                                <summary class="text-muted small cursor-pointer"><i class="fas fa-brain me-1"></i>Why this size?</summary>
+                                <p class="small text-muted mt-1 mb-0">${data.team_size_reasoning || 'Based on project scope.'}</p>
+                            </details>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Assumptions -->
+            ${data.key_assumptions && data.key_assumptions.length > 0 ? `
+                <div class="mt-3 pt-2 border-top">
+                    <details>
+                        <summary class="text-muted small cursor-pointer"><i class="fas fa-info-circle me-1"></i>AI Assumptions</summary>
+                        <ul class="small text-muted mt-1 mb-0 ps-3">
+                            ${data.key_assumptions.map(a => `<li>${a}</li>`).join('')}
+                        </ul>
+                    </details>
+                </div>
+            ` : ''}
+            
+            <!-- Alternative Configuration -->
+            ${data.alternative_configuration ? `
+                <div class="mt-2">
+                    <details>
+                        <summary class="text-muted small cursor-pointer"><i class="fas fa-exchange-alt me-1"></i>Alternative Configuration</summary>
+                        <div class="small text-muted mt-1">
+                            <p class="mb-1"><strong>${data.alternative_configuration.phases} phases</strong> with <strong>${data.alternative_configuration.team_size}</strong> team</p>
+                            <p class="mb-0 fst-italic">${data.alternative_configuration.when_applicable || 'Consider this for different project scope.'}</p>
+                        </div>
+                    </details>
+                </div>
+            ` : ''}
+            
+            <!-- Action Buttons -->
+            <div class="mt-3 pt-2 border-top d-flex gap-2">
+                <button type="button" class="btn btn-success btn-sm" onclick="applyAllBoardRecommendations()">
+                    <i class="fas fa-check-double me-1"></i>Apply All
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="hideBoardRecommendations()">
+                    <i class="fas fa-times me-1"></i>Dismiss
+                </button>
+            </div>
+        </div>
+    `;
+    
+    resultDiv.innerHTML = html;
+    resultDiv.classList.remove('d-none');
+}
+
+/**
+ * Apply AI-suggested description
+ */
+function applyBoardDescription() {
+    const data = window.currentBoardSetupRecommendations;
+    if (!data || !data.description) return;
+    
+    const descriptionTextarea = document.getElementById('id_description');
+    if (descriptionTextarea) {
+        descriptionTextarea.value = data.description;
+        // Add visual feedback
+        descriptionTextarea.classList.add('border-success');
+        setTimeout(() => descriptionTextarea.classList.remove('border-success'), 2000);
+    }
+}
+
+/**
+ * Apply AI-suggested phases
+ */
+function applyBoardPhases() {
+    const data = window.currentBoardSetupRecommendations;
+    if (!data || data.recommended_phases === undefined) return;
+    
+    const numPhasesInput = document.getElementById('id_num_phases');
+    if (numPhasesInput) {
+        numPhasesInput.value = data.recommended_phases;
+        // Add visual feedback
+        numPhasesInput.classList.add('border-success');
+        setTimeout(() => numPhasesInput.classList.remove('border-success'), 2000);
+    }
+}
+
+/**
+ * Apply AI-suggested team size
+ */
+function applyBoardTeamSize() {
+    const data = window.currentBoardSetupRecommendations;
+    if (!data || !data.recommended_team_size) return;
+    
+    const teamSizeSelect = document.getElementById('team_size');
+    if (teamSizeSelect) {
+        teamSizeSelect.value = data.recommended_team_size;
+        // Add visual feedback
+        teamSizeSelect.classList.add('border-success');
+        setTimeout(() => teamSizeSelect.classList.remove('border-success'), 2000);
+    }
+}
+
+/**
+ * Apply all AI recommendations at once
+ */
+function applyAllBoardRecommendations() {
+    applyBoardDescription();
+    applyBoardPhases();
+    applyBoardTeamSize();
+    
+    // Update project type if inferred
+    const data = window.currentBoardSetupRecommendations;
+    if (data && data.inferred_project_type) {
+        const projectTypeInput = document.getElementById('project_type');
+        if (projectTypeInput) {
+            projectTypeInput.value = data.inferred_project_type;
+            projectTypeInput.classList.add('border-success');
+            setTimeout(() => projectTypeInput.classList.remove('border-success'), 2000);
+        }
+    }
+    
+    // Show success message
+    const resultDiv = document.getElementById('board-setup-recommendations');
+    if (resultDiv) {
+        const successAlert = document.createElement('div');
+        successAlert.className = 'alert alert-success mt-2 py-2 small';
+        successAlert.innerHTML = '<i class="fas fa-check-circle me-1"></i> All recommendations applied! Review and adjust as needed.';
+        resultDiv.appendChild(successAlert);
+        
+        // Auto-hide after delay
+        setTimeout(() => hideBoardRecommendations(), 3000);
+    }
+}
+
+/**
+ * Hide board recommendations panel
+ */
+function hideBoardRecommendations() {
+    const resultDiv = document.getElementById('board-setup-recommendations');
+    if (resultDiv) {
+        resultDiv.classList.add('d-none');
+    }
 }
 
 /**

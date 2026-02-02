@@ -75,6 +75,7 @@ urlpatterns = [
     path('api/suggest-task-priority/', api_views.suggest_task_priority_api, name='suggest_task_priority_api'),
     path('api/predict-deadline/', api_views.predict_deadline_api, name='predict_deadline_api'),
     path('api/recommend-columns/', api_views.recommend_columns_api, name='recommend_columns_api'),
+    path('api/generate-board-setup/', api_views.generate_board_setup_api, name='generate_board_setup_api'),
     path('api/suggest-task-breakdown/', api_views.suggest_task_breakdown_api, name='suggest_task_breakdown_api'),
     path('api/analyze-workflow-optimization/', api_views.analyze_workflow_optimization_api, name='analyze_workflow_optimization_api'),    path('api/create-subtasks/', api_views.create_subtasks_api, name='create_subtasks_api'),
     

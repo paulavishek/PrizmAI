@@ -1023,6 +1023,86 @@ def recommend_board_columns(board_data: Dict) -> Optional[Dict]:
         logger.error(f"Error recommending columns: {str(e)}")
         return None
 
+
+def generate_board_setup_recommendations(board_data: Dict) -> Optional[Dict]:
+    """
+    Generate AI-powered recommendations for board description, phase configuration, 
+    and team size based on the board name and project type.
+    
+    Provides explainable AI output with reasoning for each recommendation.
+    
+    Args:
+        board_data: Dictionary containing:
+            - name: Board/project name
+            - project_type: Optional project type hint
+            
+    Returns:
+        A dictionary with recommendations and explainability data or None if generation fails
+    """
+    try:
+        board_name = board_data.get('name', '')
+        project_type = board_data.get('project_type', '')
+        
+        if not board_name:
+            return None
+        
+        prompt = f"""
+        Analyze this project/board name and generate smart setup recommendations.
+        
+        ## Project Information:
+        - Name: {board_name}
+        - Project Type Hint: {project_type or 'Not specified'}
+        
+        Based on the project name, intelligently infer:
+        1. A concise project description (2-3 sentences MAX - keep it brief and actionable)
+        2. Recommended number of phases (0-10)
+        3. Recommended team size category
+        
+        IMPORTANT: Keep the description SHORT and focused. No lengthy explanations.
+        
+        Format your response as JSON WITH FULL EXPLAINABILITY:
+        {{
+            "description": "Brief 2-3 sentence project description focused on key objectives",
+            "description_reasoning": "1 sentence explaining how you interpreted the project name",
+            "recommended_phases": 3,
+            "phases_reasoning": "1-2 sentences explaining why this phase count is recommended",
+            "phase_names": ["Phase 1 name", "Phase 2 name", "Phase 3 name"],
+            "recommended_team_size": "small|medium|large|solo|enterprise",
+            "team_size_reasoning": "1 sentence explaining why this team size fits the project scope",
+            "confidence_score": 0.XX,
+            "confidence_level": "high|medium|low",
+            "inferred_project_type": "The project type inferred from the name",
+            "key_assumptions": [
+                "Brief assumption 1 about the project scope",
+                "Brief assumption 2 about the project nature"
+            ],
+            "alternative_configuration": {{
+                "phases": 2,
+                "team_size": "medium",
+                "when_applicable": "Brief description of when this alternative might be better"
+            }}
+        }}
+        """
+        
+        response_text = generate_ai_content(prompt, task_type='task_description')
+        if response_text:
+            # Handle code block formatting
+            if "```json" in response_text:
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif "```" in response_text:
+                response_text = response_text.split("```")[1].strip()
+            
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error in board setup: {str(e)}")
+                return None
+        return None
+    except Exception as e:
+        logger.error(f"Error generating board setup recommendations: {str(e)}")
+        return None
+
+
 def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
     """
     Suggest automated breakdown of a complex task into smaller subtasks.
