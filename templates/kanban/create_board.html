@@ -61,26 +61,34 @@
                             </h6>
                             <div class="mb-3">
                                 <label for="{{ form.name.id_for_label }}" class="form-label">Board Name <span class="text-danger">*</span></label>
-                                <div class="input-group">
-                                    {{ form.name }}
-                                    <button type="button" id="generate-board-setup-btn" class="btn btn-outline-info" title="Get AI suggestions for description, phases, and team size">
-                                        <i class="fas fa-magic me-1"></i> AI Suggest
-                                    </button>
-                                </div>
-                                <small class="form-text text-muted">
-                                    <i class="fas fa-lightbulb me-1"></i>Enter a board name and click "AI Suggest" to get smart recommendations.
-                                </small>
+                                {{ form.name }}
                                 {% if form.name.errors %}
                                     <div class="invalid-feedback d-block">{{ form.name.errors }}</div>
                                 {% endif %}
                             </div>
                             
-                            <!-- AI Generation Spinner -->
-                            <div id="board-setup-ai-spinner" class="d-none text-center mb-3">
-                                <div class="spinner-border spinner-border-sm text-info" role="status">
-                                    <span class="visually-hidden">Loading...</span>
+                            <!-- AI Smart Setup Assistant -->
+                            <div class="card border-info bg-light mb-3">
+                                <div class="card-body py-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <i class="fas fa-robot text-info me-2"></i>
+                                            <strong class="small">AI Smart Setup</strong>
+                                            <span class="text-muted small ms-2">— Auto-fill description, phases & team size based on your board name</span>
+                                        </div>
+                                        <button type="button" id="generate-board-setup-btn" class="btn btn-info btn-sm" title="Generate AI recommendations for description, phases, and team size">
+                                            <i class="fas fa-magic me-1"></i> Generate Suggestions
+                                        </button>
+                                    </div>
+                                    
+                                    <!-- AI Generation Spinner -->
+                                    <div id="board-setup-ai-spinner" class="d-none text-center mt-2">
+                                        <div class="spinner-border spinner-border-sm text-info" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <span class="ms-2 text-muted small">Analyzing your project and generating recommendations...</span>
+                                    </div>
                                 </div>
-                                <span class="ms-2 text-muted small">Analyzing your project and generating recommendations...</span>
                             </div>
                             
                             <!-- AI Recommendations Result -->
