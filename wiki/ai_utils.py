@@ -11,14 +11,30 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
+# Temperature settings for wiki AI tasks
+WIKI_TEMPERATURE_MAP = {
+    'simple': 0.5,           # General content
+    'complex': 0.4,          # Complex analysis
+    'transcript_analysis': 0.4,  # Meeting transcript analysis - needs accuracy
+    'task_extraction': 0.3,  # Task extraction - needs consistency
+    'summary': 0.5,          # Summaries - balanced
+}
+
 
 def generate_ai_content(prompt: str, task_type='simple') -> Optional[str]:
     """
-    Generate content using AI (Gemini) with smart model routing.
+    Generate content using AI (Gemini) with smart model routing and optimized temperature.
     
     Routes to appropriate model based on task complexity:
     - Complex tasks → Gemini 2.5 Flash
     - Simple tasks → Gemini 2.5 Flash-Lite (default)
+    
+    Temperature settings:
+    - transcript_analysis: 0.4 (needs accuracy)
+    - task_extraction: 0.3 (needs consistency)
+    - summary: 0.5 (balanced)
+    - complex: 0.4 (analytical)
+    - simple: 0.5 (general)
     
     Args:
         prompt: The prompt to send
@@ -37,9 +53,21 @@ def generate_ai_content(prompt: str, task_type='simple') -> Optional[str]:
         # Smart routing: use Gemini 2.5 Flash for all tasks (best performance/price)
         model_name = 'gemini-2.5-flash'
         model = genai.GenerativeModel(model_name)
-        logger.debug(f"Using {model_name} for task_type: {task_type}")
         
-        response = model.generate_content(prompt)
+        # Get optimized temperature for this task type
+        temperature = WIKI_TEMPERATURE_MAP.get(task_type, 0.5)
+        
+        # Create generation config with task-specific temperature
+        generation_config = {
+            'temperature': temperature,
+            'top_p': 0.8,
+            'top_k': 40,
+            'max_output_tokens': 4096,
+        }
+        
+        logger.debug(f"Using {model_name} for task_type: {task_type}, temperature: {temperature}")
+        
+        response = model.generate_content(prompt, generation_config=generation_config)
         
         if response and response.text:
             return response.text

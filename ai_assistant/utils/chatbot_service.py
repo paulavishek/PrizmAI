@@ -1,5 +1,6 @@
 ﻿import json
 import logging
+import re
 from django.conf import settings
 from django.db.models import Q, Count, Avg, Max
 from kanban.models import Task, Board
@@ -21,6 +22,109 @@ except ImportError:
     HAS_RESOURCE_MODELS = False
 
 logger = logging.getLogger(__name__)
+
+
+# Temperature settings for Spectra's dual-mode responses
+# Data/factual queries need low temperature for accuracy
+# Conversational queries can use higher temperature for engagement
+SPECTRA_TEMPERATURE_MAP = {
+    'data_retrieval': 0.3,   # Factual queries - needs accuracy
+    'analysis': 0.4,          # Analytical queries - consistent insights
+    'action': 0.3,            # Action requests - precise instructions
+    'help': 0.5,              # Help/guidance - clear but friendly
+    'conversational': 0.7,    # General chat - natural, engaging
+}
+
+
+def classify_spectra_query(prompt: str) -> dict:
+    """
+    Classify user query to determine appropriate response mode and temperature.
+    
+    Returns:
+        dict with 'type', 'temperature', and 'reasoning'
+    """
+    prompt_lower = prompt.lower().strip()
+    
+    # Data retrieval patterns - user wants specific facts/numbers
+    data_patterns = [
+        r'\bhow many\b', r'\bcount\b', r'\bnumber of\b', r'\btotal\b',
+        r'\bstatus\b', r'\bprogress\b', r'\bcompletion\b', r'\blist\b',
+        r'\bshow\b', r'\bwhat are\b', r'\bwhich\b', r'\bwho is\b',
+        r'\bassigned to\b', r'\bdue date\b', r'\bdeadline\b', r'\boverdue\b',
+        r'\bblocked\b', r'\bmetric\b', r'\bkpi\b', r'\bvelocity\b',
+        r'\bthroughput\b', r'\bcycle time\b', r'\blead time\b',
+        r'\btask[s]?\s+(in|on|for)\b', r'\bboard[s]?\b',
+    ]
+    
+    # Analysis patterns - user wants insights/interpretation
+    analysis_patterns = [
+        r'\banalyze\b', r'\banalysis\b', r'\binsight\b', r'\btrend\b',
+        r'\bpattern\b', r'\bpredict\b', r'\bforecast\b', r'\bestimate\b',
+        r'\bcompare\b', r'\bcomparison\b', r'\bperformance\b', r'\brisk\b',
+        r'\bbottleneck\b', r'\brecommend\b', r'\bsuggest\b', r'\badvise\b',
+        r'\bwhy\s+(is|are|did|does)\b', r'\bshould\b',
+    ]
+    
+    # Action patterns - user wants to do something
+    action_patterns = [
+        r'\bcreate\b', r'\badd\b', r'\bmake\b', r'\bnew\b', r'\bupdate\b',
+        r'\bchange\b', r'\bmodify\b', r'\bedit\b', r'\bdelete\b', r'\bremove\b',
+        r'\bmove\b', r'\bassign\b', r'\bset\b', r'\bstart\b', r'\bcomplete\b',
+    ]
+    
+    # Help patterns - user needs guidance
+    help_patterns = [
+        r'\bhow (do|can|to)\b', r'\bhelp\b', r'\bexplain\b',
+        r'\bwhat (is|does)\b', r'\bguide\b', r'\btutorial\b', r'\blearn\b',
+    ]
+    
+    # Conversational patterns - greetings, small talk
+    chat_patterns = [
+        r'^(hi|hello|hey)\b', r'\bthanks?\b', r'\bthank you\b',
+        r'\bgood (morning|afternoon|evening)\b', r'\bhow are you\b',
+        r'^(yes|no|ok|okay|sure|great)\b', r'\bbye\b', r'\bwho are you\b',
+    ]
+    
+    # Score each category
+    scores = {'data_retrieval': 0, 'analysis': 0, 'action': 0, 'help': 0, 'conversational': 0}
+    
+    for pattern in data_patterns:
+        if re.search(pattern, prompt_lower):
+            scores['data_retrieval'] += 1
+    for pattern in analysis_patterns:
+        if re.search(pattern, prompt_lower):
+            scores['analysis'] += 1
+    for pattern in action_patterns:
+        if re.search(pattern, prompt_lower):
+            scores['action'] += 1
+    for pattern in help_patterns:
+        if re.search(pattern, prompt_lower):
+            scores['help'] += 1
+    for pattern in chat_patterns:
+        if re.search(pattern, prompt_lower):
+            scores['conversational'] += 1
+    
+    # Determine the highest scoring type
+    max_score = max(scores.values())
+    
+    if max_score == 0:
+        query_type = 'conversational'
+        reasoning = "No specific patterns - using conversational mode"
+    else:
+        # Priority order for ties: data_retrieval > analysis > action > help > conversational
+        priority = ['data_retrieval', 'analysis', 'action', 'help', 'conversational']
+        for qtype in priority:
+            if scores[qtype] == max_score:
+                query_type = qtype
+                reasoning = f"Matched {max_score} {qtype} pattern(s)"
+                break
+    
+    return {
+        'type': query_type,
+        'temperature': SPECTRA_TEMPERATURE_MAP.get(query_type, 0.5),
+        'reasoning': reasoning,
+        'scores': scores
+    }
 
 
 class TaskFlowChatbotService:
@@ -2744,8 +2848,15 @@ When context data is limited, acknowledge it briefly but still provide valuable 
             else:
                 logger.debug("No specific context found for query")
             
-            # Get response from Gemini (STATELESS - no history maintained)
-            response = self.gemini_client.get_response(prompt, system_prompt)
+            # Classify query for dual-mode temperature selection
+            query_classification = classify_spectra_query(prompt)
+            query_type = query_classification['type']
+            temperature = query_classification['temperature']
+            
+            logger.debug(f"Spectra query classified: {query_type}, temp: {temperature}")
+            
+            # Get response from Gemini with optimized temperature (STATELESS - no history maintained)
+            response = self.gemini_client.get_response(prompt, system_prompt, temperature=temperature)
             
             return {
                 'response': response['content'],
@@ -2754,6 +2865,8 @@ When context data is limited, acknowledge it briefly but still provide valuable 
                 'error': response.get('error'),
                 'used_web_search': used_web_search,
                 'search_sources': search_sources,
+                'query_type': query_type,
+                'temperature_used': temperature,
                 'context': {
                     'is_project_query': is_project_query,
                     'is_search_query': is_search_query,

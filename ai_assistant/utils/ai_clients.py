@@ -32,13 +32,17 @@ class GeminiClient:
                 raise ValueError("GEMINI_API_KEY not configured in settings")
             genai.configure(api_key=api_key)
             
-            # Configure generation settings to disable caching and session persistence
-            self.generation_config = {
-                'temperature': 0.7,
+            # Base generation config - temperature can be overridden per request
+            # Default 0.7 for general use, but specific features use optimized values
+            self.base_generation_config = {
+                'temperature': 0.7,  # Default - will be overridden per task type
                 'top_p': 0.8,
                 'top_k': 40,
                 'max_output_tokens': 2048,
             }
+            
+            # For backward compatibility
+            self.generation_config = self.base_generation_config
             
             # Safety settings - permissive for business/technical content
             self.safety_settings = [
@@ -102,7 +106,7 @@ class GeminiClient:
         
         return self.models[model_name]
     
-    def get_response(self, prompt, system_prompt=None, history=None, task_complexity='simple'):
+    def get_response(self, prompt, system_prompt=None, history=None, task_complexity='simple', temperature=None):
         """
         Get response from Gemini model using stateless generation with smart routing.
         
@@ -110,14 +114,22 @@ class GeminiClient:
         - 'complex': Uses Gemini 2.5 Flash for complex reasoning
         - 'simple': Uses Gemini 2.5 Flash-Lite for fast, cost-effective responses
         
+        Temperature Guidelines:
+        - 0.2-0.3: Deterministic (column recommendations, board setup, structured outputs)
+        - 0.4: Analytical (risk assessment, skill gap, budget analysis, performance reports)
+        - 0.5: Balanced (dashboard insights, help queries)
+        - 0.6: Creative content (task descriptions, retrospectives)
+        - 0.7: Conversational (chat, general assistance)
+        
         Args:
             prompt (str): User prompt
             system_prompt (str): System context (combined with prompt for this call only)
             history (list): DEPRECATED - Not used to prevent session persistence
             task_complexity (str): 'simple' or 'complex' for model routing
+            temperature (float): Override temperature for this request (0.0-1.0)
             
         Returns:
-            dict: Response with content, token info, and model used
+            dict: Response with content, token info, model used, and temperature used
         """
         model = self.get_model(task_complexity=task_complexity)
         if not model:
@@ -141,8 +153,22 @@ class GeminiClient:
             # Determine which model we're using for logging
             model_name = 'gemini-2.5-flash' if task_complexity == 'complex' else 'gemini-2.5-flash-lite'
             
+            # Build generation config with temperature override if provided
+            generation_config = None
+            temp_used = self.base_generation_config.get('temperature', 0.7)
+            if temperature is not None:
+                generation_config = {
+                    **self.base_generation_config,
+                    'temperature': temperature
+                }
+                temp_used = temperature
+                logger.debug(f"Using custom temperature: {temperature}")
+            
             # Generate content WITHOUT using chat sessions
-            response = model.generate_content(full_prompt)
+            if generation_config:
+                response = model.generate_content(full_prompt, generation_config=generation_config)
+            else:
+                response = model.generate_content(full_prompt)
             
             # Check if response was blocked by safety filters
             if not response.candidates or not response.candidates[0].content.parts:
@@ -169,7 +195,7 @@ class GeminiClient:
                 # Fallback: rough approximation
                 token_count = len(full_prompt.split()) + len(response.text.split())
             
-            logger.info(f"Gemini response generated - Model: {model_name}, Tokens: {token_count}, Complexity: {task_complexity}")
+            logger.info(f"Gemini response generated - Model: {model_name}, Tokens: {token_count}, Complexity: {task_complexity}, Temp: {temp_used}")
             
             return {
                 'content': response.text,
@@ -177,7 +203,8 @@ class GeminiClient:
                 'tokens': token_count,
                 'session_mode': 'stateless',
                 'model_used': model_name,
-                'task_complexity': task_complexity
+                'task_complexity': task_complexity,
+                'temperature_used': temp_used
             }
         
         except Exception as e:

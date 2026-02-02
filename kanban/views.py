@@ -440,27 +440,12 @@ def board_detail(request, board_id):
     
     columns = Column.objects.filter(board=board).order_by('position')
     
-    # Create default columns if none exist (only for boards created without AI recommendations)
+    # Create default columns if none exist
     if not columns.exists():
         default_columns = ['To Do', 'In Progress', 'Done']
         for i, name in enumerate(default_columns):
             Column.objects.create(name=name, board=board, position=i)
         columns = Column.objects.filter(board=board).order_by('position')
-    else:
-        # Ensure "To Do" column exists - recreate if missing (for compatibility)
-        has_todo = columns.filter(name__iregex=r'^(to do|todo)$').exists()
-        if not has_todo:
-            # Get the highest position and add "To Do" at the beginning
-            max_position = columns.aggregate(max_pos=Max('position'))['max_pos'] or -1
-            
-            # Shift all existing columns one position to the right
-            for column in columns.order_by('-position'):
-                column.position += 1
-                column.save()
-                
-            # Create "To Do" column at position 0
-            Column.objects.create(name='To Do', board=board, position=0)
-            columns = Column.objects.filter(board=board).order_by('position')  # Refresh queryset
     
     # Initialize the search form
     search_form = TaskSearchForm(request.GET or None, board=board)

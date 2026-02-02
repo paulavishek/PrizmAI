@@ -58,6 +58,59 @@ SIMPLE_TASKS = [
     'mitigation_suggestions'
 ]
 
+# Temperature settings for different AI task types
+# Lower = more deterministic/consistent, Higher = more creative/varied
+TASK_TEMPERATURE_MAP = {
+    # Deterministic tasks (0.2-0.3) - Need consistent, predictable outputs
+    'column_recommendations': 0.3,      # Same project should get similar column structure
+    'board_setup': 0.2,                  # Phase count, team size should be consistent
+    'task_breakdown': 0.3,               # Subtask structure should be predictable
+    'resource_optimization': 0.3,        # Workload calculations need consistency
+    
+    # Analytical tasks (0.4) - Data-driven with professional narrative
+    'risk_assessment': 0.4,              # Risk identification should be thorough & consistent
+    'board_analytics_summary': 0.4,      # Analytics reports need reliability
+    'priority_suggestion': 0.4,          # Priority should be consistent for similar tasks
+    'deadline_prediction': 0.4,          # Deadline estimates need consistency
+    'skill_gap_analysis': 0.4,           # Skill assessments should be reliable
+    'budget_analysis': 0.4,              # Financial analysis needs accuracy
+    'team_performance': 0.4,             # Performance reports should be consistent
+    'dependency_analysis': 0.4,          # Dependency analysis should be reliable
+    'critical_path': 0.4,                # Critical path needs accuracy
+    'workflow_optimization': 0.4,        # Workflow suggestions should be consistent
+    
+    # Dashboard/Insights (0.5) - Analytical with slight variation for freshness
+    'dashboard_insights': 0.5,           # Insights can have slight variation
+    'timeline_generation': 0.5,          # Timeline needs accuracy with some flexibility
+    
+    # Creative content (0.6) - Natural language, readability matters
+    'task_description': 0.6,             # Descriptions should be varied but professional
+    'retrospective': 0.6,                # Retrospectives benefit from thoughtful variation
+    'comment_summary': 0.6,              # Summaries should read naturally
+    
+    # Conversational (0.7) - Engaging, human-like responses
+    'chat': 0.7,                         # Chat should feel natural
+    'lean_classification': 0.5,          # Classification with explanation
+    'task_enhancement': 0.6,             # Enhancement suggestions
+    'mitigation_suggestions': 0.5,       # Mitigation advice
+    
+    # Defaults
+    'simple': 0.6,                       # Default for simple tasks
+    'complex': 0.4,                      # Default for complex tasks
+}
+
+def get_temperature_for_task(task_type: str) -> float:
+    """
+    Get the appropriate temperature setting for a given task type.
+    
+    Args:
+        task_type: The type of AI task being performed
+        
+    Returns:
+        float: Temperature value between 0.0 and 1.0
+    """
+    return TASK_TEMPERATURE_MAP.get(task_type, 0.5)  # Default to 0.5 if unknown
+
 def get_model_for_task(task_type='simple'):
     """
     Get the appropriate Gemini model based on task complexity.
@@ -117,11 +170,17 @@ def get_model():
 
 def generate_ai_content(prompt: str, task_type='simple') -> Optional[str]:
     """
-    Generate content using Gemini API with smart model routing.
+    Generate content using Gemini API with smart model routing and optimized temperature.
     
     Routes requests to appropriate model based on task complexity:
     - Complex tasks → Gemini 2.5 Flash (higher quality reasoning)
     - Simple tasks → Gemini 2.5 Flash-Lite (faster, cheaper)
+    
+    Temperature is automatically set based on task type:
+    - Deterministic tasks (0.2-0.3): column_recommendations, board_setup, task_breakdown
+    - Analytical tasks (0.4): risk_assessment, analytics, priority_suggestion
+    - Creative tasks (0.6): task_description, retrospective
+    - Conversational (0.7): chat responses
     
     Args:
         prompt: The prompt to send to the Gemini API
@@ -136,9 +195,21 @@ def generate_ai_content(prompt: str, task_type='simple') -> Optional[str]:
             logger.error("Gemini model not available")
             return None
         
-        # Generate content without any conversation history
-        # This ensures no "History Restored" messages and no token waste
-        response = model.generate_content(prompt)
+        # Get optimized temperature for this task type
+        temperature = get_temperature_for_task(task_type)
+        
+        # Create generation config with task-specific temperature
+        generation_config = {
+            'temperature': temperature,
+            'top_p': 0.8,
+            'top_k': 40,
+            'max_output_tokens': 4096,
+        }
+        
+        logger.debug(f"Generating AI content - Task: {task_type}, Temperature: {temperature}")
+        
+        # Generate content with optimized settings
+        response = model.generate_content(prompt, generation_config=generation_config)
         
         if response and response.text:
             return response.text.strip()
