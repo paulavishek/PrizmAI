@@ -539,16 +539,18 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
         ## Board Metrics Overview:
         - Total Tasks: {total_tasks}
         - Completed Tasks: {completed_count}
-        - Overall Productivity: {productivity}%
+        - Overall Productivity (Completion Rate): {productivity}%
         - Overdue Tasks: {overdue_count}
         - Tasks Due Soon: {upcoming_count}
 
         ## Lean Six Sigma Analysis:
-        - Value-Added Percentage: {value_added_percentage}%
         - Total Categorized Tasks: {total_categorized} out of {total_tasks}
-        - Value-Added Tasks: {tasks_by_lean_category[0]['count'] if tasks_by_lean_category else 0}
+        - Value-Added Tasks: {tasks_by_lean_category[0]['count'] if tasks_by_lean_category else 0} ({value_added_percentage}% of categorized)
         - Necessary Non-Value-Added: {tasks_by_lean_category[1]['count'] if len(tasks_by_lean_category) > 1 else 0}
         - Waste/Eliminate Tasks: {tasks_by_lean_category[2]['count'] if len(tasks_by_lean_category) > 2 else 0}
+        
+        Note: In Lean Six Sigma, Value-Added percentage ideally should be 60%+ for healthy projects. 
+        Value of {value_added_percentage}% means {100 - value_added_percentage}% of work is either necessary overhead or potential waste.
 
         ## Task Distribution:
         Column Distribution: {', '.join([f"{col['name']}: {col['count']}" for col in tasks_by_column])}

@@ -596,16 +596,11 @@ def summarize_board_analytics_api(request, board_id):
             progress=100
         ).count()
         
-        # Calculate productivity
-        total_progress_percentage = 0
-        for task in all_tasks:
-            # Use actual task progress, defaulting to 0 if None
-            progress = task.progress if task.progress is not None else 0
-            total_progress_percentage += progress
-        
+        # Calculate productivity (completion rate - same as displayed on the page)
+        # This is the percentage of tasks that are fully completed
         productivity = 0
         if total_tasks > 0:
-            productivity = (total_progress_percentage / (total_tasks * 100)) * 100
+            productivity = (completed_count / total_tasks) * 100
         
         # Overdue and upcoming tasks
         today = timezone.now().date()
