@@ -1182,10 +1182,11 @@
         });
         
         // FORWARD PASS: Calculate ES and EF
-        // ES = max(EF of all predecessors) or project start if no predecessors
+        // ES = max(EF of all predecessors) or 0 if no predecessors
         // EF = ES + duration
+        // NOTE: We use task durations and dependencies only, not actual calendar dates
         
-        // Find project start date (earliest start among all tasks)
+        // Find the earliest start among all tasks (for reference)
         let projectStart = null;
         taskMap.forEach(task => {
             if (!projectStart || task.start < projectStart) {
@@ -1217,23 +1218,25 @@
         // Sort all tasks
         taskMap.forEach((_, taskId) => topologicalSort(taskId));
         
-        // Forward pass
+        // Forward pass - calculate ES and EF based purely on dependencies
         sorted.forEach(taskId => {
             const task = taskMap.get(taskId);
             if (!task) return;
             
-            // ES = max(EF of predecessors) or task's actual start date
+            // ES = max(EF of predecessors) or project start if no predecessors
             if (task.dependencies.length === 0) {
-                task.ES = task.start;
+                // No predecessors - start at project start
+                task.ES = new Date(projectStart);
             } else {
-                let maxPredEF = projectStart;
+                // ES = max(EF of all predecessors)
+                let maxPredEF = new Date(projectStart);
                 task.dependencies.forEach(depId => {
                     const dep = taskMap.get(depId);
                     if (dep && dep.EF && dep.EF > maxPredEF) {
-                        maxPredEF = dep.EF;
+                        maxPredEF = new Date(dep.EF);
                     }
                 });
-                task.ES = maxPredEF > task.start ? maxPredEF : task.start;
+                task.ES = maxPredEF;
             }
             
             // EF = ES + duration
