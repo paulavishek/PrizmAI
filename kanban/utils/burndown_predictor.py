@@ -161,6 +161,7 @@ class BurndownPredictor:
         """Ensure velocity snapshots exist for recent periods"""
         from kanban.burndown_models import TeamVelocitySnapshot
         from kanban.models import Task
+        from datetime import datetime
         
         today = timezone.now().date()
         
@@ -169,11 +170,15 @@ class BurndownPredictor:
         current_period_end = today
         current_period_start = today - timedelta(days=6)  # 7-day period
         
+        # Convert to timezone-aware datetime for proper comparison with DateTimeField
+        period_start_dt = timezone.make_aware(datetime.combine(current_period_start, datetime.min.time()))
+        period_end_dt = timezone.make_aware(datetime.combine(current_period_end, datetime.max.time()))
+        
         # Calculate velocity for current period
         completed_tasks = Task.objects.filter(
             column__board=board,
-            completed_at__gte=current_period_start,
-            completed_at__lte=current_period_end
+            completed_at__gte=period_start_dt,
+            completed_at__lte=period_end_dt
         )
         
         tasks_count = completed_tasks.count()
@@ -214,11 +219,15 @@ class BurndownPredictor:
             ).exists():
                 continue
             
+            # Convert to timezone-aware datetime for proper comparison
+            hist_start_dt = timezone.make_aware(datetime.combine(period_start, datetime.min.time()))
+            hist_end_dt = timezone.make_aware(datetime.combine(period_end, datetime.max.time()))
+            
             # Calculate velocity for this period
             completed_tasks = Task.objects.filter(
                 column__board=board,
-                completed_at__gte=period_start,
-                completed_at__lte=period_end
+                completed_at__gte=hist_start_dt,
+                completed_at__lte=hist_end_dt
             )
             
             tasks_count = completed_tasks.count()
