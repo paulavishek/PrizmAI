@@ -223,14 +223,17 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
     try:
         from kanban.models import Task
         
-        # Get upcoming/active tasks with optimized query
-        end_date = timezone.now() + timedelta(days=sprint_period_days)
+        # Get all incomplete tasks for the board
+        # We analyze ALL active tasks, not just those due soon, because:
+        # 1. Tasks due far in the future still need skilled resources to eventually complete them
+        # 2. The sprint_period helps prioritize but shouldn't exclude work entirely
+        # 3. A PM needs to see all skill gaps, not just immediate ones
         tasks = list(Task.objects.filter(
             column__board=board,
             progress__lt=100
-        ).filter(
-            Q(due_date__isnull=True) | Q(due_date__lte=end_date)
         ).select_related('column'))
+        
+        logger.info(f"Analyzing {len(tasks)} active tasks for skill gaps on board {board.name}")
         
         # Auto-populate required_skills for tasks that don't have them
         tasks_needing_skills = [t for t in tasks if not t.required_skills]
@@ -267,9 +270,44 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                 task.refresh_from_db(fields=['required_skills'])
             
             if task.required_skills:
-                for skill in task.required_skills:
-                    skill_name = skill.get('name', '').strip()
-                    skill_level = skill.get('level', 'Intermediate').capitalize()
+                skills_list = task.required_skills
+                
+                # Handle if stored as JSON string
+                if isinstance(skills_list, str):
+                    try:
+                        skills_list = json.loads(skills_list)
+                    except (json.JSONDecodeError, TypeError):
+                        logger.warning(f"Invalid required_skills format for task {task.id}")
+                        continue
+                
+                if not isinstance(skills_list, list):
+                    continue
+                
+                for skill in skills_list:
+                    # Handle both dict format and string format
+                    if isinstance(skill, dict):
+                        skill_name = skill.get('name', '').strip()
+                        skill_level = skill.get('level', 'Intermediate').capitalize()
+                    elif isinstance(skill, str):
+                        # Check if it's a stringified dict like "{'name': 'Python', 'level': 'Expert'}"
+                        if skill.startswith('{') and 'name' in skill:
+                            try:
+                                # Try to parse as Python dict (uses single quotes)
+                                import ast
+                                parsed = ast.literal_eval(skill)
+                                if isinstance(parsed, dict):
+                                    skill_name = parsed.get('name', '').strip()
+                                    skill_level = parsed.get('level', 'Intermediate').capitalize()
+                                else:
+                                    continue
+                            except (ValueError, SyntaxError):
+                                skill_name = skill.strip()
+                                skill_level = 'Intermediate'
+                        else:
+                            skill_name = skill.strip()
+                            skill_level = 'Intermediate'  # Default level for string-only skills
+                    else:
+                        continue
                     
                     if skill_name:
                         if skill_name not in required_skills:
