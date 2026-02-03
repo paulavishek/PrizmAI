@@ -164,17 +164,45 @@ class BurndownPredictor:
         
         today = timezone.now().date()
         
-        # Check if we have a recent snapshot (within last 7 days)
-        recent_snapshot = TeamVelocitySnapshot.objects.filter(
+        # Always update/create snapshot for current period (last 7 days)
+        # This ensures velocity reflects recently completed tasks
+        current_period_end = today
+        current_period_start = today - timedelta(days=6)  # 7-day period
+        
+        # Calculate velocity for current period
+        completed_tasks = Task.objects.filter(
+            column__board=board,
+            completed_at__gte=current_period_start,
+            completed_at__lte=current_period_end
+        )
+        
+        tasks_count = completed_tasks.count()
+        story_points = sum(
+            t.complexity_score or 5 for t in completed_tasks
+        )
+        
+        # Get active team members
+        team_members = list(board.members.all())
+        active_count = len(team_members)
+        
+        # Update or create snapshot for current period
+        TeamVelocitySnapshot.objects.update_or_create(
             board=board,
-            period_end__gte=today - timedelta(days=7)
-        ).first()
+            period_start=current_period_start,
+            period_end=current_period_end,
+            defaults={
+                'period_type': 'weekly',
+                'tasks_completed': tasks_count,
+                'story_points_completed': Decimal(str(story_points)),
+                'hours_completed': Decimal(str(tasks_count * 8)),  # Estimate
+                'active_team_members': active_count,
+                'team_member_list': [m.id for m in team_members],
+                'quality_score': Decimal('95.0'),  # Default high quality
+            }
+        )
         
-        if recent_snapshot:
-            return  # Already have recent data
-        
-        # Create velocity snapshots for last 8 weeks
-        for week_offset in range(8):
+        # Create velocity snapshots for previous weeks (if not exist)
+        for week_offset in range(1, 8):  # Start from 1 to skip current week
             period_end = today - timedelta(days=week_offset * 7)
             period_start = period_end - timedelta(days=6)  # 7-day periods
             
@@ -197,10 +225,6 @@ class BurndownPredictor:
             story_points = sum(
                 t.complexity_score or 5 for t in completed_tasks
             )
-            
-            # Get active team members
-            team_members = list(board.members.all())
-            active_count = len(team_members)
             
             # Create snapshot
             TeamVelocitySnapshot.objects.create(
