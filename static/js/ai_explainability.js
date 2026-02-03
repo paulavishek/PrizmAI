@@ -1017,7 +1017,28 @@ const AIExplainability = (() => {
      * Utility: Escape HTML to prevent XSS
      */
     function escapeHtml(text) {
-        if (!text) return '';
+        // Handle null, undefined, or empty values
+        if (text === null || text === undefined) {
+            return '';
+        }
+        
+        // Handle objects and arrays - convert to readable string
+        if (typeof text === 'object') {
+            // If it's an array, join with commas
+            if (Array.isArray(text)) {
+                return text.map(item => escapeHtml(item)).join(', ');
+            }
+            // If it's an object, try to extract a meaningful value
+            if (text.toString && text.toString() !== '[object Object]') {
+                text = text.toString();
+            } else {
+                text = text.name || text.title || text.value || text.description || JSON.stringify(text);
+            }
+        }
+        
+        // Convert to string if not already
+        text = String(text);
+        
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;

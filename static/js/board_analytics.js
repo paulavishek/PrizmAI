@@ -748,6 +748,27 @@ function formatTimelineRecommendations(recommendations) {
 
 // Formatting helper functions
 function formatAISummary(summary) {
+    // Handle null or undefined
+    if (summary === null || summary === undefined) {
+        return '<p class="text-muted">No summary available.</p>';
+    }
+    
+    // Handle objects - try to extract a string or format as structured
+    if (typeof summary === 'object') {
+        // Check for common summary properties
+        if (summary.executive_summary) {
+            summary = summary.executive_summary;
+        } else if (summary.summary) {
+            summary = summary.summary;
+        } else if (summary.markdown_summary) {
+            summary = summary.markdown_summary;
+        } else {
+            // It's a structured object, use the structured formatter
+            console.log('formatAISummary received object, delegating to formatStructuredAISummary');
+            return formatStructuredAISummary(summary);
+        }
+    }
+    
     // This function handles plain string summaries (legacy format)
     if (typeof summary !== 'string') {
         console.error('formatAISummary expects a string, got:', typeof summary);
@@ -813,9 +834,31 @@ function formatStructuredAISummary(summary) {
         
         html += '<div class="mb-4">';
         html += '<h6 class="text-' + healthColor + '"><i class="fas fa-heartbeat me-2"></i>Project Health</h6>';
-        html += '<span class="badge bg-' + healthColor + ' mb-2">' + (health.overall_score || 'Unknown').toUpperCase() + '</span>';
+        html += '<span class="badge bg-' + healthColor + ' mb-2">' + escapeHtml(health.overall_score || 'Unknown').toUpperCase() + '</span>';
         if (health.score_reasoning) {
             html += '<p class="text-muted small">' + escapeHtml(health.score_reasoning) + '</p>';
+        }
+        
+        // Render health indicators if present
+        if (health.health_indicators && Array.isArray(health.health_indicators) && health.health_indicators.length > 0) {
+            html += '<div class="mt-3">';
+            html += '<p class="mb-2"><strong>Health Indicators:</strong></p>';
+            html += '<div class="table-responsive"><table class="table table-sm table-bordered">';
+            html += '<thead class="table-light"><tr><th>Indicator</th><th>Status</th><th>Value</th><th>Benchmark</th><th>Impact</th></tr></thead><tbody>';
+            health.health_indicators.forEach(indicator => {
+                if (!indicator) return;
+                const statusColors = {positive: 'success', negative: 'danger', neutral: 'secondary'};
+                const statusColor = statusColors[indicator.status] || 'secondary';
+                html += '<tr>';
+                html += '<td>' + escapeHtml(indicator.indicator || '') + '</td>';
+                html += '<td><span class="badge bg-' + statusColor + '">' + escapeHtml(indicator.status || 'N/A') + '</span></td>';
+                html += '<td>' + escapeHtml(indicator.value || 'N/A') + '</td>';
+                html += '<td>' + escapeHtml(indicator.benchmark || 'N/A') + '</td>';
+                html += '<td class="small">' + escapeHtml(indicator.impact_on_score || '') + '</td>';
+                html += '</tr>';
+            });
+            html += '</tbody></table></div>';
+            html += '</div>';
         }
         html += '</div>';
     }
@@ -1124,6 +1167,29 @@ function getCSRFToken() {
 }
 
 function escapeHtml(text) {
+    // Handle null, undefined, or empty values
+    if (text === null || text === undefined) {
+        return '';
+    }
+    
+    // Handle objects and arrays - convert to readable string
+    if (typeof text === 'object') {
+        // If it's an array, join with commas
+        if (Array.isArray(text)) {
+            return text.map(item => escapeHtml(item)).join(', ');
+        }
+        // If it's an object, try to extract a meaningful value
+        if (text.toString && text.toString() !== '[object Object]') {
+            text = text.toString();
+        } else {
+            // Try to extract common property names for display
+            text = text.name || text.title || text.value || text.description || text.insight || text.recommendation || text.concern || text.action || JSON.stringify(text);
+        }
+    }
+    
+    // Convert to string if not already
+    text = String(text);
+    
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;

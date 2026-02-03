@@ -547,6 +547,31 @@ function initAIAnalyticsSummary() {
  * Format summary text for better HTML display
  */
 function formatSummaryText(text) {
+    // Handle null, undefined, or empty values
+    if (text === null || text === undefined) {
+        return '<p class="text-muted">No summary available.</p>';
+    }
+    
+    // Handle objects and arrays - convert to readable string first
+    if (typeof text === 'object') {
+        // If it has an executive_summary or summary property, use that
+        if (text.executive_summary) {
+            text = text.executive_summary;
+        } else if (text.summary) {
+            text = text.summary;
+        } else if (text.markdown_summary) {
+            text = text.markdown_summary;
+        } else if (Array.isArray(text)) {
+            text = text.join('\n\n');
+        } else {
+            // Last resort: try to format structured object
+            return formatStructuredAnalyticsSummary(text);
+        }
+    }
+    
+    // Ensure text is a string
+    text = String(text);
+    
     // Convert markdown-like formatting to HTML
     let formatted = text
         // Convert ** bold ** to <strong>
@@ -585,7 +610,29 @@ function formatStructuredAnalyticsSummary(summary) {
     
     // Helper functions
     function escapeHtml(text) {
-        if (!text) return '';
+        // Handle null, undefined, or empty values
+        if (text === null || text === undefined) {
+            return '';
+        }
+        
+        // Handle objects and arrays - convert to readable string
+        if (typeof text === 'object') {
+            // If it's an array, join with commas
+            if (Array.isArray(text)) {
+                return text.map(item => escapeHtml(item)).join(', ');
+            }
+            // If it's an object, try to extract a meaningful value
+            if (text.toString && text.toString() !== '[object Object]') {
+                text = text.toString();
+            } else {
+                // Try to extract common property names for display
+                text = text.name || text.title || text.value || text.description || text.insight || text.recommendation || text.concern || text.action || JSON.stringify(text);
+            }
+        }
+        
+        // Convert to string if not already
+        text = String(text);
+        
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
