@@ -650,18 +650,128 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
         
         response_text = generate_ai_content(prompt, task_type='board_analytics_summary')
         if response_text:
-            # Handle code block formatting
+            logger.debug(f"Raw AI response (first 500 chars): {response_text[:500]}")
+            
+            # Handle code block formatting - more robust extraction
+            original_response = response_text
+            
             if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
+                try:
+                    response_text = response_text.split("```json")[1].split("```")[0].strip()
+                except IndexError:
+                    logger.warning("Failed to extract JSON from ```json block")
             elif "```" in response_text:
-                response_text = response_text.split("```")[1].strip()
+                # Handle case where code block might contain language identifier
+                parts = response_text.split("```")
+                if len(parts) >= 2:
+                    # Get the content between first ``` and second ```
+                    code_content = parts[1]
+                    # Remove language identifier if present (e.g., 'json\n')
+                    if code_content.lstrip().startswith('json'):
+                        code_content = code_content.lstrip()[4:].lstrip()
+                    response_text = code_content.strip()
+            
+            # Clean up any leading/trailing whitespace
+            response_text = response_text.strip()
+            
+            # Try to find JSON object if response has extra text before it
+            if not response_text.startswith('{'):
+                json_start = response_text.find('{')
+                if json_start != -1:
+                    response_text = response_text[json_start:]
+            
+            # Find the matching closing brace for complete JSON extraction
+            if response_text.startswith('{'):
+                brace_count = 0
+                json_end = -1
+                in_string = False
+                escape_next = False
+                
+                for i, char in enumerate(response_text):
+                    if escape_next:
+                        escape_next = False
+                        continue
+                    if char == '\\':
+                        escape_next = True
+                        continue
+                    if char == '"' and not escape_next:
+                        in_string = not in_string
+                        continue
+                    if not in_string:
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                json_end = i + 1
+                                break
+                
+                if json_end > 0:
+                    response_text = response_text[:json_end]
+            
+            logger.debug(f"Processed JSON (first 300 chars): {response_text[:300]}")
             
             try:
-                return json.loads(response_text)
-            except json.JSONDecodeError:
-                # Fallback to plain text summary for backward compatibility
+                parsed = json.loads(response_text)
+                # Validate that we got expected structure
+                if isinstance(parsed, dict):
+                    logger.info(f"Successfully parsed board analytics JSON with {len(parsed)} keys")
+                    return parsed
+                else:
+                    logger.warning(f"AI returned non-dict JSON: {type(parsed)}")
+                    return {
+                        'executive_summary': str(parsed),
+                        'confidence_score': 0.5,
+                        'parsing_note': 'AI returned unexpected JSON type'
+                    }
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON parse error in board analytics: {e}")
+                logger.debug(f"Failed JSON content: {response_text[:500]}")
+                
+                # Try a more aggressive JSON extraction using regex
+                import re
+                
+                # Try to find and parse any valid JSON object
+                json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+                matches = re.findall(json_pattern, response_text, re.DOTALL)
+                
+                for match in matches:
+                    try:
+                        parsed = json.loads(match)
+                        if isinstance(parsed, dict) and 'executive_summary' in parsed:
+                            logger.info("Recovered JSON using regex extraction")
+                            return parsed
+                    except json.JSONDecodeError:
+                        continue
+                
+                # Last resort: extract key fields manually
+                result = {'confidence_score': 0.5, 'parsing_note': 'Partial extraction from malformed JSON'}
+                
+                # Extract executive_summary
+                exec_match = re.search(r'"executive_summary"\s*:\s*"((?:[^"\\]|\\.)*)"', response_text)
+                if exec_match:
+                    result['executive_summary'] = exec_match.group(1).replace('\\"', '"').replace('\\n', '\n')
+                
+                # Extract confidence_score
+                conf_match = re.search(r'"confidence_score"\s*:\s*([\d.]+)', response_text)
+                if conf_match:
+                    try:
+                        result['confidence_score'] = float(conf_match.group(1))
+                    except ValueError:
+                        pass
+                
+                # Extract health_assessment overall_score
+                health_match = re.search(r'"overall_score"\s*:\s*"([^"]+)"', response_text)
+                if health_match:
+                    result['health_assessment'] = {'overall_score': health_match.group(1)}
+                
+                if 'executive_summary' in result:
+                    logger.info("Partially recovered data from malformed JSON")
+                    return result
+                
+                # Complete fallback
                 return {
-                    'executive_summary': response_text,
+                    'executive_summary': original_response[:500] if len(original_response) > 500 else original_response,
                     'confidence_score': 0.5,
                     'parsing_note': 'Returned plain text summary due to JSON parsing error'
                 }

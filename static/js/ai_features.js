@@ -608,6 +608,30 @@ function formatSummaryText(text) {
 function formatStructuredAnalyticsSummary(summary) {
     let html = '<div class="ai-analytics-summary-structured">';
     
+    // Check if the summary object might be a wrapper with a nested JSON string
+    // This handles cases where the AI returns the JSON as a string inside a field
+    if (summary && summary.executive_summary && typeof summary.executive_summary === 'string') {
+        const execSummary = summary.executive_summary.trim();
+        // Check if executive_summary itself contains JSON (indicating double-encoding issue)
+        if (execSummary.startsWith('{') && execSummary.includes('"executive_summary"')) {
+            try {
+                const parsed = JSON.parse(execSummary);
+                if (parsed && typeof parsed === 'object') {
+                    console.log('Detected nested JSON in executive_summary, re-parsing...');
+                    summary = parsed;
+                }
+            } catch (e) {
+                console.log('Failed to parse nested JSON in executive_summary');
+            }
+        }
+    }
+    
+    // Also check if there's a nested 'summary' field that needs extraction
+    if (summary && summary.summary && typeof summary.summary === 'object' && !summary.executive_summary) {
+        console.log('Extracting nested summary object');
+        summary = summary.summary;
+    }
+    
     // Helper functions
     function escapeHtml(text) {
         // Handle null, undefined, or empty values
