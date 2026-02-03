@@ -3406,14 +3406,36 @@ def analyze_skill_gaps_api(request, board_id):
 
         pass  # Original: board membership check removed
         
-        from kanban.utils.skill_analysis import calculate_skill_gaps, generate_skill_gap_recommendations
+        from kanban.utils.skill_analysis import calculate_skill_gaps, generate_skill_gap_recommendations, update_team_skill_profile_model
         from kanban.models import SkillGap
+        
+        # Update team skill profile before analysis (keeps Matrix in sync)
+        update_team_skill_profile_model(board)
         
         # Get sprint period from query params (default 14 days)
         sprint_days = int(request.GET.get('sprint_days', 14))
         
         # Calculate gaps
         gaps = calculate_skill_gaps(board, sprint_period_days=sprint_days)
+        
+        # Track which gaps are still active (for cleanup)
+        active_gap_keys = set()
+        for gap_data in gaps:
+            key = (gap_data['skill_name'], gap_data['proficiency_level'])
+            active_gap_keys.add(key)
+        
+        # Mark stale gaps as resolved (gaps that no longer exist in current analysis)
+        stale_gaps = SkillGap.objects.filter(
+            board=board,
+            status__in=['identified', 'acknowledged', 'in_progress']
+        )
+        for stale_gap in stale_gaps:
+            key = (stale_gap.skill_name, stale_gap.proficiency_level)
+            if key not in active_gap_keys:
+                stale_gap.status = 'resolved'
+                stale_gap.resolved_at = timezone.now()
+                stale_gap.save()
+                logger.info(f"Auto-resolved stale gap: {stale_gap.skill_name} ({stale_gap.proficiency_level})")
         
         # Save gaps to database (without AI recommendations initially for speed)
         saved_gaps = []
@@ -3474,6 +3496,8 @@ def analyze_skill_gaps_api(request, board_id):
                 'severity': skill_gap.severity,
                 'status': skill_gap.status,
                 'affected_tasks': gap_data['affected_tasks'],
+                'task_count': gap_data.get('task_count', len(gap_data['affected_tasks'])),
+                'has_team_coverage': gap_data.get('has_team_coverage', False),
                 'recommendations': skill_gap.ai_recommendations or [],
                 'recommendations_pending': not skill_gap.ai_recommendations,
                 'identified_at': skill_gap.identified_at.isoformat()
@@ -3510,7 +3534,15 @@ def analyze_skill_gaps_api(request, board_id):
             'success': True,
             'gaps': saved_gaps,
             'sprint_period_days': sprint_days,
-            'total_gaps': len(saved_gaps)
+            'total_gaps': len(saved_gaps),
+            'methodology': {
+                'description': 'Gap count represents concurrent team member slots needed, not total tasks.',
+                'calculation': 'Based on ~4 tasks per team member per sprint. Severity considers team coverage.',
+                'critical_meaning': 'Team has no coverage for this skill and work is blocked.',
+                'high_meaning': 'Team lacks sufficient capacity but may have related skills.',
+                'medium_meaning': 'Team has coverage but may need upskilling or support.',
+                'low_meaning': 'Minor gap, work can proceed with existing team.'
+            }
         })
         
     except Exception as e:
