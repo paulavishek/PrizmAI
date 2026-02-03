@@ -208,10 +208,10 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
     vs available skills (from team members)
     
     METHODOLOGY:
-    - Gap count represents the number of CONCURRENT skill slots needed, not total task count
-    - A single team member can work on multiple tasks requiring the same skill
-    - Severity is calibrated against actual team coverage, not just raw numbers
-    - A skill is only a "gap" if the team cannot reasonably cover the work
+    - A gap exists when required skill coverage exceeds available team capacity
+    - Zero-coverage skills (no team members have it) are always flagged
+    - Severity is calibrated: Critical for zero coverage, graduated otherwise
+    - Gap count is realistic (not 1:1 with task count, but capacity-based)
     
     Args:
         board: Board instance
@@ -233,14 +233,13 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
         ).select_related('column'))
         
         # Auto-populate required_skills for tasks that don't have them
-        # This fixes the "0 tasks affected" issue where skills weren't extracted yet
         tasks_needing_skills = [t for t in tasks if not t.required_skills]
         skills_extracted_count = 0
         
         if tasks_needing_skills:
             logger.info(f"Auto-extracting skills for {len(tasks_needing_skills)} tasks without defined skills")
-            # Limit to first 10 to avoid API rate limits and long waits
-            for task in tasks_needing_skills[:10]:
+            # Limit to first 15 to avoid API rate limits (increased from 10)
+            for task in tasks_needing_skills[:15]:
                 try:
                     extracted_skills = extract_skills_from_task(task.title, task.description or "")
                     if extracted_skills:
@@ -264,7 +263,7 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
         
         for task in tasks:
             # Refresh from DB if we extracted skills
-            if skills_extracted_count > 0 and task in tasks_needing_skills[:10]:
+            if skills_extracted_count > 0 and task in tasks_needing_skills[:15]:
                 task.refresh_from_db(fields=['required_skills'])
             
             if task.required_skills:
@@ -295,7 +294,7 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                         })
                         required_skills[skill_name]['unique_tasks'].add(task.id)
         
-        # Calculate gaps with improved methodology
+        # Calculate gaps
         gaps = []
         
         for skill_name, requirements in required_skills.items():
@@ -307,9 +306,7 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                 'members': []
             })
             
-            # Calculate total team coverage for this skill (considering skill level hierarchy)
-            # Expert can cover Advanced, Intermediate, Beginner work
-            # Advanced can cover Intermediate, Beginner work, etc.
+            # Calculate team coverage for this skill
             expert_count = available.get('expert', 0)
             advanced_count = available.get('advanced', 0)
             intermediate_count = available.get('intermediate', 0)
@@ -326,10 +323,41 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                 'beginner': total_team_coverage
             }
             
-            # Number of unique tasks needing this skill
-            unique_task_count = len(requirements.get('unique_tasks', set()))
+            # Total tasks needing this skill (at any level)
+            total_tasks_needing_skill = len(requirements.get('unique_tasks', set()))
+            all_affected_tasks = requirements['tasks']
             
-            # Check each proficiency level
+            # CASE 1: Team has ZERO coverage for this skill
+            # This is always a gap - the team cannot do this work at all
+            if not has_any_coverage:
+                # Calculate gap count based on workload
+                # Assume 1 person can handle up to 5 tasks in a sprint
+                tasks_per_person = 5
+                gap_count = max(1, (total_tasks_needing_skill + tasks_per_person - 1) // tasks_per_person)
+                # Cap at reasonable number (not more than team size)
+                gap_count = min(gap_count, max(2, team_size))
+                
+                # Determine the highest level needed
+                highest_level = 'beginner'
+                for level in ['expert', 'advanced', 'intermediate', 'beginner']:
+                    if requirements[level] > 0:
+                        highest_level = level
+                        break
+                
+                gaps.append({
+                    'skill_name': skill_name,
+                    'proficiency_level': highest_level.capitalize(),
+                    'required_count': gap_count,
+                    'available_count': 0,
+                    'gap_count': gap_count,
+                    'affected_tasks': all_affected_tasks,
+                    'task_count': total_tasks_needing_skill,
+                    'has_team_coverage': False,
+                    'severity': 'critical' if total_tasks_needing_skill >= 3 or highest_level in ['expert', 'advanced'] else 'high'
+                })
+                continue
+            
+            # CASE 2: Team has SOME coverage - check each proficiency level
             for level in ['expert', 'advanced', 'intermediate', 'beginner']:
                 task_count_at_level = requirements[level]
                 
@@ -339,39 +367,47 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
                 # Get effective team members who can handle this level
                 available_for_level = effective_coverage.get(level, 0)
                 
-                # Calculate realistic concurrent capacity need
-                # Assume each team member can handle ~3-5 tasks per sprint
-                tasks_per_member_per_sprint = 4
-                concurrent_slots_needed = max(1, (task_count_at_level + tasks_per_member_per_sprint - 1) // tasks_per_member_per_sprint)
+                # Calculate capacity-based need
+                # Assume each person can handle 4-5 tasks per sprint
+                tasks_per_person = 4
+                slots_needed = max(1, (task_count_at_level + tasks_per_person - 1) // tasks_per_person)
                 
-                # Cap the need at team size (can't need more slots than team size * 2)
-                concurrent_slots_needed = min(concurrent_slots_needed, team_size * 2)
+                # Calculate gap
+                gap_count = max(0, slots_needed - available_for_level)
                 
-                # Calculate actual gap
-                gap_count = max(0, concurrent_slots_needed - available_for_level)
+                # Even if gap_count is 0, check if coverage is thin (bus factor)
+                # If only 1 person covers many tasks, that's a risk
+                is_thin_coverage = available_for_level == 1 and task_count_at_level >= 4
                 
-                # Only report as a gap if there's actually insufficient coverage
-                if gap_count > 0:
+                if gap_count > 0 or is_thin_coverage:
                     affected_tasks = [t for t in requirements['tasks'] if t['level'].lower() == level]
                     
-                    gap = {
-                        'skill_name': skill_name,
-                        'proficiency_level': level.capitalize(),
-                        'required_count': concurrent_slots_needed,
-                        'available_count': available_for_level,
-                        'gap_count': gap_count,
-                        'affected_tasks': affected_tasks,
-                        'task_count': task_count_at_level,
-                        'has_team_coverage': has_any_coverage,
-                        'severity': _calculate_gap_severity(
+                    # Determine severity
+                    if gap_count > 0:
+                        severity = _calculate_gap_severity(
                             skill_name, level, gap_count, affected_tasks,
-                            has_team_coverage=has_any_coverage,
+                            has_team_coverage=True,
                             total_team_coverage=total_team_coverage,
                             effective_coverage=available_for_level,
                             team_size=team_size
                         )
-                    }
-                    gaps.append(gap)
+                    else:
+                        # Thin coverage warning (bus factor risk)
+                        severity = 'low'
+                        gap_count = 1  # Suggest adding 1 more for redundancy
+                    
+                    gaps.append({
+                        'skill_name': skill_name,
+                        'proficiency_level': level.capitalize(),
+                        'required_count': slots_needed,
+                        'available_count': available_for_level,
+                        'gap_count': gap_count,
+                        'affected_tasks': affected_tasks,
+                        'task_count': task_count_at_level,
+                        'has_team_coverage': True,
+                        'thin_coverage': is_thin_coverage and gap_count == 1,
+                        'severity': severity
+                    })
         
         # Sort by severity and gap size
         severity_order = {'critical': 0, 'high': 1, 'medium': 2, 'low': 3}
@@ -392,14 +428,15 @@ def _calculate_gap_severity(skill_name: str, level: str, gap_count: int, affecte
     Determine severity of a skill gap based on multiple factors
     
     CALIBRATION LOGIC:
-    - If the team has coverage for the skill, severity is reduced (someone can help/mentor)
-    - Critical should be reserved for truly blocking situations: no team coverage at all
-    - Gap count is weighted against team size to avoid over-alarming small teams
+    - Critical: Team has NO coverage OR coverage is zero for the required level with many tasks
+    - High: Significant capacity gap (need 2+ more) or many tasks affected
+    - Medium: Moderate gap with some coverage
+    - Low: Minor gap, thin coverage warning, or small impact
     
     Args:
         skill_name: Name of the skill
         level: Proficiency level
-        gap_count: Number of resources short (concurrent slots, not task count)
+        gap_count: Number of resources short
         affected_tasks: Tasks requiring this skill
         has_team_coverage: Whether any team member has this skill at any level
         total_team_coverage: Total team members with this skill at any level
@@ -409,46 +446,43 @@ def _calculate_gap_severity(skill_name: str, level: str, gap_count: int, affecte
     Returns:
         Severity level: 'low', 'medium', 'high', or 'critical'
     """
-    # If the team has coverage for this skill, the situation is less severe
-    # because knowledge transfer, mentoring, or stretch assignments are possible
-    if has_team_coverage:
-        # Team has the skill - severity is reduced
-        
-        # If the team can effectively cover the level (e.g., Expert covers Advanced needs)
-        if effective_coverage > 0:
-            # We have partial coverage - this is at most "medium"
-            if len(affected_tasks) >= 5:
+    num_affected = len(affected_tasks)
+    
+    # ZERO COVERAGE for this skill at the required level
+    if effective_coverage == 0:
+        if has_team_coverage:
+            # Team has the skill but at lower level than needed
+            # e.g., have Intermediate but need Expert
+            if level in ['expert', 'advanced'] and num_affected >= 2:
+                return 'high'
+            if num_affected >= 4:
+                return 'high'
+            if num_affected >= 2:
                 return 'medium'
             return 'low'
-        
-        # Team has the skill but at lower level than needed
-        # e.g., have Intermediate but need Expert
-        if gap_count >= 2:
+        else:
+            # Team has NO ONE with this skill - this is serious
+            if num_affected >= 3 or level in ['expert', 'advanced']:
+                return 'critical'
+            if num_affected >= 2:
+                return 'high'
+            return 'medium'  # Even 1 task needing a skill no one has is medium
+    
+    # PARTIAL COVERAGE exists
+    # The gap represents additional capacity needed beyond what we have
+    
+    if gap_count >= 2:
+        # Need 2+ more people
+        if num_affected >= 5:
             return 'high'
-        if len(affected_tasks) >= 3:
-            return 'medium'
-        return 'low'
-    
-    # Team has NO coverage for this skill at all - more serious
-    # But still calibrate against gap size and impact
-    
-    # Critical: No coverage AND significant gap AND high-level skill needed
-    if gap_count >= 2 and level in ['expert', 'advanced']:
-        return 'critical'
-    
-    # Critical: No coverage AND would block significant work
-    if gap_count >= 3 or len(affected_tasks) >= 8:
-        return 'critical'
-    
-    # High: No coverage AND multiple tasks affected
-    if gap_count >= 2 or len(affected_tasks) >= 4:
-        return 'high'
-    
-    # Medium: No coverage but limited impact
-    if len(affected_tasks) >= 2:
         return 'medium'
     
-    # Low: No coverage but minimal impact (1 task, small gap)
+    # gap_count is 1
+    if num_affected >= 6:
+        return 'medium'
+    if num_affected >= 3:
+        return 'low'
+    
     return 'low'
 
 

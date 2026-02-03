@@ -204,9 +204,15 @@
                         {% endfor %}
                     {% else %}
                         <div class="empty-state">
-                            <i class="fas fa-check-circle text-success"></i>
-                            <h5>No Skill Gaps Identified</h5>
-                            <p class="text-muted">Run analysis to check for skill gaps in your team.</p>
+                            <i class="fas fa-search text-muted"></i>
+                            <h5>No Skill Gaps Found</h5>
+                            <p class="text-muted">
+                                Click "Run Analysis" to extract required skills from tasks and compare against team capabilities.
+                            </p>
+                            <p class="text-muted small">
+                                <i class="fas fa-info-circle me-1"></i>
+                                If tasks don't have required skills defined, the AI will attempt to extract them automatically.
+                            </p>
                             <button class="btn btn-primary" onclick="runSkillAnalysis()">
                                 <i class="fas fa-sync-alt me-1"></i> Run Analysis
                             </button>

@@ -3424,18 +3424,26 @@ def analyze_skill_gaps_api(request, board_id):
             key = (gap_data['skill_name'], gap_data['proficiency_level'])
             active_gap_keys.add(key)
         
-        # Mark stale gaps as resolved (gaps that no longer exist in current analysis)
-        stale_gaps = SkillGap.objects.filter(
-            board=board,
-            status__in=['identified', 'acknowledged', 'in_progress']
-        )
-        for stale_gap in stale_gaps:
-            key = (stale_gap.skill_name, stale_gap.proficiency_level)
-            if key not in active_gap_keys:
-                stale_gap.status = 'resolved'
-                stale_gap.resolved_at = timezone.now()
-                stale_gap.save()
-                logger.info(f"Auto-resolved stale gap: {stale_gap.skill_name} ({stale_gap.proficiency_level})")
+        # Only auto-resolve stale gaps if the new analysis found SOME gaps
+        # If analysis found 0 gaps, it might be an error (API failure, no tasks with skills)
+        # In that case, preserve existing gaps rather than wiping them all out
+        if len(gaps) > 0:
+            stale_gaps = SkillGap.objects.filter(
+                board=board,
+                status__in=['identified', 'acknowledged', 'in_progress']
+            )
+            resolved_count = 0
+            for stale_gap in stale_gaps:
+                key = (stale_gap.skill_name, stale_gap.proficiency_level)
+                if key not in active_gap_keys:
+                    stale_gap.status = 'resolved'
+                    stale_gap.resolved_at = timezone.now()
+                    stale_gap.save()
+                    resolved_count += 1
+            if resolved_count > 0:
+                logger.info(f"Auto-resolved {resolved_count} stale gap(s) for board {board.name}")
+        else:
+            logger.warning(f"Analysis found 0 gaps for board {board.name} - preserving existing gaps")
         
         # Save gaps to database (without AI recommendations initially for speed)
         saved_gaps = []
