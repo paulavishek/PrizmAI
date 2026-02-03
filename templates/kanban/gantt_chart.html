@@ -1119,6 +1119,43 @@
     let criticalPathTasks = new Set(); // Store task IDs on critical path
     
     /**
+     * Calculate Critical Path for the entire project
+     * Handles two scenarios:
+     * 1. With Phases: Calculate critical path separately for each phase
+     * 2. Without Phases: Calculate critical path across all tasks
+     */
+    function calculateProjectCriticalPath() {
+        const allCriticalTasks = new Set();
+        
+        if (hasPhases) {
+            // WITH PHASES: Calculate critical path for each phase independently
+            console.log('%c CPM: Calculating critical path per phase', 'background: #6366f1; color: white; padding: 2px 6px;');
+            
+            for (let i = 1; i <= numPhases; i++) {
+                const phaseName = `Phase ${i}`;
+                const phaseTasks = tasks.filter(t => t.phase === phaseName);
+                
+                if (phaseTasks.length > 0) {
+                    const phaseCriticalPath = calculateCriticalPath(phaseTasks);
+                    console.log(`  Phase ${i}: ${phaseCriticalPath.size} critical tasks out of ${phaseTasks.length}`);
+                    
+                    // Merge into all critical tasks
+                    phaseCriticalPath.forEach(taskId => allCriticalTasks.add(taskId));
+                }
+            }
+        } else {
+            // WITHOUT PHASES: Calculate critical path across all tasks
+            console.log('%c CPM: Calculating project-wide critical path', 'background: #6366f1; color: white; padding: 2px 6px;');
+            
+            const projectCriticalPath = calculateCriticalPath(tasks);
+            projectCriticalPath.forEach(taskId => allCriticalTasks.add(taskId));
+        }
+        
+        console.log(`%c Total critical path tasks: ${allCriticalTasks.size}`, 'background: #dc2626; color: white; padding: 2px 6px;');
+        return allCriticalTasks;
+    }
+    
+    /**
      * Calculate the Critical Path using the Critical Path Method (CPM) algorithm
      * 
      * Forward pass: Calculate earliest start (ES) and earliest finish (EF) for each task
@@ -1285,13 +1322,10 @@
         // Calculate slack and identify critical path
         const criticalPath = new Set();
         
-        console.log('%c CPM Debug - All Tasks:', 'background: #333; color: #fff; padding: 2px 5px;');
         taskMap.forEach((task, taskId) => {
             if (task.ES && task.LS) {
                 // Slack = LS - ES (in days)
                 task.slack = Math.round((task.LS - task.ES) / (1000 * 60 * 60 * 24));
-                
-                console.log(`  Task ${taskId} (${task.name.substring(0, 20)}): ES=${task.ES.toISOString().split('T')[0]}, LS=${task.LS.toISOString().split('T')[0]}, Slack=${task.slack}, Deps=[${task.dependencies.join(',')}], Succs=[${task.successors.join(',')}]`);
                 
                 // Tasks with zero or near-zero slack are on the critical path
                 // Use <= 1 to account for rounding errors
@@ -1302,14 +1336,14 @@
         });
         
         console.log('%c Critical Path Analysis Complete', 'background: #dc2626; color: white; padding: 4px 8px; border-radius: 4px;');
-        console.log(`Found ${criticalPath.size} tasks on critical path:`, Array.from(criticalPath));
+        console.log(`Found ${criticalPath.size} tasks on critical path out of ${taskMap.size} total tasks`);
         
-        // Log details for debugging
-        taskMap.forEach((task, taskId) => {
-            if (criticalPath.has(taskId)) {
-                console.log(`  🔴 ${task.name}: Slack = ${task.slack} days (CRITICAL)`);
-            }
+        // Log critical path tasks
+        const criticalTasks = Array.from(criticalPath).map(id => {
+            const t = taskMap.get(id);
+            return t ? `${t.name.substring(0, 25)}...` : id;
         });
+        console.log('Critical path tasks:', criticalTasks);
         
         return criticalPath;
     }
@@ -1495,7 +1529,7 @@
         
         // Calculate and apply critical path (only on first call or when tasks change)
         if (criticalPathTasks.size === 0) {
-            criticalPathTasks = calculateCriticalPath(tasks);
+            criticalPathTasks = calculateProjectCriticalPath();
         }
         applyCriticalPathStyling();
 
@@ -2351,8 +2385,11 @@
         }
 
         // Re-initialize Gantt with phase data
-        // Reset critical path to recalculate for visible tasks
-        criticalPathTasks = calculateCriticalPath(ganttData);
+        // Calculate critical path - per phase if phases exist, project-wide otherwise
+        // Only recalculate if not already done
+        if (criticalPathTasks.size === 0) {
+            criticalPathTasks = calculateProjectCriticalPath();
+        }
         initGanttWithData(ganttData);
     }
 
