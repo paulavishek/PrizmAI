@@ -1899,12 +1899,34 @@
             const isExpanded = expandedPhases.has(phaseName);
 
             // Add phase bar with all required fields to match task structure
+            // Calculate phase dates from actual tasks to ensure correctness
+            const phaseTasks = tasks.filter(t => t.phase === phaseName && t.start && t.end && t.start !== '' && t.end !== '');
+            let phaseStart = data.start;
+            let phaseEnd = data.end;
+            
+            // If we have tasks, recalculate from them to ensure accuracy
+            if (phaseTasks.length > 0) {
+                const taskStarts = phaseTasks.map(t => new Date(t.start)).filter(d => !isNaN(d.getTime()));
+                const taskEnds = phaseTasks.map(t => new Date(t.end)).filter(d => !isNaN(d.getTime()));
+                
+                if (taskStarts.length > 0) {
+                    const minStart = new Date(Math.min(...taskStarts));
+                    phaseStart = minStart.toISOString().split('T')[0];
+                }
+                if (taskEnds.length > 0) {
+                    const maxEnd = new Date(Math.max(...taskEnds));
+                    phaseEnd = maxEnd.toISOString().split('T')[0];
+                }
+                
+                console.log(`%c Phase ${phaseName} dates recalculated - start: ${phaseStart}, end: ${phaseEnd} (from ${phaseTasks.length} tasks)`, 'background: #0f0; color: #000;');
+            }
+            
             const phaseBar = {
                 id: phaseId,
                 name: `${phaseName} ${isExpanded ? '▼' : '▶'} (${data.task_count} tasks)`,
                 fullName: phaseName,
-                start: data.start,
-                end: data.end,
+                start: phaseStart,
+                end: phaseEnd,
                 progress: 0,
                 dependencies: '',
                 custom_class: 'phase-bar',
@@ -1925,14 +1947,14 @@
             if (isExpanded) {
                 // Get phase tasks and sort by ID to maintain consistent order
                 // (regardless of date changes)
-                const phaseTasks = tasks
+                const expandedPhaseTasks = tasks
                     .filter(t => t.phase === phaseName)
                     .sort((a, b) => parseInt(a.id) - parseInt(b.id));
                 
                 // Process tasks
                 const regularTasks = [];
                 
-                phaseTasks.forEach(task => {
+                expandedPhaseTasks.forEach(task => {
                     // Only include tasks with valid start and end date
                     if (!task.end || task.end === 'None' || task.end === '') return;
                     if (!task.start || task.start === 'None' || task.start === '') return;
@@ -1975,6 +1997,11 @@
 
         // Log final gantt data to debug ordering
         console.log('Final ganttData order:', ganttData.map(d => ({ id: d.id, name: d.name, start: d.start, end: d.end, isPhase: d.isPhase })));
+        
+        // DEBUG: Log phase bar dates specifically
+        ganttData.filter(d => d.isPhase).forEach(phase => {
+            console.log(`%c PHASE DATE DEBUG: ${phase.id} - start: ${phase.start}, end: ${phase.end}`, 'background: #f0f; color: #fff; padding: 2px 5px;');
+        });
 
         // WORKAROUND: Frappe Gantt sorts by start date internally
         // To maintain phase order (1, 2, 3), we need to ensure Phase 1 starts earliest
