@@ -806,74 +806,112 @@ class BurndownPredictor:
         risk_assessment: Dict,
         velocity_stats: Dict
     ) -> List:
-        """Create burndown alerts based on prediction"""
+        """Create burndown alerts based on prediction
+        
+        Only creates alerts if no active alert of the same type exists for this board.
+        This prevents duplicate alerts from being created on each prediction generation.
+        """
         from kanban.burndown_models import BurndownAlert
         
         alerts = []
+        board = prediction.board
+        
+        # Helper function to check if active alert of type already exists
+        def active_alert_exists(alert_type):
+            return BurndownAlert.objects.filter(
+                board=board,
+                alert_type=alert_type,
+                status='active'
+            ).exists()
         
         # Delay probability alert
         delay_prob = float(risk_assessment['delay_probability'])
         if delay_prob >= 50:
-            alert = BurndownAlert.objects.create(
-                prediction=prediction,
-                board=prediction.board,
-                alert_type='target_risk',
-                severity='critical',
-                status='active',
-                title=f"Critical: {delay_prob:.0f}% Risk of Missing Target",
-                message=f"Current trajectory shows {delay_prob:.0f}% probability of missing target date. "
-                       f"Immediate action required to get back on track.",
-                metric_value=Decimal(str(delay_prob)),
-                threshold_value=Decimal('50.0'),
-                suggested_actions=[s for s in prediction.actionable_suggestions if s.get('impact') == 'critical' or s.get('priority') <= 2],
-            )
-            alerts.append(alert)
+            if not active_alert_exists('target_risk'):
+                alert = BurndownAlert.objects.create(
+                    prediction=prediction,
+                    board=prediction.board,
+                    alert_type='target_risk',
+                    severity='critical',
+                    status='active',
+                    title=f"Critical: {delay_prob:.0f}% Risk of Missing Target",
+                    message=f"Current trajectory shows {delay_prob:.0f}% probability of missing target date. "
+                           f"Immediate action required to get back on track.",
+                    metric_value=Decimal(str(delay_prob)),
+                    threshold_value=Decimal('50.0'),
+                    suggested_actions=[s for s in prediction.actionable_suggestions if s.get('impact') == 'critical' or s.get('priority') <= 2],
+                )
+                alerts.append(alert)
         elif delay_prob >= 30:
-            alert = BurndownAlert.objects.create(
-                prediction=prediction,
-                board=prediction.board,
+            if not active_alert_exists('target_risk'):
+                alert = BurndownAlert.objects.create(
+                    prediction=prediction,
+                    board=prediction.board,
+                    alert_type='target_risk',
+                    severity='warning',
+                    status='active',
+                    title=f"Warning: {delay_prob:.0f}% Risk of Delay",
+                    message=f"Elevated risk of missing target. Review priorities and consider corrective actions.",
+                    metric_value=Decimal(str(delay_prob)),
+                    threshold_value=Decimal('30.0'),
+                    suggested_actions=[s for s in prediction.actionable_suggestions if s.get('priority') <= 3],
+                )
+                alerts.append(alert)
+        else:
+            # Risk is now low - resolve any existing target_risk alerts
+            BurndownAlert.objects.filter(
+                board=board,
                 alert_type='target_risk',
-                severity='warning',
-                status='active',
-                title=f"Warning: {delay_prob:.0f}% Risk of Delay",
-                message=f"Elevated risk of missing target. Review priorities and consider corrective actions.",
-                metric_value=Decimal(str(delay_prob)),
-                threshold_value=Decimal('30.0'),
-                suggested_actions=[s for s in prediction.actionable_suggestions if s.get('priority') <= 3],
-            )
-            alerts.append(alert)
+                status='active'
+            ).update(status='resolved')
         
         # Velocity variance alert
         cv = velocity_stats['coefficient_of_variation']
         if cv > 50:
-            alert = BurndownAlert.objects.create(
-                prediction=prediction,
-                board=prediction.board,
+            if not active_alert_exists('variance_high'):
+                alert = BurndownAlert.objects.create(
+                    prediction=prediction,
+                    board=prediction.board,
+                    alert_type='variance_high',
+                    severity='warning',
+                    status='active',
+                    title=f"High Velocity Variance Detected",
+                    message=f"Team velocity is inconsistent ({cv:.1f}% CV). This makes predictions less reliable. "
+                           f"Focus on stabilizing workflow and removing blockers.",
+                    metric_value=Decimal(str(cv)),
+                    threshold_value=Decimal('50.0'),
+                    suggested_actions=[s for s in prediction.actionable_suggestions if s.get('type') == 'stabilize_velocity'],
+                )
+                alerts.append(alert)
+        else:
+            # Variance is now acceptable - resolve any existing variance_high alerts
+            BurndownAlert.objects.filter(
+                board=board,
                 alert_type='variance_high',
-                severity='warning',
-                status='active',
-                title=f"High Velocity Variance Detected",
-                message=f"Team velocity is inconsistent ({cv:.1f}% CV). This makes predictions less reliable. "
-                       f"Focus on stabilizing workflow and removing blockers.",
-                metric_value=Decimal(str(cv)),
-                threshold_value=Decimal('50.0'),
-                suggested_actions=[s for s in prediction.actionable_suggestions if s.get('type') == 'stabilize_velocity'],
-            )
-            alerts.append(alert)
+                status='active'
+            ).update(status='resolved')
         
         # Velocity decline alert
         if velocity_stats['trend'] == 'decreasing':
-            alert = BurndownAlert.objects.create(
-                prediction=prediction,
-                board=prediction.board,
+            if not active_alert_exists('velocity_drop'):
+                alert = BurndownAlert.objects.create(
+                    prediction=prediction,
+                    board=prediction.board,
+                    alert_type='velocity_drop',
+                    severity='critical',
+                    status='active',
+                    title="Team Velocity Declining",
+                    message="Team velocity has been declining over recent periods. "
+                           "Investigate root causes and take corrective action.",
+                    suggested_actions=[s for s in prediction.actionable_suggestions if s.get('type') == 'address_slowdown'],
+                )
+                alerts.append(alert)
+        else:
+            # Velocity is no longer declining - resolve any existing velocity_drop alerts
+            BurndownAlert.objects.filter(
+                board=board,
                 alert_type='velocity_drop',
-                severity='critical',
-                status='active',
-                title="Team Velocity Declining",
-                message="Team velocity has been declining over recent periods. "
-                       "Investigate root causes and take corrective action.",
-                suggested_actions=[s for s in prediction.actionable_suggestions if s.get('type') == 'address_slowdown'],
-            )
-            alerts.append(alert)
+                status='active'
+            ).update(status='resolved')
         
         return alerts
