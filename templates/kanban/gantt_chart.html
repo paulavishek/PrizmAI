@@ -156,6 +156,68 @@
         ry: 6;
     }
 
+    /* ============================================
+       CRITICAL PATH STYLING
+       ============================================ */
+
+    /* Critical path tasks - distinctive red/orange color */
+    .gantt .bar-wrapper .bar[data-critical-path="true"] {
+        fill: #dc2626 !important;
+        stroke: #991b1b !important;
+        stroke-width: 2px !important;
+        filter: drop-shadow(0 3px 6px rgba(220, 38, 38, 0.4)) !important;
+    }
+
+    .gantt .bar-wrapper .bar[data-critical-path="true"]:hover {
+        fill: #b91c1c !important;
+        filter: brightness(1.1) drop-shadow(0 4px 8px rgba(220, 38, 38, 0.5)) !important;
+    }
+
+    /* Critical path toggle control */
+    .critical-path-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        user-select: none;
+    }
+
+    .critical-path-toggle:hover {
+        background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+        border-color: #f87171;
+    }
+
+    .critical-path-toggle input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        accent-color: #dc2626;
+        cursor: pointer;
+    }
+
+    .critical-path-toggle label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #991b1b;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .critical-path-toggle .cp-indicator {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        background: #dc2626;
+        border-radius: 3px;
+        border: 1px solid #991b1b;
+    }
+
     /* Hide progress overlay for cleaner look */
     .gantt .bar-wrapper .bar-progress {
         display: none !important;
@@ -854,6 +916,17 @@
         {% endif %}
 
         {% if tasks %}
+            <!-- Critical Path Toggle -->
+            <div class="d-flex justify-content-end mb-3">
+                <div class="critical-path-toggle">
+                    <input type="checkbox" id="critical-path-toggle" checked>
+                    <label for="critical-path-toggle">
+                        <span class="cp-indicator"></span>
+                        Show Critical Path
+                    </label>
+                </div>
+            </div>
+
             <!-- Gantt Chart Wrapper - this div will be cleared and recreated on each render -->
             <div id="gantt-chart-wrapper">
                 <svg id="gantt"></svg>
@@ -894,6 +967,10 @@
                     <span>Phase</span>
                 </div>
                 {% endif %}
+                <div class="legend-item" id="critical-path-legend">
+                    <span class="legend-color" style="background: #dc2626; border: 2px solid #991b1b;"></span>
+                    <span>Critical Path</span>
+                </div>
                 <div class="legend-item" style="margin-left: auto;">
                     <svg width="40" height="12" style="vertical-align: middle;">
                         <defs>
@@ -1034,6 +1111,254 @@
         }
     });
 
+    // ============================================
+    // CRITICAL PATH METHOD (CPM) IMPLEMENTATION
+    // ============================================
+    
+    let showCriticalPath = true; // Default: ON
+    let criticalPathTasks = new Set(); // Store task IDs on critical path
+    
+    /**
+     * Calculate the Critical Path using the Critical Path Method (CPM) algorithm
+     * 
+     * Forward pass: Calculate earliest start (ES) and earliest finish (EF) for each task
+     * Backward pass: Calculate latest start (LS) and latest finish (LF) for each task
+     * Slack = LS - ES (or LF - EF)
+     * Tasks with zero slack are on the critical path
+     */
+    function calculateCriticalPath(taskList) {
+        if (!taskList || taskList.length === 0) return new Set();
+        
+        // Filter to only include tasks with valid dates (exclude phases)
+        const validTasks = taskList.filter(t => 
+            t.start && t.end && 
+            t.start !== '' && t.end !== '' && 
+            !t.isPhase
+        );
+        
+        if (validTasks.length === 0) return new Set();
+        
+        // Create a set of valid task IDs for quick lookup
+        const validTaskIds = new Set(validTasks.map(t => String(t.id)));
+        
+        // Build task map for quick lookup - FIRST PASS: create all entries
+        const taskMap = new Map();
+        validTasks.forEach(task => {
+            taskMap.set(String(task.id), {
+                id: String(task.id),
+                name: task.name,
+                start: new Date(task.start),
+                end: new Date(task.end),
+                duration: Math.max(1, Math.ceil((new Date(task.end) - new Date(task.start)) / (1000 * 60 * 60 * 24))),
+                rawDependencies: task.dependencies || '',
+                dependencies: [], // Will be populated in second pass
+                successors: [],
+                ES: null, // Earliest Start
+                EF: null, // Earliest Finish
+                LS: null, // Latest Start
+                LF: null, // Latest Finish
+                slack: null
+            });
+        });
+        
+        // SECOND PASS: Parse dependencies now that all tasks are in the map
+        taskMap.forEach((task, taskId) => {
+            if (task.rawDependencies) {
+                const depIds = task.rawDependencies.split(',')
+                    .map(d => String(d).trim())
+                    .filter(d => d && validTaskIds.has(d));
+                task.dependencies = depIds;
+            }
+        });
+        
+        // Build successor relationships
+        taskMap.forEach((task, taskId) => {
+            task.dependencies.forEach(depId => {
+                const depTask = taskMap.get(depId);
+                if (depTask) {
+                    depTask.successors.push(taskId);
+                }
+            });
+        });
+        
+        // FORWARD PASS: Calculate ES and EF
+        // ES = max(EF of all predecessors) or project start if no predecessors
+        // EF = ES + duration
+        
+        // Find project start date (earliest start among all tasks)
+        let projectStart = null;
+        taskMap.forEach(task => {
+            if (!projectStart || task.start < projectStart) {
+                projectStart = task.start;
+            }
+        });
+        
+        // Topological sort for forward pass
+        const visited = new Set();
+        const sorted = [];
+        
+        function topologicalSort(taskId) {
+            if (visited.has(taskId)) return;
+            visited.add(taskId);
+            
+            const task = taskMap.get(taskId);
+            if (!task) return;
+            
+            // Visit all dependencies first
+            task.dependencies.forEach(depId => {
+                if (taskMap.has(depId)) {
+                    topologicalSort(depId);
+                }
+            });
+            
+            sorted.push(taskId);
+        }
+        
+        // Sort all tasks
+        taskMap.forEach((_, taskId) => topologicalSort(taskId));
+        
+        // Forward pass
+        sorted.forEach(taskId => {
+            const task = taskMap.get(taskId);
+            if (!task) return;
+            
+            // ES = max(EF of predecessors) or task's actual start date
+            if (task.dependencies.length === 0) {
+                task.ES = task.start;
+            } else {
+                let maxPredEF = projectStart;
+                task.dependencies.forEach(depId => {
+                    const dep = taskMap.get(depId);
+                    if (dep && dep.EF && dep.EF > maxPredEF) {
+                        maxPredEF = dep.EF;
+                    }
+                });
+                task.ES = maxPredEF > task.start ? maxPredEF : task.start;
+            }
+            
+            // EF = ES + duration
+            task.EF = new Date(task.ES);
+            task.EF.setDate(task.EF.getDate() + task.duration);
+        });
+        
+        // Find project end date (latest EF)
+        let projectEnd = null;
+        taskMap.forEach(task => {
+            if (!projectEnd || (task.EF && task.EF > projectEnd)) {
+                projectEnd = task.EF;
+            }
+        });
+        
+        // BACKWARD PASS: Calculate LF and LS
+        // LF = min(LS of all successors) or project end if no successors
+        // LS = LF - duration
+        
+        // Reverse order for backward pass
+        const reverseSorted = [...sorted].reverse();
+        
+        reverseSorted.forEach(taskId => {
+            const task = taskMap.get(taskId);
+            if (!task) return;
+            
+            // LF = min(LS of successors) or project end
+            if (task.successors.length === 0) {
+                task.LF = projectEnd;
+            } else {
+                let minSuccLS = projectEnd;
+                task.successors.forEach(succId => {
+                    const succ = taskMap.get(succId);
+                    if (succ && succ.LS && succ.LS < minSuccLS) {
+                        minSuccLS = succ.LS;
+                    }
+                });
+                task.LF = minSuccLS;
+            }
+            
+            // LS = LF - duration
+            task.LS = new Date(task.LF);
+            task.LS.setDate(task.LS.getDate() - task.duration);
+        });
+        
+        // Calculate slack and identify critical path
+        const criticalPath = new Set();
+        
+        console.log('%c CPM Debug - All Tasks:', 'background: #333; color: #fff; padding: 2px 5px;');
+        taskMap.forEach((task, taskId) => {
+            if (task.ES && task.LS) {
+                // Slack = LS - ES (in days)
+                task.slack = Math.round((task.LS - task.ES) / (1000 * 60 * 60 * 24));
+                
+                console.log(`  Task ${taskId} (${task.name.substring(0, 20)}): ES=${task.ES.toISOString().split('T')[0]}, LS=${task.LS.toISOString().split('T')[0]}, Slack=${task.slack}, Deps=[${task.dependencies.join(',')}], Succs=[${task.successors.join(',')}]`);
+                
+                // Tasks with zero or near-zero slack are on the critical path
+                // Use <= 1 to account for rounding errors
+                if (task.slack <= 1) {
+                    criticalPath.add(taskId);
+                }
+            }
+        });
+        
+        console.log('%c Critical Path Analysis Complete', 'background: #dc2626; color: white; padding: 4px 8px; border-radius: 4px;');
+        console.log(`Found ${criticalPath.size} tasks on critical path:`, Array.from(criticalPath));
+        
+        // Log details for debugging
+        taskMap.forEach((task, taskId) => {
+            if (criticalPath.has(taskId)) {
+                console.log(`  🔴 ${task.name}: Slack = ${task.slack} days (CRITICAL)`);
+            }
+        });
+        
+        return criticalPath;
+    }
+    
+    /**
+     * Apply critical path styling to task bars
+     */
+    function applyCriticalPathStyling() {
+        if (!showCriticalPath) {
+            // Remove critical path styling from all bars
+            document.querySelectorAll('.bar-wrapper .bar[data-critical-path="true"]').forEach(bar => {
+                bar.removeAttribute('data-critical-path');
+            });
+            return;
+        }
+        
+        // Apply critical path attribute to tasks on the critical path
+        criticalPathTasks.forEach(taskId => {
+            const barWrapper = document.querySelector(`.bar-wrapper[data-id="${taskId}"]`);
+            if (barWrapper) {
+                const bar = barWrapper.querySelector('.bar');
+                if (bar) {
+                    bar.setAttribute('data-critical-path', 'true');
+                }
+            }
+        });
+    }
+    
+    /**
+     * Toggle critical path visibility
+     */
+    function toggleCriticalPath(enabled) {
+        showCriticalPath = enabled;
+        applyCriticalPathStyling();
+        
+        // Update legend visibility
+        const legend = document.getElementById('critical-path-legend');
+        if (legend) {
+            legend.style.opacity = enabled ? '1' : '0.5';
+        }
+    }
+    
+    // Initialize critical path toggle event listener
+    document.addEventListener('DOMContentLoaded', function() {
+        const toggle = document.getElementById('critical-path-toggle');
+        if (toggle) {
+            toggle.addEventListener('change', function() {
+                toggleCriticalPath(this.checked);
+            });
+        }
+    });
+
     let ganttChart = null;
     let currentViewMode = 'Week';
 
@@ -1164,6 +1489,12 @@
                 barElement.setAttribute('data-priority', task.priority);
             }
         });
+        
+        // Calculate and apply critical path (only on first call or when tasks change)
+        if (criticalPathTasks.size === 0) {
+            criticalPathTasks = calculateCriticalPath(tasks);
+        }
+        applyCriticalPathStyling();
 
         // Enhance dependency arrows with better styling
         enhanceDependencyArrows();
@@ -1917,8 +2248,6 @@
                     const maxEnd = new Date(Math.max(...taskEnds));
                     phaseEnd = maxEnd.toISOString().split('T')[0];
                 }
-                
-                console.log(`%c Phase ${phaseName} dates recalculated - start: ${phaseStart}, end: ${phaseEnd} (from ${phaseTasks.length} tasks)`, 'background: #0f0; color: #000;');
             }
             
             const phaseBar = {
@@ -1995,14 +2324,6 @@
             }
         });
 
-        // Log final gantt data to debug ordering
-        console.log('Final ganttData order:', ganttData.map(d => ({ id: d.id, name: d.name, start: d.start, end: d.end, isPhase: d.isPhase })));
-        
-        // DEBUG: Log phase bar dates specifically
-        ganttData.filter(d => d.isPhase).forEach(phase => {
-            console.log(`%c PHASE DATE DEBUG: ${phase.id} - start: ${phase.start}, end: ${phase.end}`, 'background: #f0f; color: #fff; padding: 2px 5px;');
-        });
-
         // WORKAROUND: Frappe Gantt sorts by start date internally
         // To maintain phase order (1, 2, 3), we need to ensure Phase 1 starts earliest
         // Add a small visual hack: prepend phase number to ensure correct display order
@@ -2027,6 +2348,8 @@
         }
 
         // Re-initialize Gantt with phase data
+        // Reset critical path to recalculate for visible tasks
+        criticalPathTasks = calculateCriticalPath(ganttData);
         initGanttWithData(ganttData);
     }
 
