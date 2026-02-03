@@ -832,6 +832,9 @@ function initColumnScrolling() {
             minHeight: COLUMN_SCROLL_CONFIG.MIN_HEIGHT + 'px'
         });
         
+        // Initial update of task counts for all columns
+        updateAllColumnTaskCounts();
+        
         // Initial update
         updateColumnScrolling();
         
@@ -847,6 +850,28 @@ function initColumnScrolling() {
     }
 }
 
+// Update task count display for a specific column
+function updateColumnTaskCount(columnWrapper, taskCount) {
+    if (!columnWrapper) return;
+    
+    const taskCountSpan = columnWrapper.querySelector('.column-task-count');
+    if (taskCountSpan) {
+        taskCountSpan.textContent = taskCount;
+        console.log(`Updated task count display: ${taskCount}`);
+    }
+}
+
+// Update task counts for all columns
+function updateAllColumnTaskCounts() {
+    const columns = document.querySelectorAll('.kanban-column-tasks');
+    columns.forEach(column => {
+        const tasks = column.querySelectorAll('.kanban-task');
+        const taskCount = tasks.length;
+        const columnWrapper = column.closest('.kanban-column');
+        updateColumnTaskCount(columnWrapper, taskCount);
+    });
+}
+
 function updateColumnScrolling() {
     try {
         console.log('Updating column scrolling...');
@@ -860,7 +885,11 @@ function updateColumnScrolling() {
             const columnWrapper = column.closest('.kanban-column');
             
             console.log(`Column ${index + 1}: ${taskCount} tasks`);
-              // Add or remove scrollable class based on task count
+            
+            // Update task count display
+            updateColumnTaskCount(columnWrapper, taskCount);
+            
+            // Add or remove scrollable class based on task count
             if (taskCount > COLUMN_SCROLL_CONFIG.TASK_THRESHOLD) {
                 console.log(`  → Making column ${index + 1} scrollable`);
                 column.classList.add('scrollable');
@@ -921,6 +950,7 @@ function updateColumnScrolling() {
 
 // Make function globally accessible
 window.kanbanUpdateColumnScrolling = updateColumnScrolling;
+window.updateAllColumnTaskCounts = updateAllColumnTaskCounts;
 
 // Force cleanup function to reset all column styles
 function forceCleanupAllColumns() {
