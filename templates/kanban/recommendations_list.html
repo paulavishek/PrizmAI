@@ -187,31 +187,10 @@
                                 </div>
                                 {% endif %}
                                 
-                                <!-- Actions - Consistent UI with Accept/Reject always visible -->
+                                <!-- Actions - Clean sequential workflow, each stage shows ONLY its buttons -->
                                 <div class="d-grid gap-2">
-                                    {% if rec.status == 'accepted' %}
-                                    <!-- Accepted: Show Preview & Implement above Accept/Reject -->
-                                    <button type="button" class="btn btn-outline-info btn-sm w-100 mb-2" 
-                                            onclick="previewChanges({{ rec.id }})">
-                                        <i class="fas fa-eye"></i> Preview Changes
-                                    </button>
-                                    <button type="button" class="btn btn-primary btn-sm w-100 mb-2" 
-                                            onclick="showImplementModal({{ rec.id }}, '{{ rec.title|escapejs }}')">
-                                        <i class="fas fa-check-double"></i> Implement Changes
-                                    </button>
-                                    {% elif rec.status == 'implemented' %}
-                                    <!-- Implemented: Show View Changes above Accept/Reject -->
-                                    <button type="button" class="btn btn-outline-secondary btn-sm w-100 mb-2" 
-                                            onclick="viewImplementationDetails({{ rec.id }})">
-                                        <i class="fas fa-history"></i> View Changes Made
-                                    </button>
-                                    <small class="text-muted text-center d-block mb-2">
-                                        <i class="fas fa-check-circle text-success"></i>
-                                        Implemented {{ rec.implemented_at|date:"M d, Y H:i" }}
-                                    </small>
-                                    {% endif %}
-                                    
-                                    <!-- Accept/Reject buttons ALWAYS visible on every recommendation -->
+                                    {% if rec.status == 'pending' %}
+                                    <!-- Stage 1: ONLY Accept/Reject -->
                                     <form method="post" action="{% url 'recommendation_action' rec.id %}" class="d-inline">
                                         {% csrf_token %}
                                         <input type="hidden" name="action" value="accept">
@@ -226,6 +205,42 @@
                                             <i class="fas fa-times"></i> Reject
                                         </button>
                                     </form>
+                                    
+                                    {% elif rec.status == 'accepted' %}
+                                    <!-- Stage 2: ONLY Preview & Implement -->
+                                    <button type="button" class="btn btn-outline-info btn-sm w-100 mb-2" 
+                                            onclick="previewChanges({{ rec.id }})">
+                                        <i class="fas fa-eye"></i> Preview Changes
+                                    </button>
+                                    <button type="button" class="btn btn-primary btn-sm w-100" 
+                                            onclick="showImplementModal({{ rec.id }}, '{{ rec.title|escapejs }}')">
+                                        <i class="fas fa-check-double"></i> Implement Changes
+                                    </button>
+                                    
+                                    {% elif rec.status == 'implemented' %}
+                                    <!-- Stage 3: ONLY View Changes Made -->
+                                    <button type="button" class="btn btn-outline-secondary btn-sm w-100" 
+                                            onclick="viewImplementationDetails({{ rec.id }})">
+                                        <i class="fas fa-history"></i> View Changes Made
+                                    </button>
+                                    
+                                    {% elif rec.status == 'rejected' %}
+                                    <!-- Rejected: Allow re-accepting -->
+                                    <form method="post" action="{% url 'recommendation_action' rec.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="accept">
+                                        <button type="submit" class="btn btn-success btn-sm w-100 mb-2">
+                                            <i class="fas fa-check"></i> Accept
+                                        </button>
+                                    </form>
+                                    <form method="post" action="{% url 'recommendation_action' rec.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="action" value="reject">
+                                        <button type="submit" class="btn btn-danger btn-sm w-100">
+                                            <i class="fas fa-times"></i> Reject
+                                        </button>
+                                    </form>
+                                    {% endif %}
                                 </div>
                             </div>
                         </div>
