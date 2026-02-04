@@ -457,8 +457,8 @@ def roi_dashboard(request, board_id):
     # Get ROI metrics
     roi_metrics = BudgetAnalyzer.calculate_roi_metrics(board)
     
-    # Get historical ROI snapshots
-    roi_snapshots = ProjectROI.objects.filter(board=board).order_by('-snapshot_date')[:10]
+    # Get historical ROI snapshots (chronological order - oldest first)
+    roi_snapshots = ProjectROI.objects.filter(board=board).order_by('snapshot_date')[:10]
     
     context = {
         'board': board,

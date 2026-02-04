@@ -340,14 +340,40 @@
             responsive: true,
             maintainAspectRatio: true,
             plugins: {
-                legend: { display: false }
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            return context[0].label;
+                        },
+                        label: function(context) {
+                            return '{{ budget.currency }} ' + context.raw.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        }
+                    }
+                }
             },
             scales: {
+                x: {
+                    ticks: {
+                        maxRotation: 45,
+                        minRotation: 0,
+                        autoSkip: true,
+                        maxTicksLimit: 7,
+                        callback: function(value, index, ticks) {
+                            // Show weekly markers (every ~4-5 days for 30 days = ~6-7 labels)
+                            return this.getLabelForValue(value);
+                        }
+                    },
+                    grid: {
+                        display: true,
+                        drawOnChartArea: true
+                    }
+                },
                 y: {
                     beginAtZero: true,
                     ticks: {
                         callback: function(value) {
-                            return '{{ budget.currency }} ' + value.toFixed(2);
+                            return '{{ budget.currency }} ' + value.toLocaleString();
                         }
                     }
                 }
@@ -382,7 +408,8 @@
         }
     });
 
-    // Top 10 Expensive Tasks Chart
+    // Top 10 Expensive Tasks Chart - with full task names for tooltips
+    const fullTaskNames = [{% for task in cost_breakdown|slice:":10" %}'{{ task.task_title|escapejs }}'{% if not forloop.last %}, {% endif %}{% endfor %}];
     const sortedTasks = [...taskCosts].sort((a, b) => b - a).slice(0, 10);
     const sortedLabels = taskLabels.slice(0, 10);
     
@@ -393,7 +420,8 @@
             datasets: [{
                 label: 'Cost',
                 data: taskCosts,
-                backgroundColor: '#007bff'
+                backgroundColor: '#007bff',
+                fullNames: fullTaskNames  // Store full names for tooltip
             }]
         },
         options: {
@@ -401,14 +429,35 @@
             maintainAspectRatio: true,
             indexAxis: 'y',
             plugins: {
-                legend: { display: false }
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        title: function(context) {
+                            // Show full task name in tooltip
+                            const index = context[0].dataIndex;
+                            return fullTaskNames[index] || context[0].label;
+                        },
+                        label: function(context) {
+                            return '{{ budget.currency }} ' + context.raw.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                        }
+                    }
+                }
             },
             scales: {
                 x: {
                     beginAtZero: true,
                     ticks: {
                         callback: function(value) {
-                            return '{{ budget.currency }} ' + value.toFixed(0);
+                            return '{{ budget.currency }} ' + value.toLocaleString();
+                        }
+                    }
+                },
+                y: {
+                    ticks: {
+                        callback: function(value, index) {
+                            // Keep truncated labels but ensure readability
+                            const label = this.getLabelForValue(value);
+                            return label.length > 18 ? label.substring(0, 15) + '...' : label;
                         }
                     }
                 }

@@ -326,7 +326,10 @@
                                     {% endif %}
                                 </div>
                                 
-                                <small class="text-muted">{{ rec.created_at|timesince }} ago</small>
+                                <small class="text-muted" title="Created: {{ rec.created_at|date:'M d, Y H:i' }}" style="cursor: help;">
+                                    <i class="fas fa-clock me-1"></i>{{ rec.created_at|timesince }} ago
+                                    <span class="d-block text-muted" style="font-size: 0.75rem;">{{ rec.created_at|date:'M d, Y H:i' }}</span>
+                                </small>
                             </div>
                         </div>
                         {% endfor %}
