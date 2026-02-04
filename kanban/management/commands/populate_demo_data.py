@@ -1361,21 +1361,29 @@ class Command(BaseCommand):
                     }
                 ])
                 
-                # Create the action items
+                # Create the action items only if they don't already exist for this board
                 for idx, action_data in enumerate(action_items):
-                    days_offset = 14 if action_data['priority'] == 'high' else 30
-                    RetrospectiveActionItem.objects.create(
-                        retrospective=retro,
+                    # Check if this action already exists for this board (avoid duplicates)
+                    existing_action = RetrospectiveActionItem.objects.filter(
                         board=board,
                         title=action_data['title'],
-                        description=action_data['description'],
-                        action_type=action_data['action_type'],
-                        assigned_to=sam if idx == 0 else (jordan if idx == 1 else alex),
-                        target_completion_date=(timezone.now() + timedelta(days=days_offset)).date(),
-                        priority=action_data['priority'],
-                        status='in_progress' if idx == 0 else 'pending',
-                        expected_impact=f'Improve team efficiency and {board.name.lower()} outcomes'
-                    )
+                        assigned_to=sam if idx == 0 else (jordan if idx == 1 else alex)
+                    ).first()
+                    
+                    if not existing_action:
+                        days_offset = 14 if action_data['priority'] == 'high' else 30
+                        RetrospectiveActionItem.objects.create(
+                            retrospective=retro,
+                            board=board,
+                            title=action_data['title'],
+                            description=action_data['description'],
+                            action_type=action_data['action_type'],
+                            assigned_to=sam if idx == 0 else (jordan if idx == 1 else alex),
+                            target_completion_date=(timezone.now() + timedelta(days=days_offset)).date(),
+                            priority=action_data['priority'],
+                            status='in_progress' if idx == 0 else 'pending',
+                            expected_impact=f'Improve team efficiency and {board.name.lower()} outcomes'
+                        )
 
         self.stdout.write('   ✅ Retrospective data created')
 
