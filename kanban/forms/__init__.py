@@ -119,7 +119,7 @@ class TaskForm(forms.ModelForm):
         widget=forms.NumberInput(attrs={
             'class': 'form-control',
             'placeholder': '0.0',
-            'step': '0.5',
+            'step': '0.01',
             'min': '0',
         }),
         help_text='Estimated hours to complete this task',
