@@ -322,7 +322,72 @@
 
                                         <hr>
 
-                                        <!-- 🔗 Task Relationships & Timeline -->
+                                        <!-- � Budget & Cost Estimation -->
+                                        <div class="mb-4">
+                                            <h6><i class="fas fa-dollar-sign text-success"></i> Budget & Cost Estimation</h6>
+                                            <div class="alert alert-info py-2 mb-3">
+                                                <small><i class="fas fa-info-circle me-1"></i> Cost estimates help track project budget and enable AI-powered budget recommendations.</small>
+                                            </div>
+                                            <div class="row">
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="{{ form.estimated_cost.id_for_label }}" class="form-label">
+                                                        <i class="fas fa-money-bill-wave me-1 text-success"></i> Estimated Cost
+                                                    </label>
+                                                    <div class="input-group">
+                                                        <span class="input-group-text">$</span>
+                                                        {{ form.estimated_cost }}
+                                                    </div>
+                                                    <small class="form-text text-muted">{{ form.estimated_cost.help_text }}</small>
+                                                    {% if form.estimated_cost.errors %}
+                                                        <div class="invalid-feedback d-block">{{ form.estimated_cost.errors }}</div>
+                                                    {% endif %}
+                                                </div>
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="{{ form.estimated_hours.id_for_label }}" class="form-label">
+                                                        <i class="fas fa-clock me-1 text-primary"></i> Estimated Hours
+                                                    </label>
+                                                    <div class="input-group">
+                                                        {{ form.estimated_hours }}
+                                                        <span class="input-group-text">hrs</span>
+                                                    </div>
+                                                    <small class="form-text text-muted">{{ form.estimated_hours.help_text }}</small>
+                                                    {% if form.estimated_hours.errors %}
+                                                        <div class="invalid-feedback d-block">{{ form.estimated_hours.errors }}</div>
+                                                    {% endif %}
+                                                </div>
+                                                <div class="col-md-4 mb-3">
+                                                    <label for="{{ form.hourly_rate.id_for_label }}" class="form-label">
+                                                        <i class="fas fa-user-clock me-1 text-info"></i> Hourly Rate
+                                                    </label>
+                                                    <div class="input-group">
+                                                        <span class="input-group-text">$/hr</span>
+                                                        {{ form.hourly_rate }}
+                                                    </div>
+                                                    <small class="form-text text-muted">{{ form.hourly_rate.help_text }}</small>
+                                                    {% if form.hourly_rate.errors %}
+                                                        <div class="invalid-feedback d-block">{{ form.hourly_rate.errors }}</div>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                            <div class="row mt-2">
+                                                <div class="col-12">
+                                                    <div class="card bg-light">
+                                                        <div class="card-body py-2">
+                                                            <small class="text-muted">
+                                                                <i class="fas fa-calculator me-1"></i>
+                                                                <strong>Estimated Labor Cost:</strong>
+                                                                <span id="laborCostPreview">$0.00</span>
+                                                                <span class="ms-2 text-secondary">(Hours × Hourly Rate)</span>
+                                                            </small>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <hr>
+
+                                        <!-- �🔗 Task Relationships & Timeline -->
                                         <div class="mb-4">
                                             <h6><i class="fas fa-project-diagram text-info"></i> Task Relationships & Timeline</h6>
                                             <div class="row">
@@ -741,6 +806,37 @@
         const boardId = {{ board.id }};
         prioritySuggestion = new PrioritySuggestionWidget({ boardId: boardId });
         prioritySuggestion.init();
+        
+        // Budget/Cost calculation preview
+        function updateLaborCostPreview() {
+            const hoursInput = document.getElementById('id_estimated_hours');
+            const rateInput = document.getElementById('id_hourly_rate');
+            const preview = document.getElementById('laborCostPreview');
+            
+            if (hoursInput && rateInput && preview) {
+                const hours = parseFloat(hoursInput.value) || 0;
+                const rate = parseFloat(rateInput.value) || 0;
+                const laborCost = hours * rate;
+                preview.textContent = '$' + laborCost.toLocaleString(undefined, {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                });
+            }
+        }
+        
+        // Add event listeners for budget fields
+        const hoursInput = document.getElementById('id_estimated_hours');
+        const rateInput = document.getElementById('id_hourly_rate');
+        
+        if (hoursInput) {
+            hoursInput.addEventListener('input', updateLaborCostPreview);
+        }
+        if (rateInput) {
+            rateInput.addEventListener('input', updateLaborCostPreview);
+        }
+        
+        // Initial calculation
+        updateLaborCostPreview();
     });
 </script>
 {% endblock %}

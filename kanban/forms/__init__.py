@@ -95,6 +95,52 @@ class TaskForm(forms.ModelForm):
         label='Mitigation Strategies'
     )
     
+    # Budget & Cost fields (stored in TaskCost model)
+    estimated_cost = forms.DecimalField(
+        required=False,
+        min_value=0,
+        max_digits=10,
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'placeholder': '0.00',
+            'step': '0.01',
+            'min': '0',
+        }),
+        help_text='Estimated cost for completing this task',
+        label='Estimated Cost'
+    )
+    
+    estimated_hours = forms.DecimalField(
+        required=False,
+        min_value=0,
+        max_digits=8,
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'placeholder': '0.0',
+            'step': '0.5',
+            'min': '0',
+        }),
+        help_text='Estimated hours to complete this task',
+        label='Estimated Hours'
+    )
+    
+    hourly_rate = forms.DecimalField(
+        required=False,
+        min_value=0,
+        max_digits=8,
+        decimal_places=2,
+        widget=forms.NumberInput(attrs={
+            'class': 'form-control',
+            'placeholder': '0.00',
+            'step': '0.01',
+            'min': '0',
+        }),
+        help_text='Hourly rate for labor cost calculation (optional - uses project default if not set)',
+        label='Hourly Rate'
+    )
+    
     class Meta:
         model = Task
         fields = [
@@ -248,6 +294,20 @@ class TaskForm(forms.ModelForm):
                 
                 if mitigation_lines:
                     self.fields['mitigation_strategies_text'].initial = '\n'.join(mitigation_lines)
+            
+            # Initialize budget fields from TaskCost model
+            try:
+                from kanban.budget_models import TaskCost
+                task_cost = TaskCost.objects.filter(task=self.instance).first()
+                if task_cost:
+                    if task_cost.estimated_cost:
+                        self.fields['estimated_cost'].initial = task_cost.estimated_cost
+                    if task_cost.estimated_hours:
+                        self.fields['estimated_hours'].initial = task_cost.estimated_hours
+                    if task_cost.hourly_rate:
+                        self.fields['hourly_rate'].initial = task_cost.hourly_rate
+            except Exception:
+                pass  # TaskCost doesn't exist yet, use defaults
         
         if board:
             # Filter out Lean Six Sigma labels - they have their own dedicated field
@@ -553,8 +613,48 @@ class TaskForm(forms.ModelForm):
             # Update dependency chain if parent_task was changed
             if 'parent_task' in self.cleaned_data:
                 instance.update_dependency_chain()
+            
+            # Save budget/cost fields to TaskCost model
+            self._save_task_cost(instance)
         
         return instance
+    
+    def _save_task_cost(self, task):
+        """Save budget fields to TaskCost model"""
+        from decimal import Decimal
+        
+        estimated_cost = self.cleaned_data.get('estimated_cost')
+        estimated_hours = self.cleaned_data.get('estimated_hours')
+        hourly_rate = self.cleaned_data.get('hourly_rate')
+        
+        # Only create/update TaskCost if at least one budget field has a value
+        if estimated_cost is not None or estimated_hours is not None or hourly_rate is not None:
+            try:
+                from kanban.budget_models import TaskCost
+                
+                task_cost, created = TaskCost.objects.get_or_create(
+                    task=task,
+                    defaults={
+                        'estimated_cost': estimated_cost or Decimal('0.00'),
+                        'estimated_hours': estimated_hours or Decimal('0.00'),
+                        'hourly_rate': hourly_rate,
+                    }
+                )
+                
+                if not created:
+                    # Update existing TaskCost
+                    if estimated_cost is not None:
+                        task_cost.estimated_cost = estimated_cost
+                    if estimated_hours is not None:
+                        task_cost.estimated_hours = estimated_hours
+                    if hourly_rate is not None:
+                        task_cost.hourly_rate = hourly_rate
+                    task_cost.save()
+                    
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error saving TaskCost for task {task.id}: {e}")
 
 class CommentForm(forms.ModelForm):
     class Meta:
