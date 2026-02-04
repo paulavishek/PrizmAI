@@ -1305,18 +1305,77 @@ class Command(BaseCommand):
                         status='identified',
                     )
 
-                # Add action items
-                RetrospectiveActionItem.objects.create(
-                    retrospective=retro,
-                    board=board,
-                    title='Implement suggested improvement',
-                    description='Follow up on retrospective discussion',
-                    action_type='process_change',
-                    assigned_to=sam,
-                    target_completion_date=(timezone.now() + timedelta(days=14)).date(),
-                    priority='high',
-                    status='in_progress',
-                )
+                # Add action items with meaningful titles based on board type
+                action_items_by_board = {
+                    'Software Development Sprint': [
+                        {
+                            'title': 'Implement automated code review checklist',
+                            'description': 'Create and integrate automated checklist for code reviews to ensure consistent quality standards',
+                            'action_type': 'process_change',
+                            'priority': 'high'
+                        },
+                        {
+                            'title': 'Reduce technical debt in authentication module',
+                            'description': 'Allocate 20% of sprint capacity to refactor and document authentication code',
+                            'action_type': 'technical_improvement',
+                            'priority': 'medium'
+                        }
+                    ],
+                    'Marketing Campaign Review': [
+                        {
+                            'title': 'Improve campaign performance tracking',
+                            'description': 'Set up automated dashboards for real-time campaign metrics and ROI tracking',
+                            'action_type': 'tool_adoption',
+                            'priority': 'high'
+                        },
+                        {
+                            'title': 'Enhance team collaboration on content creation',
+                            'description': 'Schedule weekly brainstorming sessions and implement shared content calendar',
+                            'action_type': 'team_building',
+                            'priority': 'medium'
+                        }
+                    ],
+                    'Bug Fix Retrospective': [
+                        {
+                            'title': 'Establish bug triage process',
+                            'description': 'Create priority matrix and daily triage meetings to handle critical bugs faster',
+                            'action_type': 'process_change',
+                            'priority': 'high'
+                        },
+                        {
+                            'title': 'Improve bug documentation standards',
+                            'description': 'Create bug report template with reproduction steps and impact assessment',
+                            'action_type': 'documentation',
+                            'priority': 'medium'
+                        }
+                    ]
+                }
+                
+                # Select appropriate action items based on title prefix
+                action_items = action_items_by_board.get(title_prefix, [
+                    {
+                        'title': 'Implement process improvements',
+                        'description': 'Follow up on retrospective discussion and implement agreed changes',
+                        'action_type': 'process_change',
+                        'priority': 'high'
+                    }
+                ])
+                
+                # Create the action items
+                for idx, action_data in enumerate(action_items):
+                    days_offset = 14 if action_data['priority'] == 'high' else 30
+                    RetrospectiveActionItem.objects.create(
+                        retrospective=retro,
+                        board=board,
+                        title=action_data['title'],
+                        description=action_data['description'],
+                        action_type=action_data['action_type'],
+                        assigned_to=sam if idx == 0 else (jordan if idx == 1 else alex),
+                        target_completion_date=(timezone.now() + timedelta(days=days_offset)).date(),
+                        priority=action_data['priority'],
+                        status='in_progress' if idx == 0 else 'pending',
+                        expected_impact=f'Improve team efficiency and {board.name.lower()} outcomes'
+                    )
 
         self.stdout.write('   ✅ Retrospective data created')
 

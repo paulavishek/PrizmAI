@@ -162,11 +162,12 @@
                             <th>Assigned To</th>
                             <th>Due Date</th>
                             <th>Status</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for action in action_items %}
-                        <tr>
+                        <tr id="action-{{ action.id }}">
                             <td>
                                 <strong>{{ action.title }}</strong>
                                 <br><small class="text-muted">{{ action.description|truncatewords:15 }}</small>
@@ -195,6 +196,14 @@
                                     <option value="blocked" {% if action.status == 'blocked' %}selected{% endif %}>Blocked</option>
                                     <option value="cancelled" {% if action.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
                                 </select>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" 
+                                        data-bs-toggle="modal" 
+                                        data-bs-target="#actionModal{{ action.id }}"
+                                        title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
@@ -450,4 +459,182 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+
+<!-- Action Item Detail Modals -->
+{% for action in action_items %}
+<div class="modal fade" id="actionModal{{ action.id }}" tabindex="-1" aria-labelledby="actionModalLabel{{ action.id }}" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="actionModalLabel{{ action.id }}">
+                    <i class="fas fa-tasks"></i> Action Item Details
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <h6 class="fw-bold">{{ action.title }}</h6>
+                        <p class="text-muted mb-3">{{ action.description }}</p>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Type:</strong> 
+                        <span class="badge bg-secondary">{{ action.get_action_type_display }}</span>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Priority:</strong> 
+                        <span class="badge bg-{% if action.priority == 'critical' %}danger{% elif action.priority == 'high' %}warning{% else %}info{% endif %}">
+                            {{ action.get_priority_display }}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Status:</strong> 
+                        <span class="badge bg-{% if action.status == 'completed' %}success{% elif action.status == 'in_progress' %}primary{% elif action.status == 'blocked' %}danger{% else %}secondary{% endif %}">
+                            {{ action.get_status_display }}
+                        </span>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Progress:</strong> 
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar" role="progressbar" 
+                                 style="width: {{ action.progress_percentage }}%;" 
+                                 aria-valuenow="{{ action.progress_percentage }}" 
+                                 aria-valuemin="0" aria-valuemax="100">
+                                {{ action.progress_percentage }}%
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Assigned To:</strong><br>
+                        {% if action.assigned_to %}
+                            <i class="fas fa-user"></i> {{ action.assigned_to.get_full_name|default:action.assigned_to.username }}
+                        {% else %}
+                            <span class="text-muted">Unassigned</span>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Board:</strong><br>
+                        <i class="fas fa-project-diagram"></i> {{ action.board.name }}
+                    </div>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Target Date:</strong><br>
+                        {% if action.target_completion_date %}
+                            <i class="far fa-calendar"></i> {{ action.target_completion_date|date:"F d, Y" }}
+                            {% if action.is_overdue %}
+                                <span class="badge bg-danger ms-2">Overdue</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted">No target date</span>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Actual Completion:</strong><br>
+                        {% if action.actual_completion_date %}
+                            <i class="far fa-calendar-check"></i> {{ action.actual_completion_date|date:"F d, Y" }}
+                        {% else %}
+                            <span class="text-muted">Not completed</span>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% if action.expected_impact %}
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <strong>Expected Impact:</strong>
+                        <p class="text-muted mt-1">{{ action.expected_impact }}</p>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if action.actual_impact %}
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <strong>Actual Impact:</strong>
+                        <p class="text-success mt-1">{{ action.actual_impact }}</p>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if action.blocked_reason %}
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <div class="alert alert-danger">
+                            <strong><i class="fas fa-exclamation-triangle"></i> Blocked:</strong><br>
+                            {{ action.blocked_reason }}
+                            {% if action.blocked_date %}
+                                <br><small>Since: {{ action.blocked_date|date:"F d, Y" }}</small>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if action.progress_notes %}
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <strong>Progress Notes:</strong>
+                        <p class="text-muted mt-1">{{ action.progress_notes }}</p>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if action.stakeholders.all %}
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <strong>Stakeholders:</strong>
+                        <div class="mt-1">
+                            {% for stakeholder in action.stakeholders.all %}
+                                <span class="badge bg-light text-dark me-1">
+                                    <i class="fas fa-user"></i> {{ stakeholder.get_full_name|default:stakeholder.username }}
+                                </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if action.ai_suggested %}
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="alert alert-info">
+                            <i class="fas fa-robot"></i> <strong>AI-Generated Action Item</strong>
+                            {% if action.ai_confidence %}
+                                <br>Confidence: {{ action.ai_confidence|floatformat:0 }}%
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="row">
+                    <div class="col-md-12">
+                        <small class="text-muted">
+                            Created: {{ action.created_at|date:"F d, Y g:i A" }}
+                            {% if action.updated_at != action.created_at %}
+                                | Updated: {{ action.updated_at|date:"F d, Y g:i A" }}
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
+
 {% endblock %}
