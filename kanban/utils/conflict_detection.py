@@ -12,6 +12,9 @@ from kanban.conflict_models import (
     ConflictDetection, ConflictResolution, ResolutionPattern
 )
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ConflictDetectionService:
@@ -449,28 +452,57 @@ class ConflictResolutionSuggester:
         suggestions = []
         data = self.conflict.conflict_data
         
-        # Suggestion 1: Reassign one task to another user
-        task1 = Task.objects.filter(id=data.get('task1_id')).first()
-        task2 = Task.objects.filter(id=data.get('task2_id')).first()
+        # Get tasks - try from conflict_data first, then fall back to tasks relationship
+        task1_id = data.get('task1_id')
+        task2_id = data.get('task2_id')
         
+        if not task1_id or not task2_id:
+            # Fall back to getting tasks from the conflict's tasks relationship
+            conflict_tasks = list(self.conflict.tasks.all()[:2])
+            task1 = conflict_tasks[0] if len(conflict_tasks) > 0 else None
+            task2 = conflict_tasks[1] if len(conflict_tasks) > 1 else None
+        else:
+            task1 = Task.objects.filter(id=task1_id).first()
+            task2 = Task.objects.filter(id=task2_id).first()
+        
+        if not task1 or not task2:
+            logger.warning(f"Could not find tasks for resource conflict {self.conflict.id}")
+            return suggestions
+        
+        # Get user info
+        user_id = data.get('user_id')
+        user_name = data.get('user_name')
+        
+        # Fall back to getting user from affected_users if not in conflict_data
+        if not user_id:
+            affected_user = self.conflict.affected_users.first()
+            if affected_user:
+                user_id = affected_user.id
+                user_name = affected_user.get_full_name() or affected_user.username
+        
+        if not user_id:
+            logger.warning(f"Could not find user for resource conflict {self.conflict.id}")
+            return suggestions
+        
+        # Suggestion 1: Reassign one task to another user
         if task1 and task2:
             # Find users with lower workload
             board = self.conflict.board
             board_members = board.members.all()
             
             for member in board_members:
-                if member.id != data.get('user_id'):
+                if member.id != user_id:
                     # Suggest reassigning task2 to this member
                     resolution = ConflictResolution.objects.create(
                         conflict=self.conflict,
                         resolution_type='reassign',
                         title=f"Reassign '{task2.title}' to {member.get_full_name() or member.username}",
-                        description=f"Move task '{task2.title}' from {data.get('user_name')} to {member.get_full_name() or member.username} to balance workload.",
+                        description=f"Move task '{task2.title}' from {user_name} to {member.get_full_name() or member.username} to balance workload.",
                         ai_confidence=70,
                         auto_applicable=True,
                         implementation_data={
                             'task_id': task2.id,
-                            'old_assignee_id': data.get('user_id'),
+                            'old_assignee_id': user_id,
                             'new_assignee_id': member.id
                         },
                         estimated_impact="Reduces workload conflict and balances team capacity"
@@ -480,9 +512,18 @@ class ConflictResolutionSuggester:
         
         # Suggestion 2: Reschedule one task
         if task2:
+            # Try to get due date from conflict_data first
             task1_due = data.get('task1_dates', {}).get('due')
             if task1_due:
                 new_start = datetime.fromisoformat(task1_due.replace('Z', '+00:00')).date() + timedelta(days=1)
+            elif task1.due_date:
+                # Fall back to task's actual due date
+                task1_due_date = task1.due_date.date() if hasattr(task1.due_date, 'date') else task1.due_date
+                new_start = task1_due_date + timedelta(days=1)
+            else:
+                new_start = None
+            
+            if new_start:
                 resolution = ConflictResolution.objects.create(
                     conflict=self.conflict,
                     resolution_type='reschedule',
@@ -505,14 +546,20 @@ class ConflictResolutionSuggester:
         suggestions = []
         data = self.conflict.conflict_data
         
+        # Get task - try from conflict_data first, then fall back to tasks relationship
         task_id = data.get('task_id')
-        task = Task.objects.filter(id=task_id).first()
+        if task_id:
+            task = Task.objects.filter(id=task_id).first()
+        else:
+            # Fall back to first task from relationship
+            task = self.conflict.tasks.first()
         
         if not task:
+            logger.warning(f"Could not find task for schedule conflict {self.conflict.id}")
             return suggestions
         
         # Suggestion 1: Extend due date
-        if 'days_overdue' in data:
+        if 'days_overdue' in data or (task.due_date and task.due_date < timezone.now()):
             new_due = timezone.now() + timedelta(days=7)
             resolution = ConflictResolution.objects.create(
                 conflict=self.conflict,
@@ -522,7 +569,7 @@ class ConflictResolutionSuggester:
                 ai_confidence=75,
                 auto_applicable=True,
                 implementation_data={
-                    'task_id': task_id,
+                    'task_id': task.id,
                     'new_due_date': str(new_due)
                 },
                 estimated_impact="Provides realistic timeline for completion"
@@ -549,10 +596,16 @@ class ConflictResolutionSuggester:
         suggestions = []
         data = self.conflict.conflict_data
         
+        # Get task - try from conflict_data first, then fall back to tasks relationship
         task_id = data.get('task_id')
-        task = Task.objects.filter(id=task_id).first()
+        if task_id:
+            task = Task.objects.filter(id=task_id).first()
+        else:
+            # Fall back to first task from relationship
+            task = self.conflict.tasks.first()
         
         if not task:
+            logger.warning(f"Could not find task for dependency conflict {self.conflict.id}")
             return suggestions
         
         # Suggestion 1: Adjust dates to after dependencies

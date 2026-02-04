@@ -215,6 +215,19 @@ def conflict_detail(request, conflict_id):
         # Get resolutions sorted by confidence
         resolutions = conflict.resolutions.all().order_by('-ai_confidence')
         
+        # Generate resolutions on-demand if none exist
+        if not resolutions.exists() and conflict.status == 'active':
+            try:
+                from kanban.utils.conflict_detection import ConflictResolutionSuggester
+                logger.info(f"Generating resolutions on-demand for conflict {conflict.id}: {conflict.title}")
+                suggester = ConflictResolutionSuggester(conflict)
+                generated_resolutions = suggester.generate_suggestions()
+                logger.info(f"Generated {len(generated_resolutions)} resolutions on-demand")
+                # Refresh the queryset to include newly created resolutions
+                resolutions = conflict.resolutions.all().order_by('-ai_confidence')
+            except Exception as gen_error:
+                logger.error(f"Failed to generate resolutions on-demand: {gen_error}", exc_info=True)
+        
         # Mark notification as read if exists (only for authenticated users)
         if request.user.is_authenticated:
             ConflictNotification.objects.filter(

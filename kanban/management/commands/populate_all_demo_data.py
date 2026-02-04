@@ -715,6 +715,14 @@ POST /api/auth/token/
                             'confidence': config.get('confidence', 0.85),
                         }
                     ],
+                    conflict_data={
+                        'task1_id': task1.id,
+                        'task1_title': task1.title,
+                        'task2_id': task2.id if task2 else None,
+                        'task2_title': task2.title if task2 else None,
+                        'user_id': affected_user.id if affected_user else None,
+                        'user_name': affected_user.get_full_name() if affected_user else None,
+                    }
                 )
                 
                 # Add tasks
@@ -728,8 +736,15 @@ POST /api/auth/token/
                 
                 conflicts_created += 1
                 
-                # Create resolution if resolved
-                if config.get('status') == 'resolved':
+                # Generate actual ConflictResolution objects for active conflicts
+                if config.get('status') != 'resolved':
+                    # Use ConflictResolutionSuggester to generate proper resolutions
+                    from kanban.utils.conflict_detection import ConflictResolutionSuggester
+                    suggester = ConflictResolutionSuggester(conflict)
+                    generated_resolutions = suggester.generate_suggestions()
+                    resolutions_created += len(generated_resolutions)
+                else:
+                    # Create resolution if already resolved
                     resolution = ConflictResolution.objects.create(
                         conflict=conflict,
                         resolution_type=config.get('resolution_type', 'custom'),
