@@ -64,6 +64,14 @@ urlpatterns = [
          budget_views.recommendation_action, 
          name='recommendation_action'),
     
+    path('recommendation/<int:recommendation_id>/preview/', 
+         budget_views.recommendation_preview, 
+         name='recommendation_preview'),
+    
+    path('recommendation/<int:recommendation_id>/details/', 
+         budget_views.recommendation_implementation_details, 
+         name='recommendation_implementation_details'),
+    
     # API Endpoints
     path('board/<int:board_id>/budget/api/metrics/', 
          budget_views.budget_api_metrics, 

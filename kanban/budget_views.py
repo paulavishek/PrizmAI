@@ -718,8 +718,11 @@ def recommendations_list(request, board_id):
 @require_http_methods(["POST"])
 def recommendation_action(request, recommendation_id):
     """
-    Accept, reject, or mark recommendation as implemented
+    Accept, reject, or mark recommendation as implemented.
+    When implementing, actually applies budget changes.
     """
+    from kanban.budget_utils import BudgetRedistributor
+    
     recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
     board = recommendation.board
     
@@ -733,20 +736,53 @@ def recommendation_action(request, recommendation_id):
         
         if action == 'accept':
             recommendation.status = 'accepted'
-            messages.success(request, f'Recommendation "{recommendation.title}" has been accepted.')
+            recommendation.reviewed_by = request.user
+            recommendation.reviewed_at = timezone.now()
+            recommendation.save()
+            messages.success(request, f'Recommendation "{recommendation.title}" has been accepted. Click "Implement" to apply the changes.')
+            
         elif action == 'reject':
             recommendation.status = 'rejected'
+            recommendation.reviewed_by = request.user
+            recommendation.reviewed_at = timezone.now()
+            recommendation.save()
             messages.info(request, f'Recommendation "{recommendation.title}" has been rejected.')
+            
         elif action == 'implement':
-            recommendation.status = 'implemented'
-            messages.success(request, f'Recommendation "{recommendation.title}" has been marked as implemented.')
+            # Actually apply the budget changes using the redistributor
+            redistributor = BudgetRedistributor(recommendation, request.user)
+            result = redistributor.apply_changes()
+            
+            if result.get('success'):
+                changes_count = result.get('changes_applied', 0)
+                summary = result.get('summary', '')
+                
+                if changes_count > 0:
+                    messages.success(
+                        request, 
+                        f'✅ Recommendation "{recommendation.title}" implemented successfully! '
+                        f'{changes_count} budget changes applied. {summary}'
+                    )
+                else:
+                    if result.get('manual_action_required'):
+                        messages.info(
+                            request,
+                            f'Recommendation "{recommendation.title}" marked as implemented. '
+                            f'This recommendation requires manual action: {summary}'
+                        )
+                    else:
+                        messages.success(
+                            request,
+                            f'Recommendation "{recommendation.title}" has been marked as implemented.'
+                        )
+            else:
+                messages.warning(
+                    request,
+                    f'Recommendation marked as implemented, but some changes may not have been applied.'
+                )
         else:
             messages.error(request, 'Invalid action.')
             return redirect('recommendations_list', board_id=board.id)
-        
-        recommendation.reviewed_by = request.user
-        recommendation.reviewed_at = timezone.now()
-        recommendation.save()
         
         return redirect('recommendations_list', board_id=board.id)
         
@@ -754,6 +790,89 @@ def recommendation_action(request, recommendation_id):
         logger.error(f"Error updating recommendation: {e}")
         messages.error(request, f'Error updating recommendation: {str(e)}')
         return redirect('recommendations_list', board_id=board.id)
+
+
+@login_required
+@require_http_methods(["GET"])
+def recommendation_preview(request, recommendation_id):
+    """
+    Preview what changes will be made when implementing a recommendation.
+    Returns JSON for modal display.
+    """
+    from kanban.budget_utils import BudgetRedistributor
+    
+    recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
+    board = recommendation.board
+    
+    if not _can_access_board(request.user, board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    
+    try:
+        redistributor = BudgetRedistributor(recommendation, request.user)
+        preview = redistributor.preview_changes()
+        
+        # Add recommendation info to preview
+        preview['recommendation'] = {
+            'id': recommendation.id,
+            'title': recommendation.title,
+            'type': recommendation.get_recommendation_type_display(),
+            'description': recommendation.description,
+            'priority': recommendation.priority,
+            'confidence': recommendation.confidence_score,
+            'estimated_savings': float(recommendation.estimated_savings) if recommendation.estimated_savings else 0,
+        }
+        preview['currency'] = board.budget.currency if hasattr(board, 'budget') else 'USD'
+        
+        return JsonResponse(preview)
+        
+    except Exception as e:
+        logger.error(f"Error generating preview: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def recommendation_implementation_details(request, recommendation_id):
+    """
+    Get implementation details and audit log for an implemented recommendation.
+    """
+    from kanban.budget_models import BudgetImplementationLog
+    
+    recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
+    board = recommendation.board
+    
+    if not _can_access_board(request.user, board):
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+    
+    logs = BudgetImplementationLog.objects.filter(
+        recommendation=recommendation
+    ).select_related('affected_task', 'implemented_by')
+    
+    implementation_data = {
+        'recommendation_id': recommendation.id,
+        'recommendation_title': recommendation.title,
+        'implemented_at': recommendation.implemented_at.isoformat() if recommendation.implemented_at else None,
+        'implemented_by': recommendation.reviewed_by.get_full_name() if recommendation.reviewed_by else None,
+        'summary': recommendation.implementation_summary,
+        'changes': [
+            {
+                'id': log.id,
+                'change_type': log.get_change_type_display(),
+                'task': log.affected_task.title if log.affected_task else 'N/A',
+                'field': log.field_changed,
+                'old_value': float(log.old_value) if log.old_value else None,
+                'new_value': float(log.new_value) if log.new_value else None,
+                'change_amount': float(log.get_change_amount()),
+                'reason': log.change_details.get('reason', '') if log.change_details else '',
+                'is_rolled_back': log.is_rolled_back,
+            }
+            for log in logs
+        ],
+        'total_changes': logs.count(),
+        'currency': board.budget.currency if hasattr(board, 'budget') else 'USD',
+    }
+    
+    return JsonResponse(implementation_data)
 
 
 @login_required

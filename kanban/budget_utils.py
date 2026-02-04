@@ -12,6 +12,513 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+class BudgetRedistributor:
+    """
+    Utility class for applying budget recommendations and redistributing funds.
+    Handles different recommendation types and creates audit logs.
+    """
+    
+    def __init__(self, recommendation, user):
+        """
+        Initialize the redistributor with a recommendation and user.
+        
+        Args:
+            recommendation: BudgetRecommendation instance
+            user: User implementing the recommendation
+        """
+        self.recommendation = recommendation
+        self.board = recommendation.board
+        self.user = user
+        self.changes_made = []
+        
+    def preview_changes(self) -> Dict:
+        """
+        Preview what changes will be made without applying them.
+        
+        Returns:
+            Dictionary with preview of all changes
+        """
+        rec_type = self.recommendation.recommendation_type
+        
+        handlers = {
+            'reallocation': self._preview_reallocation,
+            'scope_cut': self._preview_scope_reduction,
+            'resource_optimization': self._preview_resource_optimization,
+            'risk_mitigation': self._preview_risk_mitigation,
+            'efficiency_improvement': self._preview_efficiency_improvement,
+            'timeline_change': self._preview_timeline_change,
+        }
+        
+        handler = handlers.get(rec_type, self._preview_generic)
+        return handler()
+    
+    def apply_changes(self) -> Dict:
+        """
+        Apply the recommendation changes and create audit logs.
+        
+        Returns:
+            Dictionary with summary of applied changes
+        """
+        from kanban.budget_models import BudgetImplementationLog
+        
+        rec_type = self.recommendation.recommendation_type
+        
+        handlers = {
+            'reallocation': self._apply_reallocation,
+            'scope_cut': self._apply_scope_reduction,
+            'resource_optimization': self._apply_resource_optimization,
+            'risk_mitigation': self._apply_risk_mitigation,
+            'efficiency_improvement': self._apply_efficiency_improvement,
+            'timeline_change': self._apply_timeline_change,
+        }
+        
+        handler = handlers.get(rec_type, self._apply_generic)
+        result = handler()
+        
+        # Update recommendation status
+        self.recommendation.status = 'implemented'
+        self.recommendation.implemented_at = timezone.now()
+        self.recommendation.reviewed_by = self.user
+        self.recommendation.reviewed_at = timezone.now()
+        self.recommendation.implementation_summary = self._generate_summary()
+        self.recommendation.save()
+        
+        return result
+    
+    def _get_overrun_tasks(self) -> List:
+        """Get tasks that are over budget"""
+        from kanban.budget_models import TaskCost
+        
+        task_costs = TaskCost.objects.filter(
+            task__column__board=self.board
+        ).select_related('task')
+        
+        overrun_tasks = []
+        for tc in task_costs:
+            actual = tc.get_total_actual_cost()
+            if actual > tc.estimated_cost and tc.estimated_cost > 0:
+                variance = actual - tc.estimated_cost
+                variance_percent = (variance / tc.estimated_cost) * 100
+                overrun_tasks.append({
+                    'task_cost': tc,
+                    'task': tc.task,
+                    'estimated': tc.estimated_cost,
+                    'actual': actual,
+                    'variance': variance,
+                    'variance_percent': float(variance_percent),
+                })
+        
+        return sorted(overrun_tasks, key=lambda x: x['variance'], reverse=True)
+    
+    def _get_underbudget_tasks(self) -> List:
+        """Get tasks that are significantly under budget"""
+        from kanban.budget_models import TaskCost
+        
+        task_costs = TaskCost.objects.filter(
+            task__column__board=self.board
+        ).select_related('task')
+        
+        underbudget_tasks = []
+        for tc in task_costs:
+            actual = tc.get_total_actual_cost()
+            if tc.estimated_cost > actual and tc.estimated_cost > 0:
+                savings = tc.estimated_cost - actual
+                savings_percent = (savings / tc.estimated_cost) * 100
+                # Only include if more than 20% under budget
+                if savings_percent >= 20:
+                    underbudget_tasks.append({
+                        'task_cost': tc,
+                        'task': tc.task,
+                        'estimated': tc.estimated_cost,
+                        'actual': actual,
+                        'savings': savings,
+                        'savings_percent': float(savings_percent),
+                    })
+        
+        return sorted(underbudget_tasks, key=lambda x: x['savings'], reverse=True)
+    
+    def _preview_reallocation(self) -> Dict:
+        """Preview budget reallocation changes"""
+        overrun_tasks = self._get_overrun_tasks()
+        underbudget_tasks = self._get_underbudget_tasks()
+        
+        changes = []
+        total_reallocation = Decimal('0.00')
+        
+        # Calculate how much can be reallocated from underbudget tasks
+        available_funds = sum(t['savings'] for t in underbudget_tasks)
+        needed_funds = sum(t['variance'] for t in overrun_tasks)
+        
+        # Distribute from underbudget to overrun tasks
+        for under_task in underbudget_tasks[:5]:  # Limit to top 5
+            realloc_amount = min(under_task['savings'] * Decimal('0.5'), under_task['savings'])  # Take up to 50% of savings
+            if realloc_amount > 100:  # Only if meaningful amount
+                changes.append({
+                    'type': 'reduce_estimate',
+                    'task_id': under_task['task'].id,
+                    'task_title': under_task['task'].title,
+                    'field': 'estimated_cost',
+                    'old_value': float(under_task['estimated']),
+                    'new_value': float(under_task['estimated'] - realloc_amount),
+                    'change_amount': float(-realloc_amount),
+                    'reason': f"Task is {under_task['savings_percent']:.1f}% under budget, reallocating excess funds",
+                })
+                total_reallocation += realloc_amount
+        
+        # Increase estimates for overrun tasks
+        remaining = total_reallocation
+        for over_task in overrun_tasks[:3]:  # Limit to top 3 overruns
+            if remaining <= 0:
+                break
+            add_amount = min(over_task['variance'], remaining)
+            changes.append({
+                'type': 'increase_estimate',
+                'task_id': over_task['task'].id,
+                'task_title': over_task['task'].title,
+                'field': 'estimated_cost',
+                'old_value': float(over_task['estimated']),
+                'new_value': float(over_task['estimated'] + add_amount),
+                'change_amount': float(add_amount),
+                'reason': f"Task is {over_task['variance_percent']:.1f}% over budget, adding funds to cover overrun",
+            })
+            remaining -= add_amount
+        
+        return {
+            'recommendation_type': 'Budget Reallocation',
+            'summary': f"Reallocate {self.board.budget.currency} {total_reallocation:,.2f} from under-budget tasks to over-budget tasks",
+            'changes': changes,
+            'total_tasks_affected': len(changes),
+            'estimated_savings': float(self.recommendation.estimated_savings or 0),
+            'funds_available': float(available_funds),
+            'funds_needed': float(needed_funds),
+        }
+    
+    def _preview_scope_reduction(self) -> Dict:
+        """Preview scope reduction changes"""
+        overrun_tasks = self._get_overrun_tasks()
+        
+        changes = []
+        total_reduction = Decimal('0.00')
+        
+        for task_data in overrun_tasks[:5]:  # Top 5 overrun tasks
+            # Suggest reducing estimate to actual (accepting the overrun as new baseline)
+            reduction = task_data['variance'] * Decimal('0.25')  # Suggest 25% scope cut
+            if reduction > 50:
+                new_estimate = task_data['estimated'] - reduction
+                changes.append({
+                    'type': 'scope_reduction',
+                    'task_id': task_data['task'].id,
+                    'task_title': task_data['task'].title,
+                    'field': 'estimated_cost',
+                    'old_value': float(task_data['estimated']),
+                    'new_value': float(new_estimate),
+                    'change_amount': float(-reduction),
+                    'reason': f"Reduce scope to bring task within budget. Consider removing non-essential features.",
+                })
+                total_reduction += reduction
+        
+        return {
+            'recommendation_type': 'Scope Reduction',
+            'summary': f"Reduce scope on {len(changes)} tasks to save {self.board.budget.currency} {total_reduction:,.2f}",
+            'changes': changes,
+            'total_tasks_affected': len(changes),
+            'estimated_savings': float(self.recommendation.estimated_savings or 0),
+        }
+    
+    def _preview_resource_optimization(self) -> Dict:
+        """Preview resource optimization changes"""
+        from kanban.budget_models import TaskCost
+        
+        # Find tasks with high hourly rates
+        task_costs = TaskCost.objects.filter(
+            task__column__board=self.board,
+            hourly_rate__isnull=False,
+            hourly_rate__gt=0
+        ).select_related('task').order_by('-hourly_rate')
+        
+        changes = []
+        total_savings = Decimal('0.00')
+        
+        avg_rate = task_costs.aggregate(avg=Avg('hourly_rate'))['avg'] or Decimal('0.00')
+        
+        for tc in task_costs[:5]:
+            if tc.hourly_rate > avg_rate * Decimal('1.2'):  # 20% above average
+                new_rate = avg_rate * Decimal('1.1')  # Reduce to 10% above average
+                hours = tc.estimated_hours or Decimal('0.00')
+                savings = (tc.hourly_rate - new_rate) * hours
+                
+                if savings > 50:
+                    changes.append({
+                        'type': 'rate_optimization',
+                        'task_id': tc.task.id,
+                        'task_title': tc.task.title,
+                        'field': 'hourly_rate',
+                        'old_value': float(tc.hourly_rate),
+                        'new_value': float(new_rate),
+                        'change_amount': float(-savings),
+                        'reason': f"Hourly rate is {((tc.hourly_rate / avg_rate) - 1) * 100:.0f}% above average. Consider using different resources.",
+                    })
+                    total_savings += savings
+        
+        return {
+            'recommendation_type': 'Resource Optimization',
+            'summary': f"Optimize resource rates on {len(changes)} tasks to save {self.board.budget.currency} {total_savings:,.2f}",
+            'changes': changes,
+            'total_tasks_affected': len(changes),
+            'estimated_savings': float(self.recommendation.estimated_savings or 0),
+            'average_hourly_rate': float(avg_rate),
+        }
+    
+    def _preview_risk_mitigation(self) -> Dict:
+        """Preview risk mitigation changes - add buffer to high-risk tasks"""
+        overrun_tasks = self._get_overrun_tasks()
+        
+        changes = []
+        total_buffer = Decimal('0.00')
+        
+        # Add 15% buffer to tasks with history of overruns
+        for task_data in overrun_tasks[:5]:
+            buffer_amount = task_data['actual'] * Decimal('0.15')
+            new_estimate = task_data['actual'] + buffer_amount
+            
+            changes.append({
+                'type': 'add_risk_buffer',
+                'task_id': task_data['task'].id,
+                'task_title': task_data['task'].title,
+                'field': 'estimated_cost',
+                'old_value': float(task_data['estimated']),
+                'new_value': float(new_estimate),
+                'change_amount': float(new_estimate - task_data['estimated']),
+                'reason': f"Add 15% risk buffer based on historical overrun pattern.",
+            })
+            total_buffer += buffer_amount
+        
+        return {
+            'recommendation_type': 'Risk Mitigation',
+            'summary': f"Add risk buffers to {len(changes)} high-risk tasks",
+            'changes': changes,
+            'total_tasks_affected': len(changes),
+            'estimated_savings': float(self.recommendation.estimated_savings or 0),
+            'total_buffer_added': float(total_buffer),
+        }
+    
+    def _preview_efficiency_improvement(self) -> Dict:
+        """Preview efficiency improvement suggestions"""
+        from kanban.budget_models import TaskCost
+        
+        # Find tasks where actual hours greatly exceed estimated
+        task_costs = TaskCost.objects.filter(
+            task__column__board=self.board,
+            estimated_hours__gt=0
+        ).select_related('task')
+        
+        changes = []
+        
+        for tc in task_costs:
+            from kanban.budget_models import TimeEntry
+            actual_hours = TimeEntry.objects.filter(
+                task=tc.task
+            ).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
+            
+            if actual_hours > tc.estimated_hours * Decimal('1.25'):  # 25% over estimated hours
+                efficiency_target = tc.estimated_hours * Decimal('1.1')  # Target 10% over
+                hours_to_save = actual_hours - efficiency_target
+                
+                if hours_to_save > 2:  # Only if significant
+                    hourly_rate = tc.hourly_rate or Decimal('50.00')
+                    cost_savings = hours_to_save * hourly_rate
+                    
+                    changes.append({
+                        'type': 'efficiency_target',
+                        'task_id': tc.task.id,
+                        'task_title': tc.task.title,
+                        'field': 'estimated_hours',
+                        'old_value': float(tc.estimated_hours),
+                        'new_value': float(efficiency_target),
+                        'change_amount': float(efficiency_target - tc.estimated_hours),
+                        'actual_hours': float(actual_hours),
+                        'potential_savings': float(cost_savings),
+                        'reason': f"Task is running {((actual_hours / tc.estimated_hours) - 1) * 100:.0f}% over estimated hours. Review processes for efficiency.",
+                    })
+        
+        return {
+            'recommendation_type': 'Efficiency Improvement',
+            'summary': f"Identified {len(changes)} tasks with efficiency improvement potential",
+            'changes': changes[:10],  # Limit to top 10
+            'total_tasks_affected': len(changes),
+            'estimated_savings': float(self.recommendation.estimated_savings or 0),
+        }
+    
+    def _preview_timeline_change(self) -> Dict:
+        """Preview timeline adjustment suggestions"""
+        return {
+            'recommendation_type': 'Timeline Adjustment',
+            'summary': "Timeline adjustments require manual review of project schedule",
+            'changes': [],
+            'total_tasks_affected': 0,
+            'estimated_savings': float(self.recommendation.estimated_savings or 0),
+            'note': "This recommendation suggests reviewing and adjusting project timelines. Please review task due dates and milestones manually.",
+        }
+    
+    def _preview_generic(self) -> Dict:
+        """Generic preview for unknown recommendation types"""
+        return {
+            'recommendation_type': self.recommendation.get_recommendation_type_display(),
+            'summary': self.recommendation.description,
+            'changes': [],
+            'total_tasks_affected': 0,
+            'estimated_savings': float(self.recommendation.estimated_savings or 0),
+            'note': "This recommendation requires manual implementation.",
+        }
+    
+    def _apply_reallocation(self) -> Dict:
+        """Apply budget reallocation changes"""
+        from kanban.budget_models import BudgetImplementationLog
+        
+        preview = self._preview_reallocation()
+        
+        for change in preview['changes']:
+            self._apply_single_change(change, 'budget_reallocation')
+        
+        return {
+            'success': True,
+            'changes_applied': len(preview['changes']),
+            'summary': preview['summary'],
+        }
+    
+    def _apply_scope_reduction(self) -> Dict:
+        """Apply scope reduction changes"""
+        from kanban.budget_models import BudgetImplementationLog
+        
+        preview = self._preview_scope_reduction()
+        
+        for change in preview['changes']:
+            self._apply_single_change(change, 'scope_reduction')
+        
+        return {
+            'success': True,
+            'changes_applied': len(preview['changes']),
+            'summary': preview['summary'],
+        }
+    
+    def _apply_resource_optimization(self) -> Dict:
+        """Apply resource optimization changes"""
+        preview = self._preview_resource_optimization()
+        
+        for change in preview['changes']:
+            self._apply_single_change(change, 'hourly_rate_change')
+        
+        return {
+            'success': True,
+            'changes_applied': len(preview['changes']),
+            'summary': preview['summary'],
+        }
+    
+    def _apply_risk_mitigation(self) -> Dict:
+        """Apply risk mitigation (add buffers)"""
+        preview = self._preview_risk_mitigation()
+        
+        for change in preview['changes']:
+            self._apply_single_change(change, 'task_estimate_update')
+        
+        return {
+            'success': True,
+            'changes_applied': len(preview['changes']),
+            'summary': preview['summary'],
+        }
+    
+    def _apply_efficiency_improvement(self) -> Dict:
+        """Apply efficiency improvement targets"""
+        preview = self._preview_efficiency_improvement()
+        
+        for change in preview['changes']:
+            self._apply_single_change(change, 'task_estimate_update')
+        
+        return {
+            'success': True,
+            'changes_applied': len(preview['changes']),
+            'summary': preview['summary'],
+        }
+    
+    def _apply_timeline_change(self) -> Dict:
+        """Timeline changes require manual implementation"""
+        return {
+            'success': True,
+            'changes_applied': 0,
+            'summary': "Timeline adjustment marked as implemented. Please manually review and adjust task due dates.",
+            'manual_action_required': True,
+        }
+    
+    def _apply_generic(self) -> Dict:
+        """Generic implementation for unknown types"""
+        return {
+            'success': True,
+            'changes_applied': 0,
+            'summary': "Recommendation marked as implemented.",
+            'manual_action_required': True,
+        }
+    
+    def _apply_single_change(self, change: Dict, change_type: str):
+        """Apply a single change and create audit log"""
+        from kanban.budget_models import BudgetImplementationLog, TaskCost
+        from kanban.models import Task
+        
+        try:
+            task = Task.objects.get(id=change['task_id'])
+            task_cost, created = TaskCost.objects.get_or_create(task=task)
+            
+            field = change['field']
+            old_value = Decimal(str(change['old_value']))
+            new_value = Decimal(str(change['new_value']))
+            
+            # Apply the change
+            if hasattr(task_cost, field):
+                setattr(task_cost, field, new_value)
+                task_cost.save()
+            
+            # Create audit log
+            log = BudgetImplementationLog.objects.create(
+                recommendation=self.recommendation,
+                change_type=change_type,
+                affected_task=task,
+                field_changed=field,
+                old_value=old_value,
+                new_value=new_value,
+                change_details={
+                    'reason': change.get('reason', ''),
+                    'change_amount': change.get('change_amount', 0),
+                },
+                implemented_by=self.user,
+            )
+            
+            self.changes_made.append({
+                'log_id': log.id,
+                'task': task.title,
+                'field': field,
+                'old': float(old_value),
+                'new': float(new_value),
+            })
+            
+        except Exception as e:
+            logger.error(f"Error applying change for task {change.get('task_id')}: {e}")
+    
+    def _generate_summary(self) -> str:
+        """Generate a human-readable summary of changes made"""
+        if not self.changes_made:
+            return "Recommendation implemented (no automatic changes applied)."
+        
+        summary_parts = [f"Applied {len(self.changes_made)} changes:"]
+        for change in self.changes_made[:5]:  # Show first 5
+            summary_parts.append(
+                f"• {change['task']}: {change['field']} changed from {change['old']:.2f} to {change['new']:.2f}"
+            )
+        
+        if len(self.changes_made) > 5:
+            summary_parts.append(f"... and {len(self.changes_made) - 5} more changes.")
+        
+        return "\n".join(summary_parts)
+
+
 class BudgetAnalyzer:
     """
     Utility class for budget analysis and calculations

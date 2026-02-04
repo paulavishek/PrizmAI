@@ -20,10 +20,51 @@
     .recommendation-card.priority-medium { border-left-color: #ffc107; }
     .recommendation-card.priority-low { border-left-color: #28a745; }
     
-    .status-badge-pending { background-color: #ffc107; }
+    .status-badge-pending { background-color: #ffc107; color: #000; }
     .status-badge-accepted { background-color: #28a745; }
     .status-badge-rejected { background-color: #dc3545; }
     .status-badge-implemented { background-color: #17a2b8; }
+    
+    .change-preview-item {
+        border-left: 3px solid #007bff;
+        padding: 10px 15px;
+        margin-bottom: 10px;
+        background-color: #f8f9fa;
+        border-radius: 0 4px 4px 0;
+    }
+    
+    .change-preview-item.increase {
+        border-left-color: #28a745;
+        background-color: #d4edda;
+    }
+    
+    .change-preview-item.decrease {
+        border-left-color: #dc3545;
+        background-color: #f8d7da;
+    }
+    
+    .implementation-log {
+        background-color: #e7f3ff;
+        border-radius: 8px;
+        padding: 15px;
+        margin-top: 15px;
+    }
+    
+    .implementation-log .change-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #dee2e6;
+    }
+    
+    .implementation-log .change-item:last-child {
+        border-bottom: none;
+    }
+    
+    .savings-badge {
+        font-size: 1.1rem;
+        padding: 8px 16px;
+    }
 </style>
 {% endblock %}
 
@@ -157,13 +198,29 @@
                                 </div>
                                 {% elif rec.status == 'accepted' %}
                                 <div class="d-grid gap-2">
-                                    <form method="post" action="{% url 'recommendation_action' rec.id %}" class="d-inline">
-                                        {% csrf_token %}
-                                        <input type="hidden" name="action" value="implement">
-                                        <button type="submit" class="btn btn-primary btn-sm w-100">
-                                            <i class="fas fa-check-double"></i> Mark Implemented
-                                        </button>
-                                    </form>
+                                    <!-- Preview Changes Button -->
+                                    <button type="button" class="btn btn-outline-info btn-sm w-100 mb-2" 
+                                            onclick="previewChanges({{ rec.id }})">
+                                        <i class="fas fa-eye"></i> Preview Changes
+                                    </button>
+                                    <!-- Implement Button - triggers modal -->
+                                    <button type="button" class="btn btn-primary btn-sm w-100" 
+                                            onclick="showImplementModal({{ rec.id }}, '{{ rec.title|escapejs }}')">
+                                        <i class="fas fa-check-double"></i> Implement Changes
+                                    </button>
+                                </div>
+                                {% elif rec.status == 'implemented' %}
+                                <div class="d-grid gap-2">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm w-100" 
+                                            onclick="viewImplementationDetails({{ rec.id }})">
+                                        <i class="fas fa-history"></i> View Changes Made
+                                    </button>
+                                    {% if rec.implemented_at %}
+                                    <small class="text-muted text-center mt-2">
+                                        <i class="fas fa-check-circle text-success"></i>
+                                        Implemented {{ rec.implemented_at|date:"M d, Y H:i" }}
+                                    </small>
+                                    {% endif %}
                                 </div>
                                 {% endif %}
                             </div>
@@ -192,32 +249,377 @@
         </div>
     </div>
 </div>
+
+<!-- Preview Changes Modal -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title" id="previewModalLabel">
+                    <i class="fas fa-eye me-2"></i>Preview Changes
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="previewModalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Analyzing recommendation...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Implement Confirmation Modal -->
+<div class="modal fade" id="implementModal" tabindex="-1" aria-labelledby="implementModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="implementModalLabel">
+                    <i class="fas fa-check-double me-2"></i>Confirm Implementation
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="implementModalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading changes preview...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form id="implementForm" method="post" action="" class="d-inline">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="implement">
+                    <button type="submit" class="btn btn-primary" id="confirmImplementBtn">
+                        <i class="fas fa-check-double"></i> Confirm & Apply Changes
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Implementation Details Modal -->
+<div class="modal fade" id="detailsModal" tabindex="-1" aria-labelledby="detailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="detailsModalLabel">
+                    <i class="fas fa-history me-2"></i>Implementation Details
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="detailsModalBody">
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading implementation details...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// Add confirmation for actions
-document.querySelectorAll('form[action*="recommendation_action"]').forEach(form => {
-    form.addEventListener('submit', function(e) {
-        const action = this.querySelector('input[name="action"]').value;
-        let message = '';
-        
-        switch(action) {
-            case 'accept':
-                message = 'Are you sure you want to accept this recommendation?';
-                break;
-            case 'reject':
-                message = 'Are you sure you want to reject this recommendation?';
-                break;
-            case 'implement':
-                message = 'Mark this recommendation as implemented?';
-                break;
-        }
-        
-        if (!confirm(message)) {
-            e.preventDefault();
-        }
+const currency = '{{ board.budget.currency|default:"USD" }}';
+
+function formatCurrency(amount) {
+    return currency + ' ' + parseFloat(amount).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
     });
+}
+
+function previewChanges(recId) {
+    const modal = new bootstrap.Modal(document.getElementById('previewModal'));
+    modal.show();
+    
+    fetch(`/recommendation/${recId}/preview/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('previewModalBody').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i>${data.error}
+                    </div>
+                `;
+                return;
+            }
+            
+            let changesHtml = '';
+            if (data.changes && data.changes.length > 0) {
+                changesHtml = data.changes.map(change => {
+                    const isIncrease = change.change_amount > 0;
+                    const changeClass = isIncrease ? 'increase' : 'decrease';
+                    const icon = isIncrease ? 'arrow-up' : 'arrow-down';
+                    const changeColor = isIncrease ? 'success' : 'danger';
+                    
+                    return `
+                        <div class="change-preview-item ${changeClass}">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong>${change.task_title}</strong>
+                                    <br>
+                                    <small class="text-muted">${change.field}: ${formatCurrency(change.old_value)} → ${formatCurrency(change.new_value)}</small>
+                                </div>
+                                <span class="badge bg-${changeColor}">
+                                    <i class="fas fa-${icon} me-1"></i>
+                                    ${formatCurrency(Math.abs(change.change_amount))}
+                                </span>
+                            </div>
+                            <small class="text-muted mt-2 d-block"><em>${change.reason}</em></small>
+                        </div>
+                    `;
+                }).join('');
+            } else {
+                changesHtml = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        ${data.note || 'This recommendation requires manual implementation. No automatic changes will be made.'}
+                    </div>
+                `;
+            }
+            
+            document.getElementById('previewModalBody').innerHTML = `
+                <div class="mb-4">
+                    <h6 class="text-primary">${data.recommendation_type}</h6>
+                    <p class="lead">${data.summary}</p>
+                </div>
+                
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h6 class="text-muted">Tasks Affected</h6>
+                                <h3>${data.total_tasks_affected}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h6 class="text-muted">Estimated Savings</h6>
+                                <h3 class="text-success">${formatCurrency(data.estimated_savings)}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h6 class="text-muted">Changes</h6>
+                                <h3>${data.changes ? data.changes.length : 0}</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <h6 class="mb-3"><i class="fas fa-list me-2"></i>Proposed Changes</h6>
+                ${changesHtml}
+            `;
+        })
+        .catch(error => {
+            document.getElementById('previewModalBody').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>Error loading preview: ${error}
+                </div>
+            `;
+        });
+}
+
+function showImplementModal(recId, recTitle) {
+    const modal = new bootstrap.Modal(document.getElementById('implementModal'));
+    document.getElementById('implementForm').action = `/recommendation/${recId}/action/`;
+    document.getElementById('implementModalLabel').innerHTML = `
+        <i class="fas fa-check-double me-2"></i>Implement: ${recTitle}
+    `;
+    modal.show();
+    
+    // Load preview in the modal
+    fetch(`/recommendation/${recId}/preview/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('implementModalBody').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i>${data.error}
+                    </div>
+                `;
+                return;
+            }
+            
+            let changesCount = data.changes ? data.changes.length : 0;
+            let changesListHtml = '';
+            
+            if (changesCount > 0) {
+                changesListHtml = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>This action will make the following changes to your budget:</strong>
+                    </div>
+                    <div class="changes-list" style="max-height: 300px; overflow-y: auto;">
+                        ${data.changes.slice(0, 10).map(change => `
+                            <div class="change-preview-item ${change.change_amount > 0 ? 'increase' : 'decrease'}">
+                                <strong>${change.task_title}</strong><br>
+                                <small>${change.field}: ${formatCurrency(change.old_value)} → ${formatCurrency(change.new_value)}</small>
+                            </div>
+                        `).join('')}
+                        ${changesCount > 10 ? `<p class="text-muted">...and ${changesCount - 10} more changes</p>` : ''}
+                    </div>
+                `;
+            } else {
+                changesListHtml = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        ${data.note || 'This recommendation will be marked as implemented. Manual action may be required.'}
+                    </div>
+                `;
+            }
+            
+            document.getElementById('implementModalBody').innerHTML = `
+                <div class="mb-3">
+                    <p class="lead">${data.summary}</p>
+                </div>
+                ${changesListHtml}
+                <div class="mt-3 p-3 bg-light rounded">
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <strong>Tasks Affected:</strong> ${data.total_tasks_affected}
+                        </div>
+                        <div class="col-6">
+                            <strong>Est. Savings:</strong> <span class="text-success">${formatCurrency(data.estimated_savings)}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        })
+        .catch(error => {
+            document.getElementById('implementModalBody').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>Error loading preview: ${error}
+                </div>
+            `;
+        });
+}
+
+function viewImplementationDetails(recId) {
+    const modal = new bootstrap.Modal(document.getElementById('detailsModal'));
+    modal.show();
+    
+    fetch(`/recommendation/${recId}/details/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('detailsModalBody').innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i>${data.error}
+                    </div>
+                `;
+                return;
+            }
+            
+            let changesHtml = '';
+            if (data.changes && data.changes.length > 0) {
+                changesHtml = `
+                    <h6 class="mb-3"><i class="fas fa-list-check me-2"></i>Changes Applied (${data.total_changes})</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Task</th>
+                                    <th>Field Changed</th>
+                                    <th>Old Value</th>
+                                    <th>New Value</th>
+                                    <th>Change</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.changes.map(change => `
+                                    <tr class="${change.is_rolled_back ? 'text-muted text-decoration-line-through' : ''}">
+                                        <td>${change.task}</td>
+                                        <td>${change.field}</td>
+                                        <td>${formatCurrency(change.old_value)}</td>
+                                        <td>${formatCurrency(change.new_value)}</td>
+                                        <td>
+                                            <span class="badge bg-${change.change_amount >= 0 ? 'success' : 'danger'}">
+                                                ${change.change_amount >= 0 ? '+' : ''}${formatCurrency(change.change_amount)}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+            } else {
+                changesHtml = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        No automatic changes were applied. This recommendation was marked as implemented manually.
+                    </div>
+                `;
+            }
+            
+            document.getElementById('detailsModalBody').innerHTML = `
+                <div class="implementation-log">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h5 class="mb-1">${data.recommendation_title}</h5>
+                            <small class="text-muted">
+                                Implemented ${data.implemented_at ? new Date(data.implemented_at).toLocaleString() : 'N/A'}
+                                ${data.implemented_by ? ' by ' + data.implemented_by : ''}
+                            </small>
+                        </div>
+                        <span class="badge bg-success savings-badge">
+                            <i class="fas fa-check-circle me-1"></i>Implemented
+                        </span>
+                    </div>
+                    
+                    ${data.summary ? `<p class="mb-3"><em>${data.summary}</em></p>` : ''}
+                </div>
+                
+                <div class="mt-4">
+                    ${changesHtml}
+                </div>
+            `;
+        })
+        .catch(error => {
+            document.getElementById('detailsModalBody').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle me-2"></i>Error loading details: ${error}
+                </div>
+            `;
+        });
+}
+
+// Simple confirmation for accept/reject (no modal needed)
+document.querySelectorAll('form[action*="recommendation_action"]').forEach(form => {
+    const actionInput = form.querySelector('input[name="action"]');
+    if (actionInput && (actionInput.value === 'accept' || actionInput.value === 'reject')) {
+        form.addEventListener('submit', function(e) {
+            const action = actionInput.value;
+            let message = action === 'accept' 
+                ? 'Accept this recommendation? You can then preview and implement the changes.'
+                : 'Reject this recommendation?';
+            
+            if (!confirm(message)) {
+                e.preventDefault();
+            }
+        });
+    }
 });
 </script>
 {% endblock %}

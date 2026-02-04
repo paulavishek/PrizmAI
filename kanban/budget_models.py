@@ -489,6 +489,16 @@ class BudgetRecommendation(models.Model):
         blank=True,
         related_name='reviewed_recommendations'
     )
+    implemented_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the recommendation was implemented"
+    )
+    implementation_summary = models.TextField(
+        blank=True,
+        default='',
+        help_text="Summary of changes made when implementing this recommendation"
+    )
     
     class Meta:
         ordering = ['-created_at']
@@ -501,6 +511,16 @@ class BudgetRecommendation(models.Model):
     
     def __str__(self):
         return f"{self.get_recommendation_type_display()} - {self.title}"
+    
+    def get_implementation_logs(self):
+        """Get all implementation logs for this recommendation"""
+        return self.implementation_logs.all()
+    
+    def get_total_savings_realized(self):
+        """Calculate actual savings from implementation logs"""
+        logs = self.implementation_logs.filter(is_rolled_back=False)
+        total_change = sum(log.get_change_amount() for log in logs)
+        return abs(total_change) if total_change < 0 else Decimal('0.00')
 
 
 class CostPattern(models.Model):
@@ -557,3 +577,110 @@ class CostPattern(models.Model):
     
     def __str__(self):
         return f"{self.board.name} - {self.pattern_name} (Confidence: {self.confidence}%)"
+
+
+class BudgetImplementationLog(models.Model):
+    """
+    Audit log for tracking budget changes when recommendations are implemented.
+    Records what was changed, by whom, and allows for potential rollback.
+    """
+    CHANGE_TYPE_CHOICES = [
+        ('budget_reallocation', 'Budget Reallocation'),
+        ('task_estimate_update', 'Task Estimate Update'),
+        ('hourly_rate_change', 'Hourly Rate Change'),
+        ('scope_reduction', 'Scope Reduction'),
+        ('resource_reassignment', 'Resource Reassignment'),
+        ('timeline_adjustment', 'Timeline Adjustment'),
+    ]
+    
+    recommendation = models.ForeignKey(
+        BudgetRecommendation,
+        on_delete=models.CASCADE,
+        related_name='implementation_logs',
+        help_text="Recommendation that triggered this change"
+    )
+    
+    # Change details
+    change_type = models.CharField(
+        max_length=30,
+        choices=CHANGE_TYPE_CHOICES,
+        help_text="Type of change made"
+    )
+    
+    # What was changed
+    affected_task = models.ForeignKey(
+        Task,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='budget_change_logs',
+        help_text="Task affected by this change (if applicable)"
+    )
+    
+    # Before/After values
+    field_changed = models.CharField(
+        max_length=100,
+        help_text="Name of the field that was changed"
+    )
+    old_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="Previous value"
+    )
+    new_value = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        help_text="New value after change"
+    )
+    
+    # For complex changes
+    change_details = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Additional details about the change"
+    )
+    
+    # Tracking
+    implemented_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='budget_implementations'
+    )
+    implemented_at = models.DateTimeField(auto_now_add=True)
+    
+    # Rollback support
+    is_rolled_back = models.BooleanField(
+        default=False,
+        help_text="Whether this change has been rolled back"
+    )
+    rolled_back_at = models.DateTimeField(
+        null=True,
+        blank=True
+    )
+    rolled_back_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='budget_rollbacks'
+    )
+    
+    class Meta:
+        ordering = ['-implemented_at']
+        verbose_name = 'Budget Implementation Log'
+        verbose_name_plural = 'Budget Implementation Logs'
+    
+    def __str__(self):
+        task_name = self.affected_task.title if self.affected_task else "N/A"
+        return f"{self.get_change_type_display()} - {task_name} ({self.field_changed}: {self.old_value} → {self.new_value})"
+    
+    def get_change_amount(self):
+        """Calculate the net change amount"""
+        if self.old_value is not None and self.new_value is not None:
+            return self.new_value - self.old_value
+        return Decimal('0.00')
