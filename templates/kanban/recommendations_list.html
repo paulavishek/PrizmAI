@@ -165,15 +165,24 @@
                             </div>
                             
                             <div class="col-md-4">
-                                <!-- Estimated Savings -->
+                                <!-- Budget Impact -->
                                 {% if rec.estimated_savings %}
                                 <div class="card bg-light mb-3">
                                     <div class="card-body text-center">
+                                        {% if rec.recommendation_type == 'risk_mitigation' or rec.recommendation_type == 'timeline_change' %}
+                                        <h6 class="text-muted mb-2">Additional Budget</h6>
+                                        <h3 class="mb-0 text-warning">
+                                            <i class="fas fa-arrow-up"></i>
+                                            {{ board.budget.currency }} {{ rec.estimated_savings|floatformat:2 }}
+                                        </h3>
+                                        <small class="text-muted">Risk buffer to prevent overruns</small>
+                                        {% else %}
                                         <h6 class="text-muted mb-2">Estimated Savings</h6>
                                         <h3 class="mb-0" style="color: #2c3e50;">
                                             <i class="fas fa-piggy-bank text-success"></i>
                                             {{ board.budget.currency }} {{ rec.estimated_savings|floatformat:2 }}
                                         </h3>
+                                        {% endif %}
                                     </div>
                                 </div>
                                 {% endif %}
@@ -338,10 +347,42 @@
 const currency = '{{ board.budget.currency|default:"USD" }}';
 
 function formatCurrency(amount) {
-    return currency + ' ' + parseFloat(amount).toLocaleString(undefined, {
+    return currency + ' ' + parseFloat(amount || 0).toLocaleString(undefined, {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     });
+}
+
+function getBudgetImpactDisplay(data) {
+    // Calculate net budget impact from changes
+    let netImpact = 0;
+    if (data.changes && data.changes.length > 0) {
+        netImpact = data.changes.reduce((sum, change) => sum + (change.change_amount || 0), 0);
+    }
+    
+    if (netImpact > 0) {
+        // Budget increase (costs going up) - e.g., adding risk buffers
+        return `
+            <h6 class="text-muted">Additional Budget</h6>
+            <h3 class="text-warning">
+                <i class="fas fa-arrow-up me-1"></i>${formatCurrency(netImpact)}
+            </h3>
+        `;
+    } else if (netImpact < 0) {
+        // Budget savings (costs going down)
+        return `
+            <h6 class="text-muted">Estimated Savings</h6>
+            <h3 class="text-success">
+                <i class="fas fa-piggy-bank me-1"></i>${formatCurrency(Math.abs(netImpact))}
+            </h3>
+        `;
+    } else {
+        // No net change (or manual recommendations)
+        return `
+            <h6 class="text-muted">Budget Impact</h6>
+            <h3 class="text-secondary">No Change</h3>
+        `;
+    }
 }
 
 function previewChanges(recId) {
@@ -366,7 +407,8 @@ function previewChanges(recId) {
                     const isIncrease = change.change_amount > 0;
                     const changeClass = isIncrease ? 'increase' : 'decrease';
                     const icon = isIncrease ? 'arrow-up' : 'arrow-down';
-                    const changeColor = isIncrease ? 'success' : 'danger';
+                    // Increase = warning (cost going up), Decrease = success (saving money)
+                    const changeColor = isIncrease ? 'warning' : 'success';
                     
                     return `
                         <div class="change-preview-item ${changeClass}">
@@ -412,8 +454,7 @@ function previewChanges(recId) {
                     <div class="col-md-4">
                         <div class="card bg-light">
                             <div class="card-body text-center">
-                                <h6 class="text-muted">Estimated Savings</h6>
-                                <h3 class="text-success">${formatCurrency(data.estimated_savings)}</h3>
+                                ${getBudgetImpactDisplay(data)}
                             </div>
                         </div>
                     </div>
