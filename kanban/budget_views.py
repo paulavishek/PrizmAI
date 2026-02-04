@@ -735,36 +735,18 @@ def recommendation_action(request, recommendation_id):
         action = request.POST.get('action')  # 'accept', 'reject', 'implement'
         
         if action == 'accept':
-            # Allow re-accepting if it was rejected or implemented
-            if recommendation.status == 'accepted':
-                messages.info(request, f'Recommendation "{recommendation.title}" is already accepted.')
-            else:
-                old_status = recommendation.get_status_display()
-                recommendation.status = 'accepted'
-                recommendation.reviewed_by = request.user
-                recommendation.reviewed_at = timezone.now()
-                recommendation.save()
-                
-                if old_status == 'Implemented':
-                    messages.success(request, f'Recommendation "{recommendation.title}" has been moved back to accepted status. You can re-implement if needed.')
-                else:
-                    messages.success(request, f'Recommendation "{recommendation.title}" has been accepted. Click "Implement" to apply the changes.')
+            recommendation.status = 'accepted'
+            recommendation.reviewed_by = request.user
+            recommendation.reviewed_at = timezone.now()
+            recommendation.save()
+            messages.success(request, f'Recommendation "{recommendation.title}" has been accepted. You can now preview and implement the changes.')
             
         elif action == 'reject':
-            # Allow re-rejecting or rejecting an accepted/implemented recommendation
-            if recommendation.status == 'rejected':
-                messages.info(request, f'Recommendation "{recommendation.title}" is already rejected.')
-            else:
-                old_status = recommendation.get_status_display()
-                recommendation.status = 'rejected'
-                recommendation.reviewed_by = request.user
-                recommendation.reviewed_at = timezone.now()
-                recommendation.save()
-                
-                if old_status == 'Implemented':
-                    messages.warning(request, f'Recommendation "{recommendation.title}" has been rejected. Note: Previously implemented changes are NOT automatically rolled back.')
-                else:
-                    messages.info(request, f'Recommendation "{recommendation.title}" has been rejected.')
+            recommendation.status = 'rejected'
+            recommendation.reviewed_by = request.user
+            recommendation.reviewed_at = timezone.now()
+            recommendation.save()
+            messages.info(request, f'Recommendation "{recommendation.title}" has been rejected.')
             
         elif action == 'implement':
             # Actually apply the budget changes using the redistributor
