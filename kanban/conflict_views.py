@@ -509,12 +509,32 @@ def conflict_feedback(request, conflict_id):
                 status='resolved'
             )
         else:
-            profile = request.user.profile
-            organization = profile.organization
+            from accounts.models import Organization, UserProfile
+            from kanban.models import Board
+            
+            # Ensure user has a profile
+            try:
+                profile = request.user.profile
+            except UserProfile.DoesNotExist:
+                profile = UserProfile.objects.create(
+                    user=request.user,
+                    organization=None,
+                    is_admin=False,
+                    completed_wizard=True
+                )
+            
+            # MVP Mode: Include demo boards, organization boards, and user boards
+            demo_boards = Board.objects.filter(is_official_demo_board=True)
+            org_boards = Board.objects.filter(organization=profile.organization) if profile.organization else Board.objects.none()
+            user_boards = Board.objects.filter(
+                Q(created_by=request.user) | Q(members=request.user)
+            )
+            accessible_boards = (demo_boards | org_boards | user_boards).distinct()
+            
             conflict = get_object_or_404(
                 ConflictDetection,
                 id=conflict_id,
-                board__organization=organization,
+                board__in=accessible_boards,
                 status='resolved'
             )
         
