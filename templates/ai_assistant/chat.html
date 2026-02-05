@@ -975,7 +975,7 @@
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Refreshing...';
         
-        fetch(`{% url \"ai_assistant:refresh_kb\" %}`, {
+        fetch(`{% url "ai_assistant:refresh_kb" %}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
