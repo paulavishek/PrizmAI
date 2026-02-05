@@ -1379,11 +1379,12 @@ class TaskFlowChatbotService:
             ).distinct()
         else:
             # Include demo boards for users without organization
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            user_boards = Board.objects.filter(
-                Q(created_by=self.user) | Q(members=self.user)
+            # Use Q objects to combine queries properly instead of queryset union
+            return Board.objects.filter(
+                Q(is_official_demo_board=True) |
+                Q(created_by=self.user) | 
+                Q(members=self.user)
             ).distinct()
-            return (user_boards | demo_boards).distinct()
     
     def _get_organization_context(self, prompt):
         """

@@ -22,7 +22,7 @@ from .forms import AISessionForm, UserPreferenceForm
 from .utils.chatbot_service import TaskFlowChatbotService
 
 
-@login_required(login_url='accounts:login')
+@login_required
 @ensure_csrf_cookie
 def assistant_welcome(request):
     """Welcome page for AI Project Assistant"""
@@ -49,7 +49,7 @@ def assistant_welcome(request):
     return render(request, 'ai_assistant/welcome.html', context)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 @ensure_csrf_cookie
 def chat_interface(request, session_id=None):
     """Main chat interface for AI Assistant"""
@@ -122,7 +122,7 @@ def chat_interface(request, session_id=None):
     return render(request, 'ai_assistant/chat.html', context)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 @require_http_methods(["POST"])
 def create_session(request):
     """Create a new AI Assistant session"""
@@ -152,7 +152,7 @@ def create_session(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 @require_POST
 def send_message(request):
     """Send message to AI Assistant and get response"""
@@ -356,7 +356,7 @@ def send_message(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 def get_sessions(request):
     """Get user's chat sessions including demo sessions"""
     # Show user's own sessions AND demo sessions
@@ -382,7 +382,7 @@ def get_sessions(request):
     return JsonResponse(data)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 def get_session_messages(request, session_id):
     """Get messages for a specific session"""
     from accounts.models import Organization
@@ -437,7 +437,7 @@ def get_session_messages(request, session_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 @require_POST
 def rename_session(request, session_id):
     """Rename a chat session"""
@@ -467,7 +467,7 @@ def rename_session(request, session_id):
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 @require_POST
 def delete_session(request, session_id):
     """Delete a chat session (only user's own sessions, not demo sessions)"""
@@ -487,7 +487,7 @@ def delete_session(request, session_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 @require_POST
 def clear_session(request, session_id):
     """Clear all messages in a chat session"""
@@ -515,7 +515,7 @@ def clear_session(request, session_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 def export_session(request, session_id):
     """Export chat session as JSON or Markdown"""
     try:
@@ -609,7 +609,7 @@ def export_session(request, session_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 @require_POST
 def toggle_star_message(request, message_id):
     """Toggle star on a message"""
@@ -624,7 +624,7 @@ def toggle_star_message(request, message_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 @require_POST
 def submit_feedback(request, message_id):
     """Submit feedback on a message"""
@@ -647,7 +647,7 @@ def submit_feedback(request, message_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 def analytics_dashboard(request):
     """View analytics dashboard"""
     from accounts.models import Organization
@@ -726,7 +726,7 @@ def analytics_dashboard(request):
     return render(request, 'ai_assistant/analytics.html', context)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 def get_analytics_data(request):
     """Get analytics data for charts"""
     from accounts.models import Organization
@@ -765,7 +765,7 @@ def get_analytics_data(request):
     return JsonResponse(data)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 def view_recommendations(request):
     """View AI task recommendations"""
     board_id = request.GET.get('board_id')
@@ -791,7 +791,7 @@ def view_recommendations(request):
     return render(request, 'ai_assistant/recommendations.html', context)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 @require_POST
 def accept_recommendation(request, recommendation_id):
     """Accept a task recommendation"""
@@ -807,7 +807,7 @@ def accept_recommendation(request, recommendation_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 @require_POST
 def reject_recommendation(request, recommendation_id):
     """Reject a task recommendation"""
@@ -823,7 +823,7 @@ def reject_recommendation(request, recommendation_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 def user_preferences(request):
     """Manage user preferences"""
     user_pref, created = UserPreference.objects.get_or_create(user=request.user)
@@ -841,7 +841,7 @@ def user_preferences(request):
     return render(request, 'ai_assistant/preferences.html', context)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 @require_POST
 def save_preferences(request):
     """Save user preferences via AJAX"""
@@ -868,7 +868,7 @@ def save_preferences(request):
         return JsonResponse({'error': str(e)}, status=500)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 def knowledge_base_view(request):
     """View and manage project knowledge base"""
     board_id = request.GET.get('board_id')
@@ -888,7 +888,7 @@ def knowledge_base_view(request):
     return render(request, 'ai_assistant/knowledge_base.html', context)
 
 
-@login_required(login_url='accounts:login')
+@login_required
 @require_POST
 def refresh_knowledge_base(request):
     """Refresh knowledge base from project data"""
@@ -905,3 +905,4 @@ def refresh_knowledge_base(request):
     
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=500)
+
