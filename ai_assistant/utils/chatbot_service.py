@@ -274,15 +274,19 @@ class TaskFlowChatbotService:
             else:
                 return ""
             
-            # Get high-risk tasks
+            # Get high-risk tasks (exclude completed tasks)
             high_risk_tasks = board_tasks.filter(
                 risk_level__in=['high', 'critical']
+            ).exclude(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
             ).select_related('assigned_to', 'column').order_by('-risk_score')[:10]
             
             if not high_risk_tasks.exists():
                 # Try alternative: tasks with AI risk score
                 high_risk_tasks = board_tasks.filter(
                     ai_risk_score__gte=70
+                ).exclude(
+                    Q(column__name__icontains='done') | Q(column__name__icontains='closed')
                 ).select_related('assigned_to', 'column').order_by('-ai_risk_score')[:10]
             
             if not high_risk_tasks.exists():
@@ -361,6 +365,8 @@ class TaskFlowChatbotService:
     def _is_search_query(self, prompt):
         """
         Detect if query should trigger web search (RAG)
+        Only triggers for genuinely external/industry knowledge queries,
+        NOT for project-specific questions that can be answered from internal data.
         
         Args:
             prompt (str): User prompt
@@ -368,20 +374,26 @@ class TaskFlowChatbotService:
         Returns:
             bool: True if web search should be triggered
         """
+        # First check if this is clearly a project-specific query — skip web search
+        project_specific_indicators = [
+            'my task', 'my board', 'assigned to me', 'our team', 'our project',
+            'my project', 'how many tasks', 'workload', 'overdue', 'who is',
+            'who has', 'which board', 'task distribution', 'sprint', 'burndown',
+            'work on today', 'assigned', 'blocker', 'blocked', 'risk in my',
+            'should i assign', 'reassign', 'team member',
+        ]
+        prompt_lower = prompt.lower()
+        if any(indicator in prompt_lower for indicator in project_specific_indicators):
+            return False
+        
         search_triggers = [
-            'latest', 'recent', 'current', 'new', 'today', '2025', '2024',
-            'trend', 'news', 'update', 'web', 'online', 'internet',
-            'what is the', 'how do', 'tell me about', 'find', 'search',
-            'best practices', 'industry', 'methodology', 'tool', 'framework',
-            'how to tackle', 'how to handle', 'how to manage', 'how to solve',
-            'strategy for', 'strategies for', 'approach to', 'way to',
-            'tips for', 'advice on', 'guidance on', 'recommendations for',
-            'help me', 'suggest', 'what should', 'how can I', 'how can we',
-            'industry standard', 'common practice', 'proven method', 
-            'effective way', 'efficient way', 'optimal approach'
+            'latest', 'recent news', 'current trend', 'new release',
+            'trend', 'news', 'web', 'online', 'internet', 'search for',
+            'best practices in industry', 'industry standard', 'common practice',
+            'proven method', 'methodology comparison',
+            'what is the difference between', 'compare methodologies',
         ]
         
-        prompt_lower = prompt.lower()
         return any(trigger in prompt_lower for trigger in search_triggers)
     
     def _is_project_query(self, prompt):
@@ -786,6 +798,22 @@ class TaskFlowChatbotService:
                 user_type = "Demo" if u['is_demo'] else "Real"
                 context += f"| {u['name']} | {user_type} | {u['stats']['total']} | {u['stats']['completed']} | {u['stats']['overdue_count']} | {u['stats']['due_soon_count']} |\n"
             
+            # Add skill information for team members
+            context += "\n---\n**🛠️ Team Skills & Proficiencies:**\n"
+            try:
+                from accounts.models import UserProfile
+                for user in all_users:
+                    try:
+                        profile = UserProfile.objects.get(user=user)
+                        if profile.skills and isinstance(profile.skills, list) and len(profile.skills) > 0:
+                            display_name = user.get_full_name() or user.username
+                            skill_strs = [f"{s.get('name', 'Unknown')} ({s.get('level', 'N/A')})" for s in profile.skills]
+                            context += f"  • **{display_name}**: {', '.join(skill_strs)}\n"
+                    except UserProfile.DoesNotExist:
+                        pass
+            except Exception as e:
+                logger.debug(f"Could not load skill data for user info: {e}")
+            
             return context
             
         except Exception as e:
@@ -885,18 +913,26 @@ class TaskFlowChatbotService:
     
     def _is_strategic_query(self, prompt):
         """
-        Detect if query is asking for strategic advice, best practices, or how-to guidance
-        These queries benefit from RAG + project context
+        Detect if query is asking for strategic advice, best practices, or how-to guidance.
+        Only triggers for genuinely strategic/methodology questions, not project-specific ones.
         """
-        strategic_keywords = [
-            'how to', 'how can', 'how should', 'what should', 'best way to',
-            'best practice', 'best practices', 'advice', 'guidance', 'recommend',
-            'suggestion', 'tips', 'strategy', 'strategies', 'approach',
-            'tackle', 'handle', 'manage', 'deal with', 'solve', 'improve',
-            'optimize', 'enhance', 'better', 'effective', 'efficient',
-            'successful', 'proven method', 'industry standard', 'expert advice'
+        # Skip if this is clearly about the user's own project data
+        project_data_indicators = [
+            'my task', 'assigned to me', 'our board', 'my board',
+            'workload', 'who should', 'who has', 'overdue', 'what should i work on',
+            'work on today', 'task assigned', 'blockers', 'risks in my',
         ]
-        return any(kw in prompt.lower() for kw in strategic_keywords)
+        prompt_lower = prompt.lower()
+        if any(indicator in prompt_lower for indicator in project_data_indicators):
+            return False
+        
+        strategic_keywords = [
+            'best practice', 'best practices', 'industry standard',
+            'methodology', 'approach for complex', 'proven method',
+            'expert advice on', 'strategy for scaling', 'how to implement agile',
+            'optimize process', 'improve team productivity framework',
+        ]
+        return any(kw in prompt_lower for kw in strategic_keywords)
     
     def _get_user_tasks_context(self, prompt):
         """
@@ -1178,6 +1214,50 @@ class TaskFlowChatbotService:
                     
                     context += f"{i}. **{name}**: {task_count} tasks ({percentage:.1f}%)\n"
             
+            # Per-board breakdown for each team member
+            context += "\n**Per-Board Breakdown:**\n"
+            for board in user_boards:
+                board_tasks = all_tasks.filter(column__board=board)
+                if not board_tasks.exists():
+                    continue
+                board_distribution = board_tasks.values(
+                    'assigned_to__first_name',
+                    'assigned_to__last_name',
+                    'assigned_to__username'
+                ).annotate(task_count=Count('id')).order_by('-task_count')
+                
+                if board_distribution:
+                    context += f"\n  **{board.name}** ({board_tasks.count()} tasks):\n"
+                    for assignee in board_distribution:
+                        first_name = assignee['assigned_to__first_name'] or ''
+                        last_name = assignee['assigned_to__last_name'] or ''
+                        username = assignee['assigned_to__username']
+                        name = f"{first_name} {last_name}".strip() if (first_name or last_name) else (username or 'Unassigned')
+                        context += f"    • {name}: {assignee['task_count']} tasks\n"
+            
+            # Add skill information for each team member (if available)
+            try:
+                from accounts.models import UserProfile
+                context += "\n**Team Member Skills:**\n"
+                for assignee in task_distribution:
+                    username = assignee['assigned_to__username']
+                    if not username:
+                        continue
+                    try:
+                        profile = UserProfile.objects.get(user__username=username)
+                        if profile.skills:
+                            skills_list = profile.skills if isinstance(profile.skills, list) else []
+                            if skills_list:
+                                first_name = assignee['assigned_to__first_name'] or ''
+                                last_name = assignee['assigned_to__last_name'] or ''
+                                name = f"{first_name} {last_name}".strip() or username
+                                skill_strs = [f"{s.get('name', 'Unknown')} ({s.get('level', 'N/A')})" for s in skills_list[:5]]
+                                context += f"  • **{name}**: {', '.join(skill_strs)}\n"
+                    except UserProfile.DoesNotExist:
+                        pass
+            except Exception as e:
+                logger.debug(f"Could not load skill data: {e}")
+            
             # Check for workload imbalance
             if task_distribution:
                 max_tasks = task_distribution[0]['task_count']
@@ -1356,18 +1436,26 @@ class TaskFlowChatbotService:
     
     def _is_strategic_query(self, prompt):
         """
-        Detect if query is asking for strategic advice, best practices, or how-to guidance
-        These queries benefit from RAG + project context
+        Detect if query is asking for strategic advice, best practices, or how-to guidance.
+        Only triggers for genuinely strategic/methodology questions, not project-specific ones.
         """
-        strategic_keywords = [
-            'how to', 'how can', 'how should', 'what should', 'best way to',
-            'best practice', 'best practices', 'advice', 'guidance', 'recommend',
-            'suggestion', 'tips', 'strategy', 'strategies', 'approach',
-            'tackle', 'handle', 'manage', 'deal with', 'solve', 'improve',
-            'optimize', 'enhance', 'better', 'effective', 'efficient',
-            'successful', 'proven method', 'industry standard', 'expert advice'
+        # Skip if this is clearly about the user's own project data
+        project_data_indicators = [
+            'my task', 'assigned to me', 'our board', 'my board',
+            'workload', 'who should', 'who has', 'overdue', 'what should i work on',
+            'work on today', 'task assigned', 'blockers', 'risks in my',
         ]
-        return any(kw in prompt.lower() for kw in strategic_keywords)
+        prompt_lower = prompt.lower()
+        if any(indicator in prompt_lower for indicator in project_data_indicators):
+            return False
+        
+        strategic_keywords = [
+            'best practice', 'best practices', 'industry standard',
+            'methodology', 'approach for complex', 'proven method',
+            'expert advice on', 'strategy for scaling', 'how to implement agile',
+            'optimize process', 'improve team productivity framework',
+        ]
+        return any(kw in prompt_lower for kw in strategic_keywords)
     
     def _get_user_boards(self, organization=None):
         """Helper to get user's boards with optional organization filter"""
@@ -1493,9 +1581,11 @@ class TaskFlowChatbotService:
                 logger.warning(f"User {self.user} has no accessible boards")
                 return None
             
-            # Query critical tasks by multiple criteria
+            # Query critical tasks by multiple criteria (exclude completed tasks)
             critical_tasks = Task.objects.filter(
                 column__board__in=user_boards
+            ).exclude(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
             ).filter(
                 Q(risk_level__in=['high', 'critical']) |  # Explicit risk level
                 Q(priority='urgent') |  # Urgent priority
@@ -1558,16 +1648,20 @@ class TaskFlowChatbotService:
             if not user_boards.exists():
                 return None
             
-            # Get high-risk tasks
+            # Get high-risk tasks (exclude completed tasks)
             high_risk_tasks = Task.objects.filter(
                 column__board__in=user_boards,
                 risk_level__in=['high', 'critical']
+            ).exclude(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
             ).select_related('assigned_to', 'column').order_by('-risk_score')[:15]
             
             # If no explicitly high-risk tasks, try AI risk score
             if not high_risk_tasks.exists():
                 high_risk_tasks = Task.objects.filter(
                     column__board__in=user_boards
+                ).exclude(
+                    Q(column__name__icontains='done') | Q(column__name__icontains='closed')
                 ).filter(ai_risk_score__gte=70).select_related(
                     'assigned_to', 'column'
                 ).order_by('-ai_risk_score')[:15]
@@ -2586,8 +2680,24 @@ class TaskFlowChatbotService:
             return None
     
     def generate_system_prompt(self):
-        """Generate system prompt for AI model"""
-        return """You are PrizmAI AI Project Assistant, an intelligent project management assistant. 
+        """Generate system prompt for AI model with dynamic context"""
+        from django.utils import timezone
+        
+        # Dynamic context: current date, user identity, board
+        current_date = timezone.now().strftime('%A, %B %d, %Y')
+        current_time = timezone.now().strftime('%I:%M %p %Z')
+        user_name = self.user.get_full_name() or self.user.username if self.user else 'Unknown User'
+        user_username = self.user.username if self.user else 'unknown'
+        board_name = self.board.name if self.board else 'All boards'
+        
+        return f"""You are Spectra, PrizmAI's AI Project Assistant — an intelligent project management assistant.
+
+**CURRENT CONTEXT:**
+- Today's Date: {current_date}
+- Current Time: {current_time}
+- Current User: {user_name} (username: {user_username})
+- Active Board: {board_name}
+
 Your role is to help project managers and team members with:
 - Project planning and strategy
 - Task management and prioritization
@@ -2604,15 +2714,25 @@ CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 2. **NEVER ASK FOR INFORMATION YOU HAVE**: If context data contains the answer, provide it immediately without asking follow-up questions
 3. **BE SPECIFIC AND CONCRETE**: Use actual numbers, names, dates from the context data - not general statements
 4. **ANSWER DIRECTLY FIRST**: Start with the specific answer from the data, then provide additional insights or recommendations
-5. **NO UNNECESSARY QUESTIONS**: Don't ask "What is your name?" or "Which board?" if the context already identifies the user or scope
+5. **NO UNNECESSARY QUESTIONS**: Don't ask "What is your name?" or "Which board?" — you already know the user is {user_name} and the board context
 6. **LEVERAGE WIKI & MEETINGS**: When wiki pages or meeting notes are provided, reference them directly and quote relevant sections
+7. **DATE AWARENESS**: Always compare task due dates against today's date ({current_date}). Proactively flag overdue tasks (due date before today) and approaching deadlines (due within 7 days). If a task is overdue, ALWAYS highlight it with a warning, even if not explicitly asked.
+8. **CROSS-REFERENCE DATA**: When answering resource allocation or task assignment questions, combine multiple data sources:
+   - Check team members' current workloads (task counts)
+   - Check skill proficiency levels (if available in context)
+   - Check task priorities and deadlines
+   - Provide a synthesized recommendation, not just raw data
+9. **FILTER COMPLETED WORK**: When listing risks, blockers, or actionable items, exclude tasks that are already "Done" or "Closed" unless specifically asked about completed work. Completed tasks are not risks.
+10. **CONCISE & ACTIONABLE**: Keep responses focused. Avoid generic productivity advice or filler content. Every sentence should add value.
 
 RESPONSE STRUCTURE:
 - For data queries (counts, lists, status): Provide the specific data FIRST, then optionally add insights
+- For "what should I work on?" queries: Prioritize by (1) overdue tasks, (2) due today, (3) due this week, (4) highest priority unstarted tasks
 - For documentation queries: Cite specific wiki pages with titles and provide relevant excerpts
 - For meeting queries: Reference specific meetings with dates and summarize key decisions/action items
-- For strategic questions (how-to, best practices): Combine web search results (if available) with project-specific recommendations
-- For risk/mitigation: Give both general best practices AND specific actions based on actual project data
+- For strategic questions: Combine project-specific data with best practices — avoid generic web advice if project data answers the question
+- For risk/mitigation: Focus ONLY on active (non-completed) tasks. Provide both specific actions and general best practices
+- For task assignment questions: Recommend specific team members based on workload + skills (if available), don't ask for info you have
 - Always be actionable - provide clear next steps
 
 EXAMPLES OF CORRECT BEHAVIOR:
@@ -2622,16 +2742,17 @@ EXAMPLES OF CORRECT BEHAVIOR:
 ❌ WRONG: "How many organizations would you like to see?"
 ✓ RIGHT: "You have 1 organization: Dev Team (2 boards, 6 members)"
 
-❌ WRONG: "I'm ready to help. What would you like to know?"
-✓ RIGHT: [Directly provide the requested data from context]
+❌ WRONG: "I need more information about team member skills to recommend an assignee"
+✓ RIGHT: "Based on current workloads, Alex Chen (12 tasks) has the most capacity. They also have Python skills at Expert level. I recommend assigning to Alex."
+
+❌ WRONG: "Security audit fixes (Done) - CRITICAL Risk"
+✓ RIGHT: (Don't include completed tasks in risk lists — they're resolved)
 
 Format responses clearly with:
 - Bullet points for lists
 - **Bold** for emphasis and headers
 - Specific numbers and metrics
-- Actionable recommendations
-
-When context data is limited, acknowledge it briefly but still provide valuable strategic guidance based on project management best practices."""
+- Actionable recommendations"""
     
     def get_response(self, prompt, use_cache=True):
         """
@@ -2828,7 +2949,7 @@ When context data is limited, acknowledge it briefly but still provide valuable 
                 logger.debug("Added KB context")
             
             # 18. Web search context for research and strategic queries
-            # SKIP web search if we already have wiki context (local documentation is preferred)
+            # SKIP web search if we already have strong internal context or wiki context
             search_context = ""
             used_web_search = False
             search_sources = []
@@ -2836,9 +2957,15 @@ When context data is limited, acknowledge it briefly but still provide valuable 
             # Check if wiki context was already added (indicates query is about internal docs)
             has_wiki_context = is_wiki_query and any('wiki' in part.lower() or 'documentation' in part.lower() for part in context_parts)
             
-            # Trigger web search for search queries OR strategic queries (how-to, best practices, etc.)
-            # BUT skip if wiki context exists - local documentation takes priority
-            if (is_search_query or is_strategic_query) and not has_wiki_context and getattr(settings, 'ENABLE_WEB_SEARCH', False) and self.search_client:
+            # Check if we already have strong internal context (project data answers the question)
+            has_strong_internal_context = len(context_parts) >= 2 or any(
+                indicator in '\n'.join(context_parts).lower() 
+                for indicator in ['tasks assigned', 'task distribution', 'total tasks', 'workload', 'risk analysis', 'critical tasks', 'overdue']
+            ) if context_parts else False
+            
+            # Trigger web search ONLY for queries that genuinely need external knowledge
+            # Skip if: wiki context exists, OR strong internal context already answers the question
+            if (is_search_query or is_strategic_query) and not has_wiki_context and not has_strong_internal_context and getattr(settings, 'ENABLE_WEB_SEARCH', False) and self.search_client:
                 try:
                     search_context = self.search_client.get_search_context(prompt, max_results=3)
                     if search_context:  # Only add if we got results (None = failed)
