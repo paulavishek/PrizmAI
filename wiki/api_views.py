@@ -15,6 +15,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from django.db import transaction
 from django.db import models
+from django.db.models import Q
 
 from kanban.models import Board, Task, Column
 from accounts.models import Organization
@@ -70,11 +71,12 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
         # Access restriction removed - all authenticated users can access
         
         try:
-            # Get available boards for context (user's boards or demo boards)
-            if org:
-                available_boards = Board.objects.filter(organization=org)
-            else:
-                available_boards = Board.objects.filter(is_official_demo_board=True)
+            # MVP Mode: Get all accessible boards (demo boards + user's boards)
+            demo_boards = Board.objects.filter(is_official_demo_board=True)
+            user_boards = Board.objects.filter(
+                Q(created_by=request.user) | Q(members=request.user)
+            )
+            available_boards = (demo_boards | user_boards).distinct()
             
             # Prepare wiki page context
             wiki_context = {
@@ -221,8 +223,12 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
         )
         
         try:
-            # Get available boards for context
-            available_boards = Board.objects.filter(organization=org)
+            # MVP Mode: Get all accessible boards (demo boards + user's boards)
+            demo_boards = Board.objects.filter(is_official_demo_board=True)
+            user_boards = Board.objects.filter(
+                Q(created_by=request.user) | Q(members=request.user)
+            )
+            available_boards = (demo_boards | user_boards).distinct()
             
             # Prepare wiki page context
             wiki_context = {
@@ -558,20 +564,12 @@ def get_boards_for_organization(request):
     Used for board selection when creating tasks
     """
     try:
-        # Get organization - use user's org or demo org as fallback
-        org = None
-        if hasattr(request.user, 'profile') and request.user.profile.organization:
-            org = request.user.profile.organization
-        else:
-            org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-        
-        # Get boards user has access to - include demo boards for users without org
-        if org:
-            boards = Board.objects.filter(organization=org).filter(
-                models.Q(created_by=request.user) | models.Q(members=request.user) | models.Q(is_official_demo_board=True)
-            ).distinct()
-        else:
-            boards = Board.objects.filter(is_official_demo_board=True)
+        # MVP Mode: Get all accessible boards (demo boards + user's boards)
+        demo_boards = Board.objects.filter(is_official_demo_board=True)
+        user_boards = Board.objects.filter(
+            Q(created_by=request.user) | Q(members=request.user)
+        )
+        boards = (demo_boards | user_boards).distinct()
         
         boards_data = []
         for board in boards:
@@ -678,10 +676,12 @@ def import_transcript_to_wiki_page(request, wiki_page_id):
                 # Check AI quota
                 has_quota, quota, remaining = check_ai_quota(request.user)
                 if has_quota:
-                    # Get available boards
-                    available_boards = Board.objects.filter(organization=org).filter(
-                        models.Q(created_by=request.user) | models.Q(members=request.user)
-                    ).distinct()[:10]
+                    # MVP Mode: Get all accessible boards
+                    demo_boards = Board.objects.filter(is_official_demo_board=True)
+                    user_boards = Board.objects.filter(
+                        Q(created_by=request.user) | Q(members=request.user)
+                    )
+                    available_boards = (demo_boards | user_boards).distinct()[:10]
                     
                     # Build wiki page context
                     wiki_page_context = {

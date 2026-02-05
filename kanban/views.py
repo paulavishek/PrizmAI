@@ -1655,18 +1655,11 @@ def organization_boards(request):
 
 @login_required
 def join_board(request, board_id):
-    """Allow users to join boards in their organization that they aren't already members of"""
+    """Allow users to join boards they have access to"""
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if user is in the same organization as the board
-    try:
-        user_profile = request.user.profile
-        if user_profile.organization != board.organization:
-            messages.error(request, "You cannot join boards outside your organization.")
-            return redirect('organization_boards')
-    except UserProfile.DoesNotExist:
-        messages.error(request, "You need to set up a profile first.")
-        return redirect('organization_choice')
+    # MVP Mode: Users can join any board they can access
+    # Access restriction removed - no organization check needed
     
     # Check if user is already a member
     if request.user in board.members.all() or board.created_by == request.user:

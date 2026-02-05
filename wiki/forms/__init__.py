@@ -114,13 +114,30 @@ class WikiLinkForm(forms.ModelForm):
             }),
         }
     
-    def __init__(self, *args, organization=None, **kwargs):
+    def __init__(self, *args, organization=None, user=None, **kwargs):
         super().__init__(*args, **kwargs)
-        if organization:
-            from kanban.models import Board, Task
-            # Filter tasks and boards to organization
-            self.fields['task'].queryset = Task.objects.filter(column__board__organization=organization)
-            self.fields['board'].queryset = Board.objects.filter(organization=organization)
+        from kanban.models import Board, Task
+        from django.db.models import Q
+        
+        # MVP Mode: Get all accessible boards (demo boards + user's boards)
+        demo_boards = Board.objects.filter(is_official_demo_board=True)
+        
+        if user:
+            user_boards = Board.objects.filter(
+                Q(created_by=user) | Q(members=user)
+            )
+            accessible_boards = (demo_boards | user_boards).distinct()
+        elif organization:
+            # Fallback to organization-based filtering if no user
+            accessible_boards = Board.objects.filter(organization=organization)
+            accessible_boards = (demo_boards | accessible_boards).distinct()
+        else:
+            # If no user or organization, show demo boards
+            accessible_boards = demo_boards
+        
+        # Filter tasks and boards to accessible boards
+        self.fields['task'].queryset = Task.objects.filter(column__board__in=accessible_boards)
+        self.fields['board'].queryset = accessible_boards
     
     def clean(self):
         cleaned_data = super().clean()
@@ -228,8 +245,20 @@ class WikiPageSearchForm(forms.Form):
     
     def __init__(self, *args, organization=None, **kwargs):
         super().__init__(*args, **kwargs)
+        # MVP Mode: Show all categories (from user's org + demo org)
         if organization:
-            self.fields['category'].queryset = WikiCategory.objects.filter(organization=organization)
+            from django.db.models import Q
+            from accounts.models import Organization
+            demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+            if demo_org:
+                self.fields['category'].queryset = WikiCategory.objects.filter(
+                    Q(organization=organization) | Q(organization=demo_org)
+                ).distinct()
+            else:
+                self.fields['category'].queryset = WikiCategory.objects.filter(organization=organization)
+        else:
+            # No organization - show all categories (MVP mode)
+            self.fields['category'].queryset = WikiCategory.objects.all()
 
 
 # Inline formsets for attachments

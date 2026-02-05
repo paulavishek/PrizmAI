@@ -728,12 +728,25 @@ def conflict_analytics(request):
             demo_orgs = Organization.objects.filter(name__in=demo_org_names)
             boards = Board.objects.filter(organization__in=demo_orgs).distinct()
         else:
-            profile = request.user.profile
-            organization = profile.organization
-            boards = Board.objects.filter(
-                Q(organization=organization) &
-                (Q(created_by=request.user) | Q(members=request.user))
-            ).distinct()
+            from accounts.models import Organization, UserProfile
+            
+            # Ensure user has a profile
+            try:
+                profile = request.user.profile
+            except UserProfile.DoesNotExist:
+                profile = UserProfile.objects.create(
+                    user=request.user,
+                    organization=None,
+                    is_admin=False,
+                    completed_wizard=True
+                )
+            
+            # MVP Mode: Get all boards the user has access to
+            demo_boards = Board.objects.filter(is_official_demo_board=True)
+            user_boards = Board.objects.filter(
+                Q(created_by=request.user) | Q(members=request.user)
+            )
+            boards = (demo_boards | user_boards).distinct()
         
         # Get resolution patterns
         patterns = ResolutionPattern.objects.filter(

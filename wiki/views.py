@@ -527,7 +527,7 @@ def wiki_search(request):
 @require_http_methods(['GET', 'POST'])
 def quick_link_wiki(request, content_type, object_id):
     """Quick link wiki pages to tasks or boards"""
-    # MVP Mode: Get organization, fall back to demo org if user doesn't have one
+    # MVP Mode: Get organization for wiki page filtering
     org = request.user.profile.organization if hasattr(request.user, 'profile') and request.user.profile.organization else None
     
     # Get demo organization as fallback
@@ -539,25 +539,19 @@ def quick_link_wiki(request, content_type, object_id):
     if not org:
         org = demo_org
     
-    # Build list of allowed organizations
-    allowed_orgs = []
-    if org:
-        allowed_orgs.append(org)
-    if demo_org and demo_org not in allowed_orgs:
-        allowed_orgs.append(demo_org)
+    # MVP Mode: Get all accessible boards (demo boards + user boards)
+    demo_boards = Board.objects.filter(is_official_demo_board=True)
+    user_boards = Board.objects.filter(
+        Q(created_by=request.user) | Q(members=request.user)
+    )
+    accessible_boards = (demo_boards | user_boards).distinct()
     
     if content_type == 'task':
-        # Allow tasks from allowed organizations
-        if allowed_orgs:
-            item = get_object_or_404(Task, pk=object_id, column__board__organization__in=allowed_orgs)
-        else:
-            item = get_object_or_404(Task, pk=object_id)
+        # MVP Mode: Allow tasks from any accessible board
+        item = get_object_or_404(Task, pk=object_id, column__board__in=accessible_boards)
     elif content_type == 'board':
-        # Allow boards from allowed organizations
-        if allowed_orgs:
-            item = get_object_or_404(Board, pk=object_id, organization__in=allowed_orgs)
-        else:
-            item = get_object_or_404(Board, pk=object_id)
+        # MVP Mode: Allow any accessible board
+        item = get_object_or_404(Board, pk=object_id, id__in=accessible_boards.values_list('id', flat=True))
     else:
         return JsonResponse({'error': 'Invalid content type'}, status=400)
     
