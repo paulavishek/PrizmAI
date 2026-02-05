@@ -944,10 +944,15 @@ class TaskFlowChatbotService:
                     
                     if hasattr(task, 'due_date') and task.due_date:
                         from django.utils import timezone
-                        if task.due_date < timezone.now().date():
-                            context += f"    - Due: {task.due_date} ⚠️ OVERDUE\n"
+                        # Handle both datetime and date objects
+                        due_date = task.due_date
+                        if hasattr(due_date, 'date'):
+                            due_date = due_date.date()
+                        today = timezone.now().date()
+                        if due_date < today:
+                            context += f"    - Due: {due_date} ⚠️ OVERDUE\n"
                         else:
-                            context += f"    - Due: {task.due_date}\n"
+                            context += f"    - Due: {due_date}\n"
                     
                     context += "\n"
             
@@ -1976,9 +1981,14 @@ class TaskFlowChatbotService:
             # Check if overdue
             if hasattr(task, 'due_date') and task.due_date:
                 from django.utils import timezone
-                if task.due_date < timezone.now().date():
+                # Handle both datetime and date objects
+                due_date = task.due_date
+                if hasattr(due_date, 'date'):
+                    due_date = due_date.date()
+                today = timezone.now().date()
+                if due_date < today:
                     bottleneck_score += 3
-                    reasons.append(f"Overdue by {(timezone.now().date() - task.due_date).days} days")
+                    reasons.append(f"Overdue by {(today - due_date).days} days")
             
             # Check if blocked
             if task.column and 'block' in task.column.name.lower():
@@ -2504,11 +2514,16 @@ class TaskFlowChatbotService:
                         
                         if hasattr(task, 'due_date') and task.due_date:
                             from django.utils import timezone
-                            if task.due_date < timezone.now().date():
-                                days_overdue = (timezone.now().date() - task.due_date).days
+                            # Handle both datetime and date objects
+                            due_date = task.due_date
+                            if hasattr(due_date, 'date'):
+                                due_date = due_date.date()
+                            today = timezone.now().date()
+                            if due_date < today:
+                                days_overdue = (today - due_date).days
                                 context += f"{indent}    - ⚠️ OVERDUE by {days_overdue} days\n"
                             else:
-                                context += f"{indent}    - Due: {task.due_date}\n"
+                                context += f"{indent}    - Due: {due_date}\n"
                         
                         context += "\n"
                     
