@@ -65,7 +65,7 @@ def chat_interface(request, session_id=None):
         except (ValueError, TypeError):
             session_id = None
     
-    # Get session or create new one
+    # Get session if specified, otherwise let user create one via "New Chat" button
     if session_id:
         # Allow access to user's own sessions OR demo sessions
         session = AIAssistantSession.objects.filter(
@@ -78,13 +78,10 @@ def chat_interface(request, session_id=None):
                 'error_message': 'Session not found or access denied.'
             }, status=404)
     else:
-        # Get active session or create new one
-        session = AIAssistantSession.objects.filter(user=request.user, is_active=True).first()
-        if not session:
-            session = AIAssistantSession.objects.create(
-                user=request.user,
-                title=f"Chat Session {timezone.now().strftime('%Y-%m-%d %H:%M')}"
-            )
+        # Don't auto-create sessions - let user create one via "New Chat" button
+        # Try to get the most recent user session to display, but don't create one
+        session = AIAssistantSession.objects.filter(user=request.user, is_active=True).order_by('-updated_at').first()
+        # session can be None - template will handle showing empty state
     
     # Get user's organization
     user_org = request.user.profile.organization if hasattr(request.user, 'profile') else None

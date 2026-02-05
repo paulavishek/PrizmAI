@@ -296,13 +296,6 @@
         cursor: not-allowed;
     }
     
-    .board-selector {
-        padding: 10px;
-        border-radius: 5px;
-        border: 1px solid #ddd;
-        font-size: 13px;
-    }
-    
     .search-badge {
         display: inline-block;
         background: #fff3cd;
@@ -553,6 +546,7 @@
     
     <!-- Main Chat Area -->
     <div class="chat-main">
+        {% if session %}
         <!-- Header -->
         <div class="chat-header">
             <div class="chat-title">
@@ -561,13 +555,6 @@
                 <i class="fas fa-pencil-alt title-edit-icon" id="edit-title-btn" title="Rename chat"></i>
             </div>
             <div class="chat-toolbar">
-                <select id="board-selector" class="board-selector">
-                    <option value="">All Projects</option>
-                    {% for board in boards %}
-                    <option value="{{ board.id }}"{% if session.board and session.board.id == board.id %} selected{% endif %}>{{ board.name }}</option>
-                    {% endfor %}
-                </select>
-                
                 <div class="btn-group">
                     <button class="btn btn-sm btn-outline-secondary" id="export-chat-btn" title="Export chat">
                         <i class="fas fa-download"></i> Export
@@ -630,13 +617,29 @@
                 </button>
             </div>
         </div>
+        {% else %}
+        <!-- No Session State - Prompt user to create a new chat -->
+        <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; padding: 40px; text-align: center;">
+            <div style="font-size: 80px; margin-bottom: 20px;">🤖</div>
+            <h2 style="color: #333; margin-bottom: 15px;">Welcome to Spectra</h2>
+            <p style="color: #666; max-width: 500px; margin-bottom: 25px;">
+                I'm your AI assistant for project management. I can help you analyze your boards, tasks, track progress, and provide insights about your projects.
+            </p>
+            <p style="color: #888; margin-bottom: 20px;">
+                Click <strong>"New Chat"</strong> on the left to start a conversation.
+            </p>
+            <button class="btn btn-primary btn-lg" onclick="createNewSession()">
+                <i class="fas fa-plus me-2"></i> Start New Chat
+            </button>
+        </div>
+        {% endif %}
     </div>
 </div>
 
 {% csrf_token %}
 
 <script>
-    const sessionId = {{ session.id|safe }};
+    const sessionId = {% if session %}{{ session.id|safe }}{% else %}null{% endif %};
     
     // Note: Chat history is NO LONGER maintained in memory or sent to the server.
     // Each AI request is completely independent (stateless) to prevent token accumulation
@@ -685,6 +688,9 @@
     
     // Load messages
     function loadMessages() {
+        // Don't load messages if no session is selected
+        if (!sessionId) return;
+        
         fetch(`{% url "ai_assistant:get_session_messages" 1 %}`.replace('1', sessionId))
             .then(r => r.json())
             .then(data => {
@@ -794,6 +800,12 @@
     
     // Send message
     function sendMessage() {
+        // Check if there's an active session
+        if (!sessionId) {
+            alert('Please create a new chat session first by clicking "New Chat".');
+            return;
+        }
+        
         const input = document.getElementById('chat-input');
         const message = input.value.trim();
         
@@ -809,9 +821,7 @@
         typing.innerHTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
         container.appendChild(typing);
         
-        // Send to server
-        const boardId = document.getElementById('board-selector').value;
-        
+        // Send to server (removed board_id since board selector was removed)
         fetch('{% url "ai_assistant:send_message" %}', {
             method: 'POST',
             headers: {
@@ -821,7 +831,6 @@
             body: JSON.stringify({
                 message: message,
                 session_id: sessionId,
-                board_id: boardId,
                 // Note: history removed - each request is stateless to prevent token accumulation
             })
         })
@@ -851,7 +860,7 @@
     }
     
     // Enter to send
-    document.getElementById('chat-input').addEventListener('keypress', function(e) {
+    document.getElementById('chat-input')?.addEventListener('keypress', function(e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             sendMessage();
@@ -920,14 +929,19 @@
     
     // Delete chat session
     document.getElementById('delete-chat-btn')?.addEventListener('click', function() {
-        const sessionId = {{ session.id }};
-        const sessionTitle = '{{ session.title|escapejs }}';
+        const currentSessionId = {% if session %}{{ session.id }}{% else %}null{% endif %};
+        const sessionTitle = '{% if session %}{{ session.title|escapejs }}{% else %}{% endif %}';
+        
+        if (!currentSessionId) {
+            alert('No session selected');
+            return;
+        }
         
         if (!confirm('Are you sure you want to delete this entire chat session? This action cannot be undone.')) {
             return;
         }
         
-        fetch(`/assistant/api/sessions/${sessionId}/delete/`, {
+        fetch(`/assistant/api/sessions/${currentSessionId}/delete/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -939,7 +953,7 @@
             if (data.status === 'success') {
                 // Show success message before redirecting
                 alert(`Session "${sessionTitle}" has been deleted successfully.`);
-                // Redirect to chat page without session (will load or create a new one)
+                // Redirect to chat page - will show empty state, user can create new session via "New Chat" button
                 window.location.href = '/assistant/chat/';
             } else if (data.error) {
                 alert('Error deleting chat: ' + data.error);
@@ -961,7 +975,7 @@
         btn.disabled = true;
         btn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i> Refreshing...';
         
-        fetch(`{% url "ai_assistant:refresh_kb" %}?board_id=${document.getElementById('board-selector').value || ''}`, {
+        fetch(`{% url \"ai_assistant:refresh_kb\" %}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -1011,19 +1025,10 @@
     
     // Initialize
     loadSessions();
-    loadMessages();
+    if (sessionId) {
+        loadMessages();
+    }
     setInterval(loadSessions, 30000); // Refresh sessions every 30 seconds
-    
-    // Board selector change handler
-    document.getElementById('board-selector')?.addEventListener('change', function() {
-        const selectedBoard = this.options[this.selectedIndex].text;
-        const titleElement = document.getElementById('chat-title');
-        if (this.value) {
-            titleElement.textContent = selectedBoard;
-        } else {
-            titleElement.textContent = '{{ session.title }}';
-        }
-    });
     
     // Handle chat title rename
     const editTitleBtn = document.getElementById('edit-title-btn');
