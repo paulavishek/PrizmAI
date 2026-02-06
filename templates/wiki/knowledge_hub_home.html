@@ -95,7 +95,7 @@
             <!-- Search and Filter -->
             <div class="card border-0 shadow-sm mb-4">
                 <div class="card-body">
-                    <form method="get" class="row g-3">
+                    <form method="get" class="row g-3" id="searchForm">
                         <div class="col-md-12">
                             <div class="input-group">
                                 <span class="input-group-text">
@@ -103,7 +103,16 @@
                                 </span>
                                 <input type="text" name="q" class="form-control" 
                                        placeholder="Search wiki pages..." 
-                                       value="{{ search_query }}">
+                                       value="{{ search_query }}"
+                                       id="searchInput">
+                                <button class="btn btn-primary" type="submit">
+                                    <i class="fas fa-search"></i> Search
+                                </button>
+                                {% if search_query %}
+                                <a href="{% url 'wiki:knowledge_hub_home' %}" class="btn btn-outline-secondary" type="button">
+                                    <i class="fas fa-times"></i> Clear Filter
+                                </a>
+                                {% endif %}
                             </div>
                         </div>
                     </form>
