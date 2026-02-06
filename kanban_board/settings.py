@@ -617,6 +617,7 @@ CSP_SCRIPT_SRC = (
     "'self'", 
     "'unsafe-inline'",
     "https://cdn.jsdelivr.net", 
+    "https://cdnjs.cloudflare.com",  # Cloudflare CDN for wiki page libraries
     "https://code.jquery.com",
     "https://www.googletagmanager.com",  # Google Analytics
     "https://www.google-analytics.com",  # Google Analytics
