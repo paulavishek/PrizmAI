@@ -104,7 +104,7 @@
         <div class="col-12">
             {% if missing_time_alert %}
             <div class="alert alert-info alert-dismissible fade show" role="alert">
-                <i class="fas fa-bell me-2"></i>
+                <span class="badge bg-primary me-2"><i class="fas fa-robot"></i> AI</span>
                 <strong>Reminder:</strong> {{ missing_time_alert.message }}
                 <span class="ms-2 text-muted">{{ missing_time_alert.suggestion }}</span>
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
@@ -114,14 +114,14 @@
             {% for alert in time_alerts %}
             {% if alert.severity == 'critical' %}
             <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                <i class="fas fa-exclamation-triangle me-2"></i>
+                <span class="badge bg-danger me-2"><i class="fas fa-robot"></i> AI</span>
                 <strong>High Hours Alert:</strong> {{ alert.message }}
                 <br><small class="text-muted">{{ alert.suggestion }}</small>
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
             {% elif alert.severity == 'warning' %}
             <div class="alert alert-warning alert-dismissible fade show" role="alert">
-                <i class="fas fa-exclamation-circle me-2"></i>
+                <span class="badge bg-warning text-dark me-2"><i class="fas fa-robot"></i> AI</span>
                 <strong>Notice:</strong> {{ alert.message }}
                 <br><small class="text-muted">{{ alert.suggestion }}</small>
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
@@ -180,7 +180,13 @@
                                 {% endif %}
                             </select>
                             {% if smart_suggestions %}
-                            <small class="text-muted"><i class="fas fa-magic"></i> AI suggested based on your activity</small>
+                            <div class="mt-2 p-2 bg-light rounded small">
+                                <i class="fas fa-robot text-primary me-1"></i>
+                                <strong>AI Task Suggestions:</strong>
+                                <span class="text-muted">We analyze your recent activity, in-progress tasks, and upcoming deadlines to suggest what you might be working on.</span>
+                            </div>
+                            {% else %}
+                            <small class="text-muted">Showing tasks assigned to you that are not yet complete.</small>
                             {% endif %}
                         </div>
                         <div class="mb-3">
@@ -223,7 +229,7 @@
                             <div class="d-flex justify-content-between align-items-start">
                                 <div class="flex-grow-1">
                                     <h6 class="mb-1">
-                                        <a href="{% url 'task_detail' entry.task.id %}" class="text-decoration-none">
+                                        <a href="{% url 'task_detail' entry.task.id %}" class="text-decoration-none" title="{{ entry.task.title }}">
                                             {{ entry.task.title|truncatechars:40 }}
                                         </a>
                                     </h6>
@@ -231,7 +237,7 @@
                                         {{ entry.task.column.board.name }} • {{ entry.work_date|date:"M d, Y" }}
                                     </small>
                                     {% if entry.description %}
-                                    <p class="mb-0 mt-1"><small>{{ entry.description }}</small></p>
+                                    <p class="mb-0 mt-1"><small title="{{ entry.description }}" style="cursor: help;">{{ entry.description|truncatechars:60 }}</small></p>
                                     {% endif %}
                                 </div>
                                 <div class="text-end">
@@ -261,7 +267,7 @@
                         <div class="list-group-item px-0">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div class="flex-grow-1">
-                                    <a href="{% url 'task_detail' task.id %}" class="text-decoration-none">
+                                    <a href="{% url 'task_detail' task.id %}" class="text-decoration-none" title="{{ task.title }}">
                                         {{ task.title|truncatechars:50 }}
                                     </a>
                                     <br>

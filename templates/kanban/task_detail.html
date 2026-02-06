@@ -1356,7 +1356,7 @@
                                     <strong class="text-primary">{{ entry.hours_spent }}h</strong>
                                     <small class="text-muted d-block">{{ entry.work_date|date:"M d, Y" }}</small>
                                     {% if entry.description %}
-                                    <small class="text-muted">{{ entry.description|truncatechars:40 }}</small>
+                                    <small class="text-muted" title="{{ entry.description }}" style="cursor: help;">{{ entry.description|truncatechars:40 }}</small>
                                     {% endif %}
                                 </div>
                                 {% if entry.user == user %}
