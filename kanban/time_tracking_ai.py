@@ -64,6 +64,7 @@ class TimeTrackingAIService:
         
         for day_data in daily_totals:
             total = day_data['total_hours']
+            total_rounded = round(float(total), 2)
             work_date = day_data['work_date']
             
             if total >= self.CRITICAL_HOURS_THRESHOLD:
@@ -71,8 +72,8 @@ class TimeTrackingAIService:
                     'type': 'high_hours_critical',
                     'severity': 'critical',
                     'date': work_date,
-                    'hours': float(total),
-                    'message': f'Logged {total}h on {work_date.strftime("%b %d")} - this exceeds sustainable work limits.',
+                    'hours': total_rounded,
+                    'message': f'Logged {total_rounded}h on {work_date.strftime("%b %d")} - this exceeds sustainable work limits.',
                     'suggestion': 'Consider splitting time entries across multiple days if this was not continuous work.'
                 })
             elif total >= self.HIGH_HOURS_THRESHOLD:
@@ -80,8 +81,8 @@ class TimeTrackingAIService:
                     'type': 'high_hours_warning',
                     'severity': 'warning',
                     'date': work_date,
-                    'hours': float(total),
-                    'message': f'Logged {total}h on {work_date.strftime("%b %d")} - longer than a typical workday.',
+                    'hours': total_rounded,
+                    'message': f'Logged {total_rounded}h on {work_date.strftime("%b %d")} - longer than a typical workday.',
                     'suggestion': 'Monitor workload to prevent burnout.'
                 })
         

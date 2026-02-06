@@ -105,4 +105,8 @@ urlpatterns = [
     path('time-entry/<int:entry_id>/delete/', 
          budget_views.delete_time_entry, 
          name='delete_time_entry'),
+    
+    path('api/time-entries-by-date/', 
+         budget_views.time_entries_by_date, 
+         name='time_entries_by_date'),
 ]

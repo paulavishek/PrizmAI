@@ -138,6 +138,7 @@
             <div class="card shadow mb-4">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                     <h6 class="m-0 font-weight-bold text-primary">Daily Hours (Last 14 Days)</h6>
+                    <small class="text-muted"><i class="fas fa-mouse-pointer"></i> Click any bar to see breakdown</small>
                 </div>
                 <div class="card-body">
                     <canvas id="dailyHoursChart"></canvas>
@@ -330,8 +331,78 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             }
+        },
+        onClick: function(event, elements) {
+            if (elements.length > 0) {
+                const index = elements[0].index;
+                const clickedDate = chartData[index].date;
+                showDayBreakdown(clickedDate);
+            }
+        },
+        onHover: function(event, elements) {
+            event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
         }
     });
+
+    // Show day breakdown modal
+    function showDayBreakdown(dateStr) {
+        const modal = new bootstrap.Modal(document.getElementById('dayBreakdownModal'));
+        const modalBody = document.getElementById('dayBreakdownContent');
+        const modalTitle = document.getElementById('dayBreakdownTitle');
+        
+        modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-2">Loading...</p></div>';
+        modal.show();
+        
+        {% if board %}
+        const url = `/api/time-entries-by-date/?date=${dateStr}&board_id={{ board.id }}`;
+        {% else %}
+        const url = `/api/time-entries-by-date/?date=${dateStr}`;
+        {% endif %}
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    modalTitle.textContent = `Time Breakdown - ${data.date_display}`;
+                    
+                    if (data.entries.length === 0) {
+                        modalBody.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-clock fa-2x mb-2"></i><p>No time logged on this day</p></div>';
+                        return;
+                    }
+                    
+                    let html = `
+                        <div class="alert alert-light mb-3">
+                            <strong>Total: ${data.total_hours}h</strong> across ${data.entry_count} ${data.entry_count === 1 ? 'entry' : 'entries'}
+                        </div>
+                        <div class="list-group">
+                    `;
+                    
+                    data.entries.forEach(entry => {
+                        html += `
+                            <a href="/tasks/${entry.task_id}/" class="list-group-item list-group-item-action">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1">${entry.task_title}</h6>
+                                        <small class="text-muted">${entry.board_name}</small>
+                                        ${entry.description ? `<p class="mb-0 mt-1 small text-secondary">${entry.description}</p>` : ''}
+                                    </div>
+                                    <span class="badge bg-primary rounded-pill">${entry.hours}h</span>
+                                </div>
+                            </a>
+                        `;
+                    });
+                    
+                    html += '</div>';
+                    modalBody.innerHTML = html;
+                } else {
+                    modalBody.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                modalBody.innerHTML = '<div class="alert alert-danger">Failed to load time entries. Please try again.</div>';
+            });
+    }
 
     // Quick log form
     document.getElementById('quickLogForm').addEventListener('submit', function(e) {
@@ -373,4 +444,24 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
+
+<!-- Day Breakdown Modal -->
+<div class="modal fade" id="dayBreakdownModal" tabindex="-1" aria-labelledby="dayBreakdownTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="dayBreakdownTitle">
+                    <i class="fas fa-chart-pie me-2"></i>Time Breakdown
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="dayBreakdownContent">
+                <!-- Content loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}

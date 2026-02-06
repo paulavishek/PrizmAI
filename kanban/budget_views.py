@@ -1491,3 +1491,55 @@ def delete_time_entry(request, entry_id):
         'total_time': float(total_time),
         'message': 'Time entry deleted'
     })
+
+
+@login_required
+def time_entries_by_date(request):
+    """
+    Get time entries for a specific date (AJAX endpoint for chart drill-down)
+    """
+    date_str = request.GET.get('date')
+    board_id = request.GET.get('board_id')
+    
+    if not date_str:
+        return JsonResponse({'success': False, 'error': 'Date required'}, status=400)
+    
+    try:
+        from datetime import datetime
+        work_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'success': False, 'error': 'Invalid date format'}, status=400)
+    
+    # Get entries for this date
+    entries_qs = TimeEntry.objects.filter(
+        user=request.user,
+        work_date=work_date
+    ).select_related('task', 'task__column', 'task__column__board')
+    
+    if board_id:
+        entries_qs = entries_qs.filter(task__column__board_id=board_id)
+    
+    entries_qs = entries_qs.order_by('-hours_spent')
+    
+    entries_data = []
+    total_hours = Decimal('0.00')
+    
+    for entry in entries_qs:
+        entries_data.append({
+            'id': entry.id,
+            'task_id': entry.task.id,
+            'task_title': entry.task.title,
+            'board_name': entry.task.column.board.name,
+            'hours': float(entry.hours_spent),
+            'description': entry.description or '',
+        })
+        total_hours += entry.hours_spent
+    
+    return JsonResponse({
+        'success': True,
+        'date': date_str,
+        'date_display': work_date.strftime('%A, %B %d, %Y'),
+        'entries': entries_data,
+        'total_hours': float(total_hours),
+        'entry_count': len(entries_data),
+    })
