@@ -26,12 +26,12 @@
     <!-- Stats Cards -->
     <div class="row">
         <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card border-left-primary shadow h-100 py-2 metric-card" data-period="today" style="cursor: pointer;" title="Click to see breakdown">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                                Today
+                                Today <i class="fas fa-search-plus small ms-1"></i>
                             </div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">{{ today_hours }}h</div>
                         </div>
@@ -44,12 +44,12 @@
         </div>
 
         <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-success shadow h-100 py-2">
+            <div class="card border-left-success shadow h-100 py-2 metric-card" data-period="week" style="cursor: pointer;" title="Click to see breakdown">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                                This Week
+                                This Week <i class="fas fa-search-plus small ms-1"></i>
                             </div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">{{ week_hours }}h</div>
                         </div>
@@ -62,12 +62,12 @@
         </div>
 
         <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-info shadow h-100 py-2">
+            <div class="card border-left-info shadow h-100 py-2 metric-card" data-period="month" style="cursor: pointer;" title="Click to see breakdown">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
-                                This Month
+                                This Month <i class="fas fa-search-plus small ms-1"></i>
                             </div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">{{ month_hours }}h</div>
                         </div>
@@ -80,12 +80,12 @@
         </div>
 
         <div class="col-xl-3 col-md-6 mb-4">
-            <div class="card border-left-warning shadow h-100 py-2">
+            <div class="card border-left-warning shadow h-100 py-2 metric-card" data-period="all" style="cursor: pointer;" title="Click to see breakdown">
                 <div class="card-body">
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                                Total Hours
+                                Total Hours <i class="fas fa-search-plus small ms-1"></i>
                             </div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">{{ total_hours }}h</div>
                         </div>
@@ -162,33 +162,41 @@
                             <select class="form-select" id="quick-task-select" required>
                                 <option value="">Select a task...</option>
                                 {% if smart_suggestions %}
-                                <optgroup label="Suggested Tasks">
+                                <optgroup label="AI Suggested Tasks">
                                     {% for suggestion in smart_suggestions %}
                                     <option value="{{ suggestion.task.id }}" {% if forloop.first %}selected{% endif %}>
                                         {{ suggestion.task.title|truncatechars:40 }} ({{ suggestion.reason_text }})
                                     </option>
                                     {% endfor %}
                                 </optgroup>
-                                <optgroup label="All Tasks">
                                 {% endif %}
+                                {% if my_tasks %}
+                                <optgroup label="My Assigned Tasks">
                                 {% for task in my_tasks %}
                                 {% if task.id not in suggested_task_ids %}
                                 <option value="{{ task.id }}">{{ task.title|truncatechars:50 }}</option>
                                 {% endif %}
                                 {% endfor %}
-                                {% if smart_suggestions %}
+                                </optgroup>
+                                {% endif %}
+                                {% if all_accessible_tasks %}
+                                <optgroup label="Other Board Tasks">
+                                {% for task in all_accessible_tasks %}
+                                <option value="{{ task.id }}">{{ task.title|truncatechars:40 }} ({{ task.column.board.name }})</option>
+                                {% endfor %}
                                 </optgroup>
                                 {% endif %}
                             </select>
-                            {% if smart_suggestions %}
                             <div class="mt-2 p-2 bg-light rounded small">
+                                {% if smart_suggestions %}
                                 <i class="fas fa-robot text-primary me-1"></i>
-                                <strong>AI Task Suggestions:</strong>
-                                <span class="text-muted">We analyze your recent activity, in-progress tasks, and upcoming deadlines to suggest what you might be working on.</span>
+                                <strong>AI Suggestions</strong> - Based on your recent activity and deadlines
+                                {% endif %}
+                                <br><i class="fas fa-user text-success me-1"></i>
+                                <strong>My Assigned Tasks</strong> - Tasks assigned to you (incomplete)
+                                <br><i class="fas fa-th-large text-info me-1"></i>
+                                <strong>Other Board Tasks</strong> - Other tasks from your boards
                             </div>
-                            {% else %}
-                            <small class="text-muted">Showing tasks assigned to you that are not yet complete.</small>
-                            {% endif %}
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Hours <span class="text-danger">*</span></label>
@@ -442,6 +450,78 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Failed to log time. Please try again.');
         });
     });
+
+    // Metric card click handlers
+    document.querySelectorAll('.metric-card').forEach(card => {
+        card.addEventListener('click', function() {
+            const period = this.dataset.period;
+            showPeriodBreakdown(period);
+        });
+    });
+
+    // Show period breakdown modal
+    function showPeriodBreakdown(period) {
+        const modal = new bootstrap.Modal(document.getElementById('periodBreakdownModal'));
+        const modalBody = document.getElementById('periodBreakdownContent');
+        const modalTitle = document.getElementById('periodBreakdownTitle');
+        
+        modalBody.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x"></i><p class="mt-2">Loading...</p></div>';
+        modal.show();
+        
+        {% if board %}
+        const url = `/api/time-entries-by-period/?period=${period}&board_id={{ board.id }}`;
+        {% else %}
+        const url = `/api/time-entries-by-period/?period=${period}`;
+        {% endif %}
+        
+        fetch(url)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    modalTitle.textContent = `Time Breakdown - ${data.period_display}`;
+                    
+                    if (data.tasks.length === 0) {
+                        modalBody.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-clock fa-2x mb-2"></i><p>No time logged for this period</p></div>';
+                        return;
+                    }
+                    
+                    let html = `
+                        <div class="alert alert-light mb-3">
+                            <strong>Total: ${data.total_hours}h</strong> across ${data.task_count} ${data.task_count === 1 ? 'task' : 'tasks'}
+                        </div>
+                        <div class="list-group">
+                    `;
+                    
+                    data.tasks.forEach(task => {
+                        const entriesHtml = task.entries.slice(0, 3).map(e => 
+                            `<small class="d-block text-muted">${e.date}: ${e.hours}h${e.description ? ' - ' + e.description.substring(0, 30) + '...' : ''}</small>`
+                        ).join('');
+                        
+                        html += `
+                            <a href="/tasks/${task.task_id}/" class="list-group-item list-group-item-action">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <h6 class="mb-1">${task.task_title}</h6>
+                                        <small class="text-muted">${task.board_name} • ${task.entry_count} ${task.entry_count === 1 ? 'entry' : 'entries'}</small>
+                                        ${entriesHtml}
+                                    </div>
+                                    <span class="badge bg-primary rounded-pill">${task.hours}h</span>
+                                </div>
+                            </a>
+                        `;
+                    });
+                    
+                    html += '</div>';
+                    modalBody.innerHTML = html;
+                } else {
+                    modalBody.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                modalBody.innerHTML = '<div class="alert alert-danger">Failed to load time entries. Please try again.</div>';
+            });
+    }
 });
 </script>
 
@@ -456,6 +536,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body" id="dayBreakdownContent">
+                <!-- Content loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Period Breakdown Modal -->
+<div class="modal fade" id="periodBreakdownModal" tabindex="-1" aria-labelledby="periodBreakdownTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="periodBreakdownTitle">
+                    <i class="fas fa-chart-pie me-2"></i>Time Breakdown
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="periodBreakdownContent">
                 <!-- Content loaded dynamically -->
             </div>
             <div class="modal-footer">

@@ -1265,6 +1265,14 @@ def time_tracking_dashboard(request, board_id=None):
     
     my_tasks = my_tasks.select_related('column', 'column__board')[:20]
     
+    # All accessible tasks (for users who need to log time on non-assigned tasks)
+    all_accessible_tasks = Task.objects.filter(
+        column__board__in=boards,
+        progress__lt=100
+    ).exclude(
+        assigned_to=request.user  # Exclude already shown in my_tasks
+    ).select_related('column', 'column__board').order_by('column__board__name', 'title')[:50]
+    
     # AI-powered features
     from kanban.time_tracking_ai import TimeTrackingAIService
     ai_service = TimeTrackingAIService(request.user, board)
@@ -1294,10 +1302,14 @@ def time_tracking_dashboard(request, board_id=None):
         'tasks_with_time': tasks_with_time_list,
         'chart_data': chart_data_json,
         'my_tasks': my_tasks,
+        'all_accessible_tasks': all_accessible_tasks,
         'time_alerts': time_alerts,
         'smart_suggestions': smart_suggestions,
         'suggested_task_ids': suggested_task_ids,
         'missing_time_alert': missing_time_alert,
+        'today_date': today.isoformat(),
+        'week_start_date': week_start.isoformat(),
+        'month_start_date': month_start.isoformat(),
     }
     
     return render(request, 'kanban/time_tracking_dashboard.html', context)
@@ -1542,4 +1554,98 @@ def time_entries_by_date(request):
         'entries': entries_data,
         'total_hours': float(total_hours),
         'entry_count': len(entries_data),
+    })
+
+
+@login_required
+def time_entries_by_period(request):
+    """
+    Get time entries for a specific period (AJAX endpoint for metric card drill-down)
+    """
+    from datetime import timedelta
+    
+    period = request.GET.get('period')  # today, week, month, all
+    board_id = request.GET.get('board_id')
+    
+    if period not in ['today', 'week', 'month', 'all']:
+        return JsonResponse({'success': False, 'error': 'Invalid period'}, status=400)
+    
+    today = timezone.now().date()
+    
+    # Determine date range
+    if period == 'today':
+        start_date = today
+        end_date = today
+        period_display = f"Today ({today.strftime('%B %d, %Y')})"
+    elif period == 'week':
+        start_date = today - timedelta(days=today.weekday())
+        end_date = today
+        period_display = f"This Week ({start_date.strftime('%b %d')} - {end_date.strftime('%b %d, %Y')})"
+    elif period == 'month':
+        start_date = today.replace(day=1)
+        end_date = today
+        period_display = f"This Month ({today.strftime('%B %Y')})"
+    else:  # all
+        start_date = None
+        end_date = None
+        period_display = "All Time"
+    
+    # Get entries
+    entries_qs = TimeEntry.objects.filter(user=request.user)
+    
+    if start_date:
+        entries_qs = entries_qs.filter(work_date__gte=start_date)
+    if end_date:
+        entries_qs = entries_qs.filter(work_date__lte=end_date)
+    if board_id:
+        entries_qs = entries_qs.filter(task__column__board_id=board_id)
+    
+    entries_qs = entries_qs.select_related(
+        'task', 'task__column', 'task__column__board'
+    ).order_by('-work_date', '-hours_spent')
+    
+    # Group by task for summary
+    task_summary = {}
+    total_hours = Decimal('0.00')
+    
+    for entry in entries_qs:
+        task_id = entry.task.id
+        if task_id not in task_summary:
+            task_summary[task_id] = {
+                'task_id': task_id,
+                'task_title': entry.task.title,
+                'board_name': entry.task.column.board.name,
+                'hours': Decimal('0.00'),
+                'entry_count': 0,
+                'entries': [],
+            }
+        task_summary[task_id]['hours'] += entry.hours_spent
+        task_summary[task_id]['entry_count'] += 1
+        task_summary[task_id]['entries'].append({
+            'date': entry.work_date.strftime('%b %d'),
+            'hours': float(entry.hours_spent),
+            'description': entry.description or '',
+        })
+        total_hours += entry.hours_spent
+    
+    # Convert to list and sort by hours
+    tasks_data = sorted(
+        [
+            {
+                **task,
+                'hours': float(task['hours']),
+            }
+            for task in task_summary.values()
+        ],
+        key=lambda x: x['hours'],
+        reverse=True
+    )
+    
+    return JsonResponse({
+        'success': True,
+        'period': period,
+        'period_display': period_display,
+        'tasks': tasks_data,
+        'total_hours': float(total_hours),
+        'task_count': len(tasks_data),
     })
