@@ -309,6 +309,16 @@ document.addEventListener('DOMContentLoaded', function() {
         options: {
             responsive: true,
             maintainAspectRatio: true,
+            onClick: function(event, elements) {
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    const clickedDate = chartData[index].date;
+                    showDayBreakdown(clickedDate);
+                }
+            },
+            onHover: function(event, elements) {
+                event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
+            },
             scales: {
                 y: {
                     beginAtZero: true,
@@ -331,16 +341,6 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                 }
             }
-        },
-        onClick: function(event, elements) {
-            if (elements.length > 0) {
-                const index = elements[0].index;
-                const clickedDate = chartData[index].date;
-                showDayBreakdown(clickedDate);
-            }
-        },
-        onHover: function(event, elements) {
-            event.native.target.style.cursor = elements.length > 0 ? 'pointer' : 'default';
         }
     });
 
