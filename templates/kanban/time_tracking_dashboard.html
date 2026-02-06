@@ -179,23 +179,25 @@
                                 {% endfor %}
                                 </optgroup>
                                 {% endif %}
-                                {% if all_accessible_tasks %}
-                                <optgroup label="Other Board Tasks">
-                                {% for task in all_accessible_tasks %}
-                                <option value="{{ task.id }}">{{ task.title|truncatechars:40 }} ({{ task.column.board.name }})</option>
-                                {% endfor %}
-                                </optgroup>
-                                {% endif %}
                             </select>
+                            <div class="mt-2">
+                                <label class="form-label small text-muted">Or search for a task from your boards:</label>
+                                <div class="position-relative">
+                                    <input type="text" class="form-control" id="task-search-input" 
+                                           placeholder="Type to search tasks..." autocomplete="off">
+                                    <div id="task-search-results" class="list-group position-absolute w-100" 
+                                         style="display: none; z-index: 1000; max-height: 200px; overflow-y: auto;"></div>
+                                </div>
+                            </div>
                             <div class="mt-2 p-2 bg-light rounded small">
                                 {% if smart_suggestions %}
                                 <i class="fas fa-robot text-primary me-1"></i>
-                                <strong>AI Suggestions</strong> - Based on your recent activity and deadlines
+                                <strong>AI Suggestions</strong> - Based on your recent activity and deadlines<br>
                                 {% endif %}
-                                <br><i class="fas fa-user text-success me-1"></i>
-                                <strong>My Assigned Tasks</strong> - Tasks assigned to you (incomplete)
-                                <br><i class="fas fa-th-large text-info me-1"></i>
-                                <strong>Other Board Tasks</strong> - Other tasks from your boards
+                                <i class="fas fa-user text-success me-1"></i>
+                                <strong>My Assigned Tasks</strong> - Tasks assigned to you (incomplete)<br>
+                                <i class="fas fa-search text-info me-1"></i>
+                                <strong>Search Tasks</strong> - Find any task from your boards by typing its name
                             </div>
                         </div>
                         <div class="mb-3">
@@ -459,7 +461,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Show period breakdown modal
+    // Show period breakdown modal with pagination
+    let currentPeriodData = null;
+    let currentPage = 1;
+    const itemsPerPage = 10;
+    
     function showPeriodBreakdown(period) {
         const modal = new bootstrap.Modal(document.getElementById('periodBreakdownModal'));
         const modalBody = document.getElementById('periodBreakdownContent');
@@ -481,47 +487,180 @@ document.addEventListener('DOMContentLoaded', function() {
                     modalTitle.textContent = `Time Breakdown - ${data.period_display}`;
                     
                     if (data.tasks.length === 0) {
-                        modalBody.innerHTML = '<div class="text-center py-4 text-muted"><i class="fas fa-clock fa-2x mb-2"></i><p>No time logged for this period</p></div>';
+                        modalBody.innerHTML = '<div class=\"text-center py-4 text-muted\"><i class=\"fas fa-clock fa-2x mb-2\"></i><p>No time logged for this period</p></div>';
                         return;
                     }
                     
-                    let html = `
-                        <div class="alert alert-light mb-3">
-                            <strong>Total: ${data.total_hours}h</strong> across ${data.task_count} ${data.task_count === 1 ? 'task' : 'tasks'}
-                        </div>
-                        <div class="list-group">
-                    `;
-                    
-                    data.tasks.forEach(task => {
-                        const entriesHtml = task.entries.slice(0, 3).map(e => 
-                            `<small class="d-block text-muted">${e.date}: ${e.hours}h${e.description ? ' - ' + e.description.substring(0, 30) + '...' : ''}</small>`
-                        ).join('');
-                        
-                        html += `
-                            <a href="/tasks/${task.task_id}/" class="list-group-item list-group-item-action">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div class="flex-grow-1">
-                                        <h6 class="mb-1">${task.task_title}</h6>
-                                        <small class="text-muted">${task.board_name} • ${task.entry_count} ${task.entry_count === 1 ? 'entry' : 'entries'}</small>
-                                        ${entriesHtml}
-                                    </div>
-                                    <span class="badge bg-primary rounded-pill">${task.hours}h</span>
-                                </div>
-                            </a>
-                        `;
-                    });
-                    
-                    html += '</div>';
-                    modalBody.innerHTML = html;
+                    currentPeriodData = data;
+                    currentPage = 1;
+                    renderPeriodBreakdownPage();
                 } else {
-                    modalBody.innerHTML = `<div class="alert alert-danger">Error: ${data.error}</div>`;
+                    modalBody.innerHTML = `<div class=\"alert alert-danger\">Error: ${data.error}</div>`;
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                modalBody.innerHTML = '<div class="alert alert-danger">Failed to load time entries. Please try again.</div>';
+                modalBody.innerHTML = '<div class=\"alert alert-danger\">Failed to load time entries. Please try again.</div>';
             });
     }
+    
+    function renderPeriodBreakdownPage() {
+        if (!currentPeriodData) return;
+        
+        const modalBody = document.getElementById('periodBreakdownContent');
+        const tasks = currentPeriodData.tasks;
+        const totalPages = Math.ceil(tasks.length / itemsPerPage);
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = Math.min(startIndex + itemsPerPage, tasks.length);
+        const pageTasks = tasks.slice(startIndex, endIndex);
+        
+        let html = `
+            <div class=\"alert alert-light mb-3\">
+                <strong>Total: ${currentPeriodData.total_hours}h</strong> across ${currentPeriodData.task_count} ${currentPeriodData.task_count === 1 ? 'task' : 'tasks'}
+                <span class=\"float-end text-muted\">Showing ${startIndex + 1}-${endIndex} of ${tasks.length}</span>
+            </div>
+            <div class=\"list-group mb-3\">
+        `;
+        
+        pageTasks.forEach(task => {
+            const entriesHtml = task.entries.slice(0, 3).map(e => 
+                `<small class=\"d-block text-muted\">${e.date}: ${e.hours}h${e.description ? ' - ' + e.description.substring(0, 30) + '...' : ''}</small>`
+            ).join('');
+            
+            html += `
+                <a href=\"/tasks/${task.task_id}/\" class=\"list-group-item list-group-item-action\">
+                    <div class=\"d-flex justify-content-between align-items-start\">
+                        <div class=\"flex-grow-1\">
+                            <h6 class=\"mb-1\">${task.task_title}</h6>
+                            <small class=\"text-muted\">${task.board_name} • ${task.entry_count} ${task.entry_count === 1 ? 'entry' : 'entries'}</small>
+                            ${entriesHtml}
+                        </div>
+                        <span class=\"badge bg-primary rounded-pill\">${task.hours}h</span>
+                    </div>
+                </a>
+            `;
+        });
+        
+        html += '</div>';
+        
+        // Add pagination controls if needed
+        if (totalPages > 1) {
+            html += '<nav aria-label=\"Task pagination\"><ul class=\"pagination justify-content-center\">';
+            
+            // Previous button
+            html += `<li class=\"page-item ${currentPage === 1 ? 'disabled' : ''}\">
+                <a class=\"page-link\" href=\"#\" onclick=\"changePeriodPage(${currentPage - 1}); return false;\">Previous</a>
+            </li>`;
+            
+            // Page numbers
+            for (let i = 1; i <= totalPages; i++) {
+                if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
+                    html += `<li class=\"page-item ${i === currentPage ? 'active' : ''}\">
+                        <a class=\"page-link\" href=\"#\" onclick=\"changePeriodPage(${i}); return false;\">${i}</a>
+                    </li>`;
+                } else if (i === currentPage - 3 || i === currentPage + 3) {
+                    html += '<li class=\"page-item disabled\"><span class=\"page-link\">...</span></li>';
+                }
+            }
+            
+            // Next button
+            html += `<li class=\"page-item ${currentPage === totalPages ? 'disabled' : ''}\">
+                <a class=\"page-link\" href=\"#\" onclick=\"changePeriodPage(${currentPage + 1}); return false;\">Next</a>
+            </li>`;
+            
+            html += '</ul></nav>';
+        }
+        
+        modalBody.innerHTML = html;
+    }
+    
+    window.changePeriodPage = function(page) {
+        if (!currentPeriodData) return;
+        const totalPages = Math.ceil(currentPeriodData.tasks.length / itemsPerPage);
+        if (page < 1 || page > totalPages) return;
+        currentPage = page;
+        renderPeriodBreakdownPage();
+    };
+    
+    // Task search functionality
+    let searchTimeout;
+    const taskSearchInput = document.getElementById('task-search-input');
+    const taskSearchResults = document.getElementById('task-search-results');
+    const taskSelect = document.getElementById('quick-task-select');
+    
+    taskSearchInput.addEventListener('input', function() {
+        clearTimeout(searchTimeout);
+        const query = this.value.trim();
+        
+        if (query.length < 2) {
+            taskSearchResults.style.display = 'none';
+            return;
+        }
+        
+        searchTimeout = setTimeout(() => {
+            {% if board %}
+            const url = `/api/search-tasks/?q=${encodeURIComponent(query)}&board_id={{ board.id }}`;
+            {% else %}
+            const url = `/api/search-tasks/?q=${encodeURIComponent(query)}`;
+            {% endif %}
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        if (data.tasks.length === 0) {
+                            taskSearchResults.innerHTML = '<div class=\"list-group-item text-muted\">No tasks found</div>';
+                            taskSearchResults.style.display = 'block';
+                        } else {
+                            let html = '';
+                            data.tasks.forEach(task => {
+                                html += `
+                                    <a href=\"#\" class=\"list-group-item list-group-item-action task-search-result\" 
+                                       data-task-id=\"${task.id}\" data-task-title=\"${task.title}\">
+                                        <strong>${task.title}</strong>
+                                        <br><small class=\"text-muted\">${task.board_name} • ${task.column_name}</small>
+                                    </a>
+                                `;
+                            });
+                            taskSearchResults.innerHTML = html;
+                            taskSearchResults.style.display = 'block';
+                            
+                            // Add click handlers
+                            document.querySelectorAll('.task-search-result').forEach(item => {
+                                item.addEventListener('click', function(e) {
+                                    e.preventDefault();
+                                    const taskId = this.dataset.taskId;
+                                    const taskTitle = this.dataset.taskTitle;
+                                    
+                                    // Clear existing selection
+                                    taskSelect.value = '';
+                                    
+                                    // Add temporary option to select
+                                    const option = new Option(taskTitle, taskId, true, true);
+                                    taskSelect.add(option, 0);
+                                    
+                                    // Clear search
+                                    taskSearchInput.value = '';
+                                    taskSearchResults.style.display = 'none';
+                                });
+                            });
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    taskSearchResults.innerHTML = '<div class=\"list-group-item text-danger\">Search failed</div>';
+                    taskSearchResults.style.display = 'block';
+                });
+        }, 300);
+    });
+    
+    // Hide search results when clicking outside
+    document.addEventListener('click', function(e) {
+        if (!taskSearchInput.contains(e.target) && !taskSearchResults.contains(e.target)) {
+            taskSearchResults.style.display = 'none';
+        }
+    });
 });
 </script>
 

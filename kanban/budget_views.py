@@ -1265,14 +1265,6 @@ def time_tracking_dashboard(request, board_id=None):
     
     my_tasks = my_tasks.select_related('column', 'column__board')[:20]
     
-    # All accessible tasks (for users who need to log time on non-assigned tasks)
-    all_accessible_tasks = Task.objects.filter(
-        column__board__in=boards,
-        progress__lt=100
-    ).exclude(
-        assigned_to=request.user  # Exclude already shown in my_tasks
-    ).select_related('column', 'column__board').order_by('column__board__name', 'title')[:50]
-    
     # AI-powered features
     from kanban.time_tracking_ai import TimeTrackingAIService
     ai_service = TimeTrackingAIService(request.user, board)
@@ -1302,7 +1294,6 @@ def time_tracking_dashboard(request, board_id=None):
         'tasks_with_time': tasks_with_time_list,
         'chart_data': chart_data_json,
         'my_tasks': my_tasks,
-        'all_accessible_tasks': all_accessible_tasks,
         'time_alerts': time_alerts,
         'smart_suggestions': smart_suggestions,
         'suggested_task_ids': suggested_task_ids,
@@ -1648,4 +1639,49 @@ def time_entries_by_period(request):
         'tasks': tasks_data,
         'total_hours': float(total_hours),
         'task_count': len(tasks_data),
+    })
+
+
+@login_required
+def search_tasks_for_time_entry(request):
+    """
+    Search tasks by name for time entry (AJAX endpoint for task search)
+    """
+    query = request.GET.get('q', '').strip()
+    board_id = request.GET.get('board_id')
+    
+    if not query or len(query) < 2:
+        return JsonResponse({'success': True, 'tasks': []})
+    
+    # Get boards user has access to
+    boards = Board.objects.filter(
+        models.Q(created_by=request.user) | models.Q(members=request.user)
+    ).distinct()
+    
+    if board_id:
+        boards = boards.filter(id=board_id)
+    
+    # Search tasks by title
+    tasks_qs = Task.objects.filter(
+        column__board__in=boards,
+        progress__lt=100,
+        title__icontains=query
+    ).exclude(
+        assigned_to=request.user  # Don't show assigned tasks here
+    ).select_related('column', 'column__board').order_by('title')[:20]
+    
+    tasks_data = [
+        {
+            'id': task.id,
+            'title': task.title,
+            'board_name': task.column.board.name,
+            'column_name': task.column.name,
+        }
+        for task in tasks_qs
+    ]
+    
+    return JsonResponse({
+        'success': True,
+        'tasks': tasks_data,
+        'count': len(tasks_data),
     })

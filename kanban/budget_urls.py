@@ -113,4 +113,8 @@ urlpatterns = [
     path('api/time-entries-by-period/', 
          budget_views.time_entries_by_period, 
          name='time_entries_by_period'),
+    
+    path('api/search-tasks/', 
+         budget_views.search_tasks_for_time_entry, 
+         name='search_tasks_for_time_entry'),
 ]
