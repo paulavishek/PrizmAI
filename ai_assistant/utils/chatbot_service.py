@@ -602,13 +602,15 @@ class TaskFlowChatbotService:
         
         user_keywords = [
             'user', 'users', 'member', 'members', 'team member', 'team members',
-            'who is', 'who has', 'who are', 'who works', 'person', 'people',
-            'assignee', 'developer', 'developers', 'colleague',
+            'who is', 'who has', 'who are', 'who works', 'who should', 'who can',
+            'person', 'people', 'assignee', 'developer', 'developers', 'colleague',
             'coworker', 'teammate', 'teammates', 'staff', 'employee',
             'alex', 'sam', 'jordan',  # Common demo user names
             'demo user', 'demo users', 'real user', 'real users',
             'tasks for', 'workload for', 'deadline for', 'overdue for',
-            'assigned to alex', 'assigned to sam', 'assigned to jordan'
+            'assigned to alex', 'assigned to sam', 'assigned to jordan',
+            'assign to', 'should i assign', 'team skill', 'team skills',
+            'workload', 'current workload', 'team workload'
         ]
         return any(kw in prompt_lower for kw in user_keywords)
     
