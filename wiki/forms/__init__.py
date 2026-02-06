@@ -23,6 +23,17 @@ class WikiCategoryForm(forms.ModelForm):
 
 
 class WikiPageForm(forms.ModelForm):
+    # Override tags field to use CharField instead of JSONField's default widget
+    tags = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={
+            'class': 'form-control',
+            'placeholder': 'Tags separated by commas',
+            'data-role': 'tagsinput'
+        }),
+        help_text='Tags for search and filtering'
+    )
+    
     class Meta:
         model = WikiPage
         fields = ['title', 'category', 'content', 'parent_page', 'is_published', 'is_pinned', 'tags']
@@ -43,15 +54,16 @@ class WikiPageForm(forms.ModelForm):
             }),
             'is_published': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'is_pinned': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
-            'tags': forms.TextInput(attrs={
-                'class': 'form-control',
-                'placeholder': 'Tags separated by commas',
-                'data-role': 'tagsinput'
-            }),
         }
     
     def __init__(self, *args, organization=None, **kwargs):
         super().__init__(*args, **kwargs)
+        
+        # Convert tags list to comma-separated string for editing
+        if self.instance and self.instance.pk and self.instance.tags:
+            if isinstance(self.instance.tags, list):
+                self.initial['tags'] = ', '.join(self.instance.tags)
+        
         if organization:
             from django.db.models import Q
             from accounts.models import Organization
@@ -68,6 +80,16 @@ class WikiPageForm(forms.ModelForm):
             self.fields['parent_page'].queryset = WikiPage.objects.filter(
                 org_filter
             ).exclude(pk=self.instance.pk if self.instance.pk else None).distinct()
+        else:
+            # MVP Mode: If no organization, show all categories from demo org
+            from django.db.models import Q
+            from accounts.models import Organization
+            demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+            if demo_org:
+                self.fields['category'].queryset = WikiCategory.objects.filter(organization=demo_org)
+                self.fields['parent_page'].queryset = WikiPage.objects.filter(
+                    organization=demo_org
+                ).exclude(pk=self.instance.pk if self.instance.pk else None)
     
     def clean_tags(self):
         """Convert comma-separated tags to list"""
@@ -75,7 +97,7 @@ class WikiPageForm(forms.ModelForm):
         if isinstance(tags_str, str):
             tags = [tag.strip() for tag in tags_str.split(',') if tag.strip()]
             return tags
-        return tags_str
+        return tags_str if tags_str else []
 
 
 class WikiAttachmentForm(forms.ModelForm):

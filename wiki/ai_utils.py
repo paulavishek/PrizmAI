@@ -5,6 +5,7 @@ Handles transcript analysis and task extraction
 
 import json
 import logging
+import re
 from typing import Optional, Dict
 from django.utils import timezone
 from datetime import datetime, timedelta
@@ -200,6 +201,11 @@ def extract_tasks_from_transcript(transcript: str, meeting_context: Dict,
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
+            
+            # Clean up common JSON issues from AI responses
+            response_text = response_text.replace('True', 'true').replace('False', 'false')
+            response_text = response_text.replace('None', 'null')
+            response_text = re.sub(r',\s*([}\]])', r'\1', response_text)
                 
             return json.loads(response_text)
         return None
@@ -349,7 +355,20 @@ def analyze_meeting_notes_from_wiki(wiki_content: str, wiki_page_context: Dict,
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
             
-            result = json.loads(response_text)
+            # Clean up common JSON issues from AI responses
+            response_text = response_text.replace('True', 'true').replace('False', 'false')
+            response_text = response_text.replace('None', 'null')
+            # Remove any trailing commas before closing brackets (common AI mistake)
+            response_text = re.sub(r',\s*([}\]])', r'\1', response_text)
+            
+            try:
+                result = json.loads(response_text)
+            except json.JSONDecodeError as json_err:
+                logger.error(f"JSON parse error: {json_err}. Response text (first 500 chars): {response_text[:500]}")
+                # Try a more aggressive cleanup
+                response_text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', response_text)  # Remove control characters
+                result = json.loads(response_text)
+            
             # Ensure metadata counts are accurate
             if 'metadata' in result:
                 result['metadata']['total_action_items'] = len(result.get('action_items', []))
@@ -552,6 +571,11 @@ def analyze_wiki_documentation(wiki_content: str, wiki_page_context: Dict,
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
+            
+            # Clean up common JSON issues from AI responses
+            response_text = response_text.replace('True', 'true').replace('False', 'false')
+            response_text = response_text.replace('None', 'null')
+            response_text = re.sub(r',\s*([}\]])', r'\1', response_text)
             
             result = json.loads(response_text)
             # Ensure metadata counts are accurate

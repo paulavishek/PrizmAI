@@ -237,7 +237,16 @@ class WikiPageUpdateView(WikiBaseView, UpdateView):
     
     def get_queryset(self):
         org = self.get_organization()
-        return WikiPage.objects.filter(organization=org)
+        # MVP Mode: Include demo organization content for all users
+        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+        if org:
+            org_filter = Q(organization=org)
+            if demo_org:
+                org_filter |= Q(organization=demo_org)
+            return WikiPage.objects.filter(org_filter)
+        elif demo_org:
+            return WikiPage.objects.filter(organization=demo_org)
+        return WikiPage.objects.none()
     
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
