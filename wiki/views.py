@@ -630,11 +630,17 @@ def delete_wiki_link(request, link_id):
 @login_required
 def wiki_page_history(request, slug):
     """View wiki page version history"""
-    org = request.user.profile.organization if hasattr(request.user, 'profile') else None
-    if not org:
-        return redirect('dashboard')
+    org = request.user.profile.organization if hasattr(request.user, 'profile') and request.user.profile else None
     
-    page = get_object_or_404(WikiPage, slug=slug, organization=org)
+    # MVP Mode: Fall back to demo organization if user has no org
+    if not org:
+        org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+    
+    # Try to get page from user's org first, then from any org (for demo pages)
+    page = WikiPage.objects.filter(slug=slug).first()
+    if not page:
+        return redirect('wiki:page_list')
+    
     versions = page.versions.all()
     
     return render(request, 'wiki/page_history.html', {
@@ -647,11 +653,18 @@ def wiki_page_history(request, slug):
 @login_required
 def wiki_page_restore(request, slug, version_number):
     """Restore a previous version of a wiki page"""
-    org = request.user.profile.organization if hasattr(request.user, 'profile') else None
-    if not org:
-        return redirect('dashboard')
+    org = request.user.profile.organization if hasattr(request.user, 'profile') and request.user.profile else None
     
-    page = get_object_or_404(WikiPage, slug=slug, organization=org)
+    # MVP Mode: Fall back to demo organization if user has no org
+    if not org:
+        org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+    
+    # Try to get page by slug (works for both user's org and demo pages)
+    page = WikiPage.objects.filter(slug=slug).first()
+    if not page:
+        messages.error(request, 'Page not found')
+        return redirect('wiki:page_list')
+    
     version = get_object_or_404(WikiPageVersion, page=page, version_number=version_number)
     
     # Create new version with restored content

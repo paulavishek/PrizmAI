@@ -207,10 +207,13 @@
             
             <!-- Form Actions -->
             <div class="form-section">
-                <div class="d-flex gap-2">
+                <div class="d-flex gap-2 flex-wrap">
                     <button type="submit" class="btn btn-primary btn-lg">
                         <i class="fas fa-save"></i>
                         {% if form.instance.pk %}Update{% else %}Create{% endif %} Page
+                    </button>
+                    <button type="button" class="btn btn-outline-success btn-lg" data-bs-toggle="modal" data-bs-target="#importModal">
+                        <i class="fas fa-file-import"></i> Import Document
                     </button>
                     <a href="{% url 'wiki:page_list' %}" class="btn btn-outline-secondary btn-lg">
                         <i class="fas fa-times"></i> Cancel
@@ -225,6 +228,96 @@
                 </div>
             {% endif %}
         </form>
+        
+        <!-- Import Document Modal -->
+        <div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-success text-white">
+                        <h5 class="modal-title" id="importModalLabel">
+                            <i class="fas fa-file-import me-2"></i>Import Document
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info mb-3">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Import Options:</strong> Paste a meeting transcript, document content, or upload a text file to automatically populate the content field.
+                        </div>
+                        
+                        <!-- Import Type Selection -->
+                        <ul class="nav nav-pills mb-3" id="importTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="paste-tab" data-bs-toggle="pill" data-bs-target="#paste-content" type="button" role="tab">
+                                    <i class="fas fa-paste me-1"></i> Paste Text
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="file-tab" data-bs-toggle="pill" data-bs-target="#file-content" type="button" role="tab">
+                                    <i class="fas fa-file-upload me-1"></i> Upload File
+                                </button>
+                            </li>
+                        </ul>
+                        
+                        <div class="tab-content" id="importTabsContent">
+                            <!-- Paste Text Tab -->
+                            <div class="tab-pane fade show active" id="paste-content" role="tabpanel">
+                                <div class="mb-3">
+                                    <label for="importText" class="form-label">Paste your content here:</label>
+                                    <textarea class="form-control" id="importText" rows="12" 
+                                              placeholder="Paste meeting transcript, notes, or document content here...
+
+Example meeting transcript:
+Sprint Planning Meeting - January 31, 2026
+Attendees: Alex Chen (PM), Sam Rivera (Dev), Jordan Taylor (Designer)
+
+Alex: Let's review our Sprint 45 goals. Sam, can you take on the API authentication work?
+Sam: Yes, I can start that Monday. Should take about 5 days.
+..."></textarea>
+                                </div>
+                            </div>
+                            
+                            <!-- Upload File Tab -->
+                            <div class="tab-pane fade" id="file-content" role="tabpanel">
+                                <div class="mb-3">
+                                    <label for="importFile" class="form-label">Upload a text file (.txt, .md, .csv):</label>
+                                    <input class="form-control" type="file" id="importFile" accept=".txt,.md,.csv,.text">
+                                    <small class="text-muted">Supported formats: Plain text (.txt), Markdown (.md), CSV (.csv)</small>
+                                </div>
+                                <div id="filePreview" class="border rounded p-3 bg-light d-none" style="max-height: 300px; overflow-y: auto;">
+                                    <pre id="filePreviewContent" class="mb-0" style="white-space: pre-wrap;"></pre>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Import Options -->
+                        <div class="mt-3 p-3 bg-light rounded">
+                            <h6><i class="fas fa-cog me-1"></i> Import Options</h6>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="replaceContent" checked>
+                                <label class="form-check-label" for="replaceContent">
+                                    Replace existing content
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="appendContent">
+                                <label class="form-check-label" for="appendContent">
+                                    Append to existing content
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="fas fa-times"></i> Cancel
+                        </button>
+                        <button type="button" class="btn btn-success" id="importContentBtn">
+                            <i class="fas fa-file-import"></i> Import Content
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
     
     <!-- Sidebar Help -->
@@ -297,6 +390,92 @@ document.addEventListener('DOMContentLoaded', function() {
         } catch (e) {
             // Fallback if tagsInput plugin fails
         }
+    }
+    
+    // Import functionality
+    const importFile = document.getElementById('importFile');
+    const filePreview = document.getElementById('filePreview');
+    const filePreviewContent = document.getElementById('filePreviewContent');
+    const replaceCheckbox = document.getElementById('replaceContent');
+    const appendCheckbox = document.getElementById('appendContent');
+    const importContentBtn = document.getElementById('importContentBtn');
+    const importText = document.getElementById('importText');
+    
+    // Mutually exclusive checkboxes
+    if (replaceCheckbox && appendCheckbox) {
+        replaceCheckbox.addEventListener('change', function() {
+            if (this.checked) appendCheckbox.checked = false;
+        });
+        appendCheckbox.addEventListener('change', function() {
+            if (this.checked) replaceCheckbox.checked = false;
+        });
+    }
+    
+    // File upload preview
+    if (importFile) {
+        importFile.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    filePreviewContent.textContent = event.target.result;
+                    filePreview.classList.remove('d-none');
+                };
+                reader.readAsText(file);
+            }
+        });
+    }
+    
+    // Import content button
+    if (importContentBtn) {
+        importContentBtn.addEventListener('click', function() {
+            const contentTextarea = document.querySelector('textarea[name="content"]');
+            let importedContent = '';
+            
+            // Check if we're using paste or file upload
+            const pasteTab = document.getElementById('paste-content');
+            if (pasteTab && pasteTab.classList.contains('show')) {
+                importedContent = importText.value;
+            } else {
+                importedContent = filePreviewContent.textContent;
+            }
+            
+            if (!importedContent.trim()) {
+                alert('Please paste or upload content to import.');
+                return;
+            }
+            
+            if (contentTextarea) {
+                if (replaceCheckbox.checked) {
+                    contentTextarea.value = importedContent;
+                } else if (appendCheckbox.checked) {
+                    contentTextarea.value = contentTextarea.value + '\n\n' + importedContent;
+                } else {
+                    contentTextarea.value = importedContent;
+                }
+                
+                // Trigger preview update
+                contentTextarea.dispatchEvent(new Event('input'));
+                
+                // Close modal
+                const modal = bootstrap.Modal.getInstance(document.getElementById('importModal'));
+                modal.hide();
+                
+                // Clear import fields
+                importText.value = '';
+                filePreviewContent.textContent = '';
+                filePreview.classList.add('d-none');
+                importFile.value = '';
+                
+                // Show success message
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-success alert-dismissible fade show position-fixed top-0 start-50 translate-middle-x mt-3';
+                alertDiv.style.zIndex = '9999';
+                alertDiv.innerHTML = '<i class="fas fa-check-circle me-2"></i>Content imported successfully! <button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+                document.body.appendChild(alertDiv);
+                setTimeout(() => alertDiv.remove(), 3000);
+            }
+        });
     }
 });
 </script>
