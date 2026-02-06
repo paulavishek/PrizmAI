@@ -58,12 +58,16 @@ def generate_ai_content(prompt: str, task_type='simple') -> Optional[str]:
         # Get optimized temperature for this task type
         temperature = WIKI_TEMPERATURE_MAP.get(task_type, 0.5)
         
+        # Set max_output_tokens based on task complexity
+        # Complex tasks like meeting analysis need more tokens to avoid JSON truncation
+        max_tokens = 8192 if task_type in ['complex', 'transcript_analysis'] else 4096
+        
         # Create generation config with task-specific temperature
         generation_config = {
             'temperature': temperature,
             'top_p': 0.8,
             'top_k': 40,
-            'max_output_tokens': 4096,
+            'max_output_tokens': max_tokens,
         }
         
         logger.debug(f"Using {model_name} for task_type: {task_type}, temperature: {temperature}")
@@ -206,8 +210,67 @@ def extract_tasks_from_transcript(transcript: str, meeting_context: Dict,
             response_text = response_text.replace('True', 'true').replace('False', 'false')
             response_text = response_text.replace('None', 'null')
             response_text = re.sub(r',\s*([}\]])', r'\1', response_text)
+            
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError as json_err:
+                logger.error(f"JSON parse error: {json_err}. Response text (first 500 chars): {response_text[:500]}")
+                # Try a more aggressive cleanup
+                response_text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', response_text)  # Remove control characters
                 
-            return json.loads(response_text)
+                try:
+                    return json.loads(response_text)
+                except json.JSONDecodeError as second_err:
+                    logger.error(f"Second JSON parse attempt failed: {second_err}")
+                    # Try to repair truncated JSON
+                    try:
+                        cleaned = response_text.rstrip()
+                        if not cleaned.endswith('}'):
+                            # Find the last properly closed object
+                            depth = 0
+                            last_valid_pos = -1
+                            for i, char in enumerate(cleaned):
+                                if char == '{':
+                                    depth += 1
+                                elif char == '}':
+                                    depth -= 1
+                                    if depth == 0:
+                                        last_valid_pos = i
+                            
+                            if last_valid_pos > 0:
+                                cleaned = cleaned[:last_valid_pos + 1]
+                                logger.info("Successfully repaired truncated JSON")
+                                return json.loads(cleaned)
+                            else:
+                                raise json.JSONDecodeError("Could not repair JSON", response_text, 0)
+                        else:
+                            raise second_err
+                    except Exception as repair_err:
+                        logger.error(f"Failed to repair JSON: {repair_err}")
+                        # Return a minimal valid response
+                        return {
+                            "extraction_summary": {
+                                "total_tasks_found": 0,
+                                "meeting_summary": "Unable to complete analysis due to response length.",
+                                "confidence_level": "low",
+                                "confidence_score": 0.0,
+                                "processing_notes": "Analysis truncated - content too long.",
+                                "extraction_quality": {
+                                    "transcript_clarity": "unknown",
+                                    "action_item_density": "unknown",
+                                    "context_completeness": "incomplete"
+                                }
+                            },
+                            "extracted_tasks": [],
+                            "suggested_follow_ups": [],
+                            "unresolved_items": [],
+                            "meeting_insights": {
+                                "key_decisions": [],
+                                "concerns_raised": [],
+                                "positive_highlights": [],
+                                "overall_sentiment": "neutral"
+                            }
+                        }
         return None
     except Exception as e:
         logger.error(f"Error extracting tasks from transcript: {str(e)}")
@@ -367,7 +430,64 @@ def analyze_meeting_notes_from_wiki(wiki_content: str, wiki_page_context: Dict,
                 logger.error(f"JSON parse error: {json_err}. Response text (first 500 chars): {response_text[:500]}")
                 # Try a more aggressive cleanup
                 response_text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', response_text)  # Remove control characters
-                result = json.loads(response_text)
+                
+                try:
+                    result = json.loads(response_text)
+                except json.JSONDecodeError as second_err:
+                    logger.error(f"Second JSON parse attempt failed: {second_err}")
+                    # Try to repair truncated JSON by finding the last valid closing bracket
+                    try:
+                        # Find the last complete object by looking for balanced braces
+                        # This handles cases where the response was cut off mid-string
+                        cleaned = response_text.rstrip()
+                        if not cleaned.endswith('}'):
+                            # Find the last properly closed object
+                            depth = 0
+                            last_valid_pos = -1
+                            for i, char in enumerate(cleaned):
+                                if char == '{':
+                                    depth += 1
+                                elif char == '}':
+                                    depth -= 1
+                                    if depth == 0:
+                                        last_valid_pos = i
+                            
+                            if last_valid_pos > 0:
+                                cleaned = cleaned[:last_valid_pos + 1]
+                                result = json.loads(cleaned)
+                                logger.info("Successfully repaired truncated JSON")
+                            else:
+                                raise json.JSONDecodeError("Could not repair JSON", response_text, 0)
+                        else:
+                            raise second_err
+                    except Exception as repair_err:
+                        logger.error(f"Failed to repair JSON: {repair_err}")
+                        # Return a minimal valid response instead of None
+                        return {
+                            "meeting_summary": {
+                                "title": wiki_page_context.get('title', 'Meeting Analysis'),
+                                "summary": "Unable to complete full analysis due to response length. Please try analyzing a shorter section.",
+                                "date_detected": None,
+                                "participants_detected": [],
+                                "meeting_type": "general",
+                                "confidence": "low"
+                            },
+                            "action_items": [],
+                            "decisions": [],
+                            "blockers": [],
+                            "risks": [],
+                            "key_topics": [],
+                            "follow_ups": [],
+                            "metadata": {
+                                "total_action_items": 0,
+                                "total_decisions": 0,
+                                "total_blockers": 0,
+                                "total_risks": 0,
+                                "requires_immediate_attention": False,
+                                "overall_sentiment": "neutral",
+                                "processing_notes": "Analysis truncated - content too long. Consider breaking into smaller sections."
+                            }
+                        }
             
             # Ensure metadata counts are accurate
             if 'metadata' in result:
@@ -577,7 +697,68 @@ def analyze_wiki_documentation(wiki_content: str, wiki_page_context: Dict,
             response_text = response_text.replace('None', 'null')
             response_text = re.sub(r',\s*([}\]])', r'\1', response_text)
             
-            result = json.loads(response_text)
+            try:
+                result = json.loads(response_text)
+            except json.JSONDecodeError as json_err:
+                logger.error(f"JSON parse error: {json_err}. Response text (first 500 chars): {response_text[:500]}")
+                # Try a more aggressive cleanup
+                response_text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', response_text)  # Remove control characters
+                
+                try:
+                    result = json.loads(response_text)
+                except json.JSONDecodeError as second_err:
+                    logger.error(f"Second JSON parse attempt failed: {second_err}")
+                    # Try to repair truncated JSON
+                    try:
+                        cleaned = response_text.rstrip()
+                        if not cleaned.endswith('}'):
+                            # Find the last properly closed object
+                            depth = 0
+                            last_valid_pos = -1
+                            for i, char in enumerate(cleaned):
+                                if char == '{':
+                                    depth += 1
+                                elif char == '}':
+                                    depth -= 1
+                                    if depth == 0:
+                                        last_valid_pos = i
+                            
+                            if last_valid_pos > 0:
+                                cleaned = cleaned[:last_valid_pos + 1]
+                                result = json.loads(cleaned)
+                                logger.info("Successfully repaired truncated JSON")
+                            else:
+                                raise json.JSONDecodeError("Could not repair JSON", response_text, 0)
+                        else:
+                            raise second_err
+                    except Exception as repair_err:
+                        logger.error(f"Failed to repair JSON: {repair_err}")
+                        # Return a minimal valid response
+                        return {
+                            "documentation_summary": {
+                                "title": wiki_page_context.get('title', 'Documentation Analysis'),
+                                "summary": "Unable to complete full analysis due to response length. Please try analyzing a shorter section.",
+                                "document_type": "general",
+                                "completeness": "unknown",
+                                "last_updated_detected": None,
+                                "target_audience": "Unknown"
+                            },
+                            "key_points": [],
+                            "action_items": [],
+                            "suggested_improvements": [],
+                            "related_topics": [],
+                            "questions_raised": [],
+                            "dependencies_mentioned": [],
+                            "metadata": {
+                                "total_action_items": 0,
+                                "total_suggestions": 0,
+                                "documentation_quality": "needs_improvement",
+                                "requires_update": False,
+                                "technical_level": "intermediate",
+                                "processing_notes": "Analysis truncated - content too long. Consider breaking into smaller sections."
+                            }
+                        }
+            
             # Ensure metadata counts are accurate
             if 'metadata' in result:
                 result['metadata']['total_action_items'] = len(result.get('action_items', []))
