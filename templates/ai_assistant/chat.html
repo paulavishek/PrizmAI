@@ -639,7 +639,7 @@
 {% csrf_token %}
 
 <script>
-    const sessionId = {% if session %}{{ session.id|safe }}{% else %}null{% endif %};
+    let sessionId = {% if session %}{{ session.id|safe }}{% else %}null{% endif %};
     
     // Note: Chat history is NO LONGER maintained in memory or sent to the server.
     // Each AI request is completely independent (stateless) to prevent token accumulation
@@ -1148,21 +1148,71 @@
     }
     
     // Handle initial query from URL parameter (e.g., from wiki quick queries)
-    {% if initial_query %}
     document.addEventListener('DOMContentLoaded', function() {
-        const chatInput = document.getElementById('chat-input');
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlQuery = urlParams.get('q');
         const initialQuery = "{{ initial_query|escapejs }}";
         
-        if (initialQuery && chatInput) {
-            // Pre-fill the input with the query
-            chatInput.value = initialQuery;
-            
-            // Auto-send the message after a short delay to ensure chat is ready
-            setTimeout(() => {
-                sendMessage();
-            }, 500);
+        console.log('DOMContentLoaded - URL query param:', urlQuery);
+        console.log('DOMContentLoaded - Initial query from context:', initialQuery);
+        console.log('DOMContentLoaded - Current sessionId:', sessionId);
+        
+        // Use URL parameter if available, otherwise fall back to template variable
+        const queryToSend = urlQuery || initialQuery;
+        
+        if (queryToSend) {
+            // Check if there's an active session
+            if (!sessionId) {
+                // No session - need to create one first, then reload with the query
+                console.log('No active session found, creating one for initial query...');
+                fetch('{% url "ai_assistant:create_session" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        title: 'Quick Query: ' + (queryToSend.substring(0, 30) + (queryToSend.length > 30 ? '...' : '')),
+                        description: 'Auto-created session for quick query from wiki'
+                    })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    console.log('Session creation response:', data);
+                    if (data.session_id) {
+                        console.log('Session created successfully:', data.session_id);
+                        // Reload the page with both session and query parameters
+                        // This will render the chat interface with the input field
+                        window.location.href = `/assistant/chat/?session=${data.session_id}&q=${encodeURIComponent(queryToSend)}`;
+                    } else {
+                        console.error('Failed to create session:', data);
+                        alert('Failed to create chat session. Please try clicking "New Chat" button.');
+                    }
+                })
+                .catch(err => {
+                    console.error('Error creating session:', err);
+                    alert('Error creating chat session. Please try clicking "New Chat" button.');
+                });
+            } else {
+                // Session exists, chat input should be available
+                const chatInput = document.getElementById('chat-input');
+                if (chatInput) {
+                    // Pre-fill the input with the query
+                    chatInput.value = queryToSend;
+                    console.log('Pre-filled chat input with:', queryToSend);
+                    
+                    // Auto-send the message after a short delay
+                    setTimeout(() => {
+                        console.log('Sending message...');
+                        sendMessage();
+                    }, 500);
+                } else {
+                    console.error('Chat input element not found even with active session!');
+                }
+            }
+        } else {
+            console.log('No initial query to process');
         }
     });
-    {% endif %}
 </script>
 {% endblock %}
