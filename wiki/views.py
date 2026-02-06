@@ -397,7 +397,7 @@ def wiki_search(request):
     """Search wiki pages"""
     org = request.user.profile.organization if hasattr(request.user, 'profile') else None
     if not org:
-        return redirect('home')
+        return redirect('dashboard')
     
     query = request.GET.get('q', '')
     results = {
@@ -632,7 +632,7 @@ def wiki_page_history(request, slug):
     """View wiki page version history"""
     org = request.user.profile.organization if hasattr(request.user, 'profile') else None
     if not org:
-        return redirect('home')
+        return redirect('dashboard')
     
     page = get_object_or_404(WikiPage, slug=slug, organization=org)
     versions = page.versions.all()
@@ -649,7 +649,7 @@ def wiki_page_restore(request, slug, version_number):
     """Restore a previous version of a wiki page"""
     org = request.user.profile.organization if hasattr(request.user, 'profile') else None
     if not org:
-        return redirect('home')
+        return redirect('dashboard')
     
     page = get_object_or_404(WikiPage, slug=slug, organization=org)
     version = get_object_or_404(WikiPageVersion, page=page, version_number=version_number)
