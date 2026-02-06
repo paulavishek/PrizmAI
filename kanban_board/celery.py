@@ -33,6 +33,21 @@ app.conf.beat_schedule = {
         'task': 'kanban.refresh_demo_dates',
         'schedule': crontab(hour=3, minute=0),  # Daily at 3:00 AM
     },
+    # Time tracking reminder - runs at 5 PM on weekdays
+    'time-tracking-reminder': {
+        'task': 'kanban.send_time_tracking_reminders',
+        'schedule': crontab(hour=17, minute=0, day_of_week='1-5'),  # 5 PM Mon-Fri
+    },
+    # Time anomaly detection - runs daily at 9 AM
+    'time-anomaly-detection': {
+        'task': 'kanban.detect_time_anomalies',
+        'schedule': crontab(hour=9, minute=0),  # Daily at 9:00 AM
+    },
+    # Weekly time summary - runs Monday at 8 AM
+    'weekly-time-summary': {
+        'task': 'kanban.weekly_time_summary',
+        'schedule': crontab(hour=8, minute=0, day_of_week='1'),  # Monday at 8 AM
+    },
 }
 
 

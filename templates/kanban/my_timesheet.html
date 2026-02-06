@@ -89,6 +89,10 @@
                                 {% if entry_data.entry %}
                                 <div class="time-entry" data-entry-id="{{ entry_data.entry.id }}">
                                     <span class="hours-display">{{ entry_data.hours }}</span>
+                                    {% if entry_data.entry_count > 1 %}
+                                    <span class="badge bg-info ms-1" title="{{ entry_data.entry_count }} separate sessions logged" 
+                                          data-bs-toggle="tooltip">{{ entry_data.entry_count }}</span>
+                                    {% endif %}
                                     <button class="btn btn-sm btn-link text-danger delete-entry" title="Delete">
                                         <i class="fas fa-times"></i>
                                     </button>
@@ -152,8 +156,8 @@
                     <div class="mb-3">
                         <label class="form-label">Hours <span class="text-danger">*</span></label>
                         <input type="number" class="form-control" id="entry-hours" name="hours" 
-                               step="0.25" min="0.25" max="24" required>
-                        <small class="text-muted">Use increments of 0.25 (15 minutes)</small>
+                               step="0.25" min="0.25" max="16" required>
+                        <small class="text-muted">Use increments of 0.25 (15 minutes). Max 16 hours per entry.</small>
                     </div>
                     
                     <div class="mb-3">

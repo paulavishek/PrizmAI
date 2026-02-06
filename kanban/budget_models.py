@@ -5,7 +5,7 @@ Tracks project budgets, task costs, time spent, and ROI metrics with AI optimiza
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal
 from kanban.models import Task, Board, Column
 
@@ -258,8 +258,11 @@ class TimeEntry(models.Model):
     hours_spent = models.DecimalField(
         max_digits=6,
         decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.01'))],
-        help_text="Hours spent on this task"
+        validators=[
+            MinValueValidator(Decimal('0.01')),
+            MaxValueValidator(Decimal('16.00'))
+        ],
+        help_text="Hours spent on this task (max 16 hours per entry)"
     )
     work_date = models.DateField(
         help_text="Date when work was performed"

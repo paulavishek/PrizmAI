@@ -306,7 +306,7 @@ def time_entry_create(request, task_id):
         return HttpResponseForbidden("You don't have permission to access this task.")
     
     if request.method == 'POST':
-        form = TimeEntryForm(request.POST)
+        form = TimeEntryForm(request.POST, user=request.user)
         if form.is_valid():
             entry = form.save(commit=False)
             entry.task = task
@@ -322,7 +322,7 @@ def time_entry_create(request, task_id):
                 })
             return redirect('budget_dashboard', board_id=board.id)
     else:
-        form = TimeEntryForm(initial={'work_date': timezone.now().date()})
+        form = TimeEntryForm(initial={'work_date': timezone.now().date()}, user=request.user)
     
     context = {
         'task': task,
@@ -1087,11 +1087,13 @@ def my_timesheet(request, board_id=None):
         work_date__lte=end_of_week
     ).select_related('task', 'task__column', 'task__column__board')
     
-    # Organize entries by task and date
+    # Organize entries by task and date (support multiple entries per task/date)
     entries_by_task_date = {}
     for entry in entries:
         key = (entry.task.id, entry.work_date)
-        entries_by_task_date[key] = entry
+        if key not in entries_by_task_date:
+            entries_by_task_date[key] = []
+        entries_by_task_date[key].append(entry)
     
     # Build week days
     week_days = []
@@ -1113,15 +1115,19 @@ def my_timesheet(request, board_id=None):
             'total_hours': Decimal('0.00'),
         }
         for day in week_days:
-            entry = entries_by_task_date.get((task.id, day['date']))
-            hours = entry.hours_spent if entry else Decimal('0.00')
+            entry_list = entries_by_task_date.get((task.id, day['date']), [])
+            # Sum hours from all entries for this task/date
+            hours = sum((e.hours_spent for e in entry_list), Decimal('0.00'))
+            # Get the most recent entry for display (description, etc.)
+            primary_entry = entry_list[-1] if entry_list else None
             row['entries'].append({
                 'date': day['date'],
-                'entry': entry,
+                'entry': primary_entry,
+                'all_entries': entry_list,  # Keep all entries for tooltip
                 'hours': round(hours, 2),
+                'entry_count': len(entry_list),  # Track number of entries
             })
-            if entry:
-                row['total_hours'] += entry.hours_spent
+            row['total_hours'] += hours
         row['total_hours'] = round(row['total_hours'], 2)
         task_rows.append(row)
     
@@ -1259,6 +1265,20 @@ def time_tracking_dashboard(request, board_id=None):
     
     my_tasks = my_tasks.select_related('column', 'column__board')[:20]
     
+    # AI-powered features
+    from kanban.time_tracking_ai import TimeTrackingAIService
+    ai_service = TimeTrackingAIService(request.user, board)
+    
+    # Get anomaly alerts (warnings about unusual time patterns)
+    time_alerts = ai_service.detect_anomalies(days_back=14)
+    
+    # Get smart task suggestions
+    smart_suggestions = ai_service.suggest_tasks(limit=5)
+    suggested_task_ids = [s['task'].id for s in smart_suggestions]
+    
+    # Get missing time reminder (if applicable)
+    missing_time_alert = ai_service.get_missing_time_alerts()
+    
     # Serialize chart data for JavaScript
     import json
     chart_data_json = json.dumps(chart_data)
@@ -1274,6 +1294,10 @@ def time_tracking_dashboard(request, board_id=None):
         'tasks_with_time': tasks_with_time_list,
         'chart_data': chart_data_json,
         'my_tasks': my_tasks,
+        'time_alerts': time_alerts,
+        'smart_suggestions': smart_suggestions,
+        'suggested_task_ids': suggested_task_ids,
+        'missing_time_alert': missing_time_alert,
     }
     
     return render(request, 'kanban/time_tracking_dashboard.html', context)
@@ -1398,6 +1422,24 @@ def quick_time_entry(request, task_id):
         
         if hours <= 0:
             return JsonResponse({'success': False, 'error': 'Hours must be greater than 0'}, status=400)
+        
+        if hours > 16:
+            return JsonResponse({'success': False, 'error': 'Hours cannot exceed 16 per entry'}, status=400)
+        
+        # Round to nearest 0.25 increment
+        hours = Decimal(str(round(float(hours) * 4) / 4))
+        
+        # Check daily total won't exceed 24 hours
+        existing_hours = TimeEntry.objects.filter(
+            user=request.user,
+            work_date=work_date
+        ).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
+        
+        if existing_hours + hours > 24:
+            return JsonResponse({
+                'success': False, 
+                'error': f'Daily total would exceed 24 hours. You already have {existing_hours}h logged for this date.'
+            }, status=400)
         
         entry = TimeEntry.objects.create(
             task=task,

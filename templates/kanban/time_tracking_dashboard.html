@@ -98,6 +98,40 @@
         </div>
     </div>
 
+    <!-- AI-Powered Alerts Section -->
+    {% if time_alerts or missing_time_alert %}
+    <div class="row mb-4">
+        <div class="col-12">
+            {% if missing_time_alert %}
+            <div class="alert alert-info alert-dismissible fade show" role="alert">
+                <i class="fas fa-bell me-2"></i>
+                <strong>Reminder:</strong> {{ missing_time_alert.message }}
+                <span class="ms-2 text-muted">{{ missing_time_alert.suggestion }}</span>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endif %}
+            
+            {% for alert in time_alerts %}
+            {% if alert.severity == 'critical' %}
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>High Hours Alert:</strong> {{ alert.message }}
+                <br><small class="text-muted">{{ alert.suggestion }}</small>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% elif alert.severity == 'warning' %}
+            <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                <i class="fas fa-exclamation-circle me-2"></i>
+                <strong>Notice:</strong> {{ alert.message }}
+                <br><small class="text-muted">{{ alert.suggestion }}</small>
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
     <div class="row">
         <!-- Daily Hours Chart -->
         <div class="col-xl-8 col-lg-7">
@@ -115,7 +149,9 @@
         <div class="col-xl-4 col-lg-5">
             <div class="card shadow mb-4">
                 <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Quick Log Time</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">
+                        <i class="fas fa-bolt text-warning me-1"></i> Quick Log Time
+                    </h6>
                 </div>
                 <div class="card-body">
                     <form id="quickLogForm">
@@ -124,16 +160,34 @@
                             <label class="form-label">Task <span class="text-danger">*</span></label>
                             <select class="form-select" id="quick-task-select" required>
                                 <option value="">Select a task...</option>
+                                {% if smart_suggestions %}
+                                <optgroup label="Suggested Tasks">
+                                    {% for suggestion in smart_suggestions %}
+                                    <option value="{{ suggestion.task.id }}" {% if forloop.first %}selected{% endif %}>
+                                        {{ suggestion.task.title|truncatechars:40 }} ({{ suggestion.reason_text }})
+                                    </option>
+                                    {% endfor %}
+                                </optgroup>
+                                <optgroup label="All Tasks">
+                                {% endif %}
                                 {% for task in my_tasks %}
+                                {% if task.id not in suggested_task_ids %}
                                 <option value="{{ task.id }}">{{ task.title|truncatechars:50 }}</option>
+                                {% endif %}
                                 {% endfor %}
+                                {% if smart_suggestions %}
+                                </optgroup>
+                                {% endif %}
                             </select>
+                            {% if smart_suggestions %}
+                            <small class="text-muted"><i class="fas fa-magic"></i> AI suggested based on your activity</small>
+                            {% endif %}
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Hours <span class="text-danger">*</span></label>
                             <input type="number" class="form-control" id="quick-hours" 
-                                   step="0.25" min="0.25" max="24" required>
-                            <small class="text-muted">Increments of 0.25</small>
+                                   step="0.25" min="0.25" max="16" required>
+                            <small class="text-muted">Increments of 0.25 (max 16h per entry)</small>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Date</label>

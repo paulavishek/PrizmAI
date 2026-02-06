@@ -4,6 +4,8 @@ Forms for budget management, time tracking, and cost entry
 """
 from django import forms
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
+from django.db.models import Sum
 from decimal import Decimal
 from kanban.budget_models import (
     ProjectBudget, TaskCost, TimeEntry, ProjectROI, BudgetRecommendation
@@ -166,6 +168,59 @@ class TimeEntryForm(forms.ModelForm):
             'work_date': 'Date when the work was performed',
             'description': 'Optional description of work performed',
         }
+    
+    def __init__(self, *args, user=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.user = user
+    
+    def clean_hours_spent(self):
+        """Validate hours with max limit and 0.25 increments"""
+        hours = self.cleaned_data.get('hours_spent')
+        if hours is None:
+            return hours
+        
+        # Check maximum hours per entry
+        if hours > Decimal('16.00'):
+            raise ValidationError('Hours cannot exceed 16 per entry.')
+        
+        # Check minimum
+        if hours <= Decimal('0'):
+            raise ValidationError('Hours must be greater than 0.')
+        
+        # Round to nearest 0.25 increment
+        rounded_hours = Decimal(str(round(float(hours) * 4) / 4))
+        if rounded_hours != hours:
+            # Auto-round and show message (don't reject)
+            return rounded_hours
+        
+        return hours
+    
+    def clean(self):
+        """Cross-field validation for daily total"""
+        cleaned_data = super().clean()
+        hours = cleaned_data.get('hours_spent')
+        work_date = cleaned_data.get('work_date')
+        
+        if hours and work_date and self.user:
+            # Calculate existing hours for that day (excluding current entry if editing)
+            existing_qs = TimeEntry.objects.filter(
+                user=self.user,
+                work_date=work_date
+            )
+            if self.instance and self.instance.pk:
+                existing_qs = existing_qs.exclude(pk=self.instance.pk)
+            
+            existing_hours = existing_qs.aggregate(
+                total=Sum('hours_spent')
+            )['total'] or Decimal('0.00')
+            
+            if existing_hours + hours > Decimal('24.00'):
+                raise ValidationError(
+                    f'Daily total would exceed 24 hours. '
+                    f'You already have {existing_hours}h logged for {work_date}.'
+                )
+        
+        return cleaned_data
 
 
 class ProjectROIForm(forms.ModelForm):
