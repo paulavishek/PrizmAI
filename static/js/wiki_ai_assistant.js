@@ -13,32 +13,43 @@ let availableBoards = [];
 
 // Detect page type and show appropriate AI assistant button
 function detectPageTypeAndShowButton() {
-    const meetingBtn = document.getElementById('analyzeMeetingBtn');
-    const docsBtn = document.getElementById('analyzeDocsBtn');
+    const aiBtn = document.getElementById('aiAnalysisBtn');
+    const aiButtonText = document.getElementById('aiAnalysisBtnText');
     const importTranscriptBtn = document.getElementById('importTranscriptBtn');
     
-    if (!meetingBtn || !docsBtn) return;
+    if (!aiBtn) return;
     
     // Use category-based detection (passed from backend)
     // This is more reliable than keyword matching
     if (categoryAiType === 'meeting') {
-        meetingBtn.style.display = 'inline-block';
-        docsBtn.style.display = 'none';
+        aiBtn.style.display = 'inline-block';
+        aiBtn.className = 'btn btn-outline-success btn-sm me-2';
+        if (aiButtonText) aiButtonText.textContent = 'Meeting Analysis';
         if (importTranscriptBtn) importTranscriptBtn.style.display = 'inline-block';
     } else if (categoryAiType === 'documentation') {
-        meetingBtn.style.display = 'none';
-        docsBtn.style.display = 'inline-block';
+        aiBtn.style.display = 'inline-block';
+        aiBtn.className = 'btn btn-outline-info btn-sm me-2';
+        if (aiButtonText) aiButtonText.textContent = 'Doc Assistant';
         if (importTranscriptBtn) importTranscriptBtn.style.display = 'none';
     } else if (categoryAiType === 'none') {
         // No AI assistant for this category
-        meetingBtn.style.display = 'none';
-        docsBtn.style.display = 'none';
+        aiBtn.style.display = 'none';
         if (importTranscriptBtn) importTranscriptBtn.style.display = 'none';
     } else {
         // Fallback: if category type not set, use documentation as default
-        meetingBtn.style.display = 'none';
-        docsBtn.style.display = 'inline-block';
+        aiBtn.style.display = 'inline-block';
+        aiBtn.className = 'btn btn-outline-info btn-sm me-2';
+        if (aiButtonText) aiButtonText.textContent = 'Doc Assistant';
         if (importTranscriptBtn) importTranscriptBtn.style.display = 'none';
+    }
+}
+
+// Unified trigger function that routes to the appropriate analysis
+function triggerAIAnalysis() {
+    if (categoryAiType === 'meeting') {
+        processMeetingNotes();
+    } else {
+        processDocumentation();
     }
 }
 

@@ -478,36 +478,16 @@
                     <span class="badge" style="background-color: {{ page.category.color }}">
                         <i class="fas fa-{{ page.category.icon }}"></i> {{ page.category.name }}
                     </span>
-                    {% if page.category.ai_assistant_type == 'meeting' %}
-                        <span class="badge bg-success ms-2" title="This category uses AI Meeting Analysis">
-                            <i class="fas fa-users"></i> AI: Meeting Analysis
-                        </span>
-                    {% elif page.category.ai_assistant_type == 'documentation' %}
-                        <span class="badge bg-info ms-2" title="This category uses Documentation Assistant">
-                            <i class="fas fa-robot"></i> AI: Doc Assistant
-                        </span>
-                    {% elif page.category.ai_assistant_type == 'none' %}
-                        <span class="badge bg-secondary ms-2" title="AI features disabled for this category">
-                            <i class="fas fa-ban"></i> No AI Assistant
-                        </span>
-                    {% endif %}
                 </div>
                 <div>
                     <button onclick="goBack()" class="btn btn-outline-secondary btn-sm me-2">
                         <i class="fas fa-arrow-left"></i> Back
                     </button>
                     
-                    <!-- AI Assistant Buttons (Available to all users) -->
-                    <div class="btn-group btn-group-sm me-2" role="group">
-                        <!-- Meeting Analysis Button - for meeting notes -->
-                        <button class="btn btn-outline-success" id="analyzeMeetingBtn" onclick="processMeetingNotes()" style="display: none;">
-                            <i class="fas fa-users"></i> Analyze Meeting
-                        </button>
-                        <!-- Documentation Assistant Button - for general docs -->
-                        <button class="btn btn-outline-info" id="analyzeDocsBtn" onclick="processDocumentation()" style="display: none;">
-                            <i class="fas fa-robot"></i> Doc Assistant
-                        </button>
-                    </div>
+                    <!-- AI Assistant Button (Available to all users) -->
+                    <button class="btn btn-outline-primary btn-sm me-2" id="aiAnalysisBtn" onclick="triggerAIAnalysis()" style="display: none;">
+                        <i class="fas fa-magic"></i> <span id="aiAnalysisBtnText">AI Analysis</span>
+                    </button>
                     
                     <!-- Editor Controls (Only for page owner/staff) -->
                     {% if user == page.created_by or user.is_staff %}
