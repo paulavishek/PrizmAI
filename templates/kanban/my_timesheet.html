@@ -76,7 +76,7 @@
                         {% for row in task_rows %}
                         <tr>
                             <td>
-                                <a href="{% url 'task_detail' row.task.id %}" class="text-decoration-none">
+                                <a href="{% url 'task_detail' row.task.id %}" class="text-decoration-none" title="{{ row.task.title }}">
                                     {{ row.task.title|truncatechars:50 }}
                                 </a>
                                 <br>
@@ -98,7 +98,7 @@
                                     </button>
                                     {% if entry_data.entry.description %}
                                     <div class="entry-description">
-                                        <small class="text-muted">{{ entry_data.entry.description|truncatechars:30 }}</small>
+                                        <small class="text-muted" title="{{ entry_data.entry.description }}" style="cursor: help;">{{ entry_data.entry.description|truncatechars:30 }}</small>
                                     </div>
                                     {% endif %}
                                 </div>

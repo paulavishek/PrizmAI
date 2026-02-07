@@ -18,9 +18,9 @@ class TimeTrackingAIService:
     AI-powered time tracking analysis and recommendations
     """
     
-    # Thresholds for anomaly detection
-    HIGH_HOURS_THRESHOLD = Decimal('12.00')  # Warning threshold per day
-    CRITICAL_HOURS_THRESHOLD = Decimal('16.00')  # Critical threshold per entry
+    # Thresholds for anomaly detection - aligned with labor law standards
+    HIGH_HOURS_THRESHOLD = Decimal('10.00')  # Warning threshold per day (long day alert)
+    CRITICAL_HOURS_THRESHOLD = Decimal('14.00')  # Critical threshold (exceeds safe limits)
     MISSING_TIME_THRESHOLD_DAYS = 3  # Days without logging before alert
     
     def __init__(self, user: User, board=None):
@@ -72,8 +72,9 @@ class TimeTrackingAIService:
                     'type': 'high_hours_critical',
                     'severity': 'critical',
                     'date': work_date,
+                    'date_str': work_date.isoformat(),
                     'hours': total_rounded,
-                    'message': f'Logged {total_rounded}h on {work_date.strftime("%b %d")} - this exceeds sustainable work limits.',
+                    'message': f'Logged {total_rounded}h on {work_date.strftime("%b %d")} - this exceeds safe work limits.',
                     'suggestion': 'Consider splitting time entries across multiple days if this was not continuous work.'
                 })
             elif total >= self.HIGH_HOURS_THRESHOLD:
@@ -81,8 +82,9 @@ class TimeTrackingAIService:
                     'type': 'high_hours_warning',
                     'severity': 'warning',
                     'date': work_date,
+                    'date_str': work_date.isoformat(),
                     'hours': total_rounded,
-                    'message': f'Logged {total_rounded}h on {work_date.strftime("%b %d")} - longer than a typical workday.',
+                    'message': f'Logged {total_rounded}h on {work_date.strftime("%b %d")} - that\'s a long day! Everything OK?',
                     'suggestion': 'Monitor workload to prevent burnout.'
                 })
         

@@ -113,18 +113,40 @@
             
             {% for alert in time_alerts %}
             {% if alert.severity == 'critical' %}
-            <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                <span class="badge bg-danger me-2"><i class="fas fa-robot"></i> AI</span>
-                <strong>High Hours Alert:</strong> {{ alert.message }}
-                <br><small class="text-muted">{{ alert.suggestion }}</small>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            <div class="alert alert-danger fade show" role="alert" id="alert-{{ alert.date_str }}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <span class="badge bg-danger me-2"><i class="fas fa-robot"></i> AI</span>
+                        <strong>High Hours Alert:</strong> {{ alert.message }}
+                        <br><small class="text-muted">{{ alert.suggestion }}</small>
+                    </div>
+                    <div class="btn-group-vertical btn-group-sm ms-3">
+                        <button type="button" class="btn btn-outline-light btn-sm text-danger" onclick="showSplitEntryModal('{{ alert.date_str }}', {{ alert.hours }})" title="Split these hours across multiple days">
+                            <i class="fas fa-code-branch"></i> Split Entry
+                        </button>
+                        <button type="button" class="btn btn-outline-light btn-sm text-danger" onclick="acknowledgeAlert('{{ alert.date_str }}')" title="Confirm this was intentional">
+                            <i class="fas fa-check"></i> Was Correct
+                        </button>
+                    </div>
+                </div>
             </div>
             {% elif alert.severity == 'warning' %}
-            <div class="alert alert-warning alert-dismissible fade show" role="alert">
-                <span class="badge bg-warning text-dark me-2"><i class="fas fa-robot"></i> AI</span>
-                <strong>Notice:</strong> {{ alert.message }}
-                <br><small class="text-muted">{{ alert.suggestion }}</small>
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            <div class="alert alert-warning fade show" role="alert" id="alert-{{ alert.date_str }}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <span class="badge bg-warning text-dark me-2"><i class="fas fa-robot"></i> AI</span>
+                        <strong>Notice:</strong> {{ alert.message }}
+                        <br><small class="text-muted">{{ alert.suggestion }}</small>
+                    </div>
+                    <div class="btn-group-vertical btn-group-sm ms-3">
+                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="showSplitEntryModal('{{ alert.date_str }}', {{ alert.hours }})" title="Split these hours across multiple days">
+                            <i class="fas fa-code-branch"></i> Split Entry
+                        </button>
+                        <button type="button" class="btn btn-outline-dark btn-sm" onclick="acknowledgeAlert('{{ alert.date_str }}')" title="Confirm this was intentional">
+                            <i class="fas fa-check"></i> Was Correct
+                        </button>
+                    </div>
+                </div>
             </div>
             {% endif %}
             {% endfor %}
@@ -388,13 +410,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     `;
                     
                     data.entries.forEach(entry => {
+                        const truncatedTitle = entry.task_title.length > 50 ? entry.task_title.substring(0, 50) + '...' : entry.task_title;
+                        const truncatedDesc = entry.description && entry.description.length > 80 ? entry.description.substring(0, 80) + '...' : entry.description;
                         html += `
                             <a href="/tasks/${entry.task_id}/" class="list-group-item list-group-item-action">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div class="flex-grow-1">
-                                        <h6 class="mb-1">${entry.task_title}</h6>
+                                        <h6 class="mb-1" ${entry.task_title.length > 50 ? `title="${entry.task_title}" style="cursor: help;"` : ''}>${truncatedTitle}</h6>
                                         <small class="text-muted">${entry.board_name}</small>
-                                        ${entry.description ? `<p class="mb-0 mt-1 small text-secondary">${entry.description}</p>` : ''}
+                                        ${entry.description ? `<p class="mb-0 mt-1 small text-secondary" ${entry.description.length > 80 ? `title="${entry.description}" style="cursor: help;"` : ''}>${truncatedDesc}</p>` : ''}
                                     </div>
                                     <span class="badge bg-primary rounded-pill">${entry.hours}h</span>
                                 </div>
@@ -523,15 +547,18 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         
         pageTasks.forEach(task => {
-            const entriesHtml = task.entries.slice(0, 3).map(e => 
-                `<small class=\"d-block text-muted\">${e.date}: ${e.hours}h${e.description ? ' - ' + e.description.substring(0, 30) + '...' : ''}</small>`
-            ).join('');
+            const truncatedTitle = task.task_title.length > 50 ? task.task_title.substring(0, 50) + '...' : task.task_title;
+            const entriesHtml = task.entries.slice(0, 3).map(e => {
+                const fullDesc = e.description || '';
+                const truncatedDesc = fullDesc.length > 40 ? fullDesc.substring(0, 40) + '...' : fullDesc;
+                return `<small class=\"d-block text-muted\" ${fullDesc.length > 40 ? `title=\"${fullDesc}\" style=\"cursor: help;\"` : ''}>${e.date}: ${e.hours}h${truncatedDesc ? ' - ' + truncatedDesc : ''}</small>`;
+            }).join('');
             
             html += `
                 <a href=\"/tasks/${task.task_id}/\" class=\"list-group-item list-group-item-action\">
                     <div class=\"d-flex justify-content-between align-items-start\">
                         <div class=\"flex-grow-1\">
-                            <h6 class=\"mb-1\">${task.task_title}</h6>
+                            <h6 class=\"mb-1\" ${task.task_title.length > 50 ? `title=\"${task.task_title}\" style=\"cursor: help;\"` : ''}>${truncatedTitle}</h6>
                             <small class=\"text-muted\">${task.board_name} • ${task.entry_count} ${task.entry_count === 1 ? 'entry' : 'entries'}</small>
                             ${entriesHtml}
                         </div>
@@ -703,4 +730,182 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
     </div>
 </div>
+
+<!-- Split Entry Modal -->
+<div class="modal fade" id="splitEntryModal" tabindex="-1" aria-labelledby="splitEntryTitle" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="splitEntryTitle">
+                    <i class="fas fa-code-branch me-2"></i>Split Time Entries
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">
+                    Split <strong id="splitTotalHours">0</strong>h from <strong id="splitOriginalDate"></strong> across multiple days.
+                </p>
+                <div id="splitEntriesContainer">
+                    <!-- Split entries will be added here dynamically -->
+                </div>
+                <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="addSplitRow()">
+                    <i class="fas fa-plus"></i> Add Another Day
+                </button>
+                <hr>
+                <div class="d-flex justify-content-between">
+                    <span>Remaining to allocate:</span>
+                    <strong id="splitRemainingHours">0h</strong>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitSplitEntries()" id="submitSplitBtn" disabled>
+                    <i class="fas fa-check"></i> Apply Split
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Alert action functions
+let splitModalData = { date: null, totalHours: 0, entries: [] };
+
+function acknowledgeAlert(dateStr) {
+    // Store acknowledgment in localStorage
+    const acknowledged = JSON.parse(localStorage.getItem('acknowledgedTimeAlerts') || '[]');
+    if (!acknowledged.includes(dateStr)) {
+        acknowledged.push(dateStr);
+        localStorage.setItem('acknowledgedTimeAlerts', JSON.stringify(acknowledged));
+    }
+    
+    // Hide the alert with animation
+    const alertEl = document.getElementById('alert-' + dateStr);
+    if (alertEl) {
+        alertEl.classList.remove('show');
+        setTimeout(() => alertEl.remove(), 150);
+    }
+    
+    // Show confirmation
+    const toast = document.createElement('div');
+    toast.className = 'position-fixed bottom-0 end-0 p-3';
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `
+        <div class="toast show" role="alert">
+            <div class="toast-header">
+                <i class="fas fa-check-circle text-success me-2"></i>
+                <strong class="me-auto">Acknowledged</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+            </div>
+            <div class="toast-body">
+                This entry has been marked as correct. The alert won't appear again for this date.
+            </div>
+        </div>
+    `;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+function showSplitEntryModal(dateStr, totalHours) {
+    splitModalData = { date: dateStr, totalHours: totalHours, entries: [] };
+    
+    document.getElementById('splitTotalHours').textContent = totalHours;
+    document.getElementById('splitOriginalDate').textContent = new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+    
+    // Initialize with two split rows
+    const container = document.getElementById('splitEntriesContainer');
+    container.innerHTML = '';
+    addSplitRow();
+    addSplitRow();
+    
+    updateSplitRemaining();
+    
+    const modal = new bootstrap.Modal(document.getElementById('splitEntryModal'));
+    modal.show();
+}
+
+function addSplitRow() {
+    const container = document.getElementById('splitEntriesContainer');
+    const rowIndex = container.children.length;
+    
+    const row = document.createElement('div');
+    row.className = 'row mb-2 split-row';
+    row.innerHTML = `
+        <div class="col-6">
+            <input type="date" class="form-control form-control-sm split-date" 
+                   value="${splitModalData.date}" onchange="updateSplitRemaining()">
+        </div>
+        <div class="col-4">
+            <div class="input-group input-group-sm">
+                <input type="number" class="form-control split-hours" step="0.25" min="0.25" 
+                       placeholder="Hours" onchange="updateSplitRemaining()" oninput="updateSplitRemaining()">
+                <span class="input-group-text">h</span>
+            </div>
+        </div>
+        <div class="col-2">
+            ${rowIndex > 1 ? `<button type="button" class="btn btn-outline-danger btn-sm" onclick="removeSplitRow(this)"><i class="fas fa-times"></i></button>` : ''}
+        </div>
+    `;
+    container.appendChild(row);
+}
+
+function removeSplitRow(btn) {
+    btn.closest('.split-row').remove();
+    updateSplitRemaining();
+}
+
+function updateSplitRemaining() {
+    const hoursInputs = document.querySelectorAll('.split-hours');
+    let allocated = 0;
+    hoursInputs.forEach(input => {
+        allocated += parseFloat(input.value) || 0;
+    });
+    
+    const remaining = splitModalData.totalHours - allocated;
+    const remainingEl = document.getElementById('splitRemainingHours');
+    remainingEl.textContent = remaining.toFixed(2) + 'h';
+    remainingEl.className = remaining < 0 ? 'text-danger' : (remaining === 0 ? 'text-success' : '');
+    
+    // Enable/disable submit button
+    document.getElementById('submitSplitBtn').disabled = remaining !== 0 || allocated === 0;
+}
+
+function submitSplitEntries() {
+    const rows = document.querySelectorAll('.split-row');
+    const splits = [];
+    
+    rows.forEach(row => {
+        const date = row.querySelector('.split-date').value;
+        const hours = parseFloat(row.querySelector('.split-hours').value);
+        if (date && hours > 0) {
+            splits.push({ date, hours });
+        }
+    });
+    
+    if (splits.length === 0) {
+        alert('Please enter at least one valid split entry');
+        return;
+    }
+    
+    // For now, show instructions (actual implementation would need backend endpoint)
+    const instructions = splits.map(s => 
+        `• ${new Date(s.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}: ${s.hours}h`
+    ).join('\n');
+    
+    alert(`To split your time entries, please:\n\n1. Delete the original entries for ${splitModalData.date}\n2. Create new entries as follows:\n${instructions}\n\n(Automatic splitting feature coming soon!)`);
+    
+    bootstrap.Modal.getInstance(document.getElementById('splitEntryModal')).hide();
+}
+
+// Check for acknowledged alerts on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const acknowledged = JSON.parse(localStorage.getItem('acknowledgedTimeAlerts') || '[]');
+    acknowledged.forEach(dateStr => {
+        const alertEl = document.getElementById('alert-' + dateStr);
+        if (alertEl) {
+            alertEl.remove();
+        }
+    });
+});
+</script>
 {% endblock %}
