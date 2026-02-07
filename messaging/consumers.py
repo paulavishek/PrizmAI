@@ -34,6 +34,9 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
         
         await self.accept()
         
+        # Mark all unread messages as read and broadcast updates
+        await self.mark_all_messages_read_on_join()
+        
         # Notify others that user joined
         await self.channel_layer.group_send(
             self.room_group_name,
@@ -412,6 +415,75 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
             }
         except ChatMessage.DoesNotExist:
             return None
+    
+    async def mark_all_messages_read_on_join(self):
+        """Mark all unread messages as read when user joins the room and broadcast updates"""
+        updates = await self.get_and_mark_unread_messages()
+        
+        # Broadcast read status updates for each message
+        for update in updates:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'message_marked_read',
+                    'message_id': update['message_id'],
+                    'username': self.user.username,
+                    'user_id': self.user.id,
+                    'read_count': update['read_count'],
+                    'total_members': update['total_members'],
+                    'all_read': update['all_read']
+                }
+            )
+        
+        # If any messages were marked, also trigger notification count update
+        if updates:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'notification_count_update',
+                    'trigger': 'bulk_read_on_join'
+                }
+            )
+    
+    @database_sync_to_async
+    def get_and_mark_unread_messages(self):
+        """Get all unread messages for this user in this room and mark them as read"""
+        from django.db.models import Q
+        
+        try:
+            chat_room = ChatRoom.objects.get(id=self.room_id)
+            total_members = chat_room.members.count()
+            
+            # Get messages not read by this user (excluding their own messages)
+            unread_messages = ChatMessage.objects.filter(
+                chat_room=chat_room
+            ).exclude(
+                read_by=self.user
+            ).exclude(
+                author=self.user
+            )
+            
+            updates = []
+            for message in unread_messages:
+                message.read_by.add(self.user)
+                read_count = message.read_by.count()
+                all_read = read_count >= total_members
+                
+                if all_read and not message.is_read:
+                    message.is_read = True
+                    message.read_at = datetime.now()
+                    message.save()
+                
+                updates.append({
+                    'message_id': message.id,
+                    'read_count': read_count,
+                    'total_members': total_members,
+                    'all_read': all_read
+                })
+            
+            return updates
+        except ChatRoom.DoesNotExist:
+            return []
 
 
 class TaskCommentConsumer(AsyncWebsocketConsumer):

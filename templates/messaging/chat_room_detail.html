@@ -195,6 +195,79 @@
         }
     }
 
+    // ============================================================
+    // RELATIVE TIMESTAMP FORMATTING
+    // ============================================================
+    function formatRelativeTimestamp(date) {
+        const now = new Date();
+        const diffMs = now - date;
+        const diffSecs = Math.floor(diffMs / 1000);
+        const diffMins = Math.floor(diffSecs / 60);
+        const diffHours = Math.floor(diffMins / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        
+        // Less than 1 minute ago
+        if (diffSecs < 60) {
+            return 'Just now';
+        }
+        
+        // Less than 1 hour ago
+        if (diffMins < 60) {
+            return `${diffMins} min${diffMins > 1 ? 's' : ''} ago`;
+        }
+        
+        // Check if same day
+        const isToday = date.toDateString() === now.toDateString();
+        
+        // Check if yesterday
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const isYesterday = date.toDateString() === yesterday.toDateString();
+        
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        if (isToday) {
+            // Today: show time only for older messages (over an hour)
+            return timeStr;
+        }
+        
+        if (isYesterday) {
+            return `Yesterday ${timeStr}`;
+        }
+        
+        // Within last 7 days: show day name
+        if (diffDays < 7) {
+            const dayName = date.toLocaleDateString([], { weekday: 'short' });
+            return `${dayName} ${timeStr}`;
+        }
+        
+        // Same year: show month and day
+        if (date.getFullYear() === now.getFullYear()) {
+            return date.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ` ${timeStr}`;
+        }
+        
+        // Different year: show full date
+        return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) + ` ${timeStr}`;
+    }
+    
+    // Update all timestamps on the page
+    function updateAllTimestamps() {
+        const timeElements = document.querySelectorAll('.message-time[data-timestamp]');
+        timeElements.forEach(el => {
+            const timestamp = el.getAttribute('data-timestamp');
+            if (timestamp) {
+                const date = new Date(timestamp);
+                el.textContent = formatRelativeTimestamp(date);
+            }
+        });
+    }
+    
+    // Update timestamps on page load and every minute
+    document.addEventListener('DOMContentLoaded', function() {
+        updateAllTimestamps();
+        setInterval(updateAllTimestamps, 60000); // Update every minute
+    });
+
     // Auto-scroll to bottom of messages
     const chatMessages = document.querySelector('.chat-messages');
     if (chatMessages) {
@@ -431,10 +504,14 @@
                 messageEl.classList.add('own');
             }
             
-            // Format timestamp
+            // Format timestamp - shows relative time for recent messages, date for older ones
             const messageDate = new Date(data.timestamp);
-            const timeString = messageDate.toLocaleTimeString([], { 
-                hour: '2-digit', 
+            const relativeTime = formatRelativeTimestamp(messageDate);
+            const fullDateTime = messageDate.toLocaleString([], {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
                 minute: '2-digit'
             });
             
@@ -483,7 +560,7 @@
                 <div class="message-content">${data.message}</div>
                 ${mentionHtml}
                 ${broadcastHtml}
-                <div class="message-time">${timeString}</div>
+                <div class="message-time" data-timestamp="${data.timestamp}" title="${fullDateTime}">${relativeTime}</div>
                 ${readStatusHtml}
                 ${actionsHtml}
             `;
@@ -697,6 +774,12 @@
 {% endblock %}
 
 {% block content %}
+<div class="mb-3">
+    <button onclick="goBack()" class="btn btn-outline-secondary btn-sm">
+        <i class="fas fa-arrow-left me-1"></i> Back
+    </button>
+</div>
+
 <div class="row">
     <div class="col-lg-8">
         <div class="chat-container">
@@ -710,9 +793,6 @@
                         <!-- WebSocket Connection Status -->
                         <span id="ws-connection-status" style="font-size: 0.75rem; display: none;"></span>
                     </div>
-                    <button onclick="goBack()" class="btn btn-light btn-sm">
-                        <i class="fas fa-arrow-left me-1"></i> Back
-                    </button>
                 </div>
             </div>
 
@@ -788,7 +868,7 @@
                     <div class="message" data-message-id="{{ message.id }}" data-read-by="{{ message.read_by.count }}">
                         <div class="message-author">{{ message.author.username }}</div>
                         <div class="message-content">{{ message.content }}</div>
-                        <div class="message-time">{{ message.created_at|date:"g:i A" }}</div>
+                        <div class="message-time" data-timestamp="{{ message.created_at|date:'c' }}" title="{{ message.created_at|date:'M j, Y g:i A' }}">{{ message.created_at|date:"g:i A" }}</div>
                         {% if message.is_read %}
                             <div class="message-read-status"><small class="text-success"><i class="fas fa-check-double"></i> Read by all</small></div>
                         {% else %}
