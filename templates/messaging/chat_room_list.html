@@ -129,3 +129,35 @@
     </div>
 {% endif %}
 {% endblock %}
+{% block extra_js %}
+<script>
+    // Refresh page when it becomes visible (user navigates back from chat room)
+    // This ensures unread counts are accurate after marking messages as read
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible' && document.hidden === false) {
+            // Check if we should refresh (if coming back from another page)
+            const lastVisitKey = 'chat_room_list_last_visit';
+            const now = Date.now();
+            const lastVisit = sessionStorage.getItem(lastVisitKey);
+            
+            // Refresh if more than 5 seconds have passed since leaving
+            if (lastVisit && (now - parseInt(lastVisit)) > 5000) {
+                window.location.reload();
+            }
+        }
+    });
+    
+    // Track when user leaves the page
+    window.addEventListener('beforeunload', function() {
+        sessionStorage.setItem('chat_room_list_last_visit', Date.now().toString());
+    });
+    
+    // Also handle back/forward navigation
+    window.addEventListener('pageshow', function(event) {
+        if (event.persisted) {
+            // Page was restored from back/forward cache
+            window.location.reload();
+        }
+    });
+</script>
+{% endblock %}

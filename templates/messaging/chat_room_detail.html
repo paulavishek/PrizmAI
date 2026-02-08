@@ -71,12 +71,17 @@
     .message-actions {
         font-size: 0.8rem;
         margin-top: 0.5rem;
-        display: none;
+        display: flex;
         gap: 0.5rem;
     }
 
-    .message:hover .message-actions {
-        display: flex;
+    /* Only show delete button on hover, but always show Mark as Read */
+    .message-actions .message-delete-btn {
+        display: none;
+    }
+
+    .message:hover .message-actions .message-delete-btn {
+        display: inline;
     }
 
     .message-read-btn {
@@ -567,17 +572,10 @@
             messagesDiv.appendChild(messageEl);
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
             
-            // Auto-mark as read if this is not the sender's message (recipient is viewing)
-            if (data.user_id !== currentUserId && data.id) {
-                console.log(`[Auto-mark] Message ${data.id} from user ${data.user_id}, current user ${currentUserId} - marking as read in 500ms`);
-                // Wait a moment to ensure message is displayed, then auto-mark as read
-                setTimeout(() => {
-                    console.log(`[Auto-mark] Executing markMessageAsRead(${data.id})`);
-                    markMessageAsRead(data.id);
-                }, 500);
-            } else {
-                console.log(`[Auto-mark] Skipping auto-mark: user_id=${data.user_id}, currentUserId=${currentUserId}, id=${data.id}`);
-            }
+            // NOTE: Messages are NOT auto-marked as read.
+            // Users must manually click "Mark as Read" for privacy control.
+            // This allows users to decide when they want others to know they've read a message.
+            console.log(`[Message] New message ${data.id} received. User can manually mark as read.`);
         }
         else if (data.type === 'message_marked_read') {
             // Update message read status
@@ -989,7 +987,7 @@
         <div class="alert alert-info mt-3">
             <small>
                 <i class="fas fa-info-circle me-1"></i>
-                <strong>Message Status:</strong> Hover over messages and click "Mark as Read" to mark them. The notification badge will update based on unread messages. Messages are updated in real-time. Use @username to mention someone.
+                <strong>Message Status:</strong> Hover over messages and click "Mark as Read" to let others know you've read them. You control when read receipts are sent - messages aren't auto-marked as read for your privacy. Use @username to mention someone.
             </small>
         </div>
     </div>

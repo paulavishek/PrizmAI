@@ -34,8 +34,8 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
         
         await self.accept()
         
-        # Mark all unread messages as read and broadcast updates
-        await self.mark_all_messages_read_on_join()
+        # NOTE: Messages are NOT auto-marked as read when joining.
+        # Users must manually click "Mark as Read" for privacy control.
         
         # Notify others that user joined
         await self.channel_layer.group_send(

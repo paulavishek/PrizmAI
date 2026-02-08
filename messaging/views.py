@@ -109,10 +109,9 @@ def chat_room_detail(request, room_id):
     chat_messages = chat_room.messages.all().order_by('-created_at')[:50]
     chat_messages = list(chat_messages)
     
-    # Auto-mark all displayed messages as read since user is viewing the chat
-    for msg in chat_messages:
-        if request.user not in msg.read_by.all():
-            msg.read_by.add(request.user)
+    # NOTE: Messages are NOT auto-marked as read when viewing the chat.
+    # Users must manually click "Mark as Read" to indicate they've read a message.
+    # This gives users control over read receipts for privacy.
     
     chat_messages = reversed(chat_messages)
     
