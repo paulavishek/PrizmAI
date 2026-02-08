@@ -378,39 +378,24 @@ def get_unread_message_count(request):
     """API endpoint to get unread message count for the current user
     
     Counts messages that the user hasn't marked as read yet.
-    Only counts messages from boards in the user's organization (matching messaging hub).
-    Optional query parameter:
-    - board_id: If provided, only count messages from chat rooms in this board
+    Uses the same board access logic as messaging_hub:
+    - Official demo boards
+    - Boards user created
+    - Boards user is a member of
     """
-    board_id = request.GET.get('board_id')
-    
     # Get boards accessible to the user (same logic as messaging_hub)
-    try:
-        profile = request.user.profile
-        organization = profile.organization
-        
-        # Filter boards by organization and membership
-        accessible_boards = Board.objects.filter(
-            Q(organization=organization) & 
-            (Q(created_by=request.user) | Q(members=request.user))
-        ).distinct()
-        
-        # Get chat rooms from accessible boards only
-        user_chat_rooms = ChatRoom.objects.filter(
-            members=request.user,
-            board__in=accessible_boards
-        )
-    except:
-        # Fallback: get all chat rooms if no profile/organization
-        user_chat_rooms = ChatRoom.objects.filter(members=request.user)
+    # Include: 1) Official demo boards, 2) Boards user created, 3) Boards user is member of
+    demo_boards = Board.objects.filter(is_official_demo_board=True)
+    user_boards_query = Board.objects.filter(
+        Q(created_by=request.user) | Q(members=request.user)
+    )
+    accessible_boards = (demo_boards | user_boards_query).distinct()
     
-    # If board_id is provided, filter to only that board
-    if board_id:
-        try:
-            board_id = int(board_id)
-            user_chat_rooms = user_chat_rooms.filter(board_id=board_id)
-        except (ValueError, TypeError):
-            pass  # Invalid board_id, ignore the filter
+    # Get chat rooms from accessible boards where user is a member
+    user_chat_rooms = ChatRoom.objects.filter(
+        members=request.user,
+        board__in=accessible_boards
+    )
     
     # Count total unread messages
     # Messages are unread if: the user hasn't marked them as read AND they're not from the user
