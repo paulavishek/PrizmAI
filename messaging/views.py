@@ -504,7 +504,10 @@ def mark_room_messages_read(request, room_id):
 @login_required
 @require_http_methods(["DELETE"])
 def delete_chat_message(request, message_id):
-    """Delete a specific chat message"""
+    """Delete a specific chat message and broadcast to all connected users"""
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+    
     message = get_object_or_404(ChatMessage, id=message_id)
     
     # Check if user is the author or a room creator
@@ -516,7 +519,22 @@ def delete_chat_message(request, message_id):
         return JsonResponse({'error': 'Unauthorized'}, status=403)
     
     message_id = message.id
+    room_group_name = f'chat_room_{chat_room.id}'
+    
+    # Delete the message
     message.delete()
+    
+    # Broadcast deletion to all connected users via WebSocket
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        room_group_name,
+        {
+            'type': 'message_deleted',
+            'message_id': message_id,
+            'deleted_by': request.user.username,
+            'deleted_by_id': request.user.id
+        }
+    )
     
     return JsonResponse({
         'success': True,
@@ -528,7 +546,10 @@ def delete_chat_message(request, message_id):
 @login_required
 @require_http_methods(["POST"])
 def clear_chat_room_messages(request, room_id):
-    """Delete all messages in a chat room"""
+    """Delete all messages in a chat room and broadcast to all connected users"""
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+    
     chat_room = get_object_or_404(ChatRoom, id=room_id)
     
     # Check if user is room creator or staff
@@ -540,6 +561,19 @@ def clear_chat_room_messages(request, room_id):
     
     # Delete all messages
     chat_room.messages.all().delete()
+    
+    # Broadcast clear all to connected users via WebSocket
+    channel_layer = get_channel_layer()
+    room_group_name = f'chat_room_{chat_room.id}'
+    async_to_sync(channel_layer.group_send)(
+        room_group_name,
+        {
+            'type': 'messages_cleared',
+            'cleared_by': request.user.username,
+            'cleared_by_id': request.user.id,
+            'count': count
+        }
+    )
     
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({

@@ -274,6 +274,24 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
             'trigger': event.get('trigger', 'unknown')
         }))
     
+    async def message_deleted(self, event):
+        """Send message deletion notification to all connected users"""
+        await self.send(text_data=json.dumps({
+            'type': 'message_deleted',
+            'message_id': event['message_id'],
+            'deleted_by': event['deleted_by'],
+            'deleted_by_id': event['deleted_by_id']
+        }))
+    
+    async def messages_cleared(self, event):
+        """Send notification that all messages were cleared"""
+        await self.send(text_data=json.dumps({
+            'type': 'messages_cleared',
+            'cleared_by': event['cleared_by'],
+            'cleared_by_id': event['cleared_by_id'],
+            'count': event['count']
+        }))
+    
     async def file_uploaded(self, event):
         """Send file upload notification to all room members"""
         await self.send(text_data=json.dumps({

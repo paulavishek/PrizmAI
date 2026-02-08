@@ -617,6 +617,44 @@
         else if (data.type === 'user_leave') {
             console.log(data.username + ' left the room');
         }
+        else if (data.type === 'message_deleted') {
+            // Remove message from DOM immediately for all users
+            const messageEl = document.querySelector(`[data-message-id="${data.message_id}"]`);
+            if (messageEl) {
+                messageEl.style.transition = 'opacity 0.3s, transform 0.3s';
+                messageEl.style.opacity = '0';
+                messageEl.style.transform = 'translateX(-20px)';
+                setTimeout(() => messageEl.remove(), 300);
+            }
+            console.log(`Message ${data.message_id} deleted by ${data.deleted_by}`);
+            
+            // Update notification count
+            if (typeof updateUnreadMessageCount === 'function') {
+                setTimeout(updateUnreadMessageCount, 500);
+            }
+        }
+        else if (data.type === 'messages_cleared') {
+            // Remove all messages from DOM
+            const messagesContainer = document.querySelector('.chat-messages');
+            if (messagesContainer) {
+                const allMessages = messagesContainer.querySelectorAll('.message');
+                allMessages.forEach(msg => {
+                    msg.style.transition = 'opacity 0.3s';
+                    msg.style.opacity = '0';
+                });
+                setTimeout(() => {
+                    allMessages.forEach(msg => msg.remove());
+                    // Show empty state
+                    messagesContainer.innerHTML = '<div class="text-center text-muted py-5"><p>No messages yet. Start the conversation!</p></div>';
+                }, 300);
+            }
+            console.log(`All messages cleared by ${data.cleared_by}`);
+            
+            // Update notification count
+            if (typeof updateUnreadMessageCount === 'function') {
+                setTimeout(updateUnreadMessageCount, 500);
+            }
+        }
     };
 
     // Send message on form submit
