@@ -768,6 +768,279 @@
         console.log('New file added:', fileData.filename);
     }
 
+    // ============================================================
+    // MESSAGE AND FILE MANAGEMENT FUNCTIONS
+    // ============================================================
+    let messageToDeleteId = null;
+
+    function markMessageAsRead(messageId) {
+        console.log(`[Mark Read] Marking message ${messageId} as read...`);
+        
+        // Send read notification via WebSocket
+        chatSocketManager.send({
+            'type': 'message_read',
+            'message_id': messageId
+        });
+        
+        // Also send to server via HTTP for persistence
+        fetch(`{% url 'messaging:mark_chat_message_read' message_id=0 %}`.replace('0', messageId), {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log('Message marked as read:', data);
+                // Update UI
+                const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
+                if (messageEl) {
+                    const readBtn = messageEl.querySelector('.message-read-btn');
+                    if (readBtn) {
+                        readBtn.classList.add('read');
+                        readBtn.disabled = true;
+                        readBtn.textContent = '';
+                        readBtn.innerHTML = '<i class="fas fa-check"></i> Read';
+                        
+                        // Update read status display
+                        const readStatus = messageEl.querySelector('.message-read-status');
+                        if (readStatus) {
+                            readStatus.innerHTML = `<small class="text-muted"><i class="fas fa-check"></i> Read by ${data.read_count}/${data.total_members}</small>`;
+                            if (data.all_read) {
+                                readStatus.innerHTML = '<small class="text-success"><i class="fas fa-check-double"></i> Read by all</small>';
+                            }
+                        }
+                    }
+                }
+                
+                // Update the notification badge in navbar
+                if (typeof updateUnreadMessageCount === 'function') {
+                    setTimeout(updateUnreadMessageCount, 500);
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error marking message as read:', error);
+        });
+    }
+
+    function deleteMessage(messageId) {
+        const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
+        const content = messageEl.querySelector('.message-content').textContent;
+        
+        messageToDeleteId = messageId;
+        document.getElementById('messagePreview').textContent = content.substring(0, 100) + (content.length > 100 ? '...' : '');
+        
+        const deleteModal = new bootstrap.Modal(document.getElementById('deleteMessageModal'));
+        deleteModal.show();
+    }
+
+    function confirmDeleteMessage() {
+        if (!messageToDeleteId) return;
+
+        fetch(`{% url 'messaging:delete_chat_message' message_id=0 %}`.replace('0', messageToDeleteId), {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Remove message from DOM
+                const messageEl = document.querySelector(`[data-message-id="${messageToDeleteId}"]`);
+                messageEl.style.opacity = '0.5';
+                messageEl.style.textDecoration = 'line-through';
+                
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('deleteMessageModal')).hide();
+                
+                // Reload messages
+                setTimeout(() => {
+                    location.reload();
+                }, 500);
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error deleting message');
+        });
+    }
+
+    function clearAllMessages(roomId) {
+        fetch(`/messaging/room/${roomId}/clear/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Close modal
+                bootstrap.Modal.getInstance(document.getElementById('clearAllModal')).hide();
+                
+                // Show success message
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-success alert-dismissible fade show';
+                alertDiv.setAttribute('role', 'alert');
+                alertDiv.innerHTML = `
+                    <i class="fas fa-check-circle me-2"></i> ${data.message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.querySelector('main').insertBefore(alertDiv, document.querySelector('main').firstChild);
+                
+                // Reload page
+                setTimeout(() => {
+                    location.reload();
+                }, 1500);
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error clearing messages');
+        });
+    }
+
+    function toggleFileUpload() {
+        const section = document.getElementById('fileUploadSection');
+        section.style.display = section.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+
+    function deleteFile(fileId, filename) {
+        if (confirm(`Delete "${filename}"?`)) {
+            fetch(`{% url 'messaging:delete_chat_room_file' file_id=0 %}`.replace('0', fileId), {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Error deleting file');
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+    }
+
+    // Initialize event listeners after DOM is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+        // Update message count when modal opens
+        const clearAllModal = document.getElementById('clearAllModal');
+        if (clearAllModal) {
+            clearAllModal.addEventListener('show.bs.modal', function() {
+                const messageCount = document.querySelectorAll('.chat-messages .message').length;
+                document.getElementById('messageCountDisplay').textContent = messageCount;
+            });
+        }
+
+        // File upload form handler
+        const chatFileForm = document.getElementById('chatFileForm');
+        if (chatFileForm) {
+            chatFileForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const formData = new FormData(this);
+                const fileInput = document.querySelector('input[name="file"]');
+                const uploadBtn = this.querySelector('button[type="submit"]');
+                
+                // Validate file is selected
+                if (!fileInput.files.length) {
+                    alert('Please select a file');
+                    return;
+                }
+                
+                // Show loading state
+                uploadBtn.disabled = true;
+                uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+                
+                fetch('{% url "messaging:upload_chat_room_file" room_id=chat_room.id %}', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    }
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Show success message
+                        const successAlert = document.createElement('div');
+                        successAlert.className = 'alert alert-success alert-dismissible fade show mt-2';
+                        successAlert.innerHTML = `
+                            <i class="fas fa-check-circle me-2"></i> File "${data.filename}" uploaded successfully! Check the <strong>Files</strong> section on the right.
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        `;
+                        chatFileForm.parentElement.appendChild(successAlert);
+                        
+                        // Reset form
+                        fileInput.value = '';
+                        document.querySelector('textarea[name="description"]').value = '';
+                        
+                        // Auto-hide after 3 seconds
+                        setTimeout(() => {
+                            toggleFileUpload();
+                            successAlert.remove();
+                        }, 2000);
+                    } else {
+                        alert('Upload failed: ' + JSON.stringify(data.errors));
+                        uploadBtn.disabled = false;
+                        uploadBtn.innerHTML = '<i class="fas fa-upload"></i>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Upload error: ' + error);
+                    uploadBtn.disabled = false;
+                    uploadBtn.innerHTML = '<i class="fas fa-upload"></i>';
+                });
+            });
+        }
+
+        // Show/hide demo banner based on localStorage
+        const banner = document.getElementById('demoMultiUserBanner');
+        const showBtn = document.getElementById('showDemoBannerBtn');
+        const isDismissed = localStorage.getItem('demoMultiUserBannerDismissed') === 'true';
+        
+        if (banner) {
+            if (isDismissed) {
+                banner.style.display = 'none';
+                if (showBtn) showBtn.style.display = 'inline-block';
+            } else {
+                banner.style.display = 'block';
+                if (showBtn) showBtn.style.display = 'none';
+            }
+        }
+    });
+
 </script>
 {% endblock %}
 
@@ -1041,275 +1314,5 @@
         </div>
     </div>
 </div>
-
-<script>
-    let messageToDeleteId = null;
-
-    function markMessageAsRead(messageId) {
-        console.log(`[Mark Read] Marking message ${messageId} as read...`);
-        
-        // Send read notification via WebSocket
-        chatSocketManager.send({
-            'type': 'message_read',
-            'message_id': messageId
-        });
-        
-        // Also send to server via HTTP for persistence
-        fetch(`{% url 'messaging:mark_chat_message_read' message_id=0 %}`.replace('0', messageId), {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                console.log('Message marked as read:', data);
-                // Update UI
-                const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
-                if (messageEl) {
-                    const readBtn = messageEl.querySelector('.message-read-btn');
-                    if (readBtn) {
-                        readBtn.classList.add('read');
-                        readBtn.disabled = true;
-                        readBtn.textContent = '';
-                        readBtn.innerHTML = '<i class="fas fa-check"></i> Read';
-                        
-                        // Update read status display
-                        const readStatus = messageEl.querySelector('.message-read-status');
-                        if (readStatus) {
-                            readStatus.innerHTML = `<small class="text-muted"><i class="fas fa-check"></i> Read by ${data.read_count}/${data.total_members}</small>`;
-                            if (data.all_read) {
-                                readStatus.innerHTML = '<small class="text-success"><i class="fas fa-check-double"></i> Read by all</small>';
-                            }
-                        }
-                    }
-                }
-                }
-                
-                // Update the notification badge in navbar
-                if (typeof updateUnreadMessageCount === 'function') {
-                    setTimeout(updateUnreadMessageCount, 500);
-                }
-            }
-        })
-        .catch(error => {
-            console.error('Error marking message as read:', error);
-        });
-    }
-
-    function deleteMessage(messageId) {
-        const messageEl = document.querySelector(`[data-message-id="${messageId}"]`);
-        const content = messageEl.querySelector('.message-content').textContent;
-        
-        messageToDeleteId = messageId;
-        document.getElementById('messagePreview').textContent = content.substring(0, 100) + (content.length > 100 ? '...' : '');
-        
-        const deleteModal = new bootstrap.Modal(document.getElementById('deleteMessageModal'));
-        deleteModal.show();
-    }
-
-    function confirmDeleteMessage() {
-        if (!messageToDeleteId) return;
-
-        fetch(`{% url 'messaging:delete_chat_message' message_id=0 %}`.replace('0', messageToDeleteId), {
-            method: 'DELETE',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Remove message from DOM
-                const messageEl = document.querySelector(`[data-message-id="${messageToDeleteId}"]`);
-                messageEl.style.opacity = '0.5';
-                messageEl.style.textDecoration = 'line-through';
-                
-                // Close modal
-                bootstrap.Modal.getInstance(document.getElementById('deleteMessageModal')).hide();
-                
-                // Reload messages
-                setTimeout(() => {
-                    location.reload();
-                }, 500);
-            } else {
-                alert('Error: ' + data.error);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error deleting message');
-        });
-    }
-
-    function clearAllMessages(roomId) {
-        fetch(`/messaging/room/${roomId}/clear/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Close modal
-                bootstrap.Modal.getInstance(document.getElementById('clearAllModal')).hide();
-                
-                // Show success message
-                const alertDiv = document.createElement('div');
-                alertDiv.className = 'alert alert-success alert-dismissible fade show';
-                alertDiv.setAttribute('role', 'alert');
-                alertDiv.innerHTML = `
-                    <i class="fas fa-check-circle me-2"></i> ${data.message}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                `;
-                document.querySelector('main').insertBefore(alertDiv, document.querySelector('main').firstChild);
-                
-                // Reload page
-                setTimeout(() => {
-                    location.reload();
-                }, 1500);
-            } else {
-                alert('Error: ' + data.error);
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error clearing messages');
-        });
-    }
-
-    // Update message count when modal opens
-    document.getElementById('clearAllModal').addEventListener('show.bs.modal', function() {
-        const messageCount = document.querySelectorAll('.chat-messages .message').length;
-        document.getElementById('messageCountDisplay').textContent = messageCount;
-    });
-
-    // File Management Functions
-    function toggleFileUpload() {
-        const section = document.getElementById('fileUploadSection');
-        section.style.display = section.style.display === 'none' ? 'block' : 'none';
-    }
-
-    function getCookie(name) {
-        let cookieValue = null;
-        if (document.cookie && document.cookie !== '') {
-            const cookies = document.cookie.split(';');
-            for (let i = 0; i < cookies.length; i++) {
-                const cookie = cookies[i].trim();
-                if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                    break;
-                }
-            }
-        }
-        return cookieValue;
-    }
-
-    document.getElementById('chatFileForm')?.addEventListener('submit', function(e) {
-        e.preventDefault();
-        
-        const formData = new FormData(this);
-        const fileInput = document.querySelector('input[name="file"]');
-        const uploadBtn = this.querySelector('button[type="submit"]');
-        
-        // Validate file is selected
-        if (!fileInput.files.length) {
-            alert('Please select a file');
-            return;
-        }
-        
-        // Show loading state
-        uploadBtn.disabled = true;
-        uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
-        
-        fetch('{% url "messaging:upload_chat_room_file" room_id=chat_room.id %}', {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRFToken': getCookie('csrftoken')
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                // Show success message
-                const successAlert = document.createElement('div');
-                successAlert.className = 'alert alert-success alert-dismissible fade show mt-2';
-                successAlert.innerHTML = `
-                    <i class="fas fa-check-circle me-2"></i> File "${data.filename}" uploaded successfully! Check the <strong>Files</strong> section on the right.
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                `;
-                this.parentElement.appendChild(successAlert);
-                
-                // Reset form
-                fileInput.value = '';
-                document.querySelector('textarea[name="description"]').value = '';
-                
-                // Auto-hide after 3 seconds
-                setTimeout(() => {
-                    toggleFileUpload();
-                    successAlert.remove();
-                }, 2000);
-                
-                // Don't reload - WebSocket will update the file list
-                // setTimeout(() => location.reload(), 3000);
-            } else {
-                alert('Upload failed: ' + JSON.stringify(data.errors));
-                uploadBtn.disabled = false;
-                uploadBtn.innerHTML = '<i class="fas fa-upload"></i>';
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Upload error: ' + error);
-            uploadBtn.disabled = false;
-            uploadBtn.innerHTML = '<i class="fas fa-upload"></i>';
-        });
-    });
-
-    function deleteFile(fileId, filename) {
-        if (confirm(`Delete "${filename}"?`)) {
-            fetch(`{% url 'messaging:delete_chat_room_file' file_id=0 %}`.replace('0', fileId), {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert('Error deleting file');
-                }
-            })
-            .catch(error => console.error('Error:', error));
-        }
-    }
-
-    // Show banner on page load if not dismissed (already initialized at top)
-    (function() {
-        const banner = document.getElementById('demoMultiUserBanner');
-        const showBtn = document.getElementById('showDemoBannerBtn');
-        const isDismissed = localStorage.getItem('demoMultiUserBannerDismissed') === 'true';
-        
-        if (banner) {
-            if (isDismissed) {
-                banner.style.display = 'none';
-                if (showBtn) showBtn.style.display = 'inline-block';
-            } else {
-                banner.style.display = 'block';
-                if (showBtn) showBtn.style.display = 'none';
-            }
-        }
-    })();
-
-</script>
 
 {% endblock %}
