@@ -8,12 +8,16 @@ Also includes comments, activity logs, stakeholders, wiki links, and file attach
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.contrib.auth import get_user_model
+from django.db import models
 from datetime import timedelta, date
 from decimal import Decimal
-from kanban.models import Board, Column, Task, TaskLabel, Organization, Comment, TaskActivity, TaskFile
+from kanban.models import (
+    Board, Column, Task, TaskLabel, Organization, Comment, TaskActivity, TaskFile,
+    TeamSkillProfile, SkillGap, ScopeChangeSnapshot, ScopeCreepAlert
+)
 from kanban.permission_models import Role
 from kanban.budget_models import TimeEntry, ProjectBudget, TaskCost, ProjectROI
-from kanban.burndown_models import TeamVelocitySnapshot, BurndownPrediction
+from kanban.burndown_models import TeamVelocitySnapshot, BurndownPrediction, SprintMilestone
 from kanban.retrospective_models import ProjectRetrospective, LessonLearned, ImprovementMetric, RetrospectiveActionItem
 from kanban.coach_models import CoachingSuggestion, PMMetrics, CoachingInsight
 from kanban.stakeholder_models import ProjectStakeholder, StakeholderTaskInvolvement
@@ -480,6 +484,18 @@ class Command(BaseCommand):
         # Create burndown/velocity data
         self.stdout.write(self.style.SUCCESS('\n📉 Creating burndown velocity data...\n'))
         self.create_burndown_data(software_board, marketing_board, bug_board)
+
+        # Create sprint milestones
+        self.stdout.write(self.style.SUCCESS('\n🎯 Creating sprint milestones...\n'))
+        self.create_sprint_milestones(software_board, marketing_board, bug_board)
+
+        # Create team skill profiles and skill gaps
+        self.stdout.write(self.style.SUCCESS('\n🎓 Creating skill profiles and skill gaps...\n'))
+        self.create_skill_data(software_board, marketing_board, bug_board, all_tasks)
+
+        # Create scope change snapshots
+        self.stdout.write(self.style.SUCCESS('\n📐 Creating scope change snapshots...\n'))
+        self.create_scope_snapshots(software_board, marketing_board, bug_board, alex)
 
         # Create retrospective data
         self.stdout.write(self.style.SUCCESS('\n🔄 Creating retrospective data...\n'))
@@ -959,7 +975,17 @@ class Command(BaseCommand):
         self.stdout.write('   ✅ Lean Six Sigma labels assigned to all tasks (with analytics categories)')
 
     def enhance_tasks_with_demo_data(self, tasks, skill_pool, board_type):
-        """Add comprehensive demo data to tasks including risk, skills, and collaboration"""
+        """Add comprehensive demo data to tasks including risk, skills, collaboration, and AI analysis"""
+        now = timezone.now()
+        
+        # LSS classification choices aligned with model
+        lss_choices = ['value_added', 'necessary_nva', 'waste']
+        lss_display = {
+            'value_added': 'Value-Added',
+            'necessary_nva': 'Necessary NVA',
+            'waste': 'Waste/Eliminate'
+        }
+        
         for task in tasks:
             complexity = task.complexity_score or random.randint(3, 8)
             priority = task.priority or 'medium'
@@ -976,7 +1002,27 @@ class Command(BaseCommand):
             task.risk_score = risk_data['score']
             task.risk_level = risk_data['level']
             task.risk_indicators = risk_data['indicators']
-            task.risk_mitigation = risk_data['strategies']
+            task.mitigation_suggestions = risk_data['strategies']  # Fixed: was risk_mitigation
+            
+            # Add comprehensive risk analysis JSON
+            task.risk_analysis = {
+                'overall_risk': risk_data['level'],
+                'factors': [
+                    {'name': 'Complexity', 'score': complexity, 'weight': 0.3},
+                    {'name': 'Priority Pressure', 'score': 3 if priority in ['urgent', 'high'] else 1, 'weight': 0.25},
+                    {'name': 'Progress Status', 'score': max(1, 10 - progress // 10), 'weight': 0.25},
+                    {'name': 'Resource Availability', 'score': random.randint(2, 8), 'weight': 0.2},
+                ],
+                'reasoning': f"Task has {'high' if complexity >= 7 else 'moderate' if complexity >= 4 else 'low'} complexity with {priority} priority. "
+                            f"Current progress at {progress}% {'reduces' if progress >= 50 else 'maintains'} overall risk.",
+                'last_updated': now.isoformat(),
+            }
+            task.last_risk_assessment = now - timedelta(hours=random.randint(1, 72))
+            
+            # AI Risk Score (0-100 scale)
+            task.ai_risk_score = min(100, max(0, risk_data['score'] * 10 + random.randint(-10, 10)))
+            task.ai_recommendations = f"Based on analysis: {'; '.join(risk_data['strategies'][:2])}"
+            task.last_ai_analysis = now - timedelta(hours=random.randint(1, 48))
 
             # Add workload impact
             task.workload_impact = self.get_workload_impact(complexity, priority)
@@ -987,12 +1033,93 @@ class Command(BaseCommand):
                 complexity
             )
 
-            # Set collaboration requirement
-            task.requires_collaboration = self.should_require_collaboration(complexity, priority)
-
-            # Add estimated hours based on complexity
-            base_hours = complexity * random.uniform(1.5, 3)
-            task.estimated_hours = round(base_hours, 1)
+            # Set collaboration requirement (Fixed: was requires_collaboration)
+            task.collaboration_required = self.should_require_collaboration(complexity, priority)
+            
+            # Add suggested team members for collaborative tasks
+            if task.collaboration_required:
+                task.suggested_team_members = [
+                    {'user_id': random.randint(1, 3), 'reason': 'Complementary skills', 'confidence': round(random.uniform(0.7, 0.95), 2)},
+                    {'user_id': random.randint(1, 3), 'reason': 'Domain expertise', 'confidence': round(random.uniform(0.6, 0.85), 2)},
+                ]
+            
+            # Add optimal assignee suggestions
+            task.optimal_assignee_suggestions = [
+                {
+                    'user_id': task.assigned_to.id if task.assigned_to else random.randint(1, 3),
+                    'match_score': task.skill_match_score or random.randint(70, 95),
+                    'reasoning': 'Best skill match for required competencies',
+                    'workload_status': 'available' if random.random() > 0.3 else 'busy'
+                }
+            ]
+            
+            # Add resource conflicts for some tasks
+            if random.random() < 0.2:  # 20% of tasks have conflicts
+                task.resource_conflicts = [
+                    {
+                        'type': random.choice(['schedule_overlap', 'skill_mismatch', 'overallocation']),
+                        'severity': random.choice(['low', 'medium', 'high']),
+                        'description': 'Potential conflict with other assigned tasks',
+                        'suggested_resolution': 'Review task assignments and priorities'
+                    }
+                ]
+            
+            # Lean Six Sigma Classification
+            # Distribute realistically: 50% value-added, 30% necessary NVA, 20% waste
+            rand = random.random()
+            if rand < 0.5:
+                task.lss_classification = 'value_added'
+            elif rand < 0.8:
+                task.lss_classification = 'necessary_nva'
+            else:
+                task.lss_classification = 'waste'
+            
+            task.lss_classification_confidence = round(random.uniform(0.70, 0.95), 2)
+            task.lss_classification_reasoning = {
+                'classification': task.lss_classification,
+                'display_name': lss_display[task.lss_classification],
+                'confidence': task.lss_classification_confidence,
+                'factors': [
+                    'Task directly contributes to customer deliverables' if task.lss_classification == 'value_added' else
+                    'Required for compliance/process but no direct customer value' if task.lss_classification == 'necessary_nva' else
+                    'Can be eliminated or automated for efficiency gains'
+                ],
+                'ai_reasoning': f"Based on task description and context, classified as {lss_display[task.lss_classification]} with {task.lss_classification_confidence:.0%} confidence.",
+                'suggested_actions': [
+                    'Continue with planned execution' if task.lss_classification == 'value_added' else
+                    'Look for automation opportunities' if task.lss_classification == 'necessary_nva' else
+                    'Consider elimination or significant simplification'
+                ]
+            }
+            
+            # Prediction fields for tasks with progress
+            if progress > 0 and task.start_date:
+                # Calculate predicted completion based on progress and complexity
+                days_elapsed = (now.date() - task.start_date).days if task.start_date else 0
+                if progress > 0 and days_elapsed > 0:
+                    estimated_total_days = int((days_elapsed / progress) * 100)
+                    remaining_days = max(1, estimated_total_days - days_elapsed)
+                    task.predicted_completion_date = now + timedelta(days=remaining_days)
+                    task.prediction_confidence = round(random.uniform(0.65, 0.92), 2)
+                    task.prediction_metadata = {
+                        'based_on_tasks': random.randint(10, 50),
+                        'confidence_interval': [remaining_days - 2, remaining_days + 4],
+                        'factors': ['historical_velocity', 'complexity_score', 'assignee_performance'],
+                        'model_version': '2.1',
+                        'calculation_date': now.isoformat()
+                    }
+                    task.last_prediction_update = now - timedelta(hours=random.randint(1, 24))
+            
+            # Dependency suggestions
+            if random.random() < 0.3:  # 30% of tasks get dependency suggestions
+                task.suggested_dependencies = [
+                    {
+                        'task_id': random.randint(1, 90),
+                        'confidence': round(random.uniform(0.6, 0.9), 2),
+                        'reason': 'Similar title/description suggests logical dependency'
+                    }
+                ]
+                task.last_dependency_analysis = now - timedelta(hours=random.randint(1, 48))
 
             task.save()
 
@@ -1827,6 +1954,291 @@ class Command(BaseCommand):
             )
 
         self.stdout.write('   ✅ Stakeholders created and linked to tasks')
+
+    def create_sprint_milestones(self, software_board, marketing_board, bug_board):
+        """Create sprint milestones for burndown tracking"""
+        from kanban.burndown_models import SprintMilestone
+        
+        now = timezone.now().date()
+        milestones_created = 0
+        
+        for board in [software_board, marketing_board, bug_board]:
+            # Delete existing milestones
+            SprintMilestone.objects.filter(board=board).delete()
+            
+            # Create 3 milestones per board
+            task_count = Task.objects.filter(column__board=board).count()
+            
+            milestone_configs = [
+                {
+                    'name': 'Sprint Mid-Point',
+                    'target_date': now + timedelta(days=7),
+                    'target_tasks': int(task_count * 0.4),
+                    'is_completed': False,
+                },
+                {
+                    'name': 'Feature Freeze',
+                    'target_date': now + timedelta(days=12),
+                    'target_tasks': int(task_count * 0.7),
+                    'is_completed': False,
+                },
+                {
+                    'name': 'Sprint End',
+                    'target_date': now + timedelta(days=14),
+                    'target_tasks': task_count,
+                    'is_completed': False,
+                },
+            ]
+            
+            for config in milestone_configs:
+                SprintMilestone.objects.create(
+                    board=board,
+                    name=config['name'],
+                    target_date=config['target_date'],
+                    target_tasks_completed=config['target_tasks'],
+                    is_completed=config['is_completed'],
+                )
+                milestones_created += 1
+        
+        self.stdout.write(f'   ✅ Created {milestones_created} sprint milestones')
+
+    def create_skill_data(self, software_board, marketing_board, bug_board, all_tasks):
+        """Create team skill profiles and skill gaps for boards"""
+        from kanban.models import TeamSkillProfile, SkillGap
+        
+        now = timezone.now()
+        
+        skill_configs = {
+            software_board: {
+                'skills': SOFTWARE_SKILLS,
+                'inventory': {
+                    'Python': {'expert': 1, 'advanced': 2, 'intermediate': 1},
+                    'JavaScript': {'advanced': 2, 'intermediate': 2},
+                    'React': {'advanced': 1, 'intermediate': 2},
+                    'Django': {'expert': 1, 'advanced': 1},
+                    'PostgreSQL': {'intermediate': 2, 'beginner': 1},
+                    'Docker': {'intermediate': 2},
+                    'AWS': {'intermediate': 1, 'beginner': 1},
+                },
+                'gaps': [
+                    {'skill': 'Kubernetes', 'level': 'intermediate', 'required': 2, 'available': 0, 'severity': 'high'},
+                    {'skill': 'Security', 'level': 'advanced', 'required': 1, 'available': 0, 'severity': 'critical'},
+                    {'skill': 'Machine Learning', 'level': 'intermediate', 'required': 1, 'available': 0, 'severity': 'medium'},
+                ],
+                'capacity': Decimal('120.0'),
+                'utilized': Decimal('95.0'),
+            },
+            marketing_board: {
+                'skills': MARKETING_SKILLS,
+                'inventory': {
+                    'Content Strategy': {'advanced': 2, 'intermediate': 1},
+                    'SEO/SEM': {'advanced': 1, 'intermediate': 2},
+                    'Social Media Marketing': {'expert': 1, 'advanced': 2},
+                    'Analytics': {'advanced': 2, 'intermediate': 1},
+                    'Copywriting': {'advanced': 2, 'intermediate': 1},
+                },
+                'gaps': [
+                    {'skill': 'Video Production', 'level': 'advanced', 'required': 1, 'available': 0, 'severity': 'high'},
+                    {'skill': 'Paid Advertising', 'level': 'expert', 'required': 1, 'available': 0, 'severity': 'medium'},
+                ],
+                'capacity': Decimal('80.0'),
+                'utilized': Decimal('72.0'),
+            },
+            bug_board: {
+                'skills': BUG_TRACKING_SKILLS,
+                'inventory': {
+                    'Debugging': {'expert': 2, 'advanced': 1},
+                    'Root Cause Analysis': {'advanced': 2, 'intermediate': 1},
+                    'Testing': {'advanced': 2, 'intermediate': 2},
+                    'Performance Profiling': {'intermediate': 2},
+                },
+                'gaps': [
+                    {'skill': 'Security Analysis', 'level': 'expert', 'required': 1, 'available': 0, 'severity': 'critical'},
+                ],
+                'capacity': Decimal('100.0'),
+                'utilized': Decimal('85.0'),
+            },
+        }
+        
+        profiles_created = 0
+        gaps_created = 0
+        
+        for board, config in skill_configs.items():
+            if not board:
+                continue
+                
+            # Delete existing skill data
+            TeamSkillProfile.objects.filter(board=board).delete()
+            SkillGap.objects.filter(board=board).delete()
+            
+            # Create team skill profile
+            TeamSkillProfile.objects.create(
+                board=board,
+                skill_inventory=config['inventory'],
+                total_capacity_hours=config['capacity'],
+                utilized_capacity_hours=config['utilized'],
+                last_analysis=now - timedelta(hours=random.randint(1, 24)),
+            )
+            profiles_created += 1
+            
+            # Create skill gaps
+            board_tasks = [t for t in all_tasks if t.column.board == board]
+            for gap_config in config['gaps']:
+                gap = SkillGap.objects.create(
+                    board=board,
+                    skill_name=gap_config['skill'],
+                    proficiency_level=gap_config['level'],
+                    required_count=gap_config['required'],
+                    available_count=gap_config['available'],
+                    gap_count=gap_config['required'] - gap_config['available'],
+                    severity=gap_config['severity'],
+                    status='identified',
+                    sprint_period_start=now.date() - timedelta(days=7),
+                    sprint_period_end=now.date() + timedelta(days=7),
+                    ai_recommendations=[
+                        {
+                            'type': 'training',
+                            'details': f'Upskill existing team member in {gap_config["skill"]}',
+                            'priority': 1,
+                            'estimated_time': '2-4 weeks'
+                        },
+                        {
+                            'type': 'hire',
+                            'details': f'Consider hiring contractor with {gap_config["skill"]} expertise',
+                            'priority': 2,
+                            'estimated_time': '4-6 weeks'
+                        },
+                    ],
+                    estimated_impact_hours=Decimal(str(random.randint(20, 80))),
+                    confidence_score=Decimal(str(round(random.uniform(0.7, 0.95), 2))),
+                )
+                
+                # Link affected tasks (tasks with matching skills)
+                affected = [t for t in board_tasks if any(
+                    s.get('name', '').lower() == gap_config['skill'].lower() 
+                    for s in (t.required_skills or [])
+                )][:5]
+                for task in affected:
+                    gap.affected_tasks.add(task)
+                    
+                gaps_created += 1
+        
+        self.stdout.write(f'   ✅ Created {profiles_created} skill profiles and {gaps_created} skill gaps')
+
+    def create_scope_snapshots(self, software_board, marketing_board, bug_board, admin_user):
+        """Create scope change snapshots for boards"""
+        from kanban.models import ScopeChangeSnapshot, ScopeCreepAlert
+        
+        now = timezone.now()
+        snapshots_created = 0
+        alerts_created = 0
+        
+        for board in [software_board, marketing_board, bug_board]:
+            if not board:
+                continue
+                
+            # Delete existing snapshots
+            ScopeChangeSnapshot.objects.filter(board=board).delete()
+            ScopeCreepAlert.objects.filter(board=board).delete()
+            
+            tasks = Task.objects.filter(column__board=board)
+            total_tasks = tasks.count()
+            completed_tasks = tasks.filter(progress=100).count()
+            in_progress_tasks = tasks.filter(progress__gt=0, progress__lt=100).count()
+            
+            # Overall complexity
+            avg_complexity = tasks.aggregate(avg=models.Avg('complexity_score'))['avg'] or 5.0
+            total_complexity = int(avg_complexity * total_tasks)
+            
+            # Calculate baseline values (simulating 15% fewer tasks initially)
+            baseline_tasks = int(total_tasks * 0.85)
+            baseline_complexity = int(total_complexity * 0.85)
+            
+            # Create baseline snapshot (from 2 weeks ago)
+            baseline = ScopeChangeSnapshot.objects.create(
+                board=board,
+                total_tasks=baseline_tasks,
+                total_complexity_points=baseline_complexity,
+                avg_complexity=round(avg_complexity * 0.95, 2),
+                high_priority_tasks=max(0, tasks.filter(priority='high').count() - 2),
+                urgent_priority_tasks=max(0, tasks.filter(priority='urgent').count() - 1),
+                todo_tasks=int(baseline_tasks * 0.5),
+                in_progress_tasks=int(baseline_tasks * 0.25),
+                completed_tasks=int(baseline_tasks * 0.1),
+                is_baseline=True,
+                baseline_snapshot=None,
+                created_by=admin_user,
+                snapshot_type='baseline',
+                notes='Initial sprint baseline',
+            )
+            # Backdate the snapshot
+            ScopeChangeSnapshot.objects.filter(pk=baseline.pk).update(
+                snapshot_date=now - timedelta(days=14)
+            )
+            snapshots_created += 1
+            
+            # Calculate scope change percentage  
+            scope_change_pct = round(((total_tasks - baseline_tasks) / baseline_tasks) * 100, 1) if baseline_tasks > 0 else 0
+            complexity_change_pct = round(((total_complexity - baseline_complexity) / baseline_complexity) * 100, 1) if baseline_complexity > 0 else 0
+            
+            # Create current snapshot
+            current = ScopeChangeSnapshot.objects.create(
+                board=board,
+                total_tasks=total_tasks,
+                total_complexity_points=total_complexity,
+                avg_complexity=round(avg_complexity, 2),
+                high_priority_tasks=tasks.filter(priority='high').count(),
+                urgent_priority_tasks=tasks.filter(priority='urgent').count(),
+                todo_tasks=total_tasks - in_progress_tasks - completed_tasks,
+                in_progress_tasks=in_progress_tasks,
+                completed_tasks=completed_tasks,
+                is_baseline=False,
+                baseline_snapshot=baseline,
+                created_by=admin_user,
+                snapshot_type='scheduled',
+                notes='Auto-generated snapshot',
+                scope_change_percentage=scope_change_pct,
+                complexity_change_percentage=complexity_change_pct,
+                ai_analysis={
+                    'trend': 'increasing',
+                    'risk_level': 'medium',
+                    'tasks_added': total_tasks - baseline_tasks,
+                    'complexity_added': total_complexity - baseline_complexity,
+                    'recommendations': [
+                        'Review new requirements carefully before adding',
+                        'Consider deferring lower priority items',
+                        'Communicate scope changes to stakeholders'
+                    ],
+                    'confidence': round(random.uniform(0.75, 0.92), 2)
+                }
+            )
+            snapshots_created += 1
+            
+            # Calculate tasks added for alerts
+            tasks_added = total_tasks - baseline_tasks
+            
+            # Create scope creep alert if scope increased significantly
+            if scope_change_pct > 10:
+                ScopeCreepAlert.objects.create(
+                    board=board,
+                    snapshot=current,
+                    severity='warning' if scope_change_pct < 20 else 'critical',
+                    scope_increase_percentage=scope_change_pct,
+                    complexity_increase_percentage=complexity_change_pct,
+                    tasks_added=tasks_added,
+                    predicted_delay_days=random.randint(2, 7) if scope_change_pct > 15 else None,
+                    timeline_at_risk=scope_change_pct > 20,
+                    recommendations={
+                        'immediate': ['Review all newly added tasks', 'Validate priorities'],
+                        'short_term': ['Consider scope reduction', 'Discuss with product owner'],
+                        'prevention': ['Implement stricter change control', 'Regular backlog grooming']
+                    },
+                    ai_summary=f'Scope has increased by {scope_change_pct:.1f}% since baseline. '
+                              f'{tasks_added} new tasks added.',
+                )
+                alerts_created += 1
+        
+        self.stdout.write(f'   ✅ Created {snapshots_created} scope snapshots and {alerts_created} alerts')
 
     def create_file_attachments(self, tasks, alex, sam, jordan):
         """Create simulated file attachment metadata for tasks"""

@@ -300,6 +300,29 @@ class Command(BaseCommand):
         TimeEntry.objects.filter(task__column__board__in=self.demo_boards).delete()
         self.stdout.write('   ✓ Cleared Time Tracking data')
 
+        # =====================================================================
+        # STEP 8: Clear Skill Profiles and Skill Gaps
+        # =====================================================================
+        from kanban.models import TeamSkillProfile, SkillGap
+        SkillGap.objects.filter(board__in=self.demo_boards).delete()
+        TeamSkillProfile.objects.filter(board__in=self.demo_boards).delete()
+        self.stdout.write('   ✓ Cleared Skill data')
+
+        # =====================================================================
+        # STEP 9: Clear Scope Change data
+        # =====================================================================
+        from kanban.models import ScopeChangeSnapshot, ScopeCreepAlert
+        ScopeCreepAlert.objects.filter(board__in=self.demo_boards).delete()
+        ScopeChangeSnapshot.objects.filter(board__in=self.demo_boards).delete()
+        self.stdout.write('   ✓ Cleared Scope Change data')
+
+        # =====================================================================
+        # STEP 10: Clear Sprint Milestones
+        # =====================================================================
+        from kanban.burndown_models import SprintMilestone
+        SprintMilestone.objects.filter(board__in=self.demo_boards).delete()
+        self.stdout.write('   ✓ Cleared Sprint Milestone data')
+
         self.stdout.write(self.style.SUCCESS('   ✓ All demo data cleared\n'))
 
     # =========================================================================
