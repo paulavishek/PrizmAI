@@ -157,20 +157,40 @@
     }
 
     /* ============================================
-       CRITICAL PATH STYLING
+       CRITICAL PATH STYLING - HIGH SPECIFICITY
        ============================================ */
 
-    /* Critical path tasks - distinctive red/orange color */
-    .gantt .bar-wrapper .bar[data-critical-path="true"] {
-        fill: #dc2626 !important;
-        stroke: #991b1b !important;
-        stroke-width: 2px !important;
-        filter: drop-shadow(0 3px 6px rgba(220, 38, 38, 0.4)) !important;
+    /* Animation for critical path pulsing effect */
+    @keyframes criticalPathPulse {
+        0%, 100% {
+            filter: drop-shadow(0 0 4px rgba(220, 38, 38, 0.6)) drop-shadow(0 0 8px rgba(220, 38, 38, 0.4));
+        }
+        50% {
+            filter: drop-shadow(0 0 8px rgba(220, 38, 38, 0.9)) drop-shadow(0 0 16px rgba(220, 38, 38, 0.6));
+        }
     }
 
-    .gantt .bar-wrapper .bar[data-critical-path="true"]:hover {
+    /* Critical path tasks - MUST override priority colors */
+    /* Using higher specificity selectors */
+    .gantt .bar-wrapper .bar[data-critical-path="true"],
+    .gantt .bar-wrapper .bar[data-critical-path="true"][data-priority="low"],
+    .gantt .bar-wrapper .bar[data-critical-path="true"][data-priority="medium"],
+    .gantt .bar-wrapper .bar[data-critical-path="true"][data-priority="high"],
+    .gantt .bar-wrapper .bar[data-critical-path="true"][data-priority="urgent"] {
+        fill: #dc2626 !important;
+        stroke: #7f1d1d !important;
+        stroke-width: 3px !important;
+        animation: criticalPathPulse 2s ease-in-out infinite !important;
+    }
+
+    .gantt .bar-wrapper .bar[data-critical-path="true"]:hover,
+    .gantt .bar-wrapper .bar[data-critical-path="true"][data-priority="low"]:hover,
+    .gantt .bar-wrapper .bar[data-critical-path="true"][data-priority="medium"]:hover,
+    .gantt .bar-wrapper .bar[data-critical-path="true"][data-priority="high"]:hover,
+    .gantt .bar-wrapper .bar[data-critical-path="true"][data-priority="urgent"]:hover {
         fill: #b91c1c !important;
-        filter: brightness(1.1) drop-shadow(0 4px 8px rgba(220, 38, 38, 0.5)) !important;
+        animation: none !important;
+        filter: brightness(1.15) drop-shadow(0 0 12px rgba(220, 38, 38, 0.8)) !important;
     }
 
     /* Critical path toggle control */
@@ -1041,7 +1061,7 @@
             start: '{{ task.start_date|date:"Y-m-d" }}',
             end: '{{ task.due_date|date:"Y-m-d" }}',
             progress: {{ task.progress|default:0 }},
-            dependencies: '{% with deps=task.dependencies.all %}{% if deps %}{% for dep in deps %}{% if dep.due_date %}{{ dep.id }}{% if not forloop.last %},{% endif %}{% endif %}{% endfor %}{% endif %}{% endwith %}',
+            dependencies: '{% for dep in task.dependencies.all %}{{ dep.id }}{% if not forloop.last %},{% endif %}{% endfor %}',
             custom_class: 'status-{{ task.column.name|lower|cut:" "}}',
             status: '{% if "done" in task.column.name|lower %}done{% elif "progress" in task.column.name|lower %}in_progress{% else %}todo{% endif %}',
             priority: '{{ task.priority }}',
@@ -1322,16 +1342,22 @@
         // Calculate slack and identify critical path
         const criticalPath = new Set();
         
+        console.log('%c Slack Analysis for all tasks:', 'background: #059669; color: white; padding: 2px 6px;');
         taskMap.forEach((task, taskId) => {
             if (task.ES && task.LS) {
                 // Slack = LS - ES (in days)
                 task.slack = Math.round((task.LS - task.ES) / (1000 * 60 * 60 * 24));
+                
+                // Log detailed info for each task
+                console.log(`  Task ${taskId} "${task.name.substring(0, 20)}...": ES=${task.ES.toDateString()}, LS=${task.LS.toDateString()}, Slack=${task.slack} days ${task.slack <= 1 ? '🔴 CRITICAL' : '⚪ Non-critical'}`);
                 
                 // Tasks with zero or near-zero slack are on the critical path
                 // Use <= 1 to account for rounding errors
                 if (task.slack <= 1) {
                     criticalPath.add(taskId);
                 }
+            } else {
+                console.log(`  Task ${taskId} "${task.name.substring(0, 20)}...": ES or LS not calculated!`);
             }
         });
         
@@ -1352,24 +1378,39 @@
      * Apply critical path styling to task bars
      */
     function applyCriticalPathStyling() {
+        console.log('%c Applying Critical Path Styling', 'background: #7c3aed; color: white; padding: 2px 6px;');
+        console.log('showCriticalPath:', showCriticalPath);
+        console.log('criticalPathTasks:', Array.from(criticalPathTasks));
+        
         if (!showCriticalPath) {
-            // Remove critical path styling from all bars
+            // Remove critical path styling from all bars and wrappers
             document.querySelectorAll('.bar-wrapper .bar[data-critical-path="true"]').forEach(bar => {
                 bar.removeAttribute('data-critical-path');
             });
+            document.querySelectorAll('.bar-wrapper[data-critical-path="true"]').forEach(wrapper => {
+                wrapper.removeAttribute('data-critical-path');
+            });
+            console.log('Critical path styling removed');
             return;
         }
         
+        let appliedCount = 0;
         // Apply critical path attribute to tasks on the critical path
         criticalPathTasks.forEach(taskId => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${taskId}"]`);
             if (barWrapper) {
+                barWrapper.setAttribute('data-critical-path', 'true');
                 const bar = barWrapper.querySelector('.bar');
                 if (bar) {
                     bar.setAttribute('data-critical-path', 'true');
+                    appliedCount++;
+                    console.log(`  ✅ Applied to task ${taskId}`);
                 }
+            } else {
+                console.log(`  ❌ Bar wrapper not found for task ${taskId}`);
             }
         });
+        console.log(`Applied critical path styling to ${appliedCount} tasks`);
     }
     
     /**
