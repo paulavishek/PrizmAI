@@ -796,6 +796,138 @@
         }
     }
 
+    /* ============================================
+       CRITICAL PATH FLOWCHART MODAL STYLES
+       ============================================ */
+    
+    #criticalPathFlowchartModal .modal-fullscreen {
+        max-width: 100%;
+    }
+    
+    .flowchart-legend .legend-box {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        border: 2px solid;
+    }
+    
+    .flowchart-legend .legend-box.critical {
+        background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+        border-color: #7f1d1d;
+        box-shadow: 0 0 8px rgba(220, 38, 38, 0.6);
+    }
+    
+    .flowchart-legend .legend-box.non-critical {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border-color: #1d4ed8;
+    }
+    
+    .flowchart-legend .legend-box.start-node {
+        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        border-color: #15803d;
+    }
+    
+    .flowchart-legend .legend-box.end-node {
+        background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+        border-color: #6d28d9;
+    }
+    
+    /* Flowchart task nodes */
+    .fc-task-node {
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .fc-task-node:hover {
+        filter: brightness(1.15);
+    }
+    
+    .fc-task-node rect {
+        rx: 8;
+        ry: 8;
+    }
+    
+    .fc-task-node.critical rect {
+        fill: url(#criticalGradient);
+        stroke: #7f1d1d;
+        stroke-width: 3;
+        filter: drop-shadow(0 0 10px rgba(220, 38, 38, 0.6));
+    }
+    
+    .fc-task-node.non-critical rect {
+        fill: url(#nonCriticalGradient);
+        stroke: #1d4ed8;
+        stroke-width: 2;
+    }
+    
+    .fc-task-node.start-node rect {
+        stroke: #15803d;
+        stroke-width: 3;
+        stroke-dasharray: 5, 3;
+    }
+    
+    .fc-task-node.end-node rect {
+        stroke: #6d28d9;
+        stroke-width: 3;
+        stroke-dasharray: 5, 3;
+    }
+    
+    .fc-task-title {
+        font-size: 12px;
+        font-weight: 600;
+        fill: white;
+    }
+    
+    .fc-task-slack {
+        font-size: 10px;
+        fill: rgba(255, 255, 255, 0.9);
+    }
+    
+    .fc-task-duration {
+        font-size: 9px;
+        fill: rgba(255, 255, 255, 0.7);
+    }
+    
+    .fc-dependency-arrow {
+        stroke: #f59e0b;
+        stroke-width: 2;
+        fill: none;
+    }
+    
+    .fc-dependency-arrow.critical-arrow {
+        stroke: #ef4444;
+        stroke-width: 3;
+    }
+    
+    /* Phase separator lines */
+    .fc-phase-separator {
+        stroke: rgba(255, 255, 255, 0.2);
+        stroke-width: 2;
+        stroke-dasharray: 10, 5;
+    }
+    
+    .fc-phase-label {
+        font-size: 16px;
+        font-weight: 700;
+        fill: rgba(255, 255, 255, 0.8);
+    }
+
+    /* View Network Diagram Button */
+    #show-critical-path-flowchart {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+        border: none;
+        color: white;
+        font-weight: 500;
+        padding: 8px 16px;
+        transition: all 0.2s ease;
+    }
+    
+    #show-critical-path-flowchart:hover {
+        background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+    }
+
 </style>
 {% endblock %}
 
@@ -936,8 +1068,11 @@
         {% endif %}
 
         {% if tasks %}
-            <!-- Critical Path Toggle -->
-            <div class="d-flex justify-content-end mb-3">
+            <!-- Critical Path Toggle and Flowchart Button -->
+            <div class="d-flex justify-content-end mb-3 gap-2 align-items-center">
+                <button class="btn btn-outline-primary btn-sm" id="show-critical-path-flowchart" title="View Critical Path Network Diagram">
+                    <i class="fas fa-sitemap me-1"></i> View Network Diagram
+                </button>
                 <div class="critical-path-toggle">
                     <input type="checkbox" id="critical-path-toggle" checked>
                     <label for="critical-path-toggle">
@@ -1013,6 +1148,66 @@
                 </a>
             </div>
         {% endif %}
+    </div>
+</div>
+
+<!-- Critical Path Network Diagram Modal -->
+<div class="modal fade" id="criticalPathFlowchartModal" tabindex="-1" aria-labelledby="criticalPathFlowchartModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-fullscreen">
+        <div class="modal-content">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="criticalPathFlowchartModalLabel">
+                    <i class="fas fa-sitemap me-2"></i>Critical Path Network Diagram
+                </h5>
+                <div class="d-flex align-items-center gap-3 ms-auto">
+                    <div class="form-check form-switch text-white">
+                        <input class="form-check-input" type="checkbox" id="flowchart-phase-filter" checked>
+                        <label class="form-check-label small" for="flowchart-phase-filter">Show All Phases</label>
+                    </div>
+                    <select class="form-select form-select-sm bg-dark text-white border-secondary" id="flowchart-phase-select" style="width: auto;">
+                        <option value="all">All Phases</option>
+                    </select>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+            </div>
+            <div class="modal-body p-0" style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); overflow: auto;">
+                <!-- Legend -->
+                <div class="flowchart-legend p-3 bg-dark bg-opacity-50">
+                    <div class="d-flex gap-4 flex-wrap justify-content-center">
+                        <div class="legend-item-fc d-flex align-items-center gap-2">
+                            <div class="legend-box critical"></div>
+                            <span class="text-white small">Critical Path (0 slack)</span>
+                        </div>
+                        <div class="legend-item-fc d-flex align-items-center gap-2">
+                            <div class="legend-box non-critical"></div>
+                            <span class="text-white small">Non-Critical (has slack)</span>
+                        </div>
+                        <div class="legend-item-fc d-flex align-items-center gap-2">
+                            <svg width="40" height="20">
+                                <defs>
+                                    <marker id="arrow-legend-fc" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+                                        <polygon points="0 0, 8 4, 0 8" fill="#f59e0b"/>
+                                    </marker>
+                                </defs>
+                                <path d="M 2 10 L 30 10" stroke="#f59e0b" stroke-width="2" fill="none" marker-end="url(#arrow-legend-fc)"/>
+                            </svg>
+                            <span class="text-white small">Dependency</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Flowchart Container -->
+                <div id="flowchart-container" style="min-height: 600px; padding: 20px;">
+                    <svg id="flowchart-svg" width="100%" height="100%"></svg>
+                </div>
+            </div>
+            <div class="modal-footer bg-dark border-top border-secondary">
+                <div class="text-muted small me-auto">
+                    <i class="fas fa-info-circle me-1"></i>
+                    <span id="flowchart-stats">Loading...</span>
+                </div>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -2579,5 +2774,482 @@
             {% endif %}
         }
     }
+
+    // ============================================
+    // CRITICAL PATH NETWORK FLOWCHART
+    // ============================================
+    
+    /**
+     * Generate the critical path network diagram flowchart
+     */
+    function generateCriticalPathFlowchart(phaseFilter = 'all') {
+        const svgContainer = document.getElementById('flowchart-svg');
+        const statsElement = document.getElementById('flowchart-stats');
+        if (!svgContainer) return;
+
+        // Check if tasks array exists (it's defined inside {% if tasks %})
+        if (typeof tasks === 'undefined' || !Array.isArray(tasks)) {
+            svgContainer.innerHTML = `
+                <text x="50%" y="50%" text-anchor="middle" fill="white" font-size="18">
+                    No tasks available for flowchart
+                </text>
+            `;
+            return;
+        }
+
+        // Clear existing content
+        svgContainer.innerHTML = '';
+
+        // Get task data and filter by phase if needed
+        let taskList = tasks.filter(t => 
+            t.start && t.end && 
+            t.start !== '' && t.end !== '' && 
+            !t.name.includes('Phase') || !t.name.includes('tasks')
+        );
+
+        if (phaseFilter !== 'all') {
+            taskList = taskList.filter(t => t.phase === phaseFilter);
+        }
+
+        if (taskList.length === 0) {
+            svgContainer.innerHTML = `
+                <text x="50%" y="50%" text-anchor="middle" fill="white" font-size="18">
+                    No tasks available for flowchart
+                </text>
+            `;
+            return;
+        }
+
+        // Build task map with dependency info and calculate critical path
+        const taskMap = new Map();
+        const validTaskIds = new Set(taskList.map(t => String(t.id)));
+
+        taskList.forEach(task => {
+            taskMap.set(String(task.id), {
+                id: String(task.id),
+                name: task.name || task.fullName,
+                phase: task.phase || 'No Phase',
+                start: new Date(task.start),
+                end: new Date(task.end),
+                // Duration: inclusive of both start and end dates (+1)
+                duration: Math.max(1, Math.ceil((new Date(task.end) - new Date(task.start)) / (1000 * 60 * 60 * 24)) + 1),
+                dependencies: [],
+                successors: [],
+                slack: 0,
+                isCritical: false,
+                isStart: false,
+                isEnd: false
+            });
+        });
+
+        // Parse dependencies
+        taskList.forEach(task => {
+            const taskData = taskMap.get(String(task.id));
+            if (task.dependencies) {
+                // Handle both string and array formats
+                let depIds;
+                if (typeof task.dependencies === 'string') {
+                    depIds = task.dependencies.split(',')
+                        .map(d => String(d).trim())
+                        .filter(d => d && validTaskIds.has(d));
+                } else if (Array.isArray(task.dependencies)) {
+                    depIds = task.dependencies
+                        .map(d => String(d).trim())
+                        .filter(d => d && validTaskIds.has(d));
+                } else {
+                    depIds = [];
+                }
+                taskData.dependencies = depIds;
+            }
+        });
+
+        // Build successor relationships
+        taskMap.forEach((task, taskId) => {
+            task.dependencies.forEach(depId => {
+                const depTask = taskMap.get(depId);
+                if (depTask) {
+                    depTask.successors.push(taskId);
+                }
+            });
+        });
+
+        // Mark start and end nodes
+        taskMap.forEach((task, taskId) => {
+            task.isStart = task.dependencies.length === 0;
+            task.isEnd = task.successors.length === 0;
+        });
+
+        // Group tasks by phase first (needed for per-phase critical path calculation)
+        const phaseTasksMap = new Map();
+        taskMap.forEach((task, taskId) => {
+            const phase = task.phase || 'No Phase';
+            if (!phaseTasksMap.has(phase)) {
+                phaseTasksMap.set(phase, []);
+            }
+            phaseTasksMap.get(phase).push(taskId);
+        });
+
+        // Calculate critical path per phase for accurate highlighting
+        // This ensures each phase shows its own critical path
+        function calculateCriticalPathForTasks(taskIds) {
+            if (taskIds.length === 0) return;
+
+            const phaseTaskSet = new Set(taskIds);
+            
+            // Topological sort for this subset
+            const visited = new Set();
+            const sorted = [];
+            
+            function topSort(taskId) {
+                if (visited.has(taskId)) return;
+                visited.add(taskId);
+                const task = taskMap.get(taskId);
+                if (!task) return;
+                // Only follow dependencies within this phase's task set
+                task.dependencies.forEach(depId => {
+                    if (phaseTaskSet.has(depId)) topSort(depId);
+                });
+                sorted.push(taskId);
+            }
+            taskIds.forEach(taskId => topSort(taskId));
+
+            // Forward pass - ES and EF (relative to phase)
+            sorted.forEach(taskId => {
+                const task = taskMap.get(taskId);
+                const phaseDeps = task.dependencies.filter(d => phaseTaskSet.has(d));
+                if (phaseDeps.length === 0) {
+                    task.ES = 0;
+                } else {
+                    task.ES = Math.max(...phaseDeps.map(depId => {
+                        const dep = taskMap.get(depId);
+                        return dep ? (dep.EF || 0) : 0;
+                    }));
+                }
+                task.EF = task.ES + task.duration;
+            });
+
+            // Phase end (max EF within this phase)
+            const phaseEnd = Math.max(...taskIds.map(id => taskMap.get(id).EF || 0));
+
+            // Backward pass - LS and LF
+            const reverseSorted = [...sorted].reverse();
+            reverseSorted.forEach(taskId => {
+                const task = taskMap.get(taskId);
+                const phaseSuccs = task.successors.filter(s => phaseTaskSet.has(s));
+                if (phaseSuccs.length === 0) {
+                    task.LF = phaseEnd;
+                } else {
+                    task.LF = Math.min(...phaseSuccs.map(succId => {
+                        const succ = taskMap.get(succId);
+                        return succ ? (succ.LS !== null ? succ.LS : phaseEnd) : phaseEnd;
+                    }));
+                }
+                task.LS = task.LF - task.duration;
+                task.slack = Math.max(0, task.LS - task.ES); // Ensure non-negative
+                task.isCritical = task.slack === 0; // Critical = zero slack
+            });
+        }
+
+        // If viewing all phases, calculate critical path per phase separately
+        // This ensures each phase shows its own critical path
+        if (phaseFilter === 'all') {
+            phaseTasksMap.forEach((taskIds, phase) => {
+                calculateCriticalPathForTasks(taskIds);
+            });
+        } else {
+            // Single phase view - calculate for all visible tasks
+            calculateCriticalPathForTasks(Array.from(taskMap.keys()));
+        }
+
+        // Calculate overall project end for stats
+        const projectEnd = Math.max(...Array.from(taskMap.values()).map(t => t.EF || 0));
+
+        // Use phaseTasksMap for layout (already created above)
+        const phaseGroups = phaseTasksMap;
+
+        // Layout configuration
+        const nodeWidth = 180;
+        const nodeHeight = 70;
+        const horizontalGap = 80;
+        const verticalGap = 40;
+        const phaseGap = 100;
+        const padding = 50;
+
+        // Calculate positions using layered approach per phase
+        const nodePositions = new Map();
+        let currentX = padding;
+
+        // Sort phases naturally
+        const sortedPhases = Array.from(phaseGroups.keys()).sort((a, b) => {
+            const numA = parseInt(a.match(/\d+/)?.[0] || '0');
+            const numB = parseInt(b.match(/\d+/)?.[0] || '0');
+            return numA - numB;
+        });
+
+        sortedPhases.forEach((phase, phaseIndex) => {
+            const phaseTasks = phaseGroups.get(phase);
+            
+            // Create layers based on dependencies (BFS)
+            const layers = [];
+            const taskToLayer = new Map();
+            const remaining = new Set(phaseTasks);
+
+            // First layer: tasks with no dependencies (within this phase)
+            const firstLayer = phaseTasks.filter(taskId => {
+                const task = taskMap.get(taskId);
+                return task.dependencies.every(depId => !phaseTasks.includes(depId));
+            });
+            
+            if (firstLayer.length > 0) {
+                layers.push(firstLayer);
+                firstLayer.forEach(taskId => {
+                    taskToLayer.set(taskId, 0);
+                    remaining.delete(taskId);
+                });
+            }
+
+            // Subsequent layers
+            while (remaining.size > 0) {
+                const nextLayer = [];
+                remaining.forEach(taskId => {
+                    const task = taskMap.get(taskId);
+                    const phaseDeps = task.dependencies.filter(depId => phaseTasks.includes(depId));
+                    if (phaseDeps.every(depId => taskToLayer.has(depId))) {
+                        nextLayer.push(taskId);
+                    }
+                });
+                
+                if (nextLayer.length === 0) {
+                    // Handle remaining (circular or orphan)
+                    remaining.forEach(taskId => nextLayer.push(taskId));
+                }
+                
+                layers.push(nextLayer);
+                nextLayer.forEach(taskId => {
+                    taskToLayer.set(taskId, layers.length - 1);
+                    remaining.delete(taskId);
+                });
+            }
+
+            // Position tasks in this phase
+            let phaseMaxX = currentX;
+            layers.forEach((layer, layerIndex) => {
+                const layerX = currentX + layerIndex * (nodeWidth + horizontalGap);
+                layer.forEach((taskId, taskIndex) => {
+                    nodePositions.set(taskId, {
+                        x: layerX,
+                        y: padding + taskIndex * (nodeHeight + verticalGap),
+                        phase: phase,
+                        phaseIndex: phaseIndex
+                    });
+                });
+                phaseMaxX = Math.max(phaseMaxX, layerX + nodeWidth);
+            });
+
+            currentX = phaseMaxX + phaseGap;
+        });
+
+        // Calculate SVG dimensions
+        const maxX = Math.max(...Array.from(nodePositions.values()).map(p => p.x)) + nodeWidth + padding;
+        const maxY = Math.max(...Array.from(nodePositions.values()).map(p => p.y)) + nodeHeight + padding;
+
+        svgContainer.setAttribute('width', maxX);
+        svgContainer.setAttribute('height', maxY);
+        svgContainer.setAttribute('viewBox', `0 0 ${maxX} ${maxY}`);
+
+        // Create SVG defs with gradients and markers
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        defs.innerHTML = `
+            <linearGradient id="criticalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#dc2626"/>
+                <stop offset="100%" style="stop-color:#991b1b"/>
+            </linearGradient>
+            <linearGradient id="nonCriticalGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#3b82f6"/>
+                <stop offset="100%" style="stop-color:#1d4ed8"/>
+            </linearGradient>
+            <marker id="arrowhead-fc" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+                <polygon points="0 0, 10 5, 0 10" fill="#f59e0b"/>
+            </marker>
+            <marker id="arrowhead-fc-critical" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+                <polygon points="0 0, 10 5, 0 10" fill="#ef4444"/>
+            </marker>
+            <filter id="glow-critical">
+                <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+                <feMerge>
+                    <feMergeNode in="coloredBlur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+            </filter>
+        `;
+        svgContainer.appendChild(defs);
+
+        // Draw phase separators and labels
+        let prevPhaseMaxX = padding;
+        sortedPhases.forEach((phase, phaseIndex) => {
+            const phaseTasks = phaseGroups.get(phase);
+            const phasePositions = phaseTasks.map(id => nodePositions.get(id));
+            const phaseMinX = Math.min(...phasePositions.map(p => p.x));
+            const phaseMaxX = Math.max(...phasePositions.map(p => p.x)) + nodeWidth;
+
+            // Phase label
+            const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            label.setAttribute('x', (phaseMinX + phaseMaxX) / 2);
+            label.setAttribute('y', 25);
+            label.setAttribute('text-anchor', 'middle');
+            label.setAttribute('class', 'fc-phase-label');
+            label.textContent = phase;
+            svgContainer.appendChild(label);
+
+            // Phase separator line (except for first phase)
+            if (phaseIndex > 0) {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', phaseMinX - phaseGap / 2);
+                line.setAttribute('y1', 35);
+                line.setAttribute('x2', phaseMinX - phaseGap / 2);
+                line.setAttribute('y2', maxY - 20);
+                line.setAttribute('class', 'fc-phase-separator');
+                svgContainer.appendChild(line);
+            }
+        });
+
+        // Draw dependency arrows first (so they appear behind nodes)
+        taskMap.forEach((task, taskId) => {
+            const fromPos = nodePositions.get(taskId);
+            if (!fromPos) return;
+
+            task.successors.forEach(succId => {
+                const toPos = nodePositions.get(succId);
+                if (!toPos) return;
+
+                const succTask = taskMap.get(succId);
+                const isCriticalArrow = task.isCritical && succTask && succTask.isCritical;
+
+                // Calculate arrow path (from right of source to left of target)
+                const startX = fromPos.x + nodeWidth;
+                const startY = fromPos.y + nodeHeight / 2;
+                const endX = toPos.x;
+                const endY = toPos.y + nodeHeight / 2;
+
+                // Create curved path
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                const midX = (startX + endX) / 2;
+                
+                // Bezier curve for smoother arrows
+                const d = `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`;
+                
+                path.setAttribute('d', d);
+                path.setAttribute('class', `fc-dependency-arrow ${isCriticalArrow ? 'critical-arrow' : ''}`);
+                path.setAttribute('marker-end', `url(#arrowhead-fc${isCriticalArrow ? '-critical' : ''})`);
+                svgContainer.appendChild(path);
+            });
+        });
+
+        // Draw task nodes
+        taskMap.forEach((task, taskId) => {
+            const pos = nodePositions.get(taskId);
+            if (!pos) return;
+
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.setAttribute('class', `fc-task-node ${task.isCritical ? 'critical' : 'non-critical'} ${task.isStart ? 'start-node' : ''} ${task.isEnd ? 'end-node' : ''}`);
+            g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+
+            // Background rect
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('width', nodeWidth);
+            rect.setAttribute('height', nodeHeight);
+            
+            // Determine fill based on critical path only (simplified: red = critical, blue = non-critical)
+            const fill = task.isCritical ? 'url(#criticalGradient)' : 'url(#nonCriticalGradient)';
+            rect.setAttribute('fill', fill);
+            if (task.isCritical) {
+                rect.setAttribute('filter', 'url(#glow-critical)');
+            }
+            g.appendChild(rect);
+
+            // Task title (truncated)
+            const title = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            title.setAttribute('x', nodeWidth / 2);
+            title.setAttribute('y', 20);
+            title.setAttribute('text-anchor', 'middle');
+            title.setAttribute('class', 'fc-task-title');
+            const displayName = task.name.length > 22 ? task.name.substring(0, 20) + '...' : task.name;
+            title.textContent = displayName;
+            g.appendChild(title);
+
+            // Slack value
+            const slackText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            slackText.setAttribute('x', nodeWidth / 2);
+            slackText.setAttribute('y', 40);
+            slackText.setAttribute('text-anchor', 'middle');
+            slackText.setAttribute('class', 'fc-task-slack');
+            slackText.textContent = task.isCritical ? '🔥 Slack: 0 days' : `⏱ Slack: ${task.slack} days`;
+            g.appendChild(slackText);
+
+            // Duration
+            const durationText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            durationText.setAttribute('x', nodeWidth / 2);
+            durationText.setAttribute('y', 58);
+            durationText.setAttribute('text-anchor', 'middle');
+            durationText.setAttribute('class', 'fc-task-duration');
+            durationText.textContent = `Duration: ${task.duration} days`;
+            g.appendChild(durationText);
+
+            // Click handler to navigate to task
+            g.style.cursor = 'pointer';
+            g.addEventListener('click', () => {
+                const modal = bootstrap.Modal.getInstance(document.getElementById('criticalPathFlowchartModal'));
+                if (modal) modal.hide();
+                window.location.href = `/tasks/${taskId}/`;
+            });
+
+            svgContainer.appendChild(g);
+        });
+
+        // Update stats
+        const criticalCount = Array.from(taskMap.values()).filter(t => t.isCritical).length;
+        const totalSlack = Array.from(taskMap.values()).reduce((sum, t) => sum + t.slack, 0);
+        statsElement.textContent = `${taskList.length} tasks | ${criticalCount} on critical path | Total project duration: ${projectEnd} days | Avg slack: ${(totalSlack / taskList.length).toFixed(1)} days`;
+
+        // Populate phase selector
+        const phaseSelect = document.getElementById('flowchart-phase-select');
+        if (phaseSelect) {
+            phaseSelect.innerHTML = '<option value="all">All Phases</option>';
+            sortedPhases.forEach(phase => {
+                const option = document.createElement('option');
+                option.value = phase;
+                option.textContent = phase;
+                if (phase === phaseFilter) option.selected = true;
+                phaseSelect.appendChild(option);
+            });
+        }
+    }
+
+    // Initialize flowchart modal
+    document.addEventListener('DOMContentLoaded', function() {
+        const showFlowchartBtn = document.getElementById('show-critical-path-flowchart');
+        const flowchartModal = document.getElementById('criticalPathFlowchartModal');
+        const phaseSelect = document.getElementById('flowchart-phase-select');
+        
+        if (showFlowchartBtn && flowchartModal) {
+            showFlowchartBtn.addEventListener('click', function() {
+                const modal = new bootstrap.Modal(flowchartModal);
+                modal.show();
+                
+                // Generate flowchart when modal opens
+                setTimeout(() => {
+                    generateCriticalPathFlowchart('all');
+                }, 100);
+            });
+            
+            // Re-generate on phase filter change
+            if (phaseSelect) {
+                phaseSelect.addEventListener('change', function() {
+                    generateCriticalPathFlowchart(this.value);
+                });
+            }
+        }
+    });
+    {% endif %}
 </script>
 {% endblock %}
