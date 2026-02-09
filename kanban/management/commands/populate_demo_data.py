@@ -555,331 +555,399 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))
 
     def create_software_tasks(self, board, alex, sam, jordan):
-        """Create 30 tasks for Software Development board (3 phases)"""
+        """
+        Create 30 tasks for Software Development board (3 phases)
+        Uses same structure as construction demo with parallel paths and merge points
+        for realistic critical path calculation.
+        """
         columns = {col.name: col for col in Column.objects.filter(board=board)}
-        backlog_col = columns.get('To Do') or columns.get('Backlog') or list(columns.values())[0]
-        in_progress_col = columns.get('In Progress') or backlog_col
-        review_col = columns.get('In Review') or in_progress_col
-        done_col = columns.get('Done') or review_col
+        todo = columns.get('To Do') or columns.get('Backlog') or list(columns.values())[0]
+        in_progress = columns.get('In Progress') or todo
+        review = columns.get('In Review') or in_progress
+        done = columns.get('Done') or review
         items = []
         now = timezone.now().date()
+        from datetime import datetime
 
-        # Phase 1: Foundation & Setup (days -60 to -31)
-        # Ensure phases don't overlap for proper Gantt chart ordering
-        phase1_tasks = [
-            {'title': 'Set up development environment', 'desc': 'Configure Docker, CI/CD pipelines, and development tools', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Design database schema', 'desc': 'Create ERD and define core database models for multi-tenancy', 'priority': 'high', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Implement user authentication', 'desc': 'Build secure login with JWT tokens and session management', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Create base API structure', 'desc': 'Set up REST API framework with versioning and documentation', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Set up automated testing', 'desc': 'Configure pytest with coverage reporting and CI integration', 'priority': 'medium', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done_col},
-            {'title': 'Implement logging system', 'desc': 'Set up structured logging with log aggregation', 'priority': 'low', 'complexity': 4, 'assignee': jordan, 'progress': 100, 'column': done_col},
-            {'title': 'Create user registration flow', 'desc': 'Build signup with email verification and onboarding', 'priority': 'medium', 'complexity': 6, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Set up development database', 'desc': 'Configure PostgreSQL with migrations and seed data', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 100, 'column': done_col},
-            {'title': 'Implement password reset', 'desc': 'Secure password reset flow with email tokens', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Create project documentation', 'desc': 'Set up documentation site with API reference', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 100, 'column': done_col},
+        # =====================================================================
+        # Phase 1: Foundation & Setup (10 tasks)
+        # Dependency structure:
+        # [0] Requirements ──────────────────┐
+        #                                    ├──► [4] Base API ──► [7] Database Migrations
+        # [1] Environment Setup ─────────────┘                            │
+        #                                                                  │
+        # [2] Architecture Design ───────────┐                             │
+        #                                    ├──► [5] Auth System ──► [8] Auth Testing ─┐
+        # [3] Security Patterns ─────────────┘            │                              │
+        #                                                 │                              │
+        #                                                 └──► [6] User Registration     │
+        #                                                                                │
+        #                                     [9] Documentation Setup ◄──────────────────┘
+        # =====================================================================
+        phase1_data = [
+            {'title': 'Requirements Analysis & Planning', 'desc': 'Gather requirements, define scope, and create project roadmap', 'priority': 'high', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 5},
+            {'title': 'Development Environment Setup', 'desc': 'Configure Docker, CI/CD pipelines, and development tools', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 4},
+            {'title': 'System Architecture Design', 'desc': 'Design microservices architecture and define API contracts', 'priority': 'high', 'complexity': 8, 'assignee': jordan, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 10},
+            {'title': 'Security Architecture Patterns', 'desc': 'Define security patterns, encryption standards, and access control', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': 2, 'duration': 8},
+            {'title': 'Base API Structure', 'desc': 'Set up REST API framework with versioning and documentation', 'priority': 'medium', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done, 'start_offset': 5, 'duration': 6},
+            {'title': 'Authentication System', 'desc': 'Build secure login with JWT tokens and session management', 'priority': 'high', 'complexity': 4, 'assignee': jordan, 'progress': 80, 'column': review, 'start_offset': 10, 'duration': 3},
+            {'title': 'User Registration Flow', 'desc': 'Build signup with email verification and onboarding', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 60, 'column': in_progress, 'start_offset': 13, 'duration': 4},
+            {'title': 'Database Schema & Migrations', 'desc': 'Create ERD and define core database models with migrations', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 40, 'column': in_progress, 'start_offset': 11, 'duration': 7},
+            {'title': 'Authentication Testing Suite', 'desc': 'Comprehensive test coverage for auth system with security tests', 'priority': 'urgent', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': 13, 'duration': 10},
+            {'title': 'Project Documentation Setup', 'desc': 'Set up documentation site with API reference and dev guides', 'priority': 'urgent', 'complexity': 7, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': 23, 'duration': 5},
         ]
 
-        # Phase 2: Core Features (days -30 to -1)
-        phase2_tasks = [
-            {'title': 'Build dashboard UI', 'desc': 'Create responsive dashboard with charts and widgets', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 80, 'column': review_col},
-            {'title': 'Implement file upload system', 'desc': 'Support multiple file types with S3 storage', 'priority': 'medium', 'complexity': 6, 'assignee': sam, 'progress': 60, 'column': in_progress_col},
-            {'title': 'Create notification system', 'desc': 'Real-time notifications via WebSocket and email', 'priority': 'medium', 'complexity': 7, 'assignee': sam, 'progress': 40, 'column': in_progress_col},
-            {'title': 'Build user management API', 'desc': 'CRUD operations for users with role-based access', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 90, 'column': review_col},
-            {'title': 'Implement search functionality', 'desc': 'Full-text search with filters and pagination', 'priority': 'medium', 'complexity': 7, 'assignee': sam, 'progress': 30, 'column': in_progress_col},
-            {'title': 'Create settings page', 'desc': 'User preferences and account settings UI', 'priority': 'low', 'complexity': 4, 'assignee': jordan, 'progress': 50, 'column': in_progress_col},
-            {'title': 'Build audit logging', 'desc': 'Track all user actions for compliance', 'priority': 'medium', 'complexity': 5, 'assignee': alex, 'progress': 70, 'column': review_col},
-            {'title': 'Implement data export', 'desc': 'Export functionality for CSV and Excel formats', 'priority': 'low', 'complexity': 4, 'assignee': jordan, 'progress': 20, 'column': in_progress_col},
-            {'title': 'Create email templates', 'desc': 'Transactional email templates with branding', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 100, 'column': done_col},
-            {'title': 'Add two-factor authentication', 'desc': 'TOTP-based 2FA with recovery codes', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 45, 'column': in_progress_col},
-        ]
-
-        # Phase 3: Polish & Launch (days 0 to +45)
-        phase3_tasks = [
-            {'title': 'Performance optimization', 'desc': 'Database query optimization and caching', 'priority': 'high', 'complexity': 8, 'assignee': sam, 'progress': 0, 'column': backlog_col},
-            {'title': 'Security audit fixes', 'desc': 'Address findings from penetration testing', 'priority': 'urgent', 'complexity': 7, 'assignee': sam, 'progress': 0, 'column': backlog_col},
-            {'title': 'Mobile responsive polish', 'desc': 'Fix mobile UI issues and improve UX', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Load testing', 'desc': 'Conduct load tests and fix bottlenecks', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 0, 'column': backlog_col},
-            {'title': 'Create user onboarding', 'desc': 'Interactive tutorial for new users', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Set up monitoring', 'desc': 'Configure APM and error tracking', 'priority': 'high', 'complexity': 5, 'assignee': alex, 'progress': 0, 'column': backlog_col},
-            {'title': 'Documentation review', 'desc': 'Update all documentation for launch', 'priority': 'medium', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Accessibility improvements', 'desc': 'WCAG 2.1 compliance updates', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Deployment automation', 'desc': 'One-click deployment to production', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 0, 'column': backlog_col},
-            {'title': 'Launch preparation', 'desc': 'Final checklist and go-live preparation', 'priority': 'urgent', 'complexity': 4, 'assignee': alex, 'progress': 0, 'column': backlog_col},
-        ]
-
-        # Create Phase 1 items with improved date logic
-        # Each task starts 0 to +3 days from the previous task's due date (no overlap)
-        # First task starts on day -10
-        prev_due_date = now + timedelta(days=-10)
-        for i, t in enumerate(phase1_tasks):
-            # Start date is 0 to +3 days from previous task's due date (ensures no overlap)
-            start = prev_due_date + timedelta(days=random.randint(0, 3))
-            due = start + timedelta(days=random.randint(3, 6))  # 3-6 day duration
+        for i, t in enumerate(phase1_data):
+            start = now + timedelta(days=t['start_offset'])
+            due_date_obj = start + timedelta(days=t['duration'])
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
                 assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
-                start_date=start, due_date=due, phase='Phase 1',
+                start_date=start, due_date=due_datetime, phase='Phase 1',
                 is_seed_demo_data=True,
             )
             items.append(task)
-            prev_due_date = due
 
-        # Create Phase 2 items
-        # Add a small gap between phases (3-6 days) for visual separation
-        prev_due_date = prev_due_date + timedelta(days=random.randint(3, 6))
-        for i, t in enumerate(phase2_tasks):
-            start = prev_due_date + timedelta(days=random.randint(0, 3))
-            due = start + timedelta(days=random.randint(3, 6))  # 3-6 day duration
+        # =====================================================================
+        # Phase 2: Core Features (10 tasks)
+        # =====================================================================
+        phase_start = 28
+        phase2_data = [
+            {'title': 'Dashboard UI Development', 'desc': 'Create responsive dashboard with charts and widgets', 'priority': 'urgent', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': phase_start, 'duration': 10},
+            {'title': 'File Upload System', 'desc': 'Support multiple file types with S3 storage integration', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 80, 'column': review, 'start_offset': phase_start + 10, 'duration': 8},
+            {'title': 'Notification Service', 'desc': 'Real-time notifications via WebSocket and email queues', 'priority': 'high', 'complexity': 7, 'assignee': jordan, 'progress': 70, 'column': in_progress, 'start_offset': phase_start + 10, 'duration': 6},
+            {'title': 'User Management API', 'desc': 'CRUD operations for users with role-based access control', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 75, 'column': in_progress, 'start_offset': phase_start + 10, 'duration': 5},
+            {'title': 'Search & Indexing Engine', 'desc': 'Full-text search with Elasticsearch and filters', 'priority': 'urgent', 'complexity': 7, 'assignee': alex, 'progress': 30, 'column': in_progress, 'start_offset': phase_start + 18, 'duration': 7},
+            {'title': 'Real-time Collaboration', 'desc': 'WebSocket-based real-time editing and presence features', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 6},
+            {'title': 'Data Caching Layer', 'desc': 'Redis-based caching for improved performance', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 31, 'duration': 5},
+            {'title': 'API Rate Limiting', 'desc': 'Implement rate limiting and throttling for API endpoints', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 5},
+            {'title': 'Integration Testing Suite', 'desc': 'End-to-end integration tests for all core features', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 30, 'duration': 4},
+            {'title': 'Core Features Code Review', 'desc': 'Comprehensive code review and refactoring', 'priority': 'urgent', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 36, 'duration': 2},
+        ]
+
+        for i, t in enumerate(phase2_data):
+            start = now + timedelta(days=t['start_offset'])
+            due_date_obj = start + timedelta(days=t['duration'])
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
                 assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
-                start_date=start, due_date=due, phase='Phase 2',
+                start_date=start, due_date=due_datetime, phase='Phase 2',
                 is_seed_demo_data=True,
             )
             items.append(task)
-            prev_due_date = due
 
-        # Create Phase 3 items
-        # Add a small gap between phases (3-6 days) for visual separation
-        prev_due_date = prev_due_date + timedelta(days=random.randint(3, 6))
-        for i, t in enumerate(phase3_tasks):
-            start = prev_due_date + timedelta(days=random.randint(0, 3))
-            due = start + timedelta(days=random.randint(3, 6))  # 3-6 day duration
+        # =====================================================================
+        # Phase 3: Polish & Launch (10 tasks)
+        # =====================================================================
+        phase_start = 66
+        phase3_data = [
+            {'title': 'Performance Optimization', 'desc': 'Database query optimization and caching improvements', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start, 'duration': 8},
+            {'title': 'Security Audit & Fixes', 'desc': 'Address findings from penetration testing', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start, 'duration': 4},
+            {'title': 'UI/UX Polish', 'desc': 'Final UI polish and mobile responsive improvements', 'priority': 'high', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 8, 'duration': 6},
+            {'title': 'Load Testing & Optimization', 'desc': 'Conduct load tests and fix performance bottlenecks', 'priority': 'medium', 'complexity': 5, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 5},
+            {'title': 'User Onboarding Flow', 'desc': 'Interactive tutorial and onboarding experience', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 19, 'duration': 6},
+            {'title': 'Error Tracking & Monitoring', 'desc': 'Configure Sentry, APM and alerting systems', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 3},
+            {'title': 'Accessibility Compliance', 'desc': 'WCAG 2.1 AA compliance updates and testing', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 4},
+            {'title': 'Final Documentation', 'desc': 'Complete user guides and API documentation', 'priority': 'low', 'complexity': 2, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 2},
+            {'title': 'Deployment Automation', 'desc': 'One-click deployment pipeline to production', 'priority': 'medium', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 27, 'duration': 3},
+            {'title': 'Launch & Go-Live', 'desc': 'Final checklist, DNS cutover, and production deployment', 'priority': 'urgent', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 30, 'duration': 2},
+        ]
+
+        for i, t in enumerate(phase3_data):
+            start = now + timedelta(days=t['start_offset'])
+            due_date_obj = start + timedelta(days=t['duration'])
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
                 assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
-                start_date=start, due_date=due, phase='Phase 3',
+                start_date=start, due_date=due_datetime, phase='Phase 3',
                 is_seed_demo_data=True,
             )
             items.append(task)
-            prev_due_date = due
 
         return items
 
     def create_marketing_tasks(self, board, alex, sam, jordan):
-        """Create 30 tasks for Marketing Campaign board (3 phases)"""
+        """
+        Create 30 tasks for Marketing Campaign board (3 phases)
+        Uses same structure as construction demo with parallel paths and merge points.
+        """
         columns = {col.name: col for col in Column.objects.filter(board=board)}
-        backlog_col = columns.get('To Do') or columns.get('Backlog') or list(columns.values())[0]
-        in_progress_col = columns.get('In Progress') or backlog_col
-        review_col = columns.get('In Review') or in_progress_col
-        done_col = columns.get('Done') or review_col
+        todo = columns.get('To Do') or columns.get('Backlog') or list(columns.values())[0]
+        in_progress = columns.get('In Progress') or todo
+        review = columns.get('In Review') or in_progress
+        done = columns.get('Done') or review
         items = []
         now = timezone.now().date()
+        from datetime import datetime
 
-        # Phase 1: Planning & Strategy (days -60 to -31)
-        # Ensure phases don't overlap for proper Gantt chart ordering
-        phase1_tasks = [
-            {'title': 'Market research analysis', 'desc': 'Analyze target audience and competitor landscape', 'priority': 'high', 'complexity': 7, 'assignee': jordan, 'progress': 100, 'column': done_col},
-            {'title': 'Define campaign objectives', 'desc': 'Set SMART goals and KPIs for the campaign', 'priority': 'high', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done_col},
-            {'title': 'Create buyer personas', 'desc': 'Develop detailed profiles of target customers', 'priority': 'medium', 'complexity': 6, 'assignee': jordan, 'progress': 100, 'column': done_col},
-            {'title': 'Budget allocation', 'desc': 'Distribute budget across channels and activities', 'priority': 'high', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done_col},
-            {'title': 'Content strategy document', 'desc': 'Define content themes, formats, and calendar', 'priority': 'medium', 'complexity': 6, 'assignee': jordan, 'progress': 100, 'column': done_col},
-            {'title': 'Channel selection', 'desc': 'Choose primary and secondary marketing channels', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 100, 'column': done_col},
-            {'title': 'Set up analytics tracking', 'desc': 'Configure GA4, UTM parameters, and conversion tracking', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Create campaign brief', 'desc': 'Document campaign overview for team alignment', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 100, 'column': done_col},
-            {'title': 'Competitor analysis report', 'desc': 'Analyze competitor marketing strategies', 'priority': 'low', 'complexity': 5, 'assignee': jordan, 'progress': 100, 'column': done_col},
-            {'title': 'Brand guidelines review', 'desc': 'Update brand guidelines for campaign', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 100, 'column': done_col},
+        # =====================================================================
+        # Phase 1: Planning & Strategy (10 tasks) - Same dependency pattern
+        # =====================================================================
+        phase1_data = [
+            {'title': 'Market Research & Analysis', 'desc': 'Analyze target audience, competitors, and market trends', 'priority': 'high', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 5},
+            {'title': 'Customer Survey Design', 'desc': 'Design and distribute customer feedback surveys', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 4},
+            {'title': 'Brand Positioning Strategy', 'desc': 'Define brand positioning and unique value proposition', 'priority': 'high', 'complexity': 8, 'assignee': jordan, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 10},
+            {'title': 'Competitor Campaign Study', 'desc': 'Analyze competitor marketing campaigns and strategies', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': 2, 'duration': 8},
+            {'title': 'Target Audience Definition', 'desc': 'Create detailed buyer personas and customer journey maps', 'priority': 'medium', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done, 'start_offset': 5, 'duration': 6},
+            {'title': 'Campaign Objectives & KPIs', 'desc': 'Set SMART goals and key performance indicators', 'priority': 'high', 'complexity': 4, 'assignee': jordan, 'progress': 80, 'column': review, 'start_offset': 10, 'duration': 3},
+            {'title': 'Channel Strategy Planning', 'desc': 'Select primary and secondary marketing channels', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 60, 'column': in_progress, 'start_offset': 13, 'duration': 4},
+            {'title': 'Budget Allocation Plan', 'desc': 'Distribute budget across channels and activities', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 40, 'column': in_progress, 'start_offset': 11, 'duration': 7},
+            {'title': 'Campaign Brief Document', 'desc': 'Document comprehensive campaign overview for team', 'priority': 'urgent', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': 13, 'duration': 10},
+            {'title': 'Strategy Approval Meeting', 'desc': 'Present strategy to stakeholders for final approval', 'priority': 'urgent', 'complexity': 7, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': 23, 'duration': 5},
         ]
 
-        # Phase 2: Content Creation (days -30 to -1)
-        phase2_tasks = [
-            {'title': 'Write blog posts', 'desc': 'Create 5 SEO-optimized blog articles', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 80, 'column': review_col},
-            {'title': 'Design social media graphics', 'desc': 'Create visual assets for all platforms', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 60, 'column': in_progress_col},
-            {'title': 'Produce video content', 'desc': 'Script, shoot, and edit promotional videos', 'priority': 'high', 'complexity': 8, 'assignee': jordan, 'progress': 40, 'column': in_progress_col},
-            {'title': 'Create email sequences', 'desc': 'Design automated email nurture campaigns', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 70, 'column': review_col},
-            {'title': 'Write landing page copy', 'desc': 'Conversion-optimized copy for landing pages', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 90, 'column': review_col},
-            {'title': 'Design landing pages', 'desc': 'Build responsive landing pages in CMS', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 50, 'column': in_progress_col},
-            {'title': 'Create infographics', 'desc': 'Design data-driven infographics', 'priority': 'low', 'complexity': 5, 'assignee': jordan, 'progress': 30, 'column': in_progress_col},
-            {'title': 'Write case studies', 'desc': 'Document customer success stories', 'priority': 'medium', 'complexity': 6, 'assignee': jordan, 'progress': 20, 'column': in_progress_col},
-            {'title': 'Create ad creatives', 'desc': 'Design paid advertising visuals and copy', 'priority': 'high', 'complexity': 5, 'assignee': jordan, 'progress': 65, 'column': in_progress_col},
-            {'title': 'Develop content calendar', 'desc': 'Schedule all content across channels', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 100, 'column': done_col},
+        for i, t in enumerate(phase1_data):
+            start = now + timedelta(days=t['start_offset'])
+            due_date_obj = start + timedelta(days=t['duration'])
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            task = Task.objects.create(
+                column=t['column'], title=t['title'], description=t['desc'],
+                priority=t['priority'], complexity_score=t['complexity'],
+                assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
+                start_date=start, due_date=due_datetime, phase='Phase 1',
+                is_seed_demo_data=True,
+            )
+            items.append(task)
+
+        # =====================================================================
+        # Phase 2: Content Creation (10 tasks)
+        # =====================================================================
+        phase_start = 28
+        phase2_data = [
+            {'title': 'Content Strategy Framework', 'desc': 'Define content themes, formats, and editorial calendar', 'priority': 'urgent', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': phase_start, 'duration': 10},
+            {'title': 'Blog Content Production', 'desc': 'Create 5 SEO-optimized blog articles and posts', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 80, 'column': review, 'start_offset': phase_start + 10, 'duration': 8},
+            {'title': 'Social Media Assets', 'desc': 'Design visual content for all social platforms', 'priority': 'high', 'complexity': 7, 'assignee': jordan, 'progress': 70, 'column': in_progress, 'start_offset': phase_start + 10, 'duration': 6},
+            {'title': 'Video Content Production', 'desc': 'Script, shoot, and edit promotional videos', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 75, 'column': in_progress, 'start_offset': phase_start + 10, 'duration': 5},
+            {'title': 'Email Campaign Design', 'desc': 'Create automated email nurture sequences', 'priority': 'urgent', 'complexity': 7, 'assignee': alex, 'progress': 30, 'column': in_progress, 'start_offset': phase_start + 18, 'duration': 7},
+            {'title': 'Landing Page Development', 'desc': 'Build conversion-optimized landing pages', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 6},
+            {'title': 'Ad Creative Production', 'desc': 'Design PPC and social ad creatives with copy', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 31, 'duration': 5},
+            {'title': 'Infographic Design', 'desc': 'Create data-driven infographics for sharing', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 5},
+            {'title': 'Case Study Development', 'desc': 'Document customer success stories', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 30, 'duration': 4},
+            {'title': 'Content Review & Approval', 'desc': 'Final review and stakeholder approval of all content', 'priority': 'urgent', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 36, 'duration': 2},
         ]
 
-        # Phase 3: Launch & Optimization (days 0 to +45)
-        phase3_tasks = [
-            {'title': 'Launch social campaigns', 'desc': 'Activate campaigns across social platforms', 'priority': 'urgent', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Start email campaigns', 'desc': 'Launch automated email sequences', 'priority': 'high', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Activate paid ads', 'desc': 'Launch PPC and social ad campaigns', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Monitor campaign performance', 'desc': 'Daily monitoring and reporting', 'priority': 'high', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'A/B test landing pages', 'desc': 'Run conversion optimization tests', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': backlog_col},
-            {'title': 'Optimize ad spend', 'desc': 'Reallocate budget based on performance', 'priority': 'high', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Influencer outreach', 'desc': 'Coordinate with influencer partners', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'PR media outreach', 'desc': 'Pitch to journalists and media outlets', 'priority': 'medium', 'complexity': 5, 'assignee': alex, 'progress': 0, 'column': backlog_col},
-            {'title': 'Weekly performance report', 'desc': 'Compile and analyze campaign metrics', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Campaign retrospective', 'desc': 'Document learnings and recommendations', 'priority': 'low', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': backlog_col},
+        for i, t in enumerate(phase2_data):
+            start = now + timedelta(days=t['start_offset'])
+            due_date_obj = start + timedelta(days=t['duration'])
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            task = Task.objects.create(
+                column=t['column'], title=t['title'], description=t['desc'],
+                priority=t['priority'], complexity_score=t['complexity'],
+                assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
+                start_date=start, due_date=due_datetime, phase='Phase 2',
+                is_seed_demo_data=True,
+            )
+            items.append(task)
+
+        # =====================================================================
+        # Phase 3: Launch & Optimization (10 tasks)
+        # =====================================================================
+        phase_start = 66
+        phase3_data = [
+            {'title': 'Campaign Launch Preparation', 'desc': 'Final checklist and platform configurations', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start, 'duration': 8},
+            {'title': 'Analytics Setup & Testing', 'desc': 'Configure GA4, UTM tracking, and conversion pixels', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start, 'duration': 4},
+            {'title': 'Social Campaign Activation', 'desc': 'Launch campaigns across all social platforms', 'priority': 'high', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 8, 'duration': 6},
+            {'title': 'Paid Media Activation', 'desc': 'Launch PPC and paid social campaigns', 'priority': 'medium', 'complexity': 5, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 5},
+            {'title': 'Email Sequence Launch', 'desc': 'Activate automated email nurture campaigns', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 19, 'duration': 6},
+            {'title': 'Performance Monitoring', 'desc': 'Daily monitoring of KPIs and campaign health', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 3},
+            {'title': 'A/B Testing & Optimization', 'desc': 'Run conversion optimization tests and iterate', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 4},
+            {'title': 'Budget Reallocation', 'desc': 'Optimize spend based on channel performance', 'priority': 'low', 'complexity': 2, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 2},
+            {'title': 'Performance Reporting', 'desc': 'Compile comprehensive campaign performance report', 'priority': 'medium', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 27, 'duration': 3},
+            {'title': 'Campaign Retrospective', 'desc': 'Document learnings and recommendations for future', 'priority': 'urgent', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 30, 'duration': 2},
         ]
 
-        # Create all phases with improved date logic
-        # Each task starts 0 to +3 days from the previous task's due date (no overlap)
-        # First task starts on day -10
-        prev_due_date = now + timedelta(days=-10)
-        
-        for phase_num, tasks in enumerate([phase1_tasks, phase2_tasks, phase3_tasks], start=1):
-            phase_name = f'Phase {phase_num}'
-            
-            # Add a small gap between phases (3-6 days) for visual separation
-            if phase_num > 1:
-                prev_due_date = prev_due_date + timedelta(days=random.randint(3, 6))
-
-            for i, t in enumerate(tasks):
-                # Start date is 0 to +3 days from previous task's due date (ensures no overlap)
-                start = prev_due_date + timedelta(days=random.randint(0, 3))
-                due = start + timedelta(days=random.randint(3, 6))  # 3-6 day duration
-                task = Task.objects.create(
-                    column=t['column'], title=t['title'], description=t['desc'],
-                    priority=t['priority'], complexity_score=t['complexity'],
-                    assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
-                    start_date=start, due_date=due, phase=phase_name,
-                    is_seed_demo_data=True,
-                )
-                items.append(task)
-                prev_due_date = due
+        for i, t in enumerate(phase3_data):
+            start = now + timedelta(days=t['start_offset'])
+            due_date_obj = start + timedelta(days=t['duration'])
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            task = Task.objects.create(
+                column=t['column'], title=t['title'], description=t['desc'],
+                priority=t['priority'], complexity_score=t['complexity'],
+                assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
+                start_date=start, due_date=due_datetime, phase='Phase 3',
+                is_seed_demo_data=True,
+            )
+            items.append(task)
 
         return items
 
     def create_bug_tasks(self, board, alex, sam, jordan):
-        """Create 30 tasks for Bug Tracking board (3 phases)"""
+        """
+        Create 30 tasks for Bug Tracking board (3 phases)
+        Uses same structure as construction demo with parallel paths and merge points.
+        """
         columns = {col.name: col for col in Column.objects.filter(board=board)}
-        backlog_col = columns.get('To Do') or columns.get('Backlog') or list(columns.values())[0]
-        in_progress_col = columns.get('In Progress') or backlog_col
-        review_col = columns.get('In Review') or in_progress_col
-        done_col = columns.get('Done') or review_col
+        todo = columns.get('To Do') or columns.get('Backlog') or list(columns.values())[0]
+        in_progress = columns.get('In Progress') or todo
+        review = columns.get('In Review') or in_progress
+        done = columns.get('Done') or review
         items = []
         now = timezone.now().date()
+        from datetime import datetime
 
-        # Phase 1: Critical & Security Bugs (days -60 to -31)
-        phase1_tasks = [
-            {'title': 'Fix SQL injection vulnerability', 'desc': 'Patch user input sanitization in search', 'priority': 'urgent', 'complexity': 7, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Fix authentication bypass', 'desc': 'Close security hole in session handling', 'priority': 'urgent', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Fix XSS in comments', 'desc': 'Sanitize HTML output in comment system', 'priority': 'urgent', 'complexity': 6, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Fix password hash weakness', 'desc': 'Upgrade to bcrypt with proper cost factor', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Fix CSRF token validation', 'desc': 'Implement proper CSRF protection', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Fix database connection leak', 'desc': 'Properly close DB connections in all paths', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Fix race condition in payments', 'desc': 'Add proper locking for payment processing', 'priority': 'urgent', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Fix session fixation', 'desc': 'Regenerate session ID on login', 'priority': 'high', 'complexity': 4, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Fix insecure file upload', 'desc': 'Validate file types and scan for malware', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 100, 'column': done_col},
-            {'title': 'Fix sensitive data exposure', 'desc': 'Remove PII from error logs', 'priority': 'high', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done_col},
+        # =====================================================================
+        # Phase 1: Critical & Security Bugs (10 tasks) - Same dependency pattern
+        # =====================================================================
+        phase1_data = [
+            {'title': 'Security Audit & Assessment', 'desc': 'Comprehensive security assessment and vulnerability scanning', 'priority': 'high', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 5},
+            {'title': 'SQL Injection Vulnerability', 'desc': 'Patch user input sanitization in search module', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 4},
+            {'title': 'Authentication Bypass Fix', 'desc': 'Close security hole in session handling', 'priority': 'high', 'complexity': 8, 'assignee': jordan, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 10},
+            {'title': 'XSS Vulnerability Patches', 'desc': 'Sanitize all HTML output in user content areas', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': 2, 'duration': 8},
+            {'title': 'Password Security Upgrade', 'desc': 'Upgrade to bcrypt with proper cost factor and salting', 'priority': 'medium', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done, 'start_offset': 5, 'duration': 6},
+            {'title': 'CSRF Token Implementation', 'desc': 'Implement proper CSRF protection across all forms', 'priority': 'high', 'complexity': 4, 'assignee': jordan, 'progress': 80, 'column': review, 'start_offset': 10, 'duration': 3},
+            {'title': 'Session Security Hardening', 'desc': 'Fix session fixation and regenerate IDs on login', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 60, 'column': in_progress, 'start_offset': 13, 'duration': 4},
+            {'title': 'Database Connection Leak Fix', 'desc': 'Properly close DB connections in all code paths', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 40, 'column': in_progress, 'start_offset': 11, 'duration': 7},
+            {'title': 'File Upload Security', 'desc': 'Validate file types, scan for malware, and sandbox', 'priority': 'urgent', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': 13, 'duration': 10},
+            {'title': 'Security Patch Verification', 'desc': 'Verify all security patches and penetration testing', 'priority': 'urgent', 'complexity': 7, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': 23, 'duration': 5},
         ]
 
-        # Phase 2: High Priority Bugs (days -30 to -1)
-        phase2_tasks = [
-            {'title': 'Fix memory leak in worker', 'desc': 'Background worker memory grows over time', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 80, 'column': review_col},
-            {'title': 'Fix slow dashboard load', 'desc': 'Dashboard takes 10+ seconds to load', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 60, 'column': in_progress_col},
-            {'title': 'Fix email delivery failures', 'desc': 'Emails not sending to certain domains', 'priority': 'high', 'complexity': 5, 'assignee': jordan, 'progress': 90, 'column': review_col},
-            {'title': 'Fix image resize crash', 'desc': 'App crashes on large image uploads', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 70, 'column': review_col},
-            {'title': 'Fix timezone handling', 'desc': 'Dates display incorrectly for non-UTC users', 'priority': 'medium', 'complexity': 6, 'assignee': sam, 'progress': 40, 'column': in_progress_col},
-            {'title': 'Fix search pagination', 'desc': 'Search results wrong on page 2+', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 50, 'column': in_progress_col},
-            {'title': 'Fix notification duplicates', 'desc': 'Users receiving duplicate notifications', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 30, 'column': in_progress_col},
-            {'title': 'Fix export timeout', 'desc': 'Large exports timeout before completing', 'priority': 'medium', 'complexity': 6, 'assignee': sam, 'progress': 20, 'column': in_progress_col},
-            {'title': 'Fix mobile menu collapse', 'desc': 'Menu doesn\'t collapse properly on mobile', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 100, 'column': done_col},
-            {'title': 'Fix autocomplete delay', 'desc': 'Search autocomplete is too slow', 'priority': 'low', 'complexity': 4, 'assignee': sam, 'progress': 65, 'column': in_progress_col},
+        for i, t in enumerate(phase1_data):
+            start = now + timedelta(days=t['start_offset'])
+            due_date_obj = start + timedelta(days=t['duration'])
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            task = Task.objects.create(
+                column=t['column'], title=t['title'], description=t['desc'],
+                priority=t['priority'], complexity_score=t['complexity'],
+                assigned_to=t['assignee'], created_by=sam, progress=t['progress'],
+                start_date=start, due_date=due_datetime, phase='Phase 1',
+                is_seed_demo_data=True,
+            )
+            items.append(task)
+
+        # =====================================================================
+        # Phase 2: High Priority Performance & Stability (10 tasks)
+        # =====================================================================
+        phase_start = 28
+        phase2_data = [
+            {'title': 'Memory Leak Investigation', 'desc': 'Profile and fix memory leaks in background workers', 'priority': 'urgent', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': phase_start, 'duration': 10},
+            {'title': 'Dashboard Load Optimization', 'desc': 'Optimize slow-loading dashboard (10+ seconds)', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 80, 'column': review, 'start_offset': phase_start + 10, 'duration': 8},
+            {'title': 'Email Delivery Fix', 'desc': 'Fix emails not sending to certain domains', 'priority': 'high', 'complexity': 7, 'assignee': jordan, 'progress': 70, 'column': in_progress, 'start_offset': phase_start + 10, 'duration': 6},
+            {'title': 'Image Processing Crash', 'desc': 'Fix app crash on large image uploads', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 75, 'column': in_progress, 'start_offset': phase_start + 10, 'duration': 5},
+            {'title': 'Timezone Handling Bug', 'desc': 'Fix incorrect date display for non-UTC users', 'priority': 'urgent', 'complexity': 7, 'assignee': alex, 'progress': 30, 'column': in_progress, 'start_offset': phase_start + 18, 'duration': 7},
+            {'title': 'Search Results Pagination', 'desc': 'Fix wrong results on page 2+ of search', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 6},
+            {'title': 'Notification Duplicates', 'desc': 'Fix users receiving duplicate notifications', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 31, 'duration': 5},
+            {'title': 'Export Timeout Issue', 'desc': 'Fix large exports timing out before completion', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 5},
+            {'title': 'Race Condition in Payments', 'desc': 'Add proper locking for payment processing', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 30, 'duration': 4},
+            {'title': 'Performance Bug Verification', 'desc': 'Verify all performance fixes with load testing', 'priority': 'urgent', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 36, 'duration': 2},
         ]
 
-        # Phase 3: Medium/Low Priority & Polish (days 0 to +45)
-        phase3_tasks = [
-            {'title': 'Fix form validation messages', 'desc': 'Error messages not displaying correctly', 'priority': 'medium', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Fix print stylesheet', 'desc': 'Reports don\'t print correctly', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Fix keyboard navigation', 'desc': 'Tab order incorrect on forms', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Fix tooltip positioning', 'desc': 'Tooltips clip off screen edge', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Fix date picker locale', 'desc': 'Date format wrong for non-US users', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': backlog_col},
-            {'title': 'Fix drag and drop on Safari', 'desc': 'DnD not working on Safari browser', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': backlog_col},
-            {'title': 'Fix chart rendering', 'desc': 'Charts flicker on data update', 'priority': 'low', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': backlog_col},
-            {'title': 'Fix modal close behavior', 'desc': 'Escape key doesn\'t close modals', 'priority': 'low', 'complexity': 2, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Fix breadcrumb trail', 'desc': 'Breadcrumbs show wrong path', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
-            {'title': 'Fix avatar upload preview', 'desc': 'Avatar preview not updating', 'priority': 'low', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': backlog_col},
+        for i, t in enumerate(phase2_data):
+            start = now + timedelta(days=t['start_offset'])
+            due_date_obj = start + timedelta(days=t['duration'])
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            task = Task.objects.create(
+                column=t['column'], title=t['title'], description=t['desc'],
+                priority=t['priority'], complexity_score=t['complexity'],
+                assigned_to=t['assignee'], created_by=sam, progress=t['progress'],
+                start_date=start, due_date=due_datetime, phase='Phase 2',
+                is_seed_demo_data=True,
+            )
+            items.append(task)
+
+        # =====================================================================
+        # Phase 3: UI/UX & Polish Bugs (10 tasks)
+        # =====================================================================
+        phase_start = 66
+        phase3_data = [
+            {'title': 'Form Validation Messages', 'desc': 'Fix error messages not displaying correctly', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start, 'duration': 8},
+            {'title': 'Print Stylesheet Fix', 'desc': 'Fix reports not printing correctly', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start, 'duration': 4},
+            {'title': 'Keyboard Navigation', 'desc': 'Fix incorrect tab order on forms', 'priority': 'high', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 8, 'duration': 6},
+            {'title': 'Tooltip Positioning', 'desc': 'Fix tooltips clipping off screen edge', 'priority': 'medium', 'complexity': 5, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 5},
+            {'title': 'Date Picker Locale', 'desc': 'Fix date format for non-US users', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 19, 'duration': 6},
+            {'title': 'Safari Drag & Drop', 'desc': 'Fix DnD not working on Safari browser', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 3},
+            {'title': 'Chart Rendering Flicker', 'desc': 'Fix charts flickering on data update', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 4},
+            {'title': 'Modal Close Behavior', 'desc': 'Fix Escape key not closing modals', 'priority': 'low', 'complexity': 2, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 2},
+            {'title': 'Mobile Menu Fix', 'desc': 'Fix menu not collapsing properly on mobile', 'priority': 'medium', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 27, 'duration': 3},
+            {'title': 'Final Bug Verification', 'desc': 'Final QA pass and bug verification', 'priority': 'urgent', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 30, 'duration': 2},
         ]
 
-        # Create all phases with improved date logic
-        # Each task starts 0 to +3 days from the previous task's due date (no overlap)
-        # First task starts on day -10
-        prev_due_date = now + timedelta(days=-10)
-        
-        for phase_num, tasks in enumerate([phase1_tasks, phase2_tasks, phase3_tasks], start=1):
-            phase_name = f'Phase {phase_num}'
-            
-            # Add a small gap between phases (3-6 days) for visual separation
-            if phase_num > 1:
-                prev_due_date = prev_due_date + timedelta(days=random.randint(3, 6))
-
-            for i, t in enumerate(tasks):
-                # Start date is 0 to +3 days from previous task's due date (ensures no overlap)
-                start = prev_due_date + timedelta(days=random.randint(0, 3))
-                due = start + timedelta(days=random.randint(3, 6))  # 3-6 day duration for good visual appearance
-                task = Task.objects.create(
-                    column=t['column'], title=t['title'], description=t['desc'],
-                    priority=t['priority'], complexity_score=t['complexity'],
-                    assigned_to=t['assignee'], created_by=sam, progress=t['progress'],
-                    start_date=start, due_date=due, phase=phase_name,
-                    is_seed_demo_data=True,
-                )
-                items.append(task)
-                prev_due_date = due
+        for i, t in enumerate(phase3_data):
+            start = now + timedelta(days=t['start_offset'])
+            due_date_obj = start + timedelta(days=t['duration'])
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            task = Task.objects.create(
+                column=t['column'], title=t['title'], description=t['desc'],
+                priority=t['priority'], complexity_score=t['complexity'],
+                assigned_to=t['assignee'], created_by=sam, progress=t['progress'],
+                start_date=start, due_date=due_datetime, phase='Phase 3',
+                is_seed_demo_data=True,
+            )
+            items.append(task)
 
         return items
 
     def create_dependencies(self, software_tasks, marketing_tasks, bug_tasks):
-        """Create simple linear task dependencies WITHIN each phase only
-        
-        Each task depends on only ONE previous task, creating a simple chain.
-        This makes the Gantt chart clean and easy to understand.
-        No inter-phase dependencies - each phase starts fresh.
         """
-        # Software Development - Simple linear chain within each phase
-        # Phase 1 (indices 0-9): Foundation & Setup
-        # Phase 2 (indices 10-19): Core Features  
-        # Phase 3 (indices 20-29): Polish & Launch
+        Create realistic task dependencies with parallel paths and merge points.
+        Uses the same pattern as the construction demo for proper critical path visualization.
+        
+        Dependency structure per phase (same for all boards):
+        [0] Start Task ──────────────────┐
+                                         ├──► [4] Merge Point 1 ──► [7] Work Item
+        [1] Parallel Task 1 ─────────────┘                               │
+                                                                         │
+        [2] Parallel Task 2 ─────────────┐                               │
+                                         ├──► [5] Gate ──► [8] Work Item ─┐
+        [3] Parallel Task 3 ─────────────┘        │                       │
+                                                  │                       │
+                                                  └──► [6] Side Task     │
+                                                                         │
+                                              [9] Final Task ◄───────────┘
+                                                (depends on [7] AND [8])
+        """
+        def create_phase_dependencies(tasks, phase_offset):
+            """Create dependencies for a single phase (10 tasks)"""
+            if len(tasks) < phase_offset + 10:
+                return
+            
+            base = phase_offset
+            # Task 4 depends on Tasks 0 and 1
+            tasks[base + 4].dependencies.add(tasks[base + 0])
+            tasks[base + 4].dependencies.add(tasks[base + 1])
+            
+            # Task 5 depends on Tasks 2 and 3
+            tasks[base + 5].dependencies.add(tasks[base + 2])
+            tasks[base + 5].dependencies.add(tasks[base + 3])
+            
+            # Task 6 depends on Task 5
+            tasks[base + 6].dependencies.add(tasks[base + 5])
+            
+            # Task 7 depends on Task 4
+            tasks[base + 7].dependencies.add(tasks[base + 4])
+            
+            # Task 8 depends on Task 5
+            tasks[base + 8].dependencies.add(tasks[base + 5])
+            
+            # Task 9 depends on Tasks 7 and 8 (merge point)
+            tasks[base + 9].dependencies.add(tasks[base + 7])
+            tasks[base + 9].dependencies.add(tasks[base + 8])
+
+        # Software Development
         if len(software_tasks) >= 30:
-            # Phase 1: Simple linear chain (0→1→2→3→4→5→6→7→8→9)
-            # Task 0 has no dependencies (phase start)
-            for i in range(1, 10):
-                software_tasks[i].dependencies.add(software_tasks[i-1])
+            create_phase_dependencies(software_tasks, 0)   # Phase 1
+            create_phase_dependencies(software_tasks, 10)  # Phase 2
+            create_phase_dependencies(software_tasks, 20)  # Phase 3
+        self.stdout.write('   ✅ Software Development dependencies created (parallel paths with merge points)')
 
-            # Phase 2: Simple linear chain (10→11→12→13→14→15→16→17→18→19)
-            # Task 10 has no dependencies (new phase start)
-            for i in range(11, 20):
-                software_tasks[i].dependencies.add(software_tasks[i-1])
-
-            # Phase 3: Simple linear chain (20→21→22→23→24→25→26→27→28→29)
-            # Task 20 has no dependencies (new phase start)
-            for i in range(21, 30):
-                software_tasks[i].dependencies.add(software_tasks[i-1])
-
-        self.stdout.write('   ✅ Software Development dependencies created (simple linear chain per phase)')
-
-        # Marketing Campaign - Simple linear chain within each phase
+        # Marketing Campaign
         if len(marketing_tasks) >= 30:
-            # Phase 1: Simple linear chain (0→1→2→3→4→5→6→7→8→9)
-            for i in range(1, 10):
-                marketing_tasks[i].dependencies.add(marketing_tasks[i-1])
+            create_phase_dependencies(marketing_tasks, 0)   # Phase 1
+            create_phase_dependencies(marketing_tasks, 10)  # Phase 2
+            create_phase_dependencies(marketing_tasks, 20)  # Phase 3
+        self.stdout.write('   ✅ Marketing Campaign dependencies created (parallel paths with merge points)')
 
-            # Phase 2: Simple linear chain (10→11→12→13→14→15→16→17→18→19)
-            for i in range(11, 20):
-                marketing_tasks[i].dependencies.add(marketing_tasks[i-1])
-
-            # Phase 3: Simple linear chain (20→21→22→23→24→25→26→27→28→29)
-            for i in range(21, 30):
-                marketing_tasks[i].dependencies.add(marketing_tasks[i-1])
-
-        self.stdout.write('   ✅ Marketing Campaign dependencies created (simple linear chain per phase)')
-
-        # Bug Tracking - Simple linear chain within each phase
+        # Bug Tracking
         if len(bug_tasks) >= 30:
-            # Phase 1: Simple linear chain (0→1→2→3→4→5→6→7→8→9)
-            for i in range(1, 10):
-                bug_tasks[i].dependencies.add(bug_tasks[i-1])
-
-            # Phase 2: Simple linear chain (10→11→12→13→14→15→16→17→18→19)
-            for i in range(11, 20):
-                bug_tasks[i].dependencies.add(bug_tasks[i-1])
-
-            # Phase 3: Simple linear chain (20→21→22→23→24→25→26→27→28→29)
-            for i in range(21, 30):
-                bug_tasks[i].dependencies.add(bug_tasks[i-1])
-
-        self.stdout.write('   ✅ Bug Tracking dependencies created (simple linear chain per phase)')
+            create_phase_dependencies(bug_tasks, 0)   # Phase 1
+            create_phase_dependencies(bug_tasks, 10)  # Phase 2
+            create_phase_dependencies(bug_tasks, 20)  # Phase 3
+        self.stdout.write('   ✅ Bug Tracking dependencies created (parallel paths with merge points)')
 
     def create_lean_labels(self, software_board, marketing_board, bug_board):
         """Create Lean Six Sigma labels for all boards"""
@@ -2012,13 +2080,13 @@ class Command(BaseCommand):
             software_board: {
                 'skills': SOFTWARE_SKILLS,
                 'inventory': {
-                    'Python': {'expert': 1, 'advanced': 2, 'intermediate': 1},
-                    'JavaScript': {'advanced': 2, 'intermediate': 2},
-                    'React': {'advanced': 1, 'intermediate': 2},
-                    'Django': {'expert': 1, 'advanced': 1},
-                    'PostgreSQL': {'intermediate': 2, 'beginner': 1},
-                    'Docker': {'intermediate': 2},
-                    'AWS': {'intermediate': 1, 'beginner': 1},
+                    'Python': {'expert': 1, 'advanced': 2, 'intermediate': 1, 'beginner': 0},
+                    'JavaScript': {'expert': 0, 'advanced': 2, 'intermediate': 2, 'beginner': 0},
+                    'React': {'expert': 0, 'advanced': 1, 'intermediate': 2, 'beginner': 0},
+                    'Django': {'expert': 1, 'advanced': 1, 'intermediate': 0, 'beginner': 0},
+                    'PostgreSQL': {'expert': 0, 'advanced': 0, 'intermediate': 2, 'beginner': 1},
+                    'Docker': {'expert': 0, 'advanced': 0, 'intermediate': 2, 'beginner': 0},
+                    'AWS': {'expert': 0, 'advanced': 0, 'intermediate': 1, 'beginner': 1},
                 },
                 'gaps': [
                     {'skill': 'Kubernetes', 'level': 'intermediate', 'required': 2, 'available': 0, 'severity': 'high'},
@@ -2031,11 +2099,11 @@ class Command(BaseCommand):
             marketing_board: {
                 'skills': MARKETING_SKILLS,
                 'inventory': {
-                    'Content Strategy': {'advanced': 2, 'intermediate': 1},
-                    'SEO/SEM': {'advanced': 1, 'intermediate': 2},
-                    'Social Media Marketing': {'expert': 1, 'advanced': 2},
-                    'Analytics': {'advanced': 2, 'intermediate': 1},
-                    'Copywriting': {'advanced': 2, 'intermediate': 1},
+                    'Content Strategy': {'expert': 0, 'advanced': 2, 'intermediate': 1, 'beginner': 0},
+                    'SEO/SEM': {'expert': 0, 'advanced': 1, 'intermediate': 2, 'beginner': 0},
+                    'Social Media Marketing': {'expert': 1, 'advanced': 2, 'intermediate': 0, 'beginner': 0},
+                    'Analytics': {'expert': 0, 'advanced': 2, 'intermediate': 1, 'beginner': 0},
+                    'Copywriting': {'expert': 0, 'advanced': 2, 'intermediate': 1, 'beginner': 0},
                 },
                 'gaps': [
                     {'skill': 'Video Production', 'level': 'advanced', 'required': 1, 'available': 0, 'severity': 'high'},
@@ -2047,10 +2115,10 @@ class Command(BaseCommand):
             bug_board: {
                 'skills': BUG_TRACKING_SKILLS,
                 'inventory': {
-                    'Debugging': {'expert': 2, 'advanced': 1},
-                    'Root Cause Analysis': {'advanced': 2, 'intermediate': 1},
-                    'Testing': {'advanced': 2, 'intermediate': 2},
-                    'Performance Profiling': {'intermediate': 2},
+                    'Debugging': {'expert': 2, 'advanced': 1, 'intermediate': 0, 'beginner': 0},
+                    'Root Cause Analysis': {'expert': 0, 'advanced': 2, 'intermediate': 1, 'beginner': 0},
+                    'Testing': {'expert': 0, 'advanced': 2, 'intermediate': 2, 'beginner': 0},
+                    'Performance Profiling': {'expert': 0, 'advanced': 0, 'intermediate': 2, 'beginner': 0},
                 },
                 'gaps': [
                     {'skill': 'Security Analysis', 'level': 'expert', 'required': 1, 'available': 0, 'severity': 'critical'},
