@@ -59,8 +59,8 @@ def logout_view(request):
 
 def register_view(request, org_id=None):
     """
-    Simplified registration - automatically assigns users to the single organization.
-    All users (demo + real) belong to "Demo - Acme Corporation".
+    Simplified registration - no organization assignment required.
+    Organization field is now optional.
     """
     # org_id parameter is kept for backward compatibility but ignored
     
@@ -69,17 +69,15 @@ def register_view(request, org_id=None):
         if form.is_valid():
             user = form.save()
             
-            # Automatically assign user to Demo - Acme Corporation
-            demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-            if demo_org:
-                UserProfile.objects.get_or_create(
-                    user=user,
-                    defaults={
-                        'organization': demo_org,
-                        'is_admin': False,
-                        'completed_wizard': True
-                    }
-                )
+            # Create user profile without organization
+            UserProfile.objects.get_or_create(
+                user=user,
+                defaults={
+                    'organization': None,
+                    'is_admin': False,
+                    'completed_wizard': True
+                }
+            )
             
             # Auto-add user to all official demo boards
             from kanban.models import Board
@@ -100,24 +98,18 @@ def register_view(request, org_id=None):
 @login_required
 def organization_choice(request):
     """
-    Single organization mode: Ensure user is assigned to Demo - Acme Corporation.
+    MVP Mode: Organization is optional - users don't need to be assigned.
     Auto-create profile if missing.
     """
     try:
         profile = request.user.profile
-        # Ensure they're in the demo organization
-        if not profile.organization:
-            demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-            if demo_org:
-                profile.organization = demo_org
-                profile.save()
+        # Organization is now optional - don't force assignment
         return redirect('dashboard')
     except UserProfile.DoesNotExist:
-        # Auto-create profile and assign to demo organization
-        demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+        # Auto-create profile without organization
         UserProfile.objects.create(
             user=request.user,
-            organization=demo_org,
+            organization=None,
             is_admin=False,
             completed_wizard=True
         )

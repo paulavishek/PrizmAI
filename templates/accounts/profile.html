@@ -35,7 +35,9 @@
                         <span class="badge bg-secondary me-2">Member</span>
                     {% endif %}
                     
-                    <span class="badge bg-info">{{ profile.organization.name }}</span>
+                    {% if profile.organization %}
+                        <span class="badge bg-info">{{ profile.organization.name }}</span>
+                    {% endif %}
                 </div>
                 
                 <hr>
