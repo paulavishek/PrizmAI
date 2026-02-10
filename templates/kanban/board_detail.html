@@ -291,7 +291,6 @@
             </a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}">Edit Board</a></li>
-            <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#boardSettingsModal">Board Settings</a></li>
             <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}">
                 <i class="fas fa-plug me-2 text-info"></i>Webhooks & Integrations
             </a></li>
@@ -876,57 +875,6 @@
                     {% csrf_token %}
                     <button type="submit" class="btn btn-danger">Delete Board</button>
                 </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Board Settings Modal -->
-<div class="modal fade" id="boardSettingsModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Board Settings</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <h6>Board Members</h6>
-                <ul class="list-group mb-3">
-                    {% for member in board.members.all %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <div>
-                            {{ member.username }}
-                            {% if member == board.created_by %}
-                            <span class="badge bg-primary rounded-pill">Owner</span>
-                            {% endif %}
-                        </div>
-                        {% if request.user == board.created_by or request.user.profile.is_admin or request.user == board.organization.created_by %}
-                            {% if member != board.created_by %}
-                            <a href="{% url 'remove_board_member' board.id member.id %}" class="btn btn-sm btn-outline-danger"
-                               onclick="return confirm('Are you sure you want to remove {{ member.username }} from the board?')">
-                                <i class="fas fa-trash me-1"></i> Remove
-                            </a>
-                            {% endif %}
-                        {% endif %}
-                    </li>
-                    {% endfor %}
-                </ul>
-                
-                <form method="post" action="{% url 'add_board_member' board.id %}">
-                    {% csrf_token %}
-                    <div class="input-group mb-3">
-                        <select class="form-select" name="user_id">
-                            <option selected disabled>Add a member...</option>
-                            {% for user_profile in available_org_members %}
-                                <option value="{{ user_profile.user.id }}">{{ user_profile.user.username }}</option>
-                            {% endfor %}
-                        </select>
-                        <button class="btn btn-outline-primary" type="submit">Add</button>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
