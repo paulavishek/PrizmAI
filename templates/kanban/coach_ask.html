@@ -194,6 +194,45 @@ function setQuestion(text) {
     document.getElementById('question').focus();
 }
 
+// Simple markdown parser for AI responses
+function parseMarkdownSimple(text) {
+    if (!text) return '';
+    
+    // Escape HTML to prevent XSS
+    let html = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    
+    // Convert markdown to HTML
+    html = html
+        // Headers
+        .replace(/^### (.+)$/gm, '<h5>$1</h5>')
+        .replace(/^## (.+)$/gm, '<h4>$1</h4>')
+        .replace(/^# (.+)$/gm, '<h3>$1</h3>')
+        // Bold
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        // Italic
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        // Inline code
+        .replace(/`(.+?)`/g, '<code style="background: #f4f4f4; padding: 2px 6px; border-radius: 3px;">$1</code>')
+        // Bullet lists
+        .replace(/^\s*[-*] (.+)$/gm, '<li>$1</li>')
+        // Numbered lists
+        .replace(/^\s*\d+\. (.+)$/gm, '<li>$1</li>')
+        // Line breaks
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+    
+    // Wrap consecutive list items
+    html = html.replace(/(<li>.*<\/li>\s*)+/g, '<ul style="margin: 10px 0; padding-left: 20px;">$&</ul>');
+    
+    // Wrap in paragraph
+    html = '<p>' + html + '</p>';
+    
+    return html;
+}
+
 function askCoach() {
     const question = document.getElementById('question').value.trim();
     
@@ -221,7 +260,8 @@ function askCoach() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            document.getElementById('adviceContent').textContent = data.advice;
+            // Parse markdown formatting in AI response
+            document.getElementById('adviceContent').innerHTML = parseMarkdownSimple(data.advice);
             document.getElementById('adviceContainer').style.display = 'block';
             
             // Scroll to advice
