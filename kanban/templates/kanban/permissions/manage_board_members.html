@@ -59,7 +59,7 @@
                                     {% if member_data.has_role %}
                                     {{ member_data.membership.added_at|date:"M d, Y" }}
                                     {% else %}
-                                    —
+                                    {{ member_data.user.date_joined|date:"M d, Y" }}
                                     {% endif %}
                                 </td>
                                 <td>
