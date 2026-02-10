@@ -22,9 +22,19 @@ WIKI_TEMPERATURE_MAP = {
 }
 
 
-def generate_ai_content(prompt: str, task_type='simple') -> Optional[str]:
+def _get_ai_cache():
+    """Get the AI cache manager."""
+    try:
+        from kanban_board.ai_cache import ai_cache_manager
+        return ai_cache_manager
+    except ImportError:
+        return None
+
+
+def generate_ai_content(prompt: str, task_type='simple', use_cache: bool = True,
+                        context_id: Optional[str] = None) -> Optional[str]:
     """
-    Generate content using AI (Gemini) with smart model routing and optimized temperature.
+    Generate content using AI (Gemini) with smart model routing, optimized temperature, and caching.
     
     Routes to appropriate model based on task complexity:
     - Complex tasks → Gemini 2.5 Flash
@@ -40,7 +50,17 @@ def generate_ai_content(prompt: str, task_type='simple') -> Optional[str]:
     Args:
         prompt: The prompt to send
         task_type: 'simple' or 'complex' to select model
+        use_cache: Whether to use caching (default True)
+        context_id: Optional context identifier for caching
     """
+    # Try cache first
+    ai_cache = _get_ai_cache()
+    if use_cache and ai_cache:
+        cached = ai_cache.get(prompt, task_type, context_id)
+        if cached:
+            logger.debug(f"Wiki AI cache HIT for task_type: {task_type}")
+            return cached
+    
     try:
         import google.generativeai as genai
         from django.conf import settings
@@ -75,7 +95,12 @@ def generate_ai_content(prompt: str, task_type='simple') -> Optional[str]:
         response = model.generate_content(prompt, generation_config=generation_config)
         
         if response and response.text:
-            return response.text
+            result = response.text
+            # Cache the result
+            if use_cache and ai_cache and result:
+                ai_cache.set(prompt, result, task_type, context_id)
+                logger.debug(f"Wiki AI response cached for task_type: {task_type}")
+            return result
         return None
     except Exception as e:
         logger.error(f"Error generating AI content: {str(e)}")

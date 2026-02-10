@@ -168,9 +168,10 @@ def get_model():
     """
     return get_model_for_task('simple')
 
-def generate_ai_content(prompt: str, task_type='simple') -> Optional[str]:
+def generate_ai_content(prompt: str, task_type='simple', use_cache: bool = True, 
+                        context_id: Optional[str] = None) -> Optional[str]:
     """
-    Generate content using Gemini API with smart model routing and optimized temperature.
+    Generate content using Gemini API with smart model routing, optimized temperature, and caching.
     
     Routes requests to appropriate model based on task complexity:
     - Complex tasks → Gemini 2.5 Flash (higher quality reasoning)
@@ -182,13 +183,31 @@ def generate_ai_content(prompt: str, task_type='simple') -> Optional[str]:
     - Creative tasks (0.6): task_description, retrospective
     - Conversational (0.7): chat responses
     
+    Caching is enabled by default to reduce API costs.
+    
     Args:
         prompt: The prompt to send to the Gemini API
         task_type: Task complexity indicator ('simple', 'complex', or specific task name)
+        use_cache: Whether to use caching (default True, set False for unique responses)
+        context_id: Optional identifier for cache context (e.g., board_id)
         
     Returns:
         Generated content or None if generation fails
     """
+    # Import caching system
+    try:
+        from kanban_board.ai_cache import ai_cache_manager, get_ttl_for_operation
+    except ImportError:
+        use_cache = False
+        logger.warning("AI cache module not available, running without cache")
+    
+    # Check cache first if enabled
+    if use_cache:
+        cached = ai_cache_manager.get(prompt, task_type, context_id)
+        if cached is not None:
+            logger.debug(f"AI content cache HIT for task_type: {task_type}")
+            return cached
+    
     try:
         model = get_model_for_task(task_type)
         if not model:
@@ -212,7 +231,14 @@ def generate_ai_content(prompt: str, task_type='simple') -> Optional[str]:
         response = model.generate_content(prompt, generation_config=generation_config)
         
         if response and response.text:
-            return response.text.strip()
+            result = response.text.strip()
+            
+            # Cache the result if caching is enabled
+            if use_cache and result:
+                ai_cache_manager.set(prompt, result, task_type, context_id)
+                logger.debug(f"AI content cached for task_type: {task_type}")
+            
+            return result
         
         logger.warning("Empty response from Gemini API")
         return None

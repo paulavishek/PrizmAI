@@ -47,23 +47,30 @@ def get_model():
         return None
 
 
-def extract_skills_from_task(task_title: str, task_description: str = "") -> List[Dict[str, str]]:
+def _get_ai_cache():
+    """Get the AI cache manager."""
+    try:
+        from kanban_board.ai_cache import ai_cache_manager
+        return ai_cache_manager
+    except ImportError:
+        return None
+
+
+def extract_skills_from_task(task_title: str, task_description: str = "", 
+                             use_cache: bool = True) -> List[Dict[str, str]]:
     """
-    Extract required skills from task title and description using AI
+    Extract required skills from task title and description using AI (with caching)
     
     Args:
         task_title: Title of the task
         task_description: Optional detailed description
+        use_cache: Whether to use caching (default True)
         
     Returns:
         List of skills with proficiency levels:
         [{'name': 'Python', 'level': 'Intermediate'}, ...]
     """
     try:
-        model = get_model()
-        if not model:
-            return []
-        
         prompt = f"""Analyze this task and extract the technical skills required to complete it.
 
 Task Title: {task_title}
@@ -84,6 +91,18 @@ Output format:
 ]
 
 JSON array:"""
+
+        # Try cache first
+        ai_cache = _get_ai_cache()
+        if use_cache and ai_cache:
+            cached = ai_cache.get(prompt, 'skill_analysis')
+            if cached:
+                logger.debug("Skill extraction cache HIT")
+                return cached
+        
+        model = get_model()
+        if not model:
+            return []
 
         response = model.generate_content(prompt)
         response_text = response.text.strip()
@@ -107,6 +126,11 @@ JSON array:"""
                             'name': skill['name'].strip(),
                             'level': level
                         })
+            
+            # Cache the result
+            if use_cache and ai_cache and valid_skills:
+                ai_cache.set(prompt, valid_skills, 'skill_analysis')
+                logger.debug("Skill extraction result cached")
             
             logger.info(f"Extracted {len(valid_skills)} skills from task: {task_title}")
             return valid_skills

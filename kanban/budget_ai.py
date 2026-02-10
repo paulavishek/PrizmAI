@@ -562,17 +562,39 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
 """
         return prompt
     
-    def _call_gemini_api(self, prompt: str, task_type: str = 'complex') -> Optional[str]:
+    def _get_ai_cache(self):
+        """Get the AI cache manager."""
+        try:
+            from kanban_board.ai_cache import ai_cache_manager
+            return ai_cache_manager
+        except ImportError:
+            return None
+    
+    def _call_gemini_api(self, prompt: str, task_type: str = 'complex', 
+                         use_cache: bool = True, cache_operation: str = 'budget_analysis') -> Optional[str]:
         """
-        Call Gemini API with the given prompt
+        Call Gemini API with the given prompt (with caching support)
         
         Args:
             prompt: The prompt to send
             task_type: 'simple' or 'complex'
+            use_cache: Whether to use caching (default True)
+            cache_operation: Operation type for TTL selection
             
         Returns:
             AI response text or None
         """
+        # Create context ID for caching based on board
+        context_id = f"board_{self.board.id}" if self.board else None
+        
+        # Try cache first
+        ai_cache = self._get_ai_cache()
+        if use_cache and ai_cache:
+            cached = ai_cache.get(prompt, cache_operation, context_id)
+            if cached:
+                logger.debug(f"Budget AI cache HIT for operation: {cache_operation}")
+                return cached
+        
         try:
             import google.generativeai as genai
             from django.conf import settings
@@ -591,7 +613,12 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
             response = model.generate_content(prompt)
             
             if response and response.text:
-                return response.text
+                result = response.text
+                # Cache the result
+                if use_cache and ai_cache and result:
+                    ai_cache.set(prompt, result, cache_operation, context_id)
+                    logger.debug(f"Budget AI response cached for operation: {cache_operation}")
+                return result
             return None
         except Exception as e:
             logger.error(f"Error calling Gemini API: {str(e)}")

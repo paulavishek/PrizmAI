@@ -504,6 +504,23 @@ CACHE_TIMEOUTS = {
     'permission': 3600,    # 1 hour - for permission checks
 }
 
+# AI Cache Configuration - for cost optimization
+# These can be overridden via environment variables
+AI_CACHE_ENABLED = os.getenv('AI_CACHE_ENABLED', 'true').lower() == 'true'
+
+# AI Cache TTL overrides (in seconds) - comma-separated key:value pairs
+# Example: AI_CACHE_TTLS="budget_analysis:7200,skill_analysis:3600"
+AI_CACHE_TTL_OVERRIDES = {}
+_ai_cache_ttls_env = os.getenv('AI_CACHE_TTLS', '')
+if _ai_cache_ttls_env:
+    try:
+        for pair in _ai_cache_ttls_env.split(','):
+            if ':' in pair:
+                key, value = pair.strip().split(':')
+                AI_CACHE_TTL_OVERRIDES[key.strip()] = int(value.strip())
+    except Exception:
+        pass
+
 # Session backend - use cache-backed sessions for scalability
 SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
 SESSION_CACHE_ALIAS = 'session_cache' if not DEBUG else 'default'

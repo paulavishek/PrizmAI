@@ -258,9 +258,17 @@ class RetrospectiveGenerator:
         
         return patterns
     
+    def _get_ai_cache(self):
+        """Get the AI cache manager."""
+        try:
+            from kanban_board.ai_cache import ai_cache_manager
+            return ai_cache_manager
+        except ImportError:
+            return None
+    
     def generate_ai_insights(self, metrics, patterns):
         """
-        Generate AI insights using Gemini
+        Generate AI insights using Gemini (with caching)
         
         Args:
             metrics: Metrics snapshot dict
@@ -271,6 +279,17 @@ class RetrospectiveGenerator:
         """
         # Build comprehensive prompt
         prompt = self._build_retrospective_prompt(metrics, patterns)
+        
+        # Create context ID for caching based on board and period
+        context_id = f"board_{self.board.id}:{self.period_start.isoformat()}:{self.period_end.isoformat()}"
+        
+        # Try cache first
+        ai_cache = self._get_ai_cache()
+        if ai_cache:
+            cached = ai_cache.get(prompt, 'retrospective', context_id)
+            if cached:
+                logger.debug("Retrospective AI cache HIT")
+                return cached
         
         # Get AI response with complex task routing
         response = self.gemini_client.get_response(
@@ -290,6 +309,11 @@ class RetrospectiveGenerator:
         insights = self._parse_ai_response(ai_content, metrics, patterns)
         insights['ai_model_used'] = response.get('model_used', 'gemini-2.0-flash-exp')
         insights['tokens_used'] = response.get('tokens', 0)
+        
+        # Cache the result
+        if ai_cache and insights:
+            ai_cache.set(prompt, insights, 'retrospective', context_id)
+            logger.debug("Retrospective AI insights cached")
         
         return insights
     

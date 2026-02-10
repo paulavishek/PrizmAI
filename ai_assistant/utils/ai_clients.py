@@ -106,7 +106,17 @@ class GeminiClient:
         
         return self.models[model_name]
     
-    def get_response(self, prompt, system_prompt=None, history=None, task_complexity='simple', temperature=None):
+    def _get_ai_cache(self):
+        """Get the AI cache manager."""
+        try:
+            from kanban_board.ai_cache import ai_cache_manager
+            return ai_cache_manager
+        except ImportError:
+            return None
+    
+    def get_response(self, prompt, system_prompt=None, history=None, task_complexity='simple', 
+                     temperature=None, use_cache=False, cache_operation='chat_response', 
+                     context_id=None):
         """
         Get response from Gemini model using stateless generation with smart routing.
         
@@ -127,10 +137,27 @@ class GeminiClient:
             history (list): DEPRECATED - Not used to prevent session persistence
             task_complexity (str): 'simple' or 'complex' for model routing
             temperature (float): Override temperature for this request (0.0-1.0)
+            use_cache (bool): Whether to cache this response (default False for chat)
+            cache_operation (str): Operation type for TTL selection
+            context_id (str): Optional context identifier for caching
             
         Returns:
             dict: Response with content, token info, model used, and temperature used
         """
+        # Build prompt for caching
+        full_prompt = prompt
+        if system_prompt:
+            full_prompt = f"{system_prompt}\n\n{prompt}"
+        
+        # Try cache first if enabled
+        ai_cache = self._get_ai_cache()
+        if use_cache and ai_cache:
+            cached = ai_cache.get(full_prompt, cache_operation, context_id)
+            if cached and isinstance(cached, dict):
+                logger.debug(f"GeminiClient cache HIT for operation: {cache_operation}")
+                cached['from_cache'] = True
+                return cached
+        
         model = self.get_model(task_complexity=task_complexity)
         if not model:
             return {
@@ -140,12 +167,7 @@ class GeminiClient:
                 'model_used': 'none'
             }
         
-        try:
-            # Build a fresh, one-time prompt with NO persistent history
-            full_prompt = prompt
-            if system_prompt:
-                full_prompt = f"{system_prompt}\n\n{prompt}"
-            
+        try:            
             # NOTE: history parameter is intentionally ignored to prevent session persistence
             if history:
                 logger.warning("History parameter provided but ignored - using stateless mode to prevent token accumulation")
@@ -197,15 +219,23 @@ class GeminiClient:
             
             logger.info(f"Gemini response generated - Model: {model_name}, Tokens: {token_count}, Complexity: {task_complexity}, Temp: {temp_used}")
             
-            return {
+            result = {
                 'content': response.text,
                 'error': None,
                 'tokens': token_count,
                 'session_mode': 'stateless',
                 'model_used': model_name,
                 'task_complexity': task_complexity,
-                'temperature_used': temp_used
+                'temperature_used': temp_used,
+                'from_cache': False
             }
+            
+            # Cache the result if caching is enabled
+            if use_cache and ai_cache and not result.get('error'):
+                ai_cache.set(full_prompt, result, cache_operation, context_id)
+                logger.debug(f"GeminiClient response cached for operation: {cache_operation}")
+            
+            return result
         
         except Exception as e:
             logger.error(f"Error getting Gemini response: {e}")

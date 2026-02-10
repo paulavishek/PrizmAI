@@ -32,6 +32,54 @@ class AICoachService:
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini: {e}")
                 self.gemini_available = False
+        
+        # Initialize AI cache manager
+        try:
+            from kanban_board.ai_cache import ai_cache_manager
+            self.ai_cache = ai_cache_manager
+        except ImportError:
+            self.ai_cache = None
+            logger.warning("AI cache not available for AICoachService")
+    
+    def _get_cached_or_generate(self, prompt: str, operation: str, 
+                                 context_id: str = None) -> Optional[str]:
+        """
+        Get AI response from cache or generate a new one.
+        
+        Args:
+            prompt: The AI prompt
+            operation: Operation type for TTL selection
+            context_id: Optional context identifier
+            
+        Returns:
+            AI response text or None
+        """
+        # Try cache first
+        if self.ai_cache:
+            cached = self.ai_cache.get(prompt, operation, context_id)
+            if cached:
+                logger.debug(f"AI Coach cache HIT for operation: {operation}")
+                return cached
+        
+        # Generate new response
+        if not self.gemini_available:
+            return None
+            
+        try:
+            model = self.genai.GenerativeModel('gemini-2.5-flash')
+            response = model.generate_content(prompt)
+            
+            if response and response.text:
+                result = response.text.strip()
+                # Cache the result
+                if self.ai_cache and result:
+                    self.ai_cache.set(prompt, result, operation, context_id)
+                    logger.debug(f"AI Coach response cached for operation: {operation}")
+                return result
+            return None
+        except Exception as e:
+            logger.error(f"AI generation failed: {e}")
+            return None
     
     def enhance_suggestion_with_ai(self, suggestion_data: Dict, context: Dict) -> Dict:
         """
@@ -52,13 +100,19 @@ class AICoachService:
             # Build prompt for contextual advice
             prompt = self._build_enhancement_prompt(suggestion_data, context)
             
-            # Get AI response
-            model = self.genai.GenerativeModel('gemini-2.5-flash')
-            response = model.generate_content(prompt)
+            # Create context ID for caching based on suggestion type and board
+            context_id = f"{context.get('board_id', 'unknown')}:{suggestion_data.get('suggestion_type', 'unknown')}"
             
-            if response and response.text:
+            # Get AI response (cached or fresh)
+            response_text = self._get_cached_or_generate(
+                prompt, 
+                'coaching_suggestion',
+                context_id
+            )
+            
+            if response_text:
                 # Parse AI response and enhance suggestion
-                ai_insights = self._parse_ai_enhancement(response.text)
+                ai_insights = self._parse_ai_enhancement(response_text)
                 
                 # Merge AI insights with base suggestion
                 suggestion_data['reasoning'] = ai_insights.get('reasoning', suggestion_data.get('reasoning', ''))
@@ -208,7 +262,7 @@ Generate a response following this exact structure. Be specific, actionable, and
     
     def generate_coaching_advice(self, board, pm_user, question: str) -> Optional[str]:
         """
-        Generate coaching advice for a specific PM question
+        Generate coaching advice for a specific PM question (with caching)
         
         Args:
             board: Board object for context
@@ -261,14 +315,11 @@ Keep your response:
 Respond directly to their question with helpful guidance.
 """
             
-            # Get AI response
-            model = self.genai.GenerativeModel('gemini-2.5-flash')
-            response = model.generate_content(prompt)
+            # Use cached response or generate new
+            context_id = f"board_{board.id}:user_{pm_user.id}"
+            result = self._get_cached_or_generate(prompt, 'coaching_advice', context_id)
             
-            if response and response.text:
-                return response.text.strip()
-            
-            return None
+            return result
             
         except Exception as e:
             logger.error(f"Failed to generate coaching advice: {e}")
@@ -276,7 +327,7 @@ Respond directly to their question with helpful guidance.
     
     def analyze_pm_performance(self, board, pm_user, time_period_days: int = 30) -> Optional[Dict]:
         """
-        Analyze PM performance and provide insights
+        Analyze PM performance and provide insights (with caching)
         
         Args:
             board: Board to analyze
@@ -388,14 +439,14 @@ Be constructive, specific, and actionable. Focus on growth and development.
 Make your reasoning transparent so the PM understands how you arrived at each conclusion.
 """
             
-            # Get AI response
-            model = self.genai.GenerativeModel('gemini-2.5-flash')
-            response = model.generate_content(prompt)
+            # Get AI response with caching
+            context_id = f"board_{board.id}:user_{pm_user.id}:days_{time_period_days}"
+            response_text = self._get_cached_or_generate(prompt, 'pm_performance', context_id)
             
-            if response and response.text:
+            if response_text:
                 # Parse response
                 import re
-                json_match = re.search(r'\{[\s\S]*\}', response.text)
+                json_match = re.search(r'\{[\s\S]*\}', response_text)
                 
                 if json_match:
                     return json.loads(json_match.group())
@@ -408,7 +459,9 @@ Make your reasoning transparent so the PM understands how you arrived at each co
     
     def generate_learning_content(self, topic: str, pm_experience_level: str = 'intermediate') -> Optional[str]:
         """
-        Generate learning content for PMs on specific topics
+        Generate learning content for PMs on specific topics (with caching)
+        
+        Educational content has a long cache TTL (6 hours) as it's stable.
         
         Args:
             topic: Topic to generate content for
@@ -483,14 +536,11 @@ Write in a clear, friendly, educational tone.
 Explain the 'why' behind every recommendation.
 """
             
-            # Get AI response
-            model = self.genai.GenerativeModel('gemini-2.5-flash')
-            response = model.generate_content(prompt)
+            # Get AI response with caching (learning content uses long TTL)
+            context_id = f"topic:{topic}:level:{pm_experience_level}"
+            result = self._get_cached_or_generate(prompt, 'learning_content', context_id)
             
-            if response and response.text:
-                return response.text.strip()
-            
-            return None
+            return result
             
         except Exception as e:
             logger.error(f"Failed to generate learning content: {e}")

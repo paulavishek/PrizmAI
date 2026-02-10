@@ -127,6 +127,43 @@ class Command(BaseCommand):
                 ))
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"\nError getting stats: {e}"))
+        
+        # Show AI cache statistics
+        self._show_ai_cache_stats()
+    
+    def _show_ai_cache_stats(self):
+        """Display AI-specific cache statistics."""
+        self.stdout.write("\n")
+        self.stdout.write(self.style.HTTP_INFO("AI Cache Statistics:"))
+        self.stdout.write("-" * 40)
+        
+        try:
+            from kanban_board.ai_cache import get_ai_cache_stats, AI_CACHE_TTLS
+            
+            stats = get_ai_cache_stats()
+            
+            self.stdout.write(f"  Cache Hits: {stats.get('hits', 0)}")
+            self.stdout.write(f"  Cache Misses: {stats.get('misses', 0)}")
+            self.stdout.write(f"  Cache Errors: {stats.get('errors', 0)}")
+            self.stdout.write(f"  API Calls Saved: {stats.get('api_calls_saved', 0)}")
+            self.stdout.write(f"  Estimated Cost Saved: ${stats.get('estimated_cost_saved', 0):.4f}")
+            self.stdout.write(f"  Hit Rate: {stats.get('hit_rate', '0.00%')}")
+            self.stdout.write(f"  Stats Since: {stats.get('since', 'Unknown')}")
+            
+            self.stdout.write("\n  TTL Configuration by Operation:")
+            for operation, ttl in sorted(AI_CACHE_TTLS.items()):
+                minutes = ttl // 60
+                hours = minutes // 60
+                if hours > 0:
+                    time_str = f"{hours}h {minutes % 60}m"
+                else:
+                    time_str = f"{minutes}m"
+                self.stdout.write(f"    {operation}: {time_str}")
+                
+        except ImportError:
+            self.stdout.write(self.style.WARNING("  AI cache module not available"))
+        except Exception as e:
+            self.stdout.write(self.style.ERROR(f"  Error getting AI cache stats: {e}"))
     
     def _clear_cache(self, cache_name: str):
         """Clear a specific cache."""
