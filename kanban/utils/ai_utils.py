@@ -99,6 +99,51 @@ TASK_TEMPERATURE_MAP = {
     'complex': 0.4,                      # Default for complex tasks
 }
 
+# Token limits for different AI task types
+# Lower limits = faster responses, Higher limits = more detailed outputs
+# Optimized for latency while maintaining quality
+TASK_TOKEN_LIMITS = {
+    # Short responses (512-1024 tokens)
+    'lean_classification': 512,          # Simple classification + brief explanation
+    'comment_summary': 768,              # Concise summary
+    'task_enhancement': 768,             # Brief enhancement suggestions
+    'mitigation_suggestions': 768,       # Focused recommendations
+    
+    # Medium responses (1024-1536 tokens)
+    'task_description': 1024,            # Description + checklist
+    'priority_suggestion': 1024,         # Priority with reasoning
+    'dashboard_insights': 1024,          # Quick insights
+    'velocity_forecast': 1024,           # Forecast data
+    
+    # Standard responses (1536-2048 tokens)
+    'board_analytics_summary': 2048,     # Comprehensive but focused
+    'risk_assessment': 2048,             # Risk analysis
+    'retrospective': 1536,               # Retrospective summary
+    'skill_gap_analysis': 2048,          # Skill analysis
+    'budget_analysis': 2048,             # Budget insights
+    'workflow_optimization': 1536,       # Workflow suggestions
+    
+    # Extended responses (2048+ tokens) - only when truly needed
+    'column_recommendations': 2048,      # Board setup needs detail
+    'board_setup': 2048,                 # Full board configuration
+    'timeline_generation': 2048,         # Timeline details
+    
+    # Default
+    'default': 2048,                     # Reduced from 4096 for faster responses
+}
+
+def get_token_limit_for_task(task_type: str) -> int:
+    """
+    Get the appropriate max_output_tokens for a given task type.
+    
+    Args:
+        task_type: The type of AI task being performed
+        
+    Returns:
+        int: Maximum output tokens for this task
+    """
+    return TASK_TOKEN_LIMITS.get(task_type, TASK_TOKEN_LIMITS['default'])
+
 def get_temperature_for_task(task_type: str) -> float:
     """
     Get the appropriate temperature setting for a given task type.
@@ -217,15 +262,18 @@ def generate_ai_content(prompt: str, task_type='simple', use_cache: bool = True,
         # Get optimized temperature for this task type
         temperature = get_temperature_for_task(task_type)
         
-        # Create generation config with task-specific temperature
+        # Get optimized token limit for this task type (reduces latency)
+        max_tokens = get_token_limit_for_task(task_type)
+        
+        # Create generation config with task-specific temperature and token limits
         generation_config = {
             'temperature': temperature,
             'top_p': 0.8,
             'top_k': 40,
-            'max_output_tokens': 4096,
+            'max_output_tokens': max_tokens,
         }
         
-        logger.debug(f"Generating AI content - Task: {task_type}, Temperature: {temperature}")
+        logger.debug(f"Generating AI content - Task: {task_type}, Temperature: {temperature}, MaxTokens: {max_tokens}")
         
         # Generate content with optimized settings
         response = model.generate_content(prompt, generation_config=generation_config)
@@ -524,6 +572,80 @@ def suggest_lean_classification(title: str, description: str) -> Optional[Dict]:
         logger.error(f"Error suggesting lean classification: {str(e)}")
         return None
 
+
+def _transform_analytics_response(parsed: Dict) -> Dict:
+    """
+    Transform simplified AI response to full format for backward compatibility.
+    Maps new streamlined fields to legacy structure expected by frontend.
+    """
+    # If already in old format, return as-is
+    if 'health_assessment' in parsed:
+        return parsed
+    
+    # Transform simplified response to expected format
+    result = {
+        'executive_summary': parsed.get('executive_summary', ''),
+        'confidence_score': 0.75,  # Default confidence
+    }
+    
+    # Map health_score -> health_assessment
+    if 'health_score' in parsed or 'health_reasoning' in parsed:
+        result['health_assessment'] = {
+            'overall_score': parsed.get('health_score', 'at_risk'),
+            'score_reasoning': parsed.get('health_reasoning', ''),
+            'health_indicators': []
+        }
+    
+    # Map key_insights (format is compatible)
+    if 'key_insights' in parsed:
+        result['key_insights'] = parsed['key_insights']
+    
+    # Map concerns -> areas_of_concern
+    if 'concerns' in parsed:
+        result['areas_of_concern'] = [
+            {
+                'concern': c.get('concern', ''),
+                'severity': c.get('severity', 'medium'),
+                'recommended_action': c.get('action', ''),
+            }
+            for c in parsed.get('concerns', [])
+        ]
+    
+    # Map recommendations -> process_improvement_recommendations
+    if 'recommendations' in parsed:
+        result['process_improvement_recommendations'] = [
+            {
+                'recommendation': r.get('recommendation', ''),
+                'expected_impact': r.get('impact', ''),
+                'priority': r.get('priority', 1),
+                'implementation_effort': 'medium',
+            }
+            for r in parsed.get('recommendations', [])
+        ]
+    
+    # Map lean_efficiency -> lean_analysis
+    if 'lean_efficiency' in parsed:
+        result['lean_analysis'] = {
+            'value_stream_efficiency': parsed.get('lean_efficiency', 'fair'),
+            'efficiency_reasoning': '',
+            'waste_identification': [],
+        }
+    
+    # Map team metrics
+    if 'workload_balance' in parsed:
+        result['team_performance'] = {
+            'workload_balance': parsed.get('workload_balance', 'balanced'),
+        }
+    
+    # Map trend
+    if 'productivity_trend' in parsed:
+        result['trend_analysis'] = {
+            'productivity_trend': parsed.get('productivity_trend', 'stable'),
+        }
+    
+    return result
+
+
 def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
     """
     Generate an AI-powered summary of board analytics data with full explainability.
@@ -556,125 +678,35 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
         tasks_by_priority = analytics_data.get('tasks_by_priority', [])
         tasks_by_user = analytics_data.get('tasks_by_user', [])
         
-        # Build comprehensive prompt
-        prompt = f"""
-        Analyze the following board analytics data and provide a comprehensive, actionable summary for a project manager. 
-        Focus on insights, trends, recommendations, and areas that need attention.
-        Provide full explainability for all analysis and recommendations.
+        # Build optimized prompt - streamlined for faster response while maintaining quality
+        prompt = f"""Analyze this board data and provide actionable insights for a project manager.
 
-        ## Board Metrics Overview:
-        - Total Tasks: {total_tasks}
-        - Completed Tasks: {completed_count}
-        - Overall Productivity (Completion Rate): {productivity}%
-        - Overdue Tasks: {overdue_count}
-        - Tasks Due Soon: {upcoming_count}
+## Metrics:
+- Tasks: {total_tasks} total, {completed_count} complete ({productivity}% productivity)
+- Overdue: {overdue_count}, Due soon: {upcoming_count}
+- Lean: {value_added_percentage}% value-added (target: 60%+), {total_categorized} categorized
+- Columns: {', '.join([f"{col['name']}:{col['count']}" for col in tasks_by_column])}
+- Priority: {', '.join([f"{pri['priority']}:{pri['count']}" for pri in tasks_by_priority])}
+- Team: {', '.join([f"{user['username']}:{user['count']}tasks({user['completion_rate']}%)" for user in tasks_by_user[:5]])}
 
-        ## Lean Six Sigma Analysis:
-        - Total Categorized Tasks: {total_categorized} out of {total_tasks}
-        - Value-Added Tasks: {tasks_by_lean_category[0]['count'] if tasks_by_lean_category else 0} ({value_added_percentage}% of categorized)
-        - Necessary Non-Value-Added: {tasks_by_lean_category[1]['count'] if len(tasks_by_lean_category) > 1 else 0}
-        - Waste/Eliminate Tasks: {tasks_by_lean_category[2]['count'] if len(tasks_by_lean_category) > 2 else 0}
-        
-        Note: In Lean Six Sigma, Value-Added percentage ideally should be 60%+ for healthy projects. 
-        Value of {value_added_percentage}% means {100 - value_added_percentage}% of work is either necessary overhead or potential waste.
-
-        ## Task Distribution:
-        Column Distribution: {', '.join([f"{col['name']}: {col['count']}" for col in tasks_by_column])}
-        Priority Distribution: {', '.join([f"{pri['priority']}: {pri['count']}" for pri in tasks_by_priority])}
-        Assignee Workload: {', '.join([f"{user['username']}: {user['count']} tasks ({user['completion_rate']}% complete)" for user in tasks_by_user[:5]])}
-
-        Format your response as JSON WITH FULL EXPLAINABILITY:
-        {{
-            "executive_summary": "2-3 sentence overall summary for quick reading",
-            "confidence_score": 0.XX,
-            "analysis_quality": {{
-                "data_completeness": "high|medium|low",
-                "metrics_reliability": "high|medium|low",
-                "sample_size_adequacy": "sufficient|marginal|insufficient"
-            }},
-            "health_assessment": {{
-                "overall_score": "healthy|at_risk|critical",
-                "score_reasoning": "Why this health score was assigned",
-                "health_indicators": [
-                    {{
-                        "indicator": "Indicator name",
-                        "status": "positive|neutral|negative",
-                        "value": "Actual value",
-                        "benchmark": "Expected/ideal value",
-                        "impact_on_score": "How this affects overall health"
-                    }}
-                ]
-            }},
-            "key_insights": [
-                {{
-                    "insight": "The insight statement",
-                    "evidence": "Data points supporting this insight",
-                    "significance": "Why this matters",
-                    "confidence": "high|medium|low"
-                }}
-            ],
-            "areas_of_concern": [
-                {{
-                    "concern": "The concern description",
-                    "severity": "critical|high|medium|low",
-                    "root_cause_hypothesis": "Likely cause of this issue",
-                    "evidence": "Supporting data",
-                    "recommended_action": "What to do about it",
-                    "timeline": "When to address"
-                }}
-            ],
-            "process_improvement_recommendations": [
-                {{
-                    "recommendation": "Specific actionable suggestion",
-                    "rationale": "Why this is recommended based on data",
-                    "expected_impact": "What improvement to expect",
-                    "implementation_effort": "low|medium|high",
-                    "priority": 1,
-                    "success_metrics": ["How to measure improvement"]
-                }}
-            ],
-            "lean_analysis": {{
-                "value_stream_efficiency": "excellent|good|fair|poor",
-                "efficiency_reasoning": "Why this efficiency rating",
-                "waste_identification": [
-                    {{
-                        "waste_type": "Type of waste identified",
-                        "tasks_affected": X,
-                        "elimination_strategy": "How to reduce this waste"
-                    }}
-                ],
-                "value_optimization_suggestions": [
-                    "Specific suggestion to increase value-add percentage"
-                ]
-            }},
-            "team_performance": {{
-                "workload_balance": "balanced|slightly_imbalanced|severely_imbalanced",
-                "balance_analysis": "Detailed workload distribution analysis",
-                "top_performers": ["Team member highlights"],
-                "capacity_concerns": ["Any capacity issues identified"],
-                "collaboration_opportunities": ["Where team could work together better"]
-            }},
-            "trend_analysis": {{
-                "productivity_trend": "improving|stable|declining",
-                "trend_evidence": "Data supporting trend assessment",
-                "forecast": "What to expect in coming period"
-            }},
-            "action_items": [
-                {{
-                    "action": "Specific action to take",
-                    "owner": "Suggested owner role",
-                    "urgency": "immediate|this_week|this_month",
-                    "expected_outcome": "What this action will achieve"
-                }}
-            ],
-            "assumptions": [
-                "Assumption made in this analysis"
-            ],
-            "limitations": [
-                "Limitation of this analysis due to data constraints"
-            ]
-        }}
-        """
+Return JSON only:
+{{
+  "executive_summary": "2-3 sentences summarizing health and key findings",
+  "health_score": "healthy|at_risk|critical",
+  "health_reasoning": "Brief explanation",
+  "key_insights": [
+    {{"insight": "Finding", "evidence": "Data point", "confidence": "high|medium|low"}}
+  ],
+  "concerns": [
+    {{"concern": "Issue", "severity": "critical|high|medium|low", "action": "Recommendation"}}
+  ],
+  "recommendations": [
+    {{"recommendation": "Action", "impact": "Expected result", "priority": 1}}
+  ],
+  "lean_efficiency": "excellent|good|fair|poor",
+  "workload_balance": "balanced|imbalanced",
+  "productivity_trend": "improving|stable|declining"
+}}"""
         
         response_text = generate_ai_content(prompt, task_type='board_analytics_summary')
         if response_text:
@@ -744,6 +776,8 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
                 # Validate that we got expected structure
                 if isinstance(parsed, dict):
                     logger.info(f"Successfully parsed board analytics JSON with {len(parsed)} keys")
+                    # Transform simplified format to full format for backward compatibility
+                    parsed = _transform_analytics_response(parsed)
                     return parsed
                 else:
                     logger.warning(f"AI returned non-dict JSON: {type(parsed)}")
