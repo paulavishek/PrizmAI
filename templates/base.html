@@ -155,10 +155,12 @@
                                         <i class="fas fa-history me-1"></i> Permission Audit Log
                                     </a></li>
                                 {% endif %}
+                                {% if not is_demo_account %}
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{% url 'ai_usage:dashboard' %}">
                                     <i class="fas fa-robot me-1"></i> AI Usage
                                 </a></li>
+                                {% endif %}
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{% url 'logout' %}">Logout</a></li>
                             </ul>

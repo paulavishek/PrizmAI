@@ -3103,6 +3103,24 @@ def suggest_task_priority_api(request):
         "is_ml_based": true
     }
     """
+    # Check demo AI generation limit first
+    ai_limit_status = check_ai_generation_limit(request)
+    if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+        record_limitation_hit(request, 'ai_limit')
+        return JsonResponse({
+            'error': ai_limit_status['message'],
+            'quota_exceeded': True,
+            'demo_limit': True
+        }, status=429)
+    
+    # Check AI quota for authenticated users (blocks demo accounts)
+    has_quota, quota, remaining = check_ai_quota(request.user)
+    if not has_quota:
+        return JsonResponse({
+            'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+            'quota_exceeded': True
+        }, status=429)
+    
     try:
         data = json.loads(request.body)
         task_id = data.get('task_id')
@@ -3685,6 +3703,24 @@ def extract_task_skills_api(request, task_id):
     """
     AI-extract required skills from a task description
     """
+    # Check demo AI generation limit first
+    ai_limit_status = check_ai_generation_limit(request)
+    if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+        record_limitation_hit(request, 'ai_limit')
+        return JsonResponse({
+            'error': ai_limit_status['message'],
+            'quota_exceeded': True,
+            'demo_limit': True
+        }, status=429)
+    
+    # Check AI quota for authenticated users (blocks demo accounts)
+    has_quota, quota, remaining = check_ai_quota(request.user)
+    if not has_quota:
+        return JsonResponse({
+            'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+            'quota_exceeded': True
+        }, status=429)
+    
     try:
         task = get_object_or_404(Task, pk=task_id)
         board = task.column.board

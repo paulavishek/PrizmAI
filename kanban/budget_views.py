@@ -969,10 +969,31 @@ def ai_learn_patterns(request, board_id):
     """
     Trigger AI pattern learning
     """
+    from api.ai_usage_utils import check_ai_quota
+    from kanban.utils.demo_limits import check_ai_generation_limit, record_limitation_hit
+    
     board = get_object_or_404(Board, id=board_id)
     
     if not _can_access_board(request.user, board):
         return JsonResponse({'error': 'Permission denied'}, status=403)
+    
+    # Check demo AI generation limit first
+    ai_limit_status = check_ai_generation_limit(request)
+    if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+        record_limitation_hit(request, 'ai_limit')
+        return JsonResponse({
+            'error': ai_limit_status['message'],
+            'quota_exceeded': True,
+            'demo_limit': True
+        }, status=429)
+    
+    # Check AI quota for authenticated users (blocks demo accounts)
+    has_quota, quota, remaining = check_ai_quota(request.user)
+    if not has_quota:
+        return JsonResponse({
+            'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+            'quota_exceeded': True
+        }, status=429)
     
     try:
         budget = ProjectBudget.objects.get(board=board)

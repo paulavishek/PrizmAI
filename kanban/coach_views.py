@@ -174,6 +174,9 @@ def generate_suggestions(request, board_id):
     Generate new coaching suggestions for a board
     ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
+    from api.ai_usage_utils import check_ai_quota
+    from kanban.utils.demo_limits import check_ai_generation_limit
+    
     board = get_object_or_404(Board, id=board_id)
     
     # Check access
@@ -182,6 +185,18 @@ def generate_suggestions(request, board_id):
         if error_response:
             return error_response
         return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
+    
+    # Check if user can use AI features (not a demo account)
+    can_use_ai = True
+    if request.user.is_authenticated:
+        has_quota, _, _ = check_ai_quota(request.user)
+        if not has_quota:
+            can_use_ai = False
+    else:
+        # For anonymous users, check demo AI generation limit
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            can_use_ai = False
     
     try:
         # Run rule engine
@@ -230,18 +245,19 @@ def generate_suggestions(request, board_id):
             )
             suggestion_data['confidence_score'] = adjusted_confidence
             
-            # Always attempt AI enhancement for detailed format
-            try:
-                original_method = suggestion_data.get('generation_method', 'rule')
-                suggestion_data = ai_coach.enhance_suggestion_with_ai(
-                    suggestion_data, context
-                )
-                # Track if enhancement was successful
-                if suggestion_data.get('generation_method') == 'hybrid':
-                    enhanced_count += 1
-                    logger.debug(f"Successfully enhanced: {suggestion_data['title']}")
-            except Exception as enhance_error:
-                logger.error(f"AI enhancement failed for '{suggestion_data['title']}': {enhance_error}")
+            # Only attempt AI enhancement if user has AI access (not a demo account)
+            if can_use_ai:
+                try:
+                    original_method = suggestion_data.get('generation_method', 'rule')
+                    suggestion_data = ai_coach.enhance_suggestion_with_ai(
+                        suggestion_data, context
+                    )
+                    # Track if enhancement was successful
+                    if suggestion_data.get('generation_method') == 'hybrid':
+                        enhanced_count += 1
+                        logger.debug(f"Successfully enhanced: {suggestion_data['title']}")
+                except Exception as enhance_error:
+                    logger.error(f"AI enhancement failed for '{suggestion_data['title']}': {enhance_error}")
             
             # Check if similar suggestion already exists
             # Block if recent suggestion exists in these statuses:

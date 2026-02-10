@@ -25,6 +25,14 @@ def ai_usage_dashboard(request):
     """
     Main AI usage dashboard showing consumption and quota information
     """
+    # Check if user is a demo account - redirect them since AI features are not available
+    if hasattr(request.user, 'email') and request.user.email:
+        if '@demo.prizmai.local' in request.user.email.lower():
+            from django.contrib import messages
+            messages.info(request, 'AI features are not available for demo accounts. Please create a free account to access AI-powered features.')
+            from django.shortcuts import redirect
+            return redirect('dashboard')
+    
     # Get or create quota for user
     quota = get_or_create_quota(request.user)
     

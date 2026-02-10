@@ -31,6 +31,14 @@ def demo_context(request):
         'simplified_mode': SIMPLIFIED_MODE,
     }
     
+    # Check if user is a demo account (sam, jordan, alex) - they cannot use AI features
+    # Demo accounts have @demo.prizmai.local email domain
+    is_demo_account = False
+    if request.user.is_authenticated and hasattr(request.user, 'email') and request.user.email:
+        if '@demo.prizmai.local' in request.user.email.lower():
+            is_demo_account = True
+    context['is_demo_account'] = is_demo_account
+    
     # SIMPLIFIED MODE: Much simpler logic
     if SIMPLIFIED_MODE:
         context['is_demo_mode'] = False  # No special demo mode in simplified
