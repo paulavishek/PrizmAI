@@ -116,9 +116,10 @@ class TaskFormTests(TestCase):
     
     def test_task_form_due_date_validation(self):
         """Test due date validation"""
-        from datetime import datetime, timedelta
+        from django.utils import timezone
+        from datetime import timedelta
         
-        past_date = datetime.now() - timedelta(days=1)
+        past_date = timezone.now() - timedelta(days=1)
         form = TaskForm(data={
             'title': 'Test Task',
             'column': self.column.id,

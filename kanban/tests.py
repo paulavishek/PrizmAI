@@ -1,6 +1,7 @@
 # filepath: c:\Users\Avishek Paul\TaskFlow\kanban\tests.py
 import json
-from datetime import datetime, timedelta
+from django.utils import timezone
+from datetime import timedelta
 from django.test import TestCase, TransactionTestCase
 from django.contrib.auth.models import User
 from django.urls import reverse
@@ -160,7 +161,7 @@ class TaskTestCase(TestCase):
     
     def test_task_creation(self):
         """Test creating tasks with all fields"""
-        due_date = datetime.now() + timedelta(days=7)
+        due_date = timezone.now() + timedelta(days=7)
         task = Task.objects.create(
             title='Test Task',
             description='This is a test task',

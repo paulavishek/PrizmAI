@@ -4,7 +4,7 @@ from channels.db import database_sync_to_async
 from django.contrib.auth.models import User
 from .models import ChatMessage, ChatRoom, TaskThreadComment, UserTypingStatus, Notification
 from kanban.models import Task
-from datetime import datetime
+from django.utils import timezone
 
 
 class ChatRoomConsumer(AsyncWebsocketConsumer):
@@ -423,7 +423,7 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
             
             if all_read:
                 message.is_read = True
-                message.read_at = datetime.now()
+                message.read_at = timezone.now()
                 message.save()
             
             return {
@@ -489,7 +489,7 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
                 
                 if all_read and not message.is_read:
                     message.is_read = True
-                    message.read_at = datetime.now()
+                    message.read_at = timezone.now()
                     message.save()
                 
                 updates.append({

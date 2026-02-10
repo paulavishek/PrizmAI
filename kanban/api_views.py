@@ -224,7 +224,6 @@ def download_comment_summary_pdf(request, task_id):
         from reportlab.lib import colors
         from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
         from io import BytesIO
-        from datetime import datetime
         from django.http import HttpResponse
         
         # Get the task and verify user access
@@ -312,7 +311,7 @@ def download_comment_summary_pdf(request, task_id):
         
         # Add subtitle
         subtitle = Paragraph(
-            f"Task #{task.id} | Board: {board.name}<br/>Generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}",
+            f"Task #{task.id} | Board: {board.name}<br/>Generated on {timezone.now().strftime('%B %d, %Y at %I:%M %p')}",
             subtitle_style
         )
         elements.append(subtitle)
@@ -773,7 +772,6 @@ def download_analytics_summary_pdf(request, board_id):
         from reportlab.lib import colors
         from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
         from io import BytesIO
-        from datetime import datetime
         
         # Get the board and verify user access
         board = get_object_or_404(Board, id=board_id)
@@ -966,7 +964,7 @@ def download_analytics_summary_pdf(request, board_id):
         elements.append(title)
         
         # Add subtitle
-        subtitle = Paragraph(f"AI Analytics Summary - Generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}", subtitle_style)
+        subtitle = Paragraph(f"AI Analytics Summary - Generated on {timezone.now().strftime('%B %d, %Y at %I:%M %p')}", subtitle_style)
         elements.append(subtitle)
         elements.append(Spacer(1, 0.3 * inch))
         
@@ -1141,7 +1139,7 @@ def download_analytics_summary_pdf(request, board_id):
         # Create response
         from django.http import HttpResponse
         response = HttpResponse(pdf, content_type='application/pdf')
-        response['Content-Disposition'] = f'attachment; filename="{board.name}_Analytics_Summary_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf"'
+        response['Content-Disposition'] = f'attachment; filename="{board.name}_Analytics_Summary_{timezone.now().strftime("%Y%m%d_%H%M%S")}.pdf"'
         
         return response
         

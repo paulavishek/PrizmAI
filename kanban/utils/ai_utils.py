@@ -1081,8 +1081,9 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
                     pass  # Keep original trend if parsing fails
             
             # Calculate actual dates from the predicted days
-            from datetime import datetime, timedelta
-            today = datetime.now().date()
+            from django.utils import timezone
+            from datetime import timedelta
+            today = timezone.now().date()
             
             estimated_days = ai_response.get('estimated_days_from_today', 3)
             optimistic_days = ai_response.get('alternative_scenarios', {}).get('optimistic_days', estimated_days - 1)
