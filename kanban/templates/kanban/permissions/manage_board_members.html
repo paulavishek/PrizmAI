@@ -37,7 +37,6 @@
                                 <th>Added By</th>
                                 <th>Added Date</th>
                                 <th>Status</th>
-                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -66,17 +65,10 @@
                                 <td>
                                     <span class="badge bg-success">Active</span>
                                 </td>
-                                <td>
-                                    {% if member_data.user != board.created_by %}
-                                    <button class="btn btn-sm btn-danger" onclick="removeMemberFromBoard({{ board.id }}, {{ member_data.user.id }}, '{{ member_data.user.username }}')">
-                                        <i class="fas fa-user-times"></i> Remove
-                                    </button>
-                                    {% endif %}
-                                </td>
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="5" class="text-center text-muted">No members found</td>
+                                <td colspan="4" class="text-center text-muted">No members found</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -95,26 +87,6 @@ function goBack() {
     } else {
         window.location.href = "{% url 'board_detail' board.id %}";
     }
-}
-
-function removeMemberFromBoard(boardId, userId, username) {
-    if (!confirm(`Are you sure you want to remove ${username} from this board?`)) {
-        return;
-    }
-    
-    // Create and submit a form to remove the member
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = `/kanban/boards/${boardId}/members/${userId}/remove/`;
-    
-    const csrfInput = document.createElement('input');
-    csrfInput.type = 'hidden';
-    csrfInput.name = 'csrfmiddlewaretoken';
-    csrfInput.value = '{{ csrf_token }}';
-    
-    form.appendChild(csrfInput);
-    document.body.appendChild(form);
-    form.submit();
 }
 </script>
 {% endblock %}
