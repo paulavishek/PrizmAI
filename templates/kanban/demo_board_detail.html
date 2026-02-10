@@ -408,9 +408,6 @@ kbd {
     <div>
         <h1 class="h3 mb-0 text-gray-800">
             {{ board.name }}
-            <span class="badge bg-info ms-2" title="Your role on this board">
-                <i class="fas fa-user-shield"></i> {{ user_role_name|default:"Admin" }}
-            </span>
         </h1>
         {% if board.description %}
             <p class="text-muted">{{ board.description }}</p>
@@ -462,10 +459,7 @@ kbd {
             </a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}">
-                <i class="fas fa-user-shield me-2 text-success"></i>Manage Members & Roles
-            </a></li>
-            <li><a class="dropdown-item" href="{% url 'view_permission_audit' board.id %}">
-                <i class="fas fa-history me-2 text-info"></i>Permission Audit Log
+                <i class="fas fa-users me-2 text-success"></i>Manage Members
             </a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}">Edit Board</a></li>

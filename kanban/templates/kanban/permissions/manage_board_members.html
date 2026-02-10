@@ -13,24 +13,27 @@
                     <button onclick="goBack()" class="btn btn-secondary">
                         <i class="fas fa-arrow-left"></i> Back
                     </button>
-                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMemberModal">
-                        <i class="fas fa-user-plus"></i> Add Member
-                    </button>
                 </div>
             </div>
+
+            <!-- Info Alert for Demo Boards -->
+            {% if board.is_official_demo_board %}
+            <div class="alert alert-info mb-4">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Demo Board:</strong> Members are automatically added when they access this board.
+            </div>
+            {% endif %}
 
             <!-- Current Members -->
             <div class="card shadow mb-4">
                 <div class="card-header">
-                    <h5 class="mb-0">Current Members ({{ memberships.count }})</h5>
+                    <h5 class="mb-0">Current Members ({{ all_members_data|length }})</h5>
                 </div>
                 <div class="card-body">
                     <table class="table table-hover">
                         <thead>
                             <tr>
                                 <th>Member</th>
-                                <th>Organization</th>
-                                <th>Role</th>
                                 <th>Added By</th>
                                 <th>Added Date</th>
                                 <th>Status</th>
@@ -44,22 +47,6 @@
                                     <strong>{{ member_data.user.username }}</strong>
                                     {% if member_data.user == board.created_by %}
                                     <span class="badge bg-warning">Creator</span>
-                                    {% endif %}
-                                </td>
-                                <td>{{ member_data.user.profile.organization.name|default:"—" }}</td>
-                                <td>
-                                    {% if member_data.has_role %}
-                                    <select class="form-select form-select-sm" style="width: auto;" 
-                                            onchange="changeMemberRole({{ member_data.membership.id }}, this.value)"
-                                            {% if member_data.user == board.created_by %}disabled{% endif %}>
-                                        {% for role in available_roles %}
-                                        <option value="{{ role.id }}" {% if role.id == member_data.membership.role.id %}selected{% endif %}>
-                                            {{ role.name }}
-                                        </option>
-                                        {% endfor %}
-                                    </select>
-                                    {% else %}
-                                    <span class="badge bg-info">Member</span>
                                     {% endif %}
                                 </td>
                                 <td>
@@ -77,18 +64,7 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if member_data.has_role %}
-                                        {% if member_data.membership.is_active %}
-                                        <span class="badge bg-success">Active</span>
-                                        {% else %}
-                                        <span class="badge bg-secondary">Inactive</span>
-                                        {% endif %}
-                                        {% if member_data.membership.expires_at %}
-                                        <br><small class="text-muted">Expires: {{ member_data.membership.expires_at|date:"M d, Y" }}</small>
-                                        {% endif %}
-                                    {% else %}
                                     <span class="badge bg-success">Active</span>
-                                    {% endif %}
                                 </td>
                                 <td>
                                     {% if member_data.user != board.created_by %}
@@ -100,174 +76,43 @@
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="7" class="text-center text-muted">No members found</td>
+                                <td colspan="5" class="text-center text-muted">No members found</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
             </div>
-
-            <!-- Available Users to Add -->
-            {% if org_users.exists %}
-            <div class="card shadow">
-                <div class="card-header">
-                    <h5 class="mb-0">Available Users</h5>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        {% for user in org_users %}
-                        <div class="col-md-4 mb-3">
-                            <div class="card">
-                                <div class="card-body">
-                                    <h6>{{ user.username }}</h6>
-                                    <p class="text-muted small mb-2">{{ user.email }}</p>
-                                    <button class="btn btn-sm btn-primary" 
-                                            onclick="quickAddMember({{ user.id }}, '{{ user.username }}')">
-                                        <i class="fas fa-plus"></i> Add
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-</div>
-
-<!-- Add Member Modal -->
-<div class="modal fade" id="addMemberModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form method="post" action="{% url 'add_board_member_with_role' board.id %}">
-                {% csrf_token %}
-                <div class="modal-header">
-                    <h5 class="modal-title">Add Board Member</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Select User *</label>
-                        <select name="user_id" class="form-select" required>
-                            <option value="">Choose a user...</option>
-                            {% for user in org_users %}
-                            <option value="{{ user.id }}">{{ user.username }} ({{ user.email }})</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Assign Role *</label>
-                        <select name="role_id" class="form-select" required>
-                            {% for role in available_roles %}
-                            <option value="{{ role.id }}" {% if role.is_default %}selected{% endif %}>
-                                {{ role.name }} - {{ role.description|truncatewords:10 }}
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add Member</button>
-                </div>
-            </form>
         </div>
     </div>
 </div>
 
 <script>
-function changeMemberRole(membershipId, newRoleId) {
-    if (!confirm('Are you sure you want to change this member\'s role?')) {
-        location.reload();
-        return;
+function goBack() {
+    // Try to go back, or navigate to board detail
+    if (window.history.length > 1) {
+        window.history.back();
+    } else {
+        window.location.href = "{% url 'board_detail' board.id %}";
     }
-    
-    fetch("{% url 'change_member_role' 0 %}".replace('0', membershipId), {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-CSRFToken': '{{ csrf_token }}'
-        },
-        body: `role_id=${newRoleId}`
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert('Error: ' + (data.error || 'Unknown error'));
-            location.reload();
-        }
-    })
-    .catch(error => {
-        alert('Error changing role');
-        location.reload();
-    });
 }
 
-function removeMember(membershipId, username) {
+function removeMemberFromBoard(boardId, userId, username) {
     if (!confirm(`Are you sure you want to remove ${username} from this board?`)) {
         return;
     }
     
-    fetch("{% url 'remove_board_member_role' 0 %}".replace('0', membershipId), {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-CSRFToken': '{{ csrf_token }}'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            location.reload();
-        } else {
-            alert('Error: ' + (data.error || 'Unknown error'));
-        }
-    })
-    .catch(error => {
-        alert('Error removing member');
-    });
-}
-
-function quickAddMember(userId, username) {
-    // Get default role
-    const defaultRole = document.querySelector('select[name="role_id"] option[selected]');
-    if (!defaultRole) {
-        alert('No default role found');
-        return;
-    }
-    
-    if (!confirm(`Add ${username} with ${defaultRole.text.split(' - ')[0]} role?`)) {
-        return;
-    }
-    
+    // Create and submit a form to remove the member
     const form = document.createElement('form');
     form.method = 'POST';
-    form.action = "{% url 'add_board_member_with_role' board.id %}";
+    form.action = `/kanban/boards/${boardId}/members/${userId}/remove/`;
     
     const csrfInput = document.createElement('input');
     csrfInput.type = 'hidden';
     csrfInput.name = 'csrfmiddlewaretoken';
     csrfInput.value = '{{ csrf_token }}';
     
-    const userInput = document.createElement('input');
-    userInput.type = 'hidden';
-    userInput.name = 'user_id';
-    userInput.value = userId;
-    
-    const roleInput = document.createElement('input');
-    roleInput.type = 'hidden';
-    roleInput.name = 'role_id';
-    roleInput.value = defaultRole.value;
-    
     form.appendChild(csrfInput);
-    form.appendChild(userInput);
-    form.appendChild(roleInput);
-    
     document.body.appendChild(form);
     form.submit();
 }

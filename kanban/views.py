@@ -1547,27 +1547,39 @@ def remove_board_member(request, board_id, user_id):
     has_permission = (
         board.created_by == request.user or  # Board creator
         (user_profile and user_profile.is_admin) or  # Organization admin
-        (user_profile and request.user == board.organization.created_by)  # Organization creator
+        (user_profile and board.organization and request.user == board.organization.created_by)  # Organization creator
     )
+    
+    # Get the redirect destination (manage_board_members if came from there, else board_detail)
+    referer = request.META.get('HTTP_REFERER', '')
+    redirect_to_manage = 'manage' in referer
     
     if not has_permission:
         messages.error(request, "You don't have permission to remove members from this board.")
+        if redirect_to_manage:
+            return redirect('manage_board_members', board_id=board.id)
         return redirect('board_detail', board_id=board.id)
     
     # Don't allow removing the board creator
     if user_to_remove == board.created_by:
         messages.error(request, "You cannot remove the board creator.")
+        if redirect_to_manage:
+            return redirect('manage_board_members', board_id=board.id)
         return redirect('board_detail', board_id=board.id)
     
     # Check if user is actually a member of the board
     if user_to_remove not in board.members.all():
         messages.error(request, "This user is not a member of the board.")
+        if redirect_to_manage:
+            return redirect('manage_board_members', board_id=board.id)
         return redirect('board_detail', board_id=board.id)
     
     # Remove the member
     board.members.remove(user_to_remove)
     messages.success(request, f'{user_to_remove.username} has been removed from the board.')
     
+    if redirect_to_manage:
+        return redirect('manage_board_members', board_id=board.id)
     return redirect('board_detail', board_id=board.id)
 
 def delete_board(request, board_id):
