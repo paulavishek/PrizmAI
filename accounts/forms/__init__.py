@@ -6,11 +6,14 @@ from ..models import Organization, UserProfile
 from kanban.utils.email_validation import validate_email_for_signup
 
 class LoginForm(AuthenticationForm):
-    username = forms.CharField(widget=forms.TextInput(attrs={
-        'class': 'form-control', 
-        'placeholder': 'Username',
-        'autocomplete': 'off'  # Disable browser autocomplete for username
-    }))
+    username = forms.CharField(
+        label='Username or Email',
+        widget=forms.TextInput(attrs={
+            'class': 'form-control', 
+            'placeholder': 'Username or Email',
+            'autocomplete': 'off'  # Disable browser autocomplete for username
+        })
+    )
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={
             'class': 'form-control', 
@@ -435,8 +438,77 @@ class SocialSignupForm(forms.Form):
         
         return email
     
+    def try_save(self, request):
+        """
+        New API method for django-allauth 65.9.0+
+        Creates and saves the user, returns (user, response) tuple.
+        Response is None if we just want to continue, or an HttpResponse to redirect.
+        """
+        from allauth.account.internal import flows
+        from allauth.socialaccount.models import SocialLogin
+        
+        # Get the sociallogin from the request session
+        if not self.sociallogin:
+            from allauth.socialaccount import app_settings
+            state_id = request.GET.get(app_settings.STATE_ID_KEY) or request.POST.get(app_settings.STATE_ID_KEY)
+            if state_id:
+                self.sociallogin = SocialLogin.state_from_request(request)
+        
+        if not self.sociallogin:
+            return None, None
+        
+        # Update user data with form input
+        user = self.sociallogin.user
+        user.username = self.cleaned_data.get('username')
+        user.email = self.cleaned_data.get('email')
+        
+        # Extract name from Google data if available
+        if self.sociallogin.account.provider == 'google':
+            extra_data = self.sociallogin.account.extra_data
+            user.first_name = extra_data.get('given_name', '')
+            user.last_name = extra_data.get('family_name', '')
+        
+        # Save the user first
+        user.save()
+        
+        # Complete the social connection and create UserProfile through adapter
+        self.sociallogin.save(request, connect=False)
+        
+        # Create UserProfile if it doesn't exist (fallback safety)
+        from accounts.models import UserProfile, Organization
+        if not hasattr(user, 'profile'):
+            domain = user.email.split('@')[-1].lower()
+            try:
+                organization = Organization.objects.get(domain=domain)
+                UserProfile.objects.create(
+                    user=user,
+                    organization=organization,
+                    is_admin=False,
+                    completed_wizard=True
+                )
+            except Organization.DoesNotExist:
+                UserProfile.objects.create(
+                    user=user,
+                    organization=None,
+                    is_admin=False,
+                    completed_wizard=True
+                )
+        
+        # Perform login
+        ret = flows.login.perform_login(
+            request,
+            user,
+            email_verification='optional',
+            redirect_url=None,
+            signal_kwargs={"sociallogin": self.sociallogin},
+            signup=True,
+        )
+        
+        return user, ret
+    
     def signup(self, request, user):
         """
+        Legacy method for backward compatibility (still used internally).
         Called after user is created. Can be used to add custom logic.
         """
         # Set the username from the form

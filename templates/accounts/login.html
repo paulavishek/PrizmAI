@@ -43,9 +43,10 @@
                 <form method="post">
                     {% csrf_token %}
                     
-                    <!-- Username Field -->
+                    <!-- Username or Email Field -->
                     <div class="mb-3">
-                        <label for="id_username" class="form-label">Username</label>
+                        <label for="id_username" class="form-label">Username or Email</label>
+                        <small class="form-text text-muted d-block mb-2">You can login with either your username or email address</small>
                         {{ form.username }}
                         {% if form.username.errors %}
                             <div class="text-danger">
