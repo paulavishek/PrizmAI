@@ -494,13 +494,10 @@ class SocialSignupForm(forms.Form):
                     completed_wizard=True
                 )
         
-        # Perform login
+        # Perform login using the updated API
         ret = flows.login.perform_login(
             request,
             user,
-            email_verification='optional',
-            redirect_url=None,
-            signal_kwargs={"sociallogin": self.sociallogin},
             signup=True,
         )
         
