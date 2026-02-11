@@ -2279,6 +2279,15 @@ class Command(BaseCommand):
             )
             snapshots_created += 1
             
+            # IMPORTANT: Set the board's baseline fields so get_current_scope_status() works
+            # This was missing and caused scope creep alert to show without baseline on dashboard
+            board.baseline_task_count = baseline_tasks
+            board.baseline_complexity_total = baseline_complexity
+            board.baseline_set_date = now - timedelta(days=14)
+            board.baseline_set_by = admin_user
+            board.save(update_fields=['baseline_task_count', 'baseline_complexity_total', 
+                                      'baseline_set_date', 'baseline_set_by'])
+            
             # Calculate scope change percentage  
             scope_change_pct = round(((total_tasks - baseline_tasks) / baseline_tasks) * 100, 1) if baseline_tasks > 0 else 0
             complexity_change_pct = round(((total_complexity - baseline_complexity) / baseline_complexity) * 100, 1) if baseline_complexity > 0 else 0
