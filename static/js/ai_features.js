@@ -348,6 +348,27 @@ function initAILssClassification() {
         if (classifySpinner) classifySpinner.classList.remove('d-none');
         classifyButton.disabled = true;
         
+        // Collect budget/cost data if available
+        const estimatedCostField = document.getElementById('id_estimated_cost');
+        const estimatedHoursField = document.getElementById('id_estimated_hours');
+        const hourlyRateField = document.getElementById('id_hourly_rate');
+        
+        const requestData = { 
+            title: title,
+            description: description
+        };
+        
+        // Add budget data if available
+        if (estimatedCostField && estimatedCostField.value) {
+            requestData.estimated_cost = parseFloat(estimatedCostField.value);
+        }
+        if (estimatedHoursField && estimatedHoursField.value) {
+            requestData.estimated_hours = parseFloat(estimatedHoursField.value);
+        }
+        if (hourlyRateField && hourlyRateField.value) {
+            requestData.hourly_rate = parseFloat(hourlyRateField.value);
+        }
+        
         // Make API call
         fetch('/api/suggest-lss-classification/', {
             method: 'POST',
@@ -355,10 +376,7 @@ function initAILssClassification() {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
             },
-            body: JSON.stringify({ 
-                title: title,
-                description: description
-            })
+            body: JSON.stringify(requestData)
         })
         .then(response => {
             if (!response.ok) {
@@ -1306,6 +1324,11 @@ function initDeadlinePrediction() {
             dependenciesCount = Array.from(dependenciesSelect.selectedOptions).length;
         }
         
+        // Collect budget/cost fields for enhanced deadline prediction
+        const estimatedCostInput = document.getElementById('id_estimated_cost');
+        const estimatedHoursInput = document.getElementById('id_estimated_hours');
+        const hourlyRateInput = document.getElementById('id_hourly_rate');
+        
         const taskData = {
             title: titleInput.value.trim(),
             description: descriptionInput ? descriptionInput.value : '',
@@ -1320,7 +1343,11 @@ function initDeadlinePrediction() {
             collaboration_required: collaborationRequiredCheckbox ? collaborationRequiredCheckbox.checked : false,
             dependencies_count: dependenciesCount,
             risk_score: riskScore,
-            risk_level: riskLevelSelect ? riskLevelSelect.value || null : null
+            risk_level: riskLevelSelect ? riskLevelSelect.value || null : null,
+            // Budget/effort fields for better timeline estimation
+            estimated_hours: estimatedHoursInput && estimatedHoursInput.value ? parseFloat(estimatedHoursInput.value) : null,
+            estimated_cost: estimatedCostInput && estimatedCostInput.value ? parseFloat(estimatedCostInput.value) : null,
+            hourly_rate: hourlyRateInput && hourlyRateInput.value ? parseFloat(hourlyRateInput.value) : null
         };
         
         predictTaskDeadline(taskData, function(error, data) {

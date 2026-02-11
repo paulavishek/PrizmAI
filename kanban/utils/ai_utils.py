@@ -493,9 +493,9 @@ def summarize_comments(comments: List[Dict]) -> Optional[Dict]:
         logger.error(f"Error summarizing comments: {str(e)}")
         return None
 
-def suggest_lean_classification(title: str, description: str) -> Optional[Dict]:
+def suggest_lean_classification(title: str, description: str, estimated_cost: float = None, estimated_hours: float = None, hourly_rate: float = None) -> Optional[Dict]:
     """
-    Suggest Lean Six Sigma classification for a task based on its title and description.
+    Suggest Lean Six Sigma classification for a task based on its title, description, and budget data.
     
     Provides explainable AI output including confidence scores, contributing factors,
     and alternative classifications to support user decision-making.
@@ -503,23 +503,47 @@ def suggest_lean_classification(title: str, description: str) -> Optional[Dict]:
     Args:
         title: The task title
         description: The task description
+        estimated_cost: Estimated cost for this task (optional)
+        estimated_hours: Estimated hours to complete (optional)
+        hourly_rate: Hourly rate for labor cost calculation (optional)
         
     Returns:
         A dictionary with suggested classification, justification, confidence,
         and explainability data or None if suggestion fails
     """
     try:
+        # Build budget context string
+        budget_context = ""
+        if estimated_cost is not None or estimated_hours is not None or hourly_rate is not None:
+            budget_parts = []
+            if estimated_cost is not None and estimated_cost > 0:
+                budget_parts.append(f"Estimated Cost: ${estimated_cost:,.2f}")
+            if estimated_hours is not None and estimated_hours > 0:
+                budget_parts.append(f"Estimated Hours: {estimated_hours:.1f} hours")
+            if hourly_rate is not None and hourly_rate > 0:
+                budget_parts.append(f"Hourly Rate: ${hourly_rate:.2f}/hr")
+                if estimated_hours is not None and estimated_hours > 0:
+                    labor_cost = estimated_hours * hourly_rate
+                    budget_parts.append(f"Estimated Labor Cost: ${labor_cost:,.2f}")
+            if budget_parts:
+                budget_context = "\n\nBudget & Cost Information:\n- " + "\n- ".join(budget_parts)
+        
         prompt = f"""
-        Based on this task's title and description, suggest a Lean Six Sigma classification
+        Based on this task's title, description, and budget information, suggest a Lean Six Sigma classification
         (Value-Added, Necessary Non-Value-Added, or Waste/Eliminate) with full explainability.
         
         Task Title: {title}
-        Task Description: {description or '(No description provided)'}
+        Task Description: {description or '(No description provided)'}{budget_context}
         
         Classification Definitions:
         - Value-Added (VA): Activities that transform the product/service in a way the customer values
         - Necessary Non-Value-Added (NNVA): Required activities that don't directly add value for the customer
         - Waste/Eliminate: Activities that consume resources without adding value
+        
+        IMPORTANT: Consider the cost/budget information in your analysis:
+        - High-cost tasks that don't directly add customer value may indicate waste
+        - Low-cost tasks with high customer impact are typically value-added
+        - Required but costly administrative/compliance tasks fall under Necessary NVA
         
         Analyze the task and provide a comprehensive, explainable recommendation.
         
@@ -847,8 +871,8 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
     Suggest optimal priority level for a task based on context.
     
     Args:
-        task_data: Dictionary containing task information (title, description, due_date, etc.)
-        board_context: Dictionary containing board context (workload, deadlines, etc.)
+        task_data: Dictionary containing task information (title, description, due_date, budget fields, etc.)
+        board_context: Dictionary containing board context (workload, deadlines, budget summary, etc.)
         
     Returns:
         A dictionary with suggested priority and reasoning or None if suggestion fails
@@ -859,12 +883,44 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
         description = task_data.get('description', '')
         due_date = task_data.get('due_date', '')
         current_priority = task_data.get('current_priority', 'medium')
-          # Extract board context
+        
+        # Extract budget/cost information
+        estimated_cost = task_data.get('estimated_cost')
+        estimated_hours = task_data.get('estimated_hours')
+        hourly_rate = task_data.get('hourly_rate')
+        
+        # Build budget context string
+        budget_info = ""
+        if estimated_cost is not None or estimated_hours is not None or hourly_rate is not None:
+            budget_parts = []
+            if estimated_cost is not None and float(estimated_cost) > 0:
+                budget_parts.append(f"Estimated Cost: ${float(estimated_cost):,.2f}")
+            if estimated_hours is not None and float(estimated_hours) > 0:
+                budget_parts.append(f"Estimated Hours: {float(estimated_hours):.1f} hours")
+            if hourly_rate is not None and float(hourly_rate) > 0:
+                budget_parts.append(f"Hourly Rate: ${float(hourly_rate):.2f}/hr")
+                if estimated_hours is not None and float(estimated_hours) > 0:
+                    labor_cost = float(estimated_hours) * float(hourly_rate)
+                    budget_parts.append(f"Estimated Labor Cost: ${labor_cost:,.2f}")
+            if budget_parts:
+                budget_info = "\n        - " + "\n        - ".join(budget_parts)
+        
+        # Extract board context
         total_tasks = board_context.get('total_tasks', 0)
         high_priority_count = board_context.get('high_priority_count', 0)
         urgent_count = board_context.get('urgent_count', 0)
         overdue_count = board_context.get('overdue_count', 0)
         upcoming_deadlines = board_context.get('upcoming_deadlines', [])
+        
+        # Extract board budget context if available
+        avg_task_cost = board_context.get('avg_task_cost')
+        total_board_budget = board_context.get('total_board_budget')
+        
+        board_budget_info = ""
+        if avg_task_cost is not None:
+            board_budget_info += f"\n        - Average Task Cost on Board: ${float(avg_task_cost):,.2f}"
+        if total_board_budget is not None:
+            board_budget_info += f"\n        - Total Board Budget: ${float(total_board_budget):,.2f}"
         
         # Handle case where upcoming_deadlines might be an integer count instead of a list
         if isinstance(upcoming_deadlines, int):
@@ -884,19 +940,20 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
            "High Impact due to [keyword], but Low Urgency due to [due date]"
         4. **Workload Distribution**: Consider if the board already has too many high/urgent tasks
         5. **Dependencies**: Tasks that block others need higher priority
+        6. **Budget & Cost Impact**: Higher-cost tasks may warrant higher priority for ROI optimization
         
         ## Task Information:
         - Title: {title}
         - Description: {description or 'No description provided'}
         - Current Priority: {current_priority}
-        - Due Date: {due_date or 'No due date set'}
+        - Due Date: {due_date or 'No due date set'}{budget_info if budget_info else ''}
         
         ## Board Context:
         - Total Tasks on Board: {total_tasks}
         - Current High Priority Tasks: {high_priority_count}
         - Current Urgent Tasks: {urgent_count}
         - Overdue Tasks: {overdue_count}
-        - Tasks Due Soon: {upcoming_deadlines_count}
+        - Tasks Due Soon: {upcoming_deadlines_count}{board_budget_info if board_budget_info else ''}
         
         Consider these factors in order:
         1. **Semantic keywords** in title/description indicating business impact
@@ -905,6 +962,7 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
         4. Current workload distribution (avoid too many high/urgent priorities)
         5. Dependencies and blockers that might be indicated
         6. Business value and risk implied by the task
+        7. **Budget/Cost considerations**: High-cost tasks may need higher priority for better ROI
         
         Available priority levels: low, medium, high, urgent
         
@@ -970,7 +1028,7 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
     The API endpoint validates that an assignee is selected before calling this function.
     
     Args:
-        task_data: Dictionary containing task information (must include 'assigned_to')
+        task_data: Dictionary containing task information (must include 'assigned_to', may include 'estimated_hours')
         team_context: Dictionary containing team performance and historical data
         
     Returns:
@@ -991,6 +1049,11 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         dependencies_count = task_data.get('dependencies_count', 0)
         risk_score = task_data.get('risk_score')
         risk_level = task_data.get('risk_level')
+        
+        # Extract budget/effort estimation fields
+        estimated_hours = task_data.get('estimated_hours')
+        estimated_cost = task_data.get('estimated_cost')
+        hourly_rate = task_data.get('hourly_rate')
         
         # Extract team context
         assignee_avg_completion = team_context.get('assignee_avg_completion_days', 0)
@@ -1029,6 +1092,19 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         else:
             skill_match_note = "Skill match not assessed"
         
+        # Format estimated hours info (critical for timeline calculation)
+        estimated_hours_note = ""
+        if estimated_hours is not None and float(estimated_hours) > 0:
+            hours_val = float(estimated_hours)
+            # Calculate expected days based on estimated hours and assignee velocity
+            if assignee_velocity > 0:
+                estimated_days_from_hours = hours_val / assignee_velocity
+                estimated_hours_note = f"- **Estimated Effort**: {hours_val:.1f} hours (approximately {estimated_days_from_hours:.1f} days at {assignee_velocity} hours/day)"
+            else:
+                estimated_hours_note = f"- **Estimated Effort**: {hours_val:.1f} hours"
+        else:
+            estimated_hours_note = "- Estimated Effort: Not specified (use complexity and historical data to estimate)"
+        
         prompt = f"""
         Predict a realistic timeline for completing this task based on the provided context and historical data.
         
@@ -1037,6 +1113,9 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         - Description: {description or 'No description provided'}
         - Priority: {priority}
         - Assigned To: {assigned_to}
+        
+        ## Budget & Effort Estimation:
+        {estimated_hours_note}
         
         ## Task Complexity & Resource Requirements:
         - Complexity Score: {complexity_score}/10 ({complexity_label})
@@ -1056,10 +1135,11 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         - Upcoming Holidays/Breaks: {', '.join(upcoming_holidays) if upcoming_holidays else 'None'}
         
         Consider these factors (ALL are important for prediction):
-        1. Task complexity score ({complexity_score}/10) - higher complexity = more time needed
-        2. {assigned_to}'s SPECIFIC historical performance (use the actual numbers above!)
-        3. Workload impact ({workload_impact}) - high/critical impact tasks need more focused time
-        4. Skill match ({skill_match_score}%) - poor match means learning curve adds time
+        1. **Estimated hours** (if provided) - use this as the primary basis for timeline calculation
+        2. Task complexity score ({complexity_score}/10) - higher complexity = more time needed
+        3. {assigned_to}'s SPECIFIC historical performance (use the actual numbers above!)
+        4. Workload impact ({workload_impact}) - high/critical impact tasks need more focused time
+        5. Skill match ({skill_match_score}%) - poor match means learning curve adds time
         5. Collaboration requirements - coordination overhead if team work is needed
         6. Dependencies ({dependencies_count}) - must wait for blocking tasks
         7. Risk level ({risk_level}) - high risk tasks often face delays

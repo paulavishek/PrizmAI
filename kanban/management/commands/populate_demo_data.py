@@ -1270,15 +1270,46 @@ class Command(BaseCommand):
             if created:
                 self.stdout.write(f'   ✅ Created budget for {config["name"]}: ${config["budget"]}')
 
-            # Create task costs
-            tasks = Task.objects.filter(column__board=board)[:15]
+            # Create task costs for ALL tasks (not just first 15)
+            tasks = Task.objects.filter(column__board=board)
             task_costs_created = 0
+            
+            # Define board-specific cost and hour ranges for realistic demo data
+            board_name = config['name']
+            if board_name == 'Software Development':
+                # Higher costs and hours for development work
+                min_cost, max_cost = 800, 8000
+                min_hours, max_hours = 8, 60
+                hourly_rate_range = (75, 150)  # Developer rates
+            elif board_name == 'Marketing Campaign':
+                # Moderate costs for marketing
+                min_cost, max_cost = 500, 5000
+                min_hours, max_hours = 4, 40
+                hourly_rate_range = (50, 100)  # Marketing rates
+            else:  # Bug Tracking
+                # Lower costs for bug fixes
+                min_cost, max_cost = 200, 3000
+                min_hours, max_hours = 2, 24
+                hourly_rate_range = (60, 120)  # QA/Dev rates
 
             for i, task in enumerate(tasks):
-                estimated_cost = Decimal(random.uniform(500, 5000)).quantize(Decimal('0.01'))
-                estimated_hours = Decimal(random.uniform(4, 40)).quantize(Decimal('0.01'))
+                # Base estimated cost and hours
+                estimated_cost = Decimal(random.uniform(min_cost, max_cost)).quantize(Decimal('0.01'))
+                estimated_hours = Decimal(random.uniform(min_hours, max_hours)).quantize(Decimal('0.01'))
+                hourly_rate = Decimal(random.uniform(*hourly_rate_range)).quantize(Decimal('0.01'))
+                
+                # Adjust based on task complexity if available
+                complexity = getattr(task, 'complexity_score', 5)
+                if complexity >= 8:
+                    # Complex tasks cost more
+                    estimated_cost = estimated_cost * Decimal('1.3')
+                    estimated_hours = estimated_hours * Decimal('1.4')
+                elif complexity <= 3:
+                    # Simple tasks cost less
+                    estimated_cost = estimated_cost * Decimal('0.6')
+                    estimated_hours = estimated_hours * Decimal('0.5')
 
-                # Some tasks over budget for realistic demo
+                # Some tasks over budget for realistic demo (every 5th task)
                 if i % 5 == 0:
                     actual_cost = estimated_cost * Decimal('1.25')
                 else:
@@ -1287,12 +1318,15 @@ class Command(BaseCommand):
                 TaskCost.objects.get_or_create(
                     task=task,
                     defaults={
-                        'estimated_cost': estimated_cost,
+                        'estimated_cost': estimated_cost.quantize(Decimal('0.01')),
                         'actual_cost': actual_cost.quantize(Decimal('0.01')),
-                        'estimated_hours': estimated_hours,
+                        'estimated_hours': estimated_hours.quantize(Decimal('0.01')),
+                        'hourly_rate': hourly_rate,
                     }
                 )
                 task_costs_created += 1
+            
+            self.stdout.write(f'   ✅ Created {task_costs_created} task costs for {config["name"]}')
 
             # Create historical ROI snapshots (10 months of data)
             total_tasks = Task.objects.filter(column__board=board).count()

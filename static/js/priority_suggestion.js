@@ -564,8 +564,13 @@ class PrioritySuggestionWidget {
             'workload_impact'
         ];
         
+        // Budget/Cost fields for enhanced AI analysis
+        const budgetFields = [
+            'estimated_cost', 'estimated_hours', 'hourly_rate'
+        ];
+        
         // Combine all fields
-        const allFields = [...basicFields, ...advancedFields];
+        const allFields = [...basicFields, ...advancedFields, ...budgetFields];
         
         allFields.forEach(field => {
             const element = document.getElementById(`id_${field}`);
