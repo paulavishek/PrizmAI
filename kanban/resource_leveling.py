@@ -608,20 +608,30 @@ class ResourceLevelingService:
         
         suggestions = []
         
-        # NOTE: Removed temp_workload_adjustments tracking
-        # Each suggestion now shows current actual workload, not hypothetical future states
-        # This prevents confusing users with incrementing task counts (1→2→3)
-        # that assume they'll accept all suggestions in sequence
+        # Track how many suggestions target each user to avoid flooding one person
+        # This is used to LIMIT suggestions per user, not to inflate displayed workload
+        # Max 3 suggestions per user to distribute recommendations
+        suggestion_counts_per_user = {}
+        max_suggestions_per_user = 3
         
         for task in tasks:
-            # Create suggestion based on CURRENT actual workload only
+            # Create suggestion based on CURRENT actual workload
             suggestion = self.create_suggestion(
                 task, 
                 requesting_user=requesting_user,
                 temp_workload_adjustments=None  # Always use actual current workload
             )
             if suggestion:
-                suggestions.append(suggestion)
+                suggested_user_id = suggestion.suggested_assignee.id
+                current_count = suggestion_counts_per_user.get(suggested_user_id, 0)
+                
+                # Only add suggestion if user hasn't reached the limit
+                if current_count < max_suggestions_per_user:
+                    suggestions.append(suggestion)
+                    suggestion_counts_per_user[suggested_user_id] = current_count + 1
+                else:
+                    # Delete the suggestion we just created since we won't use it
+                    suggestion.delete()
         
         # Sort by impact (time savings percentage * confidence)
         suggestions.sort(

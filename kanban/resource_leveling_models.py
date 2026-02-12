@@ -154,9 +154,10 @@ class UserPerformanceProfile(models.Model):
         
         self.current_workload_hours = estimated_hours
         
-        # Calculate utilization
+        # Calculate utilization - DO NOT cap at 100% to show true overload
+        # Users with 200% utilization are genuinely overloaded and should see that
         if self.weekly_capacity_hours > 0:
-            self.utilization_percentage = min((estimated_hours / self.weekly_capacity_hours) * 100, 100)
+            self.utilization_percentage = (estimated_hours / self.weekly_capacity_hours) * 100
         
         # Save the updated metrics to database (unless caller will save)
         if save:
