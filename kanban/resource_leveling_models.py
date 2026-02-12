@@ -201,9 +201,15 @@ class UserPerformanceProfile(models.Model):
         else:
             estimated_time = base_time
         
-        # Adjust for current workload (overloaded users take longer)
-        if self.utilization_percentage > 80:
-            workload_penalty = 1 + ((self.utilization_percentage - 80) / 100)  # Up to 20% slower
+        # Adjust for current workload - MORE aggressive
+        # Users with higher workload naturally take longer due to context switching
+        if self.current_active_tasks > 0:
+            # Each active task adds ~8% overhead due to context switching
+            workload_multiplier = 1.0 + (self.current_active_tasks * 0.08)
+            estimated_time *= workload_multiplier
+        elif self.utilization_percentage > 80:
+            # Additional penalty for high utilization
+            workload_penalty = 1 + ((self.utilization_percentage - 80) / 100)
             estimated_time *= workload_penalty
         
         return estimated_time

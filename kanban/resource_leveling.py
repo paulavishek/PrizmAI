@@ -74,6 +74,12 @@ class ResourceLevelingService:
         if not potential_assignees:
             return {'error': 'No potential assignees available'}
         
+        # IMPORTANT: Include current assignee in analysis for comparison
+        # even if they're not a board member (e.g., demo users)
+        current_assignee = task.assigned_to
+        if current_assignee and current_assignee not in potential_assignees:
+            potential_assignees = [current_assignee] + potential_assignees
+        
         # Get profiles for all candidates
         profiles = []
         for user in potential_assignees:
