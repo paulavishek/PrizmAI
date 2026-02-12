@@ -232,13 +232,44 @@ class ResourceLevelingService:
         """
         Predict completion time based on actual workload
         
+        FORMULA FOR TASK COMPLETION TIME ESTIMATION:
+        ============================================
+        
+        estimated_time = base_time × complexity_multiplier × workload_multiplier
+        
+        Where:
+        1. base_time = User's historical avg (or 8.0h default for new users)
+           - Clamped between 4-40 hours to prevent extreme values
+           - Uses historical data when available (profile.avg_completion_time_hours)
+        
+        2. complexity_multiplier = task.complexity_score / 5
+           - Complexity score ranges from 1 (simple) to 5 (very complex)
+           - Normalized to 0.2-1.0 multiplier range
+           - If no complexity score set, multiplier = 1.0
+        
+        3. workload_multiplier = 1.0 + (active_tasks × 0.08)
+           - Each active task adds 8% overhead for context switching
+           - Based on research showing productivity loss from task switching
+           - Example: 10 active tasks = 1.0 + (10 × 0.08) = 1.8x multiplier
+        
+        EXAMPLE CALCULATION:
+        -------------------
+        For a user with 27 active tasks and complexity score of 3:
+        - base_time = 8.0 hours (new user default)
+        - complexity_multiplier = 3/5 = 0.6
+        - workload_multiplier = 1.0 + (27 × 0.08) = 1.0 + 2.16 = 3.16
+        - estimated_time = 8.0 × 0.6 × 3.16 = 15.17 hours per task
+        
+        Note: Total workload shown in UI (e.g., "123h") is the sum of all
+        active task estimates, not the estimate for a single task.
+        
         Args:
             profile: UserPerformanceProfile
             task: Task object
             actual_task_count: Actual number of active tasks for this user
         
         Returns:
-            Estimated hours to complete
+            Estimated hours to complete this specific task
         """
         # Ensure base_time is always positive (min 4 hours, max 40 hours)
         # Some profiles may have corrupted/negative values

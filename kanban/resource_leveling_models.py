@@ -191,6 +191,16 @@ class UserPerformanceProfile(models.Model):
         """
         Predict how long this user will take to complete the task (in hours)
         Based on complexity and historical performance
+        
+        FORMULA: estimated_time = base_time × complexity_multiplier × workload_multiplier
+        
+        Components:
+        - base_time: 8.0h default (or historical avg_completion_time_hours)
+        - complexity_multiplier: task.complexity_score / 5 (or 1.0 if not set)
+        - workload_multiplier: 1.0 + (active_tasks × 0.08)
+        
+        See _predict_completion_time_with_workload() in resource_leveling.py for
+        detailed documentation and examples.
         """
         # Ensure base_time is always positive (min 4 hours, max 40 hours)
         raw_base = self.avg_completion_time_hours or 8.0
