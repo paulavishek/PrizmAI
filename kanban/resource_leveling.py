@@ -360,16 +360,29 @@ class ResourceLevelingService:
         
         # Calculate time savings
         current_analysis = None
+        time_savings_explanation = ""
         if current_assignee:
             current_analysis = next(
                 (c for c in analysis['all_candidates'] if c['user_id'] == current_assignee.id),
                 None
             )
         
+        # Check if users have work history for explainability
+        suggested_profile = self.get_or_create_profile(suggested_user)
+        current_profile = self.get_or_create_profile(current_assignee) if current_assignee else None
+        has_history = (suggested_profile.total_tasks_completed > 0) or (current_profile and current_profile.total_tasks_completed > 0)
+        
         if current_analysis:
             # Direct comparison when task is already assigned
             time_savings = current_analysis['estimated_hours'] - top['estimated_hours']
             time_savings_pct = (time_savings / current_analysis['estimated_hours']) * 100 if current_analysis['estimated_hours'] > 0 else 0
+            # Explainability: Show how time savings is calculated
+            if has_history:
+                # Both users have history - mention velocity, workload, and skill match
+                time_savings_explanation = f" The {time_savings_pct:.0f}% time savings is calculated by comparing estimated completion times: {current_assignee.get_full_name() or current_assignee.username} ({current_analysis['estimated_hours']:.1f}h) vs {top['display_name']} ({top['estimated_hours']:.1f}h) based on their workload, velocity, and skill match."
+            else:
+                # New users without history - explain baseline calculation
+                time_savings_explanation = f" The {time_savings_pct:.0f}% time savings is calculated by comparing estimated completion times: {current_assignee.get_full_name() or current_assignee.username} ({current_analysis['estimated_hours']:.1f}h) vs {top['display_name']} ({top['estimated_hours']:.1f}h). Since team members are new, estimates use baseline assumptions (8h per task) adjusted by current workload and task complexity."
         else:
             # For unassigned tasks, compare against team average or median
             all_estimates = [c['estimated_hours'] for c in analysis['all_candidates']]
@@ -379,6 +392,11 @@ class ResourceLevelingService:
                 median_estimate = all_estimates[len(all_estimates) // 2]
                 time_savings = median_estimate - top['estimated_hours']
                 time_savings_pct = (time_savings / median_estimate) * 100 if median_estimate > 0 else 0
+                # Explainability: Show calculation for unassigned tasks
+                if has_history:
+                    time_savings_explanation = f" The {time_savings_pct:.0f}% time savings is calculated by comparing {top['display_name']}'s estimated time ({top['estimated_hours']:.1f}h) against the team median ({median_estimate:.1f}h), factoring in their workload, velocity, and skill match."
+                else:
+                    time_savings_explanation = f" The {time_savings_pct:.0f}% time savings is calculated by comparing {top['display_name']}'s estimated time ({top['estimated_hours']:.1f}h) against the team median ({median_estimate:.1f}h). Since team members are new, estimates use baseline assumptions (8h per task) adjusted by current workload and task complexity."
             else:
                 time_savings = 0
                 time_savings_pct = 0
@@ -388,6 +406,11 @@ class ResourceLevelingService:
         
         # Calculate actual AI confidence in this suggestion (not user suitability)
         ai_confidence = self._calculate_suggestion_confidence(top, current_analysis, workload_impact)
+        
+        # Enhance reasoning with explainability - add calculation explanation
+        enhanced_reasoning = analysis['reasoning']
+        if time_savings_explanation:
+            enhanced_reasoning += time_savings_explanation
         
         # Create suggestion
         suggestion = ResourceLevelingSuggestion.objects.create(
@@ -402,7 +425,7 @@ class ResourceLevelingService:
             workload_impact=workload_impact,
             current_projected_date=timezone.now() + timedelta(hours=current_analysis['estimated_hours']) if current_analysis else None,
             suggested_projected_date=timezone.now() + timedelta(hours=top['estimated_hours']),
-            reasoning=analysis['reasoning'],
+            reasoning=enhanced_reasoning,
             expires_at=timezone.now() + timedelta(hours=48)
         )
         
