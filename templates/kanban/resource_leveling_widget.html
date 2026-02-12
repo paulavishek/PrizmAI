@@ -26,8 +26,8 @@
             </div>
         </div>
         
-        <!-- Suggestions List -->
-        <div id="suggestions-container">
+        <!-- Suggestions List with Scrollable Container -->
+        <div id="suggestions-container" class="suggestions-scrollable">
             <!-- Suggestions will be loaded here -->
         </div>
         
@@ -121,6 +121,32 @@
 
 #ai-optimization-content {
     transition: all 0.3s ease;
+}
+
+.suggestions-scrollable {
+    max-height: 500px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 5px;
+}
+
+/* Custom scrollbar styling for better UX */
+.suggestions-scrollable::-webkit-scrollbar {
+    width: 8px;
+}
+
+.suggestions-scrollable::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.suggestions-scrollable::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.suggestions-scrollable::-webkit-scrollbar-thumb:hover {
+    background: #555;
 }
 
 .suggestion-card {

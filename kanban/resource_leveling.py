@@ -27,7 +27,10 @@ class ResourceLevelingService:
         self.organization = organization
     
     def get_or_create_profile(self, user):
-        """Get or create performance profile for user"""
+        """
+        Get or create performance profile for user
+        Always fetches fresh data from database and updates workload
+        """
         profile, created = UserPerformanceProfile.objects.get_or_create(
             user=user,
             organization=self.organization,
@@ -37,6 +40,10 @@ class ResourceLevelingService:
                 'quality_score': 3.0
             }
         )
+        
+        # For existing profiles, refresh from database to avoid stale data
+        if not created:
+            profile.refresh_from_db()
         
         if created or not profile.total_tasks_completed:
             # Initialize with historical data
@@ -601,22 +608,20 @@ class ResourceLevelingService:
         
         suggestions = []
         
-        # Track suggested assignments to prevent overloading one person
-        # Key: user_id, Value: number of tasks suggested to be assigned
-        suggested_task_counts = {}
+        # NOTE: Removed temp_workload_adjustments tracking
+        # Each suggestion now shows current actual workload, not hypothetical future states
+        # This prevents confusing users with incrementing task counts (1→2→3)
+        # that assume they'll accept all suggestions in sequence
         
         for task in tasks:
-            # Always create fresh suggestion with current workload data
+            # Create suggestion based on CURRENT actual workload only
             suggestion = self.create_suggestion(
                 task, 
                 requesting_user=requesting_user,
-                temp_workload_adjustments=suggested_task_counts
+                temp_workload_adjustments=None  # Always use actual current workload
             )
             if suggestion:
                 suggestions.append(suggestion)
-                # Track this suggestion to adjust workload for subsequent evaluations
-                suggested_user_id = suggestion.suggested_assignee.id
-                suggested_task_counts[suggested_user_id] = suggested_task_counts.get(suggested_user_id, 0) + 1
         
         # Sort by impact (time savings percentage * confidence)
         suggestions.sort(

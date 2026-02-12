@@ -96,8 +96,8 @@ class UserPerformanceProfile(models.Model):
         # Update skill keywords from task descriptions
         self.update_skill_profile(completed_tasks)
         
-        # Update current workload
-        self.update_current_workload()
+        # Update current workload (don't save yet, we'll save once after all updates)
+        self.update_current_workload(save=False)
         
         self.total_tasks_completed = task_count
         self.last_task_completed = completed_tasks.latest('completed_at').completed_at
@@ -124,8 +124,14 @@ class UserPerformanceProfile(models.Model):
         # Store top 50 keywords
         self.skill_keywords = dict(word_counts.most_common(50))
     
-    def update_current_workload(self):
-        """Calculate current workload from active tasks"""
+    def update_current_workload(self, save=True):
+        """
+        Calculate current workload from active tasks
+        
+        Args:
+            save: If True, saves the profile after updating. Set to False when 
+                  calling from methods that will save afterwards to avoid duplicate saves.
+        """
         from kanban.models import Task
         
         active_tasks = Task.objects.filter(
@@ -151,6 +157,10 @@ class UserPerformanceProfile(models.Model):
         # Calculate utilization
         if self.weekly_capacity_hours > 0:
             self.utilization_percentage = min((estimated_hours / self.weekly_capacity_hours) * 100, 100)
+        
+        # Save the updated metrics to database (unless caller will save)
+        if save:
+            self.save()
     
     def calculate_skill_match(self, task_text):
         """
