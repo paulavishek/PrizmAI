@@ -47,7 +47,7 @@ class ResourceLevelingService:
         
         return profile
     
-    def analyze_task_assignment(self, task, potential_assignees=None, requesting_user=None):
+    def analyze_task_assignment(self, task, potential_assignees=None, requesting_user=None, temp_workload_adjustments=None):
         """
         Analyze a task and suggest optimal assignment
         
@@ -56,6 +56,7 @@ class ResourceLevelingService:
             potential_assignees: Optional list of User objects to consider. 
                                 If None, considers all board members
             requesting_user: User requesting the analysis (unused, kept for API compatibility)
+            temp_workload_adjustments: Dict of {user_id: additional_task_count} for tracking pending suggestions
         
         Returns:
             Dict with suggestions and impact analysis
@@ -85,7 +86,7 @@ class ResourceLevelingService:
         # Analyze each candidate
         candidates = []
         for profile in profiles:
-            analysis = self._analyze_candidate(task, task_text, profile)
+            analysis = self._analyze_candidate(task, task_text, profile, temp_workload_adjustments)
             candidates.append(analysis)
         
         # Sort by overall score
@@ -123,7 +124,7 @@ class ResourceLevelingService:
         
         return result
     
-    def _analyze_candidate(self, task, task_text, profile):
+    def _analyze_candidate(self, task, task_text, profile, temp_workload_adjustments=None):
         """
         Analyze a single candidate for task assignment
         
@@ -135,8 +136,15 @@ class ResourceLevelingService:
         # 1. Skill match score (0-100)
         skill_score = profile.calculate_skill_match(task_text)
         
-        # 2. Availability score (0-100)
-        availability_score = profile.get_availability_score()
+        # 2. Availability score (0-100) adjusted for temporary assignments
+        # If we've already suggested tasks to this user in this batch, reduce their availability
+        temp_task_count = 0
+        if temp_workload_adjustments and profile.user.id in temp_workload_adjustments:
+            temp_task_count = temp_workload_adjustments[profile.user.id]
+        
+        # Each suggested task reduces availability
+        adjusted_utilization = profile.utilization_percentage + (temp_task_count * 15)  # ~15% per task
+        availability_score = max(100 - adjusted_utilization, 0)
         
         # 3. Velocity score (normalized to 0-100)
         # Only use velocity if they have history, otherwise use neutral baseline
@@ -192,8 +200,8 @@ class ResourceLevelingService:
             'quality': round(quality_normalized, 1),
             'estimated_hours': round(estimated_hours, 1),
             'estimated_completion': estimated_completion_date.isoformat(),
-            'current_workload': profile.current_active_tasks,
-            'utilization': round(profile.utilization_percentage, 1)
+            'current_workload': profile.current_active_tasks + temp_task_count,  # Include temporary suggestions
+            'utilization': round(adjusted_utilization, 1)  # Use adjusted utilization
         }
     
     def _generate_reassignment_reasoning(self, recommended, current, improvement):
@@ -265,18 +273,20 @@ class ResourceLevelingService:
         
         return f"Assign to {recommended['display_name']}: " + ", ".join(reasons)
     
-    def create_suggestion(self, task, force_analysis=False, requesting_user=None):
+    def create_suggestion(self, task, force_analysis=False, requesting_user=None, temp_workload_adjustments=None):
         """
         Create and store a ResourceLevelingSuggestion if beneficial
         
         Args:
             task: Task object
             force_analysis: If True, create suggestion even for well-assigned tasks
+            requesting_user: User requesting the suggestion
+            temp_workload_adjustments: Dict of {user_id: additional_task_count} for tracking pending suggestions
         
         Returns:
             ResourceLevelingSuggestion object or None
         """
-        analysis = self.analyze_task_assignment(task, requesting_user=requesting_user)
+        analysis = self.analyze_task_assignment(task, requesting_user=requesting_user, temp_workload_adjustments=temp_workload_adjustments)
         
         if 'error' in analysis:
             logger.warning(f"Cannot analyze task {task.id}: {analysis['error']}")
@@ -301,11 +311,21 @@ class ResourceLevelingService:
             )
         
         if current_analysis:
+            # Direct comparison when task is already assigned
             time_savings = current_analysis['estimated_hours'] - top['estimated_hours']
             time_savings_pct = (time_savings / current_analysis['estimated_hours']) * 100 if current_analysis['estimated_hours'] > 0 else 0
         else:
-            time_savings = 0
-            time_savings_pct = 0
+            # For unassigned tasks, compare against team average or median
+            all_estimates = [c['estimated_hours'] for c in analysis['all_candidates']]
+            if all_estimates:
+                # Use median as baseline (more robust than mean)
+                all_estimates.sort()
+                median_estimate = all_estimates[len(all_estimates) // 2]
+                time_savings = median_estimate - top['estimated_hours']
+                time_savings_pct = (time_savings / median_estimate) * 100 if median_estimate > 0 else 0
+            else:
+                time_savings = 0
+                time_savings_pct = 0
         
         # Determine workload impact
         workload_impact = self._determine_workload_impact(top, current_analysis)
@@ -343,40 +363,59 @@ class ResourceLevelingService:
         - Good availability data (objective)
         - Clear improvement in multiple dimensions
         """
-        base_confidence = 70.0  # Start with reasonable base
+        base_confidence = 65.0  # Start lower for more realistic scores
         
         # Factor 1: Workload improvement (most objective)
         if current:
             util_diff = current['utilization'] - recommended['utilization']
             if util_diff > 40:  # Major imbalance
-                base_confidence += 15
+                base_confidence += 12
             elif util_diff > 20:  # Significant imbalance
-                base_confidence += 10
+                base_confidence += 8
             elif util_diff > 10:  # Moderate imbalance
-                base_confidence += 5
+                base_confidence += 4
+            elif util_diff < -10:  # Would make things worse
+                base_confidence -= 5
         else:
-            # First assignment - base confidence is good
-            base_confidence += 5
+            # First assignment - moderate confidence
+            base_confidence += 3
         
         # Factor 2: Availability difference (objective data)
         if current:
             avail_diff = recommended['availability'] - current['availability']
             if avail_diff > 30:
-                base_confidence += 8
+                base_confidence += 6
             elif avail_diff > 15:
-                base_confidence += 5
+                base_confidence += 4
+            elif avail_diff < -15:  # Recommended person is MORE loaded
+                base_confidence -= 3
         
         # Factor 3: Skill match of recommended person
-        if recommended['skill_match'] > 60:
+        # Higher match = higher confidence, but not linear
+        if recommended['skill_match'] > 70:
             base_confidence += 5
-        elif recommended['skill_match'] > 40:
+        elif recommended['skill_match'] > 50:
             base_confidence += 3
+        elif recommended['skill_match'] < 30:
+            base_confidence -= 2  # Low skill match reduces confidence
         
-        # Factor 4: Overall suitability score
-        if recommended['overall_score'] > 70:
-            base_confidence += 5
-        elif recommended['overall_score'] > 60:
-            base_confidence += 3
+        # Factor 4: Overall suitability score difference
+        if current:
+            score_diff = recommended['overall_score'] - current['overall_score']
+            if score_diff > 20:
+                base_confidence += 5
+            elif score_diff > 10:
+                base_confidence += 3
+            elif score_diff < 5:  # Marginal improvement
+                base_confidence -= 3
+        else:
+            # For unassigned, use absolute score
+            if recommended['overall_score'] > 75:
+                base_confidence += 4
+            elif recommended['overall_score'] > 60:
+                base_confidence += 2
+            elif recommended['overall_score'] < 45:
+                base_confidence -= 2
         
         # Factor 5: Workload impact type
         if workload_impact == 'reduces_bottleneck':
@@ -385,13 +424,22 @@ class ResourceLevelingService:
             base_confidence += 3
         
         # Factor 6: Recommended person's current workload (availability is objective)
+        # But being completely free isn't always a positive signal
         if recommended['current_workload'] == 0:
-            base_confidence += 5  # Completely available
-        elif recommended['current_workload'] < 3:
-            base_confidence += 3  # Very available
+            base_confidence += 3  # Available, but moderate confidence
+        elif 1 <= recommended['current_workload'] <= 3:
+            base_confidence += 4  # Ideal workload range
+        elif recommended['current_workload'] > 8:
+            base_confidence -= 4  # Already overloaded
         
-        # Cap at 95 (never claim 100% certainty)
-        return min(round(base_confidence, 1), 95.0)
+        # Add slight randomness for variety (±2 points)
+        import random
+        random.seed(recommended['user_id'] + (current['user_id'] if current else 0))  # Deterministic per user pair
+        variance = random.uniform(-2, 2)
+        base_confidence += variance
+        
+        # Cap at 92 (never claim extreme certainty) and floor at 45
+        return max(45.0, min(round(base_confidence, 1), 92.0))
     
     def _determine_workload_impact(self, recommended, current):
         """Determine the type of workload impact"""
@@ -443,11 +491,22 @@ class ResourceLevelingService:
         
         suggestions = []
         
+        # Track suggested assignments to prevent overloading one person
+        # Key: user_id, Value: number of tasks suggested to be assigned
+        suggested_task_counts = {}
+        
         for task in tasks:
             # Always create fresh suggestion with current workload data
-            suggestion = self.create_suggestion(task, requesting_user=requesting_user)
+            suggestion = self.create_suggestion(
+                task, 
+                requesting_user=requesting_user,
+                temp_workload_adjustments=suggested_task_counts
+            )
             if suggestion:
                 suggestions.append(suggestion)
+                # Track this suggestion to adjust workload for subsequent evaluations
+                suggested_user_id = suggestion.suggested_assignee.id
+                suggested_task_counts[suggested_user_id] = suggested_task_counts.get(suggested_user_id, 0) + 1
         
         # Sort by impact (time savings percentage * confidence)
         suggestions.sort(
