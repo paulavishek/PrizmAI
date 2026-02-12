@@ -1,0 +1,318 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Compare Scope Snapshots - {{ board.name }} - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .comparison-arrow {
+        font-size: 2rem;
+        color: #6c757d;
+    }
+    .change-positive { color: #dc3545; }
+    .change-negative { color: #28a745; }
+    .change-neutral { color: #6c757d; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-columns me-2"></i>Compare Scope Snapshots</h2>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'scope_dashboard' board.id %}">Scope Dashboard</a></li>
+                            <li class="breadcrumb-item active">Compare</li>
+                        </ol>
+                    </nav>
+                </div>
+                <a href="{% url 'scope_dashboard' board.id %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Snapshot Selection -->
+    <div class="card mb-4">
+        <div class="card-header bg-white">
+            <h5 class="mb-0"><i class="fas fa-sliders-h me-2"></i>Select Snapshots to Compare</h5>
+        </div>
+        <div class="card-body">
+            <form method="get" action="{% url 'scope_comparison' board.id %}">
+                <div class="row align-items-end">
+                    <div class="col-md-5">
+                        <label class="form-label">First Snapshot (Earlier)</label>
+                        <select name="snapshot1" class="form-select" required>
+                            <option value="">Select snapshot...</option>
+                            {% for snap in snapshots %}
+                            <option value="{{ snap.id }}" {% if snapshot1 and snapshot1.id == snap.id %}selected{% endif %}>
+                                {{ snap.snapshot_date|date:"M d, Y H:i" }}
+                                {% if snap.is_baseline %} (Baseline){% endif %}
+                                - {{ snap.total_tasks }} tasks
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">Second Snapshot (Later)</label>
+                        <select name="snapshot2" class="form-select" required>
+                            <option value="">Select snapshot...</option>
+                            {% for snap in snapshots %}
+                            <option value="{{ snap.id }}" {% if snapshot2 and snapshot2.id == snap.id %}selected{% endif %}>
+                                {{ snap.snapshot_date|date:"M d, Y H:i" }}
+                                {% if snap.is_baseline %} (Baseline){% endif %}
+                                - {{ snap.total_tasks }} tasks
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="fas fa-balance-scale me-1"></i> Compare
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if snapshot1 and snapshot2 and comparison %}
+    <!-- Comparison Results -->
+    <div class="row">
+        <!-- Snapshot 1 -->
+        <div class="col-md-5">
+            <div class="card h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        {{ snapshot1.snapshot_date|date:"M d, Y H:i" }}
+                        {% if snapshot1.is_baseline %}
+                        <span class="badge bg-success ms-2">Baseline</span>
+                        {% endif %}
+                    </h5>
+                    <small class="text-muted">{{ snapshot1.get_snapshot_type_display }}</small>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <div class="text-center p-3 bg-light rounded">
+                                <h4 class="mb-0">{{ snapshot1.total_tasks }}</h4>
+                                <small class="text-muted">Tasks</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-center p-3 bg-light rounded">
+                                <h4 class="mb-0">{{ snapshot1.total_complexity_points }}</h4>
+                                <small class="text-muted">Complexity</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <td class="text-muted">To Do Tasks</td>
+                                <td class="text-end fw-bold">{{ snapshot1.todo_tasks }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">In Progress</td>
+                                <td class="text-end fw-bold">{{ snapshot1.in_progress_tasks }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Completed</td>
+                                <td class="text-end fw-bold">{{ snapshot1.completed_tasks }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">High Priority</td>
+                                <td class="text-end fw-bold">{{ snapshot1.high_priority_tasks }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Urgent Priority</td>
+                                <td class="text-end fw-bold">{{ snapshot1.urgent_priority_tasks }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Avg Complexity</td>
+                                <td class="text-end fw-bold">{{ snapshot1.avg_complexity|floatformat:1 }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comparison Arrow -->
+        <div class="col-md-2 d-flex align-items-center justify-content-center">
+            <div class="text-center">
+                <i class="fas fa-arrow-right comparison-arrow"></i>
+                <div class="mt-3">
+                    <span class="badge bg-secondary">
+                        {{ snapshot1.snapshot_date|timesince:snapshot2.snapshot_date }}
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Snapshot 2 -->
+        <div class="col-md-5">
+            <div class="card h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        {{ snapshot2.snapshot_date|date:"M d, Y H:i" }}
+                        {% if snapshot2.is_baseline %}
+                        <span class="badge bg-success ms-2">Baseline</span>
+                        {% endif %}
+                    </h5>
+                    <small class="text-muted">{{ snapshot2.get_snapshot_type_display }}</small>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-4">
+                        <div class="col-6">
+                            <div class="text-center p-3 bg-light rounded">
+                                <h4 class="mb-0">{{ snapshot2.total_tasks }}</h4>
+                                <small class="text-muted">Tasks</small>
+                                {% if comparison.tasks_diff != 0 %}
+                                <div class="mt-1">
+                                    <small class="{% if comparison.tasks_diff > 0 %}change-positive{% else %}change-negative{% endif %}">
+                                        {% if comparison.tasks_diff > 0 %}+{% endif %}{{ comparison.tasks_diff }}
+                                        ({% if comparison.tasks_pct > 0 %}+{% endif %}{{ comparison.tasks_pct }}%)
+                                    </small>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="text-center p-3 bg-light rounded">
+                                <h4 class="mb-0">{{ snapshot2.total_complexity_points }}</h4>
+                                <small class="text-muted">Complexity</small>
+                                {% if comparison.complexity_diff != 0 %}
+                                <div class="mt-1">
+                                    <small class="{% if comparison.complexity_diff > 0 %}change-positive{% else %}change-negative{% endif %}">
+                                        {% if comparison.complexity_diff > 0 %}+{% endif %}{{ comparison.complexity_diff }}
+                                    </small>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <td class="text-muted">To Do Tasks</td>
+                                <td class="text-end">
+                                    <span class="fw-bold">{{ snapshot2.todo_tasks }}</span>
+                                    {% if comparison.todo_diff != 0 %}
+                                    <small class="ms-2 {% if comparison.todo_diff > 0 %}change-positive{% else %}change-negative{% endif %}">
+                                        ({% if comparison.todo_diff > 0 %}+{% endif %}{{ comparison.todo_diff }})
+                                    </small>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">In Progress</td>
+                                <td class="text-end">
+                                    <span class="fw-bold">{{ snapshot2.in_progress_tasks }}</span>
+                                    {% if comparison.in_progress_diff != 0 %}
+                                    <small class="ms-2 {% if comparison.in_progress_diff > 0 %}change-positive{% else %}change-negative{% endif %}">
+                                        ({% if comparison.in_progress_diff > 0 %}+{% endif %}{{ comparison.in_progress_diff }})
+                                    </small>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Completed</td>
+                                <td class="text-end">
+                                    <span class="fw-bold">{{ snapshot2.completed_tasks }}</span>
+                                    {% if comparison.completed_diff != 0 %}
+                                    <small class="ms-2 {% if comparison.completed_diff > 0 %}change-negative{% else %}change-positive{% endif %}">
+                                        ({% if comparison.completed_diff > 0 %}+{% endif %}{{ comparison.completed_diff }})
+                                    </small>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">High Priority</td>
+                                <td class="text-end">
+                                    <span class="fw-bold">{{ snapshot2.high_priority_tasks }}</span>
+                                    {% if comparison.high_priority_diff != 0 %}
+                                    <small class="ms-2 {% if comparison.high_priority_diff > 0 %}change-positive{% else %}change-negative{% endif %}">
+                                        ({% if comparison.high_priority_diff > 0 %}+{% endif %}{{ comparison.high_priority_diff }})
+                                    </small>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Urgent Priority</td>
+                                <td class="text-end">
+                                    <span class="fw-bold">{{ snapshot2.urgent_priority_tasks }}</span>
+                                    {% if comparison.urgent_priority_diff != 0 %}
+                                    <small class="ms-2 {% if comparison.urgent_priority_diff > 0 %}change-positive{% else %}change-negative{% endif %}">
+                                        ({% if comparison.urgent_priority_diff > 0 %}+{% endif %}{{ comparison.urgent_priority_diff }})
+                                    </small>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="text-muted">Avg Complexity</td>
+                                <td class="text-end fw-bold">{{ snapshot2.avg_complexity|floatformat:1 }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Card -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Change Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <h2 class="{% if comparison.tasks_diff > 0 %}text-danger{% elif comparison.tasks_diff < 0 %}text-success{% else %}text-secondary{% endif %}">
+                                {% if comparison.tasks_diff > 0 %}+{% endif %}{{ comparison.tasks_diff }}
+                            </h2>
+                            <p class="text-muted mb-0">Tasks Change</p>
+                            {% if comparison.tasks_pct != 0 %}
+                            <small class="text-muted">({% if comparison.tasks_pct > 0 %}+{% endif %}{{ comparison.tasks_pct }}%)</small>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-3">
+                            <h2 class="{% if comparison.complexity_diff > 0 %}text-danger{% elif comparison.complexity_diff < 0 %}text-success{% else %}text-secondary{% endif %}">
+                                {% if comparison.complexity_diff > 0 %}+{% endif %}{{ comparison.complexity_diff }}
+                            </h2>
+                            <p class="text-muted mb-0">Complexity Change</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h2 class="{% if comparison.high_priority_diff > 0 %}text-danger{% elif comparison.high_priority_diff < 0 %}text-success{% else %}text-secondary{% endif %}">
+                                {% if comparison.high_priority_diff > 0 %}+{% endif %}{{ comparison.high_priority_diff }}
+                            </h2>
+                            <p class="text-muted mb-0">High Priority Change</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h2 class="{% if comparison.completed_diff > 0 %}text-success{% elif comparison.completed_diff < 0 %}text-danger{% else %}text-secondary{% endif %}">
+                                {% if comparison.completed_diff > 0 %}+{% endif %}{{ comparison.completed_diff }}
+                            </h2>
+                            <p class="text-muted mb-0">Completed Change</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% elif not snapshot1 or not snapshot2 %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>
+        Select two snapshots above to compare their scope metrics.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

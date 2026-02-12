@@ -263,6 +263,9 @@
         <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-outline-success">
             <i class="fas fa-dollar-sign me-1"></i> Budget & ROI
         </a>
+        <a href="{% url 'scope_dashboard' board.id %}" class="btn btn-outline-primary" title="Scope Tracking - Part of Triple Constraint (Scope, Time, Cost)">
+            <i class="fas fa-chart-area me-1"></i> Scope
+        </a>
         <a href="{% url 'retrospective_dashboard' board.id %}" class="btn btn-outline-secondary">
             <i class="fas fa-history me-1"></i> Retrospectives
         </a>
@@ -351,7 +354,7 @@
             </div>
             {% endif %}
             <div class="mt-2">
-                <a href="{% url 'scope_tracking_dashboard' board.id %}" 
+                <a href="{% url 'scope_dashboard' board.id %}" 
                    class="btn btn-sm btn-outline-primary">
                     <i class="fas fa-chart-line me-1"></i>View Scope Dashboard
                 </a>
@@ -996,7 +999,7 @@
                 {% endfor %}
             </div>
             <div class="modal-footer">
-                <a href="{% url 'scope_tracking_dashboard' board.id %}" class="btn btn-primary">
+                <a href="{% url 'scope_dashboard' board.id %}" class="btn btn-primary">
                     View Full Dashboard
                 </a>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>

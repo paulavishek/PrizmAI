@@ -159,6 +159,9 @@ urlpatterns = [
     # Budget & ROI Tracking URLs
     path('', include('kanban.budget_urls')),
     
+    # Scope Tracking URLs
+    path('', include('kanban.scope_urls')),
+    
     # AI Coach URLs
     path('', include('kanban.coach_urls')),
     

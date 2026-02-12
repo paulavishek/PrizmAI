@@ -1,0 +1,272 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Scope Snapshot - {{ snapshot.snapshot_date|date:"M d, Y" }} - PrizmAI{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2>
+                        <i class="fas fa-camera me-2"></i>Scope Snapshot
+                        {% if snapshot.is_baseline %}
+                        <span class="badge bg-success ms-2">Baseline</span>
+                        {% endif %}
+                    </h2>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'scope_dashboard' board.id %}">Scope Dashboard</a></li>
+                            <li class="breadcrumb-item active">Snapshot Details</li>
+                        </ol>
+                    </nav>
+                </div>
+                <a href="{% url 'scope_dashboard' board.id %}" class="btn btn-outline-secondary">
+                    <i class="fas fa-arrow-left me-1"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Snapshot Details -->
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-info-circle me-2"></i>Snapshot Details</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <p class="mb-1 text-muted">Date & Time</p>
+                            <h5>{{ snapshot.snapshot_date|date:"F d, Y H:i" }}</h5>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="mb-1 text-muted">Type</p>
+                            <h5>{{ snapshot.get_snapshot_type_display }}</h5>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <p class="mb-1 text-muted">Created By</p>
+                            <h5>{{ snapshot.created_by.get_full_name|default:snapshot.created_by.username|default:"System" }}</h5>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="mb-1 text-muted">Status</p>
+                            <h5>
+                                {% if snapshot.is_baseline %}
+                                <span class="badge bg-success">Active Baseline</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Historical Snapshot</span>
+                                {% endif %}
+                            </h5>
+                        </div>
+                    </div>
+                    {% if snapshot.notes %}
+                    <div class="mt-3">
+                        <p class="mb-1 text-muted">Notes</p>
+                        <p class="mb-0">{{ snapshot.notes }}</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Metrics -->
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Scope Metrics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-4">
+                        <div class="col-md-4">
+                            <div class="text-center p-3 bg-light rounded">
+                                <i class="fas fa-tasks fa-2x text-primary mb-2"></i>
+                                <h3 class="mb-0">{{ snapshot.total_tasks }}</h3>
+                                <small class="text-muted">Total Tasks</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center p-3 bg-light rounded">
+                                <i class="fas fa-puzzle-piece fa-2x text-info mb-2"></i>
+                                <h3 class="mb-0">{{ snapshot.total_complexity_points }}</h3>
+                                <small class="text-muted">Complexity Points</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center p-3 bg-light rounded">
+                                <i class="fas fa-calculator fa-2x text-secondary mb-2"></i>
+                                <h3 class="mb-0">{{ snapshot.avg_complexity|floatformat:1 }}</h3>
+                                <small class="text-muted">Avg Complexity</small>
+                            </div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="row g-4">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h5 class="text-secondary">{{ snapshot.todo_tasks }}</h5>
+                                <small class="text-muted">To Do</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h5 class="text-primary">{{ snapshot.in_progress_tasks }}</h5>
+                                <small class="text-muted">In Progress</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h5 class="text-success">{{ snapshot.completed_tasks }}</h5>
+                                <small class="text-muted">Completed</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <h5 class="text-danger">{{ snapshot.high_priority_tasks }}</h5>
+                                <small class="text-muted">High Priority</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Analysis -->
+            {% if snapshot.ai_analysis %}
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-brain me-2"></i>AI Analysis</h5>
+                </div>
+                <div class="card-body">
+                    {% if snapshot.ai_analysis.summary %}
+                    <div class="mb-4">
+                        <h6 class="text-muted">Summary</h6>
+                        <p>{{ snapshot.ai_analysis.summary }}</p>
+                    </div>
+                    {% endif %}
+                    
+                    {% if snapshot.ai_analysis.risk_level %}
+                    <div class="mb-4">
+                        <h6 class="text-muted">Risk Level</h6>
+                        <span class="badge 
+                            {% if snapshot.ai_analysis.risk_level == 'critical' %}bg-danger
+                            {% elif snapshot.ai_analysis.risk_level == 'high' %}bg-warning
+                            {% elif snapshot.ai_analysis.risk_level == 'medium' %}bg-info
+                            {% else %}bg-success{% endif %} fs-6">
+                            {{ snapshot.ai_analysis.risk_level|title }}
+                        </span>
+                    </div>
+                    {% endif %}
+                    
+                    {% if snapshot.ai_analysis.recommendations %}
+                    <div class="mb-4">
+                        <h6 class="text-muted">Recommendations</h6>
+                        <ul class="list-group">
+                            {% for rec in snapshot.ai_analysis.recommendations %}
+                            <li class="list-group-item">
+                                <i class="fas fa-lightbulb text-warning me-2"></i>{{ rec }}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                    
+                    {% if snapshot.ai_analysis.key_concerns %}
+                    <div>
+                        <h6 class="text-muted">Key Concerns</h6>
+                        <ul class="list-group">
+                            {% for concern in snapshot.ai_analysis.key_concerns %}
+                            <li class="list-group-item list-group-item-warning">
+                                <i class="fas fa-exclamation-triangle me-2"></i>{{ concern }}
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="col-md-4">
+            <!-- Comparison with Baseline -->
+            {% if comparison %}
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-balance-scale me-2"></i>vs Baseline</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Tasks Change</span>
+                            <span class="{% if comparison.tasks_change > 0 %}text-danger{% elif comparison.tasks_change < 0 %}text-success{% endif %}">
+                                {% if comparison.tasks_change > 0 %}+{% endif %}{{ comparison.tasks_change }}
+                                ({% if comparison.scope_pct > 0 %}+{% endif %}{{ comparison.scope_pct|floatformat:1 }}%)
+                            </span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between">
+                            <span class="text-muted">Complexity Change</span>
+                            <span class="{% if comparison.complexity_change > 0 %}text-danger{% elif comparison.complexity_change < 0 %}text-success{% endif %}">
+                                {% if comparison.complexity_change > 0 %}+{% endif %}{{ comparison.complexity_change }}
+                                {% if comparison.complexity_pct %}
+                                ({% if comparison.complexity_pct > 0 %}+{% endif %}{{ comparison.complexity_pct|floatformat:1 }}%)
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="mb-2">
+                        <small class="text-muted">Baseline Date</small>
+                        <p class="mb-0">{{ snapshot.baseline_snapshot.snapshot_date|date:"M d, Y" }}</p>
+                    </div>
+                    <div>
+                        <small class="text-muted">Time Elapsed</small>
+                        <p class="mb-0">{{ snapshot.baseline_snapshot.snapshot_date|timesince }}</p>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Predicted Impact -->
+            {% if snapshot.predicted_delay_days %}
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Predicted Impact</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 class="text-warning mb-1">{{ snapshot.predicted_delay_days }}</h2>
+                    <p class="text-muted">day{{ snapshot.predicted_delay_days|pluralize }} delay</p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Generated Alerts -->
+            {% if snapshot.generated_alerts.exists %}
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-bell me-2"></i>Generated Alerts</h5>
+                </div>
+                <div class="card-body">
+                    {% for alert in snapshot.generated_alerts.all %}
+                    <div class="mb-3 p-3 rounded {% if alert.severity == 'critical' %}bg-danger bg-opacity-10{% elif alert.severity == 'warning' %}bg-warning bg-opacity-10{% else %}bg-info bg-opacity-10{% endif %}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <span class="badge {% if alert.severity == 'critical' %}bg-danger{% elif alert.severity == 'warning' %}bg-warning{% else %}bg-info{% endif %}">
+                                    {{ alert.get_severity_display }}
+                                </span>
+                                <small class="d-block text-muted mt-1">{{ alert.detected_at|date:"M d, Y H:i" }}</small>
+                            </div>
+                            <span class="badge bg-{{ alert.status }}">{{ alert.get_status_display }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

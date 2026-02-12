@@ -2853,65 +2853,11 @@ def skill_gap_dashboard(request, board_id):
 @login_required
 def scope_tracking_dashboard(request, board_id):
     """
-    Scope Tracking Dashboard
-    Shows baseline, current scope, alerts, snapshots, and AI recommendations
+    Scope Tracking Dashboard - Redirects to comprehensive scope dashboard
+    Kept for backward compatibility with existing links
     """
-    from kanban.models import ScopeChangeSnapshot, ScopeCreepAlert
-    from kanban.utils.scope_analysis import get_scope_trend_data, calculate_scope_velocity
-    
-    board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    
-    # Access restriction removed - all authenticated users can access
-    
-    # Get current scope status
-    scope_status = board.get_current_scope_status()
-    
-    # Get all alerts
-    all_alerts = ScopeCreepAlert.objects.filter(board=board).order_by('-detected_at')
-    active_alerts = all_alerts.filter(status__in=['active', 'acknowledged'])
-    resolved_alerts = all_alerts.filter(status='resolved')
-    
-    # Get snapshots
-    snapshots_queryset = ScopeChangeSnapshot.objects.filter(board=board).order_by('-snapshot_date')
-    baseline_snapshot = snapshots_queryset.filter(is_baseline=True).first()
-    latest_snapshot = snapshots_queryset.filter(ai_analysis__isnull=False).first()
-    snapshots = snapshots_queryset[:20]  # Limit to 20 for display
-    
-    # Get trend data (last 30 days)
-    trend_data = get_scope_trend_data(board, days=30)
-    
-    # Calculate velocity
-    velocity = calculate_scope_velocity(board, weeks=4)
-    
-    # Count alerts by severity
-    critical_count = all_alerts.filter(severity='critical').count()
-    warning_count = all_alerts.filter(severity='warning').count()
-    info_count = all_alerts.filter(severity='info').count()
-    
-    context = {
-        'board': board,
-        'scope_status': scope_status,
-        'all_alerts': all_alerts[:10],  # Show last 10
-        'active_alerts': active_alerts,
-        'resolved_alerts': resolved_alerts[:5],
-        'snapshots': snapshots,
-        'baseline_snapshot': baseline_snapshot,
-        'trend_data': trend_data,
-        'velocity': velocity,
-        'critical_count': critical_count,
-        'warning_count': warning_count,
-        'info_count': info_count,
-        'latest_snapshot': latest_snapshot,
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
-    }
-    
-    return render(request, 'kanban/scope_tracking_dashboard.html', context)
+    from django.shortcuts import redirect
+    return redirect('scope_dashboard', board_id=board_id)
 
 
 @login_required
