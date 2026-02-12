@@ -2252,9 +2252,30 @@ class Command(BaseCommand):
             avg_complexity = tasks.aggregate(avg=models.Avg('complexity_score'))['avg'] or 5.0
             total_complexity = int(avg_complexity * total_tasks)
             
-            # Calculate baseline values (simulating 15% fewer tasks initially)
-            baseline_tasks = int(total_tasks * 0.85)
-            baseline_complexity = int(total_complexity * 0.85)
+            # Calculate baseline values with different scope creep scenarios per board
+            # Software Development: ~20% scope creep (moderate increase)
+            # Marketing Campaign: ~12% scope creep (mild increase)  
+            # Bug Tracking: ~35% scope creep (critical increase)
+            if board == software_board:
+                baseline_ratio = 0.833  # Results in ~20% scope creep
+                complexity_ratio = 0.85
+            elif board == marketing_board:
+                baseline_ratio = 0.893  # Results in ~12% scope creep
+                complexity_ratio = 0.90
+            else:  # bug_board
+                baseline_ratio = 0.741  # Results in ~35% scope creep
+                complexity_ratio = 0.78
+                
+            baseline_tasks = int(total_tasks * baseline_ratio)
+            baseline_complexity = int(total_complexity * complexity_ratio)
+            
+            # Create board-specific baseline notes
+            if board == software_board:
+                baseline_notes = 'Sprint 1 baseline - Development phase kickoff'
+            elif board == marketing_board:
+                baseline_notes = 'Campaign baseline - Initial planning complete'
+            else:  # bug_board
+                baseline_notes = 'Bug tracking baseline - Post-release monitoring'
             
             # Create baseline snapshot (from 2 weeks ago)
             baseline = ScopeChangeSnapshot.objects.create(
@@ -2271,7 +2292,7 @@ class Command(BaseCommand):
                 baseline_snapshot=None,
                 created_by=admin_user,
                 snapshot_type='baseline',
-                notes='Initial sprint baseline',
+                notes=baseline_notes,
             )
             # Backdate the snapshot
             ScopeChangeSnapshot.objects.filter(pk=baseline.pk).update(
@@ -2292,6 +2313,33 @@ class Command(BaseCommand):
             scope_change_pct = round(((total_tasks - baseline_tasks) / baseline_tasks) * 100, 1) if baseline_tasks > 0 else 0
             complexity_change_pct = round(((total_complexity - baseline_complexity) / baseline_complexity) * 100, 1) if baseline_complexity > 0 else 0
             
+            # Vary AI analysis based on scope change severity
+            if scope_change_pct < 15:
+                risk_level = 'low'
+                trend = 'stable'
+                recommendations = [
+                    'Continue monitoring scope changes',
+                    'Maintain regular backlog grooming sessions',
+                    'Keep stakeholders informed of project status'
+                ]
+            elif scope_change_pct < 25:
+                risk_level = 'medium'
+                trend = 'increasing'
+                recommendations = [
+                    'Review new requirements carefully before adding',
+                    'Consider deferring lower priority items',
+                    'Communicate scope changes to stakeholders'
+                ]
+            else:
+                risk_level = 'high'
+                trend = 'rapidly_increasing'
+                recommendations = [
+                    'Immediate review of all added tasks required',
+                    'Consider removing non-essential tasks from current sprint',
+                    'Schedule urgent stakeholder meeting to discuss scope',
+                    'Implement strict change control process'
+                ]
+            
             # Create current snapshot
             current = ScopeChangeSnapshot.objects.create(
                 board=board,
@@ -2311,15 +2359,11 @@ class Command(BaseCommand):
                 scope_change_percentage=scope_change_pct,
                 complexity_change_percentage=complexity_change_pct,
                 ai_analysis={
-                    'trend': 'increasing',
-                    'risk_level': 'medium',
+                    'trend': trend,
+                    'risk_level': risk_level,
                     'tasks_added': total_tasks - baseline_tasks,
                     'complexity_added': total_complexity - baseline_complexity,
-                    'recommendations': [
-                        'Review new requirements carefully before adding',
-                        'Consider deferring lower priority items',
-                        'Communicate scope changes to stakeholders'
-                    ],
+                    'recommendations': recommendations,
                     'confidence': round(random.uniform(0.75, 0.92), 2)
                 }
             )
@@ -2328,21 +2372,46 @@ class Command(BaseCommand):
             # Calculate tasks added for alerts
             tasks_added = total_tasks - baseline_tasks
             
-            # Create scope creep alert if scope increased significantly
-            if scope_change_pct > 10:
+            # Create scope creep alert with severity based on scope change percentage
+            if scope_change_pct > 5:
+                # Determine severity dynamically
+                if scope_change_pct >= 30:
+                    severity = 'critical'
+                    predicted_delay = random.randint(5, 10)
+                elif scope_change_pct >= 15:
+                    severity = 'warning'
+                    predicted_delay = random.randint(2, 5)
+                else:
+                    severity = 'info'
+                    predicted_delay = None
+                
+                # Vary recommendations based on severity
+                if severity == 'critical':
+                    immediate_actions = ['URGENT: Review all newly added tasks', 'Schedule emergency stakeholder meeting']
+                    short_term_actions = ['Remove non-critical tasks', 'Extend timeline or reduce scope']
+                    prevention_actions = ['Implement mandatory change request process', 'Weekly scope reviews required']
+                elif severity == 'warning':
+                    immediate_actions = ['Review all newly added tasks', 'Validate priorities with product owner']
+                    short_term_actions = ['Consider scope reduction', 'Discuss timeline impact with stakeholders']
+                    prevention_actions = ['Implement stricter change control', 'Regular backlog grooming']
+                else:
+                    immediate_actions = ['Monitor scope trends', 'Document new additions']
+                    short_term_actions = ['Continue regular planning', 'Keep stakeholders informed']
+                    prevention_actions = ['Maintain current change process', 'Monthly scope reviews']
+                
                 ScopeCreepAlert.objects.create(
                     board=board,
                     snapshot=current,
-                    severity='warning' if scope_change_pct < 20 else 'critical',
+                    severity=severity,
                     scope_increase_percentage=scope_change_pct,
                     complexity_increase_percentage=complexity_change_pct,
                     tasks_added=tasks_added,
-                    predicted_delay_days=random.randint(2, 7) if scope_change_pct > 15 else None,
+                    predicted_delay_days=predicted_delay,
                     timeline_at_risk=scope_change_pct > 20,
                     recommendations={
-                        'immediate': ['Review all newly added tasks', 'Validate priorities'],
-                        'short_term': ['Consider scope reduction', 'Discuss with product owner'],
-                        'prevention': ['Implement stricter change control', 'Regular backlog grooming']
+                        'immediate': immediate_actions,
+                        'short_term': short_term_actions,
+                        'prevention': prevention_actions
                     },
                     ai_summary=f'Scope has increased by {scope_change_pct:.1f}% since baseline. '
                               f'{tasks_added} new tasks added.',
@@ -2350,6 +2419,7 @@ class Command(BaseCommand):
                 alerts_created += 1
         
         self.stdout.write(f'   ✅ Created {snapshots_created} scope snapshots and {alerts_created} alerts')
+        self.stdout.write(f'   📊 Scope creep variation: Software Dev (~20%), Marketing (~12%), Bug Tracking (~35%)')
 
     def create_file_attachments(self, tasks, alex, sam, jordan):
         """Create simulated file attachment metadata for tasks"""
