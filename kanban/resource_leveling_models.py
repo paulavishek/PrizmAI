@@ -192,7 +192,9 @@ class UserPerformanceProfile(models.Model):
         Predict how long this user will take to complete the task (in hours)
         Based on complexity and historical performance
         """
-        base_time = self.avg_completion_time_hours or 8.0
+        # Ensure base_time is always positive (min 4 hours, max 40 hours)
+        raw_base = self.avg_completion_time_hours or 8.0
+        base_time = max(4.0, min(abs(raw_base) if raw_base != 0 else 8.0, 40.0))
         
         # Adjust for complexity
         if task.complexity_score:

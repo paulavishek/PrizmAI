@@ -89,10 +89,13 @@ class ResourceLevelingService:
         # Build task context
         task_text = f"{task.title} {task.description or ''}"
         
+        # Get the board for context
+        board = task.column.board if task.column else None
+        
         # Analyze each candidate
         candidates = []
         for profile in profiles:
-            analysis = self._analyze_candidate(task, task_text, profile, temp_workload_adjustments)
+            analysis = self._analyze_candidate(task, task_text, profile, temp_workload_adjustments, board)
             candidates.append(analysis)
         
         # Sort by overall score
@@ -130,7 +133,7 @@ class ResourceLevelingService:
         
         return result
     
-    def _analyze_candidate(self, task, task_text, profile, temp_workload_adjustments=None):
+    def _analyze_candidate(self, task, task_text, profile, temp_workload_adjustments=None, board=None):
         """
         Analyze a single candidate for task assignment
         
@@ -142,14 +145,29 @@ class ResourceLevelingService:
         # 1. Skill match score (0-100)
         skill_score = profile.calculate_skill_match(task_text)
         
-        # 2. Availability score (0-100) adjusted for temporary assignments
-        # If we've already suggested tasks to this user in this batch, reduce their availability
+        # 2. Calculate ACTUAL current workload for this board
+        # This is more accurate than profile.current_active_tasks which might be org-filtered
+        from kanban.models import Task
+        if board:
+            actual_task_count = Task.objects.filter(
+                assigned_to=profile.user,
+                column__board=board,
+                completed_at__isnull=True
+            ).exclude(column__name__icontains='done').count()
+        else:
+            # Fallback to profile's stored count
+            actual_task_count = profile.current_active_tasks
+        
+        # Adjust for temporary assignments from this batch
         temp_task_count = 0
         if temp_workload_adjustments and profile.user.id in temp_workload_adjustments:
             temp_task_count = temp_workload_adjustments[profile.user.id]
         
-        # Each suggested task reduces availability
-        adjusted_utilization = profile.utilization_percentage + (temp_task_count * 15)  # ~15% per task
+        total_task_count = actual_task_count + temp_task_count
+        
+        # Calculate availability based on actual task count
+        # Each task adds ~15% utilization
+        adjusted_utilization = profile.utilization_percentage + (total_task_count * 15)
         availability_score = max(100 - adjusted_utilization, 0)
         
         # 3. Velocity score (normalized to 0-100)
@@ -190,8 +208,8 @@ class ResourceLevelingService:
                 quality_normalized * 0.05      # 5% weight on quality (minimal weight without data)
             )
         
-        # Predict completion time
-        estimated_hours = profile.predict_completion_time(task)
+        # Predict completion time (use actual task count for workload calculation)
+        estimated_hours = self._predict_completion_time_with_workload(profile, task, total_task_count)
         estimated_completion_date = timezone.now() + timedelta(hours=estimated_hours)
         
         return {
@@ -206,9 +224,41 @@ class ResourceLevelingService:
             'quality': round(quality_normalized, 1),
             'estimated_hours': round(estimated_hours, 1),
             'estimated_completion': estimated_completion_date.isoformat(),
-            'current_workload': profile.current_active_tasks + temp_task_count,  # Include temporary suggestions
+            'current_workload': total_task_count,  # Use actual + temporary count
             'utilization': round(adjusted_utilization, 1)  # Use adjusted utilization
         }
+    
+    def _predict_completion_time_with_workload(self, profile, task, actual_task_count):
+        """
+        Predict completion time based on actual workload
+        
+        Args:
+            profile: UserPerformanceProfile
+            task: Task object
+            actual_task_count: Actual number of active tasks for this user
+        
+        Returns:
+            Estimated hours to complete
+        """
+        # Ensure base_time is always positive (min 4 hours, max 40 hours)
+        # Some profiles may have corrupted/negative values
+        raw_base = profile.avg_completion_time_hours or 8.0
+        base_time = max(4.0, min(abs(raw_base) if raw_base != 0 else 8.0, 40.0))
+        
+        # Adjust for complexity
+        if task.complexity_score:
+            complexity_multiplier = task.complexity_score / 5
+            estimated_time = base_time * complexity_multiplier
+        else:
+            estimated_time = base_time
+        
+        # Adjust for current workload - each active task adds overhead
+        if actual_task_count > 0:
+            # Each active task adds ~8% overhead due to context switching
+            workload_multiplier = 1.0 + (actual_task_count * 0.08)
+            estimated_time *= workload_multiplier
+        
+        return estimated_time
     
     def _generate_reassignment_reasoning(self, recommended, current, improvement):
         """Generate human-readable reasoning for reassignment"""
