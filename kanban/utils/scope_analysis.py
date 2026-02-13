@@ -103,10 +103,18 @@ Format your response as JSON:
     try:
         # Configure Gemini
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        # Generation config for scope analysis
+        generation_config = {
+            'temperature': 0.4,  # Analytical task
+            'top_p': 0.8,
+            'top_k': 40,
+            'max_output_tokens': 2048,  # Adequate for scope analysis JSON
+        }
         
         # Generate analysis
-        response = model.generate_content(prompt)
+        response = model.generate_content(prompt, generation_config=generation_config)
         
         # Parse response
         import json

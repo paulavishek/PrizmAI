@@ -610,7 +610,26 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
             model = genai.GenerativeModel(model_name)
             logger.debug(f"Using {model_name} for budget AI analysis")
             
-            response = model.generate_content(prompt)
+            # Token limits for budget operations to prevent JSON truncation
+            budget_token_limits = {
+                'budget_analysis': 4096,      # Comprehensive health analysis with recommendations
+                'budget_recommendations': 4096,  # Multiple detailed recommendations
+                'budget_prediction': 3072,    # Prediction with scenarios
+                'budget_patterns': 3072,      # Pattern analysis
+                'budget_optimization': 3072,  # Resource optimization suggestions
+            }
+            
+            max_tokens = budget_token_limits.get(cache_operation, 3072)
+            
+            # Generation config optimized for financial analysis
+            generation_config = {
+                'temperature': 0.4,  # Lower for consistent financial analysis
+                'top_p': 0.8,
+                'top_k': 40,
+                'max_output_tokens': max_tokens,
+            }
+            
+            response = model.generate_content(prompt, generation_config=generation_config)
             
             if response and response.text:
                 result = response.text

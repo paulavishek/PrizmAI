@@ -104,7 +104,15 @@ JSON array:"""
         if not model:
             return []
 
-        response = model.generate_content(prompt)
+        # Generation config for skill extraction - simpler JSON output
+        generation_config = {
+            'temperature': 0.3,  # Low for consistent skill identification
+            'top_p': 0.8,
+            'top_k': 40,
+            'max_output_tokens': 1024,  # Skill list doesn't need many tokens
+        }
+
+        response = model.generate_content(prompt, generation_config=generation_config)
         response_text = response.text.strip()
         
         # Extract JSON from response (handle markdown code blocks)
@@ -614,7 +622,15 @@ Valid types: "training", "hiring", "contractor", "redistribute", "mentorship", "
 
 JSON array:"""
 
-        response = model.generate_content(prompt)
+        # Generation config for recommendations - needs more detail
+        generation_config = {
+            'temperature': 0.5,  # Balanced for creative yet practical recommendations
+            'top_p': 0.8,
+            'top_k': 40,
+            'max_output_tokens': 2048,  # More tokens for detailed recommendations
+        }
+
+        response = model.generate_content(prompt, generation_config=generation_config)
         response_text = response.text.strip()
         
         # Extract JSON

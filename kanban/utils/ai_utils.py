@@ -101,35 +101,43 @@ TASK_TEMPERATURE_MAP = {
 
 # Token limits for different AI task types
 # Lower limits = faster responses, Higher limits = more detailed outputs
-# Optimized for latency while maintaining quality
+# Optimized for latency while maintaining quality - increased to prevent JSON truncation
 TASK_TOKEN_LIMITS = {
-    # Short responses (512-1024 tokens)
-    'lean_classification': 512,          # Simple classification + brief explanation
-    'comment_summary': 768,              # Concise summary
-    'task_enhancement': 768,             # Brief enhancement suggestions
-    'mitigation_suggestions': 768,       # Focused recommendations
+    # Short responses (1024-1536 tokens) - increased to prevent truncation of explainability fields
+    'lean_classification': 1024,          # Classification + detailed explanation + confidence
+    'comment_summary': 1536,              # Summary with sentiment analysis and action items
+    'mitigation_suggestions': 1536,       # Mitigation strategies with action steps
     
-    # Medium responses (1024-1536 tokens)
-    'task_description': 1024,            # Description + checklist
-    'priority_suggestion': 1024,         # Priority with reasoning
-    'dashboard_insights': 1024,          # Quick insights
-    'velocity_forecast': 1024,           # Forecast data
+    # Medium responses (1536-2048 tokens)
+    'task_description': 2048,            # Description + checklist + skill requirements
+    'priority_suggestion': 2048,         # Priority with full comparison and recommendations
+    'dashboard_insights': 1536,          # Quick insights
+    'velocity_forecast': 1536,           # Forecast data
+    'simple': 1536,                      # Default for simple tasks
     
-    # Standard responses (1536-2048 tokens)
-    'board_analytics_summary': 2048,     # Comprehensive but focused
-    'risk_assessment': 2048,             # Risk analysis
-    'retrospective': 1536,               # Retrospective summary
+    # Standard responses (2048-3072 tokens)
+    'task_enhancement': 2048,            # Enhanced description + checklist + acceptance criteria
+    'board_analytics_summary': 3072,     # Comprehensive analytics with health factors
+    'risk_assessment': 3072,             # Risk analysis with mitigation and explainability
+    'retrospective': 2048,               # Retrospective summary with patterns
     'skill_gap_analysis': 2048,          # Skill analysis
-    'budget_analysis': 2048,             # Budget insights
-    'workflow_optimization': 1536,       # Workflow suggestions
+    'budget_analysis': 3072,             # Budget insights with trends and recommendations
+    'dependency_analysis': 2048,         # Dependency and cascading risk analysis
+    'deadline_prediction': 3072,         # Timeline prediction with velocity and scenarios
     
-    # Extended responses (2048+ tokens) - only when truly needed
+    # Extended responses (3072-4096 tokens) - complex nested JSON structures
+    'workflow_optimization': 3072,       # Workflow analysis with bottlenecks and recommendations
+    'task_breakdown': 4096,              # Multiple subtasks with dependencies and risk analysis
+    'critical_path': 4096,               # Critical path with task analysis and scheduling
+    'complex': 3072,                     # General complex analysis tasks
+    'timeline_generation': 3072,         # Timeline details with milestones
+    
+    # Large responses (4096+ tokens) - extensive board-wide analysis
     'column_recommendations': 5120,      # Complex structure with full explainability (4-7 columns)
     'board_setup': 3072,                 # Full board configuration with explainability
-    'timeline_generation': 2048,         # Timeline details
     
     # Default
-    'default': 2048,                     # Reduced from 4096 for faster responses
+    'default': 2048,                     # Default for unspecified tasks
 }
 
 def get_token_limit_for_task(task_type: str) -> int:

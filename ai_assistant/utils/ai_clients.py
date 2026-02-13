@@ -34,11 +34,21 @@ class GeminiClient:
             
             # Base generation config - temperature can be overridden per request
             # Default 0.7 for general use, but specific features use optimized values
+            # max_output_tokens increased to 3072 to prevent JSON truncation for complex responses
             self.base_generation_config = {
                 'temperature': 0.7,  # Default - will be overridden per task type
                 'top_p': 0.8,
                 'top_k': 40,
-                'max_output_tokens': 2048,
+                'max_output_tokens': 3072,  # Increased from 2048 for complex JSON responses
+            }
+            
+            # Task-specific token limits - use higher limits for complex analysis
+            self.task_token_limits = {
+                'simple': 2048,
+                'complex': 4096,  # Complex tasks need more tokens for detailed JSON
+                'retrospective': 4096,  # Retrospectives generate comprehensive reports
+                'chat_response': 2048,  # Chat responses can be shorter
+                'analysis': 3072,  # Analysis reports with recommendations
             }
             
             # For backward compatibility
@@ -175,22 +185,28 @@ class GeminiClient:
             # Determine which model we're using for logging
             model_name = 'gemini-2.5-flash' if task_complexity == 'complex' else 'gemini-2.5-flash-lite'
             
-            # Build generation config with temperature override if provided
-            generation_config = None
+            # Get token limit based on task complexity and operation type
+            token_limit = self.task_token_limits.get(
+                cache_operation, 
+                self.task_token_limits.get(task_complexity, 3072)
+            )
+            
+            # Build generation config with temperature override and task-specific token limit
             temp_used = self.base_generation_config.get('temperature', 0.7)
+            generation_config = {
+                **self.base_generation_config,
+                'max_output_tokens': token_limit,
+            }
+            
             if temperature is not None:
-                generation_config = {
-                    **self.base_generation_config,
-                    'temperature': temperature
-                }
+                generation_config['temperature'] = temperature
                 temp_used = temperature
                 logger.debug(f"Using custom temperature: {temperature}")
             
+            logger.debug(f"GeminiClient using max_output_tokens: {token_limit} for operation: {cache_operation}")
+            
             # Generate content WITHOUT using chat sessions
-            if generation_config:
-                response = model.generate_content(full_prompt, generation_config=generation_config)
-            else:
-                response = model.generate_content(full_prompt)
+            response = model.generate_content(full_prompt, generation_config=generation_config)
             
             # Check if response was blocked by safety filters
             if not response.candidates or not response.candidates[0].content.parts:

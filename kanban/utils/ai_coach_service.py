@@ -67,7 +67,25 @@ class AICoachService:
             
         try:
             model = self.genai.GenerativeModel('gemini-2.5-flash')
-            response = model.generate_content(prompt)
+            
+            # Token limits for coaching operations to prevent JSON truncation
+            coaching_token_limits = {
+                'coaching_suggestion': 2048,  # Suggestion enhancement with actions
+                'coaching_advice': 3072,      # Detailed coaching response
+                'coaching_question': 2048,    # PM question response
+            }
+            
+            max_tokens = coaching_token_limits.get(operation, 2048)
+            
+            # Generation config for coaching - balanced for helpful advice
+            generation_config = {
+                'temperature': 0.5,  # Balanced for actionable but engaging advice
+                'top_p': 0.8,
+                'top_k': 40,
+                'max_output_tokens': max_tokens,
+            }
+            
+            response = model.generate_content(prompt, generation_config=generation_config)
             
             if response and response.text:
                 result = response.text.strip()
