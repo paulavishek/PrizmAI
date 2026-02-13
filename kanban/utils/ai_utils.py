@@ -124,8 +124,8 @@ TASK_TOKEN_LIMITS = {
     'workflow_optimization': 1536,       # Workflow suggestions
     
     # Extended responses (2048+ tokens) - only when truly needed
-    'column_recommendations': 2048,      # Board setup needs detail
-    'board_setup': 2048,                 # Full board configuration
+    'column_recommendations': 5120,      # Complex structure with full explainability (4-7 columns)
+    'board_setup': 3072,                 # Full board configuration with explainability
     'timeline_generation': 2048,         # Timeline details
     
     # Default
@@ -1282,66 +1282,68 @@ def recommend_board_columns(board_data: Dict) -> Optional[Dict]:
         - Organization Type: {organization_type}
         - Current Columns: {', '.join(existing_columns) if existing_columns else 'None (new board)'}
         
-        Consider these factors:
-        1. Project type and workflow requirements
-        2. Team size and collaboration needs
-        3. Industry best practices
-        4. Review and approval processes
-        5. Quality assurance needs
-        6. Deployment/release cycles
+        Recommend 4-7 columns that create an efficient workflow. Keep descriptions concise.
         
-        Recommend 4-7 columns that would create an efficient workflow.
-        
-        Format your response as JSON WITH FULL EXPLAINABILITY:
+        Format as JSON:
         {{
             "recommended_columns": [
                 {{
                     "name": "Column Name",
-                    "description": "Brief description of what goes in this column",
+                    "description": "One sentence description",
                     "position": 1,
                     "color_suggestion": "#hex_color",
-                    "purpose": "Why this column is essential for the workflow",
-                    "typical_wip_limit": "Suggested WIP limit or null"
+                    "purpose": "One sentence why essential",
+                    "typical_wip_limit": "Number or null"
                 }}
             ],
             "workflow_type": "kanban|scrum|custom",
             "confidence_score": 0.XX,
             "confidence_level": "high|medium|low",
-            "reasoning": "2-3 sentences explaining why this structure works",
+            "reasoning": "1-2 sentences why this structure works",
             "contributing_factors": [
                 {{
-                    "factor": "Factor name (e.g., 'Team Size', 'Project Complexity')",
+                    "factor": "Factor name",
                     "contribution_percentage": XX,
-                    "description": "How this factor influenced the recommendation"
+                    "description": "One sentence impact"
                 }}
             ],
-            "workflow_tips": ["up to 3 tips for using this column structure effectively"],
-            "customization_suggestions": ["up to 2 ways to adapt this structure"],
+            "workflow_tips": ["Tip 1 (keep brief)", "Tip 2", "Tip 3"],
+            "customization_suggestions": ["Option 1", "Option 2"],
             "alternative_workflow": {{
-                "type": "Alternative workflow type",
-                "columns": ["Column 1", "Column 2", "Column 3"],
-                "when_to_use": "Conditions when this alternative would be better"
+                "type": "Type",
+                "columns": ["Col1", "Col2", "Col3"],
+                "when_to_use": "One sentence when better"
             }},
-            "assumptions": [
-                "Assumption 1 about the team or project",
-                "Assumption 2 about the workflow needs"
-            ],
-            "bottleneck_warnings": [
-                "Potential bottleneck 1 to watch for with this structure",
-                "Potential bottleneck 2 to monitor"
-            ]
+            "assumptions": ["Brief assumption 1", "Brief assumption 2"],
+            "bottleneck_warnings": ["Brief warning 1", "Brief warning 2"]
         }}
         """
         
         response_text = generate_ai_content(prompt, task_type='column_recommendations')
         if response_text:
-            # Handle code block formatting
+            # Handle code block formatting and clean up response
             if "```json" in response_text:
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
-                
-            return json.loads(response_text)
+            
+            # Remove any leading/trailing whitespace and potential BOM
+            response_text = response_text.strip()
+            
+            # Try to find JSON object if response contains extra text
+            if not response_text.startswith('{'):
+                # Look for the first { and last }
+                start_idx = response_text.find('{')
+                end_idx = response_text.rfind('}')
+                if start_idx != -1 and end_idx != -1:
+                    response_text = response_text[start_idx:end_idx+1]
+            
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error in column recommendations: {str(e)}")
+                logger.error(f"Response text: {response_text[:500]}")
+                return None
         return None
     except Exception as e:
         logger.error(f"Error recommending columns: {str(e)}")
@@ -1408,7 +1410,7 @@ def generate_board_setup_recommendations(board_data: Dict) -> Optional[Dict]:
         }}
         """
         
-        response_text = generate_ai_content(prompt, task_type='task_description')
+        response_text = generate_ai_content(prompt, task_type='board_setup')
         if response_text:
             # Handle code block formatting and clean up response
             if "```json" in response_text:

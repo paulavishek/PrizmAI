@@ -2968,4 +2968,11 @@ window.toggleLssExplain = toggleLssExplain;
 window.toggleAnalyticsExplain = toggleAnalyticsExplain;
 window.showAIExplainabilityModal = showAIExplainabilityModal;
 
+// Export board setup recommendation functions
+window.applyBoardDescription = applyBoardDescription;
+window.applyBoardPhases = applyBoardPhases;
+window.applyBoardTeamSize = applyBoardTeamSize;
+window.applyAllBoardRecommendations = applyAllBoardRecommendations;
+window.hideBoardRecommendations = hideBoardRecommendations;
+
 
