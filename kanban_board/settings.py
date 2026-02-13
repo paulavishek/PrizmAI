@@ -429,7 +429,7 @@ CACHES = {
     
     # AI Response Cache - longer TTL for expensive AI calls
     'ai_cache': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'BACKEND': 'django_redis.cache.RedisCache',
         'LOCATION': REDIS_URL.replace('/0', '/1'),  # Use DB 1 for AI cache
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
@@ -444,7 +444,7 @@ CACHES = {
     
     # Session Cache - for storing session data
     'session_cache': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'BACKEND': 'django_redis.cache.RedisCache',
         'LOCATION': REDIS_URL.replace('/0', '/2'),  # Use DB 2 for sessions
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
@@ -458,7 +458,7 @@ CACHES = {
     
     # Analytics Cache - for dashboard and analytics data
     'analytics_cache': {
-        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'BACKEND': 'django_redis.cache.RedisCache',
         'LOCATION': REDIS_URL.replace('/0', '/3'),  # Use DB 3 for analytics
         'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',

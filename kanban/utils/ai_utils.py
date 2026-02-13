@@ -1410,16 +1410,28 @@ def generate_board_setup_recommendations(board_data: Dict) -> Optional[Dict]:
         
         response_text = generate_ai_content(prompt, task_type='task_description')
         if response_text:
-            # Handle code block formatting
+            # Handle code block formatting and clean up response
             if "```json" in response_text:
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
             
+            # Remove any leading/trailing whitespace and potential BOM
+            response_text = response_text.strip()
+            
+            # Try to find JSON object if response contains extra text
+            if not response_text.startswith('{'):
+                # Look for the first { and last }
+                start_idx = response_text.find('{')
+                end_idx = response_text.rfind('}')
+                if start_idx != -1 and end_idx != -1:
+                    response_text = response_text[start_idx:end_idx+1]
+            
             try:
                 return json.loads(response_text)
             except json.JSONDecodeError as e:
                 logger.error(f"JSON parsing error in board setup: {str(e)}")
+                logger.error(f"Response text: {response_text[:500]}")
                 return None
         return None
     except Exception as e:
