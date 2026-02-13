@@ -464,9 +464,6 @@ def board_detail(request, board_id):
         # Filter by priority
         if search_form.cleaned_data.get('priority'):
             tasks = tasks.filter(priority=search_form.cleaned_data['priority'])
-          # Filter by label
-        if search_form.cleaned_data.get('label'):
-            tasks = tasks.filter(labels=search_form.cleaned_data['label'])
         
         # Filter by label category (Lean Six Sigma)
         if search_form.cleaned_data.get('label_category'):
