@@ -5,6 +5,7 @@ This module provides helper functions to call the Gemini API for various
 AI-powered features in the PrizmAI application.
 """
 import os
+import re
 import logging
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
@@ -1546,8 +1547,65 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
+            
+            # Clean up common JSON issues from AI responses
+            response_text = response_text.replace('True', 'true').replace('False', 'false')
+            response_text = response_text.replace('None', 'null')
+            response_text = re.sub(r',\s*([}\]])', r'\1', response_text)  # Remove trailing commas
+            
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError as json_err:
+                logger.error(f"Task breakdown JSON parse error: {json_err}. Response text (first 500 chars): {response_text[:500]}")
+                # Try a more aggressive cleanup
+                response_text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', response_text)  # Remove control characters
                 
-            return json.loads(response_text)
+                try:
+                    return json.loads(response_text)
+                except json.JSONDecodeError as second_err:
+                    logger.error(f"Second JSON parse attempt failed: {second_err}")
+                    # Try to repair truncated JSON
+                    try:
+                        cleaned = response_text.rstrip()
+                        if not cleaned.endswith('}'):
+                            # Find the last properly closed object
+                            depth = 0
+                            last_valid_pos = -1
+                            for i, char in enumerate(cleaned):
+                                if char == '{':
+                                    depth += 1
+                                elif char == '}':
+                                    depth -= 1
+                                    if depth == 0:
+                                        last_valid_pos = i
+                            
+                            if last_valid_pos > 0:
+                                cleaned = cleaned[:last_valid_pos + 1]
+                                logger.info("Successfully repaired truncated JSON for task breakdown")
+                                return json.loads(cleaned)
+                            else:
+                                raise json.JSONDecodeError("Could not repair JSON", response_text, 0)
+                        else:
+                            raise second_err
+                    except Exception as repair_err:
+                        logger.error(f"Failed to repair JSON: {repair_err}")
+                        # Return a minimal valid response indicating failure
+                        return {
+                            "is_breakdown_recommended": False,
+                            "complexity_score": 5,
+                            "confidence_score": 0.0,
+                            "confidence_level": "low",
+                            "reasoning": "Unable to analyze task due to response parsing error. Please try again or simplify the task description.",
+                            "complexity_factors": [],
+                            "subtasks": [],
+                            "critical_path": [],
+                            "parallel_opportunities": [],
+                            "workflow_suggestions": ["Try breaking down the task manually", "Simplify the task description"],
+                            "risk_considerations": [],
+                            "assumptions": ["Analysis incomplete due to technical error"],
+                            "total_estimated_effort": "Unknown",
+                            "effort_vs_original": "Unable to estimate"
+                        }
         return None
     except Exception as e:
         logger.error(f"Error suggesting task breakdown: {str(e)}")
