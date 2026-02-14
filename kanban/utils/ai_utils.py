@@ -5,6 +5,7 @@ This module provides helper functions to call the Gemini API for various
 AI-powered features in the PrizmAI application.
 """
 import os
+import re
 import logging
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
@@ -98,6 +99,60 @@ TASK_TEMPERATURE_MAP = {
     'simple': 0.6,                       # Default for simple tasks
     'complex': 0.4,                      # Default for complex tasks
 }
+
+# Token limits for different AI task types
+# Lower limits = faster responses, Higher limits = more detailed outputs
+# Optimized for latency while maintaining quality - increased to prevent JSON truncation
+TASK_TOKEN_LIMITS = {
+    # Short responses (1536-2048 tokens) - increased to prevent truncation of explainability fields
+    'lean_classification': 2048,          # Classification + detailed explanation + confidence + alternatives
+    'comment_summary': 2560,              # Summary with sentiment analysis, action items, and participant analysis
+    'mitigation_suggestions': 2048,       # Mitigation strategies with action steps
+    
+    # Medium responses (2048-3072 tokens)
+    'task_description': 4096,            # Description + checklist + skill requirements + full explainability
+    'priority_suggestion': 3072,         # Priority with full comparison and recommendations
+    'dashboard_insights': 2048,          # Quick insights with reasoning
+    'velocity_forecast': 2048,           # Forecast data with explanations
+    'simple': 2048,                      # Default for simple tasks - increased for explainability
+    
+    # Standard responses (3072-4096 tokens)
+    'task_enhancement': 3072,            # Enhanced description + checklist + acceptance criteria + reasoning
+    'board_analytics_summary': 3072,     # Comprehensive analytics with health factors
+    'risk_assessment': 3072,             # Risk analysis with mitigation and explainability
+    'retrospective': 3072,               # Retrospective summary with patterns and recommendations
+    'skill_gap_analysis': 3072,          # Skill analysis with recommendations
+    'budget_analysis': 4096,             # Budget insights with trends and recommendations
+    'dependency_analysis': 3072,         # Dependency and cascading risk analysis
+    'deadline_prediction': 3072,         # Timeline prediction with velocity and scenarios
+    
+    # Extended responses (3072-4096 tokens) - complex nested JSON structures
+    'workflow_optimization': 3072,       # Workflow analysis with bottlenecks and recommendations
+    'task_breakdown': 4096,              # Multiple subtasks with dependencies and risk analysis
+    'critical_path': 4096,               # Critical path with task analysis and scheduling
+    'complex': 3072,                     # General complex analysis tasks
+    'timeline_generation': 3072,         # Timeline details with milestones
+    
+    # Large responses (4096+ tokens) - extensive board-wide analysis
+    'column_recommendations': 5120,      # Complex structure with full explainability (4-7 columns)
+    'board_setup': 3072,                 # Full board configuration with explainability
+    'task_summary': 4096,                # Comprehensive task summary with all aspects analyzed
+    
+    # Default
+    'default': 2048,                     # Default for unspecified tasks
+}
+
+def get_token_limit_for_task(task_type: str) -> int:
+    """
+    Get the appropriate max_output_tokens for a given task type.
+    
+    Args:
+        task_type: The type of AI task being performed
+        
+    Returns:
+        int: Maximum output tokens for this task
+    """
+    return TASK_TOKEN_LIMITS.get(task_type, TASK_TOKEN_LIMITS['default'])
 
 def get_temperature_for_task(task_type: str) -> float:
     """
@@ -217,15 +272,18 @@ def generate_ai_content(prompt: str, task_type='simple', use_cache: bool = True,
         # Get optimized temperature for this task type
         temperature = get_temperature_for_task(task_type)
         
-        # Create generation config with task-specific temperature
+        # Get optimized token limit for this task type (reduces latency)
+        max_tokens = get_token_limit_for_task(task_type)
+        
+        # Create generation config with task-specific temperature and token limits
         generation_config = {
             'temperature': temperature,
             'top_p': 0.8,
             'top_k': 40,
-            'max_output_tokens': 4096,
+            'max_output_tokens': max_tokens,
         }
         
-        logger.debug(f"Generating AI content - Task: {task_type}, Temperature: {temperature}")
+        logger.debug(f"Generating AI content - Task: {task_type}, Temperature: {temperature}, MaxTokens: {max_tokens}")
         
         # Generate content with optimized settings
         response = model.generate_content(prompt, generation_config=generation_config)
@@ -445,9 +503,9 @@ def summarize_comments(comments: List[Dict]) -> Optional[Dict]:
         logger.error(f"Error summarizing comments: {str(e)}")
         return None
 
-def suggest_lean_classification(title: str, description: str) -> Optional[Dict]:
+def suggest_lean_classification(title: str, description: str, estimated_cost: float = None, estimated_hours: float = None, hourly_rate: float = None) -> Optional[Dict]:
     """
-    Suggest Lean Six Sigma classification for a task based on its title and description.
+    Suggest Lean Six Sigma classification for a task based on its title, description, and budget data.
     
     Provides explainable AI output including confidence scores, contributing factors,
     and alternative classifications to support user decision-making.
@@ -455,23 +513,47 @@ def suggest_lean_classification(title: str, description: str) -> Optional[Dict]:
     Args:
         title: The task title
         description: The task description
+        estimated_cost: Estimated cost for this task (optional)
+        estimated_hours: Estimated hours to complete (optional)
+        hourly_rate: Hourly rate for labor cost calculation (optional)
         
     Returns:
         A dictionary with suggested classification, justification, confidence,
         and explainability data or None if suggestion fails
     """
     try:
+        # Build budget context string
+        budget_context = ""
+        if estimated_cost is not None or estimated_hours is not None or hourly_rate is not None:
+            budget_parts = []
+            if estimated_cost is not None and estimated_cost > 0:
+                budget_parts.append(f"Estimated Cost: ${estimated_cost:,.2f}")
+            if estimated_hours is not None and estimated_hours > 0:
+                budget_parts.append(f"Estimated Hours: {estimated_hours:.1f} hours")
+            if hourly_rate is not None and hourly_rate > 0:
+                budget_parts.append(f"Hourly Rate: ${hourly_rate:.2f}/hr")
+                if estimated_hours is not None and estimated_hours > 0:
+                    labor_cost = estimated_hours * hourly_rate
+                    budget_parts.append(f"Estimated Labor Cost: ${labor_cost:,.2f}")
+            if budget_parts:
+                budget_context = "\n\nBudget & Cost Information:\n- " + "\n- ".join(budget_parts)
+        
         prompt = f"""
-        Based on this task's title and description, suggest a Lean Six Sigma classification
+        Based on this task's title, description, and budget information, suggest a Lean Six Sigma classification
         (Value-Added, Necessary Non-Value-Added, or Waste/Eliminate) with full explainability.
         
         Task Title: {title}
-        Task Description: {description or '(No description provided)'}
+        Task Description: {description or '(No description provided)'}{budget_context}
         
         Classification Definitions:
         - Value-Added (VA): Activities that transform the product/service in a way the customer values
         - Necessary Non-Value-Added (NNVA): Required activities that don't directly add value for the customer
         - Waste/Eliminate: Activities that consume resources without adding value
+        
+        IMPORTANT: Consider the cost/budget information in your analysis:
+        - High-cost tasks that don't directly add customer value may indicate waste
+        - Low-cost tasks with high customer impact are typically value-added
+        - Required but costly administrative/compliance tasks fall under Necessary NVA
         
         Analyze the task and provide a comprehensive, explainable recommendation.
         
@@ -524,6 +606,80 @@ def suggest_lean_classification(title: str, description: str) -> Optional[Dict]:
         logger.error(f"Error suggesting lean classification: {str(e)}")
         return None
 
+
+def _transform_analytics_response(parsed: Dict) -> Dict:
+    """
+    Transform simplified AI response to full format for backward compatibility.
+    Maps new streamlined fields to legacy structure expected by frontend.
+    """
+    # If already in old format, return as-is
+    if 'health_assessment' in parsed:
+        return parsed
+    
+    # Transform simplified response to expected format
+    result = {
+        'executive_summary': parsed.get('executive_summary', ''),
+        'confidence_score': 0.75,  # Default confidence
+    }
+    
+    # Map health_score -> health_assessment
+    if 'health_score' in parsed or 'health_reasoning' in parsed:
+        result['health_assessment'] = {
+            'overall_score': parsed.get('health_score', 'at_risk'),
+            'score_reasoning': parsed.get('health_reasoning', ''),
+            'health_indicators': []
+        }
+    
+    # Map key_insights (format is compatible)
+    if 'key_insights' in parsed:
+        result['key_insights'] = parsed['key_insights']
+    
+    # Map concerns -> areas_of_concern
+    if 'concerns' in parsed:
+        result['areas_of_concern'] = [
+            {
+                'concern': c.get('concern', ''),
+                'severity': c.get('severity', 'medium'),
+                'recommended_action': c.get('action', ''),
+            }
+            for c in parsed.get('concerns', [])
+        ]
+    
+    # Map recommendations -> process_improvement_recommendations
+    if 'recommendations' in parsed:
+        result['process_improvement_recommendations'] = [
+            {
+                'recommendation': r.get('recommendation', ''),
+                'expected_impact': r.get('impact', ''),
+                'priority': r.get('priority', 1),
+                'implementation_effort': 'medium',
+            }
+            for r in parsed.get('recommendations', [])
+        ]
+    
+    # Map lean_efficiency -> lean_analysis
+    if 'lean_efficiency' in parsed:
+        result['lean_analysis'] = {
+            'value_stream_efficiency': parsed.get('lean_efficiency', 'fair'),
+            'efficiency_reasoning': '',
+            'waste_identification': [],
+        }
+    
+    # Map team metrics
+    if 'workload_balance' in parsed:
+        result['team_performance'] = {
+            'workload_balance': parsed.get('workload_balance', 'balanced'),
+        }
+    
+    # Map trend
+    if 'productivity_trend' in parsed:
+        result['trend_analysis'] = {
+            'productivity_trend': parsed.get('productivity_trend', 'stable'),
+        }
+    
+    return result
+
+
 def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
     """
     Generate an AI-powered summary of board analytics data with full explainability.
@@ -556,125 +712,35 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
         tasks_by_priority = analytics_data.get('tasks_by_priority', [])
         tasks_by_user = analytics_data.get('tasks_by_user', [])
         
-        # Build comprehensive prompt
-        prompt = f"""
-        Analyze the following board analytics data and provide a comprehensive, actionable summary for a project manager. 
-        Focus on insights, trends, recommendations, and areas that need attention.
-        Provide full explainability for all analysis and recommendations.
+        # Build optimized prompt - streamlined for faster response while maintaining quality
+        prompt = f"""Analyze this board data and provide actionable insights for a project manager.
 
-        ## Board Metrics Overview:
-        - Total Tasks: {total_tasks}
-        - Completed Tasks: {completed_count}
-        - Overall Productivity (Completion Rate): {productivity}%
-        - Overdue Tasks: {overdue_count}
-        - Tasks Due Soon: {upcoming_count}
+## Metrics:
+- Tasks: {total_tasks} total, {completed_count} complete ({productivity}% productivity)
+- Overdue: {overdue_count}, Due soon: {upcoming_count}
+- Lean: {value_added_percentage}% value-added (target: 60%+), {total_categorized} categorized
+- Columns: {', '.join([f"{col['name']}:{col['count']}" for col in tasks_by_column])}
+- Priority: {', '.join([f"{pri['priority']}:{pri['count']}" for pri in tasks_by_priority])}
+- Team: {', '.join([f"{user['username']}:{user['count']}tasks({user['completion_rate']}%)" for user in tasks_by_user[:5]])}
 
-        ## Lean Six Sigma Analysis:
-        - Total Categorized Tasks: {total_categorized} out of {total_tasks}
-        - Value-Added Tasks: {tasks_by_lean_category[0]['count'] if tasks_by_lean_category else 0} ({value_added_percentage}% of categorized)
-        - Necessary Non-Value-Added: {tasks_by_lean_category[1]['count'] if len(tasks_by_lean_category) > 1 else 0}
-        - Waste/Eliminate Tasks: {tasks_by_lean_category[2]['count'] if len(tasks_by_lean_category) > 2 else 0}
-        
-        Note: In Lean Six Sigma, Value-Added percentage ideally should be 60%+ for healthy projects. 
-        Value of {value_added_percentage}% means {100 - value_added_percentage}% of work is either necessary overhead or potential waste.
-
-        ## Task Distribution:
-        Column Distribution: {', '.join([f"{col['name']}: {col['count']}" for col in tasks_by_column])}
-        Priority Distribution: {', '.join([f"{pri['priority']}: {pri['count']}" for pri in tasks_by_priority])}
-        Assignee Workload: {', '.join([f"{user['username']}: {user['count']} tasks ({user['completion_rate']}% complete)" for user in tasks_by_user[:5]])}
-
-        Format your response as JSON WITH FULL EXPLAINABILITY:
-        {{
-            "executive_summary": "2-3 sentence overall summary for quick reading",
-            "confidence_score": 0.XX,
-            "analysis_quality": {{
-                "data_completeness": "high|medium|low",
-                "metrics_reliability": "high|medium|low",
-                "sample_size_adequacy": "sufficient|marginal|insufficient"
-            }},
-            "health_assessment": {{
-                "overall_score": "healthy|at_risk|critical",
-                "score_reasoning": "Why this health score was assigned",
-                "health_indicators": [
-                    {{
-                        "indicator": "Indicator name",
-                        "status": "positive|neutral|negative",
-                        "value": "Actual value",
-                        "benchmark": "Expected/ideal value",
-                        "impact_on_score": "How this affects overall health"
-                    }}
-                ]
-            }},
-            "key_insights": [
-                {{
-                    "insight": "The insight statement",
-                    "evidence": "Data points supporting this insight",
-                    "significance": "Why this matters",
-                    "confidence": "high|medium|low"
-                }}
-            ],
-            "areas_of_concern": [
-                {{
-                    "concern": "The concern description",
-                    "severity": "critical|high|medium|low",
-                    "root_cause_hypothesis": "Likely cause of this issue",
-                    "evidence": "Supporting data",
-                    "recommended_action": "What to do about it",
-                    "timeline": "When to address"
-                }}
-            ],
-            "process_improvement_recommendations": [
-                {{
-                    "recommendation": "Specific actionable suggestion",
-                    "rationale": "Why this is recommended based on data",
-                    "expected_impact": "What improvement to expect",
-                    "implementation_effort": "low|medium|high",
-                    "priority": 1,
-                    "success_metrics": ["How to measure improvement"]
-                }}
-            ],
-            "lean_analysis": {{
-                "value_stream_efficiency": "excellent|good|fair|poor",
-                "efficiency_reasoning": "Why this efficiency rating",
-                "waste_identification": [
-                    {{
-                        "waste_type": "Type of waste identified",
-                        "tasks_affected": X,
-                        "elimination_strategy": "How to reduce this waste"
-                    }}
-                ],
-                "value_optimization_suggestions": [
-                    "Specific suggestion to increase value-add percentage"
-                ]
-            }},
-            "team_performance": {{
-                "workload_balance": "balanced|slightly_imbalanced|severely_imbalanced",
-                "balance_analysis": "Detailed workload distribution analysis",
-                "top_performers": ["Team member highlights"],
-                "capacity_concerns": ["Any capacity issues identified"],
-                "collaboration_opportunities": ["Where team could work together better"]
-            }},
-            "trend_analysis": {{
-                "productivity_trend": "improving|stable|declining",
-                "trend_evidence": "Data supporting trend assessment",
-                "forecast": "What to expect in coming period"
-            }},
-            "action_items": [
-                {{
-                    "action": "Specific action to take",
-                    "owner": "Suggested owner role",
-                    "urgency": "immediate|this_week|this_month",
-                    "expected_outcome": "What this action will achieve"
-                }}
-            ],
-            "assumptions": [
-                "Assumption made in this analysis"
-            ],
-            "limitations": [
-                "Limitation of this analysis due to data constraints"
-            ]
-        }}
-        """
+Return JSON only:
+{{
+  "executive_summary": "2-3 sentences summarizing health and key findings",
+  "health_score": "healthy|at_risk|critical",
+  "health_reasoning": "Brief explanation",
+  "key_insights": [
+    {{"insight": "Finding", "evidence": "Data point", "confidence": "high|medium|low"}}
+  ],
+  "concerns": [
+    {{"concern": "Issue", "severity": "critical|high|medium|low", "action": "Recommendation"}}
+  ],
+  "recommendations": [
+    {{"recommendation": "Action", "impact": "Expected result", "priority": 1}}
+  ],
+  "lean_efficiency": "excellent|good|fair|poor",
+  "workload_balance": "balanced|imbalanced",
+  "productivity_trend": "improving|stable|declining"
+}}"""
         
         response_text = generate_ai_content(prompt, task_type='board_analytics_summary')
         if response_text:
@@ -744,6 +810,8 @@ def summarize_board_analytics(analytics_data: Dict) -> Optional[Dict]:
                 # Validate that we got expected structure
                 if isinstance(parsed, dict):
                     logger.info(f"Successfully parsed board analytics JSON with {len(parsed)} keys")
+                    # Transform simplified format to full format for backward compatibility
+                    parsed = _transform_analytics_response(parsed)
                     return parsed
                 else:
                     logger.warning(f"AI returned non-dict JSON: {type(parsed)}")
@@ -813,8 +881,8 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
     Suggest optimal priority level for a task based on context.
     
     Args:
-        task_data: Dictionary containing task information (title, description, due_date, etc.)
-        board_context: Dictionary containing board context (workload, deadlines, etc.)
+        task_data: Dictionary containing task information (title, description, due_date, budget fields, etc.)
+        board_context: Dictionary containing board context (workload, deadlines, budget summary, etc.)
         
     Returns:
         A dictionary with suggested priority and reasoning or None if suggestion fails
@@ -825,12 +893,44 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
         description = task_data.get('description', '')
         due_date = task_data.get('due_date', '')
         current_priority = task_data.get('current_priority', 'medium')
-          # Extract board context
+        
+        # Extract budget/cost information
+        estimated_cost = task_data.get('estimated_cost')
+        estimated_hours = task_data.get('estimated_hours')
+        hourly_rate = task_data.get('hourly_rate')
+        
+        # Build budget context string
+        budget_info = ""
+        if estimated_cost is not None or estimated_hours is not None or hourly_rate is not None:
+            budget_parts = []
+            if estimated_cost is not None and float(estimated_cost) > 0:
+                budget_parts.append(f"Estimated Cost: ${float(estimated_cost):,.2f}")
+            if estimated_hours is not None and float(estimated_hours) > 0:
+                budget_parts.append(f"Estimated Hours: {float(estimated_hours):.1f} hours")
+            if hourly_rate is not None and float(hourly_rate) > 0:
+                budget_parts.append(f"Hourly Rate: ${float(hourly_rate):.2f}/hr")
+                if estimated_hours is not None and float(estimated_hours) > 0:
+                    labor_cost = float(estimated_hours) * float(hourly_rate)
+                    budget_parts.append(f"Estimated Labor Cost: ${labor_cost:,.2f}")
+            if budget_parts:
+                budget_info = "\n        - " + "\n        - ".join(budget_parts)
+        
+        # Extract board context
         total_tasks = board_context.get('total_tasks', 0)
         high_priority_count = board_context.get('high_priority_count', 0)
         urgent_count = board_context.get('urgent_count', 0)
         overdue_count = board_context.get('overdue_count', 0)
         upcoming_deadlines = board_context.get('upcoming_deadlines', [])
+        
+        # Extract board budget context if available
+        avg_task_cost = board_context.get('avg_task_cost')
+        total_board_budget = board_context.get('total_board_budget')
+        
+        board_budget_info = ""
+        if avg_task_cost is not None:
+            board_budget_info += f"\n        - Average Task Cost on Board: ${float(avg_task_cost):,.2f}"
+        if total_board_budget is not None:
+            board_budget_info += f"\n        - Total Board Budget: ${float(total_board_budget):,.2f}"
         
         # Handle case where upcoming_deadlines might be an integer count instead of a list
         if isinstance(upcoming_deadlines, int):
@@ -850,19 +950,20 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
            "High Impact due to [keyword], but Low Urgency due to [due date]"
         4. **Workload Distribution**: Consider if the board already has too many high/urgent tasks
         5. **Dependencies**: Tasks that block others need higher priority
+        6. **Budget & Cost Impact**: Higher-cost tasks may warrant higher priority for ROI optimization
         
         ## Task Information:
         - Title: {title}
         - Description: {description or 'No description provided'}
         - Current Priority: {current_priority}
-        - Due Date: {due_date or 'No due date set'}
+        - Due Date: {due_date or 'No due date set'}{budget_info if budget_info else ''}
         
         ## Board Context:
         - Total Tasks on Board: {total_tasks}
         - Current High Priority Tasks: {high_priority_count}
         - Current Urgent Tasks: {urgent_count}
         - Overdue Tasks: {overdue_count}
-        - Tasks Due Soon: {upcoming_deadlines_count}
+        - Tasks Due Soon: {upcoming_deadlines_count}{board_budget_info if board_budget_info else ''}
         
         Consider these factors in order:
         1. **Semantic keywords** in title/description indicating business impact
@@ -871,6 +972,7 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
         4. Current workload distribution (avoid too many high/urgent priorities)
         5. Dependencies and blockers that might be indicated
         6. Business value and risk implied by the task
+        7. **Budget/Cost considerations**: High-cost tasks may need higher priority for better ROI
         
         Available priority levels: low, medium, high, urgent
         
@@ -936,7 +1038,7 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
     The API endpoint validates that an assignee is selected before calling this function.
     
     Args:
-        task_data: Dictionary containing task information (must include 'assigned_to')
+        task_data: Dictionary containing task information (must include 'assigned_to', may include 'estimated_hours')
         team_context: Dictionary containing team performance and historical data
         
     Returns:
@@ -957,6 +1059,11 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         dependencies_count = task_data.get('dependencies_count', 0)
         risk_score = task_data.get('risk_score')
         risk_level = task_data.get('risk_level')
+        
+        # Extract budget/effort estimation fields
+        estimated_hours = task_data.get('estimated_hours')
+        estimated_cost = task_data.get('estimated_cost')
+        hourly_rate = task_data.get('hourly_rate')
         
         # Extract team context
         assignee_avg_completion = team_context.get('assignee_avg_completion_days', 0)
@@ -995,6 +1102,19 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         else:
             skill_match_note = "Skill match not assessed"
         
+        # Format estimated hours info (critical for timeline calculation)
+        estimated_hours_note = ""
+        if estimated_hours is not None and float(estimated_hours) > 0:
+            hours_val = float(estimated_hours)
+            # Calculate expected days based on estimated hours and assignee velocity
+            if assignee_velocity > 0:
+                estimated_days_from_hours = hours_val / assignee_velocity
+                estimated_hours_note = f"- **Estimated Effort**: {hours_val:.1f} hours (approximately {estimated_days_from_hours:.1f} days at {assignee_velocity} hours/day)"
+            else:
+                estimated_hours_note = f"- **Estimated Effort**: {hours_val:.1f} hours"
+        else:
+            estimated_hours_note = "- Estimated Effort: Not specified (use complexity and historical data to estimate)"
+        
         prompt = f"""
         Predict a realistic timeline for completing this task based on the provided context and historical data.
         
@@ -1003,6 +1123,9 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         - Description: {description or 'No description provided'}
         - Priority: {priority}
         - Assigned To: {assigned_to}
+        
+        ## Budget & Effort Estimation:
+        {estimated_hours_note}
         
         ## Task Complexity & Resource Requirements:
         - Complexity Score: {complexity_score}/10 ({complexity_label})
@@ -1022,10 +1145,11 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         - Upcoming Holidays/Breaks: {', '.join(upcoming_holidays) if upcoming_holidays else 'None'}
         
         Consider these factors (ALL are important for prediction):
-        1. Task complexity score ({complexity_score}/10) - higher complexity = more time needed
-        2. {assigned_to}'s SPECIFIC historical performance (use the actual numbers above!)
-        3. Workload impact ({workload_impact}) - high/critical impact tasks need more focused time
-        4. Skill match ({skill_match_score}%) - poor match means learning curve adds time
+        1. **Estimated hours** (if provided) - use this as the primary basis for timeline calculation
+        2. Task complexity score ({complexity_score}/10) - higher complexity = more time needed
+        3. {assigned_to}'s SPECIFIC historical performance (use the actual numbers above!)
+        4. Workload impact ({workload_impact}) - high/critical impact tasks need more focused time
+        5. Skill match ({skill_match_score}%) - poor match means learning curve adds time
         5. Collaboration requirements - coordination overhead if team work is needed
         6. Dependencies ({dependencies_count}) - must wait for blocking tasks
         7. Risk level ({risk_level}) - high risk tasks often face delays
@@ -1168,66 +1292,68 @@ def recommend_board_columns(board_data: Dict) -> Optional[Dict]:
         - Organization Type: {organization_type}
         - Current Columns: {', '.join(existing_columns) if existing_columns else 'None (new board)'}
         
-        Consider these factors:
-        1. Project type and workflow requirements
-        2. Team size and collaboration needs
-        3. Industry best practices
-        4. Review and approval processes
-        5. Quality assurance needs
-        6. Deployment/release cycles
+        Recommend 4-7 columns that create an efficient workflow. Keep descriptions concise.
         
-        Recommend 4-7 columns that would create an efficient workflow.
-        
-        Format your response as JSON WITH FULL EXPLAINABILITY:
+        Format as JSON:
         {{
             "recommended_columns": [
                 {{
                     "name": "Column Name",
-                    "description": "Brief description of what goes in this column",
+                    "description": "One sentence description",
                     "position": 1,
                     "color_suggestion": "#hex_color",
-                    "purpose": "Why this column is essential for the workflow",
-                    "typical_wip_limit": "Suggested WIP limit or null"
+                    "purpose": "One sentence why essential",
+                    "typical_wip_limit": "Number or null"
                 }}
             ],
             "workflow_type": "kanban|scrum|custom",
             "confidence_score": 0.XX,
             "confidence_level": "high|medium|low",
-            "reasoning": "2-3 sentences explaining why this structure works",
+            "reasoning": "1-2 sentences why this structure works",
             "contributing_factors": [
                 {{
-                    "factor": "Factor name (e.g., 'Team Size', 'Project Complexity')",
+                    "factor": "Factor name",
                     "contribution_percentage": XX,
-                    "description": "How this factor influenced the recommendation"
+                    "description": "One sentence impact"
                 }}
             ],
-            "workflow_tips": ["up to 3 tips for using this column structure effectively"],
-            "customization_suggestions": ["up to 2 ways to adapt this structure"],
+            "workflow_tips": ["Tip 1 (keep brief)", "Tip 2", "Tip 3"],
+            "customization_suggestions": ["Option 1", "Option 2"],
             "alternative_workflow": {{
-                "type": "Alternative workflow type",
-                "columns": ["Column 1", "Column 2", "Column 3"],
-                "when_to_use": "Conditions when this alternative would be better"
+                "type": "Type",
+                "columns": ["Col1", "Col2", "Col3"],
+                "when_to_use": "One sentence when better"
             }},
-            "assumptions": [
-                "Assumption 1 about the team or project",
-                "Assumption 2 about the workflow needs"
-            ],
-            "bottleneck_warnings": [
-                "Potential bottleneck 1 to watch for with this structure",
-                "Potential bottleneck 2 to monitor"
-            ]
+            "assumptions": ["Brief assumption 1", "Brief assumption 2"],
+            "bottleneck_warnings": ["Brief warning 1", "Brief warning 2"]
         }}
         """
         
         response_text = generate_ai_content(prompt, task_type='column_recommendations')
         if response_text:
-            # Handle code block formatting
+            # Handle code block formatting and clean up response
             if "```json" in response_text:
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
-                
-            return json.loads(response_text)
+            
+            # Remove any leading/trailing whitespace and potential BOM
+            response_text = response_text.strip()
+            
+            # Try to find JSON object if response contains extra text
+            if not response_text.startswith('{'):
+                # Look for the first { and last }
+                start_idx = response_text.find('{')
+                end_idx = response_text.rfind('}')
+                if start_idx != -1 and end_idx != -1:
+                    response_text = response_text[start_idx:end_idx+1]
+            
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parsing error in column recommendations: {str(e)}")
+                logger.error(f"Response text: {response_text[:500]}")
+                return None
         return None
     except Exception as e:
         logger.error(f"Error recommending columns: {str(e)}")
@@ -1294,18 +1420,30 @@ def generate_board_setup_recommendations(board_data: Dict) -> Optional[Dict]:
         }}
         """
         
-        response_text = generate_ai_content(prompt, task_type='task_description')
+        response_text = generate_ai_content(prompt, task_type='board_setup')
         if response_text:
-            # Handle code block formatting
+            # Handle code block formatting and clean up response
             if "```json" in response_text:
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
             
+            # Remove any leading/trailing whitespace and potential BOM
+            response_text = response_text.strip()
+            
+            # Try to find JSON object if response contains extra text
+            if not response_text.startswith('{'):
+                # Look for the first { and last }
+                start_idx = response_text.find('{')
+                end_idx = response_text.rfind('}')
+                if start_idx != -1 and end_idx != -1:
+                    response_text = response_text[start_idx:end_idx+1]
+            
             try:
                 return json.loads(response_text)
             except json.JSONDecodeError as e:
                 logger.error(f"JSON parsing error in board setup: {str(e)}")
+                logger.error(f"Response text: {response_text[:500]}")
                 return None
         return None
     except Exception as e:
@@ -1409,8 +1547,65 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
+            
+            # Clean up common JSON issues from AI responses
+            response_text = response_text.replace('True', 'true').replace('False', 'false')
+            response_text = response_text.replace('None', 'null')
+            response_text = re.sub(r',\s*([}\]])', r'\1', response_text)  # Remove trailing commas
+            
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError as json_err:
+                logger.error(f"Task breakdown JSON parse error: {json_err}. Response text (first 500 chars): {response_text[:500]}")
+                # Try a more aggressive cleanup
+                response_text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', response_text)  # Remove control characters
                 
-            return json.loads(response_text)
+                try:
+                    return json.loads(response_text)
+                except json.JSONDecodeError as second_err:
+                    logger.error(f"Second JSON parse attempt failed: {second_err}")
+                    # Try to repair truncated JSON
+                    try:
+                        cleaned = response_text.rstrip()
+                        if not cleaned.endswith('}'):
+                            # Find the last properly closed object
+                            depth = 0
+                            last_valid_pos = -1
+                            for i, char in enumerate(cleaned):
+                                if char == '{':
+                                    depth += 1
+                                elif char == '}':
+                                    depth -= 1
+                                    if depth == 0:
+                                        last_valid_pos = i
+                            
+                            if last_valid_pos > 0:
+                                cleaned = cleaned[:last_valid_pos + 1]
+                                logger.info("Successfully repaired truncated JSON for task breakdown")
+                                return json.loads(cleaned)
+                            else:
+                                raise json.JSONDecodeError("Could not repair JSON", response_text, 0)
+                        else:
+                            raise second_err
+                    except Exception as repair_err:
+                        logger.error(f"Failed to repair JSON: {repair_err}")
+                        # Return a minimal valid response indicating failure
+                        return {
+                            "is_breakdown_recommended": False,
+                            "complexity_score": 5,
+                            "confidence_score": 0.0,
+                            "confidence_level": "low",
+                            "reasoning": "Unable to analyze task due to response parsing error. Please try again or simplify the task description.",
+                            "complexity_factors": [],
+                            "subtasks": [],
+                            "critical_path": [],
+                            "parallel_opportunities": [],
+                            "workflow_suggestions": ["Try breaking down the task manually", "Simplify the task description"],
+                            "risk_considerations": [],
+                            "assumptions": ["Analysis incomplete due to technical error"],
+                            "total_estimated_effort": "Unknown",
+                            "effort_vs_original": "Unable to estimate"
+                        }
         return None
     except Exception as e:
         logger.error(f"Error suggesting task breakdown: {str(e)}")
@@ -3020,7 +3215,7 @@ def summarize_task_details(task_data: Dict) -> Optional[Dict]:
         }
         """
         
-        response_text = generate_ai_content(prompt, task_type='simple')
+        response_text = generate_ai_content(prompt, task_type='task_summary')
         if response_text:
             # Handle code block formatting
             if "```json" in response_text:

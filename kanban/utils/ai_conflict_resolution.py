@@ -18,7 +18,15 @@ class AIConflictResolutionEngine:
     def __init__(self):
         """Initialize Gemini AI client."""
         genai.configure(api_key=settings.GEMINI_API_KEY)
-        self.model = genai.GenerativeModel('gemini-pro')
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
+        
+        # Generation config for conflict resolution - needs detailed JSON responses
+        self.generation_config = {
+            'temperature': 0.4,  # Lower for consistent analytical output
+            'top_p': 0.8,
+            'top_k': 40,
+            'max_output_tokens': 3072,  # Adequate for resolution suggestions with reasoning
+        }
     
     def generate_advanced_resolutions(self, conflict, user=None):
         """
@@ -40,8 +48,8 @@ class AIConflictResolutionEngine:
         prompt = self._build_conflict_resolution_prompt(conflict)
         
         try:
-            # Generate AI response
-            response = self.model.generate_content(prompt)
+            # Generate AI response with proper config
+            response = self.model.generate_content(prompt, generation_config=self.generation_config)
             
             # Parse suggestions
             suggestions = self._parse_ai_suggestions(response.text, conflict)
@@ -369,7 +377,7 @@ FORMAT AS JSON WITH FULL EXPLAINABILITY:
 """
         
         try:
-            response = self.model.generate_content(prompt)
+            response = self.model.generate_content(prompt, generation_config=self.generation_config)
             
             # Parse and apply enhancements
             json_start = response.text.find('{')

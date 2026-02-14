@@ -640,7 +640,7 @@ function getProbabilityColor(probability) {
     } : {
         'high': 'danger',
         'medium': 'warning',
-        'low': 'success'
+        'low': 'secondary'  // Use gray - green implies "good" which is misleading
     };
     return colors[probability] || 'secondary';
 }

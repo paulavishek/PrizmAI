@@ -257,7 +257,7 @@ document.addEventListener('DOMContentLoaded', function() {
             high: 'warning',       // Orange
             urgent: 'danger'       // Red
         } : {
-            low: 'success',
+            low: 'secondary',      // Gray - green implies "good" which is misleading
             medium: 'warning',
             high: 'danger',
             urgent: 'dark'

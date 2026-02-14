@@ -719,7 +719,6 @@ class TaskSearchForm(forms.Form):
         
         if board:
             self.fields['column'].queryset = Column.objects.filter(board=board)
-            self.fields['label'].queryset = TaskLabel.objects.filter(board=board)
             # Show all users instead of just board members
             self.fields['assignee'].queryset = User.objects.all().order_by('username')
 

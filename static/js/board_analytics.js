@@ -159,7 +159,7 @@ function initializePriorityChart() {
             'Urgent': 'rgba(220, 53, 69, 0.8)',  // Red
             'High': 'rgba(255, 193, 7, 0.8)',    // Orange/Yellow
             'Medium': 'rgba(54, 162, 235, 0.8)', // Blue
-            'Low': 'rgba(40, 167, 69, 0.8)'      // Green
+            'Low': 'rgba(108, 117, 125, 0.8)'   // Gray (not green - green implies "good")
         };
     
     // Store chart instance for later updates

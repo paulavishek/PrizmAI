@@ -139,6 +139,12 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
                         'is_admin': False
                     }
                 )
+            
+            # Auto-add user to all official demo boards (same as regular registration)
+            from kanban.models import Board
+            demo_boards = Board.objects.filter(is_official_demo_board=True)
+            for board in demo_boards:
+                board.members.add(user)
         
         return user
     

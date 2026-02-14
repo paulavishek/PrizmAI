@@ -1,0 +1,789 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load kanban_filters %}
+
+{% block title %}Scope Dashboard - {{ board.name }} - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .scope-status-healthy { color: #28a745; }
+    .scope-status-warning { color: #ffc107; }
+    .scope-status-critical { color: #dc3545; }
+    
+    .metric-card {
+        border-left: 4px solid #007bff;
+        transition: transform 0.2s;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .metric-card.success { border-left-color: #28a745; }
+    .metric-card.info { border-left-color: #17a2b8; }
+    .metric-card.warning { border-left-color: #ffc107; }
+    .metric-card.danger { border-left-color: #dc3545; }
+    
+    .stat-card {
+        border-left: 4px solid #007bff;
+        transition: all 0.3s ease;
+    }
+    .stat-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    .stat-card.critical { border-left-color: #dc3545; }
+    .stat-card.warning { border-left-color: #ffc107; }
+    .stat-card.info { border-left-color: #17a2b8; }
+    .stat-card.success { border-left-color: #28a745; }
+    
+    .timeline-item {
+        border-left: 2px solid #e9ecef;
+        padding-left: 20px;
+        margin-bottom: 20px;
+        position: relative;
+    }
+    .timeline-item::before {
+        content: '';
+        position: absolute;
+        left: -6px;
+        top: 5px;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #007bff;
+    }
+    .timeline-item.baseline::before {
+        background: #28a745;
+        width: 14px;
+        height: 14px;
+        left: -8px;
+    }
+    
+    .alert-card {
+        border-left: 4px solid;
+        margin-bottom: 15px;
+        transition: all 0.2s ease;
+    }
+    .alert-card:hover {
+        transform: translateX(5px);
+    }
+    
+    .baseline-setup-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+    }
+    
+    .baseline-setup-card .btn-light {
+        font-weight: 600;
+    }
+    
+    .scope-indicator {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+    
+    .scope-indicator.healthy {
+        background-color: rgba(40, 167, 69, 0.2);
+        color: #28a745;
+    }
+    
+    .scope-indicator.warning {
+        background-color: rgba(255, 193, 7, 0.2);
+        color: #856404;
+    }
+    
+    .scope-indicator.critical {
+        background-color: rgba(220, 53, 69, 0.2);
+        color: #dc3545;
+    }
+    
+    .trend-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 10px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+    
+    .trend-badge.increasing {
+        background-color: rgba(255, 193, 7, 0.2);
+        color: #856404;
+    }
+    
+    .trend-badge.rapidly_increasing {
+        background-color: rgba(220, 53, 69, 0.2);
+        color: #dc3545;
+    }
+    
+    .trend-badge.stable {
+        background-color: rgba(40, 167, 69, 0.2);
+        color: #28a745;
+    }
+    
+    .trend-badge.decreasing {
+        background-color: rgba(23, 162, 184, 0.2);
+        color: #17a2b8;
+    }
+    
+    .action-card {
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .action-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+    
+    .quick-action-btn {
+        border-radius: 8px;
+        padding: 15px 20px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    
+    .quick-action-btn:hover {
+        transform: translateY(-2px);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-chart-area me-2"></i>Scope Dashboard</h2>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb">
+                            {% if is_demo_mode %}
+                            <li class="breadcrumb-item"><a href="{% url 'demo_dashboard' %}">Demo Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'demo_board_detail' board.id %}">{{ board.name }}</a></li>
+                            {% else %}
+                            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+                            {% endif %}
+                            <li class="breadcrumb-item active">Scope</li>
+                        </ol>
+                    </nav>
+                </div>
+                <div>
+                    <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-outline-secondary me-2">
+                        <i class="fas fa-arrow-left me-1"></i> Back
+                    </a>
+                    <a href="{% url 'board_analytics' board.id %}" class="btn btn-outline-primary me-2">
+                        <i class="fas fa-chart-pie me-1"></i> Analytics
+                    </a>
+                    {% if has_baseline %}
+                    <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#createSnapshotModal">
+                        <i class="fas fa-camera me-1"></i> Take Snapshot
+                    </button>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#runAnalysisModal">
+                        <i class="fas fa-brain me-1"></i> AI Analysis
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if not has_baseline %}
+    <!-- No Baseline Setup -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card baseline-setup-card">
+                <div class="card-body p-5 text-center">
+                    <i class="fas fa-bullseye fa-4x mb-4"></i>
+                    <h3 class="mb-3">Set Your Project Baseline</h3>
+                    <p class="lead mb-4">
+                        Start tracking scope changes by setting a baseline snapshot of your current project state.
+                        This will enable you to monitor scope creep and receive AI-powered insights.
+                    </p>
+                    <div class="row justify-content-center mb-4">
+                        <div class="col-md-3">
+                            <div class="bg-white bg-opacity-10 rounded p-3 mb-3">
+                                <h4 class="mb-1">{{ current_metrics.total_tasks }}</h4>
+                                <small>Current Tasks</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="bg-white bg-opacity-10 rounded p-3 mb-3">
+                                <h4 class="mb-1">{{ current_metrics.total_complexity }}</h4>
+                                <small>Complexity Points</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="bg-white bg-opacity-10 rounded p-3 mb-3">
+                                <h4 class="mb-1">{{ current_metrics.high_priority|add:current_metrics.urgent_priority }}</h4>
+                                <small>High/Urgent Priority</small>
+                            </div>
+                        </div>
+                    </div>
+                    <form method="post" action="{% url 'set_scope_baseline' board.id %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="set">
+                        <div class="mb-3">
+                            <input type="text" name="notes" class="form-control form-control-lg" 
+                                   placeholder="Optional: Add a note about this baseline (e.g., 'Sprint 1 start')"
+                                   style="max-width: 500px; margin: 0 auto;">
+                        </div>
+                        <button type="submit" class="btn btn-light btn-lg">
+                            <i class="fas fa-flag-checkered me-2"></i>Set Baseline Now
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- What You'll Get Section -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-chart-line fa-3x text-primary mb-3"></i>
+                    <h5>Scope Tracking</h5>
+                    <p class="text-muted">Monitor task count and complexity changes over time with visual trends and metrics.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-bell fa-3x text-warning mb-3"></i>
+                    <h5>Scope Creep Alerts</h5>
+                    <p class="text-muted">Get automatic alerts when scope increases beyond acceptable thresholds.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <i class="fas fa-robot fa-3x text-success mb-3"></i>
+                    <h5>AI Recommendations</h5>
+                    <p class="text-muted">Receive AI-powered insights and recommendations to manage scope effectively.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Baseline is set - Show full dashboard -->
+    
+    <!-- Key Metrics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card success">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Baseline</h6>
+                    <h3 class="mb-0">{{ scope_status.baseline_tasks }}</h3>
+                    <small class="text-muted">tasks</small>
+                    <div class="mt-2">
+                        <small class="text-muted">{{ scope_status.baseline_complexity }} complexity pts</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card info">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Current</h6>
+                    <h3 class="mb-0">{{ scope_status.current_tasks }}</h3>
+                    <small class="text-muted">tasks</small>
+                    <div class="mt-2">
+                        <small class="text-muted">{{ scope_status.current_complexity }} complexity pts</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card 
+                {% if scope_status.scope_change_percentage > 30 %}danger
+                {% elif scope_status.scope_change_percentage > 15 %}warning
+                {% else %}info{% endif %}">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Scope Change</h6>
+                    <h3 class="mb-0 
+                        {% if scope_status.scope_change_percentage > 30 %}text-danger
+                        {% elif scope_status.scope_change_percentage > 15 %}text-warning
+                        {% else %}text-info{% endif %}">
+                        {% if scope_status.scope_change_percentage > 0 %}+{% endif %}{{ scope_status.scope_change_percentage|floatformat:1 }}%
+                    </h3>
+                    <small class="text-muted">
+                        {% if scope_status.tasks_added > 0 %}+{% endif %}{{ scope_status.tasks_added }} tasks
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2">Baseline Set</h6>
+                    <p class="mb-0">{{ scope_status.baseline_date|date:"M d, Y" }}</p>
+                    <small class="text-muted">{{ scope_status.baseline_date|timesince }} ago</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Velocity Metrics -->
+    {% if velocity %}
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2"><i class="fas fa-tachometer-alt me-2"></i>Scope Velocity</h6>
+                    <h4 class="mb-0">{{ velocity.avg_tasks_added_per_week|floatformat:1 }}</h4>
+                    <small class="text-muted">tasks added per week</small>
+                    <div class="mt-2">
+                        <span class="trend-badge {{ velocity.trend }}">
+                            {% if velocity.trend == 'rapidly_increasing' %}
+                                <i class="fas fa-arrow-up me-1"></i>Rapidly Increasing
+                            {% elif velocity.trend == 'increasing' %}
+                                <i class="fas fa-arrow-up me-1"></i>Increasing
+                            {% elif velocity.trend == 'stable' %}
+                                <i class="fas fa-minus me-1"></i>Stable
+                            {% else %}
+                                <i class="fas fa-arrow-down me-1"></i>Decreasing
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2"><i class="fas fa-chart-bar me-2"></i>Complexity Velocity</h6>
+                    <h4 class="mb-0">{{ velocity.avg_complexity_added_per_week|floatformat:1 }}</h4>
+                    <small class="text-muted">complexity pts per week</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-2"><i class="fas fa-clock me-2"></i>Analysis Period</h6>
+                    <h4 class="mb-0">{{ velocity.weeks_analyzed|floatformat:0 }}</h4>
+                    <small class="text-muted">weeks analyzed</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Active Alerts -->
+    {% if active_alerts %}
+    <div class="card mb-4">
+        <div class="card-header bg-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2 text-warning"></i>Active Alerts ({{ active_alerts.count }})</h5>
+        </div>
+        <div class="card-body">
+            {% for alert in active_alerts %}
+            <div class="alert-card alert 
+                {% if alert.severity == 'critical' %}alert-danger border-danger
+                {% elif alert.severity == 'warning' %}alert-warning border-warning
+                {% else %}alert-info border-info{% endif %}" role="alert">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <h6 class="alert-heading">
+                            {{ alert.get_severity_display }} - Scope +{{ alert.scope_increase_percentage|floatformat:1 }}%
+                        </h6>
+                        <p class="mb-2">
+                            <small class="text-muted">
+                                <i class="fas fa-clock me-1"></i>Detected {{ alert.detected_at|timesince }} ago
+                            </small>
+                        </p>
+                        {% if alert.ai_summary %}
+                        <p class="mb-2">{{ alert.ai_summary }}</p>
+                        {% endif %}
+                        {% if alert.predicted_delay_days %}
+                        <p class="mb-2">
+                            <strong>Predicted Impact:</strong> {{ alert.predicted_delay_days }} day{{ alert.predicted_delay_days|pluralize }} delay
+                        </p>
+                        {% endif %}
+                        {% if alert.recommendations %}
+                        <div class="mt-2">
+                            <strong>Recommendations:</strong>
+                            <ul class="mb-0 small">
+                                {% for rec in alert.recommendations|slice:":3" %}
+                                <li>{{ rec }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex flex-column gap-2">
+                        <span class="badge bg-{{ alert.status }}">{{ alert.get_status_display }}</span>
+                        {% if alert.status == 'active' %}
+                        <form method="post" action="{% url 'acknowledge_scope_alert' board.id alert.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-primary">
+                                <i class="fas fa-check me-1"></i>Acknowledge
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% if alert.status != 'resolved' %}
+                        <button type="button" class="btn btn-sm btn-outline-success" 
+                                data-bs-toggle="modal" data-bs-target="#resolveAlertModal{{ alert.id }}">
+                            <i class="fas fa-check-double me-1"></i>Resolve
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Resolve Alert Modal -->
+            <div class="modal fade" id="resolveAlertModal{{ alert.id }}" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <form method="post" action="{% url 'resolve_scope_alert' board.id alert.id %}">
+                            {% csrf_token %}
+                            <div class="modal-header">
+                                <h5 class="modal-title">Resolve Alert</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label class="form-label">Resolution Notes</label>
+                                    <textarea name="notes" class="form-control" rows="3" 
+                                              placeholder="How was this scope change addressed?"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-success">Resolve Alert</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row">
+        <!-- Scope History -->
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-history me-2"></i>Scope History</h5>
+                    <a href="{% url 'scope_comparison' board.id %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-columns me-1"></i>Compare Snapshots
+                    </a>
+                </div>
+                <div class="card-body">
+                    {% if snapshots %}
+                    <div class="timeline">
+                        {% for snapshot in snapshots|slice:":10" %}
+                        <div class="timeline-item {% if snapshot.is_baseline %}baseline{% endif %}">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <h6 class="mb-1">
+                                        {% if snapshot.is_baseline %}
+                                            <span class="badge bg-success me-2">Baseline</span>
+                                        {% endif %}
+                                        {{ snapshot.snapshot_date|date:"M d, Y H:i" }}
+                                    </h6>
+                                    <small class="text-muted">{{ snapshot.get_snapshot_type_display }}</small>
+                                    {% if snapshot.created_by %}
+                                    <small class="text-muted">by {{ snapshot.created_by.get_full_name|default:snapshot.created_by.username }}</small>
+                                    {% endif %}
+                                </div>
+                                <div class="text-end">
+                                    {% if snapshot.scope_change_percentage %}
+                                    <span class="badge 
+                                        {% if snapshot.scope_change_percentage > 30 %}bg-danger
+                                        {% elif snapshot.scope_change_percentage > 15 %}bg-warning
+                                        {% elif snapshot.scope_change_percentage > 5 %}bg-info
+                                        {% else %}bg-secondary{% endif %}">
+                                        {% if snapshot.scope_change_percentage > 0 %}+{% endif %}{{ snapshot.scope_change_percentage|floatformat:1 }}%
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <small class="text-muted">Tasks:</small> <strong>{{ snapshot.total_tasks }}</strong>
+                                </div>
+                                <div class="col-md-4">
+                                    <small class="text-muted">Complexity:</small> <strong>{{ snapshot.total_complexity_points }} pts</strong>
+                                </div>
+                                <div class="col-md-4">
+                                    <small class="text-muted">Avg:</small> <strong>{{ snapshot.avg_complexity|floatformat:1 }}</strong>
+                                </div>
+                            </div>
+                            {% if snapshot.notes %}
+                            <p class="mb-0 mt-2 small text-muted"><i class="fas fa-sticky-note me-1"></i>{{ snapshot.notes }}</p>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">No snapshots available yet. Take your first snapshot to start tracking.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions & Summary -->
+        <div class="col-md-4">
+            <!-- Quick Actions -->
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-bolt me-2"></i>Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <button type="button" class="btn btn-success w-100 mb-3 quick-action-btn" 
+                            data-bs-toggle="modal" data-bs-target="#createSnapshotModal">
+                        <i class="fas fa-camera me-2"></i>Take Snapshot
+                    </button>
+                    <form method="post" action="{% url 'run_scope_analysis' board.id %}" class="mb-3">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-primary w-100 quick-action-btn">
+                            <i class="fas fa-brain me-2"></i>Run AI Analysis
+                        </button>
+                    </form>
+                    <button type="button" class="btn btn-outline-warning w-100 quick-action-btn"
+                            data-bs-toggle="modal" data-bs-target="#resetBaselineModal">
+                        <i class="fas fa-redo me-2"></i>Reset Baseline
+                    </button>
+                </div>
+            </div>
+
+            <!-- Alert Summary -->
+            <div class="card mb-4">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-chart-pie me-2"></i>Alert Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-6 mb-3">
+                            <div class="p-3 rounded" style="background-color: rgba(220, 53, 69, 0.1);">
+                                <i class="fas fa-exclamation-circle fa-2x text-danger mb-2"></i>
+                                <h4 class="mb-0">{{ critical_count }}</h4>
+                                <small class="text-muted">Critical</small>
+                            </div>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <div class="p-3 rounded" style="background-color: rgba(255, 193, 7, 0.1);">
+                                <i class="fas fa-exclamation-triangle fa-2x text-warning mb-2"></i>
+                                <h4 class="mb-0">{{ warning_count }}</h4>
+                                <small class="text-muted">Warning</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 rounded" style="background-color: rgba(23, 162, 184, 0.1);">
+                                <i class="fas fa-info-circle fa-2x text-info mb-2"></i>
+                                <h4 class="mb-0">{{ info_count }}</h4>
+                                <small class="text-muted">Info</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 rounded" style="background-color: rgba(40, 167, 69, 0.1);">
+                                <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                                <h4 class="mb-0">{{ resolved_alerts.count }}</h4>
+                                <small class="text-muted">Resolved</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Current Task Breakdown -->
+            <div class="card">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="fas fa-tasks me-2"></i>Current Task Breakdown</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small>To Do</small>
+                            <small>{{ current_metrics.todo_tasks }}</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-secondary" style="width: {% widthratio current_metrics.todo_tasks current_metrics.total_tasks 100 %}%"></div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small>In Progress</small>
+                            <small>{{ current_metrics.in_progress_tasks }}</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-primary" style="width: {% widthratio current_metrics.in_progress_tasks current_metrics.total_tasks 100 %}%"></div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small>Completed</small>
+                            <small>{{ current_metrics.completed_tasks }}</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-success" style="width: {% widthratio current_metrics.completed_tasks current_metrics.total_tasks 100 %}%"></div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="d-flex justify-content-between">
+                        <small class="text-muted">High Priority</small>
+                        <span class="badge bg-danger">{{ current_metrics.high_priority }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mt-2">
+                        <small class="text-muted">Urgent Priority</small>
+                        <span class="badge bg-warning text-dark">{{ current_metrics.urgent_priority }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+
+<!-- Create Snapshot Modal -->
+<div class="modal fade" id="createSnapshotModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{% url 'create_scope_snapshot' board.id %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-camera me-2"></i>Create Scope Snapshot</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Snapshot Type</label>
+                        <select name="snapshot_type" class="form-select">
+                            <option value="manual">Manual Snapshot</option>
+                            <option value="milestone">Milestone</option>
+                            <option value="scheduled">Scheduled Review</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Notes (Optional)</label>
+                        <textarea name="notes" class="form-control" rows="3" 
+                                  placeholder="Add context about this snapshot..."></textarea>
+                    </div>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" name="ai_analysis" value="true" id="aiAnalysisCheck">
+                        <label class="form-check-label" for="aiAnalysisCheck">
+                            <i class="fas fa-brain me-1"></i>Run AI analysis on this snapshot
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-camera me-1"></i>Create Snapshot
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Reset Baseline Modal -->
+<div class="modal fade" id="resetBaselineModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{% url 'set_scope_baseline' board.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="set">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-redo me-2"></i>Reset Baseline</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Warning:</strong> Resetting the baseline will set the current project state as the new reference point. 
+                        Historical data and alerts will be preserved, but scope change calculations will start fresh from this point.
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Reason for Reset</label>
+                        <textarea name="notes" class="form-control" rows="3" 
+                                  placeholder="Why are you resetting the baseline? (e.g., 'New sprint started', 'Scope officially rebaselined')"></textarea>
+                    </div>
+                    <div class="bg-light p-3 rounded">
+                        <h6>New Baseline Values:</h6>
+                        <div class="row">
+                            <div class="col-6">
+                                <small class="text-muted">Tasks:</small>
+                                <strong>{{ current_metrics.total_tasks }}</strong>
+                            </div>
+                            <div class="col-6">
+                                <small class="text-muted">Complexity:</small>
+                                <strong>{{ current_metrics.total_complexity }} pts</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">
+                        <i class="fas fa-redo me-1"></i>Reset Baseline
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Run Analysis Modal -->
+<div class="modal fade" id="runAnalysisModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="{% url 'run_scope_analysis' board.id %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-brain me-2"></i>AI Scope Analysis</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Run AI analysis to get insights about your current scope status compared to baseline.</p>
+                    <div class="bg-light p-3 rounded mb-3">
+                        <h6>What you'll get:</h6>
+                        <ul class="mb-0 small">
+                            <li>Summary of scope changes and their impact</li>
+                            <li>Risk level assessment</li>
+                            <li>Estimated timeline impact</li>
+                            <li>Actionable recommendations</li>
+                        </ul>
+                    </div>
+                    <p class="text-muted small">
+                        <i class="fas fa-info-circle me-1"></i>
+                        This will create a new snapshot and analyze it against your baseline.
+                    </p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-brain me-1"></i>Run Analysis
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function goBack() {
+    window.history.back();
+}
+</script>
+{% endblock %}

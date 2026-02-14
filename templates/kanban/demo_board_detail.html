@@ -435,6 +435,9 @@ kbd {
         <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-outline-success">
             <i class="fas fa-dollar-sign me-1"></i> Budget & ROI
         </a>
+        <a href="{% url 'scope_dashboard' board.id %}" class="btn btn-outline-primary" title="Scope Tracking - Part of Triple Constraint (Scope, Time, Cost)">
+            <i class="fas fa-chart-area me-1"></i> Scope
+        </a>
         <a href="{% url 'retrospective_dashboard' board.id %}" class="btn btn-outline-secondary">
             <i class="fas fa-history me-1"></i> Retrospectives
         </a>
@@ -523,7 +526,7 @@ kbd {
             </div>
             {% endif %}
             <div class="mt-2">
-                <a href="{% url 'scope_tracking_dashboard' board.id %}" 
+                <a href="{% url 'scope_dashboard' board.id %}" 
                    class="btn btn-sm btn-outline-primary">
                     <i class="fas fa-chart-line me-1"></i>View Scope Dashboard
                 </a>
@@ -575,7 +578,7 @@ kbd {
                         </small>
                     </div>
                     <div class="col-md-3">
-                        <a href="{% url 'scope_tracking_dashboard' board.id %}" class="btn btn-outline-primary w-100">
+                        <a href="{% url 'scope_dashboard' board.id %}" class="btn btn-outline-primary w-100">
                             <i class="fas fa-chart-line me-1"></i>View Details
                         </a>
                     </div>

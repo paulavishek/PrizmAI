@@ -96,8 +96,8 @@ class UserPerformanceProfile(models.Model):
         # Update skill keywords from task descriptions
         self.update_skill_profile(completed_tasks)
         
-        # Update current workload
-        self.update_current_workload()
+        # Update current workload (don't save yet, we'll save once after all updates)
+        self.update_current_workload(save=False)
         
         self.total_tasks_completed = task_count
         self.last_task_completed = completed_tasks.latest('completed_at').completed_at
@@ -124,8 +124,14 @@ class UserPerformanceProfile(models.Model):
         # Store top 50 keywords
         self.skill_keywords = dict(word_counts.most_common(50))
     
-    def update_current_workload(self):
-        """Calculate current workload from active tasks"""
+    def update_current_workload(self, save=True):
+        """
+        Calculate current workload from active tasks
+        
+        Args:
+            save: If True, saves the profile after updating. Set to False when 
+                  calling from methods that will save afterwards to avoid duplicate saves.
+        """
         from kanban.models import Task
         
         active_tasks = Task.objects.filter(
@@ -148,9 +154,14 @@ class UserPerformanceProfile(models.Model):
         
         self.current_workload_hours = estimated_hours
         
-        # Calculate utilization
+        # Calculate utilization - DO NOT cap at 100% to show true overload
+        # Users with 200% utilization are genuinely overloaded and should see that
         if self.weekly_capacity_hours > 0:
-            self.utilization_percentage = min((estimated_hours / self.weekly_capacity_hours) * 100, 100)
+            self.utilization_percentage = (estimated_hours / self.weekly_capacity_hours) * 100
+        
+        # Save the updated metrics to database (unless caller will save)
+        if save:
+            self.save()
     
     def calculate_skill_match(self, task_text):
         """
@@ -191,8 +202,20 @@ class UserPerformanceProfile(models.Model):
         """
         Predict how long this user will take to complete the task (in hours)
         Based on complexity and historical performance
+        
+        FORMULA: estimated_time = base_time × complexity_multiplier × workload_multiplier
+        
+        Components:
+        - base_time: 8.0h default (or historical avg_completion_time_hours)
+        - complexity_multiplier: task.complexity_score / 5 (or 1.0 if not set)
+        - workload_multiplier: 1.0 + (active_tasks × 0.08)
+        
+        See _predict_completion_time_with_workload() in resource_leveling.py for
+        detailed documentation and examples.
         """
-        base_time = self.avg_completion_time_hours or 8.0
+        # Ensure base_time is always positive (min 4 hours, max 40 hours)
+        raw_base = self.avg_completion_time_hours or 8.0
+        base_time = max(4.0, min(abs(raw_base) if raw_base != 0 else 8.0, 40.0))
         
         # Adjust for complexity
         if task.complexity_score:
@@ -201,9 +224,15 @@ class UserPerformanceProfile(models.Model):
         else:
             estimated_time = base_time
         
-        # Adjust for current workload (overloaded users take longer)
-        if self.utilization_percentage > 80:
-            workload_penalty = 1 + ((self.utilization_percentage - 80) / 100)  # Up to 20% slower
+        # Adjust for current workload - MORE aggressive
+        # Users with higher workload naturally take longer due to context switching
+        if self.current_active_tasks > 0:
+            # Each active task adds ~8% overhead due to context switching
+            workload_multiplier = 1.0 + (self.current_active_tasks * 0.08)
+            estimated_time *= workload_multiplier
+        elif self.utilization_percentage > 80:
+            # Additional penalty for high utilization
+            workload_penalty = 1 + ((self.utilization_percentage - 80) / 100)
             estimated_time *= workload_penalty
         
         return estimated_time

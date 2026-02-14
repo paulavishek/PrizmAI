@@ -314,7 +314,14 @@ class Command(BaseCommand):
         from kanban.models import ScopeChangeSnapshot, ScopeCreepAlert
         ScopeCreepAlert.objects.filter(board__in=self.demo_boards).delete()
         ScopeChangeSnapshot.objects.filter(board__in=self.demo_boards).delete()
-        self.stdout.write('   ✓ Cleared Scope Change data')
+        # Also clear board baseline fields so they get repopulated consistently
+        self.demo_boards.update(
+            baseline_task_count=None,
+            baseline_complexity_total=None,
+            baseline_set_date=None,
+            baseline_set_by=None
+        )
+        self.stdout.write('   ✓ Cleared Scope Change data and board baselines')
 
         # =====================================================================
         # STEP 10: Clear Sprint Milestones

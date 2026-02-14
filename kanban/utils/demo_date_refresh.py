@@ -83,6 +83,7 @@ def refresh_all_demo_dates():
         'action_items_updated': 0,
         'burndown_predictions_updated': 0,
         'resource_leveling_updated': 0,
+        'scope_snapshots_updated': 0,
         'roi_snapshots_updated': 0,
         'trend_analysis_updated': 0,
         'sprint_milestones_updated': 0,
@@ -147,6 +148,9 @@ def refresh_all_demo_dates():
             
             # 19. Refresh Skill Development Plans
             stats['skill_development_plans_updated'] = _refresh_skill_development_plan_dates(now, base_date)
+            
+            # 20. Refresh Scope Snapshots and Alerts
+            stats['scope_snapshots_updated'] = _refresh_scope_snapshot_dates(now, base_date)
         
         # Mark refresh as complete
         mark_demo_dates_refreshed()
@@ -1119,4 +1123,81 @@ def _refresh_skill_development_plan_dates(now, base_date):
         
     except Exception as e:
         logger.warning(f"Error refreshing sprint milestone dates: {e}")
+        return 0
+
+
+def _refresh_scope_snapshot_dates(now, base_date):
+    """
+    Refresh ScopeChangeSnapshot and ScopeCreepAlert dates for demo boards.
+    Also updates the board's baseline_set_date to keep it relative.
+    
+    This ensures scope tracking dashboard shows realistic, current dates.
+    """
+    try:
+        from kanban.models import Board, ScopeChangeSnapshot, ScopeCreepAlert
+        
+        demo_org_ids = _get_demo_organizations()
+        if not demo_org_ids:
+            return 0
+        
+        # Get demo boards with scope baselines
+        demo_boards = Board.objects.filter(
+            organization_id__in=demo_org_ids,
+            is_official_demo_board=True,
+            baseline_task_count__isnull=False
+        )
+        
+        total_updated = 0
+        
+        for board in demo_boards:
+            # Update board's baseline_set_date to 2 weeks ago
+            baseline_date = now - timedelta(days=14)
+            Board.objects.filter(pk=board.pk).update(baseline_set_date=baseline_date)
+            total_updated += 1
+            
+            # Get all snapshots for this board
+            snapshots = list(ScopeChangeSnapshot.objects.filter(board=board).order_by('snapshot_date'))
+            
+            if not snapshots:
+                continue
+            
+            # Update snapshot dates
+            for i, snapshot in enumerate(snapshots):
+                if snapshot.is_baseline:
+                    # Baseline snapshots should be 2 weeks ago
+                    new_date = now - timedelta(days=14)
+                else:
+                    # Non-baseline snapshots spread between baseline and now
+                    # Based on their order, spread them evenly
+                    days_ago = max(0, 13 - (i * 2))  # 13, 11, 9, 7, 5, 3, 1, etc.
+                    new_date = now - timedelta(days=days_ago)
+                
+                ScopeChangeSnapshot.objects.filter(pk=snapshot.pk).update(snapshot_date=new_date)
+                total_updated += 1
+            
+            # Update scope creep alerts for this board
+            alerts = ScopeCreepAlert.objects.filter(board=board)
+            for alert in alerts:
+                # Alert detected_at should be based on when scope changed
+                # Most recent alerts are from the last few days
+                days_ago = alert.id % 7 + 1  # 1-7 days ago
+                new_detected_at = now - timedelta(days=days_ago)
+                
+                update_fields = {'detected_at': new_detected_at}
+                
+                # If acknowledged, update that too
+                if alert.acknowledged_at:
+                    update_fields['acknowledged_at'] = new_detected_at + timedelta(hours=alert.id % 24 + 1)
+                
+                # If resolved, update that too
+                if alert.resolved_at:
+                    update_fields['resolved_at'] = new_detected_at + timedelta(days=alert.id % 3 + 1)
+                
+                ScopeCreepAlert.objects.filter(pk=alert.pk).update(**update_fields)
+                total_updated += 1
+        
+        return total_updated
+        
+    except Exception as e:
+        logger.warning(f"Error refreshing scope snapshot dates: {e}")
         return 0

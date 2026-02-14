@@ -491,11 +491,22 @@ def suggest_lss_classification_api(request):
         title = data.get('title', '')
         description = data.get('description', '')
         
+        # Extract budget/cost fields for enhanced LSS analysis
+        estimated_cost = data.get('estimated_cost')
+        estimated_hours = data.get('estimated_hours')
+        hourly_rate = data.get('hourly_rate')
+        
         if not title:
             return JsonResponse({'error': 'Title is required'}, status=400)
             
-        # Call AI util function to suggest classification
-        suggestion = suggest_lean_classification(title, description)
+        # Call AI util function to suggest classification with budget data
+        suggestion = suggest_lean_classification(
+            title, 
+            description,
+            estimated_cost=estimated_cost,
+            estimated_hours=estimated_hours,
+            hourly_rate=hourly_rate
+        )
         
         if not suggestion:
             response_time_ms = int((time.time() - start_time) * 1000)
@@ -612,6 +623,8 @@ def summarize_board_analytics_api(request, board_id):
             column__board=board,
             due_date__date__gte=today,
             due_date__date__lte=today + timedelta(days=7)
+        ).exclude(
+            progress=100
         )
         
         # Lean Six Sigma metrics
@@ -813,6 +826,8 @@ def download_analytics_summary_pdf(request, board_id):
             column__board=board,
             due_date__date__gte=today,
             due_date__date__lte=today + timedelta(days=7)
+        ).exclude(
+            progress=100
         )
         
         # Lean Six Sigma metrics
@@ -1181,6 +1196,11 @@ def suggest_task_priority_api(request):
         description = data.get('description', '')
         due_date = data.get('due_date', '')
         
+        # Extract budget/cost fields for enhanced priority analysis
+        estimated_cost = data.get('estimated_cost')
+        estimated_hours = data.get('estimated_hours')
+        hourly_rate = data.get('hourly_rate')
+        
         if not title:
             return JsonResponse({'error': 'Title is required'}, status=400)
         
@@ -1196,6 +1216,18 @@ def suggest_task_priority_api(request):
                     board_id = data.get('board_id')
                     if board_id:
                         board = get_object_or_404(Board, id=board_id)
+                
+                # If task exists and has cost data, use it as fallback
+                if task_id and not (estimated_cost or estimated_hours or hourly_rate):
+                    try:
+                        from kanban.budget_models import TaskCost
+                        task_cost = TaskCost.objects.filter(task_id=task_id).first()
+                        if task_cost:
+                            estimated_cost = estimated_cost or task_cost.estimated_cost
+                            estimated_hours = estimated_hours or task_cost.estimated_hours
+                            hourly_rate = hourly_rate or task_cost.hourly_rate
+                    except:
+                        pass
             except Exception as e:
                 logger.error(f"Error getting task: {str(e)}")
                 return JsonResponse({'error': 'Task not found'}, status=404)
@@ -1217,8 +1249,23 @@ def suggest_task_priority_api(request):
         pass  # Original: board membership check removed
         
         # Gather board context for priority suggestion
-        from django.db.models import Count
+        from django.db.models import Count, Avg
         all_tasks = Task.objects.filter(column__board=board)
+        
+        # Calculate average task cost for context
+        from kanban.budget_models import TaskCost, ProjectBudget
+        avg_task_cost = TaskCost.objects.filter(
+            task__column__board=board
+        ).aggregate(avg_cost=Avg('estimated_cost'))['avg_cost']
+        
+        # Get total board budget if available
+        total_board_budget = None
+        try:
+            project_budget = ProjectBudget.objects.filter(board=board).first()
+            if project_budget:
+                total_board_budget = project_budget.allocated_budget
+        except:
+            pass
         
         board_context = {
             'total_tasks': all_tasks.count(),
@@ -1228,14 +1275,19 @@ def suggest_task_priority_api(request):
             'upcoming_deadlines': all_tasks.filter(
                 due_date__gte=timezone.now(),
                 due_date__lte=timezone.now() + timedelta(days=7)
-            ).count()
+            ).count(),
+            'avg_task_cost': avg_task_cost,
+            'total_board_budget': total_board_budget,
         }
         
         task_data = {
             'title': title,
             'description': description,
             'due_date': due_date,
-            'current_priority': data.get('current_priority', 'medium')
+            'current_priority': data.get('current_priority', 'medium'),
+            'estimated_cost': estimated_cost,
+            'estimated_hours': estimated_hours,
+            'hourly_rate': hourly_rate,
         }
         
         # Call AI function
@@ -1324,6 +1376,11 @@ def predict_deadline_api(request):
         dependencies_count = data.get('dependencies_count', 0)
         risk_score = data.get('risk_score')
         risk_level = data.get('risk_level')
+        
+        # Extract budget/effort fields for enhanced deadline prediction
+        estimated_hours = data.get('estimated_hours')
+        estimated_cost = data.get('estimated_cost')
+        hourly_rate = data.get('hourly_rate')
         
         if not title:
             return JsonResponse({'error': 'Title is required'}, status=400)
@@ -1457,7 +1514,11 @@ def predict_deadline_api(request):
             'collaboration_required': collaboration_required,
             'dependencies_count': dependencies_count,
             'risk_score': risk_score,
-            'risk_level': risk_level
+            'risk_level': risk_level,
+            # Budget/effort fields for better timeline estimation
+            'estimated_hours': estimated_hours,
+            'estimated_cost': estimated_cost,
+            'hourly_rate': hourly_rate,
         }
         
         # Call AI function

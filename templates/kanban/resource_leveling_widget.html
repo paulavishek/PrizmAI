@@ -26,8 +26,8 @@
             </div>
         </div>
         
-        <!-- Suggestions List -->
-        <div id="suggestions-container">
+        <!-- Suggestions List with Scrollable Container -->
+        <div id="suggestions-container" class="suggestions-scrollable">
             <!-- Suggestions will be loaded here -->
         </div>
         
@@ -121,6 +121,32 @@
 
 #ai-optimization-content {
     transition: all 0.3s ease;
+}
+
+.suggestions-scrollable {
+    max-height: 500px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-right: 5px;
+}
+
+/* Custom scrollbar styling for better UX */
+.suggestions-scrollable::-webkit-scrollbar {
+    width: 8px;
+}
+
+.suggestions-scrollable::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.suggestions-scrollable::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.suggestions-scrollable::-webkit-scrollbar-thumb:hover {
+    background: #555;
 }
 
 .suggestion-card {
@@ -266,12 +292,20 @@ function displayWorkloadSummary(data) {
             `${member.active_tasks} tasks • ${member.workload_hours}h`;
         
         const progressBar = clone.querySelector('.progress-bar');
+        // Cap the visual bar at 100% but show actual percentage in text
         progressBar.style.width = `${Math.min(member.utilization, 100)}%`;
-        progressBar.textContent = `${member.utilization}%`;
+        
+        // Show actual utilization (can be over 100% for overloaded members)
+        const utilDisplay = Math.round(member.utilization);
+        progressBar.textContent = `${utilDisplay}%`;
         
         // Set color based on utilization
         const memberDiv = clone.querySelector('.workload-member');
-        if (member.utilization > 90) {
+        if (member.utilization > 100) {
+            // Severely overloaded - over 100%
+            memberDiv.classList.add('utilization-overloaded');
+            progressBar.title = `${utilDisplay}% - Severely overloaded! Consider reassigning tasks.`;
+        } else if (member.utilization > 90) {
             memberDiv.classList.add('utilization-overloaded');
         } else if (member.utilization > 75) {
             memberDiv.classList.add('utilization-high');
