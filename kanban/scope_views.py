@@ -24,34 +24,13 @@ from kanban.utils.scope_analysis import (
 logger = logging.getLogger(__name__)
 
 
-def _can_access_board(user, board):
-    """Check if user can access a board"""
-    if user.is_superuser or user.is_staff:
-        return True
-    if board.created_by == user:
-        return True
-    if board.members.filter(id=user.id).exists():
-        return True
-    return True  # All authenticated users can access (simplified mode)
-
-
+@login_required
 def scope_dashboard(request, board_id):
     """
     Main Scope Dashboard - comprehensive scope tracking and management
     Shows baseline status, current scope, trends, alerts, and allows management
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization and board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    
-    # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return redirect_to_login(request.get_full_path())
     
     # Get current scope status
     scope_status = board.get_current_scope_status()
@@ -123,8 +102,6 @@ def scope_dashboard(request, board_id):
         'critical_count': critical_count,
         'warning_count': warning_count,
         'info_count': info_count,
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/scope_dashboard.html', context)
@@ -138,9 +115,6 @@ def set_scope_baseline(request, board_id):
     This captures the current state as the baseline for scope tracking
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
     
     # Check if there's already a baseline
     existing_baseline = ScopeChangeSnapshot.objects.filter(
@@ -207,9 +181,6 @@ def create_scope_snapshot(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
     
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
-    
     snapshot_type = request.POST.get('snapshot_type', 'manual')
     notes = request.POST.get('notes', '')
     run_ai_analysis = request.POST.get('ai_analysis', 'false') == 'true'
@@ -268,9 +239,6 @@ def scope_snapshot_detail(request, board_id, snapshot_id):
     board = get_object_or_404(Board, id=board_id)
     snapshot = get_object_or_404(ScopeChangeSnapshot, id=snapshot_id, board=board)
     
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
-    
     # Get comparison with baseline
     comparison = None
     if snapshot.baseline_snapshot:
@@ -301,9 +269,6 @@ def acknowledge_scope_alert(request, board_id, alert_id):
     board = get_object_or_404(Board, id=board_id)
     alert = get_object_or_404(ScopeCreepAlert, id=alert_id, board=board)
     
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
-    
     alert.acknowledge(request.user)
     messages.success(request, 'Alert acknowledged.')
     
@@ -321,9 +286,6 @@ def resolve_scope_alert(request, board_id, alert_id):
     """
     board = get_object_or_404(Board, id=board_id)
     alert = get_object_or_404(ScopeCreepAlert, id=alert_id, board=board)
-    
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
     
     notes = request.POST.get('notes', '')
     alert.resolve(request.user, notes=notes)
@@ -343,9 +305,6 @@ def dismiss_scope_alert(request, board_id, alert_id):
     """
     board = get_object_or_404(Board, id=board_id)
     alert = get_object_or_404(ScopeCreepAlert, id=alert_id, board=board)
-    
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
     
     alert.status = 'dismissed'
     alert.resolved_at = timezone.now()
@@ -369,9 +328,6 @@ def run_scope_analysis(request, board_id):
     Creates a new snapshot with AI-powered insights
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
     
     # Check if baseline exists
     if not board.baseline_task_count:
@@ -433,6 +389,7 @@ def run_scope_analysis(request, board_id):
     return redirect('scope_dashboard', board_id=board.id)
 
 
+@login_required
 def scope_api_metrics(request, board_id):
     """
     API endpoint for scope metrics - used for dashboard widgets
@@ -473,9 +430,6 @@ def scope_comparison(request, board_id):
     Compare two scope snapshots side by side
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
     
     snapshot1_id = request.GET.get('snapshot1')
     snapshot2_id = request.GET.get('snapshot2')

@@ -23,7 +23,8 @@ class ResourceLevelingService:
     Main service for AI-powered resource leveling and optimization
     """
     
-    def __init__(self, organization):
+    def __init__(self, organization=None):
+        # Organization is optional - simplified mode doesn't require it
         self.organization = organization
     
     def get_or_create_profile(self, user):
@@ -33,8 +34,8 @@ class ResourceLevelingService:
         """
         profile, created = UserPerformanceProfile.objects.get_or_create(
             user=user,
-            organization=self.organization,
             defaults={
+                'organization': self.organization,
                 'weekly_capacity_hours': 40.0,
                 'velocity_score': 1.0,
                 'quality_score': 3.0
@@ -782,7 +783,8 @@ class WorkloadBalancer:
     Advanced workload balancing algorithms
     """
     
-    def __init__(self, organization):
+    def __init__(self, organization=None):
+        # Organization is optional - simplified mode doesn't require it
         self.organization = organization
         self.service = ResourceLevelingService(organization)
     

@@ -22,11 +22,6 @@ from kanban.retrospective_models import (
 )
 from kanban.utils.retrospective_generator import RetrospectiveGenerator
 from api.ai_usage_utils import track_ai_request, check_ai_quota
-from kanban.utils.demo_limits import (
-    check_ai_generation_limit, 
-    increment_ai_generation_count, 
-    record_limitation_hit
-)
 
 logger = logging.getLogger(__name__)
 
@@ -69,28 +64,10 @@ def _add_manual_actions(retrospective, board, actions_list):
             logger.error(f"Error creating manual action: {e}")
 
 
+@login_required
 def retrospective_list(request, board_id):
-    """List all retrospectives for a board
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
-    """
+    """List all retrospectives for a board"""
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return redirect_to_login(request.get_full_path())
-        
-        # Check access - all boards require membership
-        # Access restriction removed - all authenticated users can access
-    
-    # All restrictions removed - users have full access
     
     retrospectives = ProjectRetrospective.objects.filter(board=board).select_related(
         'created_by', 'finalized_by'
@@ -132,40 +109,22 @@ def retrospective_list(request, board_id):
         'stats': stats,
         'status_filter': status_filter,
         'type_filter': type_filter,
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
+        'is_demo_mode': False,
+        'is_demo_board': False,
     }
     
     return render(request, 'kanban/retrospective_list.html', context)
 
 
+@login_required
 def retrospective_detail(request, board_id, retro_id):
-    """View detailed retrospective
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
-    """
+    """View detailed retrospective"""
     board = get_object_or_404(Board, id=board_id)
     retrospective = get_object_or_404(
         ProjectRetrospective.objects.select_related('created_by', 'finalized_by'),
         id=retro_id,
         board=board
     )
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return redirect_to_login(request.get_full_path())
-        
-        # Check access - all boards require membership
-        # Access restriction removed - all authenticated users can access
-    
-    # All restrictions removed - users have full access
     
     # Get related data
     lessons = retrospective.lessons.all().order_by('-priority', '-created_at')
@@ -191,36 +150,18 @@ def retrospective_detail(request, board_id, retro_id):
         'action_items': action_items,
         'metrics': metrics,
         'stats': stats,
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
+        'is_demo_mode': False,
+        'is_demo_board': False,
     }
     
     return render(request, 'kanban/retrospective_detail.html', context)
 
 
+@login_required
 @require_http_methods(["GET", "POST"])
 def retrospective_create(request, board_id):
-    """Create a new retrospective
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
-    """
+    """Create a new retrospective"""
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return redirect_to_login(request.get_full_path())
-        
-        # Check permissions
-        # Access restriction removed - all authenticated users can access
-    
-    # All restrictions removed - users have full access
     
     if request.method == 'GET':
         # Show form for date selection
@@ -232,31 +173,19 @@ def retrospective_create(request, board_id):
             'board': board,
             'suggested_start': suggested_start,
             'suggested_end': suggested_end,
-            'is_demo_mode': is_demo_mode,
-            'is_demo_board': is_demo_board,
+            'is_demo_mode': False,
+            'is_demo_board': False,
         }
         return render(request, 'kanban/retrospective_create.html', context)
     
     else:  # POST
         start_time = time.time()
         try:
-            # Check demo mode AI generation limit first
-            ai_limit_status = check_ai_generation_limit(request)
-            if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-                record_limitation_hit(request, 'ai_limit')
-                messages.error(request, ai_limit_status['message'])
+            # Check AI quota
+            has_quota, quota, remaining = check_ai_quota(request.user)
+            if not has_quota:
+                messages.error(request, "AI usage quota exceeded. Please upgrade or wait for quota reset.")
                 return redirect('retrospective_create', board_id=board_id)
-            
-            # Check AI quota (skip for anonymous demo users)
-            if request.user.is_authenticated:
-                has_quota, quota, remaining = check_ai_quota(request.user)
-                if not has_quota:
-                    messages.error(request, "AI usage quota exceeded. Please upgrade or wait for quota reset.")
-                    return redirect('retrospective_create', board_id=board_id)
-            else:
-                # For anonymous demo users, no quota restrictions
-                quota = None
-                remaining = float('inf')
             
             # Get form data
             period_start = datetime.strptime(request.POST.get('period_start'), '%Y-%m-%d').date()
@@ -282,19 +211,9 @@ def retrospective_create(request, board_id):
             
             # Generate retrospective
             generator = RetrospectiveGenerator(board, period_start, period_end)
-            # For anonymous users in demo mode, use a demo user
-            if request.user.is_authenticated:
-                created_by = request.user
-            else:
-                # Get or create a demo admin user for anonymous retrospectives
-                from django.contrib.auth.models import User
-                created_by = User.objects.filter(username='demo_admin').first()
-                if not created_by:
-                    # Fallback: create a demo admin user if it doesn't exist
-                    created_by = User.objects.create_user(username='demo_admin', email='demo@example.com')
             
             retrospective = generator.create_retrospective(
-                created_by=created_by,
+                created_by=request.user,
                 retrospective_type=retrospective_type
             )
             
@@ -304,20 +223,16 @@ def retrospective_create(request, board_id):
             if manual_actions:
                 _add_manual_actions(retrospective, board, manual_actions)
             
-            # Increment demo AI generation count on success
-            increment_ai_generation_count(request)
-            
-            # Track successful AI request (only for authenticated users)
-            if request.user.is_authenticated:
-                response_time_ms = int((time.time() - start_time) * 1000)
-                track_ai_request(
-                    user=request.user,
-                    feature='retrospective_generation',
-                    request_type='generate',
-                    board_id=board.id,
-                    success=True,
-                    response_time_ms=response_time_ms
-                )
+            # Track successful AI request
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='retrospective_generation',
+                request_type='generate',
+                board_id=board.id,
+                success=True,
+                response_time_ms=response_time_ms
+            )
             
             messages.success(
                 request,
@@ -326,48 +241,28 @@ def retrospective_create(request, board_id):
             return redirect('retrospective_detail', board_id=board_id, retro_id=retrospective.id)
             
         except Exception as e:
-            # Track failed request (only for authenticated users, doesn't count against quota)
-            if request.user.is_authenticated:
-                response_time_ms = int((time.time() - start_time) * 1000)
-                track_ai_request(
-                    user=request.user,
-                    feature='retrospective_generation',
-                    request_type='generate',
-                    board_id=board.id,
-                    success=False,
-                    error_message=str(e),
-                    response_time_ms=response_time_ms
-                )
+            # Track failed request (doesn't count against quota)
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='retrospective_generation',
+                request_type='generate',
+                board_id=board.id,
+                success=False,
+                error_message=str(e),
+                response_time_ms=response_time_ms
+            )
             logger.error(f"Error creating retrospective: {e}")
             messages.error(request, f"Error generating retrospective: {str(e)}")
             return redirect('retrospective_create', board_id=board_id)
 
 
+@login_required
 @require_http_methods(["POST"])
 def retrospective_finalize(request, board_id, retro_id):
-    """Finalize a retrospective
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
-    """
+    """Finalize a retrospective"""
     board = get_object_or_404(Board, id=board_id)
     retrospective = get_object_or_404(ProjectRetrospective, id=retro_id, board=board)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication and check permissions
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return redirect_to_login(request.get_full_path())
-        
-        # Check permissions (only board owner or creator)
-        if not (request.user == board.created_by or request.user == retrospective.created_by):
-            return HttpResponseForbidden("You don't have permission to finalize this retrospective")
-    
-    # All restrictions removed - users have full access
     
     # Add team notes if provided
     team_notes = request.POST.get('team_notes', '')
@@ -380,28 +275,10 @@ def retrospective_finalize(request, board_id, retro_id):
     return redirect('retrospective_detail', board_id=board_id, retro_id=retro_id)
 
 
+@login_required
 def retrospective_dashboard(request, board_id):
-    """Dashboard showing improvement trends over time
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
-    """
+    """Dashboard showing improvement trends over time"""
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return redirect_to_login(request.get_full_path())
-        
-        # Check access - all boards require membership
-        # Access restriction removed - all authenticated users can access
-    
-    # All restrictions removed - users have full access
     
     # Get recent retrospectives
     retrospectives = ProjectRetrospective.objects.filter(
@@ -469,33 +346,19 @@ def retrospective_dashboard(request, board_id):
         'lessons_by_category': lessons_by_category,
         'urgent_actions': urgent_actions,
         'trend': trend,
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
+        'is_demo_mode': False,
+        'is_demo_board': False,
     }
     
     return render(request, 'kanban/retrospective_dashboard.html', context)
 
 
+@login_required
 @require_http_methods(["POST"])
 def lesson_update_status(request, board_id, lesson_id):
-    """Update lesson learned status
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
-    """
+    """Update lesson learned status"""
     board = get_object_or_404(Board, id=board_id)
     lesson = get_object_or_404(LessonLearned, id=lesson_id, board=board)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication and check permissions
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            return JsonResponse({'error': 'Authentication required'}, status=401)
-        # Access restriction removed - all authenticated users can access
-    # All restrictions removed - users have full access
     
     new_status = request.POST.get('status')
     if new_status not in dict(LessonLearned.STATUS_CHOICES):
@@ -517,26 +380,12 @@ def lesson_update_status(request, board_id, lesson_id):
     })
 
 
+@login_required
 @require_http_methods(["POST"])
 def action_update_status(request, board_id, action_id):
-    """Update action item status
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
-    """
+    """Update action item status"""
     board = get_object_or_404(Board, id=board_id)
     action = get_object_or_404(RetrospectiveActionItem, id=action_id, board=board)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication and check permissions
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            return JsonResponse({'error': 'Authentication required'}, status=401)
-        # Access restriction removed - all authenticated users can access
-    # All restrictions removed - users have full access
     
     new_status = request.POST.get('status')
     progress = request.POST.get('progress')
@@ -564,28 +413,10 @@ def action_update_status(request, board_id, action_id):
     })
 
 
+@login_required
 def lessons_learned_list(request, board_id):
-    """View all lessons learned across retrospectives
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
-    """
+    """View all lessons learned across retrospectives"""
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return redirect_to_login(request.get_full_path())
-        
-        # Check permissions
-        # Access restriction removed - all authenticated users can access
-    
-    # All restrictions removed - users have full access
     
     lessons = LessonLearned.objects.filter(board=board).select_related(
         'retrospective', 'action_owner'
@@ -619,8 +450,8 @@ def lessons_learned_list(request, board_id):
         'categories': LessonLearned.CATEGORY_CHOICES,
         'statuses': LessonLearned.STATUS_CHOICES,
         'priorities': LessonLearned.PRIORITY_CHOICES,
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
+        'is_demo_mode': False,
+        'is_demo_board': False,
     }
     
     return render(request, 'kanban/lessons_learned_list.html', context)
@@ -710,10 +541,9 @@ def _generate_trend_analysis(board):
     return trend
 
 
+@login_required
 def retrospective_export(request, board_id, retro_id):
-    """Export retrospective as PDF
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
-    """
+    """Export retrospective as PDF"""
     from reportlab.lib.pagesizes import letter, A4
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.units import inch
@@ -725,20 +555,6 @@ def retrospective_export(request, board_id, retro_id):
     
     board = get_object_or_404(Board, id=board_id)
     retrospective = get_object_or_404(ProjectRetrospective, id=retro_id, board=board)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication and check permissions
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return redirect_to_login(request.get_full_path())
-        # Access restriction removed - all authenticated users can access
-    # All restrictions removed - users have full access
     
     # Get related data
     lessons = retrospective.lessons.all().order_by('-priority', '-created_at')

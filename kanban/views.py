@@ -288,21 +288,6 @@ def board_list(request):
 def create_board(request):
     from kanban.audit_utils import log_model_change
     from kanban.permission_utils import assign_default_role_to_user
-    from kanban.utils.demo_limits import check_project_limit, increment_project_count, record_limitation_hit
-    
-    # Check demo mode project limits
-    project_limit_status = check_project_limit(request)
-    if project_limit_status['is_demo'] and not project_limit_status['can_create']:
-        # Record limitation hit for analytics
-        record_limitation_hit(request, 'project_limit')
-        messages.warning(request, project_limit_status['message'])
-        return render(request, 'kanban/create_board.html', {
-            'form': BoardForm(),
-            'demo_limit_reached': True,
-            'demo_limit_message': project_limit_status['message'],
-            'demo_projects_created': project_limit_status['current_count'],
-            'demo_projects_max': project_limit_status['max_allowed'],
-        })
     
     # Ensure user has a profile (MVP mode: auto-create without organization)
     try:
@@ -319,13 +304,6 @@ def create_board(request):
     organization = profile.organization
     
     if request.method == 'POST':
-        # Re-check limit before processing (in case of race condition)
-        project_limit_status = check_project_limit(request)
-        if project_limit_status['is_demo'] and not project_limit_status['can_create']:
-            record_limitation_hit(request, 'project_limit')
-            messages.warning(request, project_limit_status['message'])
-            return redirect('board_list')
-        
         form = BoardForm(request.POST)
         if form.is_valid():
             board = form.save(commit=False)
@@ -333,22 +311,8 @@ def create_board(request):
             board.organization = organization
             board.created_by = request.user
             
-            # If in demo mode, track this board as created by this demo session
-            is_demo_mode = request.session.get('is_demo_mode', False)
-            if is_demo_mode:
-                # Use browser_fingerprint for persistent tracking across session changes
-                browser_fingerprint = request.session.get('browser_fingerprint')
-                if browser_fingerprint:
-                    board.created_by_session = browser_fingerprint
-                else:
-                    # Fallback to session key if fingerprint not available
-                    board.created_by_session = request.session.session_key
-            
             board.save()
             board.members.add(request.user)
-            
-            # Increment demo project count if in demo mode
-            increment_project_count(request)
             
             # Assign creator as Admin in RBAC system (if organization exists)
             if organization:
@@ -423,19 +387,6 @@ def board_detail(request, board_id):
     from kanban.utils.demo_settings import SIMPLIFIED_MODE
     
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board (MVP mode: organization can be null)
-    is_demo_board = board.is_official_demo_board or (
-        board.organization and board.organization.is_demo
-    )
-    
-    # In simplified mode: treat demo boards as regular boards, no redirect
-    # In legacy mode: redirect to demo board view if in demo mode
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    if not SIMPLIFIED_MODE and is_demo_board and is_demo_mode:
-        return redirect('demo_board_detail', board_id=board_id)
-    
-    # All restrictions removed - all authenticated users have full access
     
     # Log board view
     log_audit('board.viewed', user=request.user, request=request,
@@ -593,63 +544,25 @@ def task_detail(request, task_id):
     )
     board = task.column.board
     
-    # Check if this is a demo board
-    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
-    
-    # SIMPLIFIED MODE: Don't re-establish demo mode, require authentication for all boards
-    # LEGACY MODE: Re-establish demo mode for anonymous users accessing demo boards
-    if not SIMPLIFIED_MODE:
-        # If accessing an official demo board without demo mode active, re-establish demo mode
-        # This handles cases where demo session expired but user is still browsing demo content
-        if is_demo_board and not is_demo_mode and not request.user.is_authenticated:
-            request.session['is_demo_mode'] = True
-            request.session['demo_mode'] = 'solo'
-            is_demo_mode = True
-            demo_mode_type = 'solo'
-    
-    # Require authentication for all boards
-    if not request.user.is_authenticated:
-        from django.contrib.auth.views import redirect_to_login
-        return redirect_to_login(request.get_full_path())
-    
-    # All restrictions removed - all authenticated users have full access
-    
     if request.method == 'POST':
-        # All restrictions removed - all authenticated users can edit
-        
         form = TaskForm(request.POST, instance=task, board=board)
         if form.is_valid():
-            # Track changes automatically (only for authenticated users)
-            if request.user.is_authenticated:
-                with AuditLogContext(task, request.user, request, 'task.updated'):
-                    task = form.save(commit=False)
-                    # Store who made the change for signal handler
-                    task._changed_by_user = request.user
-                    task.save()
-                    # Save many-to-many relationships (dependencies, labels, related_tasks)
-                    form.save_m2m()
-                
-                # Record activity
-                TaskActivity.objects.create(
-                    task=task,
-                    user=request.user,
-                    activity_type='updated',
-                    description=f"Updated task details for '{task.title}'"
-                )
-            else:
-                # Demo mode - save and mark as user-modified to prevent date refresh overwriting
+            # Track changes automatically
+            with AuditLogContext(task, request.user, request, 'task.updated'):
                 task = form.save(commit=False)
-                # Mark this task as user-modified so the demo date refresh won't overwrite it
-                # Set created_by_session to the user's session ID
-                session_id = request.session.get('browser_fingerprint') or request.session.session_key
-                if session_id and not task.created_by_session:
-                    task.created_by_session = session_id
-                # Also mark it as not seed data so the date refresh skips it
-                task.is_seed_demo_data = False
+                # Store who made the change for signal handler
+                task._changed_by_user = request.user
                 task.save()
+                # Save many-to-many relationships (dependencies, labels, related_tasks)
                 form.save_m2m()
+            
+            # Record activity
+            TaskActivity.objects.create(
+                task=task,
+                user=request.user,
+                activity_type='updated',
+                description=f"Updated task details for '{task.title}'"
+            )
             
             messages.success(request, 'Task updated successfully!')
             
@@ -808,25 +721,15 @@ def task_detail(request, task_id):
         'wiki_links': wiki_links,
         'prediction': prediction_data,
         'total_time_logged': total_time_logged,
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
+        'is_demo_mode': False,
+        'is_demo_board': False,
     })
 
+@login_required
 def create_task(request, board_id, column_id=None):
     from kanban.audit_utils import log_model_change
     
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board
-    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    
-    # Require authentication
-    if not request.user.is_authenticated:
-        from django.contrib.auth.views import redirect_to_login
-        return redirect_to_login(request.get_full_path())
-    
-    # All restrictions removed - all authenticated users can create tasks
     
     if column_id:
         column = get_object_or_404(Column, id=column_id, board=board)
@@ -1585,49 +1488,13 @@ def remove_board_member(request, board_id, user_id):
         return redirect('manage_board_members', board_id=board.id)
     return redirect('board_detail', board_id=board.id)
 
+@login_required
 def delete_board(request, board_id):
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board
-    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    
-    # Require authentication
-    if not request.user.is_authenticated:
-        from django.contrib.auth.views import redirect_to_login
-        return redirect_to_login(request.get_full_path())
-    
-    # All restrictions removed - all authenticated users can delete boards
     
     # Delete the board
     if request.method == 'POST':
         board_name = board.name
-        
-        # Track demo board deletion for analytics (workaround detection)
-        if is_demo_mode:
-            try:
-                from kanban.utils.demo_limits import get_demo_session
-                from analytics.models import DemoAnalytics
-                
-                demo_session = get_demo_session(request)
-                if demo_session:
-                    # Check if user has hit project limit (potential workaround attempt)
-                    at_limit = demo_session.projects_created_in_demo >= 2
-                    
-                    DemoAnalytics.objects.create(
-                        session_id=request.session.session_key,
-                        demo_session=demo_session,
-                        event_type='board_deleted_in_demo',
-                        event_data={
-                            'board_name': board_name,
-                            'total_created': demo_session.projects_created_in_demo,
-                            'at_project_limit': at_limit,
-                            'potential_workaround': at_limit,  # If at limit, might be trying workaround
-                        }
-                    )
-            except Exception as e:
-                pass  # Analytics should not block deletion
-        
         board.delete()
         messages.success(request, f'Board "{board_name}" has been deleted.')
         return redirect('board_list')
@@ -1736,10 +1603,10 @@ def move_column(request, column_id, direction):
     
     return redirect('board_detail', board_id=board.id)
 
+@login_required
 def reorder_columns(request):
     """
     Handle AJAX request to reorder columns via drag and drop.
-    Supports both authenticated users and demo mode (including anonymous users).
     """
     if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         data = json.loads(request.body)
@@ -1749,17 +1616,6 @@ def reorder_columns(request):
         
         column = get_object_or_404(Column, id=column_id)
         board = get_object_or_404(Board, id=board_id)
-        
-        # Check if this is a demo board - demo boards allow all changes
-        is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
-        is_demo_mode = request.session.get('is_demo_mode', False)
-        
-        # For non-demo boards, require authentication
-        if not (is_demo_board and is_demo_mode):
-            if not request.user.is_authenticated:
-                return JsonResponse({'error': 'Authentication required'}, status=401)
-            
-            # Access restriction removed - all authenticated users can access
         
         # Get all columns in order
         columns = list(Column.objects.filter(board=board).order_by('position'))
@@ -1887,28 +1743,17 @@ def delete_column(request, column_id):
         'board': board
     })
 
+@login_required
 def update_task_progress(request, task_id):
     """
     Update the progress percentage of a task through an AJAX request.
     Expects 'direction' parameter: 'increase' or 'decrease'.
     Increases or decreases by 10% increments.
-    Supports both authenticated users and demo mode.
     """
     if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         try:
             task = get_object_or_404(Task, id=task_id)
             board = task.column.board
-            
-            # Check if this is a demo board - demo boards allow all changes
-            is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
-            is_demo_mode = request.session.get('is_demo_mode', False)
-            
-            # For non-demo boards, require authentication
-            if not (is_demo_board and is_demo_mode):
-                if not request.user.is_authenticated:
-                    return JsonResponse({'error': 'Authentication required'}, status=401)
-                
-                # Access restriction removed - all authenticated users can access
             
             data = json.loads(request.body)
             direction = data.get('direction')
@@ -1926,14 +1771,13 @@ def update_task_progress(request, task_id):
             # Save the updated task
             task.save()
             
-            # Record activity (only for authenticated users)
-            if request.user.is_authenticated:
-                TaskActivity.objects.create(
-                    task=task,
-                    user=request.user,
-                    activity_type='updated',
-                    description=f"Updated progress for '{task.title}' to {task.progress}%"
-                )
+            # Record activity
+            TaskActivity.objects.create(
+                task=task,
+                user=request.user,
+                activity_type='updated',
+                description=f"Updated progress for '{task.title}' to {task.progress}%"
+            )
             
             # Return the updated progress
             return JsonResponse({
@@ -1961,29 +1805,7 @@ def get_progress_color_class(progress):
 @login_required
 def export_board(request, board_id):
     """Export a board's data to JSON or CSV format"""
-    from kanban.utils.demo_limits import check_export_allowed, record_export_attempt, record_limitation_hit
-    
-    # Check if export is allowed (blocked in demo mode)
-    export_status = check_export_allowed(request)
-    if export_status['is_demo'] and not export_status['allowed']:
-        record_export_attempt(request)
-        record_limitation_hit(request, 'export_blocked')
-        messages.warning(request, export_status['message'])
-        # Return JSON response for AJAX requests
-        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({
-                'error': 'demo_export_blocked',
-                'message': export_status['message'],
-                'upgrade_url': '/accounts/signup/'
-            }, status=403)
-        return redirect('board_detail', board_id=board_id)
-    
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if user has access to this board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
     
     export_format = request.GET.get('format', 'json')
     
@@ -2535,18 +2357,6 @@ def wizard_create_task(request):
                 if enhanced and enhanced.get('enhanced_description'):
                     task_description = enhanced['enhanced_description']
             
-            # Create the task with demo mode tracking
-            # Check if demo mode via session OR board
-            is_demo_board = board.is_official_demo_board or (hasattr(board.organization, 'is_demo') and board.organization.is_demo)
-            is_demo_mode = request.session.get('is_demo_mode', False) or is_demo_board
-            
-            created_by_session = None
-            if is_demo_mode:
-                created_by_session = request.session.get('browser_fingerprint') or request.session.session_key
-                if not created_by_session:
-                    import uuid
-                    created_by_session = f"demo-wizard-{uuid.uuid4().hex[:16]}"
-            
             task = Task.objects.create(
                 title=task_title,
                 description=task_description,
@@ -2554,8 +2364,7 @@ def wizard_create_task(request):
                 created_by=request.user,
                 assigned_to=request.user,
                 priority='medium',
-                created_by_session=created_by_session,
-                is_seed_demo_data=False if is_demo_mode else False  # Never seed data when user-created
+                is_seed_demo_data=False
             )
             
             return JsonResponse({
@@ -2782,26 +2591,13 @@ def list_task_files(request, task_id):
     })
 
 
+@login_required
 def skill_gap_dashboard(request, board_id):
     """
     Skill Gap Analysis Dashboard
     Shows team skill inventory, identified gaps, and development plans
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board (for display purposes only)
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
-    
-    # Require authentication
-    if not request.user.is_authenticated:
-        from django.contrib.auth.views import redirect_to_login
-        return redirect_to_login(request.get_full_path())
-    
-    # All restrictions removed - all authenticated users can view skill gaps
     
     # Get skill gaps and development plans
     from .models import SkillGap, SkillDevelopmentPlan, TeamSkillProfile
@@ -2846,8 +2642,8 @@ def skill_gap_dashboard(request, board_id):
         'active_plans': active_plans,
         'proposed_plans': proposed_plans,
         'completed_plans': completed_plans,
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
+        'is_demo_mode': False,
+        'is_demo_board': False,
     }
     
     return render(request, 'kanban/skill_gap_dashboard.html', context)

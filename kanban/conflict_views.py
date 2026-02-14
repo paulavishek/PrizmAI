@@ -21,73 +21,17 @@ from kanban.utils.conflict_detection import ConflictDetectionService
 logger = logging.getLogger(__name__)
 
 
-def check_demo_access_for_conflicts(request, require_write=False):
-    """
-    Check if demo user has access to conflict features.
-    
-    Args:
-        request: Django request object
-        require_write: If True, check for write permissions (e.g., resolving conflicts)
-        
-    Returns:
-        tuple: (has_access: bool, error_response: HttpResponse or None, is_demo_mode: bool)
-    """
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # If not in demo mode, require authentication
-    if not is_demo_mode:
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return False, redirect_to_login(request.get_full_path()), False
-        return True, None, False
-    
-    # All restrictions removed - users have full access
-    return True, None, True
-
-
+@login_required
 def conflict_dashboard(request):
     """
     Main dashboard showing all conflicts for user's boards.
     Optional board_id parameter to filter by specific board.
-    Supports demo mode - shows demo boards when in demo mode.
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
-        # Check demo access first
-        has_access, error_response, is_demo_mode = check_demo_access_for_conflicts(request)
-        if not has_access:
-            return error_response
-        
-        demo_mode_type = request.session.get('demo_mode', 'solo')
-        
-        # Get boards user has access to - MVP Mode without organization requirement
-        if is_demo_mode:
-            # In demo mode, only show demo organization boards
-            demo_org_names = ['Demo - Acme Corporation']
-            from kanban.models import Organization
-            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-            boards = Board.objects.filter(organization__in=demo_orgs).distinct()
-        else:
-            from accounts.models import Organization, UserProfile
-            
-            # Ensure user has a profile
-            try:
-                profile = request.user.profile
-            except UserProfile.DoesNotExist:
-                profile = UserProfile.objects.create(
-                    user=request.user,
-                    organization=None,
-                    is_admin=False,
-                    completed_wizard=True
-                )
-            
-            # MVP Mode: Get all boards the user has access to
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            )
-            boards = (demo_boards | user_boards).distinct()
+        # Get boards user has access to
+        boards = Board.objects.filter(
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+        ).distinct()
         
         # Check if filtering by specific board
         board_filter_id = request.GET.get('board_id')
@@ -109,17 +53,13 @@ def conflict_dashboard(request):
             'tasks', 'affected_users', 'resolutions'
         ).order_by('-severity', '-detected_at')
         
-        # Get user's notifications (only for authenticated users)
+        # Get user's notifications
         # Filter by board if a specific board is selected
-        if request.user.is_authenticated:
-            notification_query = ConflictNotification.objects.filter(
-                user=request.user,
-                acknowledged=False,
-                conflict__board__in=boards_to_show  # Filter by selected board(s)
-            ).select_related('conflict').order_by('-sent_at')[:10]
-            user_notifications = notification_query
-        else:
-            user_notifications = []
+        user_notifications = ConflictNotification.objects.filter(
+            user=request.user,
+            acknowledged=False,
+            conflict__board__in=boards_to_show  # Filter by selected board(s)
+        ).select_related('conflict').order_by('-sent_at')[:10]
         
         # Statistics
         stats = {
@@ -151,8 +91,6 @@ def conflict_dashboard(request):
             'recent_resolutions': recent_resolutions,
             'boards': boards,
             'selected_board': selected_board,
-            'is_demo_mode': is_demo_mode,
-            'demo_mode_type': demo_mode_type,
         }
         
         return render(request, 'kanban/conflicts/dashboard.html', context)
@@ -163,54 +101,24 @@ def conflict_dashboard(request):
         return redirect('dashboard')
 
 
+@login_required
 def conflict_detail(request, conflict_id):
     """
     Detailed view of a specific conflict with resolution options.
-    Supports demo mode.
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
-        # Check demo access first
-        has_access, error_response, is_demo_mode = check_demo_access_for_conflicts(request)
-        if not has_access:
-            return error_response
+        # Get boards user has access to
+        accessible_boards = Board.objects.filter(
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+        ).distinct()
         
-        demo_mode_type = request.session.get('demo_mode', 'solo')
-        
-        # Get conflict - for demo mode, allow access to demo org conflicts
-        if is_demo_mode:
-            demo_org_names = ['Demo - Acme Corporation']
-            from kanban.models import Organization
-            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-            conflict = get_object_or_404(
-                ConflictDetection.objects.select_related('board', 'chosen_resolution').prefetch_related(
-                    'tasks', 'affected_users', 'resolutions'
-                ),
-                id=conflict_id,
-                board__organization__in=demo_orgs
-            )
-        else:
-            profile = request.user.profile
-            organization = profile.organization
-            
-            # MVP Mode: Include both organization boards and demo boards
-            from kanban.models import Board
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            org_boards = Board.objects.filter(organization=organization) if organization else Board.objects.none()
-            user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            )
-            accessible_boards = (demo_boards | org_boards | user_boards).distinct()
-            
-            conflict = get_object_or_404(
-                ConflictDetection.objects.select_related('board', 'chosen_resolution').prefetch_related(
-                    'tasks', 'affected_users', 'resolutions'
-                ),
-                id=conflict_id,
-                board__in=accessible_boards
-            )
-        
-        # Access restriction removed - all authenticated users can access
+        conflict = get_object_or_404(
+            ConflictDetection.objects.select_related('board', 'chosen_resolution').prefetch_related(
+                'tasks', 'affected_users', 'resolutions'
+            ),
+            id=conflict_id,
+            board__in=accessible_boards
+        )
         
         # Get resolutions sorted by confidence
         resolutions = conflict.resolutions.all().order_by('-ai_confidence')
@@ -228,12 +136,11 @@ def conflict_detail(request, conflict_id):
             except Exception as gen_error:
                 logger.error(f"Failed to generate resolutions on-demand: {gen_error}", exc_info=True)
         
-        # Mark notification as read if exists (only for authenticated users)
-        if request.user.is_authenticated:
-            ConflictNotification.objects.filter(
-                conflict=conflict,
-                user=request.user
-            ).update(read_at=timezone.now())
+        # Mark notification as read if exists
+        ConflictNotification.objects.filter(
+            conflict=conflict,
+            user=request.user
+        ).update(read_at=timezone.now())
         
         # Get similar past conflicts for context
         similar_conflicts = ConflictDetection.objects.filter(
@@ -242,16 +149,11 @@ def conflict_detail(request, conflict_id):
             status='resolved'
         ).exclude(id=conflict.id).select_related('chosen_resolution')[:5]
         
-        # All restrictions removed - users have full access
-        can_resolve = True
-        
         context = {
             'conflict': conflict,
             'resolutions': resolutions,
             'similar_conflicts': similar_conflicts,
-            'can_resolve': can_resolve,
-            'is_demo_mode': is_demo_mode,
-            'demo_mode_type': demo_mode_type,
+            'can_resolve': True,
         }
         
         return render(request, 'kanban/conflicts/detail.html', context)
@@ -262,69 +164,24 @@ def conflict_detail(request, conflict_id):
         return redirect('conflict_dashboard')
 
 
+@login_required
 @require_POST
 def apply_resolution(request, conflict_id, resolution_id):
     """
     Apply a specific resolution to resolve a conflict.
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
-        # Check demo access first (requires write permission)
-        has_access, error_response, is_demo_mode = check_demo_access_for_conflicts(request, require_write=True)
-        if not has_access:
-            if error_response:
-                # Convert redirect to JSON error for AJAX
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Authentication required'
-                }, status=401)
-            return JsonResponse({
-                'success': False,
-                'error': "You don't have permission to resolve this conflict"
-            }, status=403)
+        # Get boards user has access to
+        accessible_boards = Board.objects.filter(
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+        ).distinct()
         
-        demo_mode_type = request.session.get('demo_mode', 'solo')
-        
-        # Get conflict and resolution based on access mode
-        if is_demo_mode:
-            demo_org_names = ['Demo - Acme Corporation']
-            from kanban.models import Organization
-            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-            conflict = get_object_or_404(
-                ConflictDetection,
-                id=conflict_id,
-                board__organization__in=demo_orgs,
-                status='active'
-            )
-        else:
-            from accounts.models import Organization, UserProfile
-            from kanban.models import Board
-            
-            # Ensure user has a profile
-            try:
-                profile = request.user.profile
-            except UserProfile.DoesNotExist:
-                profile = UserProfile.objects.create(
-                    user=request.user,
-                    organization=None,
-                    is_admin=False,
-                    completed_wizard=True
-                )
-            
-            # MVP Mode: Include demo boards, organization boards, and user boards
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            org_boards = Board.objects.filter(organization=profile.organization) if profile.organization else Board.objects.none()
-            user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            )
-            accessible_boards = (demo_boards | org_boards | user_boards).distinct()
-            
-            conflict = get_object_or_404(
-                ConflictDetection,
-                id=conflict_id,
-                board__in=accessible_boards,
-                status='active'
-            )
+        conflict = get_object_or_404(
+            ConflictDetection,
+            id=conflict_id,
+            board__in=accessible_boards,
+            status='active'
+        )
         
         resolution = get_object_or_404(
             ConflictResolution,
@@ -332,8 +189,7 @@ def apply_resolution(request, conflict_id, resolution_id):
             conflict=conflict
         )
         
-        # Access restriction removed - all authenticated users can access
-        
+
         # Get optional feedback from request
         feedback = request.POST.get('feedback', '')
         effectiveness = request.POST.get('effectiveness')
@@ -346,12 +202,11 @@ def apply_resolution(request, conflict_id, resolution_id):
             except (ValueError, TypeError):
                 effectiveness = None
         
-        # Apply resolution (use authenticated user or None for demo)
-        apply_user = request.user if request.user.is_authenticated else None
-        resolution.apply(apply_user)
+        # Apply resolution
+        resolution.apply(request.user)
         
         # Update conflict with feedback
-        conflict.resolve(resolution, apply_user, feedback, effectiveness)
+        conflict.resolve(resolution, request.user, feedback, effectiveness)
         
         messages.success(request, f"Resolution applied successfully: {resolution.title}")
         
@@ -369,67 +224,27 @@ def apply_resolution(request, conflict_id, resolution_id):
         }, status=500)
 
 
+@login_required
 @require_POST
 def ignore_conflict(request, conflict_id):
     """
     Mark a conflict as ignored.
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
-        # Check demo access first (requires write permission)
-        has_access, error_response, is_demo_mode = check_demo_access_for_conflicts(request, require_write=True)
-        if not has_access:
-            return JsonResponse({
-                'success': False,
-                'error': "You don't have permission"
-            }, status=403)
+        # Get boards user has access to
+        accessible_boards = Board.objects.filter(
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+        ).distinct()
         
-        # Get conflict based on access mode
-        if is_demo_mode:
-            demo_org_names = ['Demo - Acme Corporation']
-            from kanban.models import Organization
-            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-            conflict = get_object_or_404(
-                ConflictDetection,
-                id=conflict_id,
-                board__organization__in=demo_orgs,
-                status='active'
-            )
-        else:
-            from accounts.models import Organization, UserProfile
-            from kanban.models import Board
-            
-            # Ensure user has a profile
-            try:
-                profile = request.user.profile
-            except UserProfile.DoesNotExist:
-                profile = UserProfile.objects.create(
-                    user=request.user,
-                    organization=None,
-                    is_admin=False,
-                    completed_wizard=True
-                )
-            
-            # MVP Mode: Include demo boards, organization boards, and user boards
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            org_boards = Board.objects.filter(organization=profile.organization) if profile.organization else Board.objects.none()
-            user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            )
-            accessible_boards = (demo_boards | org_boards | user_boards).distinct()
-            
-            conflict = get_object_or_404(
-                ConflictDetection,
-                id=conflict_id,
-                board__in=accessible_boards,
-                status='active'
-            )
-        
-        # Access restriction removed - all authenticated users can access
+        conflict = get_object_or_404(
+            ConflictDetection,
+            id=conflict_id,
+            board__in=accessible_boards,
+            status='active'
+        )
         
         reason = request.POST.get('reason', '')
-        ignore_user = request.user if request.user.is_authenticated else None
-        conflict.ignore(ignore_user, reason)
+        conflict.ignore(request.user, reason)
         
         messages.info(request, "Conflict marked as ignored")
         
@@ -447,19 +262,12 @@ def ignore_conflict(request, conflict_id):
         }, status=500)
 
 
+@login_required
 @require_POST
 def acknowledge_notification(request, notification_id):
     """
     Acknowledge a conflict notification.
-    Requires authentication (notifications are user-specific).
     """
-    # This requires authentication - notifications are tied to real users
-    if not request.user.is_authenticated:
-        return JsonResponse({
-            'success': False,
-            'error': 'Authentication required'
-        }, status=401)
-    
     try:
         notification = get_object_or_404(
             ConflictNotification,
@@ -482,61 +290,24 @@ def acknowledge_notification(request, notification_id):
         }, status=500)
 
 
+@login_required
 @require_POST
 def conflict_feedback(request, conflict_id):
     """
     Add feedback and effectiveness rating to a resolved conflict.
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
-        # Check demo access first (requires write permission)
-        has_access, error_response, is_demo_mode = check_demo_access_for_conflicts(request, require_write=True)
-        if not has_access:
-            return JsonResponse({
-                'success': False,
-                'error': "You don't have permission"
-            }, status=403)
+        # Get boards user has access to
+        accessible_boards = Board.objects.filter(
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+        ).distinct()
         
-        # Get conflict based on access mode
-        if is_demo_mode:
-            demo_org_names = ['Demo - Acme Corporation']
-            from kanban.models import Organization
-            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-            conflict = get_object_or_404(
-                ConflictDetection,
-                id=conflict_id,
-                board__organization__in=demo_orgs,
-                status='resolved'
-            )
-        else:
-            from accounts.models import Organization, UserProfile
-            from kanban.models import Board
-            
-            # Ensure user has a profile
-            try:
-                profile = request.user.profile
-            except UserProfile.DoesNotExist:
-                profile = UserProfile.objects.create(
-                    user=request.user,
-                    organization=None,
-                    is_admin=False,
-                    completed_wizard=True
-                )
-            
-            # MVP Mode: Include demo boards, organization boards, and user boards
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            org_boards = Board.objects.filter(organization=profile.organization) if profile.organization else Board.objects.none()
-            user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            )
-            accessible_boards = (demo_boards | org_boards | user_boards).distinct()
-            
-            conflict = get_object_or_404(
-                ConflictDetection,
-                id=conflict_id,
-                board__in=accessible_boards,
-                status='resolved'
-            )
+        conflict = get_object_or_404(
+            ConflictDetection,
+            id=conflict_id,
+            board__in=accessible_boards,
+            status='resolved'
+        )
         
         # Get feedback and rating
         feedback = request.POST.get('feedback', '')
@@ -572,47 +343,19 @@ def conflict_feedback(request, conflict_id):
             'success': False,
             'error': str(e)
         }, status=500)
-    except Exception as e:
-        logger.error(f"Error acknowledging notification: {e}", exc_info=True)
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
 
 
+@login_required
 @require_POST
 def trigger_detection_all(request):
     """
     Manually trigger conflict detection for all accessible boards.
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
-        # Check demo access first
-        has_access, error_response, is_demo_mode = check_demo_access_for_conflicts(request, require_write=True)
-        if not has_access:
-            return JsonResponse({
-                'success': False,
-                'error': "You don't have permission"
-            }, status=403)
-        
         # Get all accessible boards
-        if is_demo_mode:
-            demo_org_names = ['Demo - Acme Corporation']
-            from kanban.models import Organization
-            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-            boards = Board.objects.filter(organization__in=demo_orgs).distinct()
-        else:
-            from kanban.models import Organization
-            profile = request.user.profile
-            organization = profile.organization
-            
-            # MVP Mode: Get all boards the user has access to (matching dashboard logic)
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            org_boards = Board.objects.filter(organization=organization) if organization else Board.objects.none()
-            user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            )
-            boards = (demo_boards | org_boards | user_boards).distinct()
+        boards = Board.objects.filter(
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+        ).distinct()
         
         # Trigger detection for each board
         count = 0
@@ -655,49 +398,23 @@ def trigger_detection_all(request):
         }, status=500)
 
 
+@login_required
 @require_POST
 def trigger_detection(request, board_id):
     """
     Manually trigger conflict detection for a specific board.
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
-        # Check demo access first
-        has_access, error_response, is_demo_mode = check_demo_access_for_conflicts(request, require_write=True)
-        if not has_access:
-            return JsonResponse({
-                'success': False,
-                'error': "You don't have permission"
-            }, status=403)
+        # Get boards user has access to
+        accessible_boards = Board.objects.filter(
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+        ).distinct()
         
-        # Get board based on access mode
-        if is_demo_mode:
-            demo_org_names = ['Demo - Acme Corporation']
-            from kanban.models import Organization
-            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-            board = get_object_or_404(
-                Board,
-                id=board_id,
-                organization__in=demo_orgs
-            )
-        else:
-            from kanban.models import Organization
-            profile = request.user.profile
-            organization = profile.organization
-            
-            # Include demo organization boards for authenticated users
-            demo_org = Organization.objects.filter(name='Demo - Acme Corporation').first()
-            org_filter = Q(organization=organization)
-            if demo_org:
-                org_filter |= Q(organization=demo_org)
-            
-            board = get_object_or_404(
-                Board,
-                org_filter,
-                id=board_id
-            )
-        
-        # Access restriction removed - all authenticated users can access
+        board = get_object_or_404(
+            Board,
+            id=board_id,
+            id__in=accessible_boards.values_list('id', flat=True)
+        )
         
         # Try async detection first, fallback to sync if Redis unavailable
         try:
@@ -727,46 +444,16 @@ def trigger_detection(request, board_id):
         }, status=500)
 
 
+@login_required
 def conflict_analytics(request):
     """
     Analytics view showing conflict patterns and resolution effectiveness.
-    Supports demo mode.
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
-        # Check demo access first
-        has_access, error_response, is_demo_mode = check_demo_access_for_conflicts(request)
-        if not has_access:
-            return error_response
-        
-        demo_mode_type = request.session.get('demo_mode', 'solo')
-        
-        # Get boards - filter to demo boards if in demo mode
-        if is_demo_mode:
-            demo_org_names = ['Demo - Acme Corporation']
-            from kanban.models import Organization
-            demo_orgs = Organization.objects.filter(name__in=demo_org_names)
-            boards = Board.objects.filter(organization__in=demo_orgs).distinct()
-        else:
-            from accounts.models import Organization, UserProfile
-            
-            # Ensure user has a profile
-            try:
-                profile = request.user.profile
-            except UserProfile.DoesNotExist:
-                profile = UserProfile.objects.create(
-                    user=request.user,
-                    organization=None,
-                    is_admin=False,
-                    completed_wizard=True
-                )
-            
-            # MVP Mode: Get all boards the user has access to
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            user_boards = Board.objects.filter(
-                Q(created_by=request.user) | Q(members=request.user)
-            )
-            boards = (demo_boards | user_boards).distinct()
+        # Get boards user has access to
+        boards = Board.objects.filter(
+            Q(is_official_demo_board=True) | Q(created_by=request.user) | Q(members=request.user)
+        ).distinct()
         
         # Get resolution patterns
         patterns = ResolutionPattern.objects.filter(
@@ -872,8 +559,6 @@ def conflict_analytics(request):
             'avg_resolution_time': avg_resolution_time,
             'avg_effectiveness': avg_effectiveness,
             'rated_count': rated_conflicts.count(),
-            'is_demo_mode': is_demo_mode,
-            'demo_mode_type': demo_mode_type,
             'trend_labels_json': json.dumps(trend_labels),
             'trend_detected_json': json.dumps(trend_detected),
             'trend_resolved_json': json.dumps(trend_resolved),
@@ -887,20 +572,11 @@ def conflict_analytics(request):
         return redirect('conflict_dashboard')
 
 
+@login_required
 def get_conflict_notifications(request):
     """
     API endpoint to get user's unread conflict notifications.
-    Requires authentication (notifications are user-specific).
     """
-    # This requires authentication - notifications are tied to real users
-    if not request.user.is_authenticated:
-        return JsonResponse({
-            'success': False,
-            'error': 'Authentication required',
-            'notifications': [],
-            'count': 0
-        }, status=401)
-    
     try:
         notifications = ConflictNotification.objects.filter(
             user=request.user,

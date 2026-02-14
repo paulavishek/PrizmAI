@@ -15,8 +15,9 @@ class UserPerformanceProfile(models.Model):
     Tracks historical performance metrics for each user
     Used for predicting task completion times and skill matching
     """
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='performance_profiles')
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='performance_profiles_org')
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='performance_profile')
+    # Organization is optional - simplified mode doesn't require it
+    organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name='performance_profiles_org')
     
     # Performance metrics
     total_tasks_completed = models.IntegerField(default=0)
@@ -44,7 +45,6 @@ class UserPerformanceProfile(models.Model):
     last_task_completed = models.DateTimeField(null=True, blank=True)
     
     class Meta:
-        unique_together = [['user', 'organization']]
         ordering = ['-velocity_score']
     
     def __str__(self):
@@ -59,8 +59,7 @@ class UserPerformanceProfile(models.Model):
         completed_tasks = Task.objects.filter(
             assigned_to=self.user,
             completed_at__isnull=False,
-            completed_at__gte=ninety_days_ago,
-            column__board__organization=self.organization
+            completed_at__gte=ninety_days_ago
         )
         
         task_count = completed_tasks.count()
@@ -136,8 +135,7 @@ class UserPerformanceProfile(models.Model):
         
         active_tasks = Task.objects.filter(
             assigned_to=self.user,
-            completed_at__isnull=True,
-            column__board__organization=self.organization
+            completed_at__isnull=True
         ).exclude(column__name__icontains='done')
         
         self.current_active_tasks = active_tasks.count()
@@ -313,7 +311,8 @@ class ResourceLevelingSuggestion(models.Model):
     Stores AI-generated resource leveling suggestions
     """
     task = models.ForeignKey('kanban.Task', on_delete=models.CASCADE, related_name='leveling_suggestions')
-    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name='leveling_suggestions')
+    # Organization is optional - simplified mode doesn't require it
+    organization = models.ForeignKey(Organization, on_delete=models.SET_NULL, null=True, blank=True, related_name='leveling_suggestions')
     
     # Current state
     current_assignee = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True,
@@ -403,13 +402,17 @@ class ResourceLevelingSuggestion(models.Model):
         # Update performance profiles - this will now be handled by signals
         # But we'll keep this as a backup in case signals don't fire
         if old_assignee:
-            profile = UserPerformanceProfile.objects.filter(user=old_assignee, organization=self.organization).first()
-            if profile:
+            try:
+                profile = old_assignee.performance_profile
                 profile.update_current_workload()
+            except UserPerformanceProfile.DoesNotExist:
+                pass
         
-        profile = UserPerformanceProfile.objects.filter(user=self.suggested_assignee, organization=self.organization).first()
-        if profile:
+        try:
+            profile = self.suggested_assignee.performance_profile
             profile.update_current_workload()
+        except UserPerformanceProfile.DoesNotExist:
+            pass
         
         return True
     

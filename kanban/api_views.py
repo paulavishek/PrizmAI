@@ -40,11 +40,6 @@ from kanban.utils.ai_utils import (
     generate_board_setup_recommendations
 )
 from api.ai_usage_utils import track_ai_request, check_ai_quota
-from kanban.utils.demo_limits import (
-    check_ai_generation_limit, 
-    increment_ai_generation_count, 
-    record_limitation_hit
-)
 
 @login_required
 @require_http_methods(["POST"])
@@ -54,16 +49,6 @@ def generate_task_description_api(request):
     """
     start_time = time.time()
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -93,9 +78,6 @@ def generate_task_description_api(request):
                 response_time_ms=response_time_ms
             )
             return JsonResponse({'error': 'Failed to generate description'}, status=500)
-        
-        # Increment demo AI generation count on success
-        increment_ai_generation_count(request)
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -128,16 +110,6 @@ def summarize_comments_api(request, task_id):
     """
     start_time = time.time()
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -149,11 +121,6 @@ def summarize_comments_api(request, task_id):
         # Get the task and verify user access
         task = get_object_or_404(Task, id=task_id)
         board = task.column.board
-        
-        # Check if user has access to this board/task
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
         
         # Format comments for AI
         comments_data = []
@@ -182,9 +149,6 @@ def summarize_comments_api(request, task_id):
                 response_time_ms=response_time_ms
             )
             return JsonResponse({'error': 'Failed to generate summary'}, status=500)
-        
-        # Increment demo AI generation count on success
-        increment_ai_generation_count(request)
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -469,16 +433,6 @@ def suggest_lss_classification_api(request):
     """
     start_time = time.time()
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -520,9 +474,6 @@ def suggest_lss_classification_api(request):
             )
             return JsonResponse({'error': 'Failed to suggest classification'}, status=500)
         
-        # Increment demo AI generation count on success
-        increment_ai_generation_count(request)
-        
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
         track_ai_request(
@@ -546,50 +497,24 @@ def suggest_lss_classification_api(request):
         )
         return JsonResponse({'error': str(e)}, status=500)
 
+@login_required
 @require_http_methods(["GET"])
 def summarize_board_analytics_api(request, board_id):
     """
     API endpoint to summarize board analytics using AI
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     start_time = time.time()
     try:
         # Get the board
         board = get_object_or_404(Board, id=board_id)
         
-        # Check if this is a demo board (for display purposes only)
-        demo_org_names = ['Demo - Acme Corporation']
-        is_demo_board = board.organization.name in demo_org_names
-        is_demo_mode = request.session.get('is_demo_mode', False)
-        
-        # For demo boards in demo mode, check AI generation limit
-        if is_demo_board and is_demo_mode:
-            ai_limit_status = check_ai_generation_limit(request)
-            if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-                record_limitation_hit(request, 'ai_limit')
-                return JsonResponse({
-                    'error': ai_limit_status['message'],
-                    'quota_exceeded': True,
-                    'demo_limit': True
-                }, status=429)
-        
-        # For non-demo boards, require authentication
-        if not (is_demo_board and is_demo_mode):
-            if not request.user.is_authenticated:
-                return JsonResponse({'error': 'Authentication required'}, status=401)
-            
-            # Check if user has access to this board
-            # Access restriction removed - all authenticated users can access
-
-            pass  # Original: board membership check removed
-            
-            # Check AI quota for authenticated users
-            has_quota, quota, remaining = check_ai_quota(request.user)
-            if not has_quota:
-                return JsonResponse({
-                    'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
-                    'quota_exceeded': True
-                }, status=429)
+        # Check AI quota for authenticated users
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please upgrade or wait for quota reset.',
+                'quota_exceeded': True
+            }, status=429)
         
         # Gather analytics data (same as in board_analytics view)
         from django.db.models import Count, Q
@@ -716,51 +641,42 @@ def summarize_board_analytics_api(request, board_id):
         
         if not summary:
             response_time_ms = int((time.time() - start_time) * 1000)
-            # Track AI request only if user is authenticated
-            if request.user.is_authenticated:
-                track_ai_request(
-                    user=request.user,
-                    feature='board_analytics',
-                    request_type='summarize',
-                    board_id=board.id,
-                    success=False,
-                    error_message='Failed to generate analytics summary',
-                    response_time_ms=response_time_ms
-                )
-            return JsonResponse({
-                'error': 'Failed to generate AI summary. This may be due to API quota limits. Please try again in a few moments.'
-            }, status=500)
-        
-        # Track successful request (only if user is authenticated)
-        response_time_ms = int((time.time() - start_time) * 1000)
-        if request.user.is_authenticated:
             track_ai_request(
                 user=request.user,
                 feature='board_analytics',
                 request_type='summarize',
                 board_id=board.id,
-                success=True,
+                success=False,
+                error_message='Failed to generate analytics summary',
                 response_time_ms=response_time_ms
             )
+            return JsonResponse({
+                'error': 'Failed to generate AI summary. This may be due to API quota limits. Please try again in a few moments.'
+            }, status=500)
         
-        # Increment demo AI generation count for demo mode
-        if is_demo_board and is_demo_mode:
-            increment_ai_generation_count(request)
+        # Track successful request
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='board_analytics',
+            request_type='summarize',
+            board_id=board.id,
+            success=True,
+            response_time_ms=response_time_ms
+        )
             
         return JsonResponse({'summary': summary})
     except Exception as e:
         response_time_ms = int((time.time() - start_time) * 1000)
-        # Track AI request only if user is authenticated
-        if request.user.is_authenticated:
-            track_ai_request(
-                user=request.user,
-                feature='board_analytics',
-                request_type='summarize',
-                board_id=board_id if 'board' in locals() else None,
-                success=False,
-                error_message=str(e),
-                response_time_ms=response_time_ms
-            )
+        track_ai_request(
+            user=request.user,
+            feature='board_analytics',
+            request_type='summarize',
+            board_id=board_id if 'board' in locals() else None,
+            success=False,
+            error_message=str(e),
+            response_time_ms=response_time_ms
+        )
         
         # Check for quota exceeded error
         error_message = str(e)
@@ -1172,16 +1088,6 @@ def suggest_task_priority_api(request):
     """
     start_time = time.time()
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -1306,9 +1212,6 @@ def suggest_task_priority_api(request):
             )
             return JsonResponse({'error': 'Failed to suggest priority'}, status=500)
         
-        # Increment demo AI generation count on success
-        increment_ai_generation_count(request)
-        
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
         track_ai_request(
@@ -1343,16 +1246,6 @@ def predict_deadline_api(request):
     """
     start_time = time.time()
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -1543,8 +1436,7 @@ def predict_deadline_api(request):
             )
             return JsonResponse({'error': 'Failed to predict deadline'}, status=500)
         
-        # Increment demo AI generation count on success
-        increment_ai_generation_count(request)
+        # Track successful request
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -1579,16 +1471,6 @@ def recommend_columns_api(request):
     start_time = time.time()
     board_id_for_tracking = None
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -1650,9 +1532,6 @@ def recommend_columns_api(request):
             )
             return JsonResponse({'error': 'Failed to recommend columns'}, status=500)
         
-        # Increment demo AI generation count on success
-        increment_ai_generation_count(request)
-        
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
         track_ai_request(
@@ -1688,16 +1567,6 @@ def generate_board_setup_api(request):
     """
     start_time = time.time()
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -1734,9 +1603,6 @@ def generate_board_setup_api(request):
             )
             return JsonResponse({'error': 'Failed to generate recommendations'}, status=500)
         
-        # Increment demo AI generation count on success
-        increment_ai_generation_count(request)
-        
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
         track_ai_request(
@@ -1770,16 +1636,6 @@ def suggest_task_breakdown_api(request):
     start_time = time.time()
     board_id_for_tracking = None
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -1832,9 +1688,6 @@ def suggest_task_breakdown_api(request):
             )
             return JsonResponse({'error': 'Failed to suggest task breakdown'}, status=500)
         
-        # Increment demo AI generation count on success
-        increment_ai_generation_count(request)
-        
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
         track_ai_request(
@@ -1868,16 +1721,6 @@ def analyze_workflow_optimization_api(request):
     """
     start_time = time.time()
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -1994,9 +1837,6 @@ def analyze_workflow_optimization_api(request):
             )
             return JsonResponse({'error': 'Failed to analyze workflow'}, status=500)
         
-        # Increment demo AI generation count on success
-        increment_ai_generation_count(request)
-        
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
         track_ai_request(
@@ -2039,14 +1879,6 @@ def create_subtasks_api(request):
               # Verify board exists
         board = get_object_or_404(Board, id=board_id)
         # Access restriction removed - all authenticated users can create tasks
-        
-        # Check if this is a demo board (for session tracking)
-        # Demo boards are either: in a demo organization OR marked as official demo boards
-        is_demo_board = (
-            board.is_official_demo_board or 
-            (hasattr(board.organization, 'is_demo') and board.organization.is_demo)
-        )
-        is_demo_mode = request.session.get('is_demo_mode', False) or is_demo_board
             
         # Get column - if not specified, use first column
         if column_id:
@@ -2102,16 +1934,7 @@ def create_subtasks_api(request):
                 if original_task_title:
                     description += f"\n\n*Subtask of: {original_task_title}*"
                 
-                # Create the task with demo session tracking
-                # is_demo_mode was already calculated above based on board + session
-                created_by_session = None
-                if is_demo_mode:
-                    created_by_session = request.session.get('browser_fingerprint') or request.session.session_key
-                    # Fallback: generate a unique identifier if session tracking failed
-                    if not created_by_session:
-                        import uuid
-                        created_by_session = f"demo-subtask-{uuid.uuid4().hex[:16]}"
-                
+                # Create the task
                 task = Task.objects.create(
                     title=title,
                     description=description,
@@ -2120,7 +1943,6 @@ def create_subtasks_api(request):
                     due_date=due_date,
                     created_by=request.user,
                     position=Task.objects.filter(column=column).count(),  # Add to end
-                    created_by_session=created_by_session,
                     is_seed_demo_data=False  # User-created, not seed data
                 )
                 
@@ -2159,16 +1981,6 @@ def calculate_task_risk_api(request):
     """
     start_time = time.time()
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -2809,15 +2621,9 @@ def update_task_dates_api(request):
         # Verify user has access
         board = task.column.board
         
-        # Check if this is a demo board
-        is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
-        is_demo_mode = request.session.get('is_demo_mode', False)
-        demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
-        
-        # Require authentication only
+        # Require authentication
         if not request.user.is_authenticated:
             return JsonResponse({'error': 'Authentication required'}, status=401)
-        # All restrictions removed - all authenticated users have full access
         
         # Update dates
         if start_date:
@@ -2834,13 +2640,6 @@ def update_task_dates_api(request):
             else:
                 # Set to end of day
                 task.due_date = datetime.strptime(due_date + ' 23:59:59', '%Y-%m-%d %H:%M:%S')
-        
-        # For demo mode, mark the task as user-modified so date refresh won't overwrite
-        if is_demo_board and is_demo_mode:
-            session_id = request.session.get('browser_fingerprint') or request.session.session_key
-            if session_id and not task.created_by_session:
-                task.created_by_session = session_id
-            task.is_seed_demo_data = False
         
         task.save()
         
@@ -3654,23 +3453,13 @@ def analyze_skill_gaps_api(request, board_id):
 def get_team_skill_profile_api(request, board_id):
     """
     Get comprehensive skill inventory for a board's team
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
         board = get_object_or_404(Board, pk=board_id)
         
-        # Check if this is a demo board
-        demo_org_names = ['Demo - Acme Corporation']
-        is_demo_board = board.organization.name in demo_org_names
-        is_demo_mode = request.session.get('is_demo_mode', False)
-        demo_mode_type = request.session.get('demo_mode', 'solo')
-        
-        # For non-demo boards, require authentication
-        if not (is_demo_board and is_demo_mode):
-            if not request.user.is_authenticated:
-                return JsonResponse({'error': 'Authentication required'}, status=401)
-            
-        # All restrictions removed - all authenticated users have full access
+        # Require authentication
+        if not request.user.is_authenticated:
+            return JsonResponse({'error': 'Authentication required'}, status=401)
         
         from kanban.utils.skill_analysis import build_team_skill_profile, update_team_skill_profile_model
         
@@ -3979,21 +3768,13 @@ def delete_skill_development_plan_api(request, plan_id):
 def get_skill_gaps_list_api(request, board_id):
     """
     Get list of active skill gaps for a board
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
         board = get_object_or_404(Board, pk=board_id)
         
-        # Check if this is a demo board
-        demo_org_names = ['Demo - Acme Corporation']
-        is_demo_board = board.organization.name in demo_org_names
-        is_demo_mode = request.session.get('is_demo_mode', False)
-        demo_mode_type = request.session.get('demo_mode', 'solo')
-        
-        # Require authentication only
+        # Require authentication
         if not request.user.is_authenticated:
             return JsonResponse({'error': 'Authentication required'}, status=401)
-        # All restrictions removed - all authenticated users have full access
         
         from kanban.models import SkillGap
         
@@ -4033,22 +3814,13 @@ def get_skill_gaps_list_api(request, board_id):
 def get_development_plans_api(request, board_id):
     """
     Get skill development plans for a board
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     try:
         board = get_object_or_404(Board, pk=board_id)
         
-        # Check if this is a demo board
-        demo_org_names = ['Demo - Acme Corporation']
-        is_demo_board = board.organization.name in demo_org_names
-        is_demo_mode = request.session.get('is_demo_mode', False)
-        demo_mode_type = request.session.get('demo_mode', 'solo')
-        
-        # For non-demo boards, require authentication
-        if not (is_demo_board and is_demo_mode):
-            if not request.user.is_authenticated:
-                return JsonResponse({'error': 'Authentication required'}, status=401)
-        # All restrictions removed - all authenticated users have full access
+        # Require authentication
+        if not request.user.is_authenticated:
+            return JsonResponse({'error': 'Authentication required'}, status=401)
         
         from kanban.models import SkillDevelopmentPlan
         

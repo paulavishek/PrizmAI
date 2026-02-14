@@ -22,14 +22,6 @@ from kanban.resource_leveling_models import (
 logger = logging.getLogger(__name__)
 
 
-def _can_access_board(user, board):
-    """Check if user can access board - all authenticated users can access"""
-    # Access restriction removed - all authenticated users can access all boards
-    return True
-    
-    return False
-
-
 @login_required
 @require_http_methods(["POST"])
 def analyze_task_assignment(request, task_id):
@@ -51,7 +43,6 @@ def analyze_task_assignment(request, task_id):
     try:
         task = get_object_or_404(Task, id=task_id)
         
-        # Access restriction removed - all authenticated users can access
         board = task.column.board if task.column else None
         if not board:
             return JsonResponse({
@@ -59,7 +50,7 @@ def analyze_task_assignment(request, task_id):
             }, status=400)
         
         # Initialize service
-        service = ResourceLevelingService(board.organization)
+        service = ResourceLevelingService()
         
         # Analyze assignment
         analysis = service.analyze_task_assignment(task, requesting_user=request.user)
@@ -94,7 +85,6 @@ def create_leveling_suggestion(request, task_id):
     try:
         task = get_object_or_404(Task, id=task_id)
         
-        # Access restriction removed - all authenticated users can access
         board = task.column.board if task.column else None
         if not board:
             return JsonResponse({
@@ -102,7 +92,7 @@ def create_leveling_suggestion(request, task_id):
             }, status=400)
         
         # Initialize service
-        service = ResourceLevelingService(board.organization)
+        service = ResourceLevelingService()
         
         # Create suggestion
         suggestion = service.create_suggestion(task, requesting_user=request.user)
@@ -152,8 +142,6 @@ def accept_suggestion(request, suggestion_id):
     try:
         suggestion = get_object_or_404(ResourceLevelingSuggestion, id=suggestion_id)
         
-        # Access restriction removed - all authenticated users can access
-        
         # Accept suggestion
         success = suggestion.accept(request.user)
         
@@ -186,8 +174,6 @@ def reject_suggestion(request, suggestion_id):
     """
     try:
         suggestion = get_object_or_404(ResourceLevelingSuggestion, id=suggestion_id)
-        
-        # Access restriction removed - all authenticated users can access
         
         suggestion.reject(request.user)
         
@@ -232,14 +218,8 @@ def get_board_suggestions(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
         
-        # Check permissions
-        if not _can_access_board(request.user, board):
-            return JsonResponse({
-                'error': 'You do not have permission to access this board'
-            }, status=403)
-        
         # Initialize service
-        service = ResourceLevelingService(board.organization)
+        service = ResourceLevelingService()
         
         # Get suggestions
         suggestions = service.get_board_optimization_suggestions(board, limit=20, requesting_user=request.user)
@@ -313,14 +293,8 @@ def get_team_workload_report(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
         
-        # Check permissions
-        if not _can_access_board(request.user, board):
-            return JsonResponse({
-                'error': 'You do not have permission to access this board'
-            }, status=403)
-        
         # Initialize service
-        service = ResourceLevelingService(board.organization)
+        service = ResourceLevelingService()
         
         # Generate report (pass requesting user for demo board filtering)
         report = service.get_team_workload_report(board, requesting_user=request.user)
@@ -365,12 +339,6 @@ def optimize_board_workload(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
         
-        # Check permissions
-        if not _can_access_board(request.user, board):
-            return JsonResponse({
-                'error': 'You do not have permission to access this board'
-            }, status=403)
-        
         # Parse body
         try:
             data = json.loads(request.body) if request.body else {}
@@ -380,7 +348,7 @@ def optimize_board_workload(request, board_id):
         auto_apply = data.get('auto_apply', False)
         
         # Initialize service
-        service = ResourceLevelingService(board.organization)
+        service = ResourceLevelingService()
         
         # Optimize
         result = service.optimize_board_workload(board, auto_apply=auto_apply)
@@ -416,8 +384,6 @@ def balance_workload(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
         
-        # Access restriction removed - all authenticated users can access
-        
         # Parse body
         try:
             data = json.loads(request.body) if request.body else {}
@@ -427,7 +393,7 @@ def balance_workload(request, board_id):
         target_utilization = data.get('target_utilization', 75.0)
         
         # Initialize balancer
-        balancer = WorkloadBalancer(board.organization)
+        balancer = WorkloadBalancer()
         
         # Balance workload
         result = balancer.balance_workload(board, target_utilization=target_utilization)
@@ -466,14 +432,14 @@ def get_user_performance_profile(request, user_id):
     try:
         user = get_object_or_404(User, id=user_id)
         
-        # Get organization from request user
-        user_profile = request.user.userprofile
-        organization = user_profile.organization
-        
-        # Get performance profile
+        # Get or create performance profile - no organization needed
         profile, created = UserPerformanceProfile.objects.get_or_create(
             user=user,
-            organization=organization
+            defaults={
+                'weekly_capacity_hours': 40.0,
+                'velocity_score': 1.0,
+                'quality_score': 3.0
+            }
         )
         
         if created or not profile.total_tasks_completed:
@@ -522,10 +488,8 @@ def update_performance_profiles(request, board_id):
     try:
         board = get_object_or_404(Board, id=board_id)
         
-        # Access restriction removed - all authenticated users can access
-        
         # Initialize service
-        service = ResourceLevelingService(board.organization)
+        service = ResourceLevelingService()
         
         # Update all profiles
         result = service.update_all_profiles(board)

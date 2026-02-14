@@ -19,51 +19,12 @@ from kanban.models import (
 from kanban.utils.forecasting_service import DemandForecastingService, WorkloadAnalyzer
 
 
-def check_demo_access_for_forecasting(request, board, require_write=False):
-    """
-    Check if demo user has access to forecasting features for a specific board.
-    
-    Args:
-        request: Django request object
-        board: Board instance to check access for
-        require_write: If True, check for write permissions
-        
-    Returns:
-        tuple: (has_access: bool, error_response: HttpResponse or None, is_demo_mode: bool)
-    """
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards or non-demo mode, require authentication
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return False, redirect_to_login(request.get_full_path()), False
-        
-        # Access restriction removed - all authenticated users can access
-        return True, None, False
-    
-    # All restrictions removed - users have full access
-    return True, None, True
-
-
+@login_required
 def forecast_dashboard(request, board_id):
     """
     Main forecast dashboard showing team capacity, workload, and alerts
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check demo access
-    has_access, error_response, is_demo_mode = check_demo_access_for_forecasting(request, board)
-    if not has_access:
-        return error_response
-    
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    is_demo_board = board.organization.name in ['Demo - Acme Corporation']
     
     # Generate fresh forecasts if needed
     service = DemandForecastingService()
@@ -91,25 +52,17 @@ def forecast_dashboard(request, board_id):
         'summary': summary,
         'period_start': forecast_data['period_start'],
         'period_end': forecast_data['period_end'],
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
-        'demo_mode_type': demo_mode_type,
     }
     
     return render(request, 'kanban/forecast_dashboard.html', context)
 
 
+@login_required
 def generate_forecast(request, board_id):
     """
     Generate forecasts for the board
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check demo access
-    has_access, error_response, is_demo_mode = check_demo_access_for_forecasting(request, board, require_write=True)
-    if not has_access:
-        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     service = DemandForecastingService()
     
@@ -135,20 +88,12 @@ def generate_forecast(request, board_id):
         return JsonResponse({'success': False, 'error': str(e)}, status=400)
 
 
+@login_required
 def workload_recommendations(request, board_id):
     """
     Display workload distribution recommendations
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check demo access
-    has_access, error_response, is_demo_mode = check_demo_access_for_forecasting(request, board)
-    if not has_access:
-        return error_response
-    
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    is_demo_board = board.organization.name in ['Demo - Acme Corporation']
     
     service = DemandForecastingService()
     recommendations = service.generate_workload_distribution_recommendations(board, period_days=21)
@@ -160,27 +105,17 @@ def workload_recommendations(request, board_id):
         'board': board,
         'recommendations': recommendations,
         'summary': summary,
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
-        'demo_mode_type': demo_mode_type,
     }
     
     return render(request, 'kanban/workload_recommendations.html', context)
 
 
+@login_required
 def capacity_alerts(request, board_id):
     """
     Display all capacity alerts for the board
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check demo access
-    has_access, error_response, is_demo_mode = check_demo_access_for_forecasting(request, board)
-    if not has_access:
-        return error_response
-    
-    demo_mode_type = request.session.get('demo_mode', 'solo')
     
     # Get all alerts
     alerts = TeamCapacityAlert.objects.filter(board=board).order_by('-created_at')
@@ -198,30 +133,22 @@ def capacity_alerts(request, board_id):
         'resolved_alerts': resolved_alerts,
         'critical_count': active_alerts.filter(alert_level='critical').count(),
         'warning_count': active_alerts.filter(alert_level='warning').count(),
-        'is_demo_mode': is_demo_mode,
-        'demo_mode_type': demo_mode_type,
     }
     
     return render(request, 'kanban/capacity_alerts.html', context)
 
 
+@login_required
 def acknowledge_alert(request, board_id, alert_id):
     """
     Acknowledge a capacity alert
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     alert = get_object_or_404(TeamCapacityAlert, id=alert_id, board=board)
     
-    # Check demo access
-    has_access, error_response, is_demo_mode = check_demo_access_for_forecasting(request, board, require_write=True)
-    if not has_access:
-        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
-    
     if request.method == 'POST':
         alert.status = 'acknowledged'
-        if request.user.is_authenticated:
-            alert.acknowledged_by = request.user
+        alert.acknowledged_by = request.user
         alert.acknowledged_at = timezone.now()
         alert.save()
         
@@ -234,26 +161,13 @@ def acknowledge_alert(request, board_id, alert_id):
     return JsonResponse({'success': False, 'error': 'POST required'}, status=400)
 
 
+@login_required
 def resolve_alert(request, board_id, alert_id):
     """
     Mark a capacity alert as resolved
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team - admin role only in team mode)
     """
     board = get_object_or_404(Board, id=board_id)
     alert = get_object_or_404(TeamCapacityAlert, id=alert_id, board=board)
-    
-    # Check demo access
-    has_access, error_response, is_demo_mode = check_demo_access_for_forecasting(request, board, require_write=True)
-    if not has_access:
-        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
-    
-    # Access restriction removed - all authenticated users can resolve alerts
-    # For team mode, check admin role
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    if is_demo_mode and demo_mode_type == 'team':
-        demo_role = request.session.get('demo_role', 'admin')
-        if demo_role != 'admin':
-            return JsonResponse({'success': False, 'error': 'Only admins can resolve alerts'}, status=403)
     
     if request.method == 'POST':
         alert.status = 'resolved'
@@ -269,24 +183,15 @@ def resolve_alert(request, board_id, alert_id):
     return JsonResponse({'success': False, 'error': 'POST required'}, status=400)
 
 
+@login_required
 def recommendation_detail(request, board_id, rec_id):
     """
     View details of a workload recommendation and accept/reject it
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     recommendation = get_object_or_404(WorkloadDistributionRecommendation, id=rec_id, board=board)
     
-    # Check demo access
-    has_access, error_response, is_demo_mode = check_demo_access_for_forecasting(request, board)
-    if not has_access:
-        return error_response
-    
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
     if request.method == 'POST':
-        # All restrictions removed - users have full access
-        
         action = request.POST.get('action')
         
         if action == 'accept':
@@ -350,24 +255,17 @@ def recommendation_detail(request, board_id, rec_id):
         'recommendation': recommendation,
         'affected_tasks': recommendation.affected_tasks.all(),
         'affected_users': recommendation.affected_users.all(),
-        'is_demo_mode': is_demo_mode,
-        'demo_mode_type': demo_mode_type,
     }
     
     return render(request, 'kanban/recommendation_detail.html', context)
 
 
+@login_required
 def team_capacity_chart(request, board_id):
     """
     API endpoint for team capacity visualization
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check demo access
-    has_access, error_response, is_demo_mode = check_demo_access_for_forecasting(request, board)
-    if not has_access:
-        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     # Get latest forecasts
     forecasts = ResourceDemandForecast.objects.filter(board=board).order_by('-forecast_date')[:20]
@@ -383,18 +281,13 @@ def team_capacity_chart(request, board_id):
     return JsonResponse(data)
 
 
+@login_required
 def task_assignment_suggestion(request, board_id, task_id):
     """
     Get suggested assignee for a task based on capacity
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
     task = get_object_or_404(Task, id=task_id, column__board=board)
-    
-    # Check demo access
-    has_access, error_response, is_demo_mode = check_demo_access_for_forecasting(request, board)
-    if not has_access:
-        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     # Find optimal assignee
     optimal_assignee = WorkloadAnalyzer.find_optimal_assignee(task, board, exclude_user=task.assigned_to)

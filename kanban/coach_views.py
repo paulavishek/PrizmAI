@@ -30,54 +30,12 @@ from kanban.utils.feedback_learning import FeedbackLearningSystem
 logger = logging.getLogger(__name__)
 
 
-def check_board_access_for_demo(request, board):
-    """
-    Helper function to check board access supporting demo mode
-    Returns (has_access: bool, error_response: HttpResponse or None)
-    """
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return False, redirect_to_login(request.get_full_path())
-        
-        # Access restriction removed - all authenticated users can access
-    
-    # All restrictions removed - users have full access
-    
-    return True, None
-
-
+@login_required
 def coach_dashboard(request, board_id):
     """
     Main coaching dashboard showing suggestions and insights
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board (for display purposes only)
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')  # 'solo' or 'team'
-    
-    # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return redirect_to_login(request.get_full_path())
-        
-        # Check access - all boards require membership
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
-    
-    # All restrictions removed - users have full access
     
     # Get active suggestions
     active_suggestions = CoachingSuggestion.objects.filter(
@@ -119,40 +77,18 @@ def coach_dashboard(request, board_id):
         'effectiveness': effectiveness,
         'recommendations': recommendations,
         'total_active': active_suggestions.count(),
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/coach_dashboard.html', context)
 
 
+@login_required
 def suggestion_detail(request, suggestion_id):
     """
     Detailed view of a coaching suggestion
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     suggestion = get_object_or_404(CoachingSuggestion, id=suggestion_id)
     board = suggestion.board
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return redirect_to_login(request.get_full_path())
-    
-    # All restrictions removed - users have full access
-    
-    # Check access
-    board = suggestion.board
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
     
     # Get related feedback
     feedback_entries = suggestion.feedback_entries.all()
@@ -161,42 +97,26 @@ def suggestion_detail(request, suggestion_id):
         'suggestion': suggestion,
         'board': board,
         'feedback_entries': feedback_entries,
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/coach_suggestion_detail.html', context)
 
 
+@login_required
 @require_POST
 def generate_suggestions(request, board_id):
     """
     Generate new coaching suggestions for a board
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     from api.ai_usage_utils import check_ai_quota
-    from kanban.utils.demo_limits import check_ai_generation_limit
     
     board = get_object_or_404(Board, id=board_id)
     
-    # Check access
-    has_access, error_response = check_board_access_for_demo(request, board)
-    if not has_access:
-        if error_response:
-            return error_response
-        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
-    
-    # Check if user can use AI features (not a demo account)
+    # Check if user can use AI features
     can_use_ai = True
-    if request.user.is_authenticated:
-        has_quota, _, _ = check_ai_quota(request.user)
-        if not has_quota:
-            can_use_ai = False
-    else:
-        # For anonymous users, check demo AI generation limit
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            can_use_ai = False
+    has_quota, _, _ = check_ai_quota(request.user)
+    if not has_quota:
+        can_use_ai = False
     
     try:
         # Run rule engine
@@ -245,7 +165,7 @@ def generate_suggestions(request, board_id):
             )
             suggestion_data['confidence_score'] = adjusted_confidence
             
-            # Only attempt AI enhancement if user has AI access (not a demo account)
+            # Only attempt AI enhancement if user has AI quota remaining
             if can_use_ai:
                 try:
                     original_method = suggestion_data.get('generation_method', 'rule')
@@ -317,20 +237,13 @@ def generate_suggestions(request, board_id):
         }, status=500)
 
 
+@login_required
 @require_POST
 def acknowledge_suggestion(request, suggestion_id):
     """
     Mark a suggestion as acknowledged
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     suggestion = get_object_or_404(CoachingSuggestion, id=suggestion_id)
-    
-    # Check access
-    has_access, error_response = check_board_access_for_demo(request, suggestion.board)
-    if not has_access:
-        if error_response:
-            return error_response
-        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     try:
         suggestion.acknowledge(request.user)
@@ -348,20 +261,13 @@ def acknowledge_suggestion(request, suggestion_id):
         }, status=500)
 
 
+@login_required
 @require_POST
 def dismiss_suggestion(request, suggestion_id):
     """
     Dismiss a suggestion
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     suggestion = get_object_or_404(CoachingSuggestion, id=suggestion_id)
-    
-    # Check access
-    has_access, error_response = check_board_access_for_demo(request, suggestion.board)
-    if not has_access:
-        if error_response:
-            return error_response
-        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     try:
         suggestion.dismiss()
@@ -390,21 +296,13 @@ def dismiss_suggestion(request, suggestion_id):
         }, status=500)
 
 
+@login_required
 @require_POST
 def submit_feedback(request, suggestion_id):
     """
     Submit detailed feedback on a suggestion
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     suggestion = get_object_or_404(CoachingSuggestion, id=suggestion_id)
-    
-    # Check access
-    has_access, error_response = check_board_access_for_demo(request, suggestion.board)
-    if not has_access:
-        if error_response:
-            return error_response
-        messages.error(request, "You don't have access to this suggestion.")
-        return redirect('board_list')
     
     try:
         # Accept both form POST and JSON data
@@ -462,59 +360,30 @@ def submit_feedback(request, suggestion_id):
             return redirect('coach_suggestion_detail', suggestion_id=suggestion.id)
 
 
+@login_required
 @require_http_methods(["GET", "POST"])
 def ask_coach(request, board_id):
     """
     Ask the AI coach a question
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
-    from api.ai_usage_utils import check_ai_quota, track_ai_request
-    from kanban.utils.demo_limits import (
-        is_demo_mode, check_ai_generation_limit, 
-        increment_ai_generation_count, record_limitation_hit
-    )
+    from api.ai_usage_utils import check_ai_quota, track_ai_request, get_or_create_quota
     import time
     
     board = get_object_or_404(Board, id=board_id)
     
-    # Check access
-    has_access, error_response = check_board_access_for_demo(request, board)
-    if not has_access:
-        if error_response:
-            return error_response
-        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
-    
     if request.method == 'POST':
-        # Check demo AI limit first (if in demo mode)
-        if is_demo_mode(request):
-            demo_ai_status = check_ai_generation_limit(request)
-            if not demo_ai_status['can_generate']:
-                record_limitation_hit(request, 'ai_limit')
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Demo AI limit reached',
-                    'quota_exceeded': True,
-                    'message': demo_ai_status['message'],
-                    'demo_limit': True
-                }, status=429)
+        # Check AI quota before processing
+        has_quota, quota, remaining = check_ai_quota(request.user)
         
-        # Check AI quota before processing (for authenticated non-demo users)
-        if request.user.is_authenticated and not is_demo_mode(request):
-            has_quota, quota, remaining = check_ai_quota(request.user)
-            
-            if not has_quota:
-                days_until_reset = quota.get_days_until_reset()
-                return JsonResponse({
-                    'success': False,
-                    'error': 'AI usage quota exceeded',
-                    'quota_exceeded': True,
-                    'message': f'You have reached your monthly AI usage limit of {quota.monthly_quota} requests. '
-                               f'Your quota will reset in {days_until_reset} days.'
-                }, status=429)
-        else:
-            # For demo users, quota is tracked via demo session
-            quota = None
-            remaining = float('inf')
+        if not has_quota:
+            days_until_reset = quota.get_days_until_reset()
+            return JsonResponse({
+                'success': False,
+                'error': 'AI usage quota exceeded',
+                'quota_exceeded': True,
+                'message': f'You have reached your monthly AI usage limit of {quota.monthly_quota} requests. '
+                           f'Your quota will reset in {days_until_reset} days.'
+            }, status=429)
         
         start_time = time.time()
         try:
@@ -529,54 +398,46 @@ def ask_coach(request, board_id):
             
             # Get AI coaching advice
             ai_coach = AICoachService()
-            # For anonymous demo users, pass a demo user or handle None
-            user_for_advice = request.user if request.user.is_authenticated else None
-            advice = ai_coach.generate_coaching_advice(board, user_for_advice, question)
+            advice = ai_coach.generate_coaching_advice(board, request.user, question)
             
-            # Track successful AI request (only for authenticated users)
-            if request.user.is_authenticated:
-                response_time_ms = int((time.time() - start_time) * 1000)
-                track_ai_request(
-                    user=request.user,
-                    feature='ai_coach',
-                    request_type='question',
-                    board_id=board_id,
-                    success=True,
-                    response_time_ms=response_time_ms
-                )
-                
-                # Get updated remaining count
-                _, _, remaining = check_ai_quota(request.user)
+            # Track successful AI request
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='ai_coach',
+                request_type='question',
+                board_id=board_id,
+                success=True,
+                response_time_ms=response_time_ms
+            )
             
-            # Track demo AI usage (for demo limitation banner)
-            if is_demo_mode(request):
-                increment_ai_generation_count(request)
+            # Get updated remaining count
+            _, _, remaining = check_ai_quota(request.user)
             
             return JsonResponse({
                 'success': True,
                 'advice': advice,
                 'question': question,
                 'ai_usage': {
-                    'remaining': remaining if request.user.is_authenticated else None,
-                    'used': quota.requests_used + 1 if quota else None
+                    'remaining': remaining,
+                    'used': quota.requests_used + 1
                 }
             })
             
         except Exception as e:
             logger.error(f"Error getting coaching advice: {e}")
             
-            # Track failed request (doesn't count against quota) - only for authenticated users
-            if request.user.is_authenticated:
-                response_time_ms = int((time.time() - start_time) * 1000)
-                track_ai_request(
-                    user=request.user,
-                    feature='ai_coach',
-                    request_type='question',
-                    board_id=board_id,
-                    success=False,
-                    error_message=str(e),
-                    response_time_ms=response_time_ms
-                )
+            # Track failed request (doesn't count against quota)
+            response_time_ms = int((time.time() - start_time) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='ai_coach',
+                request_type='question',
+                board_id=board_id,
+                success=False,
+                error_message=str(e),
+                response_time_ms=response_time_ms
+            )
             
             return JsonResponse({
                 'success': False,
@@ -584,24 +445,14 @@ def ask_coach(request, board_id):
             }, status=500)
     
     # GET request - show ask coach page with quota info
-    if request.user.is_authenticated:
-        from api.ai_usage_utils import get_or_create_quota
-        quota = get_or_create_quota(request.user)
-        
-        ai_quota_info = {
-            'used': quota.requests_used,
-            'limit': quota.monthly_quota,
-            'remaining': quota.get_remaining_requests(),
-            'percentage': quota.get_usage_percent()
-        }
-    else:
-        # For anonymous demo users, show unlimited quota
-        ai_quota_info = {
-            'used': 0,
-            'limit': None,
-            'remaining': None,
-            'percentage': 0
-        }
+    quota = get_or_create_quota(request.user)
+    
+    ai_quota_info = {
+        'used': quota.requests_used,
+        'limit': quota.monthly_quota,
+        'remaining': quota.get_remaining_requests(),
+        'percentage': quota.get_usage_percent()
+    }
     
     context = {
         'board': board,
@@ -611,20 +462,12 @@ def ask_coach(request, board_id):
     return render(request, 'kanban/coach_ask.html', context)
 
 
+@login_required
 def coaching_analytics(request, board_id):
     """
     Analytics view for coaching effectiveness
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check access
-    has_access, error_response = check_board_access_for_demo(request, board)
-    if not has_access:
-        if error_response:
-            return error_response
-        messages.error(request, "You don't have access to this board.")
-        return redirect('kanban:board_list')
     
     # Get date range (default: last 30 days)
     days = int(request.GET.get('days', 30))
@@ -684,19 +527,12 @@ def coaching_analytics(request, board_id):
     return render(request, 'kanban/coach_analytics.html', context)
 
 
+@login_required
 def get_suggestions_api(request, board_id):
     """
     API endpoint to get coaching suggestions
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check access
-    has_access, error_response = check_board_access_for_demo(request, board)
-    if not has_access:
-        if error_response:
-            return error_response
-        return JsonResponse({'success': False, 'error': 'Access denied'}, status=403)
     
     # Get filter parameters
     status = request.GET.get('status', 'active')

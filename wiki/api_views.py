@@ -22,11 +22,6 @@ from accounts.models import Organization
 from .models import WikiPage, WikiMeetingAnalysis, WikiMeetingTask
 from .ai_utils import analyze_meeting_notes_from_wiki, analyze_wiki_documentation, parse_due_date
 from api.ai_usage_utils import track_ai_request, check_ai_quota
-from kanban.utils.demo_limits import (
-    check_ai_generation_limit, 
-    increment_ai_generation_count, 
-    record_limitation_hit
-)
 
 logger = logging.getLogger(__name__)
 
@@ -40,16 +35,6 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
     """
     start_time = time.time()
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -107,9 +92,6 @@ def analyze_wiki_documentation_page(request, wiki_page_id):
                 )
                 return JsonResponse({'error': 'Failed to analyze documentation'}, status=500)
             
-            # Increment demo AI generation count on success
-            increment_ai_generation_count(request)
-            
             # Track successful request
             response_time_ms = int((time.time() - start_time) * 1000)
             track_ai_request(
@@ -165,16 +147,6 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
     """
     start_time = time.time()
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -260,9 +232,6 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
                 analysis.processing_error = 'AI analysis returned no results'
                 analysis.save()
                 return JsonResponse({'error': 'Failed to analyze meeting notes'}, status=500)
-            
-            # Increment demo AI generation count on success
-            increment_ai_generation_count(request)
             
             # Track successful request
             response_time_ms = int((time.time() - start_time) * 1000)
@@ -381,29 +350,13 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                     }
                     priority = priority_map.get(action_item.get('priority', 'medium'), 'medium')
                     
-                    # Create task - mark as user-created in demo mode
-                    # Check demo mode via session OR board organization
-                    is_demo_board = (
-                        target_column.board.is_official_demo_board or 
-                        (hasattr(target_column.board.organization, 'is_demo') and target_column.board.organization.is_demo)
-                    )
-                    is_demo_mode = request.session.get('is_demo_mode', False) or is_demo_board
-                    
-                    created_by_session = None
-                    if is_demo_mode:
-                        created_by_session = request.session.get('browser_fingerprint') or request.session.session_key
-                        if not created_by_session:
-                            import uuid
-                            created_by_session = f"demo-meeting-{uuid.uuid4().hex[:16]}"
-                    
                     task = Task.objects.create(
                         title=action_item['title'][:200],  # Limit title length
                         description=action_item.get('description', ''),
                         column=target_column,
                         priority=priority,
                         created_by=request.user,
-                        created_by_session=created_by_session,
-                        is_seed_demo_data=False,  # User-created, not seed data
+                        is_seed_demo_data=False,
                         phase=phase  # Set phase if provided (None if not)
                     )
                     

@@ -21,11 +21,6 @@ def webhook_list(request, board_id):
     """List all webhooks for a board"""
     board = get_object_or_404(Board, id=board_id)
     
-    # Check if user has access to this board
-    if not (board.created_by == request.user or board.members.filter(id=request.user.id).exists()):
-        messages.error(request, "You don't have permission to access this board.")
-        return redirect('dashboard')
-    
     webhooks = Webhook.objects.filter(board=board).order_by('-created_at')
     
     context = {
@@ -39,11 +34,6 @@ def webhook_list(request, board_id):
 def webhook_create(request, board_id):
     """Create a new webhook"""
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if user has access to this board
-    if not (board.created_by == request.user or board.members.filter(id=request.user.id).exists()):
-        messages.error(request, "You don't have permission to access this board.")
-        return redirect('dashboard')
     
     if request.method == 'POST':
         form = WebhookForm(request.POST)
@@ -69,11 +59,6 @@ def webhook_detail(request, webhook_id):
     """View webhook details and delivery history"""
     webhook = get_object_or_404(Webhook, id=webhook_id)
     board = webhook.board
-    
-    # Check if user has access
-    if not (board.created_by == request.user or board.members.filter(id=request.user.id).exists()):
-        messages.error(request, "You don't have permission to access this webhook.")
-        return redirect('dashboard')
     
     # Get recent deliveries
     deliveries = webhook.deliveries.all()[:50]
@@ -103,11 +88,6 @@ def webhook_edit(request, webhook_id):
     webhook = get_object_or_404(Webhook, id=webhook_id)
     board = webhook.board
     
-    # Check if user has access
-    if not (board.created_by == request.user or board.members.filter(id=request.user.id).exists()):
-        messages.error(request, "You don't have permission to access this webhook.")
-        return redirect('dashboard')
-    
     if request.method == 'POST':
         form = WebhookForm(request.POST, instance=webhook)
         if form.is_valid():
@@ -132,11 +112,6 @@ def webhook_delete(request, webhook_id):
     webhook = get_object_or_404(Webhook, id=webhook_id)
     board = webhook.board
     
-    # Check if user has access
-    if not (board.created_by == request.user or board.members.filter(id=request.user.id).exists()):
-        messages.error(request, "You don't have permission to delete this webhook.")
-        return redirect('dashboard')
-    
     webhook_name = webhook.name
     webhook.delete()
     messages.success(request, f'Webhook "{webhook_name}" deleted successfully!')
@@ -149,11 +124,6 @@ def webhook_toggle(request, webhook_id):
     """Toggle webhook active status"""
     webhook = get_object_or_404(Webhook, id=webhook_id)
     board = webhook.board
-    
-    # Check if user has access
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
     
     webhook.is_active = not webhook.is_active
     if webhook.is_active and webhook.status == 'failed':
@@ -174,11 +144,6 @@ def webhook_test(request, webhook_id):
     """Send a test webhook"""
     webhook = get_object_or_404(Webhook, id=webhook_id)
     board = webhook.board
-    
-    # Check if user has access
-    # Access restriction removed - all authenticated users can access
-
-    pass  # Original: board membership check removed
     
     # Create test payload
     test_data = {
@@ -216,11 +181,6 @@ def webhook_test(request, webhook_id):
 def webhook_events(request, board_id):
     """View recent webhook events for a board"""
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if user has access
-    if not (board.created_by == request.user or board.members.filter(id=request.user.id).exists()):
-        messages.error(request, "You don't have permission to access this board.")
-        return redirect('dashboard')
     
     # Get recent events
     events = WebhookEvent.objects.filter(board=board).order_by('-created_at')[:100]

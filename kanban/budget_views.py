@@ -4,7 +4,6 @@ Handles budget dashboard, analytics, and AI recommendations
 """
 import logging
 import time
-import random
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
@@ -29,125 +28,16 @@ from kanban.budget_forms import (
     ProjectROIForm, BudgetRecommendationActionForm
 )
 from api.ai_usage_utils import track_ai_request, check_ai_quota
-from kanban.utils.demo_limits import (
-    check_ai_generation_limit, 
-    increment_ai_generation_count, 
-    record_limitation_hit
-)
 
 logger = logging.getLogger(__name__)
 
 
-def _ensure_demo_time_entries(user, boards):
-    """
-    Ensure a user has time entries for demo boards.
-    
-    This auto-populates time tracking demo data for users who haven't
-    logged time yet, so they can explore the Time Tracking feature
-    with pre-populated data.
-    """
-    # Skip if not demo boards
-    demo_boards = [b for b in boards if b.is_official_demo_board]
-    if not demo_boards:
-        return
-    
-    # Skip if user is a demo user (they already have data via populate_all_demo_data)
-    if '_demo' in user.username:
-        return
-    
-    # Check if user already has time entries in these boards
-    existing_entries = TimeEntry.objects.filter(
-        user=user,
-        task__column__board__in=demo_boards
-    ).exists()
-    
-    if existing_entries:
-        return  # User already has time tracking data
-    
-    try:
-        now = timezone.now().date()
-        
-        # Time entry descriptions for variety
-        descriptions = [
-            "Reviewed requirements and planning",
-            "Implementation work",
-            "Testing and validation",
-            "Code review participation",
-            "Documentation updates",
-            "Bug investigation",
-            "Feature development",
-            "Team collaboration session",
-            "Sprint planning activities",
-            "Technical design work",
-        ]
-        
-        entries_created = 0
-        
-        for board in demo_boards:
-            # Get some tasks that are in progress
-            available_tasks = Task.objects.filter(
-                column__board=board,
-                progress__gt=0
-            ).order_by('?')[:4]  # Random 4 tasks per board
-            
-            for task in available_tasks:
-                # Create 1-3 time entries per task
-                num_entries = random.randint(1, 3)
-                for i in range(num_entries):
-                    hours = Decimal(str(round(random.uniform(0.5, 3.5), 2)))
-                    
-                    # Spread entries over the last 14 days
-                    days_ago = random.randint(0, 13)
-                    entry_date = now - timedelta(days=days_ago)
-                    
-                    # Avoid weekends
-                    while entry_date.weekday() >= 5:
-                        days_ago += 1
-                        entry_date = now - timedelta(days=days_ago)
-                    
-                    description = random.choice(descriptions)
-                    
-                    TimeEntry.objects.create(
-                        task=task,
-                        user=user,
-                        hours_spent=hours,
-                        description=f"{description} - {task.title[:30]}",
-                        work_date=entry_date,
-                    )
-                    entries_created += 1
-        
-        if entries_created > 0:
-            logger.info(f"Auto-created {entries_created} demo time entries for user {user.username}")
-    
-    except Exception as e:
-        logger.error(f"Error creating demo time entries for {user.username}: {e}")
-
-
+@login_required
 def budget_dashboard(request, board_id):
     """
     Main budget dashboard showing overview, metrics, and AI insights
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return redirect_to_login(request.get_full_path())
-        
-        # Check access - all boards require membership
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
-    
-    # All restrictions removed - users have full access
     
     # Get or create budget
     try:
@@ -188,40 +78,17 @@ def budget_dashboard(request, board_id):
         'burn_rate': burn_rate,
         'recommendations': recommendations,
         'recent_entries': recent_entries,
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/budget_dashboard.html', context)
 
 
+@login_required
 def budget_create_or_edit(request, board_id):
     """
     Create or edit project budget
-    Note: Budget creation is disabled in TEAM demo mode only.
-    SOLO demo mode has full access.
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # In TEAM demo mode only, redirect to budget dashboard (view only)
-    # Solo demo mode has full access
-    if is_demo_board and is_demo_mode and demo_mode_type == 'team':
-        messages.info(request, 'Budget creation/editing is disabled in team demo mode. You can view the existing demo budget.')
-        return redirect('budget_dashboard', board_id=board.id)
-    
-    # For non-demo boards, require authentication
-    if not request.user.is_authenticated:
-        from django.contrib.auth.views import redirect_to_login
-        return redirect_to_login(request.get_full_path())
-    
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
     
     try:
         budget = ProjectBudget.objects.get(board=board)
@@ -259,9 +126,6 @@ def task_cost_edit(request, task_id):
     """
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
-    
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this task.")
     
     try:
         task_cost = TaskCost.objects.get(task=task)
@@ -302,9 +166,6 @@ def time_entry_create(request, task_id):
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
     
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this task.")
-    
     if request.method == 'POST':
         form = TimeEntryForm(request.POST, user=request.user)
         if form.is_valid():
@@ -333,31 +194,12 @@ def time_entry_create(request, task_id):
     return render(request, 'kanban/time_entry_form.html', context)
 
 
+@login_required
 def budget_analytics(request, board_id):
     """
     Detailed budget analytics and reports
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return redirect_to_login(request.get_full_path())
-        
-        # Check access - all boards require membership
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
-    
-    # All restrictions removed - users have full access
     
     try:
         budget = ProjectBudget.objects.get(board=board)
@@ -413,38 +255,17 @@ def budget_analytics(request, board_id):
         'cost_breakdown': cost_breakdown,
         'overruns': overruns,
         'trend_data': trend_data,
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/budget_analytics.html', context)
 
 
+@login_required
 def roi_dashboard(request, board_id):
     """
     ROI tracking and analysis dashboard
-    ANONYMOUS ACCESS: Works for demo mode (Solo/Team)
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if this is a demo board
-    demo_org_names = ['Demo - Acme Corporation']
-    is_demo_board = board.organization.name in demo_org_names
-    is_demo_mode = request.session.get('is_demo_mode', False)
-    demo_mode_type = request.session.get('demo_mode', 'solo')
-    
-    # For non-demo boards, require authentication
-    if not (is_demo_board and is_demo_mode):
-        if not request.user.is_authenticated:
-            from django.contrib.auth.views import redirect_to_login
-            return redirect_to_login(request.get_full_path())
-        
-        # Check access - all boards require membership
-        # Access restriction removed - all authenticated users can access
-
-        pass  # Original: board membership check removed
-    
-    # All restrictions removed - users have full access
     
     # Check if budget exists
     try:
@@ -466,8 +287,6 @@ def roi_dashboard(request, board_id):
         'has_budget': has_budget,
         'roi_metrics': roi_metrics,
         'roi_snapshots': roi_snapshots,
-        'is_demo_mode': is_demo_mode,
-        'is_demo_board': is_demo_board,
     }
     
     return render(request, 'kanban/roi_dashboard.html', context)
@@ -479,9 +298,6 @@ def roi_snapshot_create(request, board_id):
     Create new ROI snapshot
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
     
     if request.method == 'POST':
         form = ProjectROIForm(request.POST)
@@ -518,20 +334,7 @@ def ai_analyze_budget(request, board_id):
     start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
     
-    if not _can_access_board(request.user, board):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
-    
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -564,9 +367,6 @@ def ai_analyze_budget(request, board_id):
                 response_time_ms=response_time_ms
             )
             return JsonResponse({'error': results['error']}, status=400)
-        
-        # Increment demo AI generation count on success
-        increment_ai_generation_count(request)
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -610,20 +410,7 @@ def ai_generate_recommendations(request, board_id):
     start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
     
-    if not _can_access_board(request.user, board):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
-    
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -648,9 +435,6 @@ def ai_generate_recommendations(request, board_id):
         # Generate recommendations
         optimizer = BudgetAIOptimizer(board)
         recommendations = optimizer.generate_recommendations(context=context)
-        
-        # Increment demo AI generation count on success
-        increment_ai_generation_count(request)
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -693,9 +477,6 @@ def recommendations_list(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
     
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
-    
     # Filter by status
     status_filter = request.GET.get('status', 'all')
     recommendations = BudgetRecommendation.objects.filter(board=board)
@@ -725,10 +506,6 @@ def recommendation_action(request, recommendation_id):
     
     recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
     board = recommendation.board
-    
-    if not _can_access_board(request.user, board):
-        messages.error(request, "You don't have permission to access this board.")
-        return redirect('budget_dashboard', board_id=board.id)
     
     try:
         # Get action from POST data (form submission)
@@ -804,9 +581,6 @@ def recommendation_preview(request, recommendation_id):
     recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
     board = recommendation.board
     
-    if not _can_access_board(request.user, board):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
-    
     try:
         redistributor = BudgetRedistributor(recommendation, request.user)
         preview = redistributor.preview_changes()
@@ -840,9 +614,6 @@ def recommendation_implementation_details(request, recommendation_id):
     
     recommendation = get_object_or_404(BudgetRecommendation, id=recommendation_id)
     board = recommendation.board
-    
-    if not _can_access_board(request.user, board):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
     
     logs = BudgetImplementationLog.objects.filter(
         recommendation=recommendation
@@ -884,20 +655,7 @@ def ai_predict_overrun(request, board_id):
     start_time = time.time()
     board = get_object_or_404(Board, id=board_id)
     
-    if not _can_access_board(request.user, board):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
-    
     try:
-        # Check demo mode AI generation limit first
-        ai_limit_status = check_ai_generation_limit(request)
-        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-            record_limitation_hit(request, 'ai_limit')
-            return JsonResponse({
-                'error': ai_limit_status['message'],
-                'quota_exceeded': True,
-                'demo_limit': True
-            }, status=429)
-        
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
         if not has_quota:
@@ -926,9 +684,6 @@ def ai_predict_overrun(request, board_id):
                 response_time_ms=response_time_ms
             )
             return JsonResponse({'error': prediction['error']}, status=400)
-        
-        # Increment demo AI generation count on success
-        increment_ai_generation_count(request)
         
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
@@ -969,25 +724,9 @@ def ai_learn_patterns(request, board_id):
     """
     Trigger AI pattern learning
     """
-    from api.ai_usage_utils import check_ai_quota
-    from kanban.utils.demo_limits import check_ai_generation_limit, record_limitation_hit
-    
     board = get_object_or_404(Board, id=board_id)
     
-    if not _can_access_board(request.user, board):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
-    
-    # Check demo AI generation limit first
-    ai_limit_status = check_ai_generation_limit(request)
-    if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
-        record_limitation_hit(request, 'ai_limit')
-        return JsonResponse({
-            'error': ai_limit_status['message'],
-            'quota_exceeded': True,
-            'demo_limit': True
-        }, status=429)
-    
-    # Check AI quota for authenticated users (blocks demo accounts)
+    # Check AI quota
     has_quota, quota, remaining = check_ai_quota(request.user)
     if not has_quota:
         return JsonResponse({
@@ -1026,9 +765,6 @@ def budget_api_metrics(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
     
-    if not _can_access_board(request.user, board):
-        return JsonResponse({'error': 'Permission denied'}, status=403)
-    
     try:
         metrics = BudgetAnalyzer.calculate_project_metrics(board)
         roi_metrics = BudgetAnalyzer.calculate_roi_metrics(board)
@@ -1044,19 +780,6 @@ def budget_api_metrics(request, board_id):
     except Exception as e:
         logger.error(f"Error fetching metrics: {e}")
         return JsonResponse({'error': str(e)}, status=500)
-
-
-def _can_access_board(user, board):
-    """
-    Check if user can access the board - requires board membership or demo org access
-    Note: This function assumes the user is authenticated. For demo mode, check before calling this.
-    """
-    # If user is not authenticated, return False (demo mode should be checked before calling this)
-    if not user.is_authenticated:
-        return False
-    
-    # Access restriction removed - all authenticated users can access all boards
-    return True
 
 
 # ============================================================================
@@ -1081,8 +804,6 @@ def my_timesheet(request, board_id=None):
     # Get user's tasks
     if board_id:
         board = get_object_or_404(Board, id=board_id)
-        if not _can_access_board(request.user, board):
-            return HttpResponseForbidden("You don't have permission to access this board.")
         tasks = Task.objects.filter(
             column__board=board,
             assigned_to=request.user
@@ -1097,9 +818,6 @@ def my_timesheet(request, board_id=None):
             column__board__in=boards,
             assigned_to=request.user
         ).select_related('column', 'column__board')
-    
-    # Auto-setup demo time tracking data for new users
-    _ensure_demo_time_entries(request.user, boards)
     
     # Get time entries for the week
     entries = TimeEntry.objects.filter(
@@ -1195,18 +913,12 @@ def time_tracking_dashboard(request, board_id=None):
     # Filter by board if specified
     if board_id:
         board = get_object_or_404(Board, id=board_id)
-        if not _can_access_board(request.user, board):
-            return HttpResponseForbidden("You don't have permission to access this board.")
         boards = [board]
     else:
         boards = Board.objects.filter(
             models.Q(created_by=request.user) | models.Q(members=request.user)
         ).distinct()
         board = None
-    
-    # Auto-setup demo time tracking data for new users
-    # This ensures users have time entries to see in the dashboard
-    _ensure_demo_time_entries(request.user, boards)
     
     # Get time entries
     entries = TimeEntry.objects.filter(user=request.user)
@@ -1337,9 +1049,6 @@ def team_timesheet(request, board_id):
     
     board = get_object_or_404(Board, id=board_id)
     
-    if not _can_access_board(request.user, board):
-        return HttpResponseForbidden("You don't have permission to access this board.")
-    
     # Get week parameter
     week_offset = int(request.GET.get('week', 0))
     today = timezone.now().date()
@@ -1434,9 +1143,6 @@ def quick_time_entry(request, task_id):
     """
     task = get_object_or_404(Task, id=task_id)
     board = task.column.board
-    
-    if not _can_access_board(request.user, board):
-        return JsonResponse({'success': False, 'error': 'Permission denied'}, status=403)
     
     try:
         hours = Decimal(request.POST.get('hours', '0'))
