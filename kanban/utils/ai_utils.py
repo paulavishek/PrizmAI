@@ -103,26 +103,26 @@ TASK_TEMPERATURE_MAP = {
 # Lower limits = faster responses, Higher limits = more detailed outputs
 # Optimized for latency while maintaining quality - increased to prevent JSON truncation
 TASK_TOKEN_LIMITS = {
-    # Short responses (1024-1536 tokens) - increased to prevent truncation of explainability fields
-    'lean_classification': 1024,          # Classification + detailed explanation + confidence
-    'comment_summary': 1536,              # Summary with sentiment analysis and action items
-    'mitigation_suggestions': 1536,       # Mitigation strategies with action steps
+    # Short responses (1536-2048 tokens) - increased to prevent truncation of explainability fields
+    'lean_classification': 2048,          # Classification + detailed explanation + confidence + alternatives
+    'comment_summary': 2560,              # Summary with sentiment analysis, action items, and participant analysis
+    'mitigation_suggestions': 2048,       # Mitigation strategies with action steps
     
-    # Medium responses (1536-2048 tokens)
-    'task_description': 2048,            # Description + checklist + skill requirements
-    'priority_suggestion': 2048,         # Priority with full comparison and recommendations
-    'dashboard_insights': 1536,          # Quick insights
-    'velocity_forecast': 1536,           # Forecast data
-    'simple': 1536,                      # Default for simple tasks
+    # Medium responses (2048-3072 tokens)
+    'task_description': 4096,            # Description + checklist + skill requirements + full explainability
+    'priority_suggestion': 3072,         # Priority with full comparison and recommendations
+    'dashboard_insights': 2048,          # Quick insights with reasoning
+    'velocity_forecast': 2048,           # Forecast data with explanations
+    'simple': 2048,                      # Default for simple tasks - increased for explainability
     
-    # Standard responses (2048-3072 tokens)
-    'task_enhancement': 2048,            # Enhanced description + checklist + acceptance criteria
+    # Standard responses (3072-4096 tokens)
+    'task_enhancement': 3072,            # Enhanced description + checklist + acceptance criteria + reasoning
     'board_analytics_summary': 3072,     # Comprehensive analytics with health factors
     'risk_assessment': 3072,             # Risk analysis with mitigation and explainability
-    'retrospective': 2048,               # Retrospective summary with patterns
-    'skill_gap_analysis': 2048,          # Skill analysis
-    'budget_analysis': 3072,             # Budget insights with trends and recommendations
-    'dependency_analysis': 2048,         # Dependency and cascading risk analysis
+    'retrospective': 3072,               # Retrospective summary with patterns and recommendations
+    'skill_gap_analysis': 3072,          # Skill analysis with recommendations
+    'budget_analysis': 4096,             # Budget insights with trends and recommendations
+    'dependency_analysis': 3072,         # Dependency and cascading risk analysis
     'deadline_prediction': 3072,         # Timeline prediction with velocity and scenarios
     
     # Extended responses (3072-4096 tokens) - complex nested JSON structures
@@ -135,6 +135,7 @@ TASK_TOKEN_LIMITS = {
     # Large responses (4096+ tokens) - extensive board-wide analysis
     'column_recommendations': 5120,      # Complex structure with full explainability (4-7 columns)
     'board_setup': 3072,                 # Full board configuration with explainability
+    'task_summary': 4096,                # Comprehensive task summary with all aspects analyzed
     
     # Default
     'default': 2048,                     # Default for unspecified tasks
@@ -3156,7 +3157,7 @@ def summarize_task_details(task_data: Dict) -> Optional[Dict]:
         }
         """
         
-        response_text = generate_ai_content(prompt, task_type='simple')
+        response_text = generate_ai_content(prompt, task_type='task_summary')
         if response_text:
             # Handle code block formatting
             if "```json" in response_text:
