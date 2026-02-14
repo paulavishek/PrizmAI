@@ -103,6 +103,8 @@ class AICacheManager:
     
     Uses content-based hashing to deduplicate similar prompts and
     provides tiered caching based on operation type.
+    
+    Can be disabled via AI_CACHE_ENABLED setting or environment variable.
     """
     
     # Default cache backend
@@ -119,8 +121,13 @@ class AICacheManager:
             'errors': 0,
             'api_calls_saved': 0,
             'estimated_cost_saved': 0.0,  # Estimated based on avg Gemini pricing
+            'cache_bypassed': 0,  # Count of requests when cache is disabled
         }
         self._last_reset = datetime.now()
+    
+    def is_enabled(self) -> bool:
+        """Check if AI caching is enabled via settings."""
+        return getattr(settings, 'AI_CACHE_ENABLED', True)
     
     def _get_cache(self):
         """Get the cache backend with fallback."""
@@ -165,8 +172,14 @@ class AICacheManager:
             context_hash: Optional additional context identifier
             
         Returns:
-            Cached response or None if not found
+            Cached response or None if not found/disabled
         """
+        # Skip cache if disabled
+        if not self.is_enabled():
+            self._stats['cache_bypassed'] += 1
+            logger.debug("AI cache disabled - bypassing cache lookup")
+            return None
+        
         cache = self._get_cache()
         if cache is None:
             return None
@@ -203,8 +216,13 @@ class AICacheManager:
             ttl: Optional override for TTL
             
         Returns:
-            True if cached successfully
+            True if cached successfully, False if disabled or failed
         """
+        # Skip cache if disabled
+        if not self.is_enabled():
+            logger.debug("AI cache disabled - skipping cache storage")
+            return False
+        
         cache = self._get_cache()
         if cache is None:
             return False
@@ -311,6 +329,7 @@ class AICacheManager:
             'total_requests': total,
             'hit_rate': f"{hit_rate:.2f}%",
             'since': self._last_reset.isoformat(),
+            'enabled': self.is_enabled(),
         }
     
     def reset_stats(self):
@@ -321,6 +340,7 @@ class AICacheManager:
             'errors': 0,
             'api_calls_saved': 0,
             'estimated_cost_saved': 0.0,
+            'cache_bypassed': 0,
         }
         self._last_reset = datetime.now()
 
