@@ -76,6 +76,8 @@ def dashboard(request):
     due_soon = Task.objects.filter(
         column__board__in=boards,
         due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
+    ).exclude(
+        progress=100
     ).count()
       # Get overdue tasks (due date in the past and not completed)
     overdue_count = Task.objects.filter(
@@ -134,6 +136,8 @@ def dashboard(request):
     due_soon_tasks_list = Task.objects.filter(
         column__board__in=boards,
         due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
+    ).exclude(
+        progress=100
     ).select_related('column', 'assigned_to', 'column__board').order_by('due_date')
     due_soon_tasks_page = request.GET.get('due_soon_tasks_page', 1)
     due_soon_tasks_paginator = Paginator(due_soon_tasks_list, items_per_page)
@@ -1191,6 +1195,8 @@ def board_analytics(request, board_id):
         due_date__isnull=False,
         due_date__date__gte=today,
         due_date__date__lte=today + timedelta(days=7)
+    ).exclude(
+        progress=100
     ).order_by('due_date')
     
     # Get overdue tasks (due date in the past and not completed)

@@ -724,6 +724,8 @@ def demo_dashboard(request):
     due_soon = Task.objects.filter(
         column__board__in=demo_boards,
         due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
+    ).exclude(
+        progress=100
     ).count()
     
     # Get demo tasks sorted by urgency (for display) - exclude completed tasks

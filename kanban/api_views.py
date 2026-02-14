@@ -623,6 +623,8 @@ def summarize_board_analytics_api(request, board_id):
             column__board=board,
             due_date__date__gte=today,
             due_date__date__lte=today + timedelta(days=7)
+        ).exclude(
+            progress=100
         )
         
         # Lean Six Sigma metrics
@@ -824,6 +826,8 @@ def download_analytics_summary_pdf(request, board_id):
             column__board=board,
             due_date__date__gte=today,
             due_date__date__lte=today + timedelta(days=7)
+        ).exclude(
+            progress=100
         )
         
         # Lean Six Sigma metrics
