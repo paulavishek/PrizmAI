@@ -490,6 +490,31 @@ if DEBUG and not os.getenv('FORCE_REDIS_CACHE'):
             'MAX_ENTRIES': 2000,
         },
     }
+    # Also replace other Redis caches with LocMemCache in debug mode
+    CACHES['ai_cache'] = {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'prizmAI-ai-cache',
+        'TIMEOUT': 1800,
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,
+        },
+    }
+    CACHES['session_cache'] = {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'prizmAI-session-cache',
+        'TIMEOUT': 86400,
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,
+        },
+    }
+    CACHES['analytics_cache'] = {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'prizmAI-analytics-cache',
+        'TIMEOUT': 600,
+        'OPTIONS': {
+            'MAX_ENTRIES': 500,
+        },
+    }
 
 # Cache timeout presets (in seconds)
 CACHE_TIMEOUTS = {

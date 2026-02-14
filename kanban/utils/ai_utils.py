@@ -126,20 +126,20 @@ TASK_TOKEN_LIMITS = {
     'dependency_analysis': 3072,         # Dependency and cascading risk analysis
     'deadline_prediction': 3072,         # Timeline prediction with velocity and scenarios
     
-    # Extended responses (3072-4096 tokens) - complex nested JSON structures
-    'workflow_optimization': 3072,       # Workflow analysis with bottlenecks and recommendations
-    'task_breakdown': 4096,              # Multiple subtasks with dependencies and risk analysis
-    'critical_path': 4096,               # Critical path with task analysis and scheduling
-    'complex': 3072,                     # General complex analysis tasks
-    'timeline_generation': 3072,         # Timeline details with milestones
+    # Extended responses (4096-6144 tokens) - complex nested JSON structures
+    'workflow_optimization': 4096,       # Workflow analysis with bottlenecks and recommendations
+    'task_breakdown': 6144,              # Multiple subtasks with dependencies and risk analysis
+    'critical_path': 6144,               # Critical path with task analysis and scheduling
+    'complex': 6144,                     # General complex analysis tasks - increased for comprehensive JSON
+    'timeline_generation': 4096,         # Timeline details with milestones
     
-    # Large responses (4096+ tokens) - extensive board-wide analysis
-    'column_recommendations': 5120,      # Complex structure with full explainability (4-7 columns)
-    'board_setup': 3072,                 # Full board configuration with explainability
-    'task_summary': 4096,                # Comprehensive task summary with all aspects analyzed
+    # Large responses (6144-8192 tokens) - extensive board-wide analysis
+    'column_recommendations': 6144,      # Complex structure with full explainability (4-7 columns)
+    'board_setup': 4096,                 # Full board configuration with explainability
+    'task_summary': 8192,                # Comprehensive task summary with all aspects analyzed - needs high limit
     
     # Default
-    'default': 2048,                     # Default for unspecified tasks
+    'default': 3072,                     # Default for unspecified tasks - increased to prevent truncation
 }
 
 def get_token_limit_for_task(task_type: str) -> int:

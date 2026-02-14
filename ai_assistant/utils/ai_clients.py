@@ -34,21 +34,21 @@ class GeminiClient:
             
             # Base generation config - temperature can be overridden per request
             # Default 0.7 for general use, but specific features use optimized values
-            # max_output_tokens increased to 3072 to prevent JSON truncation for complex responses
+            # max_output_tokens increased to prevent JSON truncation for complex responses
             self.base_generation_config = {
                 'temperature': 0.7,  # Default - will be overridden per task type
                 'top_p': 0.8,
                 'top_k': 40,
-                'max_output_tokens': 3072,  # Increased from 2048 for complex JSON responses
+                'max_output_tokens': 6144,  # Increased from 3072 for comprehensive JSON responses
             }
             
             # Task-specific token limits - use higher limits for complex analysis
             self.task_token_limits = {
-                'simple': 2048,
-                'complex': 4096,  # Complex tasks need more tokens for detailed JSON
-                'retrospective': 4096,  # Retrospectives generate comprehensive reports
-                'chat_response': 2048,  # Chat responses can be shorter
-                'analysis': 3072,  # Analysis reports with recommendations
+                'simple': 3072,  # Increased for explainability JSON fields
+                'complex': 8192,  # Complex tasks need more tokens for detailed JSON
+                'retrospective': 6144,  # Retrospectives generate comprehensive reports
+                'chat_response': 3072,  # Chat responses with context
+                'analysis': 6144,  # Analysis reports with recommendations
             }
             
             # For backward compatibility
