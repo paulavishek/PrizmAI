@@ -55,6 +55,11 @@ def update_workload_on_assignment_change(sender, instance, created, **kwargs):
         return
     
     organization = instance.column.board.organization
+    
+    # Skip workload updates if board has no organization (MVP mode)
+    if not organization:
+        return
+    
     old_assignee = getattr(instance, '_old_assigned_to', None)
     new_assignee = instance.assigned_to
     

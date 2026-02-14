@@ -507,69 +507,204 @@ def suggest_lean_classification(title: str, description: str, estimated_cost: fl
             if budget_parts:
                 budget_context = "\n\nBudget & Cost Information:\n- " + "\n- ".join(budget_parts)
         
-        prompt = f"""
-        Based on this task's title, description, and budget information, suggest a Lean Six Sigma classification
-        (Value-Added, Necessary Non-Value-Added, or Waste/Eliminate) with full explainability.
-        
-        Task Title: {title}
-        Task Description: {description or '(No description provided)'}{budget_context}
-        
-        Classification Definitions:
-        - Value-Added (VA): Activities that transform the product/service in a way the customer values
-        - Necessary Non-Value-Added (NNVA): Required activities that don't directly add value for the customer
-        - Waste/Eliminate: Activities that consume resources without adding value
-        
-        IMPORTANT: Consider the cost/budget information in your analysis:
-        - High-cost tasks that don't directly add customer value may indicate waste
-        - Low-cost tasks with high customer impact are typically value-added
-        - Required but costly administrative/compliance tasks fall under Necessary NVA
-        
-        Analyze the task and provide a comprehensive, explainable recommendation.
-        
-        Format your response as JSON WITH FULL EXPLAINABILITY:
-        {{
-            "classification": "Value-Added|Necessary Non-Value-Added|Waste/Eliminate",
-            "justification": "2-3 sentences explaining why this classification fits",
-            "confidence_score": 0.XX,
-            "confidence_level": "high|medium|low",
-            "contributing_factors": [
-                {{
-                    "factor": "Factor name (e.g., 'Customer Impact', 'Regulatory Requirement')",
-                    "contribution_percentage": XX,
-                    "description": "How this factor influenced the classification"
-                }}
-            ],
-            "classification_reasoning": {{
-                "value_added_indicators": ["List indicators that suggest Value-Added"],
-                "non_value_indicators": ["List indicators that suggest NNVA or Waste"],
-                "primary_driver": "The main reason for this classification"
-            }},
-            "alternative_classification": {{
-                "classification": "Second most likely classification",
-                "confidence_score": 0.XX,
-                "conditions": "Under what conditions this alternative would apply"
-            }},
-            "assumptions": [
-                "Key assumption 1 made during analysis",
-                "Key assumption 2 made during analysis"
-            ],
-            "improvement_suggestions": [
-                "If Waste/NNVA: How could this task be optimized or eliminated?",
-                "If VA: How to maximize the value delivery?"
-            ],
-            "lean_waste_type": "If Waste - specify type: Defects|Overproduction|Waiting|Non-utilized talent|Transportation|Inventory|Motion|Extra-processing (or null)"
-        }}
-        """
+        prompt = f"""Analyze this task for Lean Six Sigma classification. Task: "{title}". Description: "{description or 'None'}".{budget_context}
+
+Classifications: Value-Added (transforms product/service for customer), Necessary Non-Value-Added (required but not customer-valued), Waste/Eliminate (no value, should remove).
+
+Return ONLY valid JSON with NO line breaks inside strings:
+{{"classification":"Value-Added|Necessary Non-Value-Added|Waste/Eliminate","justification":"Brief reason in one sentence","confidence_score":0.XX,"confidence_level":"high|medium|low","contributing_factors":[{{"factor":"Factor1","contribution_percentage":XX,"description":"Brief desc"}}],"classification_reasoning":{{"value_added_indicators":["indicator1"],"non_value_indicators":["indicator1"],"primary_driver":"Main reason"}},"alternative_classification":{{"classification":"Alternative","confidence_score":0.XX,"conditions":"When applies"}},"assumptions":["assumption1"],"improvement_suggestions":["suggestion1"],"lean_waste_type":null}}"""
         
         response_text = generate_ai_content(prompt, task_type='lean_classification')
         if response_text:
+            # Log the raw response for debugging - write to file for inspection
+            logger.warning(f"Raw LSS response length: {len(response_text)}")
+            try:
+                with open('lss_debug_response.txt', 'w', encoding='utf-8') as f:
+                    f.write(response_text)
+                logger.info("Wrote raw LSS response to lss_debug_response.txt")
+            except Exception as write_err:
+                logger.error(f"Could not write debug file: {write_err}")
+            
             # Handle the case where the AI might include code block formatting
             if "```json" in response_text:
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
+            
+            # Clean up potential JSON issues before parsing
+            response_text = response_text.strip()
+            
+            # Try parsing with json.loads first
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError as json_err:
+                logger.warning(f"Initial JSON parse failed: {str(json_err)}, attempting cleanup")
+                # Log problematic area
+                error_pos = json_err.pos if hasattr(json_err, 'pos') else 395
+                start = max(0, error_pos - 50)
+                end = min(len(response_text), error_pos + 50)
+                logger.warning(f"JSON around error position {error_pos}: ...{repr(response_text[start:end])}...")
                 
-            return json.loads(response_text)
+                # Strategy 0: Handle truncated JSON (common with AI responses)
+                # Try to extract fields from partial/truncated JSON
+                def extract_from_truncated_json(text):
+                    """Extract key fields from truncated JSON response"""
+                    result = {}
+                    
+                    # Extract classification
+                    class_match = re.search(r'"classification"\s*:\s*"([^"]+)"', text)
+                    if class_match:
+                        result['classification'] = class_match.group(1)
+                    
+                    # Extract justification
+                    just_match = re.search(r'"justification"\s*:\s*"([^"]+)"', text)
+                    if just_match:
+                        result['justification'] = just_match.group(1)
+                    
+                    # Extract confidence_score
+                    conf_match = re.search(r'"confidence_score"\s*:\s*([\d.]+)', text)
+                    if conf_match:
+                        result['confidence_score'] = float(conf_match.group(1))
+                    
+                    # Extract confidence_level
+                    level_match = re.search(r'"confidence_level"\s*:\s*"([^"]+)"', text)
+                    if level_match:
+                        result['confidence_level'] = level_match.group(1)
+                    
+                    return result if 'classification' in result else None
+                
+                # Try extraction from truncated response first
+                extracted = extract_from_truncated_json(response_text)
+                if extracted and 'classification' in extracted:
+                    logger.info(f"Extracted fields from truncated JSON: {list(extracted.keys())}")
+                    # Build a complete response with extracted data
+                    return {
+                        "classification": extracted.get('classification', 'Value-Added'),
+                        "justification": extracted.get('justification', 'Classification based on task analysis.'),
+                        "confidence_score": extracted.get('confidence_score', 0.7),
+                        "confidence_level": extracted.get('confidence_level', 'medium'),
+                        "contributing_factors": [],
+                        "classification_reasoning": {
+                            "value_added_indicators": [],
+                            "non_value_indicators": [],
+                            "primary_driver": extracted.get('justification', 'Task analysis')[:100] if extracted.get('justification') else 'Task analysis'
+                        },
+                        "alternative_classification": None,
+                        "assumptions": [],
+                        "improvement_suggestions": [],
+                        "lean_waste_type": None
+                    }
+                
+                # Aggressive cleanup strategy: Fix multi-line strings
+                # The issue is that AI generates strings with literal newlines
+                def fix_multiline_strings(text):
+                    """Replace literal newlines inside JSON strings with escaped \\n"""
+                    result = []
+                    in_string = False
+                    escape_next = False
+                    i = 0
+                    
+                    while i < len(text):
+                        char = text[i]
+                        
+                        if escape_next:
+                            result.append(char)
+                            escape_next = False
+                            i += 1
+                            continue
+                        
+                        if char == '\\':
+                            result.append(char)
+                            escape_next = True
+                            i += 1
+                            continue
+                        
+                        if char == '"':
+                            in_string = not in_string
+                            result.append(char)
+                            i += 1
+                            continue
+                        
+                        if in_string and char in '\n\r':
+                            # Replace literal newline with escaped version
+                            if char == '\n':
+                                result.append('\\n')
+                            else:
+                                result.append('\\r')
+                            i += 1
+                            continue
+                        
+                        result.append(char)
+                        i += 1
+                    
+                    return ''.join(result)
+                
+                # Try multiple cleanup strategies
+                cleaned_text = response_text
+                
+                # Strategy 1: Fix multi-line strings (most likely cause of "Unterminated string")
+                try:
+                    cleaned_text = fix_multiline_strings(response_text)
+                    return json.loads(cleaned_text)
+                except json.JSONDecodeError as e:
+                    logger.debug(f"Strategy 1 (fix multiline) failed: {e}")
+                
+                # Strategy 2: Replace single quotes with double quotes (common AI mistake)
+                try:
+                    cleaned_text = fix_multiline_strings(response_text)
+                    # Replace single-quoted strings: 'value' -> "value"
+                    cleaned_text = re.sub(r"'([^']+)'(\s*:)", r'"\1"\2', cleaned_text)
+                    cleaned_text = re.sub(r":\s*'([^']*)'", r': "\1"', cleaned_text)
+                    return json.loads(cleaned_text)
+                except json.JSONDecodeError as e:
+                    logger.debug(f"Strategy 2 (single quotes) failed: {e}")
+                
+                # Strategy 3: Remove trailing commas
+                try:
+                    cleaned_text = fix_multiline_strings(response_text)
+                    cleaned_text = re.sub(r',\s*}', '}', cleaned_text)
+                    cleaned_text = re.sub(r',\s*]', ']', cleaned_text)
+                    return json.loads(cleaned_text)
+                except json.JSONDecodeError as e:
+                    logger.debug(f"Strategy 3 (trailing commas) failed: {e}")
+                
+                # Strategy 4: Try ast.literal_eval for Python dict syntax
+                try:
+                    import ast
+                    parsed = ast.literal_eval(response_text)
+                    return parsed
+                except (ValueError, SyntaxError) as e:
+                    logger.debug(f"Strategy 4 (ast.literal_eval) failed: {e}")
+                
+                logger.error(f"All JSON cleanup strategies failed for LSS classification")
+                # Last resort: try to extract just the classification
+                try:
+                    # Extract just the classification field if possible (try both quote styles)
+                    classification_match = re.search(r'["\']classification["\']\s*:\s*["\']([^"\']+)["\']', response_text)
+                    if classification_match:
+                        classification = classification_match.group(1)
+                        # Return minimal valid response
+                        return {
+                            "classification": classification,
+                            "justification": "AI-generated response had formatting issues, using classification only.",
+                            "confidence_score": 0.5,
+                            "confidence_level": "low",
+                            "contributing_factors": [],
+                            "classification_reasoning": {
+                                "value_added_indicators": [],
+                                "non_value_indicators": [],
+                                "primary_driver": "Unable to parse full reasoning"
+                            },
+                            "alternative_classification": None,
+                            "assumptions": [],
+                            "improvement_suggestions": [],
+                            "lean_waste_type": None
+                        }
+                except Exception:
+                    pass
+                
+                # If all else fails, return None
+                return None
         return None
     except Exception as e:
         logger.error(f"Error suggesting lean classification: {str(e)}")

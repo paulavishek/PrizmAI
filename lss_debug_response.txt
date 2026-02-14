@@ -1,0 +1,2 @@
+```json
+{"classification":"Value-Added","justification":"The task directly transforms the website by adding a crucial, visible, and functional component that the customer explicitly values and is willing to pay for.","confidence_score":0.95,"confidence_level":"high","contributing_factors":[{"factor":"Direct Customer Value","contribution_percentage":40,"description":"The hero section is a

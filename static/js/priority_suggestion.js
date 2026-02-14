@@ -159,11 +159,17 @@ class PrioritySuggestionWidget {
         const maxScore = parseInt(scoreMatch[2]);
         const percentage = (score / maxScore) * 100;
         
-        // Color code based on percentage
+        // Color code based on percentage (aligned with backend thresholds where max_score = 22)
+        // Backend: urgent >= 12 (54.5%), high >= 7 (31.8%), medium >= 4 (18.2%), low < 4
         let barColor = 'secondary';
-        if (percentage >= 67) barColor = 'danger';      // 8+/12 = red (urgent/high)
-        else if (percentage >= 42) barColor = 'warning'; // 5-7/12 = orange (medium/high)
-        else if (percentage >= 25) barColor = 'info';    // 3-4/12 = blue (medium)
+        if (percentage >= 54) barColor = 'danger';      // 12+/22 = red (urgent)
+        else if (percentage >= 31) barColor = 'warning'; // 7-11/22 = orange (high)
+        else if (percentage >= 18) barColor = 'info';    // 4-6/22 = blue (medium)
+        
+        // Calculate threshold positions for visual markers (based on max_score = 22)
+        const mediumThreshold = (4 / maxScore) * 100;   // ~18%
+        const highThreshold = (7 / maxScore) * 100;     // ~32%
+        const urgentThreshold = (12 / maxScore) * 100;  // ~55%
         
         return `
             <div class="mb-3">
@@ -173,15 +179,21 @@ class PrioritySuggestionWidget {
                     </span>
                     <span class="badge bg-${barColor}">${this.suggestion.reasoning.analysis_score}</span>
                 </div>
-                <div class="progress" style="height: 8px;">
+                <div class="progress position-relative" style="height: 12px;">
                     <div class="progress-bar bg-${barColor}" role="progressbar" 
                          style="width: ${percentage}%" 
                          aria-valuenow="${score}" aria-valuemin="0" aria-valuemax="${maxScore}">
                     </div>
+                    <!-- Priority threshold markers -->
+                    <div class="position-absolute" style="left: ${mediumThreshold}%; height: 100%; border-left: 2px dashed rgba(0,0,0,0.3); top: 0;" title="Medium threshold (4pts)"></div>
+                    <div class="position-absolute" style="left: ${highThreshold}%; height: 100%; border-left: 2px dashed rgba(0,0,0,0.3); top: 0;" title="High threshold (7pts)"></div>
+                    <div class="position-absolute" style="left: ${urgentThreshold}%; height: 100%; border-left: 2px dashed rgba(0,0,0,0.3); top: 0;" title="Urgent threshold (12pts)"></div>
                 </div>
-                <div class="d-flex justify-content-between mt-1" style="font-size: 0.7rem; color: #999;">
+                <div class="d-flex justify-content-between mt-1" style="font-size: 0.65rem; color: #888;">
                     <span>Low</span>
-                    <span>High</span>
+                    <span style="margin-left: 5%;">Medium</span>
+                    <span style="margin-left: 5%;">High</span>
+                    <span>Urgent</span>
                 </div>
             </div>
         `;
