@@ -110,7 +110,7 @@ TASK_TOKEN_LIMITS = {
     'mitigation_suggestions': 2048,       # Mitigation strategies with action steps
     
     # Medium responses (2048-3072 tokens)
-    'task_description': 4096,            # Description + checklist + skill requirements + full explainability
+    'task_description': 1536,            # Concise description + simple checklist (simplified prompt)
     'priority_suggestion': 3072,         # Priority with full comparison and recommendations
     'dashboard_insights': 2048,          # Quick insights with reasoning
     'velocity_forecast': 2048,           # Forecast data with explanations
@@ -124,11 +124,11 @@ TASK_TOKEN_LIMITS = {
     'skill_gap_analysis': 3072,          # Skill analysis with recommendations
     'budget_analysis': 4096,             # Budget insights with trends and recommendations
     'dependency_analysis': 3072,         # Dependency and cascading risk analysis
-    'deadline_prediction': 3072,         # Timeline prediction with velocity and scenarios
+    'deadline_prediction': 1536,         # Simplified timeline prediction (reduced from complex explainability)
     
     # Extended responses (4096-6144 tokens) - complex nested JSON structures
     'workflow_optimization': 4096,       # Workflow analysis with bottlenecks and recommendations
-    'task_breakdown': 6144,              # Multiple subtasks with dependencies and risk analysis
+    'task_breakdown': 2048,              # Simplified subtask list (reduced from verbose explainability)
     'critical_path': 6144,               # Critical path with task analysis and scheduling
     'complex': 6144,                     # General complex analysis tasks - increased for comprehensive JSON
     'timeline_generation': 4096,         # Timeline details with milestones
@@ -307,77 +307,46 @@ def generate_ai_content(prompt: str, task_type='simple', use_cache: bool = True,
 
 def generate_task_description(title: str, context: Optional[Dict] = None) -> Optional[Dict]:
     """
-    Generate a detailed task description and checklist from a task title.
-    
-    Provides explainable AI output with confidence scores and reasoning.
+    Generate a concise task description and checklist from a task title.
     
     Args:
         title: The title of the task
         context: Optional context (board name, project type, etc.)
         
     Returns:
-        A dictionary with generated description, checklist, and explainability data
-        or None if generation fails
+        A dictionary with generated description and checklist or None if generation fails
     """
     try:
         context_info = ""
         if context:
             context_info = f"""
-        ## Context:
+        Context:
         - Board/Project: {context.get('board_name', 'Not specified')}
         - Project Type: {context.get('project_type', 'General')}
-        - Team Size: {context.get('team_size', 'Unknown')}
         """
         
         prompt = f"""
-        Based on this task title: "{title}", generate a detailed task description 
-        with an objective and a checklist of smaller steps.
-        Provide comprehensive explainability for all generated content.
+        Based on this task title: "{title}", generate a CONCISE task description.
         {context_info}
         
-        IMPORTANT: For the 'objective' and 'detailed_description' fields, use PLAIN TEXT WITHOUT any Markdown formatting.
-        Only use Markdown formatting in the 'markdown_description' field.
+        IMPORTANT GUIDELINES:
+        - Keep the objective to 1-2 sentences maximum
+        - Keep each checklist item brief (under 10 words)
+        - Include 3-6 checklist items only (the most essential steps)
+        - Do NOT include explanations for why items are included
+        - Do NOT include skill requirements or alternative interpretations
+        - Focus on actionable, practical content
         
-        Format your response as JSON WITH FULL EXPLAINABILITY:
+        Format your response as JSON:
         {{
-            "objective": "Clear description of what this task aims to accomplish (PLAIN TEXT, NO MARKDOWN)",
-            "detailed_description": "2-3 paragraph detailed description of the task scope and approach (PLAIN TEXT, NO MARKDOWN)",
-            "confidence_score": 0.XX,
-            "confidence_level": "high|medium|low",
-            "interpretation_reasoning": "How the task title was interpreted to generate this description",
+            "objective": "One clear sentence describing what this task accomplishes",
             "checklist": [
-                {{
-                    "item": "First subtask",
-                    "estimated_effort": "Time estimate",
-                    "why_included": "Why this step is necessary"
-                }}
+                "First action item",
+                "Second action item",
+                "Third action item"
             ],
-            "suggested_priority": "low|medium|high|urgent",
-            "priority_reasoning": "Why this priority is suggested based on the task nature",
-            "estimated_total_effort": "Total time estimate for the full task",
-            "skill_requirements": [
-                {{
-                    "skill": "Required skill",
-                    "level": "beginner|intermediate|expert",
-                    "why_needed": "Why this skill is relevant"
-                }}
-            ],
-            "potential_blockers": [
-                "Potential blocker or dependency to consider"
-            ],
-            "success_criteria": [
-                "How to verify task is successfully completed"
-            ],
-            "assumptions": [
-                "Assumption 1 about scope or requirements",
-                "Assumption 2 about resources"
-            ],
-            "alternative_interpretations": [
-                {{
-                    "interpretation": "Alternative way to understand this task",
-                    "would_change": "How the description would differ"
-                }}
-            ],
+            "suggested_priority": "low|medium|high",
+            "estimated_effort": "Brief time estimate (e.g., '2-4 hours')",
             "markdown_description": "**Objective:** [objective]\\n\\n**Checklist:**\\n- [ ] Item 1\\n- [ ] Item 2"
         }}
         """
@@ -1038,7 +1007,7 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
     The API endpoint validates that an assignee is selected before calling this function.
     
     Args:
-        task_data: Dictionary containing task information (must include 'assigned_to', may include 'estimated_hours')
+        task_data: Dictionary containing task information (must include 'assigned_to', may include 'estimated_hours', 'start_date')
         team_context: Dictionary containing team performance and historical data
         
     Returns:
@@ -1050,6 +1019,7 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         description = task_data.get('description', '')
         priority = task_data.get('priority', 'medium')
         assigned_to = task_data.get('assigned_to', 'Unassigned')
+        start_date_str = task_data.get('start_date')  # Get start date for proper deadline calculation
         
         # Extract new task fields for enhanced prediction
         complexity_score = task_data.get('complexity_score', 5)
@@ -1068,6 +1038,7 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         # Extract team context
         assignee_avg_completion = team_context.get('assignee_avg_completion_days', 0)
         team_avg_completion = team_context.get('team_avg_completion_days', 0)
+        team_completed_count = team_context.get('team_completed_tasks_count', 0)
         current_workload = team_context.get('assignee_current_tasks', 0)
         similar_tasks_avg = team_context.get('similar_tasks_avg_days', 0)
         upcoming_holidays = team_context.get('upcoming_holidays', [])
@@ -1109,102 +1080,53 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
             # Calculate expected days based on estimated hours and assignee velocity
             if assignee_velocity > 0:
                 estimated_days_from_hours = hours_val / assignee_velocity
-                estimated_hours_note = f"- **Estimated Effort**: {hours_val:.1f} hours (approximately {estimated_days_from_hours:.1f} days at {assignee_velocity} hours/day)"
+                estimated_hours_note = f"Estimated Effort: {hours_val:.1f} hours (approximately {estimated_days_from_hours:.1f} days at {assignee_velocity} hours/day)"
             else:
-                estimated_hours_note = f"- **Estimated Effort**: {hours_val:.1f} hours"
+                estimated_hours_note = f"Estimated Effort: {hours_val:.1f} hours"
         else:
-            estimated_hours_note = "- Estimated Effort: Not specified (use complexity and historical data to estimate)"
+            estimated_hours_note = "Estimated Effort: Not specified"
+        
+        # Determine data availability for honest AI reasoning
+        has_assignee_history = assignee_completed_count > 0
+        has_team_history = team_completed_count > 0
+        
+        if has_assignee_history:
+            history_note = f"Based on {assigned_to}'s history of {assignee_completed_count} completed tasks (avg {assignee_avg_completion} days each)"
+        elif has_team_history:
+            history_note = f"No history for {assigned_to} yet. Using team average from {team_completed_count} completed tasks ({team_avg_completion} days avg)"
+        else:
+            history_note = f"NO HISTORICAL DATA available - this is a new board with no completed tasks. Estimate based on task complexity ({complexity_score}/10) and estimated effort only"
+        
+        # Determine start date for prompt
+        if start_date_str:
+            start_date_note = f"Start Date: {start_date_str} (predict days needed to complete FROM this date)"
+        else:
+            start_date_note = "Start Date: Today (no start date specified)"
         
         prompt = f"""
-        Predict a realistic timeline for completing this task based on the provided context and historical data.
+        Predict realistic timeline for this task.
         
-        ## Task Information:
-        - Title: {title}
-        - Description: {description or 'No description provided'}
-        - Priority: {priority}
-        - Assigned To: {assigned_to}
-        
-        ## Budget & Effort Estimation:
+        Task: {title}
+        Priority: {priority} | Assigned: {assigned_to}
+        Complexity: {complexity_score}/10 | Current workload: {current_workload} active tasks
         {estimated_hours_note}
+        {start_date_note}
         
-        ## Task Complexity & Resource Requirements:
-        - Complexity Score: {complexity_score}/10 ({complexity_label})
-        - Workload Impact: {workload_impact or 'Not specified'} (Low/Medium/High/Critical - impact on assignee's capacity)
-        - Skill Match: {skill_match_note}
-        - Collaboration Required: {'Yes - coordination with team members needed' if collaboration_required else 'No - can be done independently'}
-        - Dependencies: {dependencies_count} blocking task(s) that must complete first
-        - Risk Level: {risk_level or 'Not assessed'} {f'(Score: {risk_score}/9)' if risk_score else ''}
-
-        ## Historical Context (IMPORTANT - Use these actual metrics for {assigned_to}):
-        - {assigned_to}'s Personal Average Completion Time: {assignee_avg_completion} days (based on {assignee_completed_count} completed tasks)
-        - {assigned_to}'s Estimated Velocity: {assignee_velocity} hours/day
-        - Team Average Completion Time: {team_avg_completion} days
-        - Performance Comparison: {performance_note}
-        - Similar Tasks Average: {similar_tasks_avg} days
-        - {assigned_to}'s Current Workload: {current_workload} active tasks
-        - Upcoming Holidays/Breaks: {', '.join(upcoming_holidays) if upcoming_holidays else 'None'}
+        DATA AVAILABILITY: {history_note}
         
-        Consider these factors (ALL are important for prediction):
-        1. **Estimated hours** (if provided) - use this as the primary basis for timeline calculation
-        2. Task complexity score ({complexity_score}/10) - higher complexity = more time needed
-        3. {assigned_to}'s SPECIFIC historical performance (use the actual numbers above!)
-        4. Workload impact ({workload_impact}) - high/critical impact tasks need more focused time
-        5. Skill match ({skill_match_score}%) - poor match means learning curve adds time
-        5. Collaboration requirements - coordination overhead if team work is needed
-        6. Dependencies ({dependencies_count}) - must wait for blocking tasks
-        7. Risk level ({risk_level}) - high risk tasks often face delays
-        8. Priority level urgency ({priority})
-        9. Buffer time for reviews/testing
-        10. Holidays or known interruptions
+        IMPORTANT RULES:
+        - Predict number of WORKING DAYS needed to complete this task (not calendar date)
+        - Be HONEST about data availability in your reasoning
+        - If no historical data exists, say "estimated based on task complexity" NOT "based on historical averages"
+        - Keep response concise. Return JSON only:
         
-        IMPORTANT: 
-        - Predict the number of DAYS from today that this task should be completed, not absolute dates.
-        - Use {assigned_to}'s ACTUAL historical average of {assignee_avg_completion} days as your baseline, NOT the team average.
-        - If {assignee_completed_count} is 0, fall back to team average but mention this in reasoning.
-        - Factor in the complexity score, workload impact, and skill match into your estimate.
-        
-        Format your response as JSON WITH EXPLAINABILITY:
         {{
-            "estimated_days_from_today": number (integer representing days from today),
-            "estimated_effort_days": number (actual work days needed),
+            "estimated_days_to_complete": number,
             "confidence_level": "high|medium|low",
-            "confidence_score": 0.XX,
-            "reasoning": "2-3 sentences explaining the timeline prediction",
-            "risk_factors": ["up to 3 potential delays or risks"],
-            "recommendations": ["up to 3 suggestions to meet the deadline"],
-            "alternative_scenarios": {{
-                "optimistic_days": number,
-                "pessimistic_days": number
-            }},
-            "calculation_breakdown": {{
-                "base_estimate_days": number,
-                "complexity_factor": 0.XX,
-                "workload_adjustment": 0.XX,
-                "skill_match_adjustment": 0.XX,
-                "collaboration_overhead": 0.XX,
-                "dependency_buffer": number,
-                "risk_buffer": number,
-                "priority_adjustment": 0.XX,
-                "buffer_days": number
-            }},
-            "velocity_analysis": {{
-                "current_velocity": "X hours/day",
-                "expected_velocity": "X hours/day",
-                "velocity_trend": "accelerating|steady|declining",
-                "remaining_effort_hours": number
-            }},
-            "assumptions": [
-                "Key assumption 1",
-                "Key assumption 2",
-                "Key assumption 3"
-            ],
-            "contributing_factors": [
-                {{
-                    "factor": "Factor name",
-                    "contribution_percentage": XX,
-                    "description": "How this impacts the deadline"
-                }}
-            ]
+            "reasoning": "One honest sentence explaining basis for timeline (mention if no history available)",
+            "risk_factors": ["2-3 brief risks"],
+            "optimistic_days": number,
+            "pessimistic_days": number
         }}
         """
         
@@ -1218,39 +1140,46 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
                 
             ai_response = json.loads(response_text)
             
-            # Handle velocity edge case: If current velocity is 0, set trend to 'Pending'
-            if 'velocity_analysis' in ai_response:
-                velocity = ai_response['velocity_analysis']
-                current_vel = velocity.get('current_velocity', '0 hours/day')
-                # Extract numeric value from velocity string
-                try:
-                    vel_value = float(current_vel.split()[0])
-                    if vel_value == 0:
-                        ai_response['velocity_analysis']['velocity_trend'] = 'Pending'
-                except (ValueError, IndexError):
-                    pass  # Keep original trend if parsing fails
-            
             # Calculate actual dates from the predicted days
             from django.utils import timezone
-            from datetime import timedelta
+            from datetime import timedelta, datetime
             today = timezone.now().date()
             
-            estimated_days = ai_response.get('estimated_days_from_today', 3)
-            optimistic_days = ai_response.get('alternative_scenarios', {}).get('optimistic_days', estimated_days - 1)
-            pessimistic_days = ai_response.get('alternative_scenarios', {}).get('pessimistic_days', estimated_days + 2)
+            # Use start_date as base if provided, otherwise use today
+            if start_date_str:
+                try:
+                    # Parse various date formats
+                    for fmt in ['%Y-%m-%d', '%d-%m-%Y', '%m/%d/%Y', '%d/%m/%Y']:
+                        try:
+                            base_date = datetime.strptime(start_date_str, fmt).date()
+                            break
+                        except ValueError:
+                            continue
+                    else:
+                        base_date = today  # Fallback to today if parsing fails
+                except Exception:
+                    base_date = today
+            else:
+                base_date = today
+            
+            # Get estimated days (try both old and new field names for compatibility)
+            estimated_days = ai_response.get('estimated_days_to_complete') or ai_response.get('estimated_days_from_today', 3)
+            optimistic_days = ai_response.get('optimistic_days', estimated_days - 1)
+            pessimistic_days = ai_response.get('pessimistic_days', estimated_days + 2)
             
             # Ensure minimum of 1 day for all scenarios
             estimated_days = max(1, estimated_days)
             optimistic_days = max(1, optimistic_days)
             pessimistic_days = max(1, pessimistic_days)
             
-            # Calculate the actual dates
-            recommended_deadline = (today + timedelta(days=estimated_days)).strftime('%Y-%m-%d')
-            optimistic_deadline = (today + timedelta(days=optimistic_days)).strftime('%Y-%m-%d')
-            pessimistic_deadline = (today + timedelta(days=pessimistic_days)).strftime('%Y-%m-%d')
+            # Calculate the actual dates FROM the base_date (start_date or today)
+            recommended_deadline = (base_date + timedelta(days=estimated_days)).strftime('%Y-%m-%d')
+            optimistic_deadline = (base_date + timedelta(days=optimistic_days)).strftime('%Y-%m-%d')
+            pessimistic_deadline = (base_date + timedelta(days=pessimistic_days)).strftime('%Y-%m-%d')
             
             # Update response with calculated dates
             ai_response['recommended_deadline'] = recommended_deadline
+            ai_response['start_date_used'] = base_date.strftime('%Y-%m-%d')
             ai_response['alternative_scenarios'] = {
                 'optimistic': optimistic_deadline,
                 'pessimistic': pessimistic_deadline
@@ -1470,73 +1399,30 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
         estimated_effort = task_data.get('estimated_effort', '')
         
         prompt = f"""
-        Analyze this task and suggest a breakdown into smaller, manageable subtasks with dependencies.
-        Provide explainable AI output with confidence scores and factor analysis.
+        Analyze this task and suggest a breakdown into smaller subtasks.
         
-        ## Task Information:
-        - Title: {title}
-        - Description: {description or 'No description provided'}
-        - Priority: {priority}
-        - Due Date: {due_date or 'Not specified'}
-        - Estimated Effort: {estimated_effort or 'Not specified'}
+        Task: {title}
+        Description: {description or 'No description'}
+        Priority: {priority}
+        Due: {due_date or 'Not set'}
         
-        Consider these principles:
-        1. Each subtask should be completable in 1-3 days
-        2. Identify logical dependencies between subtasks
-        3. Include testing, review, and documentation subtasks where appropriate
-        4. Consider risk mitigation subtasks for complex work
-        5. Ensure subtasks are specific and actionable
+        IMPORTANT: Keep response concise. Maximum 4-6 subtasks with brief descriptions.
         
-        Format your response as JSON WITH FULL EXPLAINABILITY:
+        Return JSON only:
         {{
             "is_breakdown_recommended": true|false,
             "complexity_score": 1-10,
-            "confidence_score": 0.XX,
-            "confidence_level": "high|medium|low",
-            "reasoning": "2-3 sentences explaining why breakdown is or isn't recommended",
-            "complexity_factors": [
-                {{
-                    "factor": "Factor name (e.g., 'Technical Scope', 'Integration Points')",
-                    "contribution_percentage": XX,
-                    "description": "How this factor contributes to complexity"
-                }}
-            ],
+            "reasoning": "One sentence explaining recommendation",
             "subtasks": [
                 {{
-                    "title": "Subtask title",
-                    "description": "Brief description with clear deliverable",
-                    "estimated_effort": "1-3 days",
+                    "title": "Short subtask title",
+                    "description": "One sentence describing what to do",
+                    "estimated_effort": "1-2 days",
                     "priority": "low|medium|high",
-                    "dependencies": ["1-based indices of dependent subtasks (e.g., 1, 2, 3) or empty array"],
-                    "order": 1,
-                    "skill_requirements": ["skill1", "skill2"],
-                    "why_needed": "Brief explanation of why this subtask is essential"
+                    "order": 1
                 }}
             ],
-            "critical_path": [
-                "List of subtask titles that form the critical path"
-            ],
-            "parallel_opportunities": [
-                "Subtasks that can be worked on simultaneously"
-            ],
-            "workflow_suggestions": ["up to 3 suggestions for managing these subtasks"],
-            "risk_considerations": [
-                {{
-                    "risk": "Risk description",
-                    "affected_subtasks": ["subtask titles"],
-                    "mitigation": "Suggested mitigation"
-                }}
-            ],
-            "alternative_approach": {{
-                "description": "Alternative way to break down this task",
-                "when_applicable": "Conditions when this alternative would be better"
-            }},
-            "assumptions": [
-                "Key assumption 1 about the task",
-                "Key assumption 2 about resources/skills"
-            ],
-            "total_estimated_effort": "Sum of all subtask efforts",
-            "effort_vs_original": "How this compares to original estimate (e.g., '20% more due to testing')"
+            "total_estimated_effort": "Total time estimate"
         }}
         """
         

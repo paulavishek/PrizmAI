@@ -76,28 +76,31 @@ function initAITaskDescription() {
                     // Handle both object and string responses from AI
                     let descriptionText;
                     if (typeof data.description === 'object' && data.description !== null) {
-                        // Use markdown_description if available, fallback to detailed_description or objective
-                        descriptionText = data.description.markdown_description || 
-                                         data.description.detailed_description ||
-                                         data.description.objective ||
-                                         '';
-                        // If still empty, try to construct from available fields (using plain text, no Markdown)
-                        if (!descriptionText && (data.description.objective || data.description.checklist)) {
-                            let parts = [];
-                            if (data.description.objective) {
-                                parts.push('Objective: ' + data.description.objective);
-                            }
-                            if (data.description.detailed_description) {
-                                parts.push('\n\n' + data.description.detailed_description);
-                            }
-                            if (data.description.checklist && Array.isArray(data.description.checklist)) {
-                                parts.push('\n\nChecklist:');
-                                data.description.checklist.forEach(item => {
-                                    const itemText = typeof item === 'object' ? item.item : item;
-                                    parts.push('\n- ' + itemText);
-                                });
-                            }
-                            descriptionText = parts.join('');
+                        // Always construct clean plain text from structured fields
+                        let parts = [];
+                        if (data.description.objective) {
+                            parts.push(data.description.objective);
+                        }
+                        if (data.description.checklist && Array.isArray(data.description.checklist)) {
+                            parts.push('\n\nChecklist:');
+                            data.description.checklist.forEach(item => {
+                                const itemText = typeof item === 'object' ? item.item : item;
+                                parts.push('\n• ' + itemText);
+                            });
+                        }
+                        if (data.description.estimated_effort) {
+                            parts.push('\n\nEstimated effort: ' + data.description.estimated_effort);
+                        }
+                        descriptionText = parts.join('');
+                        
+                        // Fallback to markdown_description if structured fields are empty
+                        if (!descriptionText.trim()) {
+                            descriptionText = data.description.markdown_description || 
+                                             data.description.detailed_description ||
+                                             data.description.objective ||
+                                             '';
+                            // Clean up any markdown syntax
+                            descriptionText = descriptionText.replace(/\*\*/g, '').replace(/- \[ \] /g, '• ');
                         }
                     } else {
                         descriptionText = data.description;
@@ -1346,6 +1349,7 @@ function initDeadlinePrediction() {
         const estimatedCostInput = document.getElementById('id_estimated_cost');
         const estimatedHoursInput = document.getElementById('id_estimated_hours');
         const hourlyRateInput = document.getElementById('id_hourly_rate');
+        const startDateInput = document.getElementById('id_start_date');
         
         const taskData = {
             title: titleInput.value.trim(),
@@ -1354,6 +1358,8 @@ function initDeadlinePrediction() {
             assigned_to: assignedToSelect ? assignedToSelect.options[assignedToSelect.selectedIndex].text : 'Unassigned',
             board_id: boardId,
             task_id: taskId,
+            // Start date for proper deadline calculation (deadline = start_date + estimated_days)
+            start_date: startDateInput && startDateInput.value ? startDateInput.value : null,
             // Enhanced prediction fields
             complexity_score: complexityScoreInput ? parseInt(complexityScoreInput.value) || 5 : 5,
             workload_impact: workloadImpactSelect ? workloadImpactSelect.value || 'medium' : 'medium',

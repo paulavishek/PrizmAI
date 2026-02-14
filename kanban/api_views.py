@@ -1367,6 +1367,7 @@ def predict_deadline_api(request):
         description = data.get('description', '')
         priority = data.get('priority', 'medium')
         assigned_to = data.get('assigned_to', 'Unassigned')
+        start_date = data.get('start_date')  # Get start date for deadline calculation
         
         # Extract new enhanced prediction fields from request
         complexity_score = data.get('complexity_score', 5)
@@ -1427,6 +1428,7 @@ def predict_deadline_api(request):
         )
         
         team_avg_completion = 5  # Default fallback
+        team_completed_count = 0  # Track actual completed tasks
         assignee_avg_completion = 5  # Default fallback
         assignee_velocity_hours = 8  # Default: 8 hours/day
         
@@ -1443,6 +1445,7 @@ def predict_deadline_api(request):
             
             if count > 0:
                 team_avg_completion = total_days / count
+                team_completed_count = count
         
         # Get assignee's current workload AND their personal historical completion times
         assignee_current_tasks = 0
@@ -1495,6 +1498,7 @@ def predict_deadline_api(request):
         team_context = {
             'assignee_avg_completion_days': round(assignee_avg_completion, 1),
             'team_avg_completion_days': round(team_avg_completion, 1),
+            'team_completed_tasks_count': team_completed_count,
             'assignee_current_tasks': assignee_current_tasks,
             'assignee_completed_tasks_count': assignee_completed_count,
             'assignee_velocity_hours_per_day': round(assignee_velocity_hours, 1),
@@ -1507,6 +1511,7 @@ def predict_deadline_api(request):
             'description': description,
             'priority': priority,
             'assigned_to': assigned_to,
+            'start_date': start_date,  # Include start date for proper deadline calculation
             # Enhanced prediction fields
             'complexity_score': complexity_score,
             'workload_impact': workload_impact,
