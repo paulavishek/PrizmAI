@@ -1903,7 +1903,12 @@
                         const confidencePercent = Math.round(summary.confidence_score * 100);
                         const confidenceClass = confidencePercent >= 70 ? 'bg-success' : confidencePercent >= 40 ? 'bg-warning' : 'bg-danger';
                         formattedSummary = `<div class="mb-3">
-                            <small class="text-muted">Analysis Confidence:</small>
+                            <small class="text-muted">
+                                Analysis Confidence:
+                                <i class="fas fa-info-circle ms-1" data-bs-toggle="tooltip" data-bs-placement="top" 
+                                   title="Confidence is based on: Risk assessment completeness • Stakeholder involvement • Resource details (skills, workload) • Task progress • Dependencies information • Comments and context. Add more task details to improve confidence."
+                                   style="cursor: help; color: #6c757d;"></i>
+                            </small>
                             <div class="progress" style="height: 20px;">
                                 <div class="progress-bar ${confidenceClass}" role="progressbar" style="width: ${confidencePercent}%">${confidencePercent}%</div>
                             </div>
@@ -1932,6 +1937,12 @@
             }
             
             textElement.innerHTML = formattedSummary;
+            
+            // Initialize Bootstrap tooltips for the dynamically added content
+            const tooltipTriggerList = textElement.querySelectorAll('[data-bs-toggle="tooltip"]');
+            tooltipTriggerList.forEach(tooltipTriggerEl => {
+                new bootstrap.Tooltip(tooltipTriggerEl);
+            });
         })
         .catch(error => {
             console.error('Error generating task summary:', error);
@@ -1963,7 +1974,12 @@
             const confidencePercent = Math.round(summary.confidence_score * 100);
             const confidenceClass = confidencePercent >= 70 ? 'bg-success' : confidencePercent >= 40 ? 'bg-warning' : 'bg-danger';
             html += `<div class="mb-3">
-                <small class="text-muted">Analysis Confidence:</small>
+                <small class="text-muted">
+                    Analysis Confidence:
+                    <i class="fas fa-info-circle ms-1" data-bs-toggle="tooltip" data-bs-placement="top" 
+                       title="Confidence is based on: Risk assessment completeness • Stakeholder involvement • Resource details (skills, workload) • Task progress • Dependencies information • Comments and context. Add more task details to improve confidence."
+                       style="cursor: help; color: #6c757d;"></i>
+                </small>
                 <div class="progress" style="height: 20px;">
                     <div class="progress-bar ${confidenceClass}" role="progressbar" style="width: ${confidencePercent}%">${confidencePercent}%</div>
                 </div>

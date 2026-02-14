@@ -207,6 +207,13 @@ function initAICommentSummarizer() {
                         currentSummaryData = null;
                     }
                     summaryText.innerHTML = summaryText_content;
+                    
+                    // Initialize Bootstrap tooltips for dynamically added content
+                    const tooltipTriggerList = summaryText.querySelectorAll('[data-bs-toggle="tooltip"]');
+                    tooltipTriggerList.forEach(tooltipTriggerEl => {
+                        new bootstrap.Tooltip(tooltipTriggerEl);
+                    });
+                    
                     summaryContainer.classList.remove('d-none');
                     
                     // Show export button
@@ -538,6 +545,12 @@ function initAIAnalyticsSummary() {
                     }
                     summaryText.innerHTML = formattedSummary;
                     
+                    // Initialize Bootstrap tooltips for dynamically added content
+                    const tooltipTriggerList = summaryText.querySelectorAll('[data-bs-toggle="tooltip"]');
+                    tooltipTriggerList.forEach(tooltipTriggerEl => {
+                        new bootstrap.Tooltip(tooltipTriggerEl);
+                    });
+                    
                     // Show summary and hide placeholder
                     summaryContainer.classList.remove('d-none');
                     summaryPlaceholder.classList.add('d-none');
@@ -698,7 +711,12 @@ function formatStructuredAnalyticsSummary(summary) {
         const confidencePercent = Math.round(summary.confidence_score * 100);
         const confidenceClass = confidencePercent >= 70 ? 'bg-success' : confidencePercent >= 40 ? 'bg-warning' : 'bg-danger';
         html += `<div class="mb-3">
-            <small class="text-muted">Analysis Confidence:</small>
+            <small class="text-muted">
+                Analysis Confidence:
+                <i class="fas fa-info-circle ms-1" data-bs-toggle="tooltip" data-bs-placement="top" 
+                   title="Confidence is based on: Risk assessment completeness • Stakeholder involvement • Resource details (skills, workload) • Task progress • Dependencies information • Comments and context. Add more task details to improve confidence."
+                   style="cursor: help; color: #6c757d;"></i>
+            </small>
             <div class="progress" style="height: 20px;">
                 <div class="progress-bar ${confidenceClass}" role="progressbar" style="width: ${confidencePercent}%">${confidencePercent}%</div>
             </div>
