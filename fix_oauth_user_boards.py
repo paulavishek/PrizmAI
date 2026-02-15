@@ -12,8 +12,8 @@ django.setup()
 from django.contrib.auth.models import User
 from kanban.models import Board
 
-def fix_oauth_user_boards():
-    """Add OAuth users (especially avishek.paul) to all official demo boards."""
+def fix_oauth_user_boards(username=None):
+    """Add users to all official demo boards."""
     
     # Get all demo boards
     demo_boards = Board.objects.filter(is_official_demo_board=True)
@@ -26,10 +26,24 @@ def fix_oauth_user_boards():
     for board in demo_boards:
         print(f"  - {board.name}")
     
-    # Get the OAuth user
-    try:
-        user = User.objects.get(username='avishek.paul')
-        print(f"\nFound user: {user.username} ({user.email})")
+    # Get the user
+    if username is None:
+        # Try to find the most recent non-demo user
+        user = User.objects.exclude(email__endswith='@demo.prizmai.local').order_by('-date_joined').first()
+        if not user:
+            print("\n✗ Error: No non-demo users found.")
+            return
+        print(f"\nAuto-detected user: {user.username} ({user.email})")
+    else:
+        try:
+            user = User.objects.get(username=username)
+            print(f"\nFound user: {user.username} ({user.email})")
+        except User.DoesNotExist:
+            print(f"\n✗ Error: User '{username}' not found.")
+            print("Available users in the system:")
+            for u in User.objects.all().order_by('username'):
+                print(f"  - {u.username} ({u.email})")
+            return
         
         # Add user to all demo boards
         boards_added = 0
@@ -48,12 +62,8 @@ def fix_oauth_user_boards():
         print(f"  - Added to {boards_added} board(s)")
         print(f"  - Already member of {boards_already_member} board(s)")
         print(f"\n✓ Done! {user.username} should now appear in AI Resource Optimization.")
-        
-    except User.DoesNotExist:
-        print(f"\n✗ Error: User 'avishek.paul' not found.")
-        print("Available users in the system:")
-        for u in User.objects.all().order_by('username'):
-            print(f"  - {u.username} ({u.email})")
 
 if __name__ == '__main__':
-    fix_oauth_user_boards()
+    import sys
+    username = sys.argv[1] if len(sys.argv) > 1 else None
+    fix_oauth_user_boards(username)

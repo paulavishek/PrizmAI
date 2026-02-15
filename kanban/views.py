@@ -391,6 +391,10 @@ def board_detail(request, board_id):
     # Check if this is a demo board
     is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
     
+    # Auto-add user to demo boards - ensures they appear in AI Resource Optimization
+    if is_demo_board and request.user not in board.members.all():
+        board.members.add(request.user)
+    
     # Log board view
     log_audit('board.viewed', user=request.user, request=request,
               object_type='board', object_id=board.id, object_repr=board.name,
