@@ -446,6 +446,7 @@ class SocialSignupForm(forms.Form):
         """
         from allauth.account.internal import flows
         from allauth.socialaccount.models import SocialLogin
+        from allauth.account.models import EmailAddress
         
         # Get the sociallogin from the request session
         if not self.sociallogin:
@@ -494,11 +495,19 @@ class SocialSignupForm(forms.Form):
                     completed_wizard=True
                 )
         
-        # Perform login using the updated API
-        # Note: In django-allauth 65.9.0+, perform_login() no longer accepts 'signup' parameter
-        ret = flows.login.perform_login(
+        # Ensure email address is verified for social accounts
+        EmailAddress.objects.get_or_create(
+            user=user,
+            email=user.email,
+            defaults={'verified': True, 'primary': True}
+        )
+        
+        # Use login_user instead of perform_login for social accounts
+        # This is the correct API for django-allauth 65.9.0+
+        ret = flows.login.login_user(
             request,
             user,
+            email_verification='optional',
         )
         
         return user, ret
