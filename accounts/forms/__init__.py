@@ -442,11 +442,10 @@ class SocialSignupForm(forms.Form):
         """
         New API method for django-allauth 65.9.0+
         Creates and saves the user, returns (user, response) tuple.
-        Response is None if we just want to continue, or an HttpResponse to redirect.
+        Response should be None to let allauth handle the login via complete_social_signup.
         """
-        from allauth.account.internal import flows
         from allauth.socialaccount.models import SocialLogin
-        from allauth.account.models import EmailAddress
+        from allauth.socialaccount.adapter import get_adapter
         
         # Get the sociallogin from the request session
         if not self.sociallogin:
@@ -469,48 +468,13 @@ class SocialSignupForm(forms.Form):
             user.first_name = extra_data.get('given_name', '')
             user.last_name = extra_data.get('family_name', '')
         
-        # Save the user first
-        user.save()
+        # Use the adapter to save the user - this handles all the proper setup
+        # including creating the user, social account, and calling our custom adapter hooks
+        adapter = get_adapter()
+        adapter.save_user(request, self.sociallogin, form=self)
         
-        # Complete the social connection and create UserProfile through adapter
-        self.sociallogin.save(request, connect=False)
-        
-        # Create UserProfile if it doesn't exist (fallback safety)
-        from accounts.models import UserProfile, Organization
-        if not hasattr(user, 'profile'):
-            domain = user.email.split('@')[-1].lower()
-            try:
-                organization = Organization.objects.get(domain=domain)
-                UserProfile.objects.create(
-                    user=user,
-                    organization=organization,
-                    is_admin=False,
-                    completed_wizard=True
-                )
-            except Organization.DoesNotExist:
-                UserProfile.objects.create(
-                    user=user,
-                    organization=None,
-                    is_admin=False,
-                    completed_wizard=True
-                )
-        
-        # Ensure email address is verified for social accounts
-        EmailAddress.objects.get_or_create(
-            user=user,
-            email=user.email,
-            defaults={'verified': True, 'primary': True}
-        )
-        
-        # Use login_user instead of perform_login for social accounts
-        # This is the correct API for django-allauth 65.9.0+
-        ret = flows.login.login_user(
-            request,
-            user,
-            email_verification='optional',
-        )
-        
-        return user, ret
+        # Return user and None - allauth will handle login via complete_social_signup
+        return user, None
     
     def signup(self, request, user):
         """
