@@ -495,10 +495,10 @@ class SocialSignupForm(forms.Form):
                 )
         
         # Perform login using the updated API
+        # Note: In django-allauth 65.9.0+, perform_login() no longer accepts 'signup' parameter
         ret = flows.login.perform_login(
             request,
             user,
-            signup=True,
         )
         
         return user, ret
