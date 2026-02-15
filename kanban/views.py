@@ -388,6 +388,9 @@ def board_detail(request, board_id):
     
     board = get_object_or_404(Board, id=board_id)
     
+    # Check if this is a demo board
+    is_demo_board = board.is_official_demo_board if hasattr(board, 'is_official_demo_board') else False
+    
     # Log board view
     log_audit('board.viewed', user=request.user, request=request,
               object_type='board', object_id=board.id, object_repr=board.name,
