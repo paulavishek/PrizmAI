@@ -367,18 +367,8 @@ def create_board(request):
     else:
         form = BoardForm()
     
-    # Pass demo status to template
-    demo_context = {}
-    if project_limit_status['is_demo']:
-        demo_context = {
-            'demo_projects_created': project_limit_status['current_count'],
-            'demo_projects_max': project_limit_status['max_allowed'],
-            'demo_projects_remaining': project_limit_status['max_allowed'] - project_limit_status['current_count'],
-        }
-    
     return render(request, 'kanban/create_board.html', {
         'form': form,
-        **demo_context
     })
 
 @login_required
