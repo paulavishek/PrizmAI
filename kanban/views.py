@@ -341,6 +341,20 @@ def create_board(request):
                 try:
                     recommended_columns = json.loads(recommended_columns_json)
                     
+                    # Safety check: Ensure first column is "To Do" (required for Add Task button)
+                    if recommended_columns and recommended_columns[0]['name'] != 'To Do':
+                        # Prepend "To Do" if it's missing
+                        has_todo = any(col['name'].lower() in ['to do', 'todo'] for col in recommended_columns)
+                        if not has_todo:
+                            recommended_columns.insert(0, {
+                                'name': 'To Do',
+                                'description': 'Tasks to be started',
+                                'position': 0
+                            })
+                            # Adjust positions for other columns
+                            for i, col in enumerate(recommended_columns[1:], start=1):
+                                col['position'] = i
+                    
                     # Create the recommended columns
                     for i, column_data in enumerate(recommended_columns):
                         Column.objects.create(

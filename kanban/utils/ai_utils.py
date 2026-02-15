@@ -1358,6 +1358,13 @@ def recommend_board_columns(board_data: Dict) -> Optional[Dict]:
         
         Recommend 4-7 columns that create an efficient workflow. Keep descriptions concise.
         
+        REQUIRED: Your first column MUST be named "To Do" (this is where the task creation button is located).
+        Also ensure your recommendations include:
+        2. One or more active work stages (e.g., "In Progress", "Development", "Design", "Review")
+        3. A completion stage (e.g., "Done", "Complete", "Deployed")
+        
+        The "To Do" column is mandatory - do not use alternatives like "Backlog" or "Planned" for the first column.
+        
         Format as JSON:
         {{
             "recommended_columns": [

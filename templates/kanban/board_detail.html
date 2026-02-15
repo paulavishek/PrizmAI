@@ -717,7 +717,12 @@
                 {% endif %}
             {% endfor %}
         </div>
-        {% if column.name|lower == 'to do' or column.name|lower == 'todo' %}
+        {% comment %}
+        Show "Add Task" button in:
+        1. Any column named "To Do" or "ToDo" (case insensitive)
+        2. The first column if no "To Do" column exists (fallback for AI-generated columns)
+        {% endcomment %}
+        {% if column.name|lower == 'to do' or column.name|lower == 'todo' or column.name|lower == 'backlog' or forloop.first %}
         <div class="p-2">
             <a href="{% url 'create_task_in_column' board.id column.id %}" class="btn btn-sm btn-primary add-task-btn">
                 <i class="fas fa-plus me-1"></i> Add Task
