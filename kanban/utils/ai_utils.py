@@ -307,49 +307,36 @@ def generate_ai_content(prompt: str, task_type='simple', use_cache: bool = True,
 
 def generate_task_description(title: str, context: Optional[Dict] = None) -> Optional[Dict]:
     """
-    Generate a concise task description and checklist from a task title.
+    Generate a structured task description with deliverables and obstacles from a task title.
     
     Args:
         title: The title of the task
         context: Optional context (board name, project type, etc.)
         
     Returns:
-        A dictionary with generated description and checklist or None if generation fails
+        A dictionary with generated description sections or None if generation fails
     """
     try:
         context_info = ""
         if context:
-            context_info = f"""
-        Context:
-        - Board/Project: {context.get('board_name', 'Not specified')}
-        - Project Type: {context.get('project_type', 'General')}
-        """
+            context_info = f"Project: {context.get('board_name', 'General')}"
         
-        prompt = f"""
-        Based on this task title: "{title}", generate a CONCISE task description.
-        {context_info}
-        
-        IMPORTANT GUIDELINES:
-        - Keep the objective to 1-2 sentences maximum
-        - Keep each checklist item brief (under 10 words)
-        - Include 3-6 checklist items only (the most essential steps)
-        - Do NOT include explanations for why items are included
-        - Do NOT include skill requirements or alternative interpretations
-        - Focus on actionable, practical content
-        
-        Format your response as JSON:
-        {{
-            "objective": "One clear sentence describing what this task accomplishes",
-            "checklist": [
-                "First action item",
-                "Second action item",
-                "Third action item"
-            ],
-            "suggested_priority": "low|medium|high",
-            "estimated_effort": "Brief time estimate (e.g., '2-4 hours')",
-            "markdown_description": "**Objective:** [objective]\\n\\n**Checklist:**\\n- [ ] Item 1\\n- [ ] Item 2"
-        }}
-        """
+        prompt = f"""Generate a task description for: "{title}"
+{context_info}
+
+RULES:
+- DO NOT include time estimates, effort predictions, or deadlines
+- DO NOT suggest priority levels
+- Keep each section brief and actionable
+
+Return JSON only:
+{{
+    "objective": "1-2 sentence goal",
+    "key_deliverables": ["Deliverable 1", "Deliverable 2", "Deliverable 3"],
+    "action_steps": ["Step 1", "Step 2", "Step 3", "Step 4"],
+    "potential_obstacles": ["Risk/obstacle 1", "Risk/obstacle 2"],
+    "success_criteria": "How to know this task is complete"
+}}"""
         
         response_text = generate_ai_content(prompt, task_type='task_description')
         if response_text:
@@ -360,13 +347,39 @@ def generate_task_description(title: str, context: Optional[Dict] = None) -> Opt
                 response_text = response_text.split("```")[1].strip()
             
             try:
-                return json.loads(response_text)
+                result = json.loads(response_text)
+                
+                # Build markdown description from structured data
+                md_parts = []
+                if result.get('objective'):
+                    md_parts.append(f"**Objective:** {result['objective']}")
+                
+                if result.get('key_deliverables'):
+                    md_parts.append("\n**Key Deliverables:**")
+                    for item in result['key_deliverables'][:5]:
+                        md_parts.append(f"- {item}")
+                
+                if result.get('action_steps'):
+                    md_parts.append("\n**Action Steps:**")
+                    for item in result['action_steps'][:6]:
+                        md_parts.append(f"- [ ] {item}")
+                
+                if result.get('potential_obstacles'):
+                    md_parts.append("\n**Potential Obstacles:**")
+                    for item in result['potential_obstacles'][:3]:
+                        md_parts.append(f"- {item}")
+                
+                if result.get('success_criteria'):
+                    md_parts.append(f"\n**Success Criteria:** {result['success_criteria']}")
+                
+                result['markdown_description'] = "\n".join(md_parts)
+                return result
+                
             except json.JSONDecodeError:
-                # Fallback: return the markdown as-is for backward compatibility
+                # Fallback: return the text as markdown
                 return {
                     'markdown_description': response_text,
-                    'confidence_score': 0.5,
-                    'parsing_note': 'Returned plain markdown due to JSON parsing error'
+                    'parsing_note': 'Returned plain text due to JSON parsing error'
                 }
         return None
     except Exception as e:

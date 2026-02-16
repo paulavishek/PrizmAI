@@ -76,20 +76,31 @@ function initAITaskDescription() {
                     // Handle both object and string responses from AI
                     let descriptionText;
                     if (typeof data.description === 'object' && data.description !== null) {
-                        // Always construct clean plain text from structured fields
+                        // Construct clean plain text from structured fields
                         let parts = [];
                         if (data.description.objective) {
-                            parts.push(data.description.objective);
+                            parts.push('Objective: ' + data.description.objective);
                         }
-                        if (data.description.checklist && Array.isArray(data.description.checklist)) {
-                            parts.push('\n\nChecklist:');
-                            data.description.checklist.forEach(item => {
-                                const itemText = typeof item === 'object' ? item.item : item;
-                                parts.push('\n• ' + itemText);
+                        if (data.description.key_deliverables && Array.isArray(data.description.key_deliverables)) {
+                            parts.push('\n\nKey Deliverables:');
+                            data.description.key_deliverables.forEach(item => {
+                                parts.push('\n• ' + item);
                             });
                         }
-                        if (data.description.estimated_effort) {
-                            parts.push('\n\nEstimated effort: ' + data.description.estimated_effort);
+                        if (data.description.action_steps && Array.isArray(data.description.action_steps)) {
+                            parts.push('\n\nAction Steps:');
+                            data.description.action_steps.forEach(item => {
+                                parts.push('\n• ' + item);
+                            });
+                        }
+                        if (data.description.potential_obstacles && Array.isArray(data.description.potential_obstacles)) {
+                            parts.push('\n\nPotential Obstacles:');
+                            data.description.potential_obstacles.forEach(item => {
+                                parts.push('\n• ' + item);
+                            });
+                        }
+                        if (data.description.success_criteria) {
+                            parts.push('\n\nSuccess Criteria: ' + data.description.success_criteria);
                         }
                         descriptionText = parts.join('');
                         
