@@ -1272,9 +1272,46 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
-                
-            ai_response = json.loads(response_text)
             
+            # Try to parse JSON, with fallback for malformed responses
+            ai_response = None
+            try:
+                ai_response = json.loads(response_text)
+            except json.JSONDecodeError as json_err:
+                logger.warning(f"JSON parsing failed for deadline prediction: {json_err}. Attempting regex extraction.")
+                # Try to extract key values using regex as fallback
+                import re
+                ai_response = {}
+                
+                # Extract estimated_days_to_complete
+                days_match = re.search(r'"estimated_days_to_complete"\s*:\s*(\d+)', response_text)
+                if days_match:
+                    ai_response['estimated_days_to_complete'] = int(days_match.group(1))
+                else:
+                    # Fallback based on complexity
+                    ai_response['estimated_days_to_complete'] = max(2, complexity_score)
+                
+                # Extract confidence_level
+                conf_match = re.search(r'"confidence_level"\s*:\s*"(high|medium|low)"', response_text)
+                ai_response['confidence_level'] = conf_match.group(1) if conf_match else 'low'
+                
+                # Extract optimistic_days
+                opt_match = re.search(r'"optimistic_days"\s*:\s*(\d+)', response_text)
+                ai_response['optimistic_days'] = int(opt_match.group(1)) if opt_match else max(1, ai_response['estimated_days_to_complete'] - 1)
+                
+                # Extract pessimistic_days
+                pess_match = re.search(r'"pessimistic_days"\s*:\s*(\d+)', response_text)
+                ai_response['pessimistic_days'] = int(pess_match.group(1)) if pess_match else ai_response['estimated_days_to_complete'] + 2
+                
+                # Default reasoning
+                ai_response['reasoning'] = f"Estimated based on task complexity ({complexity_score}/10)"
+                ai_response['risk_factors'] = ["AI response parsing had issues", "Timeline based on complexity estimate"]
+                
+                logger.info(f"Deadline prediction extracted via regex fallback: {ai_response['estimated_days_to_complete']} days")
+            
+            if not ai_response:
+                return None
+                
             # Calculate actual dates from the predicted days
             from django.utils import timezone
             from datetime import timedelta, datetime

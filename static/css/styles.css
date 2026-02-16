@@ -722,6 +722,39 @@ body {
     border-color: #ffc107;
 }
 
+/* Collaboration checkbox styling */
+.task-form .collaboration-checkbox {
+    background-color: #e7f3ff;
+    border: 1px solid #b3d9ff;
+    border-radius: 6px;
+    padding: 15px;
+    margin: 10px 0;
+}
+
+.task-form .collaboration-checkbox .form-check-label {
+    font-weight: 600;
+    color: #004085;
+    font-size: 1rem;
+}
+
+.task-form .collaboration-checkbox .form-check-input {
+    width: 1.5em;
+    height: 1.5em;
+    margin-top: 0.1em;
+    border: 2px solid #007bff;
+    cursor: pointer;
+}
+
+.task-form .collaboration-checkbox .form-check-input:checked {
+    background-color: #007bff;
+    border-color: #007bff;
+}
+
+.task-form .collaboration-checkbox .form-check-input:focus {
+    border-color: #0056b3;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
 /* Dependencies multi-select styling */
 .task-form select[multiple] {
     border: 2px solid #d1d3e2;

@@ -1549,6 +1549,7 @@
         function updateLaborCostPreview() {
             const hoursInput = document.getElementById('id_estimated_hours');
             const rateInput = document.getElementById('id_hourly_rate');
+            const costInput = document.getElementById('id_estimated_cost');
             const preview = document.getElementById('laborCostPreview');
             
             if (hoursInput && rateInput && preview) {
@@ -1559,6 +1560,11 @@
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2
                 });
+                
+                // Auto-fill the Estimated Cost field with the calculated labor cost
+                if (costInput && laborCost > 0) {
+                    costInput.value = laborCost.toFixed(2);
+                }
             }
         }
         

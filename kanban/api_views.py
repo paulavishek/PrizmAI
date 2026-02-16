@@ -40,6 +40,7 @@ from kanban.utils.ai_utils import (
     generate_board_setup_recommendations
 )
 from api.ai_usage_utils import track_ai_request, check_ai_quota
+from kanban.utils.demo_limits import check_ai_generation_limit, record_limitation_hit
 
 @login_required
 @require_http_methods(["POST"])
