@@ -194,14 +194,35 @@ body {
 .kanban-column-tasks {
     padding: 10px;
     flex-grow: 0; /* Don't grow to fill remaining space */
-    overflow-y: visible; /* Default to visible */
-    min-height: var(--column-scroll-min-height); /* Minimum height for empty columns */
+    overflow-y: auto; /* Enable vertical scrolling */
+    overflow-x: hidden; /* Hide horizontal overflow */
+    max-height: calc(100vh - 280px); /* Responsive max height based on viewport */
+    min-height: 150px; /* Minimum height for empty columns */
     /* Smooth transition for height changes */
     transition: height 0.3s ease, border 0.3s ease;
     border-radius: 4px;
     position: relative; /* Ensure proper positioning context */
     width: 100%; /* Full width of parent column */
     box-sizing: border-box; /* Include padding in width calculation */
+}
+
+/* Custom scrollbar styling for kanban columns */
+.kanban-column-tasks::-webkit-scrollbar {
+    width: 8px;
+}
+
+.kanban-column-tasks::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.kanban-column-tasks::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.kanban-column-tasks::-webkit-scrollbar-thumb:hover {
+    background: #555;
 }
 
 /* Force reset all column scrolling styles */
