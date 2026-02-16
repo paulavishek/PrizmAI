@@ -2127,6 +2127,13 @@
             </div>`;
         }
         
+        // Truncation Warning (if response was recovered from truncation)
+        if (summary.truncation_note) {
+            html += `<div class="alert alert-warning small mb-3">
+                <i class="fas fa-exclamation-triangle me-2"></i>${escapeHtml(summary.truncation_note)}
+            </div>`;
+        }
+        
         html += '</div>';
         return html;
     }

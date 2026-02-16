@@ -3110,10 +3110,45 @@ def summarize_task_details(task_data: Dict) -> Optional[Dict]:
         # Comments count
         comments_count = task_data.get('comments_count', 0)
         
+        # Calculate expected confidence score based on available data
+        expected_confidence = 0.50  # Baseline for any task with title
+        if description and description != 'No description provided':
+            expected_confidence += 0.08
+        if due_date and due_date != 'No due date set':
+            expected_confidence += 0.08
+        if assigned_to and assigned_to != 'Unassigned':
+            expected_confidence += 0.08
+        if risk_level:
+            expected_confidence += 0.10
+        if priority and priority.lower() != 'medium':
+            expected_confidence += 0.05
+        if dependencies or dependent_tasks:
+            expected_confidence += 0.06
+        if stakeholders:
+            expected_confidence += 0.05
+        if required_skills or skill_match_score or workload_impact:
+            expected_confidence += 0.05
+        if complexity_score:
+            expected_confidence += 0.03
+        if labels:
+            expected_confidence += 0.02
+        expected_confidence = min(expected_confidence, 0.95)  # Cap at 95%
+        
         # Build comprehensive prompt
         prompt = f"""
-        You are an expert project manager analyzing a task in detail. Provide a comprehensive, insightful summary 
-        that addresses ALL important aspects of this task with full explainability for every insight and recommendation.
+        You are an expert project manager analyzing a task. Provide a COMPACT, actionable summary 
+        highlighting ONLY the most critical insights and recommendations. Be concise - use brief bullet points.
+
+        CRITICAL REQUIREMENTS:
+        - Each section should have 2-4 bullet points maximum with key highlights only
+        - Executive summary: 2 sentences maximum
+        - Status reasoning: 2-3 sentences maximum  
+        - Each health factor, risk, action item: 1-2 lines maximum
+        - Avoid lengthy explanations - focus on actionable insights
+        - Skip sections with no significant insights (return null for those)
+
+        CONFIDENCE SCORE: Based on the available data, set confidence_score to approximately {expected_confidence:.2f}
+        (This reflects data completeness - the analysis quality is good regardless of what data is available)
 
         ## TASK OVERVIEW:
         **Title:** {title}
@@ -3214,83 +3249,77 @@ def summarize_task_details(task_data: Dict) -> Optional[Dict]:
         
         prompt += """
 
-        Format your response as JSON WITH FULL EXPLAINABILITY:
+        Format your response as COMPACT JSON (key highlights only, not exhaustive):
         {
-            "executive_summary": "2-3 sentence high-level summary of task status and key concerns",
+            "executive_summary": "1-2 sentence critical status and top concern (max 50 words)",
             "confidence_score": 0.XX,
             "analysis_completeness": {
                 "data_quality": "high|medium|low",
-                "missing_information": ["Key info that would improve analysis"],
-                "analysis_confidence": "high|medium|low"
+                "missing_information": ["1-3 key missing items only"]
             },
             "task_health": {
                 "overall_status": "healthy|at_risk|critical",
-                "status_reasoning": "Why this health status was assigned",
+                "status_reasoning": "2-3 sentences max explaining the status",
                 "health_factors": [
                     {
-                        "factor": "Factor name",
+                        "factor": "Factor name (max 5 words)",
                         "status": "positive|neutral|negative",
-                        "impact": "How this affects task health",
-                        "evidence": "Supporting data"
+                        "impact": "One line impact (max 15 words)",
+                        "evidence": "Brief supporting data"
                     }
                 ]
             },
             "risk_analysis": {
-                "risk_assessment_validity": "The current risk assessment is appropriate|needs review|underestimated|overestimated",
-                "validity_reasoning": "Why risk assessment accuracy was rated this way",
+                "risk_assessment_validity": "appropriate|needs review|underestimated|overestimated",
+                "validity_reasoning": "One sentence (max 25 words)",
                 "top_risks": [
                     {
-                        "risk": "Risk description",
+                        "risk": "Risk in max 10 words",
                         "likelihood": "high|medium|low",
                         "impact": "high|medium|low",
-                        "current_mitigation": "What's in place",
-                        "recommended_action": "Additional action needed"
+                        "recommended_action": "One actionable step (max 20 words)"
                     }
                 ],
-                "blockers_impact": "Assessment of how blockers affect this task"
+                "blockers_impact": "One sentence on blocker impact (max 25 words)"
             },
             "resource_assessment": {
                 "assignee_fit": "good|adequate|poor",
-                "fit_reasoning": "Why assignee is/isn't well-suited",
+                "fit_reasoning": "One sentence (max 20 words)",
                 "capacity_status": "available|stretched|overloaded",
-                "skill_gaps": ["Skills needed but potentially missing"],
-                "collaboration_needs": "Assessment of team coordination requirements"
+                "skill_gaps": ["Max 3-5 key skill gaps only"],
+                "collaboration_needs": "One sentence (max 20 words)"
             },
             "stakeholder_insights": {
                 "engagement_level": "engaged|neutral|disengaged",
                 "satisfaction_trend": "improving|stable|declining|unknown",
-                "key_concerns": ["Stakeholder concerns identified"],
-                "communication_recommendations": ["How to better engage stakeholders"]
+                "key_concerns": ["Max 2-3 top concerns only"],
+                "communication_recommendations": ["Max 2-3 actionable tips"]
             },
             "timeline_assessment": {
                 "deadline_feasibility": "achievable|at_risk|unlikely",
-                "feasibility_reasoning": "Why deadline is/isn't achievable",
-                "dependency_impact": "How dependencies affect timeline",
-                "suggested_adjustments": ["Timeline optimization suggestions"]
+                "feasibility_reasoning": "One sentence (max 25 words)",
+                "dependency_impact": "One sentence (max 20 words)",
+                "suggested_adjustments": ["Max 2-4 key timeline suggestions"]
             },
             "lean_efficiency": {
                 "value_classification_appropriate": true,
-                "classification_reasoning": "Why classification is/isn't accurate",
-                "waste_indicators": ["Waste patterns observed"],
-                "efficiency_suggestions": ["How to improve value delivery"]
+                "classification_reasoning": "One sentence (max 25 words)",
+                "waste_indicators": ["Max 2-4 waste indicators"],
+                "efficiency_suggestions": ["Max 2-4 improvement tips"]
             },
             "prioritized_actions": [
                 {
-                    "action": "Specific action to take",
+                    "action": "One specific action (max 15 words)",
                     "owner": "Who should do this",
                     "urgency": "immediate|this_week|this_month",
-                    "reasoning": "Why this action is needed",
-                    "expected_outcome": "What this will achieve"
+                    "reasoning": "Brief justification (max 15 words)"
                 }
             ],
-            "assumptions": [
-                "Key assumption made in this analysis"
-            ],
-            "limitations": [
-                "Limitation of this analysis"
-            ],
-            "markdown_summary": "**Executive Summary**\\n[summary]\\n\\n**Key Actions**\\n- Action 1\\n- Action 2"
+            "assumptions": ["Max 2-3 key assumptions"],
+            "limitations": ["Max 2-3 key limitations"]
         }
+
+        IMPORTANT: Complete the ENTIRE JSON structure. Do not truncate. If a section has no insights, use null or empty array.
         """
         
         response_text = generate_ai_content(prompt, task_type='task_summary')
@@ -3301,6 +3330,23 @@ def summarize_task_details(task_data: Dict) -> Optional[Dict]:
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
             
+            # Check for truncated response (incomplete JSON)
+            json_text = response_text.strip()
+            open_braces = json_text.count('{') - json_text.count('}')
+            open_brackets = json_text.count('[') - json_text.count(']')
+            is_truncated = open_braces > 0 or open_brackets > 0 or not json_text.endswith('}')
+            
+            if is_truncated:
+                logger.warning(f"Detected truncated AI response. Attempting to repair JSON. Open braces: {open_braces}, Open brackets: {open_brackets}")
+                # Try to repair truncated JSON by closing open structures
+                while open_brackets > 0:
+                    json_text += ']'
+                    open_brackets -= 1
+                while open_braces > 0:
+                    json_text += '}'
+                    open_braces -= 1
+                response_text = json_text
+            
             try:
                 parsed_json = json.loads(response_text)
                 # Validate that we have at least the key fields
@@ -3310,13 +3356,22 @@ def summarize_task_details(task_data: Dict) -> Optional[Dict]:
                     if 'markdown_summary' not in parsed_json:
                         parsed_json['markdown_summary'] = response_text
                         parsed_json['parsing_note'] = 'AI response was parsed but missing expected structure'
+                
+                # Override AI's confidence score with our calculated one based on data completeness
+                # This ensures consistent, data-driven confidence regardless of AI variations
+                parsed_json['confidence_score'] = expected_confidence
+                
+                # Add truncation note if applicable
+                if is_truncated:
+                    parsed_json['truncation_note'] = 'Response was truncated but has been recovered. Some sections may be incomplete.'
+                
                 return parsed_json
             except json.JSONDecodeError as e:
                 logger.warning(f"JSON parsing error in summarize_task_details: {str(e)}. Response length: {len(response_text)}")
                 # Fallback to plain text for backward compatibility
                 return {
                     'markdown_summary': response_text,
-                    'confidence_score': 0.5,
+                    'confidence_score': expected_confidence,
                     'parsing_note': 'Returned plain text summary due to JSON parsing error'
                 }
         return None
