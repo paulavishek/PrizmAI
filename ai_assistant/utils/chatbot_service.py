@@ -571,10 +571,22 @@ class TaskFlowChatbotService:
     def _is_dependency_query(self, prompt):
         """Detect if query is about task dependencies"""
         dependency_keywords = [
-            'depend', 'blocked', 'blocker', 'related', 'subtask',
-            'child task', 'parent task', 'chain', 'prerequisite'
+            'depend', 'blocked', 'blocker', 'blocking', 'related', 'subtask',
+            'child task', 'parent task', 'chain', 'prerequisite',
+            'waiting on', 'waiting for', 'holds up', 'holding up'
         ]
         return any(kw in prompt.lower() for kw in dependency_keywords)
+    
+    def _is_deadline_projection_query(self, prompt):
+        """Detect if query is asking about completing tasks by a deadline"""
+        projection_keywords = [
+            'can we complete', 'will we finish', 'can we finish',
+            'by the end of', 'by end of', 'by this month', 'by next week',
+            'by friday', 'by monday', 'on track to', 'meet the deadline',
+            'complete by', 'finish by', 'done by', 'deliverable by',
+            'feasible', 'achievable', 'realistic'
+        ]
+        return any(kw in prompt.lower() for kw in projection_keywords)
     
     def _is_organization_query(self, prompt):
         """Detect if query is about organizations"""
@@ -2675,10 +2687,137 @@ class TaskFlowChatbotService:
                         child_count = task.subtasks.count() if hasattr(task, 'subtasks') else 0
                         context += f"• {task.title} ({child_count} subtasks)\n"
             
-            return context if context != "**Task Dependencies & Relationships:**\n\n" else None
+            # If no dependencies found anywhere, return explicit message
+            if context == "**Task Dependencies & Relationships:**\n\n":
+                return "**Task Dependencies & Relationships:**\n\nNo task dependencies are currently configured in your boards. Tasks are independent and can be worked on in any order.\n\nTo set up dependencies, edit a task and set its 'Parent Task' field to create blocking relationships."
+            
+            return context
         
         except Exception as e:
             logger.error(f"Error getting dependency context: {e}", exc_info=True)
+            return None
+    
+    def _get_deadline_projection_context(self, prompt):
+        """
+        Get deadline feasibility analysis for queries like "Can we complete X by Y date?"
+        Analyzes high-priority tasks, their due dates, and workload capacity
+        """
+        try:
+            if not self._is_deadline_projection_query(prompt):
+                return None
+            
+            from django.utils import timezone
+            from datetime import timedelta
+            import calendar
+            
+            user_boards = self._get_user_boards()
+            if not user_boards.exists():
+                return None
+            
+            today = timezone.now().date()
+            
+            # Determine target date from prompt
+            prompt_lower = prompt.lower()
+            
+            # End of this month
+            if 'end of this month' in prompt_lower or 'by this month' in prompt_lower or 'end of the month' in prompt_lower:
+                last_day = calendar.monthrange(today.year, today.month)[1]
+                target_date = today.replace(day=last_day)
+                target_label = f"end of {today.strftime('%B %Y')}"
+            # End of next month
+            elif 'end of next month' in prompt_lower or 'by next month' in prompt_lower:
+                next_month = today.month + 1 if today.month < 12 else 1
+                next_year = today.year if today.month < 12 else today.year + 1
+                last_day = calendar.monthrange(next_year, next_month)[1]
+                target_date = today.replace(year=next_year, month=next_month, day=last_day)
+                target_label = f"end of {target_date.strftime('%B %Y')}"
+            # Next week
+            elif 'next week' in prompt_lower or 'by friday' in prompt_lower:
+                days_until_friday = (4 - today.weekday()) % 7
+                if days_until_friday == 0:
+                    days_until_friday = 7
+                target_date = today + timedelta(days=days_until_friday)
+                target_label = f"{target_date.strftime('%A, %B %d')}"
+            else:
+                # Default to end of month
+                last_day = calendar.monthrange(today.year, today.month)[1]
+                target_date = today.replace(day=last_day)
+                target_label = f"end of {today.strftime('%B %Y')}"
+            
+            days_remaining = (target_date - today).days
+            
+            # Get high-priority incomplete tasks
+            high_priority_tasks = Task.objects.filter(
+                column__board__in=user_boards,
+                priority__in=['high', 'urgent']
+            ).exclude(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+            ).select_related('assigned_to', 'column', 'column__board').order_by('due_date', '-priority')
+            
+            # Split by due date relative to target
+            due_before_target = []
+            due_after_target = []
+            no_due_date = []
+            overdue = []
+            
+            for task in high_priority_tasks:
+                if task.due_date:
+                    task_due = task.due_date.date() if hasattr(task.due_date, 'date') else task.due_date
+                    if task_due < today:
+                        overdue.append(task)
+                    elif task_due <= target_date:
+                        due_before_target.append(task)
+                    else:
+                        due_after_target.append(task)
+                else:
+                    no_due_date.append(task)
+            
+            total_high_priority = high_priority_tasks.count()
+            
+            context = f"**Deadline Projection Analysis:**\n\n"
+            context += f"**Target:** {target_label} ({days_remaining} days remaining)\n"
+            context += f"**Total High-Priority Tasks:** {total_high_priority}\n\n"
+            
+            # Risk assessment
+            risk_level = "LOW"
+            if overdue:
+                risk_level = "HIGH"
+            elif len(due_before_target) > days_remaining * 2:  # More than 2 tasks per day
+                risk_level = "MEDIUM"
+            
+            context += f"**Feasibility Assessment:** {risk_level} RISK\n\n"
+            
+            if overdue:
+                context += f"**⚠️ OVERDUE ({len(overdue)} tasks):**\n"
+                for task in overdue[:5]:
+                    task_due = task.due_date.date() if hasattr(task.due_date, 'date') else task.due_date
+                    days_late = (today - task_due).days
+                    context += f"  • {task.title} - {days_late} days overdue (Assigned: {task.assigned_to.username if task.assigned_to else 'Unassigned'})\n"
+                context += "\n"
+            
+            if due_before_target:
+                context += f"**Due Before Target ({len(due_before_target)} tasks):**\n"
+                for task in due_before_target[:8]:
+                    task_due = task.due_date.date() if hasattr(task.due_date, 'date') else task.due_date
+                    context += f"  • {task.title} - Due {task_due.strftime('%b %d')} ({task.column.name}) - {task.assigned_to.username if task.assigned_to else 'Unassigned'}\n"
+                context += "\n"
+            
+            if no_due_date:
+                context += f"**No Due Date Set ({len(no_due_date)} high-priority tasks):**\n"
+                for task in no_due_date[:5]:
+                    context += f"  • {task.title} ({task.column.name}) - {task.assigned_to.username if task.assigned_to else 'Unassigned'}\n"
+                context += "\n"
+            
+            # Workload summary
+            context += f"**Workload Summary:**\n"
+            context += f"  • Tasks per day needed: {len(due_before_target) / max(days_remaining, 1):.1f}\n"
+            context += f"  • Overdue tasks to clear: {len(overdue)}\n"
+            context += f"  • Tasks without deadlines: {len(no_due_date)}\n"
+            
+            return context
+            
+        except Exception as e:
+            logger.error(f"Error getting deadline projection context: {e}", exc_info=True)
             return None
     
     def generate_system_prompt(self):
@@ -2811,6 +2950,7 @@ Format responses clearly with:
             is_overdue_query = self._is_overdue_query(prompt)
             is_wiki_query = self._is_wiki_query(prompt)
             is_meeting_query = self._is_meeting_query(prompt)
+            is_deadline_projection_query = self._is_deadline_projection_query(prompt)
             
             # Build context in priority order
             context_parts = []
@@ -2893,7 +3033,9 @@ Format responses clearly with:
                     logger.debug("Added mitigation context")
             
             # 9. Critical tasks context
-            if (is_critical_task_query or is_risk_query) and not is_mitigation_query:
+            # Include critical tasks context when query is about critical/risk tasks
+            # Also include it when mitigation is asked ALONG WITH critical/risk (user wants both)
+            if is_critical_task_query or is_risk_query:
                 critical_context = self._get_critical_tasks_context(prompt)
                 if critical_context:
                     context_parts.append(critical_context)
@@ -2906,8 +3048,8 @@ Format responses clearly with:
                     context_parts.append(aggregate_context)
                     logger.debug("Added aggregate context")
             
-            # 11. Risk context
-            if is_risk_query and not is_critical_task_query and not is_mitigation_query:  # Avoid duplication
+            # 11. Risk context (only if not already covered by critical tasks context)
+            if is_risk_query and not is_critical_task_query:
                 risk_context = self._get_risk_context(prompt)
                 if risk_context:
                     context_parts.append(risk_context)
@@ -2940,6 +3082,13 @@ Format responses clearly with:
                 if dependency_context:
                     context_parts.append(dependency_context)
                     logger.debug("Added dependency context")
+            
+            # 15b. Deadline projection context (can we complete by X date?)
+            if is_deadline_projection_query:
+                deadline_context = self._get_deadline_projection_context(prompt)
+                if deadline_context:
+                    context_parts.append(deadline_context)
+                    logger.debug("Added deadline projection context")
             
             # 16. General project context (if not already covered by specialized contexts)
             if is_project_query and not context_parts:
@@ -3035,6 +3184,7 @@ Format responses clearly with:
                     'is_task_distribution_query': is_task_distribution_query,
                     'is_progress_query': is_progress_query,
                     'is_overdue_query': is_overdue_query,
+                    'is_deadline_projection_query': is_deadline_projection_query,
                     'context_provided': bool(context_parts)
                 }
             }
