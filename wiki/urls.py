@@ -29,6 +29,8 @@ urlpatterns = [
          name='api_create_tasks_from_analysis'),
     path('api/meeting-analysis/<int:analysis_id>/mark-reviewed/', api_views.mark_analysis_reviewed,
          name='api_mark_analysis_reviewed'),
+    path('api/extract-text-from-file/', api_views.extract_text_from_uploaded_file,
+         name='api_extract_text_from_file'),
     path('api/boards/', api_views.get_boards_for_organization,
          name='api_get_boards'),
     

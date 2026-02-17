@@ -289,8 +289,7 @@ class WikiPageDeleteView(WikiBaseView, DeleteView):
         return WikiPage.objects.filter(organization=org)
     
     def get_success_url(self):
-        org = self.get_organization()
-        return reverse_lazy('wiki:category_list', kwargs={'org_id': org.id})
+        return reverse_lazy('wiki:category_list')
 
 
 class WikiCategoryCreateView(WikiBaseView, CreateView):
@@ -307,8 +306,7 @@ class WikiCategoryCreateView(WikiBaseView, CreateView):
         return response
     
     def get_success_url(self):
-        org = self.get_organization()
-        return reverse_lazy('wiki:category_list', kwargs={'org_id': org.id})
+        return reverse_lazy('wiki:category_list')
 
 
 class WikiCategoryUpdateView(WikiBaseView, UpdateView):
@@ -328,8 +326,7 @@ class WikiCategoryUpdateView(WikiBaseView, UpdateView):
         return response
     
     def get_success_url(self):
-        org = self.get_organization()
-        return reverse_lazy('wiki:category_list', kwargs={'org_id': org.id})
+        return reverse_lazy('wiki:category_list')
 
 
 class WikiCategoryDeleteView(WikiBaseView, DeleteView):
@@ -348,8 +345,7 @@ class WikiCategoryDeleteView(WikiBaseView, DeleteView):
         return super().delete(request, *args, **kwargs)
     
     def get_success_url(self):
-        org = self.get_organization()
-        return reverse_lazy('wiki:category_list', kwargs={'org_id': org.id})
+        return reverse_lazy('wiki:category_list')
 
 
 class WikiLinkCreateView(WikiBaseView, CreateView):

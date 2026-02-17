@@ -279,9 +279,9 @@ Sam: Yes, I can start that Monday. Should take about 5 days.
                             <!-- Upload File Tab -->
                             <div class="tab-pane fade" id="file-content" role="tabpanel">
                                 <div class="mb-3">
-                                    <label for="importFile" class="form-label">Upload a text file (.txt, .md, .csv):</label>
-                                    <input class="form-control" type="file" id="importFile" accept=".txt,.md,.csv,.text">
-                                    <small class="text-muted">Supported formats: Plain text (.txt), Markdown (.md), CSV (.csv)</small>
+                                    <label for="importFile" class="form-label">Upload a document file:</label>
+                                    <input class="form-control" type="file" id="importFile" accept=".txt,.md,.csv,.text,.doc,.docx,.pdf">
+                                    <small class="text-muted">Supported formats: Plain text (.txt), Markdown (.md), CSV (.csv), Word (.doc, .docx), PDF (.pdf)</small>
                                 </div>
                                 <div id="filePreview" class="border rounded p-3 bg-light d-none" style="max-height: 300px; overflow-y: auto;">
                                     <pre id="filePreviewContent" class="mb-0" style="white-space: pre-wrap;"></pre>
@@ -415,12 +415,45 @@ document.addEventListener('DOMContentLoaded', function() {
         importFile.addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    filePreviewContent.textContent = event.target.result;
+                const fileName = file.name.toLowerCase();
+                
+                // Check if it's a Word or PDF file that needs backend processing
+                if (fileName.endsWith('.docx') || fileName.endsWith('.doc') || fileName.endsWith('.pdf')) {
+                    // Show processing message
+                    filePreviewContent.textContent = 'Processing ' + file.name + '... Please wait.';
                     filePreview.classList.remove('d-none');
-                };
-                reader.readAsText(file);
+                    
+                    // Send file to backend for text extraction
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    fetch('/wiki/api/extract-text-from-file/', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': '{{ csrf_token }}'
+                        },
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            filePreviewContent.textContent = data.extracted_text;
+                        } else {
+                            filePreviewContent.textContent = 'Error: ' + (data.error || 'Failed to extract text from file');
+                        }
+                    })
+                    .catch(error => {
+                        filePreviewContent.textContent = 'Error processing file: ' + error.message;
+                    });
+                } else {
+                    // Plain text file - read directly
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        filePreviewContent.textContent = event.target.result;
+                        filePreview.classList.remove('d-none');
+                    };
+                    reader.readAsText(file);
+                }
             }
         });
     }

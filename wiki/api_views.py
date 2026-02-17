@@ -692,3 +692,72 @@ def import_transcript_to_wiki_page(request, wiki_page_id):
     except Exception as e:
         logger.error(f"Error in import_transcript_to_wiki_page: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def extract_text_from_uploaded_file(request):
+    """
+    Extract text from uploaded Word (.docx, .doc) or PDF files
+    Used by wiki import functionality
+    """
+    try:
+        if 'file' not in request.FILES:
+            return JsonResponse({'error': 'No file uploaded'}, status=400)
+        
+        uploaded_file = request.FILES['file']
+        
+        # Validate file size (10MB max)
+        if uploaded_file.size > 10 * 1024 * 1024:
+            return JsonResponse({'error': 'File size exceeds 10MB limit'}, status=400)
+        
+        # Get file extension
+        filename = uploaded_file.name.lower()
+        if filename.endswith('.docx'):
+            file_type = 'docx'
+        elif filename.endswith('.doc'):
+            file_type = 'docx'  # Try to parse .doc as .docx
+        elif filename.endswith('.pdf'):
+            file_type = 'pdf'
+        elif filename.endswith('.txt'):
+            file_type = 'txt'
+        else:
+            return JsonResponse({
+                'error': 'Unsupported file type. Please upload .txt, .docx, .doc, or .pdf files.'
+            }, status=400)
+        
+        # Save file temporarily
+        import tempfile
+        import os
+        from .ai_utils import extract_text_from_file
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp_file:
+            for chunk in uploaded_file.chunks():
+                tmp_file.write(chunk)
+            tmp_file_path = tmp_file.name
+        
+        try:
+            # Extract text
+            extracted_text = extract_text_from_file(tmp_file_path, file_type)
+            
+            if not extracted_text:
+                return JsonResponse({
+                    'error': 'Failed to extract text from file. The file may be corrupted or empty.'
+                }, status=400)
+            
+            return JsonResponse({
+                'success': True,
+                'extracted_text': extracted_text,
+                'filename': uploaded_file.name,
+                'file_type': file_type
+            })
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(tmp_file_path)
+            except:
+                pass
+    
+    except Exception as e:
+        logger.error(f"Error extracting text from uploaded file: {str(e)}")
+        return JsonResponse({'error': f'Error processing file: {str(e)}'}, status=500)
