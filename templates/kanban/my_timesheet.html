@@ -23,6 +23,21 @@
         </div>
     </div>
 
+    {% if showing_demo_data %}
+    <!-- Demo Data Notice -->
+    <div class="alert alert-info alert-dismissible fade show mb-4" role="alert">
+        <div class="d-flex align-items-center">
+            <i class="fas fa-lightbulb fa-lg me-3"></i>
+            <div>
+                <strong>Exploring Timesheets!</strong>
+                You're viewing sample timesheet data from <strong>{{ demo_user.get_full_name|default:demo_user.username }}</strong>.
+                Start logging your own time to build your personal timesheet!
+            </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endif %}
+
     <!-- Week Navigation -->
     <div class="card shadow mb-4">
         <div class="card-body">

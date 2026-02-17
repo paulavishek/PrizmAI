@@ -6,6 +6,7 @@ import logging
 import time
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponseForbidden
 from django.contrib import messages
@@ -789,10 +790,12 @@ def budget_api_metrics(request, board_id):
 @login_required
 def my_timesheet(request, board_id=None):
     """
-    User's personal timesheet view with weekly grid for time entry
+    User's personal timesheet view with weekly grid for time entry.
+    MVP Mode: Shows demo data when user has no time entries of their own.
     """
     from datetime import datetime, timedelta
     from django.db.models import Sum
+    from accounts.models import Organization
     
     # Get week parameter or default to current week
     week_offset = int(request.GET.get('week', 0))
@@ -801,27 +804,55 @@ def my_timesheet(request, board_id=None):
     start_of_week = today - timedelta(days=today.weekday()) + timedelta(weeks=week_offset)
     end_of_week = start_of_week + timedelta(days=6)
     
-    # Get user's tasks
+    # MVP Mode: Check if user has any time entries, if not show demo data
+    user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
+    showing_demo_data = False
+    display_user = request.user
+    
+    if not user_has_entries:
+        # Try to get a demo user with time entries
+        demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+        for demo_username in demo_usernames:
+            demo_user = User.objects.filter(username=demo_username).first()
+            if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
+                display_user = demo_user
+                showing_demo_data = True
+                break
+    
+    # Get user's tasks (or demo user's tasks in MVP mode)
     if board_id:
         board = get_object_or_404(Board, id=board_id)
         tasks = Task.objects.filter(
             column__board=board,
-            assigned_to=request.user
+            assigned_to=display_user
         ).select_related('column', 'column__board')
         boards = [board]
     else:
-        # All boards user has access to
-        boards = Board.objects.filter(
-            models.Q(created_by=request.user) | models.Q(members=request.user)
-        ).distinct()
+        # All boards user has access to (include demo boards in MVP mode)
+        if showing_demo_data:
+            demo_org = Organization.objects.filter(is_demo=True).first()
+            if demo_org:
+                boards = Board.objects.filter(
+                    models.Q(created_by=request.user) | 
+                    models.Q(members=request.user) |
+                    models.Q(organization=demo_org)
+                ).distinct()
+            else:
+                boards = Board.objects.filter(
+                    models.Q(created_by=request.user) | models.Q(members=request.user)
+                ).distinct()
+        else:
+            boards = Board.objects.filter(
+                models.Q(created_by=request.user) | models.Q(members=request.user)
+            ).distinct()
         tasks = Task.objects.filter(
             column__board__in=boards,
-            assigned_to=request.user
+            assigned_to=display_user
         ).select_related('column', 'column__board')
     
-    # Get time entries for the week
+    # Get time entries for the week (for display_user)
     entries = TimeEntry.objects.filter(
-        user=request.user,
+        user=display_user,
         work_date__gte=start_of_week,
         work_date__lte=end_of_week
     ).select_related('task', 'task__column', 'task__column__board')
@@ -897,6 +928,9 @@ def my_timesheet(request, board_id=None):
         'prev_week': prev_week,
         'next_week': next_week,
         'week_offset': week_offset,
+        # MVP Mode: demo data indicator
+        'showing_demo_data': showing_demo_data,
+        'demo_user': display_user if showing_demo_data else None,
     }
     
     return render(request, 'kanban/my_timesheet.html', context)
@@ -905,23 +939,54 @@ def my_timesheet(request, board_id=None):
 @login_required
 def time_tracking_dashboard(request, board_id=None):
     """
-    Time tracking dashboard with stats, recent entries, and quick actions
+    Time tracking dashboard with stats, recent entries, and quick actions.
+    MVP Mode: Shows demo data when user has no time entries of their own.
     """
     from datetime import timedelta
     from django.db.models import Sum, Count, Avg
+    from accounts.models import Organization
+    
+    # MVP Mode: Check if user has any time entries, if not show demo data
+    user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
+    showing_demo_data = False
+    display_user = request.user
+    
+    if not user_has_entries:
+        # Try to get a demo user with time entries
+        demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+        for demo_username in demo_usernames:
+            demo_user = User.objects.filter(username=demo_username).first()
+            if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
+                display_user = demo_user
+                showing_demo_data = True
+                break
     
     # Filter by board if specified
     if board_id:
         board = get_object_or_404(Board, id=board_id)
         boards = [board]
     else:
-        boards = Board.objects.filter(
-            models.Q(created_by=request.user) | models.Q(members=request.user)
-        ).distinct()
+        # MVP Mode: Include demo boards when showing demo data
+        if showing_demo_data:
+            demo_org = Organization.objects.filter(is_demo=True).first()
+            if demo_org:
+                boards = Board.objects.filter(
+                    models.Q(created_by=request.user) | 
+                    models.Q(members=request.user) |
+                    models.Q(organization=demo_org)
+                ).distinct()
+            else:
+                boards = Board.objects.filter(
+                    models.Q(created_by=request.user) | models.Q(members=request.user)
+                ).distinct()
+        else:
+            boards = Board.objects.filter(
+                models.Q(created_by=request.user) | models.Q(members=request.user)
+            ).distinct()
         board = None
     
-    # Get time entries
-    entries = TimeEntry.objects.filter(user=request.user)
+    # Get time entries for display_user (either request.user or demo user)
+    entries = TimeEntry.objects.filter(user=display_user)
     if board_id:
         entries = entries.filter(task__column__board=board)
     
@@ -958,9 +1023,9 @@ def time_tracking_dashboard(request, board_id=None):
         'task', 'task__column', 'task__column__board'
     ).order_by('-work_date', '-created_at')[:10]
     
-    # Tasks with time logged
+    # Tasks with time logged (use display_user for MVP mode)
     tasks_with_time = Task.objects.filter(
-        time_entries__user=request.user
+        time_entries__user=display_user
     )
     if board_id:
         tasks_with_time = tasks_with_time.filter(column__board=board)
@@ -1034,6 +1099,9 @@ def time_tracking_dashboard(request, board_id=None):
         'today_date': today.isoformat(),
         'week_start_date': week_start.isoformat(),
         'month_start_date': month_start.isoformat(),
+        # MVP Mode: demo data indicator
+        'showing_demo_data': showing_demo_data,
+        'demo_user': display_user if showing_demo_data else None,
     }
     
     return render(request, 'kanban/time_tracking_dashboard.html', context)
