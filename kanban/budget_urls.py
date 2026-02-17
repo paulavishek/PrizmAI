@@ -117,4 +117,13 @@ urlpatterns = [
     path('api/search-tasks/', 
          budget_views.search_tasks_for_time_entry, 
          name='search_tasks_for_time_entry'),
+    
+    # AI-powered time entry validation
+    path('api/time-entry/validate/', 
+         budget_views.validate_time_entry_api, 
+         name='validate_time_entry_api'),
+    
+    path('api/time-entry/create-split/', 
+         budget_views.create_split_time_entries, 
+         name='create_split_time_entries'),
 ]

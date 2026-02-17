@@ -23,6 +23,10 @@ class TimeTrackingAIService:
     CRITICAL_HOURS_THRESHOLD = Decimal('14.00')  # Critical threshold (exceeds safe limits)
     MISSING_TIME_THRESHOLD_DAYS = 3  # Days without logging before alert
     
+    # Smart split thresholds
+    RECOMMENDED_DAILY_MAX = Decimal('8.00')  # Recommended max hours per day
+    SPLIT_TRIGGER_THRESHOLD = Decimal('10.00')  # Trigger split suggestion when this is exceeded
+    
     def __init__(self, user: User, board=None):
         """
         Initialize with user and optional board
@@ -33,6 +37,222 @@ class TimeTrackingAIService:
         """
         self.user = user
         self.board = board
+    
+    def validate_time_entry(self, task, hours: Decimal, work_date: date) -> Dict:
+        """
+        Validate a proposed time entry and suggest splits if excessive.
+        This is the PROACTIVE validation called before saving.
+        
+        Args:
+            task: Task instance for the time entry
+            hours: Proposed hours to log
+            work_date: Date for the entry
+            
+        Returns:
+            Dict with validation result and AI suggestions
+        """
+        from kanban.budget_models import TimeEntry
+        from kanban.models import Task
+        
+        result = {
+            'valid': True,
+            'needs_attention': False,
+            'severity': 'ok',
+            'message': '',
+            'suggestion': None,
+            'split_entries': [],
+            'task_suggestions': []
+        }
+        
+        # Get existing hours for that day
+        existing_hours = TimeEntry.objects.filter(
+            user=self.user,
+            work_date=work_date
+        ).aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
+        
+        proposed_total = existing_hours + hours
+        
+        # Check if this would result in an excessive day
+        if proposed_total > self.SPLIT_TRIGGER_THRESHOLD:
+            result['needs_attention'] = True
+            result['severity'] = 'warning' if proposed_total <= self.CRITICAL_HOURS_THRESHOLD else 'critical'
+            
+            # Generate AI split suggestion
+            split_suggestion = self._generate_split_suggestion(
+                task=task,
+                hours=hours,
+                work_date=work_date,
+                existing_hours=existing_hours
+            )
+            
+            result['message'] = (
+                f"You're logging {hours}h which would bring your total for "
+                f"{work_date.strftime('%b %d')} to {proposed_total}h. "
+                f"That's {'extremely ' if result['severity'] == 'critical' else ''}high for a single day."
+            )
+            result['suggestion'] = split_suggestion
+            result['split_entries'] = split_suggestion.get('entries', [])
+            
+            # Get task suggestions for splitting
+            result['task_suggestions'] = self._get_split_task_suggestions(task, work_date, hours)
+        
+        elif proposed_total > self.HIGH_HOURS_THRESHOLD:
+            # Soft warning - high but not excessive
+            result['needs_attention'] = True
+            result['severity'] = 'info'
+            result['message'] = (
+                f"After this entry, you'll have logged {proposed_total}h on "
+                f"{work_date.strftime('%b %d')}. That's a long day - everything ok?"
+            )
+        
+        return result
+    
+    def _generate_split_suggestion(self, task, hours: Decimal, work_date: date, 
+                                   existing_hours: Decimal) -> Dict:
+        """
+        Generate AI-powered suggestion to split hours across multiple days.
+        
+        Returns:
+            Dict with splitting strategy and entry suggestions
+        """
+        entries = []
+        remaining_hours = hours
+        current_date = work_date
+        
+        # Calculate how much capacity is left for the original day
+        original_day_capacity = max(Decimal('0'), self.RECOMMENDED_DAILY_MAX - existing_hours)
+        
+        # First entry: fill up the original day to recommended max
+        if original_day_capacity > Decimal('0'):
+            first_entry_hours = min(remaining_hours, original_day_capacity)
+            entries.append({
+                'date': current_date.isoformat(),
+                'date_display': current_date.strftime('%a, %b %d'),
+                'hours': float(first_entry_hours),
+                'task_id': task.id,
+                'task_title': task.title[:50],
+                'description': f"Work on {task.title[:30]}",
+                'is_original_day': True
+            })
+            remaining_hours -= first_entry_hours
+        
+        # Distribute remaining hours across following days
+        days_added = 0
+        while remaining_hours > Decimal('0') and days_added < 7:
+            days_added += 1
+            current_date = work_date + timedelta(days=days_added)
+            
+            # Skip weekends
+            while current_date.weekday() >= 5:
+                days_added += 1
+                current_date = work_date + timedelta(days=days_added)
+            
+            # Allocate hours for this day (max recommended daily hours)
+            day_hours = min(remaining_hours, self.RECOMMENDED_DAILY_MAX)
+            
+            entries.append({
+                'date': current_date.isoformat(),
+                'date_display': current_date.strftime('%a, %b %d'),
+                'hours': float(day_hours),
+                'task_id': task.id,
+                'task_title': task.title[:50],
+                'description': f"Continued work on {task.title[:30]}",
+                'is_original_day': False
+            })
+            
+            remaining_hours -= day_hours
+        
+        total_days = len(entries)
+        total_hours = float(hours)
+        
+        return {
+            'strategy': 'balanced_split',
+            'original_hours': float(hours),
+            'original_date': work_date.isoformat(),
+            'days_needed': total_days,
+            'entries': entries,
+            'summary': (
+                f"Split {total_hours}h across {total_days} days "
+                f"(~{round(total_hours/total_days, 1)}h per day average)"
+            ),
+            'rationale': (
+                "This split keeps each day under 8 hours to maintain work-life balance "
+                "and ensure accurate time tracking. Weekends are automatically skipped."
+            )
+        }
+    
+    def _get_split_task_suggestions(self, original_task, work_date: date, 
+                                    total_hours: Decimal) -> List[Dict]:
+        """
+        Suggest related tasks that the user might want to split time across.
+        
+        Returns:
+            List of task suggestions for time splitting
+        """
+        from kanban.models import Task
+        
+        suggestions = []
+        
+        # Get tasks in the same board
+        board = original_task.column.board if original_task.column else None
+        if not board:
+            return suggestions
+        
+        # 1. Tasks with dependencies to/from the original task
+        related_task_ids = list(original_task.dependencies.values_list('id', flat=True))
+        if hasattr(original_task, 'dependent_tasks'):
+            related_task_ids.extend(original_task.dependent_tasks.values_list('id', flat=True))
+        
+        related_tasks = Task.objects.filter(
+            id__in=related_task_ids,
+            progress__lt=100
+        ).select_related('column')[:3]
+        
+        for task in related_tasks:
+            suggestions.append({
+                'task_id': task.id,
+                'task_title': task.title,
+                'reason': 'Related task (dependency)',
+                'board_name': board.name,
+                'progress': task.progress
+            })
+        
+        # 2. Tasks in the same column (similar work)
+        same_column_tasks = Task.objects.filter(
+            column=original_task.column,
+            progress__lt=100
+        ).exclude(
+            id__in=[original_task.id] + [s['task_id'] for s in suggestions]
+        ).select_related('column')[:2]
+        
+        for task in same_column_tasks:
+            suggestions.append({
+                'task_id': task.id,
+                'task_title': task.title,
+                'reason': f'Same column ({original_task.column.name})',
+                'board_name': board.name,
+                'progress': task.progress
+            })
+        
+        # 3. Other tasks assigned to user in this board
+        user_tasks = Task.objects.filter(
+            column__board=board,
+            assigned_to=self.user,
+            progress__lt=100
+        ).exclude(
+            id__in=[original_task.id] + [s['task_id'] for s in suggestions]
+        ).select_related('column')[:3]
+        
+        for task in user_tasks:
+            suggestions.append({
+                'task_id': task.id,
+                'task_title': task.title,
+                'reason': 'Your assigned task',
+                'board_name': board.name,
+                'progress': task.progress
+            })
+        
+        return suggestions[:5]  # Limit to 5 suggestions
     
     def detect_anomalies(self, days_back: int = 14) -> List[Dict]:
         """

@@ -453,12 +453,12 @@ document.addEventListener('DOMContentLoaded', function() {
             });
     }
 
-    // Quick log form
+    // Quick log form - with AI validation
     document.getElementById('quickLogForm').addEventListener('submit', function(e) {
         e.preventDefault();
         
         const taskId = document.getElementById('quick-task-select').value;
-        const hours = document.getElementById('quick-hours').value;
+        const hours = parseFloat(document.getElementById('quick-hours').value);
         const date = document.getElementById('quick-date').value;
         const description = document.getElementById('quick-description').value;
         
@@ -467,6 +467,53 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        // First, validate with AI
+        validateTimeEntryWithAI(taskId, hours, date, description);
+    });
+    
+    // AI-powered time entry validation
+    function validateTimeEntryWithAI(taskId, hours, date, description) {
+        const submitBtn = document.querySelector('#quickLogForm button[type="submit"]');
+        const originalBtnText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-robot fa-spin"></i> AI Checking...';
+        submitBtn.disabled = true;
+        
+        fetch('/api/time-entry/validate/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: JSON.stringify({
+                task_id: taskId,
+                hours: hours,
+                work_date: date,
+            }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            submitBtn.innerHTML = originalBtnText;
+            submitBtn.disabled = false;
+            
+            if (data.success && data.needs_attention) {
+                // Show AI suggestion modal
+                showAISplitSuggestionModal(data, taskId, hours, date, description);
+            } else {
+                // No concerns, proceed with normal submission
+                submitTimeEntry(taskId, hours, date, description);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            submitBtn.innerHTML = originalBtnText;
+            submitBtn.disabled = false;
+            // On error, fallback to normal submission
+            submitTimeEntry(taskId, hours, date, description);
+        });
+    }
+    
+    // Submit time entry directly
+    function submitTimeEntry(taskId, hours, date, description) {
         const formData = new FormData();
         formData.append('hours', hours);
         formData.append('description', description);
@@ -480,7 +527,7 @@ document.addEventListener('DOMContentLoaded', function() {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert(data.message);
+                showSuccessToast(data.message || 'Time logged successfully!');
                 location.reload();
             } else {
                 alert('Error: ' + (data.error || 'Failed to log time'));
@@ -490,7 +537,189 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error:', error);
             alert('Failed to log time. Please try again.');
         });
-    });
+    }
+    
+    // Show AI split suggestion modal
+    let aiSplitData = null;
+    function showAISplitSuggestionModal(validationData, taskId, hours, date, description) {
+        aiSplitData = { validationData, taskId, hours, date, description };
+        
+        const modal = document.getElementById('aiSplitSuggestionModal');
+        const modalBody = document.getElementById('aiSplitSuggestionContent');
+        
+        const severityClass = validationData.severity === 'critical' ? 'danger' : 'warning';
+        const severityIcon = validationData.severity === 'critical' ? 'exclamation-triangle' : 'lightbulb';
+        
+        let html = `
+            <div class="alert alert-${severityClass} mb-4">
+                <div class="d-flex align-items-start">
+                    <i class="fas fa-robot fa-2x me-3"></i>
+                    <div>
+                        <strong><i class="fas fa-${severityIcon} me-1"></i> AI Notice</strong>
+                        <p class="mb-0 mt-1">${validationData.message}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        if (validationData.suggestion) {
+            const suggestion = validationData.suggestion;
+            html += `
+                <div class="card mb-4">
+                    <div class="card-header bg-primary text-white">
+                        <i class="fas fa-magic me-2"></i>AI Recommendation: Split Your Time
+                    </div>
+                    <div class="card-body">
+                        <p class="text-muted">${suggestion.rationale}</p>
+                        <p><strong>${suggestion.summary}</strong></p>
+                        
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Hours</th>
+                                        <th>Description</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+            `;
+            
+            suggestion.entries.forEach((entry, idx) => {
+                const isOriginal = entry.is_original_day ? '<span class="badge bg-info ms-1">Original</span>' : '';
+                html += `
+                    <tr>
+                        <td>${entry.date_display} ${isOriginal}</td>
+                        <td><strong>${entry.hours}h</strong></td>
+                        <td>
+                            <input type="text" class="form-control form-control-sm ai-split-desc" 
+                                   data-idx="${idx}" value="${entry.description}" 
+                                   placeholder="Description...">
+                        </td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Related task suggestions
+        if (validationData.task_suggestions && validationData.task_suggestions.length > 0) {
+            html += `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <i class="fas fa-tasks me-2"></i>Related Tasks (if you want to split across different tasks)
+                    </div>
+                    <div class="card-body p-0">
+                        <ul class="list-group list-group-flush">
+            `;
+            
+            validationData.task_suggestions.forEach(task => {
+                html += `
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${task.task_title}</strong>
+                            <br><small class="text-muted">${task.reason} • ${task.progress}% complete</small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary" 
+                                onclick="addTaskToSplit(${task.task_id}, '${task.task_title.replace(/'/g, "\\'")}')">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </li>
+                `;
+            });
+            
+            html += `
+                        </ul>
+                    </div>
+                </div>
+            `;
+        }
+        
+        modalBody.innerHTML = html;
+        
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+    }
+    
+    // Accept AI split suggestion
+    function acceptAISplit() {
+        if (!aiSplitData || !aiSplitData.validationData.suggestion) return;
+        
+        const entries = aiSplitData.validationData.suggestion.entries.map((entry, idx) => {
+            const descInput = document.querySelector(`.ai-split-desc[data-idx="${idx}"]`);
+            return {
+                task_id: entry.task_id,
+                hours: entry.hours,
+                date: entry.date,
+                description: descInput ? descInput.value : entry.description,
+            };
+        });
+        
+        const btn = document.getElementById('acceptAISplitBtn');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+        btn.disabled = true;
+        
+        fetch('/api/time-entry/create-split/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: JSON.stringify({ entries: entries }),
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showSuccessToast(`${data.message}`);
+                bootstrap.Modal.getInstance(document.getElementById('aiSplitSuggestionModal')).hide();
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || data.errors?.join(', ') || 'Failed to create entries'));
+                btn.innerHTML = '<i class="fas fa-check"></i> Accept AI Suggestion';
+                btn.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to create split entries. Please try again.');
+            btn.innerHTML = '<i class="fas fa-check"></i> Accept AI Suggestion';
+            btn.disabled = false;
+        });
+    }
+    
+    // Proceed with original entry despite AI warning
+    function proceedWithOriginalEntry() {
+        if (!aiSplitData) return;
+        
+        bootstrap.Modal.getInstance(document.getElementById('aiSplitSuggestionModal')).hide();
+        submitTimeEntry(aiSplitData.taskId, aiSplitData.hours, aiSplitData.date, aiSplitData.description);
+    }
+    
+    // Show success toast
+    function showSuccessToast(message) {
+        const toast = document.createElement('div');
+        toast.className = 'position-fixed bottom-0 end-0 p-3';
+        toast.style.zIndex = '9999';
+        toast.innerHTML = `
+            <div class="toast show" role="alert">
+                <div class="toast-header bg-success text-white">
+                    <i class="fas fa-check-circle me-2"></i>
+                    <strong class="me-auto">Success</strong>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+                </div>
+                <div class="toast-body">${message}</div>
+            </div>
+        `;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+    }
 
     // Metric card click handlers
     document.querySelectorAll('.metric-card').forEach(card => {
@@ -776,6 +1005,31 @@ document.addEventListener('DOMContentLoaded', function() {
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" onclick="submitSplitEntries()" id="submitSplitBtn" disabled>
                     <i class="fas fa-check"></i> Apply Split
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI Split Suggestion Modal -->
+<div class="modal fade" id="aiSplitSuggestionModal" tabindex="-1" aria-labelledby="aiSplitSuggestionTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="aiSplitSuggestionTitle">
+                    <i class="fas fa-robot me-2"></i>AI Time Entry Assistant
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" id="aiSplitSuggestionContent">
+                <!-- Content loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" onclick="proceedWithOriginalEntry()">
+                    <i class="fas fa-arrow-right"></i> Log Anyway
+                </button>
+                <button type="button" class="btn btn-success" id="acceptAISplitBtn" onclick="acceptAISplit()">
+                    <i class="fas fa-check"></i> Accept AI Suggestion
                 </button>
             </div>
         </div>

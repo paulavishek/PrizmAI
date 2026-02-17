@@ -1480,3 +1480,198 @@ def search_tasks_for_time_entry(request):
         'tasks': tasks_data,
         'count': len(tasks_data),
     })
+
+
+# ============================================================================
+# AI-POWERED TIME ENTRY VALIDATION & SPLIT SUGGESTIONS
+# ============================================================================
+
+@login_required
+@require_http_methods(["POST"])
+def validate_time_entry_api(request):
+    """
+    AI-powered validation of a proposed time entry.
+    Returns suggestions if the hours would result in an excessive day.
+    
+    POST body:
+        task_id: int - Task ID
+        hours: float - Hours to log
+        work_date: str - Date in YYYY-MM-DD format
+    
+    Returns:
+        JSON with validation result and optional split suggestions
+    """
+    from kanban.time_tracking_ai import TimeTrackingAIService
+    from datetime import datetime
+    
+    try:
+        data = json.loads(request.body)
+        task_id = data.get('task_id')
+        hours = Decimal(str(data.get('hours', 0)))
+        work_date_str = data.get('work_date')
+        
+        if not all([task_id, hours, work_date_str]):
+            return JsonResponse({
+                'success': False,
+                'error': 'Missing required fields: task_id, hours, work_date'
+            }, status=400)
+        
+        # Parse date
+        try:
+            work_date = datetime.strptime(work_date_str, '%Y-%m-%d').date()
+        except ValueError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid date format. Use YYYY-MM-DD'
+            }, status=400)
+        
+        # Get task
+        task = get_object_or_404(Task, id=task_id)
+        
+        # Validate hours
+        if hours <= 0:
+            return JsonResponse({
+                'success': False,
+                'error': 'Hours must be greater than 0'
+            }, status=400)
+        
+        if hours > 16:
+            return JsonResponse({
+                'success': False,
+                'error': 'Maximum 16 hours per single entry'
+            }, status=400)
+        
+        # Run AI validation
+        ai_service = TimeTrackingAIService(request.user)
+        validation_result = ai_service.validate_time_entry(task, hours, work_date)
+        
+        return JsonResponse({
+            'success': True,
+            **validation_result
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON body'
+        }, status=400)
+    except Exception as e:
+        logger.error(f"Error validating time entry: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def create_split_time_entries(request):
+    """
+    Create multiple time entries at once from AI split suggestions.
+    
+    POST body:
+        entries: list - Array of entry objects with:
+            - task_id: int
+            - hours: float
+            - date: str (YYYY-MM-DD)
+            - description: str (optional)
+    
+    Returns:
+        JSON with created entries
+    """
+    from kanban.budget_models import TimeEntry
+    from datetime import datetime
+    
+    try:
+        data = json.loads(request.body)
+        entries_data = data.get('entries', [])
+        
+        if not entries_data:
+            return JsonResponse({
+                'success': False,
+                'error': 'No entries provided'
+            }, status=400)
+        
+        if len(entries_data) > 10:
+            return JsonResponse({
+                'success': False,
+                'error': 'Maximum 10 entries per request'
+            }, status=400)
+        
+        created_entries = []
+        errors = []
+        
+        for i, entry_data in enumerate(entries_data):
+            try:
+                task_id = entry_data.get('task_id')
+                hours = Decimal(str(entry_data.get('hours', 0)))
+                date_str = entry_data.get('date')
+                description = entry_data.get('description', '')
+                
+                # Validate required fields
+                if not all([task_id, hours, date_str]):
+                    errors.append(f"Entry {i+1}: Missing required fields")
+                    continue
+                
+                # Parse date
+                try:
+                    work_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    errors.append(f"Entry {i+1}: Invalid date format")
+                    continue
+                
+                # Get task
+                try:
+                    task = Task.objects.get(id=task_id)
+                except Task.DoesNotExist:
+                    errors.append(f"Entry {i+1}: Task not found")
+                    continue
+                
+                # Validate hours
+                if hours <= 0 or hours > 16:
+                    errors.append(f"Entry {i+1}: Hours must be between 0 and 16")
+                    continue
+                
+                # Create the entry
+                entry = TimeEntry.objects.create(
+                    task=task,
+                    user=request.user,
+                    hours_spent=hours,
+                    work_date=work_date,
+                    description=description[:500] if description else ''
+                )
+                
+                created_entries.append({
+                    'id': entry.id,
+                    'task_id': task.id,
+                    'task_title': task.title,
+                    'hours': float(entry.hours_spent),
+                    'date': entry.work_date.isoformat(),
+                    'description': entry.description
+                })
+                
+            except Exception as e:
+                errors.append(f"Entry {i+1}: {str(e)}")
+        
+        return JsonResponse({
+            'success': len(created_entries) > 0,
+            'created_count': len(created_entries),
+            'entries': created_entries,
+            'errors': errors if errors else None,
+            'message': (
+                f"Successfully created {len(created_entries)} time entries"
+                if created_entries else "No entries were created"
+            )
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'success': False,
+            'error': 'Invalid JSON body'
+        }, status=400)
+    except Exception as e:
+        logger.error(f"Error creating split time entries: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
