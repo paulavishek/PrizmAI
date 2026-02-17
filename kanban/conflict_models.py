@@ -143,6 +143,31 @@ class ConflictDetection(models.Model):
             'critical': 'critical'
         }
         return colors.get(self.severity, 'secondary')
+    
+    def ensure_notifications(self):
+        """
+        Ensure notifications exist for all affected users.
+        Creates missing notifications if needed.
+        Returns the number of notifications created.
+        """
+        if self.status != 'active':
+            return 0  # Only create notifications for active conflicts
+        
+        created_count = 0
+        for user in self.affected_users.all():
+            # Check if notification already exists
+            notification, created = ConflictNotification.objects.get_or_create(
+                conflict=self,
+                user=user,
+                defaults={
+                    'notification_type': 'in_app',
+                    'acknowledged': False
+                }
+            )
+            if created:
+                created_count += 1
+        
+        return created_count
 
 
 class ConflictResolution(models.Model):

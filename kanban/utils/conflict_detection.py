@@ -182,6 +182,9 @@ class ConflictDetectionService:
                         conflict.tasks.add(task1, task2)
                         conflict.affected_users.add(user)
                         
+                        # Ensure notifications are created
+                        conflict.ensure_notifications()
+                        
                         conflicts.append(conflict)
         
         return conflicts
@@ -248,6 +251,9 @@ class ConflictDetectionService:
                 if task.assigned_to:
                     conflict.affected_users.add(task.assigned_to)
                 
+                # Ensure notifications are created
+                conflict.ensure_notifications()
+                
                 conflicts.append(conflict)
         
         # 2. Unrealistic task durations (short time for high complexity)
@@ -290,6 +296,9 @@ class ConflictDetectionService:
                     conflict.tasks.add(task)
                     if task.assigned_to:
                         conflict.affected_users.add(task.assigned_to)
+                    
+                    # Ensure notifications are created
+                    conflict.ensure_notifications()
                     
                     conflicts.append(conflict)
         
@@ -356,6 +365,9 @@ class ConflictDetectionService:
                     conflict.tasks.add(task)
                     if task.assigned_to:
                         conflict.affected_users.add(task.assigned_to)
+                    
+                    # Ensure notifications are created
+                    conflict.ensure_notifications()
                     
                     conflicts.append(conflict)
         

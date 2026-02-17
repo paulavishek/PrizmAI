@@ -517,26 +517,9 @@ class Command(BaseCommand):
         )
 
         for conflict in active_conflicts:
-            # Notify affected users
-            for user in conflict.affected_users.all():
-                if not ConflictNotification.objects.filter(conflict=conflict, user=user).exists():
-                    notification = ConflictNotification.objects.create(
-                        conflict=conflict,
-                        user=user,
-                        notification_type='in_app',
-                        acknowledged=False
-                    )
-                    notifications_created += 1
-
-            # Also notify demo_admin for all conflicts
-            if self.demo_admin and not ConflictNotification.objects.filter(conflict=conflict, user=self.demo_admin).exists():
-                ConflictNotification.objects.create(
-                    conflict=conflict,
-                    user=self.demo_admin,
-                    notification_type='in_app',
-                    acknowledged=random.choice([True, False])
-                )
-                notifications_created += 1
+            # Use the model's ensure_notifications method
+            created = conflict.ensure_notifications()
+            notifications_created += created
 
         self.stdout.write(self.style.SUCCESS(f'   Created {notifications_created} notifications'))
 

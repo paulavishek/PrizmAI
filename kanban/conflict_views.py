@@ -53,6 +53,10 @@ def conflict_dashboard(request):
             'tasks', 'affected_users', 'resolutions'
         ).order_by('-severity', '-detected_at')
         
+        # Ensure notifications exist for all active conflicts (safety check)
+        for conflict in active_conflicts:
+            conflict.ensure_notifications()
+        
         # Get user's notifications
         # Filter by board if a specific board is selected
         user_notifications = ConflictNotification.objects.filter(
