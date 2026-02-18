@@ -2620,6 +2620,17 @@ def skill_gap_dashboard(request, board_id):
     # Try to get team skill profile
     try:
         team_profile = TeamSkillProfile.objects.get(board=board)
+        # Normalize skill_inventory to ensure all required keys exist
+        if team_profile and team_profile.skill_inventory:
+            for skill_name, skill_data in team_profile.skill_inventory.items():
+                # Ensure all proficiency levels exist
+                if isinstance(skill_data, dict):
+                    for level in ['expert', 'advanced', 'intermediate', 'beginner']:
+                        if level not in skill_data:
+                            skill_data[level] = 0
+                    # Ensure members list exists
+                    if 'members' not in skill_data:
+                        skill_data['members'] = []
     except TeamSkillProfile.DoesNotExist:
         team_profile = None
     
