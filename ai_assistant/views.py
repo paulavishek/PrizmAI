@@ -694,39 +694,61 @@ def analytics_dashboard(request):
 @login_required
 def get_analytics_data(request):
     """Get analytics data for charts"""
-    from accounts.models import Organization
-    
+    from django.db.models.functions import TruncDate
+
     board_id = request.GET.get('board_id')
-    
+
     end_date = timezone.now().date()
     start_date = end_date - timedelta(days=30)
-    
-    # Include both user's own analytics and demo user analytics
-    demo_user_ids = AIAssistantSession.objects.filter(is_demo=True).values_list('user_id', flat=True).distinct()
+
+    # --- Session-based daily message counts (demo + user) ---
+    sessions_qs = AIAssistantSession.objects.filter(
+        Q(user=request.user) | Q(is_demo=True),
+        updated_at__date__gte=start_date,
+        updated_at__date__lte=end_date,
+    )
+    if board_id:
+        sessions_qs = sessions_qs.filter(board_id=board_id)
+
+    daily_messages = (
+        sessions_qs
+        .annotate(day=TruncDate('updated_at'))
+        .values('day')
+        .annotate(total=Sum('message_count'))
+        .order_by('day')
+    )
+    # Build a dict: date -> message count
+    messages_by_date = {row['day'].isoformat(): row['total'] for row in daily_messages}
+
+    # --- Analytics-based daily token / RAG / web-search counts (user only) ---
     analytics_qs = AIAssistantAnalytics.objects.filter(
-        Q(user=request.user) | Q(user_id__in=demo_user_ids),
+        user=request.user,
         date__gte=start_date,
-        date__lte=end_date
+        date__lte=end_date,
     ).order_by('date')
-    
     if board_id:
         analytics_qs = analytics_qs.filter(board_id=board_id)
-    
+
+    tokens_by_date = {}
+    web_searches_by_date = {}
+    kb_queries_by_date = {}
+    for a in analytics_qs:
+        d = a.date.isoformat()
+        tokens_by_date[d] = tokens_by_date.get(d, 0) + a.total_tokens_used
+        web_searches_by_date[d] = web_searches_by_date.get(d, 0) + a.web_searches_performed
+        kb_queries_by_date[d] = kb_queries_by_date.get(d, 0) + a.knowledge_base_queries
+
+    # --- Merge on the union of all dates, sorted ---
+    all_dates = sorted(set(messages_by_date) | set(tokens_by_date))
+
     data = {
-        'dates': [],
-        'messages': [],
-        'tokens': [],
-        'web_searches': [],
-        'kb_queries': [],
+        'dates': all_dates,
+        'messages': [messages_by_date.get(d, 0) for d in all_dates],
+        'tokens': [tokens_by_date.get(d, 0) for d in all_dates],
+        'web_searches': [web_searches_by_date.get(d, 0) for d in all_dates],
+        'kb_queries': [kb_queries_by_date.get(d, 0) for d in all_dates],
     }
-    
-    for analytics in analytics_qs:
-        data['dates'].append(analytics.date.isoformat())
-        data['messages'].append(analytics.messages_sent)
-        data['tokens'].append(analytics.total_tokens_used)
-        data['web_searches'].append(analytics.web_searches_performed)
-        data['kb_queries'].append(analytics.knowledge_base_queries)
-    
+
     return JsonResponse(data)
 
 

@@ -65,6 +65,12 @@
         padding: 20px;
         border-radius: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        min-height: 280px;
+        position: relative;
+    }
+
+    .chart-card canvas {
+        height: 220px !important;
     }
     
     .chart-title {
@@ -153,17 +159,17 @@
     <div class="charts-grid">
         <div class="chart-card">
             <div class="chart-title">Messages Over Time</div>
-            <canvas id="messagesChart"></canvas>
+            <canvas id="messagesChart" height="200"></canvas>
         </div>
         
         <div class="chart-card">
             <div class="chart-title">AI Feature Usage (RAG vs Web Search)</div>
-            <canvas id="featureChart"></canvas>
+            <canvas id="featureChart" height="200"></canvas>
         </div>
         
         <div class="chart-card">
             <div class="chart-title">Token Efficiency Trend</div>
-            <canvas id="tokenChart"></canvas>
+            <canvas id="tokenChart" height="200"></canvas>
         </div>
     </div>
 </div>
@@ -172,7 +178,10 @@
 <script>
     // Load analytics data
     fetch('{% url "ai_assistant:analytics_data" %}')
-        .then(r => r.json())
+        .then(r => {
+            if (!r.ok) throw new Error('Analytics API returned ' + r.status);
+            return r.json();
+        })
         .then(data => {
             // Messages chart - Line chart showing messages over time
             const messagesCtx = document.getElementById('messagesChart').getContext('2d');
@@ -187,17 +196,18 @@
                         backgroundColor: 'rgba(102, 126, 234, 0.1)',
                         tension: 0.3,
                         fill: true,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false }
                     },
                     scales: {
-                        y: {
-                            beginAtZero: true
-                        }
+                        y: { beginAtZero: true }
                     }
                 }
             });
@@ -215,17 +225,24 @@
                         label: 'Usage Count',
                         data: [totalKbQueries, totalWebSearches],
                         backgroundColor: ['#34a853', '#4285f4'],
+                        barThickness: 60,
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: false },
+                        subtitle: {
+                            display: totalKbQueries === 0 && totalWebSearches === 0,
+                            text: 'No RAG or web search activity yet',
+                            color: '#999',
+                            font: { size: 13 },
+                            padding: { top: 60 }
+                        }
                     },
                     scales: {
-                        y: {
-                            beginAtZero: true
-                        }
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } }
                     }
                 }
             });
@@ -243,20 +260,22 @@
                         backgroundColor: 'rgba(251, 188, 4, 0.1)',
                         tension: 0.3,
                         fill: true,
+                        pointRadius: 5,
+                        pointHoverRadius: 7,
                     }]
                 },
                 options: {
                     responsive: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: { display: false }
                     },
                     scales: {
-                        y: {
-                            beginAtZero: true
-                        }
+                        y: { beginAtZero: true }
                     }
                 }
             });
-        });
+        })
+        .catch(err => console.error('Failed to load analytics chart data:', err));
 </script>
 {% endblock %}
