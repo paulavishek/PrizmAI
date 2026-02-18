@@ -179,10 +179,10 @@ class Command(BaseCommand):
             
             if session_data.get('board') == 'software' and software_board:
                 board = software_board
-            elif session_data.get('board') == 'marketing' and marketing_board:
-                board = marketing_board
-            elif session_data.get('board') == 'bug' and bug_board:
-                board = bug_board
+            elif session_data.get('board') in ('marketing', 'bug'):
+                # Marketing Campaign and Bug Tracking boards have been removed from the demo.
+                # Skip sessions tied to these boards.
+                continue
             else:
                 board = None
             

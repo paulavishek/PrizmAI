@@ -1,8 +1,8 @@
 """
 Management command to populate demo boards with realistic tasks
-Creates 90 tasks across 3 demo boards (30 per board) with proper assignments, dates, dependencies, and skills
-Each board has 3 phases with 10 tasks per phase
-Includes comprehensive demo data for all task fields including risk, skills, and collaboration
+Creates 30 tasks for the Software Development demo board with proper assignments,
+dates, dependencies, and skills across 3 phases (10 tasks per phase).
+Includes comprehensive demo data for all task fields including risk, skills, and collaboration.
 Also includes comments, activity logs, stakeholders, wiki links, and file attachment metadata
 """
 from django.core.management.base import BaseCommand
@@ -335,30 +335,17 @@ class Command(BaseCommand):
             organization=demo_org
         ).first()
 
-        marketing_board = Board.objects.filter(
-            name='Marketing Campaign',
-            is_official_demo_board=True,
-            organization=demo_org
-        ).first()
-
-        bug_board = Board.objects.filter(
-            name='Bug Tracking',
-            is_official_demo_board=True,
-            organization=demo_org
-        ).first()
-
-        if not all([software_board, marketing_board, bug_board]):
+        if not software_board:
             self.stdout.write(self.style.ERROR(
-                '❌ Demo boards not found. Please run: python manage.py create_demo_organization'
+                '❌ Demo board not found. Please run: python manage.py create_demo_organization'
             ))
             return
 
-        # Update boards to have 3 phases each
-        self.stdout.write('🔧 Configuring phases for demo boards...')
-        for board in [software_board, marketing_board, bug_board]:
-            board.num_phases = 3
-            board.save()
-        self.stdout.write(self.style.SUCCESS('   ✅ All demo boards set to 3 phases\n'))
+        # Update board to have 3 phases
+        self.stdout.write('🔧 Configuring phases for demo board...')
+        software_board.num_phases = 3
+        software_board.save()
+        self.stdout.write(self.style.SUCCESS('   ✅ Software Development board set to 3 phases\n'))
 
         # Reset existing demo tasks if requested
         if options['reset']:
@@ -368,13 +355,13 @@ class Command(BaseCommand):
             # This includes:
             # 1. Boards with is_official_demo_board=False
             # 2. Boards with is_seed_demo_data=False (user-created, even if marked as official)
-            # We protect only the 3 official seed boards: Software Development, Marketing Campaign, Bug Tracking
+            # We protect only the 1 official seed board: Software Development
             from django.db.models import Q
             from kanban.models import Column, Comment, TaskActivity, TaskFile
             from kanban.resource_leveling_models import TaskAssignmentHistory
             from kanban.stakeholder_models import StakeholderTaskInvolvement
             
-            official_board_names = ['Software Development', 'Marketing Campaign', 'Bug Tracking']
+            official_board_names = ['Software Development']
             
             # Find user-created boards to delete
             user_boards = Board.objects.filter(
@@ -410,15 +397,15 @@ class Command(BaseCommand):
                 deleted_boards = user_boards.delete()[0]
                 self.stdout.write(self.style.WARNING(f'   Deleted {deleted_boards} user-created boards'))
             
-            # Delete ALL tasks on official demo boards (both user-created and demo data)
+            # Delete ALL tasks on official demo board (both user-created and demo data)
             deleted_count = Task.objects.filter(
-                column__board__in=[software_board, marketing_board, bug_board]
+                column__board__in=[software_board]
             ).delete()[0]
             self.stdout.write(self.style.WARNING(f'   Deleted {deleted_count} existing tasks\n'))
 
         # Check if tasks already exist
         existing_task_count = Task.objects.filter(
-            column__board__in=[software_board, marketing_board, bug_board]
+            column__board__in=[software_board]
         ).count()
 
         if existing_task_count > 0 and not options['reset']:
@@ -430,7 +417,7 @@ class Command(BaseCommand):
             ))
             return
 
-        # Create tasks for each board (30 tasks per board)
+        # Create tasks for the Software Development board (30 tasks)
         self.stdout.write(self.style.SUCCESS('📝 Creating demo tasks...\n'))
 
         software_tasks = self.create_software_tasks(software_board, alex, sam, jordan)
@@ -438,72 +425,58 @@ class Command(BaseCommand):
             f'   ✅ Software Development: {len(software_tasks)} items created'
         ))
 
-        marketing_tasks = self.create_marketing_tasks(marketing_board, alex, sam, jordan)
-        self.stdout.write(self.style.SUCCESS(
-            f'   ✅ Marketing Campaign: {len(marketing_tasks)} items created'
-        ))
-
-        bug_tasks = self.create_bug_tasks(bug_board, alex, sam, jordan)
-        self.stdout.write(self.style.SUCCESS(
-            f'   ✅ Bug Tracking: {len(bug_tasks)} items created'
-        ))
-
-        total_tasks = len(software_tasks) + len(marketing_tasks) + len(bug_tasks)
+        total_tasks = len(software_tasks)
         self.stdout.write(self.style.SUCCESS(f'\n   📊 Total items created: {total_tasks}'))
 
         # Create task dependencies
         self.stdout.write(self.style.SUCCESS('\n🔗 Creating task dependencies...\n'))
-        self.create_dependencies(software_tasks, marketing_tasks, bug_tasks)
+        self.create_dependencies(software_tasks, [], [])
 
         # Create and assign Lean Six Sigma labels
         self.stdout.write(self.style.SUCCESS('\n🏷️  Creating Lean Six Sigma labels...\n'))
-        self.create_lean_labels(software_board, marketing_board, bug_board)
-        self.assign_lean_labels(software_tasks, marketing_tasks, bug_tasks)
+        self.create_lean_labels(software_board, None, None)
+        self.assign_lean_labels(software_tasks, [], [])
 
         # Enhance tasks with comprehensive demo data
         self.stdout.write(self.style.SUCCESS('\n📊 Enriching tasks with comprehensive demo data...\n'))
         self.enhance_tasks_with_demo_data(software_tasks, SOFTWARE_SKILLS, 'software')
-        self.enhance_tasks_with_demo_data(marketing_tasks, MARKETING_SKILLS, 'marketing')
-        self.enhance_tasks_with_demo_data(bug_tasks, BUG_TRACKING_SKILLS, 'bug_tracking')
 
         # Create related task relationships
         self.stdout.write(self.style.SUCCESS('\n🔄 Creating related task relationships...\n'))
         self.create_related_tasks(software_tasks)
-        self.create_related_tasks(marketing_tasks)
-        self.create_related_tasks(bug_tasks)
 
         # Create time tracking data for all demo users
         self.stdout.write(self.style.SUCCESS('\n⏱️  Creating time tracking data...\n'))
-        all_tasks = software_tasks + marketing_tasks + bug_tasks
+        all_tasks = software_tasks
         self.create_time_tracking_data(all_tasks, alex, sam, jordan)
 
         # Create budget and ROI data
         self.stdout.write(self.style.SUCCESS('\n💰 Creating budget and ROI data...\n'))
-        self.create_budget_roi_data(software_board, marketing_board, bug_board, alex)
+        self.create_budget_roi_data(software_board, None, None, alex)
 
         # Create burndown/velocity data
         self.stdout.write(self.style.SUCCESS('\n📉 Creating burndown velocity data...\n'))
-        self.create_burndown_data(software_board, marketing_board, bug_board)
+        self.create_burndown_data(software_board, None, None)
 
         # Create sprint milestones
         self.stdout.write(self.style.SUCCESS('\n🎯 Creating sprint milestones...\n'))
-        self.create_sprint_milestones(software_board, marketing_board, bug_board)
+        self.create_sprint_milestones(software_board, None, None)
 
         # Create team skill profiles and skill gaps
         self.stdout.write(self.style.SUCCESS('\n🎓 Creating skill profiles and skill gaps...\n'))
-        self.create_skill_data(software_board, marketing_board, bug_board, all_tasks)
+        self.create_skill_data(software_board, None, None, all_tasks)
 
         # Create scope change snapshots
         self.stdout.write(self.style.SUCCESS('\n📐 Creating scope change snapshots...\n'))
-        self.create_scope_snapshots(software_board, marketing_board, bug_board, alex)
+        self.create_scope_snapshots(software_board, None, None, alex)
 
         # Create retrospective data
         self.stdout.write(self.style.SUCCESS('\n🔄 Creating retrospective data...\n'))
-        self.create_retrospective_data(software_board, marketing_board, bug_board, alex, sam, jordan)
+        self.create_retrospective_data(software_board, None, None, alex, sam, jordan)
 
         # Create AI coaching suggestions
         self.stdout.write(self.style.SUCCESS('\n🤖 Creating AI coaching suggestions...\n'))
-        self.create_coaching_data(software_board, marketing_board, bug_board)
+        self.create_coaching_data(software_board, None, None)
 
         # Create comments for all tasks
         self.stdout.write(self.style.SUCCESS('\n💬 Creating task comments...\n'))
@@ -515,7 +488,7 @@ class Command(BaseCommand):
 
         # Create stakeholders and link them to tasks
         self.stdout.write(self.style.SUCCESS('\n👥 Creating stakeholders...\n'))
-        self.create_stakeholders(software_board, marketing_board, bug_board, all_tasks, alex, sam, jordan)
+        self.create_stakeholders(software_board, None, None, all_tasks, alex, sam, jordan)
 
         # Create file attachment metadata (simulated attachments)
         self.stdout.write(self.style.SUCCESS('\n📎 Creating file attachments...\n'))
@@ -935,20 +908,6 @@ class Command(BaseCommand):
             create_phase_dependencies(software_tasks, 20)  # Phase 3
         self.stdout.write('   ✅ Software Development dependencies created (parallel paths with merge points)')
 
-        # Marketing Campaign
-        if len(marketing_tasks) >= 30:
-            create_phase_dependencies(marketing_tasks, 0)   # Phase 1
-            create_phase_dependencies(marketing_tasks, 10)  # Phase 2
-            create_phase_dependencies(marketing_tasks, 20)  # Phase 3
-        self.stdout.write('   ✅ Marketing Campaign dependencies created (parallel paths with merge points)')
-
-        # Bug Tracking
-        if len(bug_tasks) >= 30:
-            create_phase_dependencies(bug_tasks, 0)   # Phase 1
-            create_phase_dependencies(bug_tasks, 10)  # Phase 2
-            create_phase_dependencies(bug_tasks, 20)  # Phase 3
-        self.stdout.write('   ✅ Bug Tracking dependencies created (parallel paths with merge points)')
-
     def create_lean_labels(self, software_board, marketing_board, bug_board):
         """Create Lean Six Sigma labels for all boards"""
         # Main Lean Six Sigma category labels (for analytics chart)
@@ -968,7 +927,7 @@ class Command(BaseCommand):
             {'name': 'Poka-yoke', 'color': '#6f42c1'},
         ]
 
-        for board in [software_board, marketing_board, bug_board]:
+        for board in [b for b in [software_board, marketing_board, bug_board] if b]:
             # Create main category labels first (essential for analytics)
             for label_data in main_lean_labels:
                 TaskLabel.objects.get_or_create(
@@ -1245,9 +1204,11 @@ class Command(BaseCommand):
         """Create budget and ROI data for all demo boards"""
         now = timezone.now().date()
         budget_configs = [
-            {'board': software_board, 'budget': Decimal('75000.00'), 'hours': Decimal('1200.0'), 'name': 'Software Development'},
-            {'board': marketing_board, 'budget': Decimal('35000.00'), 'hours': Decimal('600.0'), 'name': 'Marketing Campaign'},
-            {'board': bug_board, 'budget': Decimal('25000.00'), 'hours': Decimal('500.0'), 'name': 'Bug Tracking'},
+            config for config in [
+                {'board': software_board, 'budget': Decimal('75000.00'), 'hours': Decimal('1200.0'), 'name': 'Software Development'},
+                {'board': marketing_board, 'budget': Decimal('35000.00'), 'hours': Decimal('600.0'), 'name': 'Marketing Campaign'} if marketing_board else None,
+                {'board': bug_board, 'budget': Decimal('25000.00'), 'hours': Decimal('500.0'), 'name': 'Bug Tracking'} if bug_board else None,
+            ] if config is not None
         ]
 
         for config in budget_configs:
@@ -1395,7 +1356,7 @@ class Command(BaseCommand):
         
         now = timezone.now()
         
-        for board in [software_board, marketing_board, bug_board]:
+        for board in [b for b in [software_board, marketing_board, bug_board] if b]:
             self.stdout.write(f'     Processing {board.name}...')
             
             # Step 1: Populate historical completion dates for completed tasks
@@ -1503,9 +1464,11 @@ class Command(BaseCommand):
         """Create retrospective data for demo boards"""
         now = timezone.now().date()
         boards = [
-            (software_board, 'Software Development Sprint'),
-            (marketing_board, 'Marketing Campaign Review'),
-            (bug_board, 'Bug Fix Retrospective'),
+            pair for pair in [
+                (software_board, 'Software Development Sprint'),
+                (marketing_board, 'Marketing Campaign Review') if marketing_board else None,
+                (bug_board, 'Bug Fix Retrospective') if bug_board else None,
+            ] if pair is not None
         ]
 
         for board, title_prefix in boards:
@@ -1645,7 +1608,7 @@ class Command(BaseCommand):
         """
         # Delete existing suggestions first to avoid duplicates
         CoachingSuggestion.objects.filter(
-            board__in=[software_board, marketing_board, bug_board]
+            board__in=[b for b in [software_board, marketing_board, bug_board] if b]
         ).delete()
         
         # AI-Enhanced suggestions with detailed format
@@ -1759,9 +1722,11 @@ class Command(BaseCommand):
         created_count = 0
         
         for board, specific_suggestion in [
-            (software_board, software_specific),
-            (marketing_board, marketing_specific),
-            (bug_board, bug_specific)
+            pair for pair in [
+                (software_board, software_specific),
+                (marketing_board, marketing_specific) if marketing_board else None,
+                (bug_board, bug_specific) if bug_board else None,
+            ] if pair is not None
         ]:
             # Create common suggestions for each board
             for suggestion in suggestions:
@@ -1803,7 +1768,7 @@ class Command(BaseCommand):
         self.stdout.write(f'   ✅ AI coaching suggestions created ({created_count} total, all AI-enhanced)')
         
         # Create PM Metrics for analytics dashboard
-        self.create_pm_metrics(software_board, marketing_board, bug_board)
+        self.create_pm_metrics(software_board, None, None)
 
     def create_pm_metrics(self, software_board, marketing_board, bug_board):
         """Create PM performance metrics for analytics dashboard
@@ -1825,7 +1790,7 @@ class Command(BaseCommand):
         
         # Delete existing metrics
         PMMetrics.objects.filter(
-            board__in=[software_board, marketing_board, bug_board]
+            board__in=[b for b in [software_board, marketing_board, bug_board] if b]
         ).delete()
         
         now = timezone.now().date()
@@ -1833,7 +1798,7 @@ class Command(BaseCommand):
         # Create 4 weeks of historical metrics for each board
         metrics_created = 0
         
-        for board in [software_board, marketing_board, bug_board]:
+        for board in [b for b in [software_board, marketing_board, bug_board] if b]:
             for week_offset in range(4):
                 period_end = now - timedelta(weeks=week_offset)
                 period_start = period_end - timedelta(days=7)
@@ -2042,7 +2007,7 @@ class Command(BaseCommand):
             {'name': 'Emma Davis', 'role': 'Marketing Manager', 'email': 'emma.d@example.com', 'influence': 'medium'},
         ]
 
-        for board in [software_board, marketing_board, bug_board]:
+        for board in [b for b in [software_board, marketing_board, bug_board] if b]:
             for data in stakeholder_data:
                 stakeholder, created = ProjectStakeholder.objects.get_or_create(
                     board=board,
@@ -2058,7 +2023,7 @@ class Command(BaseCommand):
 
         # Link stakeholders to some tasks
         stakeholders = list(ProjectStakeholder.objects.filter(
-            board__in=[software_board, marketing_board, bug_board]
+            board__in=[b for b in [software_board, marketing_board, bug_board] if b]
         ))
 
         for task in tasks[:20]:  # Link to first 20 tasks
@@ -2082,7 +2047,7 @@ class Command(BaseCommand):
         now = timezone.now().date()
         milestones_created = 0
         
-        for board in [software_board, marketing_board, bug_board]:
+        for board in [b for b in [software_board, marketing_board, bug_board] if b]:
             # Delete existing milestones
             SprintMilestone.objects.filter(board=board).delete()
             
@@ -2253,7 +2218,7 @@ class Command(BaseCommand):
         snapshots_created = 0
         alerts_created = 0
         
-        for board in [software_board, marketing_board, bug_board]:
+        for board in [b for b in [software_board, marketing_board, bug_board] if b]:
             if not board:
                 continue
                 

@@ -148,80 +148,6 @@ class Command(BaseCommand):
                     ]
                 },
             ],
-            'Marketing Campaign': [
-                {
-                    'name': 'Campaign Planning',
-                    'description': 'Strategy discussions and campaign planning',
-                    'messages': [
-                        {'author': 'jordan', 'content': 'Team, I\'ve drafted the Q1 marketing strategy. Check the shared doc! 📊', 'minutes_ago': 360},
-                        {'author': 'alex', 'content': '@jordan_taylor_demo Looks comprehensive! Love the social media approach.', 'minutes_ago': 350},
-                        {'author': 'demo_admin', 'content': 'Great work Jordan! Can we discuss the budget allocation in our next meeting?', 'minutes_ago': 300},
-                        {'author': 'jordan', 'content': 'Absolutely @demo_admin_solo! I\'ve prepared a detailed breakdown.', 'minutes_ago': 295},
-                        {'author': 'alex', 'content': 'Should we also consider influencer partnerships? I have some contacts.', 'minutes_ago': 150},
-                        {'author': 'jordan', 'content': 'That\'s a great idea @alex_chen_demo! Let\'s schedule a brainstorming session.', 'minutes_ago': 145},
-                    ]
-                },
-                {
-                    'name': 'Content Creation',
-                    'description': 'Blog posts, social media content, and creative assets',
-                    'messages': [
-                        {'author': 'jordan', 'content': 'I\'ve uploaded the new brand guidelines to the wiki. Please review! 🎨', 'minutes_ago': 480},
-                        {'author': 'alex', 'content': 'Fantastic work! The color palette changes look professional.', 'minutes_ago': 470},
-                        {'author': 'demo_admin', 'content': 'Love the new logo variations. These will work great for the mobile app.', 'minutes_ago': 420},
-                        {'author': 'jordan', 'content': 'Thanks team! I\'m also working on the product launch video storyboard.', 'minutes_ago': 200},
-                        {'author': 'alex', 'content': '@jordan_taylor_demo Can\'t wait to see it! When do you think it\'ll be ready?', 'minutes_ago': 195},
-                        {'author': 'jordan', 'content': 'Aiming for end of this week. I\'ll share a preview soon!', 'minutes_ago': 190},
-                    ]
-                },
-                {
-                    'name': 'Analytics & Reports',
-                    'description': 'Performance metrics and campaign analytics',
-                    'messages': [
-                        {'author': 'demo_admin', 'content': 'November campaign results are in! 📈 CTR increased by 23%!', 'minutes_ago': 600},
-                        {'author': 'jordan', 'content': 'Wow! That\'s amazing @demo_admin_solo! What was the main driver?', 'minutes_ago': 590},
-                        {'author': 'demo_admin', 'content': 'The A/B test on email subject lines. Version B performed significantly better.', 'minutes_ago': 580},
-                        {'author': 'alex', 'content': 'Great insights! Let\'s apply these learnings to the December campaigns.', 'minutes_ago': 500},
-                    ]
-                },
-            ],
-            'Bug Tracking': [
-                {
-                    'name': 'Critical Issues',
-                    'description': 'Urgent bugs and production issues',
-                    'messages': [
-                        {'author': 'sam', 'content': '🚨 ALERT: Production API throwing 500 errors on user login endpoint!', 'minutes_ago': 45},
-                        {'author': 'demo_admin', 'content': 'On it! Checking the logs now. @sam_rivera_demo which region?', 'minutes_ago': 42},
-                        {'author': 'sam', 'content': 'EU-WEST-1. Started about 10 minutes ago according to CloudWatch.', 'minutes_ago': 40},
-                        {'author': 'jordan', 'content': 'Customer success team is getting tickets. ETA on fix?', 'minutes_ago': 35},
-                        {'author': 'demo_admin', 'content': 'Found it! Database connection pool exhausted. Deploying fix now.', 'minutes_ago': 30},
-                        {'author': 'sam', 'content': 'Fix deployed! Monitoring... ✅ Error rate dropping rapidly.', 'minutes_ago': 20},
-                        {'author': 'jordan', 'content': 'Perfect! I\'ll send an update to affected customers. Thanks team! 🙌', 'minutes_ago': 15},
-                    ]
-                },
-                {
-                    'name': 'Bug Triage',
-                    'description': 'Bug prioritization and assignment discussions',
-                    'messages': [
-                        {'author': 'jordan', 'content': 'Good morning! We have 15 new bugs from the weekend. Let\'s triage.', 'minutes_ago': 180},
-                        {'author': 'sam', 'content': 'I can take the frontend rendering issues. @jordan_taylor_demo assign me BUG-234 and BUG-236.', 'minutes_ago': 175},
-                        {'author': 'demo_admin', 'content': 'I\'ll handle the API bugs. The timeout issues look related to my recent changes.', 'minutes_ago': 170},
-                        {'author': 'jordan', 'content': 'Great! I\'ve updated the task board. Sprint goal: zero critical bugs by Friday. 🎯', 'minutes_ago': 160},
-                        {'author': 'sam', 'content': 'Challenge accepted! 💪', 'minutes_ago': 155},
-                    ]
-                },
-                {
-                    'name': 'QA Testing',
-                    'description': 'Testing discussions and QA feedback',
-                    'messages': [
-                        {'author': 'jordan', 'content': 'Starting regression testing for v2.5 release. Test plan in the wiki.', 'minutes_ago': 400},
-                        {'author': 'sam', 'content': '@jordan_taylor_demo Found an edge case in the payment flow. Creating a bug ticket.', 'minutes_ago': 350},
-                        {'author': 'jordan', 'content': 'Thanks Sam! Please mark it as P1 if it affects checkout.', 'minutes_ago': 345},
-                        {'author': 'demo_admin', 'content': 'Good catch! I\'ll review the payment service logs.', 'minutes_ago': 300},
-                        {'author': 'sam', 'content': 'Update: It\'s a currency conversion edge case. Only affects JPY transactions.', 'minutes_ago': 280},
-                        {'author': 'demo_admin', 'content': 'Ah, the floating point precision issue. I know exactly where to fix this.', 'minutes_ago': 275},
-                    ]
-                },
-            ],
         }
 
     def get_file_attachment_data(self):
@@ -231,17 +157,6 @@ class Command(BaseCommand):
                 {'room': 'General Discussion', 'filename': 'Sprint_15_Planning.pdf', 'file_type': 'pdf', 'file_size': 245760, 'description': 'Sprint 15 planning document with user stories'},
                 {'room': 'Technical Support', 'filename': 'Database_Migration_Guide.pdf', 'file_type': 'pdf', 'file_size': 189440, 'description': 'Step-by-step PostgreSQL 15 migration guide'},
                 {'room': 'Code Reviews', 'filename': 'Auth_Module_Architecture.png', 'file_type': 'png', 'file_size': 524288, 'description': 'Architecture diagram for authentication module'},
-            ],
-            'Marketing Campaign': [
-                {'room': 'Campaign Planning', 'filename': 'Q1_Marketing_Strategy.pdf', 'file_type': 'pdf', 'file_size': 1048576, 'description': 'Q1 2026 marketing strategy document'},
-                {'room': 'Content Creation', 'filename': 'Brand_Guidelines_v2.pdf', 'file_type': 'pdf', 'file_size': 2097152, 'description': 'Updated brand guidelines'},
-                {'room': 'Content Creation', 'filename': 'Product_Launch_Storyboard.pptx', 'file_type': 'pptx', 'file_size': 3145728, 'description': 'Video storyboard for product launch'},
-                {'room': 'Analytics & Reports', 'filename': 'November_Campaign_Report.xlsx', 'file_type': 'xlsx', 'file_size': 512000, 'description': 'November campaign performance metrics'},
-            ],
-            'Bug Tracking': [
-                {'room': 'Critical Issues', 'filename': 'Production_Error_Logs.pdf', 'file_type': 'pdf', 'file_size': 384000, 'description': 'CloudWatch logs from login endpoint incident'},
-                {'room': 'QA Testing', 'filename': 'v2.5_Test_Plan.xlsx', 'file_type': 'xlsx', 'file_size': 256000, 'description': 'Regression test plan for v2.5 release'},
-                {'room': 'QA Testing', 'filename': 'Bug_Screenshots.png', 'file_type': 'png', 'file_size': 1572864, 'description': 'Screenshots of payment flow edge case'},
             ],
         }
 

@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 # Demo configuration constants - update these to match your database
 DEMO_ORG_NAMES = ['Demo - Acme Corporation']
-DEMO_BOARD_NAMES = ['Software Development', 'Bug Tracking', 'Marketing Campaign']
+DEMO_BOARD_NAMES = ['Software Development']
 
 # Import settings from centralized config
 from kanban.utils.demo_settings import SIMPLIFIED_MODE

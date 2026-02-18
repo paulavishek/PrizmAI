@@ -241,7 +241,7 @@ class Command(BaseCommand):
         return personas
 
     def create_demo_boards(self, demo_org, personas):
-        """Create 3 demo boards in the demo org"""
+        """Create 1 demo board in the demo org"""
         self.stdout.write('\n3. Creating demo boards...')
         
         # Get Alex Chen as the board creator (admin)
@@ -253,16 +253,6 @@ class Command(BaseCommand):
                 'description': 'Track features, sprints, and releases for our product. Showcase AI-powered task management and burndown forecasting.',
                 'columns': ['To Do', 'In Progress', 'Done'],
             },
-            {
-                'name': 'Marketing Campaign',
-                'description': 'Plan and execute Q1 2025 marketing initiatives. Demonstrate collaboration and approval workflows.',
-                'columns': ['To Do', 'In Progress', 'Done'],
-            },
-            {
-                'name': 'Bug Tracking',
-                'description': 'Triage and resolve customer-reported issues. Highlight priority management and resource leveling.',
-                'columns': ['To Do', 'In Progress', 'Done'],
-            }
         ]
         
         boards = []

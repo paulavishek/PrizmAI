@@ -118,17 +118,17 @@ class Command(BaseCommand):
         self.marketing_board = self.demo_boards.filter(name__icontains='marketing').first()
         self.bug_board = self.demo_boards.filter(name__icontains='bug').first()
 
-        if not all([self.software_board, self.marketing_board, self.bug_board]):
+        if not self.software_board:
             self.stdout.write(self.style.WARNING(
-                '⚠️ Demo boards not found. Running create_demo_organization to fix...'
+                '⚠️ Demo board not found. Running create_demo_organization to fix...'
             ))
             from django.core.management import call_command
             call_command('create_demo_organization')
             # Refresh board references
             self.demo_boards = Board.objects.filter(organization=self.demo_org, is_official_demo_board=True)
             self.software_board = self.demo_boards.filter(name__icontains='software').first()
-            self.marketing_board = self.demo_boards.filter(name__icontains='marketing').first()
-            self.bug_board = self.demo_boards.filter(name__icontains='bug').first()
+            self.marketing_board = None
+            self.bug_board = None
             
         self.stdout.write(f'   Found {self.demo_boards.count()} demo boards')
 
@@ -679,27 +679,6 @@ POST /api/auth/token/
                     ]
                 },
             ],
-            'Marketing Campaign': [
-                {
-                    'name': 'Campaign Planning',
-                    'description': 'Strategy discussions',
-                    'messages': [
-                        {'author': 'jordan', 'content': "I've drafted the Q1 marketing strategy. Check the shared doc! 📊", 'minutes_ago': 360},
-                        {'author': 'alex', 'content': 'Looks comprehensive! Love the social media approach.', 'minutes_ago': 350},
-                    ]
-                },
-            ],
-            'Bug Tracking': [
-                {
-                    'name': 'Critical Issues',
-                    'description': 'Urgent bugs and production issues',
-                    'messages': [
-                        {'author': 'sam', 'content': '🚨 ALERT: Production API throwing 500 errors on login!', 'minutes_ago': 45},
-                        {'author': 'demo_admin', 'content': 'On it! Checking logs now.', 'minutes_ago': 42},
-                        {'author': 'sam', 'content': 'Found it! Database connection pool exhausted. Fix deployed. ✅', 'minutes_ago': 20},
-                    ]
-                },
-            ],
         }
 
     # =========================================================================
@@ -812,32 +791,6 @@ POST /api/auth/token/
                     'task1_idx': 2, 'task2_idx': 3,
                     'confidence': 0.88,
                     'recommendation': 'Review and break the dependency cycle.',
-                },
-            ],
-            'Marketing Campaign': [
-                {
-                    'type': 'schedule',
-                    'severity': 'high',
-                    'title': 'Overlapping Deadlines',
-                    'description': 'Multiple high-priority tasks have the same deadline.',
-                    'task1_idx': 0,
-                    'affected_user': 'jordan',
-                    'confidence': 0.85,
-                    'recommendation': 'Stagger deadlines or add resources.',
-                },
-            ],
-            'Bug Tracking': [
-                {
-                    'type': 'resource',
-                    'severity': 'medium',
-                    'title': 'Skill Gap Identified',
-                    'description': 'Critical bug requires security expertise not available on current assignment.',
-                    'task1_idx': 0,
-                    'confidence': 0.78,
-                    'recommendation': 'Assign team member with security background.',
-                    'status': 'resolved',
-                    'resolution_type': 'reassignment',
-                    'resolution_action': 'Reassigned to security specialist',
                 },
             ],
         }
