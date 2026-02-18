@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile
 from .forms import BoardForm, ColumnForm, TaskForm, TaskLabelForm, CommentForm, TaskMoveForm, TaskSearchForm, TaskFileForm
 from accounts.models import UserProfile, Organization
-from .stakeholder_models import StakeholderTaskInvolvement
+from .stakeholder_models import StakeholderTaskInvolvement, ProjectStakeholder
 
 @login_required
 def dashboard(request):
@@ -630,6 +630,9 @@ def task_detail(request, task_id):
         'stakeholder'
     ).order_by('stakeholder__name')
     
+    # Get board stakeholders for AI recommendations (when no task stakeholders assigned)
+    board_stakeholders = ProjectStakeholder.objects.filter(board=board).order_by('name')
+    
     # Get linked wiki pages for this task
     from wiki.models import WikiLink
     wiki_links = WikiLink.objects.filter(task=task).select_related('wiki_page')
@@ -729,6 +732,7 @@ def task_detail(request, task_id):
         'comments': comments,
         'activities': activities,
         'stakeholders': stakeholders,
+        'board_stakeholders': board_stakeholders,
         'wiki_links': wiki_links,
         'prediction': prediction_data,
         'total_time_logged': total_time_logged,

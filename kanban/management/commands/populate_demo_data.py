@@ -1437,7 +1437,16 @@ class Command(BaseCommand):
                         
                         task.completed_at = completion_date
                         task.progress = 100
-                        task.save(update_fields=['completed_at', 'progress'])
+                        
+                        # Calculate actual_duration_days based on start_date
+                        if task.start_date:
+                            duration = (completion_date.date() - task.start_date).days
+                            task.actual_duration_days = max(0.5, duration)
+                        else:
+                            # If no start_date, use complexity-based estimate
+                            task.actual_duration_days = max(0.5, task.complexity_score * 1.5 * random.uniform(0.8, 1.2))
+                        
+                        task.save(update_fields=['completed_at', 'progress', 'actual_duration_days'])
                         
                         task_index += 1
                 
@@ -1455,7 +1464,16 @@ class Command(BaseCommand):
                     
                     task.completed_at = completion_date
                     task.progress = 100
-                    task.save(update_fields=['completed_at', 'progress'])
+                    
+                    # Calculate actual_duration_days based on start_date
+                    if task.start_date:
+                        duration = (completion_date.date() - task.start_date).days
+                        task.actual_duration_days = max(0.5, duration)
+                    else:
+                        # If no start_date, use complexity-based estimate
+                        task.actual_duration_days = max(0.5, task.complexity_score * 1.5 * random.uniform(0.8, 1.2))
+                    
+                    task.save(update_fields=['completed_at', 'progress', 'actual_duration_days'])
                     task_index += 1
             
             # Step 2: Clean up old burndown data

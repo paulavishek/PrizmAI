@@ -342,7 +342,11 @@ def _apply_prediction_adjustments(base_days, task, historical_stats):
     # Store adjustments in historical stats for reference
     historical_stats['adjustments'] = adjustments
     
-    return max(0.5, adjusted_days)  # Minimum 0.5 days
+    # Calculate complexity-based minimum duration
+    # Tasks with higher complexity should have a higher minimum
+    complexity_minimum = max(1.0, task.complexity_score * 0.5)  # At least 0.5 days per complexity point
+    
+    return max(complexity_minimum, adjusted_days)
 
 
 def _calculate_confidence(historical_stats, task):
@@ -427,6 +431,10 @@ def _fallback_prediction(task):
     remaining_progress = (100 - task.progress) / 100.0
     adjusted_days *= remaining_progress
     
+    # Apply complexity-based minimum duration
+    complexity_minimum = max(1.0, task.complexity_score * 0.5)
+    adjusted_days = max(complexity_minimum, adjusted_days)
+    
     # Determine base date for prediction
     # Use start_date if it's in the future, otherwise use today
     base_date = timezone.now()
@@ -457,7 +465,7 @@ def _fallback_prediction(task):
             'priority': task.priority,
             'note': 'Insufficient historical data - using rule-based estimation'
         },
-        'early_date': base_date + timedelta(days=max(0.5, adjusted_days * 0.5)),
+        'early_date': base_date + timedelta(days=max(complexity_minimum * 0.5, adjusted_days * 0.5)),
         'late_date': base_date + timedelta(days=adjusted_days * 1.5),
         'prediction_method': 'rule_based_fallback'
     }

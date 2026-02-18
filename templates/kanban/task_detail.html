@@ -979,6 +979,12 @@
                                     title="Why were these stakeholders identified?">
                                 <i class="bi bi-lightbulb me-1"></i> AI Insights
                             </button>
+                            {% elif board_stakeholders %}
+                            <button type="button" class="btn btn-sm btn-outline-info me-2" 
+                                    onclick="suggestStakeholders({{ task.id }})" 
+                                    title="Get AI recommendations for stakeholders">
+                                <i class="bi bi-robot me-1"></i> AI Suggest
+                            </button>
                             {% endif %}
                             <a href="{% url 'stakeholder:task_stakeholder_involvement' board_id=task.column.board.id task_id=task.id %}" 
                                class="btn btn-sm btn-outline-primary">
@@ -989,18 +995,18 @@
                     {% if stakeholders %}
                     <div class="p-2 bg-light rounded">
                         {% for involvement in stakeholders %}
-                        <div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-white rounded border-start border-3 border-info">
+                        <div class="stakeholder-involvement-item d-flex justify-content-between align-items-center mb-2 p-2 bg-white rounded border-start border-3 border-info">
                             <div>
-                                <strong>{{ involvement.stakeholder.name }}</strong>
-                                <small class="d-block text-muted">{{ involvement.get_involvement_type_display }}</small>
+                                <strong class="stakeholder-name">{{ involvement.stakeholder.name }}</strong>
+                                <small class="stakeholder-role d-block text-muted">{{ involvement.get_involvement_type_display }}</small>
                                 {% if involvement.feedback %}
                                 <small class="d-block text-muted mt-1"><i class="fas fa-comment"></i> {{ involvement.feedback|truncatewords:15 }}</small>
                                 {% endif %}
                             </div>
                             <div class="text-end">
-                                <span class="badge bg-info">{{ involvement.get_engagement_status_display }}</span>
+                                <span class="stakeholder-status badge bg-info">{{ involvement.get_engagement_status_display }}</span>
                                 {% if involvement.satisfaction_rating %}
-                                <small class="d-block text-warning mt-1">★ {{ involvement.satisfaction_rating }}/5</small>
+                                <small class="stakeholder-rating d-block text-warning mt-1">★ {{ involvement.satisfaction_rating }}/5</small>
                                 {% endif %}
                             </div>
                         </div>
@@ -1010,10 +1016,19 @@
                     <div class="p-3 bg-light rounded text-center text-muted">
                         <i class="fas fa-users fa-2x mb-2"></i>
                         <p class="mb-0">No stakeholders assigned to this task yet.</p>
+                        {% if board_stakeholders %}
+                        <small>Click "AI Suggest" to get recommendations or "Manage Stakeholders" to add manually.</small>
+                        {% else %}
                         <small>Click "Manage Stakeholders" above to add stakeholders.</small>
+                        {% endif %}
                     </div>
                     {% endif %}
                 </div>
+                
+                <!-- Store board stakeholders data for AI suggestions -->
+                <script type="application/json" id="board-stakeholders-data">
+                    [{% for sh in board_stakeholders %}{"id": {{ sh.id }}, "name": "{{ sh.name|escapejs }}", "role": "{{ sh.role|default:''|escapejs }}", "organization": "{{ sh.organization|default:''|escapejs }}", "influence_level": "{{ sh.get_influence_level_display|default:'Medium'|escapejs }}", "interest_level": "{{ sh.get_interest_level_display|default:'Medium'|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
+                </script>
 
                 <!-- 📋 Dependencies & Requirements Section - Always show -->
                 <div class="mb-3">
@@ -2816,6 +2831,38 @@
 
     // Function to explain stakeholder recommendations
     window.explainStakeholderRecommendations = function(taskId) {
+        // Extract stakeholder data from the page
+        const stakeholderElements = document.querySelectorAll('.stakeholder-involvement-item');
+        let stakeholdersHTML = '';
+        
+        if (stakeholderElements.length > 0) {
+            stakeholdersHTML = '<div class="mb-4"><h6 class="mb-3">Identified Stakeholders:</h6>';
+            stakeholderElements.forEach(element => {
+                const name = element.querySelector('.stakeholder-name')?.textContent || 'Unknown';
+                const role = element.querySelector('.stakeholder-role')?.textContent || '';
+                const status = element.querySelector('.stakeholder-status')?.textContent || '';
+                const rating = element.querySelector('.stakeholder-rating')?.textContent || '';
+                
+                stakeholdersHTML += `
+                    <div class="card mb-2">
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong><i class="bi bi-person-fill me-2"></i>${name}</strong>
+                                    ${role ? `<small class="d-block text-muted ms-4">${role}</small>` : ''}
+                                </div>
+                                <div class="text-end">
+                                    ${status ? `<span class="badge bg-info">${status}</span>` : ''}
+                                    ${rating ? `<small class="d-block text-warning mt-1">${rating}</small>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            stakeholdersHTML += '</div>';
+        }
+        
         const modal = document.createElement('div');
         modal.className = 'modal fade';
         modal.innerHTML = `
@@ -2826,6 +2873,7 @@
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
+                        ${stakeholdersHTML}
                         <p><strong>These stakeholders were identified based on:</strong></p>
                         <ul>
                             <li><i class="bi bi-check-circle text-success me-2"></i>Task requirements and scope analysis</li>
@@ -2849,6 +2897,212 @@
         bsModal.show();
         modal.addEventListener('hidden.bs.modal', () => modal.remove());
     };
+
+    // Function to suggest stakeholders for a task using AI
+    window.suggestStakeholders = function(taskId) {
+        // Get task data from form fields
+        const taskTitle = document.querySelector('[name="title"]')?.value?.trim() || 
+                         document.getElementById('id_title')?.value?.trim() || '';
+        const taskDescription = document.querySelector('[name="description"]')?.value?.trim() || 
+                               document.getElementById('id_description')?.value?.trim() || '';
+        const taskPriority = document.querySelector('[name="priority"]')?.value || '';
+        
+        // Get board stakeholders from embedded data
+        let boardStakeholders = [];
+        try {
+            const stakeholderData = document.getElementById('board-stakeholders-data');
+            if (stakeholderData) {
+                boardStakeholders = JSON.parse(stakeholderData.textContent);
+            }
+        } catch (e) {
+            console.error('Error parsing stakeholder data:', e);
+        }
+        
+        if (boardStakeholders.length === 0) {
+            alert('No stakeholders defined for this board. Please add stakeholders first.');
+            return;
+        }
+        
+        // Show loading modal
+        const modal = document.createElement('div');
+        modal.className = 'modal fade';
+        modal.innerHTML = `
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-info text-white">
+                        <h5 class="modal-title"><i class="bi bi-robot me-2"></i>AI Stakeholder Recommendations</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" id="stakeholder-suggestions-body">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-info" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <p class="mt-3">Analyzing task and identifying relevant stakeholders...</p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <a href="{% url 'stakeholder:task_stakeholder_involvement' board_id=task.column.board.id task_id=task.id %}" 
+                           class="btn btn-primary">
+                            <i class="fas fa-user-plus me-1"></i> Manage Stakeholders
+                        </a>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        const bsModal = new bootstrap.Modal(modal);
+        bsModal.show();
+        
+        // Analyze and recommend stakeholders
+        const suggestions = analyzeStakeholdersForTask(taskTitle, taskDescription, taskPriority, boardStakeholders);
+        
+        // Display recommendations
+        const modalBody = document.getElementById('stakeholder-suggestions-body');
+        if (suggestions.length > 0) {
+            const taskDisplayName = taskTitle || 'this task';
+            let html = `
+                <div class="alert alert-info mb-3">
+                    <i class="bi bi-lightbulb me-2"></i>
+                    <strong>AI Analysis:</strong> Based on ${taskTitle ? `the task "${escapeHtml(taskTitle)}"` : 'this task'}, here are the recommended stakeholders:
+                </div>
+            `;
+            
+            suggestions.forEach((suggestion, index) => {
+                const relevanceClass = suggestion.relevance === 'high' ? 'success' : 
+                                       suggestion.relevance === 'medium' ? 'warning' : 'secondary';
+                html += `
+                    <div class="card mb-2 border-start border-3 border-${relevanceClass}">
+                        <div class="card-body py-2">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <strong><i class="bi bi-person-fill me-2"></i>${escapeHtml(suggestion.name)}</strong>
+                                    ${suggestion.role ? `<small class="d-block text-muted">${escapeHtml(suggestion.role)}${suggestion.organization ? ' • ' + escapeHtml(suggestion.organization) : ''}</small>` : ''}
+                                    <small class="d-block mt-1"><i class="bi bi-chat-quote me-1"></i>${escapeHtml(suggestion.reason)}</small>
+                                </div>
+                                <span class="badge bg-${relevanceClass}">${suggestion.relevance.charAt(0).toUpperCase() + suggestion.relevance.slice(1)} Relevance</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            html += `
+                <div class="alert alert-light mt-3 mb-0">
+                    <small>
+                        <i class="bi bi-info-circle me-2"></i>
+                        <strong>How to add:</strong> Click "Manage Stakeholders" to add these suggested stakeholders to the task.
+                    </small>
+                </div>
+            `;
+            
+            modalBody.innerHTML = html;
+        } else {
+            modalBody.innerHTML = `
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    No specific stakeholder recommendations could be made. Consider adding stakeholders based on your project needs.
+                </div>
+            `;
+        }
+        
+        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+    };
+    
+    // Helper function to analyze stakeholders for a task
+    function analyzeStakeholdersForTask(taskTitle, taskDescription, taskPriority, stakeholders) {
+        const suggestions = [];
+        const titleLower = (taskTitle || '').toLowerCase();
+        const descLower = (taskDescription || '').toLowerCase();
+        const combinedText = titleLower + ' ' + descLower;
+        
+        // Keywords that indicate relevance
+        const marketingKeywords = ['marketing', 'campaign', 'social', 'brand', 'content', 'promotion', 'advertising', 'launch', 'announce'];
+        const technicalKeywords = ['development', 'api', 'code', 'bug', 'feature', 'technical', 'software', 'database', 'server', 'deploy', 'integration'];
+        const designKeywords = ['design', 'ui', 'ux', 'interface', 'visual', 'mockup', 'prototype', 'wireframe', 'layout'];
+        const managementKeywords = ['review', 'approve', 'budget', 'timeline', 'schedule', 'milestone', 'strategic', 'planning'];
+        const dataKeywords = ['data', 'analytics', 'report', 'metrics', 'dashboard', 'analysis', 'insight'];
+        
+        stakeholders.forEach(stakeholder => {
+            const roleLower = (stakeholder.role || '').toLowerCase();
+            const nameLower = (stakeholder.name || '').toLowerCase();
+            const orgLower = (stakeholder.organization || '').toLowerCase();
+            const stakeholderContext = roleLower + ' ' + nameLower + ' ' + orgLower;
+            
+            let relevanceScore = 0;
+            let reasons = [];
+            
+            // Check for role-based matches
+            if (marketingKeywords.some(kw => combinedText.includes(kw)) && 
+                (stakeholderContext.includes('marketing') || stakeholderContext.includes('brand') || stakeholderContext.includes('content'))) {
+                relevanceScore += 3;
+                reasons.push('Marketing-related expertise aligns with task scope');
+            }
+            
+            if (technicalKeywords.some(kw => combinedText.includes(kw)) && 
+                (stakeholderContext.includes('develop') || stakeholderContext.includes('engineer') || stakeholderContext.includes('technical') || stakeholderContext.includes('software'))) {
+                relevanceScore += 3;
+                reasons.push('Technical expertise relevant to task requirements');
+            }
+            
+            if (designKeywords.some(kw => combinedText.includes(kw)) && 
+                (stakeholderContext.includes('design') || stakeholderContext.includes('ux') || stakeholderContext.includes('ui'))) {
+                relevanceScore += 3;
+                reasons.push('Design expertise matches task needs');
+            }
+            
+            if (managementKeywords.some(kw => combinedText.includes(kw)) && 
+                (stakeholderContext.includes('manager') || stakeholderContext.includes('director') || stakeholderContext.includes('lead'))) {
+                relevanceScore += 2;
+                reasons.push('Management oversight may be required');
+            }
+            
+            if (dataKeywords.some(kw => combinedText.includes(kw)) && 
+                (stakeholderContext.includes('data') || stakeholderContext.includes('analyst') || stakeholderContext.includes('analytics'))) {
+                relevanceScore += 3;
+                reasons.push('Data/analytics expertise relevant to task');
+            }
+            
+            // Influence level consideration
+            if (stakeholder.influence_level === 'High' || stakeholder.influence_level === 'Very High') {
+                if (taskPriority === 'urgent' || taskPriority === 'high') {
+                    relevanceScore += 2;
+                    reasons.push('High influence stakeholder for high-priority task');
+                }
+            }
+            
+            // Interest level consideration
+            if (stakeholder.interest_level === 'High' || stakeholder.interest_level === 'Very High') {
+                relevanceScore += 1;
+                reasons.push('High interest in project outcomes');
+            }
+            
+            // If no specific match, but high influence/interest
+            if (relevanceScore === 0 && (stakeholder.influence_level === 'High' || stakeholder.interest_level === 'High')) {
+                relevanceScore = 1;
+                reasons.push('Key stakeholder should be kept informed');
+            }
+            
+            if (relevanceScore > 0) {
+                suggestions.push({
+                    id: stakeholder.id,
+                    name: stakeholder.name,
+                    role: stakeholder.role,
+                    organization: stakeholder.organization,
+                    relevance: relevanceScore >= 3 ? 'high' : relevanceScore >= 2 ? 'medium' : 'low',
+                    score: relevanceScore,
+                    reason: reasons[0] || 'Relevant to project scope'
+                });
+            }
+        });
+        
+        // Sort by relevance score
+        suggestions.sort((a, b) => b.score - a.score);
+        
+        // Return top 5 suggestions
+        return suggestions.slice(0, 5);
+    }
 
     // Utility: Escape HTML
     function escapeHtml(text) {
