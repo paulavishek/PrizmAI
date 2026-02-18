@@ -14,6 +14,7 @@ def quick_demo_login(request, username):
     """
     Quick login for demo users with pre-set credentials.
     Allows one-click login from the dashboard.
+    Saves the real user's username in session so they can switch back.
     """
     # Only allow login for demo users
     demo_users = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
@@ -22,11 +23,19 @@ def quick_demo_login(request, username):
         messages.error(request, 'Invalid demo user.')
         return redirect('login')
     
+    # Remember the real user before switching to demo
+    real_username = None
+    if request.user.is_authenticated and request.user.username not in demo_users:
+        real_username = request.user.username
+
     # Authenticate with the known demo password
     user = authenticate(request=request, username=username, password='demo123')
     
     if user is not None:
         login(request, user)
+        # Restore the real username into the new session so we can switch back
+        if real_username:
+            request.session['real_user_username'] = real_username
         messages.success(request, f'Logged in as {user.get_full_name() or user.username}!')
         logger.info(f"Quick demo login successful for user: {username}")
         return redirect('dashboard')
@@ -34,6 +43,35 @@ def quick_demo_login(request, username):
         messages.error(request, 'Demo user not found or credentials invalid.')
         logger.warning(f"Quick demo login failed for user: {username}")
         return redirect('login')
+
+
+@login_required
+def return_to_real_account(request):
+    """
+    Switch back from a demo account to the real user account that initiated the demo session.
+    """
+    real_username = request.session.get('real_user_username')
+    demo_users = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+
+    if not real_username:
+        messages.warning(request, 'No previous account found. Please log in.')
+        return redirect('login')
+
+    try:
+        real_user = User.objects.get(username=real_username)
+    except User.DoesNotExist:
+        messages.error(request, 'Your original account could not be found. Please log in.')
+        return redirect('login')
+
+    # Log out of demo account and log back in as the real user
+    # Use the model backend directly (no password needed — we trust the session token)
+    real_user.backend = 'django.contrib.auth.backends.ModelBackend'
+    login(request, real_user)
+    # Clear the real_user flag now that we're back
+    request.session.pop('real_user_username', None)
+    messages.success(request, f'Welcome back, {real_user.get_full_name() or real_user.username}!')
+    logger.info(f"Returned to real account: {real_username}")
+    return redirect('dashboard')
 
 def login_view(request):
     if request.user.is_authenticated:

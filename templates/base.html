@@ -121,6 +121,17 @@
                     {% endif %}
                 </ul>
                 <ul class="navbar-nav align-items-center">
+                    <!-- Return to real account button (visible only when browsing as a demo user) -->
+                    {% if is_demo_account and request.session.real_user_username %}
+                        <li class="nav-item me-2">
+                            <a href="{% url 'return_to_real_account' %}"
+                               class="btn btn-sm btn-warning fw-semibold"
+                               title="Switch back to your real account"
+                               style="font-size: 0.78rem; padding: 0.3rem 0.7rem; white-space: nowrap;">
+                                <i class="fas fa-arrow-left me-1"></i>Back to {{ request.session.real_user_username }}
+                            </a>
+                        </li>
+                    {% endif %}
                     <!-- Demo Mode Badge (visible only in demo mode) -->
                     {% if request.session.is_demo_mode %}
                         <li class="nav-item me-1">
