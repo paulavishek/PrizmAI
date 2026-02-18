@@ -2853,6 +2853,9 @@ def calculate_task_risk_score(task_title: str, task_description: str,
         
         response_text = generate_ai_content(prompt, task_type='risk_assessment')
         if response_text:
+            # Log the raw response for debugging
+            logger.debug(f"Raw AI response for risk scoring: {response_text[:500]}...")
+            
             # Handle code block formatting
             if "```json" in response_text:
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
@@ -2866,15 +2869,118 @@ def calculate_task_risk_score(task_title: str, task_description: str,
             if json_start != -1 and json_end != -1 and json_end > json_start:
                 response_text = response_text[json_start:json_end + 1]
             
+            # Try to parse JSON
             try:
-                return json.loads(response_text)
+                parsed_data = json.loads(response_text)
+                logger.info(f"Successfully parsed risk assessment for task: {task_title[:50]}")
+                return parsed_data
             except json.JSONDecodeError as e:
                 logger.error(f"JSON parsing error in risk scoring: {e}")
-                return None
-        return None
+                logger.error(f"Problematic JSON text (first 1000 chars): {response_text[:1000]}")
+                
+                # Try to fix common JSON issues
+                try:
+                    # Remove trailing commas before closing braces/brackets
+                    import re
+                    fixed_text = re.sub(r',\s*([}\]])', r'\1', response_text)
+                    # Try parsing again
+                    parsed_data = json.loads(fixed_text)
+                    logger.info(f"Successfully parsed risk assessment after fixing JSON for task: {task_title[:50]}")
+                    return parsed_data
+                except json.JSONDecodeError as e2:
+                    logger.error(f"Failed to fix JSON: {e2}")
+                    # Return fallback assessment
+                    return _create_fallback_risk_assessment(task_title, task_description, task_priority)
+        else:
+            logger.warning(f"No response from AI for risk scoring of task: {task_title[:50]}")
+            return _create_fallback_risk_assessment(task_title, task_description, task_priority)
+        
+        return _create_fallback_risk_assessment(task_title, task_description, task_priority)
     except Exception as e:
-        logger.error(f"Error calculating task risk score: {str(e)}")
-        return None
+        logger.error(f"Error calculating task risk score: {str(e)}", exc_info=True)
+        return _create_fallback_risk_assessment(task_title, task_description, task_priority)
+
+
+def _create_fallback_risk_assessment(task_title: str, task_description: str, task_priority: str) -> Dict:
+    """
+    Create a basic fallback risk assessment when AI parsing fails.
+    
+    Args:
+        task_title: The title of the task
+        task_description: Detailed description of the task
+        task_priority: Priority level
+        
+    Returns:
+        Dictionary with basic risk assessment
+    """
+    # Simple rule-based assessment
+    priority_risk_map = {
+        'urgent': {'likelihood': 3, 'impact': 3},
+        'high': {'likelihood': 2, 'impact': 2},
+        'medium': {'likelihood': 2, 'impact': 2},
+        'low': {'likelihood': 1, 'impact': 1}
+    }
+    
+    risk_scores = priority_risk_map.get(task_priority.lower(), {'likelihood': 2, 'impact': 2})
+    risk_score = risk_scores['likelihood'] * risk_scores['impact']
+    
+    if risk_score >= 6:
+        risk_level = 'Critical'
+    elif risk_score >= 4:
+        risk_level = 'High'
+    elif risk_score >= 2:
+        risk_level = 'Medium'
+    else:
+        risk_level = 'Low'
+    
+    return {
+        'likelihood': {
+            'score': risk_scores['likelihood'],
+            'percentage_range': '34-66%',
+            'reasoning': f'Assessment based on task priority ({task_priority}). AI analysis temporarily unavailable.',
+            'key_factors': ['Task priority', 'Complexity assessment'],
+            'factor_weights': {'priority': 0.7, 'complexity': 0.3},
+            'confidence': 0.5
+        },
+        'impact': {
+            'score': risk_scores['impact'],
+            'severity_level': risk_level,
+            'reasoning': f'Impact estimated from task priority and context. AI analysis temporarily unavailable.',
+            'affected_areas': ['Timeline', 'Resources'],
+            'impact_breakdown': {'timeline': 0.4, 'resources': 0.3, 'quality': 0.2, 'stakeholders': 0.1},
+            'confidence': 0.5
+        },
+        'risk_assessment': {
+            'risk_score': risk_score,
+            'risk_level': risk_level,
+            'priority_ranking': 'important' if risk_score >= 4 else 'routine',
+            'summary': f'Basic risk assessment for {task_priority} priority task. AI analysis temporarily unavailable.',
+            'calculation_method': f'Likelihood ({risk_scores["likelihood"]}) × Impact ({risk_scores["impact"]}) = {risk_score}',
+            'contributing_factors': [
+                {
+                    'factor': 'Task Priority',
+                    'contribution_percentage': 70,
+                    'weight': 0.7,
+                    'description': f'Priority level is {task_priority}'
+                }
+            ]
+        },
+        'risk_indicators': [
+            {'indicator': 'Task progress', 'frequency': 'Daily', 'threshold': 'Less than expected progress'},
+            {'indicator': 'Blocker status', 'frequency': 'As needed', 'threshold': 'Any blockers identified'}
+        ],
+        'mitigation_suggestions': [
+            {'action': 'Monitor task progress closely', 'timeline': 'Daily', 'priority': 'medium', 'expected_impact': 'Helps identify issues early'},
+            {'action': 'Ensure clear requirements', 'timeline': 'Before starting', 'priority': 'high', 'expected_impact': 'Reduces uncertainty'}
+        ],
+        'confidence_level': 'medium',
+        'confidence_score': 0.5,
+        'explainability': {
+            'model_assumptions': ['Assessment based on priority level', 'Standard risk factors considered'],
+            'data_limitations': ['AI analysis temporarily unavailable', 'Using rule-based fallback'],
+            'alternative_interpretations': ['Actual risk may vary based on task specifics']
+        }
+    }
 
 
 def generate_risk_mitigation_suggestions(task_title: str, task_description: str,

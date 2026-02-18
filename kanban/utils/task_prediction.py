@@ -62,8 +62,19 @@ def predict_task_completion_date(task):
         historical_stats
     )
     
+    # Determine base date for prediction
+    # Use start_date if it's in the future, otherwise use today
+    base_date = timezone.now()
+    if task.start_date:
+        # Convert date to datetime for comparison
+        start_datetime = timezone.make_aware(
+            timezone.datetime.combine(task.start_date, timezone.datetime.min.time())
+        )
+        # Use the later of start_date or today
+        base_date = max(base_date, start_datetime)
+    
     # Calculate prediction date
-    predicted_date = timezone.now() + timedelta(days=adjusted_days)
+    predicted_date = base_date + timedelta(days=adjusted_days)
     
     # Calculate confidence based on data quality
     confidence = _calculate_confidence(historical_stats, task)
@@ -73,10 +84,10 @@ def predict_task_completion_date(task):
     confidence_interval = std_dev * 1.96  # 95% confidence interval
     
     # Calculate early/late estimates
-    early_date = timezone.now() + timedelta(
+    early_date = base_date + timedelta(
         days=max(0.5, adjusted_days - confidence_interval)
     )
-    late_date = timezone.now() + timedelta(
+    late_date = base_date + timedelta(
         days=adjusted_days + confidence_interval
     )
     
@@ -416,7 +427,18 @@ def _fallback_prediction(task):
     remaining_progress = (100 - task.progress) / 100.0
     adjusted_days *= remaining_progress
     
-    predicted_date = timezone.now() + timedelta(days=adjusted_days)
+    # Determine base date for prediction
+    # Use start_date if it's in the future, otherwise use today
+    base_date = timezone.now()
+    if task.start_date:
+        # Convert date to datetime for comparison
+        start_datetime = timezone.make_aware(
+            timezone.datetime.combine(task.start_date, timezone.datetime.min.time())
+        )
+        # Use the later of start_date or today
+        base_date = max(base_date, start_datetime)
+    
+    predicted_date = base_date + timedelta(days=adjusted_days)
     
     # Lower confidence for fallback predictions
     confidence = 0.35
@@ -435,8 +457,8 @@ def _fallback_prediction(task):
             'priority': task.priority,
             'note': 'Insufficient historical data - using rule-based estimation'
         },
-        'early_date': timezone.now() + timedelta(days=max(0.5, adjusted_days * 0.5)),
-        'late_date': timezone.now() + timedelta(days=adjusted_days * 1.5),
+        'early_date': base_date + timedelta(days=max(0.5, adjusted_days * 0.5)),
+        'late_date': base_date + timedelta(days=adjusted_days * 1.5),
         'prediction_method': 'rule_based_fallback'
     }
 
