@@ -2794,12 +2794,18 @@ def calculate_task_risk_score(task_title: str, task_description: str,
         4. Suggest specific mitigation actions
         5. Provide confidence level for assessment
         
-        FORMAT YOUR RESPONSE AS JSON WITH DETAILED EXPLAINABILITY:
+        IMPORTANT FORMATTING RULES:
+        - Keep all string values on a single line (no line breaks within strings)
+        - Keep "reasoning" fields concise (max 2-3 sentences, under 300 characters)
+        - Ensure all JSON is properly closed with matching braces
+        - Use proper JSON syntax with commas after each property except the last
+        
+        FORMAT YOUR RESPONSE AS VALID JSON WITH DETAILED EXPLAINABILITY:
         {{
           "likelihood": {{
             "score": 1-3,
             "percentage_range": "XX-XX%",
-            "reasoning": "2-3 sentence explanation",
+            "reasoning": "Concise 1-2 sentence explanation on single line",
             "key_factors": ["factor1", "factor2", "factor3"],
             "factor_weights": {{
               "factor1": 0.XX,
@@ -2810,7 +2816,7 @@ def calculate_task_risk_score(task_title: str, task_description: str,
           "impact": {{
             "score": 1-3,
             "severity_level": "Low/Medium/High",
-            "reasoning": "2-3 sentence explanation",
+            "reasoning": "Concise 1-2 sentence explanation on single line",
             "affected_areas": ["area1", "area2"],
             "impact_breakdown": {{
               "timeline": 0.XX,
@@ -2824,14 +2830,14 @@ def calculate_task_risk_score(task_title: str, task_description: str,
             "risk_score": 1-9,
             "risk_level": "Low/Medium/High/Critical",
             "priority_ranking": "routine|important|critical",
-            "summary": "Brief overall assessment",
+            "summary": "Brief overall assessment on single line",
             "calculation_method": "Likelihood (X) × Impact (Y) = Z",
             "contributing_factors": [
               {{
                 "factor": "Factor name",
                 "contribution_percentage": XX,
                 "weight": 0.XX,
-                "description": "Why this matters"
+                "description": "Brief description on single line"
               }}
             ]
           }},
@@ -2839,7 +2845,7 @@ def calculate_task_risk_score(task_title: str, task_description: str,
             {{"indicator": "What to monitor", "frequency": "When/how often", "threshold": "Alert level"}}
           ],
           "mitigation_suggestions": [
-            {{"action": "Specific action", "timeline": "When", "priority": "high/medium/low", "expected_impact": "Reduces risk by X%"}}
+            {{"action": "Specific action", "timeline": "When", "priority": "high/medium/low", "expected_impact": "Brief impact description"}}
           ],
           "confidence_level": "high|medium|low",
           "confidence_score": 0.XX,
@@ -2849,12 +2855,14 @@ def calculate_task_risk_score(task_title: str, task_description: str,
             "alternative_interpretations": ["interpretation1"]
           }}
         }}
+        
+        CRITICAL: Return ONLY valid JSON. Keep all text on single lines. No line breaks within string values.
         """
         
         response_text = generate_ai_content(prompt, task_type='risk_assessment')
         if response_text:
             # Log the raw response for debugging
-            logger.debug(f"Raw AI response for risk scoring: {response_text[:500]}...")
+            logger.debug(f"Raw AI response for risk scoring (length: {len(response_text)}): {response_text[:500]}...")
             
             # Handle code block formatting
             if "```json" in response_text:
@@ -2878,19 +2886,19 @@ def calculate_task_risk_score(task_title: str, task_description: str,
                 logger.error(f"JSON parsing error in risk scoring: {e}")
                 logger.error(f"Problematic JSON text (first 1000 chars): {response_text[:1000]}")
                 
-                # Try to fix common JSON issues
-                try:
-                    # Remove trailing commas before closing braces/brackets
-                    import re
-                    fixed_text = re.sub(r',\s*([}\]])', r'\1', response_text)
-                    # Try parsing again
-                    parsed_data = json.loads(fixed_text)
-                    logger.info(f"Successfully parsed risk assessment after fixing JSON for task: {task_title[:50]}")
-                    return parsed_data
-                except json.JSONDecodeError as e2:
-                    logger.error(f"Failed to fix JSON: {e2}")
-                    # Return fallback assessment
-                    return _create_fallback_risk_assessment(task_title, task_description, task_priority)
+                # Try advanced JSON repair
+                fixed_text = _repair_json(response_text)
+                if fixed_text:
+                    try:
+                        parsed_data = json.loads(fixed_text)
+                        logger.info(f"Successfully parsed risk assessment after repairing JSON for task: {task_title[:50]}")
+                        return parsed_data
+                    except json.JSONDecodeError as e2:
+                        logger.error(f"Failed to parse repaired JSON: {e2}")
+                
+                # Return fallback assessment
+                logger.warning(f"Falling back to rule-based assessment for task: {task_title[:50]}")
+                return _create_fallback_risk_assessment(task_title, task_description, task_priority)
         else:
             logger.warning(f"No response from AI for risk scoring of task: {task_title[:50]}")
             return _create_fallback_risk_assessment(task_title, task_description, task_priority)
@@ -2899,6 +2907,76 @@ def calculate_task_risk_score(task_title: str, task_description: str,
     except Exception as e:
         logger.error(f"Error calculating task risk score: {str(e)}", exc_info=True)
         return _create_fallback_risk_assessment(task_title, task_description, task_priority)
+
+
+def _repair_json(json_text: str) -> Optional[str]:
+    """
+    Attempt to repair common JSON formatting issues.
+    
+    Args:
+        json_text: Potentially malformed JSON string
+        
+    Returns:
+        Repaired JSON string or None if repair failed
+    """
+    try:
+        import re
+        
+        # Remove trailing commas before closing braces/brackets
+        fixed_text = re.sub(r',\s*([}\]])', r'\1', json_text)
+        
+        # Fix missing commas between object properties (common in AI responses)
+        # This regex looks for patterns like: "value"\n    "key": where comma is missing
+        fixed_text = re.sub(r'"\s*\n\s*"', '",\n    "', fixed_text)
+        
+        # Fix missing commas in arrays
+        fixed_text = re.sub(r'"\s*\n\s*\{', '",\n    {', fixed_text)
+        fixed_text = re.sub(r'\}\s*\n\s*\{', '},\n    {', fixed_text)
+        fixed_text = re.sub(r'\]\s*\n\s*\{', '],\n    {', fixed_text)
+        
+        # Handle truncated strings - if a string is not closed before end of object
+        # Look for unclosed quotes before closing braces
+        lines = fixed_text.split('\n')
+        repaired_lines = []
+        in_string = False
+        string_char = None
+        
+        for line in lines:
+            quote_count_double = line.count('"') - line.count('\\"')
+            quote_count_single = line.count("'") - line.count("\\'")
+            
+            # Simple heuristic: if line has odd number of quotes, string may be unclosed
+            if quote_count_double % 2 != 0 or quote_count_single % 2 != 0:
+                # Check if this looks like a truncated string (doesn't end with quote but ends with letter/word)
+                stripped = line.rstrip()
+                if stripped and not stripped.endswith(('"', "'", ',', '{', '}', '[', ']', ':')):
+                    # This might be a truncated line - add closing quote and comma
+                    line = stripped + '...",'
+            
+            repaired_lines.append(line)
+        
+        fixed_text = '\n'.join(repaired_lines)
+        
+        # Try to balance braces if they're unbalanced
+        open_braces = fixed_text.count('{')
+        close_braces = fixed_text.count('}')
+        open_brackets = fixed_text.count('[')
+        close_brackets = fixed_text.count(']')
+        
+        if open_braces > close_braces:
+            # Add missing closing braces at the end
+            fixed_text += '\n' + ('  ' * (open_braces - close_braces - 1)) + '}\n' * (open_braces - close_braces)
+        
+        if open_brackets > close_brackets:
+            # Add missing closing brackets at the end
+            fixed_text += ']' * (open_brackets - close_brackets)
+        
+        logger.debug(f"JSON repair attempted. Original length: {len(json_text)}, Repaired length: {len(fixed_text)}")
+        return fixed_text
+        
+    except Exception as e:
+        logger.error(f"Error during JSON repair: {e}")
+        return None
 
 
 def _create_fallback_risk_assessment(task_title: str, task_description: str, task_priority: str) -> Dict:
