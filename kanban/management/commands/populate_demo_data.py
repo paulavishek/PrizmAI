@@ -372,30 +372,76 @@ class Command(BaseCommand):
             )
             
             if user_boards.exists():
-                # First delete all tasks on these boards (to handle FK constraints)
-                user_board_tasks = Task.objects.filter(column__board__in=user_boards)
-                task_ids = list(user_board_tasks.values_list('id', flat=True))
-                
-                if task_ids:
-                    # Delete related records first
-                    TaskActivity.objects.filter(task_id__in=task_ids).delete()
-                    Comment.objects.filter(task_id__in=task_ids).delete()
-                    TaskFile.objects.filter(task_id__in=task_ids).delete()
-                    TaskAssignmentHistory.objects.filter(task_id__in=task_ids).delete()
-                    StakeholderTaskInvolvement.objects.filter(task_id__in=task_ids).delete()
-                    
-                    # Clear dependencies
-                    for task in Task.objects.filter(id__in=task_ids):
-                        task.dependencies.clear()
-                        task.dependent_tasks.clear()
-                        task.related_tasks.clear()
-                    
-                    # Delete the tasks
-                    user_board_tasks.delete()
-                
-                # Now delete the boards (columns will cascade)
-                deleted_boards = user_boards.delete()[0]
-                self.stdout.write(self.style.WARNING(f'   Deleted {deleted_boards} user-created boards'))
+                # Safe deletion using the same helper logic from demo_views
+                from django.db import connection
+                for board in list(user_boards):
+                    board_task_ids = list(Task.objects.filter(column__board=board).values_list('id', flat=True))
+                    if board_task_ids:
+                        # Clear M2M first
+                        for task in Task.objects.filter(id__in=board_task_ids):
+                            try:
+                                task.dependencies.clear()
+                            except Exception:
+                                pass
+                            try:
+                                task.related_tasks.clear()
+                            except Exception:
+                                pass
+                        TaskActivity.objects.filter(task_id__in=board_task_ids).delete()
+                        Comment.objects.filter(task_id__in=board_task_ids).delete()
+                        TaskFile.objects.filter(task_id__in=board_task_ids).delete()
+                        try:
+                            TaskAssignmentHistory.objects.filter(task_id__in=board_task_ids).delete()
+                        except Exception:
+                            pass
+                        try:
+                            StakeholderTaskInvolvement.objects.filter(task_id__in=board_task_ids).delete()
+                        except Exception:
+                            pass
+                        Task.objects.filter(id__in=board_task_ids).delete()
+                    # Delete board-level artifacts before board
+                    try:
+                        from webhooks.models import WebhookEvent, Webhook
+                        WebhookEvent.objects.filter(board=board).delete()
+                        Webhook.objects.filter(board=board).delete()
+                    except Exception:
+                        pass
+                    try:
+                        from kanban.stakeholder_models import ProjectStakeholder, StakeholderEngagementRecord
+                        StakeholderEngagementRecord.objects.filter(stakeholder__board=board).delete()
+                        ProjectStakeholder.objects.filter(board=board).delete()
+                    except Exception:
+                        pass
+                    try:
+                        from analytics.models import EngagementMetrics
+                        EngagementMetrics.objects.filter(board=board).delete()
+                    except Exception:
+                        pass
+                    try:
+                        from kanban.permission_models import BoardMembership, PermissionAuditLog
+                        BoardMembership.objects.filter(board=board).delete()
+                        PermissionAuditLog.objects.filter(board=board).delete()
+                    except Exception:
+                        pass
+                    # Delete columns then board (FK-safe)
+                    board.columns.all().delete()
+                    with connection.cursor() as c:
+                        c.execute('PRAGMA foreign_keys = OFF;')
+                    board.delete()
+                    with connection.cursor() as c:
+                        c.execute('PRAGMA foreign_keys = ON;')
+                self.stdout.write(self.style.WARNING(f'   Deleted {len(list(user_boards))} user-created boards'))
+            
+            # Also fix any orphaned webhook events from previously-deleted boards
+            try:
+                from django.db import connection
+                with connection.cursor() as c:
+                    c.execute(
+                        'DELETE FROM webhooks_webhookevent '
+                        'WHERE board_id NOT IN (SELECT id FROM kanban_board)'
+                    )
+            except Exception:
+                pass
             
             # Delete ALL tasks on official demo board (both user-created and demo data)
             deleted_count = Task.objects.filter(

@@ -195,51 +195,195 @@ class Command(BaseCommand):
         """Reset ALL demo data - removes user-created content and prepares for fresh population"""
         self.stdout.write(self.style.WARNING('\n🗑️ Resetting ALL demo data...'))
 
-        # =====================================================================
-        # STEP 1: Delete user-created boards (non-official demo boards)
-        # =====================================================================
+        from django.db import connection
         from kanban.models import Comment, TaskActivity, TaskFile
         from kanban.resource_leveling_models import TaskAssignmentHistory
         from kanban.stakeholder_models import StakeholderTaskInvolvement
-        
-        user_created_boards = Board.objects.filter(
+
+        # =====================================================================
+        # STEP 1: Delete user-created boards (non-official demo boards)
+        #         — must delete all related artifacts before the boards
+        # =====================================================================
+        user_created_boards = list(Board.objects.filter(
             organization=self.demo_org,
             is_official_demo_board=False
-        )
-        
-        if user_created_boards.exists():
-            # Get task IDs for cleanup
-            user_board_tasks = Task.objects.filter(column__board__in=user_created_boards)
-            task_ids = list(user_board_tasks.values_list('id', flat=True))
-            
+        ))
+
+        deleted_board_count = 0
+        for board in user_created_boards:
+            task_ids = list(Task.objects.filter(column__board=board).values_list('id', flat=True))
+
             if task_ids:
-                # Clean up task-related data
+                # Clear M2M on tasks first
+                for task in Task.objects.filter(id__in=task_ids):
+                    try:
+                        task.dependencies.clear()
+                    except Exception:
+                        pass
+                    try:
+                        task.related_tasks.clear()
+                    except Exception:
+                        pass
+
+                # Task-level children
                 TaskActivity.objects.filter(task_id__in=task_ids).delete()
                 Comment.objects.filter(task_id__in=task_ids).delete()
                 TaskFile.objects.filter(task_id__in=task_ids).delete()
                 try:
                     TaskAssignmentHistory.objects.filter(task_id__in=task_ids).delete()
-                except:
+                except Exception:
                     pass
                 try:
                     StakeholderTaskInvolvement.objects.filter(task_id__in=task_ids).delete()
-                except:
+                except Exception:
                     pass
-                
-                # Clear dependencies
-                for task in Task.objects.filter(id__in=task_ids):
-                    task.dependencies.clear()
-                    if hasattr(task, 'dependent_tasks'):
-                        task.dependent_tasks.clear()
-                    if hasattr(task, 'related_tasks'):
-                        task.related_tasks.clear()
-                
-                # Delete tasks
-                user_board_tasks.delete()
-            
-            # Delete the boards
-            deleted_count = user_created_boards.delete()[0]
-            self.stdout.write(f'   ✓ Deleted {deleted_count} user-created boards')
+                try:
+                    TaskThreadComment.objects.filter(task_id__in=task_ids).delete()
+                except Exception:
+                    pass
+                try:
+                    TimeEntry.objects.filter(task_id__in=task_ids).delete()
+                except Exception:
+                    pass
+                try:
+                    from kanban.budget_models import TaskCost
+                    TaskCost.objects.filter(task_id__in=task_ids).delete()
+                except Exception:
+                    pass
+                try:
+                    from wiki.models import WikiLink as WL
+                    WL.objects.filter(task_id__in=task_ids).delete()
+                except Exception:
+                    pass
+
+                Task.objects.filter(id__in=task_ids).delete()
+
+            # Board-level children
+            try:
+                from webhooks.models import WebhookEvent as WE, Webhook as WH
+                WE.objects.filter(board=board).delete()
+                WH.objects.filter(board=board).delete()
+            except Exception:
+                pass
+            try:
+                FileAttachment.objects.filter(chat_room__board=board).delete()
+                ChatMessage.objects.filter(chat_room__board=board).delete()
+                ChatRoom.objects.filter(board=board).delete()
+            except Exception:
+                pass
+            try:
+                ConflictNotification.objects.filter(conflict__board=board).delete()
+                ConflictResolution.objects.filter(conflict__board=board).delete()
+                ConflictDetection.objects.filter(board=board).delete()
+            except Exception:
+                pass
+            try:
+                AIAssistantMessage.objects.filter(session__board=board).delete()
+                AIAssistantSession.objects.filter(board=board).delete()
+                AITaskRecommendation.objects.filter(board=board).delete()
+                ProjectKnowledgeBase.objects.filter(board=board).delete()
+                AIAssistantAnalytics.objects.filter(board=board).delete()
+            except Exception:
+                pass
+            try:
+                from kanban.stakeholder_models import (
+                    StakeholderEngagementRecord
+                )
+                StakeholderEngagementRecord.objects.filter(
+                    stakeholder__board=board
+                ).delete()
+                StakeholderTaskInvolvement.objects.filter(
+                    stakeholder__board=board
+                ).delete()
+                from kanban.stakeholder_models import ProjectStakeholder
+                ProjectStakeholder.objects.filter(board=board).delete()
+            except Exception:
+                pass
+            try:
+                from kanban.retrospective_models import (
+                    RetrospectiveTrend, ImprovementMetric, LessonLearned,
+                    RetrospectiveActionItem, ProjectRetrospective
+                )
+                RetrospectiveTrend.objects.filter(board=board).delete()
+                ImprovementMetric.objects.filter(board=board).delete()
+                LessonLearned.objects.filter(board=board).delete()
+                RetrospectiveActionItem.objects.filter(board=board).delete()
+                ProjectRetrospective.objects.filter(board=board).delete()
+            except Exception:
+                pass
+            try:
+                from kanban.coach_models import CoachingSuggestion, PMMetrics
+                CoachingSuggestion.objects.filter(board=board).delete()
+                PMMetrics.objects.filter(board=board).delete()
+            except Exception:
+                pass
+            try:
+                from kanban.budget_models import ProjectBudget, ProjectROI
+                ProjectROI.objects.filter(board=board).delete()
+                ProjectBudget.objects.filter(board=board).delete()
+            except Exception:
+                pass
+            try:
+                from kanban.burndown_models import (
+                    TeamVelocitySnapshot, BurndownPrediction, BurndownAlert, SprintMilestone
+                )
+                BurndownAlert.objects.filter(board=board).delete()
+                BurndownPrediction.objects.filter(board=board).delete()
+                TeamVelocitySnapshot.objects.filter(board=board).delete()
+                SprintMilestone.objects.filter(board=board).delete()
+            except Exception:
+                pass
+            try:
+                from kanban.models import (
+                    TeamSkillProfile, SkillGap, SkillDevelopmentPlan,
+                    ScopeChangeSnapshot, ScopeCreepAlert,
+                    WorkloadDistributionRecommendation, TeamCapacityAlert,
+                    ResourceDemandForecast, MeetingTranscript
+                )
+                SkillGap.objects.filter(board=board).delete()
+                SkillDevelopmentPlan.objects.filter(board=board).delete()
+                TeamSkillProfile.objects.filter(board=board).delete()
+                ScopeCreepAlert.objects.filter(board=board).delete()
+                ScopeChangeSnapshot.objects.filter(board=board).delete()
+                WorkloadDistributionRecommendation.objects.filter(board=board).delete()
+                TeamCapacityAlert.objects.filter(board=board).delete()
+                ResourceDemandForecast.objects.filter(board=board).delete()
+                MeetingTranscript.objects.filter(board=board).delete()
+            except Exception:
+                pass
+            try:
+                from analytics.models import EngagementMetrics
+                EngagementMetrics.objects.filter(board=board).delete()
+            except Exception:
+                pass
+            try:
+                from kanban.permission_models import BoardMembership, PermissionAuditLog
+                BoardMembership.objects.filter(board=board).delete()
+                PermissionAuditLog.objects.filter(board=board).delete()
+            except Exception:
+                pass
+
+            # Delete columns then board (with FK safety)
+            board.columns.all().delete()
+            with connection.cursor() as c:
+                c.execute('PRAGMA foreign_keys = OFF;')
+            board.delete()
+            with connection.cursor() as c:
+                c.execute('PRAGMA foreign_keys = ON;')
+            deleted_board_count += 1
+
+        if deleted_board_count:
+            self.stdout.write(f'   ✓ Deleted {deleted_board_count} user-created boards')
+
+        # Fix any orphaned webhook events from previously-deleted boards
+        try:
+            with connection.cursor() as c:
+                c.execute(
+                    'DELETE FROM webhooks_webhookevent '
+                    'WHERE board_id NOT IN (SELECT id FROM kanban_board)'
+                )
+        except Exception:
+            pass
 
         # =====================================================================
         # STEP 2: Delete user-created tasks on official demo boards
@@ -249,8 +393,27 @@ class Command(BaseCommand):
             is_seed_demo_data=False
         )
         if user_tasks_on_demo_boards.exists():
+            user_task_ids = list(user_tasks_on_demo_boards.values_list('id', flat=True))
+            # Clean children first
+            Comment.objects.filter(task_id__in=user_task_ids).delete()
+            TaskActivity.objects.filter(task_id__in=user_task_ids).delete()
+            TaskFile.objects.filter(task_id__in=user_task_ids).delete()
+            for t in Task.objects.filter(id__in=user_task_ids):
+                try:
+                    t.dependencies.clear()
+                except Exception:
+                    pass
+                try:
+                    t.related_tasks.clear()
+                except Exception:
+                    pass
             deleted = user_tasks_on_demo_boards.delete()[0]
             self.stdout.write(f'   ✓ Deleted {deleted} user-created tasks on demo boards')
+
+        # Delete ALL comments on demo boards (will be repopulated by seed data)
+        Comment.objects.filter(
+            task__column__board__in=self.demo_boards
+        ).delete()
 
         # =====================================================================
         # STEP 3: Clear Wiki data (all data in demo org, will be repopulated)
@@ -261,9 +424,14 @@ class Command(BaseCommand):
         self.stdout.write('   ✓ Cleared Wiki data')
 
         # =====================================================================
-        # STEP 4: Clear Messaging data
+        # STEP 4: Clear Messaging data (all — will be repopulated)
         # =====================================================================
         Notification.objects.filter(recipient__in=self.demo_users).delete()
+        # Also clear notifications for ALL users on demo boards
+        try:
+            Notification.objects.filter(board__in=self.demo_boards).delete()
+        except Exception:
+            pass
         FileAttachment.objects.filter(chat_room__board__in=self.demo_boards).delete()
         ChatMessage.objects.filter(chat_room__board__in=self.demo_boards).delete()
         TaskThreadComment.objects.filter(task__column__board__in=self.demo_boards).delete()
@@ -281,13 +449,10 @@ class Command(BaseCommand):
         # =====================================================================
         # STEP 6: Clear AI Assistant data
         # =====================================================================
-        # Clear sessions for demo boards
         AIAssistantMessage.objects.filter(session__board__in=self.demo_boards).delete()
         AIAssistantSession.objects.filter(board__in=self.demo_boards).delete()
-        # Clear sessions for demo users (in case they have non-board sessions)
         AIAssistantMessage.objects.filter(session__user__in=self.demo_users).delete()
         AIAssistantSession.objects.filter(user__in=self.demo_users).delete()
-        # Clear analytics and knowledge base
         ProjectKnowledgeBase.objects.filter(board__in=self.demo_boards).delete()
         AIAssistantAnalytics.objects.filter(user__in=self.demo_users).delete()
         AIAssistantAnalytics.objects.filter(board__in=self.demo_boards).delete()
@@ -301,20 +466,42 @@ class Command(BaseCommand):
         self.stdout.write('   ✓ Cleared Time Tracking data')
 
         # =====================================================================
-        # STEP 8: Clear Skill Profiles and Skill Gaps
+        # STEP 8: Clear Stakeholder data
+        # =====================================================================
+        try:
+            from kanban.stakeholder_models import (
+                ProjectStakeholder, StakeholderTaskInvolvement, StakeholderEngagementRecord
+            )
+            StakeholderEngagementRecord.objects.filter(
+                stakeholder__board__in=self.demo_boards
+            ).delete()
+            StakeholderTaskInvolvement.objects.filter(
+                stakeholder__board__in=self.demo_boards
+            ).delete()
+            ProjectStakeholder.objects.filter(board__in=self.demo_boards).delete()
+        except Exception:
+            pass
+        self.stdout.write('   ✓ Cleared Stakeholder data')
+
+        # =====================================================================
+        # STEP 9: Clear Skill Profiles and Skill Gaps
         # =====================================================================
         from kanban.models import TeamSkillProfile, SkillGap
         SkillGap.objects.filter(board__in=self.demo_boards).delete()
+        try:
+            from kanban.models import SkillDevelopmentPlan
+            SkillDevelopmentPlan.objects.filter(board__in=self.demo_boards).delete()
+        except Exception:
+            pass
         TeamSkillProfile.objects.filter(board__in=self.demo_boards).delete()
         self.stdout.write('   ✓ Cleared Skill data')
 
         # =====================================================================
-        # STEP 9: Clear Scope Change data
+        # STEP 10: Clear Scope Change data
         # =====================================================================
         from kanban.models import ScopeChangeSnapshot, ScopeCreepAlert
         ScopeCreepAlert.objects.filter(board__in=self.demo_boards).delete()
         ScopeChangeSnapshot.objects.filter(board__in=self.demo_boards).delete()
-        # Also clear board baseline fields so they get repopulated consistently
         self.demo_boards.update(
             baseline_task_count=None,
             baseline_complexity_total=None,
@@ -324,11 +511,46 @@ class Command(BaseCommand):
         self.stdout.write('   ✓ Cleared Scope Change data and board baselines')
 
         # =====================================================================
-        # STEP 10: Clear Sprint Milestones
+        # STEP 11: Clear Sprint Milestones
         # =====================================================================
         from kanban.burndown_models import SprintMilestone
         SprintMilestone.objects.filter(board__in=self.demo_boards).delete()
         self.stdout.write('   ✓ Cleared Sprint Milestone data')
+
+        # =====================================================================
+        # STEP 12: Clear Retrospective data
+        # =====================================================================
+        try:
+            from kanban.retrospective_models import (
+                RetrospectiveTrend, ImprovementMetric, LessonLearned,
+                RetrospectiveActionItem, ProjectRetrospective
+            )
+            RetrospectiveTrend.objects.filter(board__in=self.demo_boards).delete()
+            ImprovementMetric.objects.filter(board__in=self.demo_boards).delete()
+            LessonLearned.objects.filter(board__in=self.demo_boards).delete()
+            RetrospectiveActionItem.objects.filter(board__in=self.demo_boards).delete()
+            ProjectRetrospective.objects.filter(board__in=self.demo_boards).delete()
+        except Exception:
+            pass
+        self.stdout.write('   ✓ Cleared Retrospective data')
+
+        # =====================================================================
+        # STEP 13: Clear Analytics engagement metrics
+        # =====================================================================
+        try:
+            from analytics.models import EngagementMetrics
+            EngagementMetrics.objects.filter(board__in=self.demo_boards).delete()
+        except Exception:
+            pass
+
+        # =====================================================================
+        # STEP 14: Clear Webhook events on demo boards
+        # =====================================================================
+        try:
+            from webhooks.models import WebhookEvent
+            WebhookEvent.objects.filter(board__in=self.demo_boards).delete()
+        except Exception:
+            pass
 
         self.stdout.write(self.style.SUCCESS('   ✓ All demo data cleared\n'))
 
