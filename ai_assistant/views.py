@@ -250,18 +250,35 @@ def send_message(request):
                     'messages_sent': 0,
                     'gemini_requests': 0,
                     'web_searches_performed': 0,
+                    'knowledge_base_queries': 0,
                     'total_tokens_used': 0,
+                    'avg_response_time_ms': 0,
                 }
             )
-            
+
             analytics.messages_sent += 1
             if response.get('source') == 'gemini':
                 analytics.gemini_requests += 1
-            
+
             if response.get('used_web_search'):
                 analytics.web_searches_performed += 1
-            
+
+            # Track RAG/knowledge-base usage: any context retrieved from project data counts
+            if response.get('context', {}).get('context_provided'):
+                analytics.knowledge_base_queries += 1
+
             analytics.total_tokens_used += response.get('tokens', 0)
+
+            # Update rolling average response time
+            resp_time_ms = int((time.time() - start_time) * 1000)
+            if analytics.messages_sent == 1:
+                analytics.avg_response_time_ms = resp_time_ms
+            else:
+                old_n = analytics.messages_sent - 1
+                analytics.avg_response_time_ms = int(
+                    (analytics.avg_response_time_ms * old_n + resp_time_ms) / analytics.messages_sent
+                )
+
             analytics.save()
         except Exception as e:
             print(f"Error updating analytics: {e}")
@@ -720,9 +737,11 @@ def get_analytics_data(request):
     # Build a dict: date -> message count
     messages_by_date = {row['day'].isoformat(): row['total'] for row in daily_messages}
 
-    # --- Analytics-based daily token / RAG / web-search counts (user only) ---
+    # --- Analytics-based daily token / RAG / web-search counts (demo + user) ---
+    # Include demo user analytics so charts are consistent with the metric cards on the dashboard
+    demo_user_ids_chart = AIAssistantSession.objects.filter(is_demo=True).values_list('user_id', flat=True).distinct()
     analytics_qs = AIAssistantAnalytics.objects.filter(
-        user=request.user,
+        Q(user=request.user) | Q(user_id__in=demo_user_ids_chart),
         date__gte=start_date,
         date__lte=end_date,
     ).order_by('date')
