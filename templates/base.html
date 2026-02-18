@@ -199,6 +199,34 @@
                 </div>
             {% endfor %}
         </div>
+
+        <!-- Toast notifications (bottom-right) for success/info messages -->
+        <div id="django-toast-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100;">
+            {% for message in messages %}
+                {% if 'success' in message.tags or 'info' in message.tags %}
+                <div class="toast align-items-center text-white {% if 'success' in message.tags %}bg-success{% else %}bg-info{% endif %} border-0 show mb-2 django-toast"
+                     role="alert" aria-live="assertive" aria-atomic="true">
+                    <div class="d-flex">
+                        <div class="toast-body">
+                            <i class="fas {% if 'success' in message.tags %}fa-check-circle{% else %}fa-info-circle{% endif %} me-2"></i>
+                            {{ message }}
+                        </div>
+                        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                    </div>
+                </div>
+                {% endif %}
+            {% endfor %}
+        </div>
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.django-toast').forEach(function(el) {
+                setTimeout(function() {
+                    var toast = bootstrap.Toast.getOrCreateInstance(el);
+                    toast.hide();
+                }, 4000);
+            });
+        });
+        </script>
     {% endif %}
 
     <!-- Demo Limitation Modal (available globally for demo mode) -->

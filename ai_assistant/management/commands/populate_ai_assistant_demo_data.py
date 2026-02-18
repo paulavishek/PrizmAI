@@ -542,7 +542,7 @@ Would you like me to help with task estimation or identify any blockers?""",
                     },
                     {
                         'role': 'assistant',
-                        'content': """Great question! Here's how to manage this dependency effectively:
+                        'content': """Here's how to manage this dependency effectively:
 
 **Parallel Work Strategy:**
 
@@ -737,7 +737,7 @@ Would you like detailed mitigation plans for any of these risks?""",
                     },
                     {
                         'role': 'assistant',
-                        'content': """Great question! Here's how to access and use the Gantt chart:
+                        'content': """Here's how to access and use the Gantt chart:
 
 **Accessing the Gantt Chart:**
 

@@ -13,7 +13,7 @@ from django.views.decorators.http import require_http_methods, require_POST
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.utils import timezone
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Case, When, IntegerField
 from django.core.paginator import Paginator
 
 from kanban.models import Board, Task
@@ -37,11 +37,20 @@ def coach_dashboard(request, board_id):
     """
     board = get_object_or_404(Board, id=board_id)
     
-    # Get active suggestions
+    # Get active suggestions — ordered by semantic severity (critical→high→medium→low→info)
+    severity_order = Case(
+        When(severity='critical', then=0),
+        When(severity='high', then=1),
+        When(severity='medium', then=2),
+        When(severity='low', then=3),
+        When(severity='info', then=4),
+        default=5,
+        output_field=IntegerField()
+    )
     active_suggestions = CoachingSuggestion.objects.filter(
         board=board,
         status__in=['active', 'acknowledged']
-    ).order_by('-severity', '-created_at')
+    ).annotate(severity_rank=severity_order).order_by('severity_rank', '-created_at')
     
     # Get recent resolved suggestions
     recent_resolved = CoachingSuggestion.objects.filter(

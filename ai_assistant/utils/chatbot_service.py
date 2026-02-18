@@ -298,7 +298,8 @@ class TaskFlowChatbotService:
             for task in high_risk_tasks:
                 context += f"**Task: {task.title}**\n"
                 context += f"  Status: {task.column.name if task.column else 'Unknown'}\n"
-                context += f"  Assigned: {task.assigned_to.username if task.assigned_to else 'Unassigned'}\n"
+                assigned_name = (task.assigned_to.get_full_name() or task.assigned_to.username) if task.assigned_to else 'Unassigned'
+                context += f"  Assigned: {assigned_name}\n"
                 
                 # Risk level
                 if task.risk_level:

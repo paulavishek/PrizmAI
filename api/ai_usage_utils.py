@@ -157,6 +157,16 @@ def require_ai_quota(feature_name, request_type=''):
                 
                 # Determine if it's a daily or monthly limit
                 if daily_remaining <= 0:
+                    # Calculate hours until next midnight (UTC)
+                    now = timezone.now()
+                    from datetime import timedelta
+                    midnight = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                    hours_until_reset = int((midnight - now).total_seconds() // 3600)
+                    minutes_until_reset = int(((midnight - now).total_seconds() % 3600) // 60)
+                    if hours_until_reset > 0:
+                        reset_msg = f'Resets in {hours_until_reset}h {minutes_until_reset}m (at midnight UTC).'
+                    else:
+                        reset_msg = f'Resets in {minutes_until_reset} minutes (at midnight UTC).'
                     return JsonResponse({
                         'success': False,
                         'error': 'Daily AI usage limit exceeded',
@@ -167,9 +177,9 @@ def require_ai_quota(feature_name, request_type=''):
                             'daily_limit': quota.daily_limit,
                             'monthly_used': quota.requests_used,
                             'monthly_limit': quota.monthly_quota,
+                            'hours_until_reset': hours_until_reset,
                         },
-                        'message': f'You have reached your daily limit of {quota.daily_limit} AI requests. '
-                                   f'Your daily limit resets at midnight.'
+                        'message': f'⚠️ Daily AI limit reached ({quota.daily_requests_used}/{quota.daily_limit}). {reset_msg}'
                     }, status=429)
                 else:
                     return JsonResponse({

@@ -237,6 +237,37 @@
                 <div class="chart-container" style="position: relative; height: 300px;">
                     <canvas id="leanChart"></canvas>
                 </div>
+                {% if total_categorized > 0 %}
+                <div class="mt-3 pt-2 border-top">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted small">Value-Added Rate</span>
+                        <span class="fw-bold {% if value_added_percentage >= 60 %}text-success{% elif value_added_percentage >= 40 %}text-warning{% else %}text-danger{% endif %}">
+                            {{ value_added_percentage }}%
+                            {% if value_added_percentage >= 60 %}
+                                <i class="fas fa-check-circle ms-1" title="At or above Lean benchmark"></i>
+                            {% else %}
+                                <i class="fas fa-arrow-up ms-1" title="Below Lean benchmark"></i>
+                            {% endif %}
+                        </span>
+                    </div>
+                    <div class="progress mt-1" style="height: 6px;">
+                        <div class="progress-bar {% if value_added_percentage >= 60 %}bg-success{% elif value_added_percentage >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                             role="progressbar"
+                             style="width: {{ value_added_percentage }}%;"
+                             aria-valuenow="{{ value_added_percentage }}" aria-valuemin="0" aria-valuemax="100">
+                        </div>
+                        <!-- Benchmark marker at 60% -->
+                        <div style="position: absolute; left: 60%; top: 0; bottom: 0; width: 2px; background: #6c757d; opacity: 0.6;" title="Lean target: 60%"></div>
+                    </div>
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted">0%</small>
+                        <small class="text-muted" style="position: relative; left: -10%;">
+                            <span style="color: #6c757d;">▲ Lean target: 60%</span>
+                        </small>
+                        <small class="text-muted">100%</small>
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>

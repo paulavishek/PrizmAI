@@ -465,10 +465,16 @@ class FeedbackLearningSystem:
             action_rate = (acted_on / total * 100)
             
             if action_rate < 30:
-                recommendations.append(
-                    "You're dismissing most suggestions. Try acting on 1-2 per week to build "
-                    "coaching engagement."
-                )
+                if total == acted_on == 0:
+                    recommendations.append(
+                        "You haven't engaged with any suggestions yet. Try acting on 1-2 per week "
+                        "to build coaching momentum."
+                    )
+                else:
+                    recommendations.append(
+                        "Most suggestions haven't been acted on yet. Try accepting or modifying "
+                        "1-2 per week to build coaching engagement."
+                    )
         
         # Check for recurring suggestion types
         type_counts = recent.values('suggestion_type').annotate(

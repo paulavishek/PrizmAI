@@ -646,7 +646,13 @@
                             </button>
                         </div>
                         <div class="text-center">
-                            <small class="text-muted">{{ task.progress }}% complete</small>
+                            <small class="text-muted">
+                                {% if task.progress == 0 %}
+                                    <span class="text-secondary">0% — not yet started</span>
+                                {% else %}
+                                    {{ task.progress }}% complete
+                                {% endif %}
+                            </small>
                         </div>
                     </div>
                       {% if task.labels.all %}

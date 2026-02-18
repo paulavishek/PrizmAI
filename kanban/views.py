@@ -2638,7 +2638,16 @@ def skill_gap_dashboard(request, board_id):
     skill_gaps = SkillGap.objects.filter(
         board=board,
         status__in=['identified', 'acknowledged', 'in_progress']
-    ).prefetch_related('affected_tasks').order_by('-severity', '-gap_count')
+    ).prefetch_related('affected_tasks').annotate(
+        severity_rank=Case(
+            When(severity='critical', then=0),
+            When(severity='high', then=1),
+            When(severity='medium', then=2),
+            When(severity='low', then=3),
+            default=4,
+            output_field=IntegerField()
+        )
+    ).order_by('severity_rank', '-gap_count')
     
     # Get development plans
     development_plans = SkillDevelopmentPlan.objects.filter(

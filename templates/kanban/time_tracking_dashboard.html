@@ -1038,7 +1038,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 // Alert action functions
-let splitModalData = { date: null, totalHours: 0, entries: [] };
+let splitModalData = { date: null, totalHours: 0, entries: [], originalEntries: [] };
 
 function acknowledgeAlert(dateStr) {
     // Store acknowledgment in localStorage
@@ -1076,7 +1076,7 @@ function acknowledgeAlert(dateStr) {
 }
 
 function showSplitEntryModal(dateStr, totalHours) {
-    splitModalData = { date: dateStr, totalHours: totalHours, entries: [] };
+    splitModalData = { date: dateStr, totalHours: totalHours, entries: [], originalEntries: [] };
     
     document.getElementById('splitTotalHours').textContent = totalHours;
     document.getElementById('splitOriginalDate').textContent = new Date(dateStr).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -1089,6 +1089,16 @@ function showSplitEntryModal(dateStr, totalHours) {
     
     updateSplitRemaining();
     
+    // Pre-fetch original entries for this date so we have task_ids for submission
+    fetch(`/api/time-entries-by-date/?date=${dateStr}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && data.entries.length > 0) {
+                splitModalData.originalEntries = data.entries;
+            }
+        })
+        .catch(() => {});  // graceful fallback – user can still submit
+
     const modal = new bootstrap.Modal(document.getElementById('splitEntryModal'));
     modal.show();
 }
@@ -1155,15 +1165,80 @@ function submitSplitEntries() {
         alert('Please enter at least one valid split entry');
         return;
     }
-    
-    // For now, show instructions (actual implementation would need backend endpoint)
-    const instructions = splits.map(s => 
-        `• ${new Date(s.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}: ${s.hours}h`
-    ).join('\n');
-    
-    alert(`To split your time entries, please:\n\n1. Delete the original entries for ${splitModalData.date}\n2. Create new entries as follows:\n${instructions}\n\n(Automatic splitting feature coming soon!)`);
-    
-    bootstrap.Modal.getInstance(document.getElementById('splitEntryModal')).hide();
+
+    // Derive task_id from the original entries fetched for this date.
+    // Distribute hours proportionally if multiple original tasks; otherwise use first task.
+    const originalEntries = splitModalData.originalEntries;
+    const defaultTaskId = originalEntries.length > 0 ? originalEntries[0].task_id : null;
+
+    if (!defaultTaskId) {
+        alert('Unable to determine the original task for these entries. Please log entries manually.');
+        return;
+    }
+
+    // Build entries payload — each split row inherits the task description from the original entry
+    const defaultDescription = originalEntries.length > 0 ? (originalEntries[0].description || '') : '';
+    const entriesPayload = splits.map(s => ({
+        task_id: defaultTaskId,
+        hours: s.hours,
+        date: s.date,
+        description: defaultDescription ? `[Split] ${defaultDescription}` : '[Split entry]'
+    }));
+
+    // Disable the submit button during processing
+    const submitBtn = document.getElementById('submitSplitBtn');
+    const originalBtnText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
+
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+                      window.CSRF_TOKEN || '{{ csrf_token }}';
+
+    fetch('/api/time-entry/create-split/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+        },
+        body: JSON.stringify({ entries: entriesPayload })
+    })
+    .then(r => r.json())
+    .then(data => {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnText;
+
+        if (data.success) {
+            bootstrap.Modal.getInstance(document.getElementById('splitEntryModal')).hide();
+            // Show success toast
+            const toast = document.createElement('div');
+            toast.className = 'position-fixed bottom-0 end-0 p-3';
+            toast.style.zIndex = '9999';
+            toast.innerHTML = `
+                <div class="toast show" role="alert">
+                    <div class="toast-header">
+                        <i class="fas fa-check-circle text-success me-2"></i>
+                        <strong class="me-auto">Time Entry Split</strong>
+                        <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+                    </div>
+                    <div class="toast-body">
+                        Successfully created ${data.created_count} split ${data.created_count === 1 ? 'entry' : 'entries'}.
+                        Refresh the page to see updated totals.
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(toast);
+            setTimeout(() => { toast.remove(); location.reload(); }, 3000);
+        } else {
+            const errMsg = data.errors ? data.errors.join('\n') : (data.error || 'An error occurred');
+            alert('Failed to create split entries:\n' + errMsg);
+        }
+    })
+    .catch(err => {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalBtnText;
+        alert('Network error — please try again.');
+        console.error('Split entries error:', err);
+    });
 }
 
 // Check for acknowledged alerts on page load
