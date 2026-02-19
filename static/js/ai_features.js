@@ -1686,21 +1686,42 @@ function highlightDueDateForReview() {
 function repredictDeadlineWithComplexity(complexityScore) {
     const predictButton = document.getElementById('predict-deadline-btn');
     if (predictButton) {
-        // Store complexity score for context (optional for future backend integration)
-        window.lastComplexityScore = complexityScore;
-        
+        // Apply the AI complexity score to the slider so the prediction actually uses it
+        const complexitySlider = document.getElementById('id_complexity_score');
+        const complexityOutput = document.getElementById('complexity-output');
+        let originalScore = null;
+
+        if (complexitySlider) {
+            originalScore = complexitySlider.value;
+            complexitySlider.value = complexityScore;
+            // Keep slider value in sync with the displayed badge
+            if (complexityOutput) {
+                complexityOutput.value = complexityScore;
+                complexityOutput.textContent = complexityScore;
+                // Update badge colour to match new score
+                complexityOutput.className = 'badge ';
+                if (complexityScore >= 8) {
+                    complexityOutput.className += 'bg-danger';
+                } else if (complexityScore >= 5) {
+                    complexityOutput.className += 'bg-warning';
+                } else {
+                    complexityOutput.className += 'bg-success';
+                }
+            }
+            complexitySlider.dispatchEvent(new Event('input'));
+        }
+
         // Show user feedback
         const toast = document.createElement('div');
-        toast.className = 'alert alert-info position-fixed top-0 start-50 translate-middle-x mt-3';
+        toast.className = 'alert alert-info position-fixed top-0 start-50 translate-middle-x mt-3 shadow';
         toast.style.zIndex = '9999';
-        toast.innerHTML = `<i class="fas fa-info-circle"></i> Re-calculating deadline with complexity score of ${complexityScore}/10...`;
+        toast.innerHTML = `<i class="fas fa-brain me-1"></i> Re-predicting deadline using AI complexity score <strong>${complexityScore}/10</strong>` +
+            (originalScore && originalScore != complexityScore ? ` (was ${originalScore}/10)` : '') + `…`;
         document.body.appendChild(toast);
-        
-        setTimeout(() => {
-            toast.remove();
-        }, 2000);
-        
-        // Trigger the predict deadline button
+
+        setTimeout(() => { toast.remove(); }, 3000);
+
+        // Trigger the predict deadline button — slider now holds the AI score
         predictButton.click();
     } else {
         alert('Please use the "Predict" button next to the Due Date field to calculate an optimal deadline.');
@@ -2197,18 +2218,55 @@ function initTaskBreakdown() {
         const descriptionInput = document.getElementById('id_description');
         const prioritySelect = document.getElementById('id_priority');
         const dueDateInput = document.getElementById('id_due_date');
-        
+
         if (!titleInput || !titleInput.value.trim()) {
             alert('Please enter a task title first.');
             return;
         }
-        
+
+        // ---- Optional context fields (used for accurate complexity scoring) ----
+        const riskLikelihoodEl   = document.getElementById('id_risk_likelihood');
+        const riskImpactEl       = document.getElementById('id_risk_impact');
+        const riskLevelEl        = document.getElementById('id_risk_level');
+        const workloadImpactEl   = document.getElementById('id_workload_impact');
+        const skillMatchEl       = document.getElementById('id_skill_match_score');
+        const collaborationEl    = document.getElementById('id_collaboration_required');
+        const dependenciesEl     = document.getElementById('id_dependencies');
+        const estimatedHoursEl   = document.getElementById('id_estimated_hours');
+        const estimatedCostEl    = document.getElementById('id_estimated_cost');
+        const hourlyRateEl       = document.getElementById('id_hourly_rate');
+
+        // Compute risk_score from likelihood × impact if both present
+        const likelihoodMap = { low: 1, medium: 2, high: 3 };
+        const impactMap     = { low: 1, medium: 2, high: 3 };
+        const likelihoodVal = riskLikelihoodEl ? (likelihoodMap[riskLikelihoodEl.value] || null) : null;
+        const impactVal     = riskImpactEl     ? (impactMap[riskImpactEl.value]         || null) : null;
+        const riskScore     = (likelihoodVal && impactVal) ? likelihoodVal * impactVal : null;
+
+        // Count selected dependencies
+        let dependenciesCount = 0;
+        if (dependenciesEl) {
+            dependenciesCount = Array.from(dependenciesEl.selectedOptions).length;
+        }
+
         const taskData = {
             title: titleInput.value.trim(),
             description: descriptionInput ? descriptionInput.value : '',
             priority: prioritySelect ? prioritySelect.value : 'medium',
             due_date: dueDateInput ? dueDateInput.value : '',
-            estimated_effort: ''
+            estimated_effort: '',
+            // Optional context fields
+            risk_likelihood:      riskLikelihoodEl && riskLikelihoodEl.value ? riskLikelihoodEl.value : null,
+            risk_impact:          riskImpactEl     && riskImpactEl.value     ? riskImpactEl.value     : null,
+            risk_level:           riskLevelEl      && riskLevelEl.value      ? riskLevelEl.value      : null,
+            risk_score:           riskScore,
+            workload_impact:      workloadImpactEl && workloadImpactEl.value ? workloadImpactEl.value : null,
+            skill_match_score:    skillMatchEl     && skillMatchEl.value     ? parseInt(skillMatchEl.value) : null,
+            collaboration_required: collaborationEl ? collaborationEl.checked : null,
+            dependencies_count:   dependenciesCount,
+            estimated_hours:      estimatedHoursEl && estimatedHoursEl.value ? parseFloat(estimatedHoursEl.value) : null,
+            estimated_cost:       estimatedCostEl  && estimatedCostEl.value  ? parseFloat(estimatedCostEl.value)  : null,
+            hourly_rate:          hourlyRateEl      && hourlyRateEl.value     ? parseFloat(hourlyRateEl.value)     : null,
         };
         
         suggestTaskBreakdown(taskData, function(error, data) {
@@ -2308,21 +2366,78 @@ function displayTaskBreakdown(data) {
             
             <p><strong>Breakdown Recommended:</strong> ${data.is_breakdown_recommended ? 'Yes' : 'No'}</p>
             <p><strong>Analysis:</strong> ${data.reasoning}</p>
+
+            <!-- ── Explainability Panel ───────────────────────────── -->
+            ${(data.factors_considered && data.factors_considered.length > 0) || (data.factors_missing && data.factors_missing.length > 0) ? `
+            <div class="mt-3 border rounded p-3 bg-white" style="font-size:0.9em;">
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="fas fa-microscope text-primary"></i>
+                    <strong>How AI Scored This Task</strong>
+                    <span class="badge bg-primary ms-auto">Explainable AI</span>
+                </div>
+
+                ${data.factors_considered && data.factors_considered.length > 0 ? `
+                <p class="text-muted mb-2" style="font-size:0.85em;">
+                    <i class="fas fa-check-circle text-success me-1"></i>
+                    <strong>${data.factors_considered.length} factor${data.factors_considered.length !== 1 ? 's' : ''} considered</strong>
+                    — these fields were used to adjust the complexity score:
+                </p>
+                <table class="table table-sm table-borderless mb-2" style="font-size:0.85em;">
+                    <tbody>
+                        ${data.factors_considered.map(f => {
+                            const icon   = f.direction === 'raises'  ? '⬆'  : f.direction === 'lowers' ? '⬇' : '↔';
+                            const colour = f.direction === 'raises'  ? 'text-danger'  : f.direction === 'lowers' ? 'text-success' : 'text-secondary';
+                            const badge  = f.direction === 'raises'  ? 'bg-danger'    : f.direction === 'lowers' ? 'bg-success'   : 'bg-secondary';
+                            return `<tr>
+                                <td style="width:28px;" class="${colour} fw-bold">${icon}</td>
+                                <td><strong>${f.name}</strong> <span class="badge ${badge} ms-1" style="font-size:0.75em;">${f.value}</span></td>
+                                <td class="text-muted">${f.note}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>` : ''}
+
+                ${data.factors_missing && data.factors_missing.length > 0 ? `
+                <p class="text-muted mb-1" style="font-size:0.85em;">
+                    <i class="fas fa-exclamation-circle text-warning me-1"></i>
+                    <strong>${data.factors_missing.length} optional field${data.factors_missing.length !== 1 ? 's' : ''} not filled</strong>
+                    — treated as neutral (no penalty applied):
+                </p>
+                <ul class="mb-0 ps-3" style="font-size:0.82em; color:#6c757d;">
+                    ${data.factors_missing.map(f => `<li><strong>${f.name}</strong> — ${f.note}</li>`).join('')}
+                </ul>
+                <p class="mt-2 mb-0 text-muted" style="font-size:0.8em;">
+                    <i class="fas fa-lightbulb text-warning me-1"></i>
+                    Filling these fields before running the analysis gives the AI more context for a more accurate score.
+                </p>` : ''}
+            </div>` : ''}
+            <!-- ── End Explainability Panel ───────────────────────── -->
     `;
-    
+
     // High Complexity Warning - nudge user about due date
-    if (data.complexity_score > 7) {
+    // Use >= 7 so that a score of exactly 7 is also flagged (previously > 7 silently dropped it)
+    if (data.complexity_score >= 7) {
+        const userComplexityForWarning = document.querySelector('input[name="complexity_score"]');
+        const userScore = userComplexityForWarning ? parseInt(userComplexityForWarning.value) : null;
+        const complexityMismatch = userScore && userScore !== data.complexity_score;
         html += `
             <div class="alert alert-danger mt-3 mb-0" role="alert">
                 <h6 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> High Complexity Detected!</h6>
-                <p class="mb-2">This task has a complexity score of <strong>${data.complexity_score}/10</strong>.</p>
+                <p class="mb-2">The AI rates this task at <strong>${data.complexity_score}/10</strong> complexity.</p>
+                ${complexityMismatch ? `
+                <p class="mb-2 text-warning fw-bold">
+                    <i class="fas fa-exclamation-circle me-1"></i>
+                    Note: Your current complexity slider is set to <strong>${userScore}/10</strong>. 
+                    The deadline prediction currently uses your slider value, <strong>not</strong> the AI's ${data.complexity_score}/10.
+                    Click "Re-predict Deadline" below to predict using the AI complexity score.
+                </p>` : ''}
                 <p class="mb-2"><strong>Recommendation:</strong> Consider extending the deadline by <strong>2-3 days</strong> 
                 to account for the task complexity.</p>
                 <button type="button" class="btn btn-sm btn-warning mt-2" onclick="highlightDueDateForReview()">
                     <i class="fas fa-calendar-check me-1"></i> Review Due Date
                 </button>
                 <button type="button" class="btn btn-sm btn-info mt-2 ms-2" onclick="repredictDeadlineWithComplexity(${data.complexity_score})">
-                    <i class="fas fa-brain me-1"></i> Re-predict Deadline
+                    <i class="fas fa-brain me-1"></i> Re-predict Deadline with AI Score (${data.complexity_score}/10)
                 </button>
             </div>
         `;

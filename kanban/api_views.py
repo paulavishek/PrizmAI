@@ -1669,7 +1669,19 @@ def suggest_task_breakdown_api(request):
             'description': description,
             'priority': data.get('priority', 'medium'),
             'due_date': data.get('due_date', ''),
-            'estimated_effort': data.get('estimated_effort', '')
+            'estimated_effort': data.get('estimated_effort', ''),
+            # Optional context fields for accurate complexity scoring
+            'risk_likelihood': data.get('risk_likelihood'),
+            'risk_impact': data.get('risk_impact'),
+            'risk_level': data.get('risk_level'),
+            'risk_score': data.get('risk_score'),
+            'workload_impact': data.get('workload_impact'),
+            'skill_match_score': data.get('skill_match_score'),
+            'collaboration_required': data.get('collaboration_required'),
+            'dependencies_count': data.get('dependencies_count'),
+            'estimated_hours': data.get('estimated_hours'),
+            'estimated_cost': data.get('estimated_cost'),
+            'hourly_rate': data.get('hourly_rate'),
         }
         
         # Call AI function

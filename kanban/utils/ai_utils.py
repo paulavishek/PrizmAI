@@ -1575,49 +1575,212 @@ def generate_board_setup_recommendations(board_data: Dict) -> Optional[Dict]:
 def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
     """
     Suggest automated breakdown of a complex task into smaller subtasks.
-    
+    Includes all optional context fields (risk, workload, dependencies, etc.)
+    for accurate complexity scoring and transparent factor reporting.
+
     Args:
         task_data: Dictionary containing task information
         
     Returns:
-        A dictionary with subtask suggestions or None if breakdown fails
+        A dictionary with subtask suggestions, factors_considered, and
+        factors_missing for explainability, or None if breakdown fails
     """
     try:
-        # Extract task information
+        # Extract core task information
         title = task_data.get('title', '')
         description = task_data.get('description', '')
         priority = task_data.get('priority', 'medium')
         due_date = task_data.get('due_date', '')
         estimated_effort = task_data.get('estimated_effort', '')
-        
+
+        # Extract optional context fields
+        risk_likelihood = task_data.get('risk_likelihood')
+        risk_impact = task_data.get('risk_impact')
+        risk_level = task_data.get('risk_level')
+        risk_score = task_data.get('risk_score')
+        workload_impact = task_data.get('workload_impact')
+        skill_match_score = task_data.get('skill_match_score')
+        collaboration_required = task_data.get('collaboration_required')
+        dependencies_count = task_data.get('dependencies_count')
+        estimated_hours = task_data.get('estimated_hours')
+        estimated_cost = task_data.get('estimated_cost')
+        hourly_rate = task_data.get('hourly_rate')
+
+        # ----------------------------------------------------------------
+        # Build structured factor list for the prompt so the AI can reason
+        # transparently and so we can reflect it back to the user.
+        # Each factor records: name, value, direction (raises/lowers/neutral),
+        # whether it was provided.
+        # ----------------------------------------------------------------
+        factors_provided = []
+        factors_missing = []
+
+        # --- Risk --------------------------------------------------------
+        if risk_score is not None:
+            level = risk_level or ('high' if risk_score >= 6 else 'medium' if risk_score >= 3 else 'low')
+            direction = 'raises' if risk_score >= 6 else 'lowers' if risk_score <= 2 else 'neutral'
+            factors_provided.append({
+                'name': 'Risk Score',
+                'value': f"{risk_score}/9 ({level})",
+                'direction': direction,
+                'note': f"Risk score {risk_score}/9 → complexity {'penalty' if direction == 'raises' else 'benefit' if direction == 'lowers' else 'neutral'}"
+            })
+        elif risk_level:
+            direction = 'raises' if risk_level.lower() == 'high' else 'lowers' if risk_level.lower() == 'low' else 'neutral'
+            factors_provided.append({
+                'name': 'Risk Level',
+                'value': risk_level,
+                'direction': direction,
+                'note': f"Risk level is {risk_level}"
+            })
+        elif risk_likelihood and risk_impact:
+            combo = f"{risk_likelihood}/{risk_impact}"
+            direction = 'raises' if (risk_likelihood.lower() == 'high' or risk_impact.lower() == 'high') else \
+                        'lowers' if (risk_likelihood.lower() == 'low' and risk_impact.lower() == 'low') else 'neutral'
+            factors_provided.append({
+                'name': 'Risk',
+                'value': f"Likelihood={risk_likelihood}, Impact={risk_impact}",
+                'direction': direction,
+                'note': f"Combined risk signals are {combo}"
+            })
+        else:
+            factors_missing.append({'name': 'Risk Assessment', 'note': 'No risk fields filled – treated as neutral'})
+
+        # --- Workload ----------------------------------------------------
+        if workload_impact:
+            direction = 'raises' if workload_impact.lower() in ('high', 'critical') else \
+                        'lowers' if workload_impact.lower() == 'low' else 'neutral'
+            factors_provided.append({
+                'name': 'Workload Impact',
+                'value': workload_impact,
+                'direction': direction,
+                'note': f"Assignee workload is {workload_impact}"
+            })
+        else:
+            factors_missing.append({'name': 'Workload Impact', 'note': 'Not specified – treated as neutral'})
+
+        # --- Skill Match -------------------------------------------------
+        if skill_match_score is not None:
+            direction = 'lowers' if skill_match_score >= 70 else 'raises' if skill_match_score < 50 else 'neutral'
+            factors_provided.append({
+                'name': 'Skill Match',
+                'value': f"{skill_match_score}%",
+                'direction': direction,
+                'note': f"{'Good' if skill_match_score >= 70 else 'Moderate' if skill_match_score >= 50 else 'Poor'} skill alignment"
+            })
+        else:
+            factors_missing.append({'name': 'Skill Match Score', 'note': 'Not assessed – treated as neutral'})
+
+        # --- Collaboration -----------------------------------------------
+        if collaboration_required is not None:
+            direction = 'raises' if collaboration_required else 'lowers'
+            factors_provided.append({
+                'name': 'Collaboration Required',
+                'value': 'Yes' if collaboration_required else 'No',
+                'direction': direction,
+                'note': 'Coordination overhead adds complexity' if collaboration_required else 'Solo task reduces coordination complexity'
+            })
+        else:
+            factors_missing.append({'name': 'Collaboration Required', 'note': 'Not specified – treated as neutral'})
+
+        # --- Dependencies ------------------------------------------------
+        if dependencies_count is not None:
+            direction = 'raises' if dependencies_count > 2 else 'neutral' if dependencies_count > 0 else 'lowers'
+            factors_provided.append({
+                'name': 'Dependencies',
+                'value': str(dependencies_count),
+                'direction': direction,
+                'note': f"{dependencies_count} task dependenc{'ies' if dependencies_count != 1 else 'y'}"
+            })
+        else:
+            factors_missing.append({'name': 'Dependencies Count', 'note': 'Not specified – treated as neutral'})
+
+        # --- Estimated Effort --------------------------------------------
+        if estimated_hours is not None and float(estimated_hours) > 0:
+            hours_val = float(estimated_hours)
+            direction = 'raises' if hours_val > 16 else 'lowers' if hours_val <= 8 else 'neutral'
+            factors_provided.append({
+                'name': 'Estimated Hours',
+                'value': f"{hours_val:.1f} hrs",
+                'direction': direction,
+                'note': f"{'Short' if hours_val <= 8 else 'Medium' if hours_val <= 16 else 'Long'} effort estimate"
+            })
+        else:
+            factors_missing.append({'name': 'Estimated Hours', 'note': 'Not specified – AI estimates from description'})
+
+        # ----------------------------------------------------------------
+        # Build readable factor summary for the prompt
+        # ----------------------------------------------------------------
+        def fmt_direction(d):
+            return '⬆ raises complexity' if d == 'raises' else '⬇ lowers complexity' if d == 'lowers' else '↔ neutral'
+
+        provided_block = '\n'.join(
+            f"  - {f['name']}: {f['value']} → {fmt_direction(f['direction'])} ({f['note']})"
+            for f in factors_provided
+        ) or '  (none provided)'
+
+        missing_block = '\n'.join(
+            f"  - {f['name']}: {f['note']}"
+            for f in factors_missing
+        ) or '  (all fields provided)'
+
         prompt = f"""
         Analyze this task and suggest a breakdown into smaller subtasks.
-        
-        Task: {title}
-        Description: {description or 'No description'}
+
+        ## Task
+        Title: {title}
+        Description: {description or 'No description provided'}
         Priority: {priority}
         Due: {due_date or 'Not set'}
-        
-        IMPORTANT: Keep response concise. Maximum 4-6 subtasks with brief descriptions.
-        
-        Return JSON only:
+
+        ## Context Factors Provided (YOU MUST USE THESE TO ADJUST THE COMPLEXITY SCORE)
+{provided_block}
+
+        ## Context Factors Missing (treat each as NEUTRAL – do NOT penalise for missing data)
+{missing_block}
+
+        ## COMPLEXITY SCORING RULES
+        1. Start from the content complexity of the title + description (distinct deliverables, unknowns, technical challenges).
+        2. For EVERY factor listed as "⬇ lowers complexity", REDUCE the score by 1-2 points.
+        3. For EVERY factor listed as "⬆ raises complexity", INCREASE the score by 1-2 points.
+        4. For missing/neutral factors, make NO adjustment – do not assume difficulty.
+        5. Final score must be between 1 and 10.
+        6. In your "reasoning" field, explicitly name each factor and how it moved the score.
+
+        ## Output Format
+        Return JSON only – no extra text:
         {{
             "is_breakdown_recommended": true|false,
             "complexity_score": 1-10,
-            "reasoning": "One sentence explaining recommendation",
+            "reasoning": "Explain score step-by-step: content base score X, then list each factor adjustment",
             "subtasks": [
                 {{
                     "title": "Short subtask title",
                     "description": "One sentence describing what to do",
-                    "estimated_effort": "1-2 days",
+                    "estimated_effort": "0.5-1 day",
                     "priority": "low|medium|high",
                     "order": 1
                 }}
             ],
-            "total_estimated_effort": "Total time estimate"
+            "total_estimated_effort": "Total time estimate",
+            "factors_considered": [
+                {{"name": "Factor Name", "value": "Factor Value", "direction": "raises|lowers|neutral", "note": "one-line explanation"}}
+            ],
+            "factors_missing": [
+                {{"name": "Factor Name", "note": "why it was not available"}}
+            ]
         }}
         """
         
+        def _enrich_result(result):
+            """Guarantee factors_considered / factors_missing are always present so
+            the frontend can always render the explainability panel."""
+            if not result.get('factors_considered'):
+                result['factors_considered'] = factors_provided
+            if not result.get('factors_missing'):
+                result['factors_missing'] = factors_missing
+            return result
+
         response_text = generate_ai_content(prompt, task_type='task_breakdown')
         if response_text:
             # Handle code block formatting
@@ -1632,14 +1795,14 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
             response_text = re.sub(r',\s*([}\]])', r'\1', response_text)  # Remove trailing commas
             
             try:
-                return json.loads(response_text)
+                return _enrich_result(json.loads(response_text))
             except json.JSONDecodeError as json_err:
                 logger.error(f"Task breakdown JSON parse error: {json_err}. Response text (first 500 chars): {response_text[:500]}")
                 # Try a more aggressive cleanup
                 response_text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', response_text)  # Remove control characters
                 
                 try:
-                    return json.loads(response_text)
+                    return _enrich_result(json.loads(response_text))
                 except json.JSONDecodeError as second_err:
                     logger.error(f"Second JSON parse attempt failed: {second_err}")
                     # Try to repair truncated JSON
@@ -1660,7 +1823,7 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
                             if last_valid_pos > 0:
                                 cleaned = cleaned[:last_valid_pos + 1]
                                 logger.info("Successfully repaired truncated JSON for task breakdown")
-                                return json.loads(cleaned)
+                                return _enrich_result(json.loads(cleaned))
                             else:
                                 raise json.JSONDecodeError("Could not repair JSON", response_text, 0)
                         else:
@@ -1668,7 +1831,7 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
                     except Exception as repair_err:
                         logger.error(f"Failed to repair JSON: {repair_err}")
                         # Return a minimal valid response indicating failure
-                        return {
+                        return _enrich_result({
                             "is_breakdown_recommended": False,
                             "complexity_score": 5,
                             "confidence_score": 0.0,
@@ -1683,7 +1846,7 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
                             "assumptions": ["Analysis incomplete due to technical error"],
                             "total_estimated_effort": "Unknown",
                             "effort_vs_original": "Unable to estimate"
-                        }
+                        })
         return None
     except Exception as e:
         logger.error(f"Error suggesting task breakdown: {str(e)}")
