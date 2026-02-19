@@ -510,7 +510,13 @@ def board_detail(request, board_id):
     can_manage_members = True
     can_edit_board = True
     can_create_tasks = True
-    
+
+    # Invitation permission: board creator or site admin
+    can_manage_invites = (
+        board.created_by == request.user or
+        getattr(getattr(request.user, 'profile', None), 'is_admin', False)
+    )
+
     return render(request, 'kanban/board_detail.html', {
         'board': board,
         'columns': columns,
@@ -530,6 +536,7 @@ def board_detail(request, board_id):
         'can_manage_members': can_manage_members,  # Permission flags for UI
         'can_edit_board': can_edit_board,
         'can_create_tasks': can_create_tasks,
+        'can_manage_invites': can_manage_invites,  # For invite button visibility
     })
 
 def task_detail(request, task_id):

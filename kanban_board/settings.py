@@ -229,17 +229,19 @@ LOGIN_REDIRECT_URL = 'dashboard'
 LOGOUT_REDIRECT_URL = 'login'
 
 # Email Configuration
-# For development, use console backend to display emails in terminal
-if DEBUG:
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-else:
-    # Production email settings (configure based on your email provider)
+# Uses SMTP whenever EMAIL_HOST_USER is set (works in both dev and prod).
+# Without credentials, falls back to console backend so terminal logging still works.
+_email_host_user = os.getenv('EMAIL_HOST_USER', '')
+if _email_host_user:
     EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
     EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
     EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
     EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True').lower() == 'true'
-    EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+    EMAIL_HOST_USER = _email_host_user
     EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+else:
+    # No credentials configured — print to terminal (console backend)
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 # Default from email for system emails
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@prizmAI.com')

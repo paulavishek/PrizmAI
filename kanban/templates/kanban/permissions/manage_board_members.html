@@ -32,22 +32,24 @@
                     <h5 class="mb-0">Invite Someone by Email</h5>
                 </div>
                 <div class="card-body">
-                    <form method="post" action="{% url 'invite_to_board' board.id %}" class="d-flex gap-2 flex-wrap align-items-end">
+                    <form method="post" action="{% url 'invite_to_board' board.id %}">
                         {% csrf_token %}
-                        <div class="flex-grow-1" style="min-width:260px;">
-                            <label for="invite_email" class="form-label small text-muted mb-1">
-                                Email address of the person you want to invite
+                        <div class="mb-3">
+                            <label for="invite_emails" class="form-label small text-muted mb-1">
+                                Email address(es) — separate multiple addresses with commas, semicolons, or new lines
                             </label>
-                            <input type="email" id="invite_email" name="invite_email"
-                                   class="form-control" placeholder="colleague@example.com" required>
+                            <textarea id="invite_emails" name="invite_emails" rows="3"
+                                      class="form-control font-monospace"
+                                      placeholder="alice@example.com, bob@example.com&#10;carol@example.com"
+                                      required></textarea>
                         </div>
                         <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-paper-plane me-1"></i> Send Invitation
+                            <i class="fas fa-paper-plane me-1"></i> Send Invitation(s)
                         </button>
                     </form>
                     <p class="text-muted small mt-2 mb-0">
                         <i class="fas fa-info-circle me-1"></i>
-                        An invitation link will be emailed to them. The link expires in 48 hours.
+                        Each recipient gets a unique invitation link valid for 48 hours.
                         If they don't have an account yet, they'll be prompted to create one.
                     </p>
                 </div>

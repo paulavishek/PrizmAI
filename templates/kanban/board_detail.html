@@ -278,6 +278,11 @@
                 <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=csv">Export as CSV</a></li>
             </ul>
         </div>
+        {% if can_manage_invites and not board.is_official_demo_board %}
+        <a href="{% url 'manage_board_members' board.id %}" class="btn btn-outline-info" title="Invite members to this board">
+            <i class="fas fa-user-plus me-1"></i> Invite Members
+        </a>
+        {% endif %}
         <div class="btn-group">
             <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                 <i class="fas fa-cog"></i>

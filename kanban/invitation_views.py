@@ -71,46 +71,74 @@ def _send_invitation_email(request, invitation):
 @login_required
 @require_POST
 def invite_to_board(request, board_id):
-    """Send an email invitation to join a board."""
+    """Send email invitations to one or more addresses (comma/newline separated)."""
+    import re
     board = get_object_or_404(Board, id=board_id)
 
     if not _can_manage_invites(request.user, board):
         messages.error(request, "You don't have permission to invite members to this board.")
         return redirect('manage_board_members', board_id=board.id)
 
-    email = request.POST.get('invite_email', '').strip().lower()
-    if not email:
-        messages.error(request, "Please enter an email address.")
+    raw = request.POST.get('invite_emails', '').strip()
+    if not raw:
+        messages.error(request, "Please enter at least one email address.")
         return redirect('manage_board_members', board_id=board.id)
 
-    # Check if email already belongs to a current board member
-    if board.members.filter(email__iexact=email).exists():
-        messages.info(request, f"{email} is already a member of this board.")
+    # Split on commas, semicolons, or newlines and deduplicate
+    raw_emails = re.split(r'[,;\n]+', raw)
+    emails = list(dict.fromkeys(
+        e.strip().lower() for e in raw_emails if e.strip()
+    ))
+
+    if not emails:
+        messages.error(request, "No valid email addresses found.")
         return redirect('manage_board_members', board_id=board.id)
 
-    # Cancel any previous pending invite for this email + board
-    BoardInvitation.objects.filter(
-        board=board, email=email, status=BoardInvitation.STATUS_PENDING
-    ).update(status=BoardInvitation.STATUS_REVOKED)
+    sent_list, skipped_list, failed_list = [], [], []
 
-    # Create a fresh invitation
-    invitation = BoardInvitation.objects.create(
-        board=board,
-        invited_by=request.user,
-        email=email,
-    )
+    for email in emails:
+        # Basic format check
+        if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+            skipped_list.append(f"{email} (invalid format)")
+            continue
 
-    sent = _send_invitation_email(request, invitation)
-    if sent:
-        messages.success(
-            request,
-            f"Invitation sent to {email}. The link will expire in 48 hours."
+        # Already a board member?
+        if board.members.filter(email__iexact=email).exists():
+            skipped_list.append(f"{email} (already a member)")
+            continue
+
+        # Revoke any previous pending invite
+        BoardInvitation.objects.filter(
+            board=board, email=email, status=BoardInvitation.STATUS_PENDING
+        ).update(status=BoardInvitation.STATUS_REVOKED)
+
+        invitation = BoardInvitation.objects.create(
+            board=board,
+            invited_by=request.user,
+            email=email,
         )
-    else:
+
+        if _send_invitation_email(request, invitation):
+            sent_list.append(email)
+        else:
+            failed_list.append(email)
+
+    # Build feedback messages
+    if sent_list:
+        count = len(sent_list)
+        if count == 1:
+            messages.success(request, f"Invitation sent to {sent_list[0]}. The link will expire in 48 hours.")
+        else:
+            messages.success(request, f"Invitations sent to {count} addresses: {', '.join(sent_list)}.")
+
+    for note in skipped_list:
+        messages.info(request, f"Skipped: {note}")
+
+    if failed_list:
         messages.warning(
             request,
-            f"Invitation created for {email} but the email could not be delivered. "
-            "Check your email settings."
+            f"Invitation(s) created but email could not be delivered to: {', '.join(failed_list)}. "
+            "Check your email settings (EMAIL_HOST_USER / EMAIL_HOST_PASSWORD in .env)."
         )
 
     return redirect('manage_board_members', board_id=board.id)
