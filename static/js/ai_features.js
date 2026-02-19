@@ -2315,8 +2315,7 @@ function displayTaskBreakdown(data) {
         html += `
             <div class="alert alert-danger mt-3 mb-0" role="alert">
                 <h6 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> High Complexity Detected!</h6>
-                <p class="mb-2">This task has a complexity score of <strong>${data.complexity_score}/10</strong>. 
-                The current due date might be too aggressive.</p>
+                <p class="mb-2">This task has a complexity score of <strong>${data.complexity_score}/10</strong>.</p>
                 <p class="mb-2"><strong>Recommendation:</strong> Consider extending the deadline by <strong>2-3 days</strong> 
                 to account for the task complexity.</p>
                 <button type="button" class="btn btn-sm btn-warning mt-2" onclick="highlightDueDateForReview()">
