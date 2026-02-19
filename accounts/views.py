@@ -77,19 +77,25 @@ def login_view(request):
     if request.user.is_authenticated:
         return redirect('dashboard')
     
+    next_url = request.GET.get('next', '')
+
     if request.method == 'POST':
         form = LoginForm(request, data=request.POST)
+        next_url = request.POST.get('next', next_url)
         if form.is_valid():
             username = form.cleaned_data.get('username')
             password = form.cleaned_data.get('password')
             user = authenticate(request=request, username=username, password=password)
             if user is not None:
                 login(request, user)
+                # Honour the ?next= redirect (e.g. invitation accept link)
+                if next_url and next_url.startswith('/'):
+                    return redirect(next_url)
                 return redirect('dashboard')
     else:
         form = LoginForm()
     
-    return render(request, 'accounts/login.html', {'form': form})
+    return render(request, 'accounts/login.html', {'form': form, 'next': next_url})
 
 def logout_view(request):
     logout(request)
@@ -124,6 +130,13 @@ def register_view(request, org_id=None):
                 board.members.add(user)
             
             messages.success(request, 'Registration successful! Please log in.')
+            # If an invite token is waiting in the session, carry it forward
+            from kanban.invitation_views import SESSION_INVITE_KEY
+            pending_token = request.session.get(SESSION_INVITE_KEY)
+            if pending_token:
+                from django.urls import reverse
+                next_url = reverse('accept_board_invitation', args=[pending_token])
+                return redirect(f"{reverse('login')}?next={next_url}")
             return redirect('login')
     else:
         form = RegistrationForm()

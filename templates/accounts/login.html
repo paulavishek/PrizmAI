@@ -42,6 +42,7 @@
                 <!-- Traditional Login Form -->
                 <form method="post">
                     {% csrf_token %}
+                    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
                     
                     <!-- Username or Email Field -->
                     <div class="mb-3">

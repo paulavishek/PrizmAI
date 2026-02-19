@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     Board, Column, Task, TaskLabel, Comment, TaskActivity,
     TeamSkillProfile, SkillGap, SkillDevelopmentPlan,
-    ScopeChangeSnapshot, ScopeCreepAlert
+    ScopeChangeSnapshot, ScopeCreepAlert, BoardInvitation
 )
 from .priority_models import PriorityDecision, PriorityModel, PrioritySuggestionLog
 from .burndown_models import (
@@ -29,6 +29,13 @@ class BoardAdmin(admin.ModelAdmin):
     list_display = ('name', 'organization', 'created_by', 'created_at')
     search_fields = ('name', 'description')
     list_filter = ('organization', 'created_at')
+
+@admin.register(BoardInvitation)
+class BoardInvitationAdmin(admin.ModelAdmin):
+    list_display = ('email', 'board', 'invited_by', 'status', 'created_at', 'expires_at', 'accepted_by')
+    list_filter = ('status', 'created_at')
+    search_fields = ('email', 'board__name', 'invited_by__username')
+    readonly_fields = ('token', 'created_at', 'accepted_at', 'accepted_by')
 
 @admin.register(Column)
 class ColumnAdmin(admin.ModelAdmin):

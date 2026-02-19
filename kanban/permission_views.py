@@ -8,6 +8,7 @@ from django.contrib import messages
 from django.http import JsonResponse, HttpResponseForbidden
 from django.db.models import Count, Q
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 from kanban.models import Board
 from accounts.models import Organization
@@ -241,6 +242,12 @@ def manage_board_members(request, board_id):
         'all_members_data': all_members_data,  # New: all board members
         'available_roles': available_roles,
         'org_users': org_users,
+        'pending_invitations': board.invitations.filter(status='pending').order_by('-created_at'),
+        'can_manage_invites': (
+            board.created_by == request.user or
+            getattr(getattr(request.user, 'profile', None), 'is_admin', False)
+        ),
+        'now': timezone.now(),
     }
     
     return render(request, 'kanban/permissions/manage_board_members.html', context)

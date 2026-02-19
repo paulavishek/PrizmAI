@@ -469,9 +469,13 @@ def board_detail(request, board_id):
     board_member_ids = board.members.values_list('id', flat=True)
     board_member_profiles = UserProfile.objects.filter(user_id__in=board_member_ids)
     
-    # For adding new members: show all users who aren't on the board yet
+    # For adding new members: show all non-demo users who aren't on the board yet
     available_org_members = UserProfile.objects.exclude(
         user_id__in=board_member_ids
+    ).exclude(
+        user__username__icontains='_demo'
+    ).exclude(
+        organization__is_demo=True
     ).select_related('user')
     
     # Get linked wiki pages for this board
@@ -1399,13 +1403,9 @@ def move_task(request):
     
     return JsonResponse({'error': 'Invalid request'}, status=400)
 
+@login_required
 def add_board_member(request, board_id):
     board = get_object_or_404(Board, id=board_id)
-    
-    # Require authentication
-    if not request.user.is_authenticated:
-        from django.contrib.auth.views import redirect_to_login
-        return redirect_to_login(request.get_full_path())
     
     # All restrictions removed - all authenticated users can add members
     

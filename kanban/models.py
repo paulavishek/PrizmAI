@@ -1,4 +1,5 @@
-﻿from datetime import date
+﻿from datetime import date, timedelta
+import uuid
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -1336,3 +1337,64 @@ class ScopeCreepAlert(models.Model):
 # Import security and permission models to register them with Django
 from .audit_models import SystemAuditLog, SecurityEvent, DataAccessLog
 from .permission_models import Role, BoardMembership, PermissionOverride, ColumnPermission
+
+
+class BoardInvitation(models.Model):
+    """Email-based invitation to join a specific board."""
+
+    STATUS_PENDING = 'pending'
+    STATUS_ACCEPTED = 'accepted'
+    STATUS_EXPIRED = 'expired'
+    STATUS_REVOKED = 'revoked'
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_ACCEPTED, 'Accepted'),
+        (STATUS_EXPIRED, 'Expired'),
+        (STATUS_REVOKED, 'Revoked'),
+    ]
+
+    board = models.ForeignKey(
+        Board, on_delete=models.CASCADE, related_name='invitations'
+    )
+    invited_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='sent_invitations'
+    )
+    email = models.EmailField()
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    accepted_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='accepted_invitations'
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Invite to {self.board.name} for {self.email} ({self.status})"
+
+    def save(self, *args, **kwargs):
+        if not self.expires_at:
+            self.expires_at = timezone.now() + timedelta(hours=48)
+        super().save(*args, **kwargs)
+
+    def is_valid(self):
+        """Return True if the invitation is still usable."""
+        if self.status != self.STATUS_PENDING:
+            return False
+        if timezone.now() > self.expires_at:
+            # Auto-mark as expired
+            self.status = self.STATUS_EXPIRED
+            self.save(update_fields=['status'])
+            return False
+        return True
+
+    def mark_accepted(self, user):
+        self.status = self.STATUS_ACCEPTED
+        self.accepted_at = timezone.now()
+        self.accepted_by = user
+        self.save()

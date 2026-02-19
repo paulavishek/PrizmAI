@@ -8,7 +8,7 @@
     <div class="row">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2><i class="fas fa-users"></i> Manage Members - {{ board.name }}</h2>
+                <h2><i class="fas fa-users"></i> Manage Members — {{ board.name }}</h2>
                 <div>
                     <button onclick="goBack()" class="btn btn-secondary">
                         <i class="fas fa-arrow-left"></i> Back
@@ -23,6 +23,84 @@
                 <strong>Demo Board:</strong> Members are automatically added when they access this board.
             </div>
             {% endif %}
+
+            <!-- ── Invite by Email ─────────────────────────────────────── -->
+            {% if can_manage_invites and not board.is_official_demo_board %}
+            <div class="card shadow mb-4 border-0" style="border-left:4px solid #3b82f6 !important;">
+                <div class="card-header bg-white d-flex align-items-center gap-2">
+                    <i class="fas fa-envelope text-primary"></i>
+                    <h5 class="mb-0">Invite Someone by Email</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'invite_to_board' board.id %}" class="d-flex gap-2 flex-wrap align-items-end">
+                        {% csrf_token %}
+                        <div class="flex-grow-1" style="min-width:260px;">
+                            <label for="invite_email" class="form-label small text-muted mb-1">
+                                Email address of the person you want to invite
+                            </label>
+                            <input type="email" id="invite_email" name="invite_email"
+                                   class="form-control" placeholder="colleague@example.com" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-paper-plane me-1"></i> Send Invitation
+                        </button>
+                    </form>
+                    <p class="text-muted small mt-2 mb-0">
+                        <i class="fas fa-info-circle me-1"></i>
+                        An invitation link will be emailed to them. The link expires in 48 hours.
+                        If they don't have an account yet, they'll be prompted to create one.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Pending Invitations -->
+            {% if pending_invitations %}
+            <div class="card shadow mb-4 border-0">
+                <div class="card-header bg-white d-flex align-items-center justify-content-between">
+                    <span><i class="fas fa-clock text-warning me-2"></i><strong>Pending Invitations</strong>
+                        <span class="badge bg-warning text-dark ms-1">{{ pending_invitations|length }}</span>
+                    </span>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Email</th>
+                                <th>Invited By</th>
+                                <th>Sent</th>
+                                <th>Expires</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for inv in pending_invitations %}
+                            <tr>
+                                <td>{{ inv.email }}</td>
+                                <td>{{ inv.invited_by.username }}</td>
+                                <td>{{ inv.created_at|date:"M d, Y H:i" }}</td>
+                                <td>
+                                    <span class="{% if inv.expires_at < now %}text-danger fw-semibold{% else %}text-muted{% endif %}">
+                                        {{ inv.expires_at|date:"M d, Y H:i" }}
+                                    </span>
+                                </td>
+                                <td class="text-end">
+                                    <form method="post" action="{% url 'revoke_board_invitation' inv.id %}"
+                                          onsubmit="return confirm('Revoke the invitation for {{ inv.email }}?');">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            <i class="fas fa-times me-1"></i>Revoke
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endif %}
+            {% endif %}
+            <!-- ─────────────────────────────────────────────────────────── -->
 
             <!-- Current Members -->
             <div class="card shadow mb-4">
@@ -81,7 +159,6 @@
 
 <script>
 function goBack() {
-    // Try to go back, or navigate to board detail
     if (window.history.length > 1) {
         window.history.back();
     } else {

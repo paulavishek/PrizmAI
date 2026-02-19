@@ -1,0 +1,15 @@
+Hi,
+
+{{ invited_by.get_full_name|default:invited_by.username }} has invited you to join the board "{{ board.name }}" on PrizmAI.
+
+Click the link below to accept the invitation:
+
+{{ accept_url }}
+
+This link will expire in {{ expires_hours }} hours.
+
+If you don't have a PrizmAI account yet, you will be prompted to create one when you click the link.
+
+If you did not expect this invitation, you can safely ignore this email.
+
+— The PrizmAI Team
