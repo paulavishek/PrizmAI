@@ -350,8 +350,9 @@ class PrioritySuggestionService:
         and advanced fields (risk assessment, workload impact, complexity analysis, etc.)
         """
         score = 0
-        max_score = 22  # Increased to accommodate complexity analysis factors
+        max_score = 25  # Updated to reflect extended scoring: due-date tiers, duration, complexity tiers
         factors = []
+        no_due_date = True  # Track whether a due date was provided
         
         # Semantic keyword analysis (0-4 points) - Check FIRST before due date
         high_impact_keywords = {
@@ -383,9 +384,10 @@ class PrioritySuggestionService:
             if keyword_matches:
                 factors.append(f"High-impact keywords detected: {', '.join(keyword_matches[:3])}")
         
-        # Due date urgency (0-4 points)
+        # Due date urgency (0-5 points, with -1 penalty for far-future dates)
         days_until_due = None
         if task.due_date:
+            no_due_date = False
             due_date = task.due_date
             if timezone.is_naive(due_date):
                 due_date = timezone.make_aware(due_date)
@@ -393,19 +395,48 @@ class PrioritySuggestionService:
             days_until_due = delta.total_seconds() / 86400
             
             if days_until_due < 0:
-                score += 4
+                score += 5
                 factors.append("Task is overdue")
             elif days_until_due < 1:
-                score += 3
+                score += 4
                 factors.append("Due within 24 hours")
             elif days_until_due < 3:
-                score += 2
+                score += 3
                 factors.append("Due within 3 days")
             elif days_until_due < 7:
-                score += 1
+                score += 2
                 factors.append("Due within 7 days")
+            elif days_until_due < 14:
+                score += 1
+                factors.append(f"Due in {int(days_until_due)} days")
+            elif days_until_due < 60:
+                # Neutral — upcoming but not imminent
+                factors.append(f"Due in {int(days_until_due)} days")
             else:
-                factors.append(f"Due in {int(days_until_due)} days (Low urgency)")
+                # Long-term deadline reduces urgency
+                score -= 1
+                factors.append(f"Due in {int(days_until_due)} days (long-term deadline)")
+        else:
+            # No due date: urgency cannot be determined
+            factors.append("No due date set — urgency cannot be assessed")
+
+        # === TASK DURATION FACTOR (-0 to -2 points) ===
+        # A very long project span signals low short-term urgency regardless of complexity
+        start_date = getattr(task, 'start_date', None)
+        if start_date and task.due_date:
+            sd = start_date
+            ed = task.due_date
+            if timezone.is_naive(sd):
+                sd = timezone.make_aware(sd)
+            if timezone.is_naive(ed):
+                ed = timezone.make_aware(ed)
+            duration_days = (ed - sd).total_seconds() / 86400
+            if duration_days > 180:
+                score -= 2
+                factors.append(f"Long-term project span ({int(duration_days)} days — low short-term urgency)")
+            elif duration_days > 90:
+                score -= 1
+                factors.append(f"Extended project timeline ({int(duration_days)} days)")
         
         # Blocking tasks (0-3 points) - Check both saved tasks and advanced context
         blocking_count = 0
@@ -444,14 +475,17 @@ class PrioritySuggestionService:
             except (ValueError, TypeError):
                 effective_complexity = 5
         
-        # Score based on complexity
-        if effective_complexity >= 8:
+        # Score based on complexity (more granular tiers)
+        complexity_source = "AI-analyzed" if ai_complexity else "Manual"
+        if effective_complexity >= 9:
+            score += 3
+            factors.append(f"Very high complexity ({effective_complexity}/10, {complexity_source})")
+        elif effective_complexity >= 7:
             score += 2
-            complexity_source = "AI-analyzed" if ai_complexity else "Manual"
             factors.append(f"High complexity ({effective_complexity}/10, {complexity_source})")
-        elif effective_complexity >= 6:
+        elif effective_complexity >= 5:
             score += 1
-            factors.append(f"Medium-high complexity ({effective_complexity}/10)")
+            factors.append(f"Medium complexity ({effective_complexity}/10)")
         
         # Additional points for breakdown recommendation (indicates very complex task)
         if is_breakdown_recommended:
@@ -533,29 +567,43 @@ class PrioritySuggestionService:
             # Subtasks might inherit urgency but are generally more focused
             factors.append("Part of larger task (subtask)")
         
-        # Determine priority based on score with adjusted thresholds (max_score = 22)
-        if score >= 12:
+        # Determine priority based on recalibrated thresholds (max_score = 25)
+        # Proportional bands: low <5 (0-20%), medium 5-8 (20-36%), high 9-14 (36-56%), urgent >=15 (60%+)
+        if score >= 15:
             priority = 'urgent'
             confidence = 0.82
-        elif score >= 7:
+        elif score >= 9:
             priority = 'high'
             confidence = 0.77
-        elif score >= 4:
+        elif score >= 5:
             priority = 'medium'
             confidence = 0.72
         else:
             priority = 'low'
             confidence = 0.67
+
+        # Cap at 'high' and reduce confidence when no due date is provided
+        # (cannot reliably determine urgency without a deadline)
+        if no_due_date:
+            confidence = max(0.45, confidence - 0.10)
+            if priority == 'urgent':
+                priority = 'high'
         
         # Build detailed explanation
         explanation = f"Based on rule-based analysis (score: {score}/{max_score}), this task should be **{priority}** priority. "
-        
+
+        # Add no-due-date warning prominently
+        if no_due_date:
+            explanation += "⚠️ No due date set — urgency is estimated from task attributes only. Set a due date for a more accurate priority recommendation. "
+
         # Add specific reasoning
         if keyword_matches:
             explanation += f"Contains critical keywords suggesting high impact. "
         if days_until_due is not None:
-            if days_until_due > 7:
-                explanation += f"However, due date is {int(days_until_due)} days away. "
+            if days_until_due > 60:
+                explanation += f"Due date is {int(days_until_due)} days away (long-term). "
+            elif days_until_due > 7:
+                explanation += f"Due date is {int(days_until_due)} days away. "
             elif days_until_due < 3:
                 explanation += f"Due date is approaching ({int(days_until_due)} days). "
         
@@ -585,14 +633,18 @@ class PrioritySuggestionService:
                 'factor': f.split(':')[0] if ':' in f else f
             })
         
+        # Floor displayed score at 0 (negative penalties are for logic only)
+        displayed_score = max(0, score)
+
         return {
             'suggested_priority': priority,
             'confidence': confidence,
+            'no_due_date': no_due_date,  # Frontend uses this to show warning
             'reasoning': {
                 'top_factors': top_factors_with_pct,
                 'explanation': explanation,
                 'confidence_level': self._confidence_label(confidence),
-                'analysis_score': f"{score}/{max_score} points"
+                'analysis_score': f"{displayed_score}/{max_score} points"
             },
             'alternatives': [],
             'is_ml_based': False,

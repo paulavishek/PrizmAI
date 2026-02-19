@@ -143,7 +143,25 @@ class PrioritySuggestionWidget {
         
         this.isVisible = true;
         container.style.display = 'block';
-    }
+
+        // Show no-due-date warning banner if the backend flagged it
+        if (this.suggestion.no_due_date) {
+            const warningId = 'priority-no-due-date-warning';
+            if (!document.getElementById(warningId)) {
+                const warning = document.createElement('div');
+                warning.id = warningId;
+                warning.className = 'alert alert-warning d-flex align-items-center gap-2 py-2 px-3 mb-2 small';
+                warning.style.borderLeft = '4px solid #ffc107';
+                warning.innerHTML = `
+                    <i class="fas fa-calendar-times text-warning"></i>
+                    <span><strong>No due date set.</strong> The priority is estimated from task attributes only. 
+                    Set a due date for a more accurate recommendation.</span>
+                    <button type="button" class="btn-close btn-close-sm ms-auto" style="font-size:0.65rem;" 
+                        onclick="document.getElementById('${warningId}').remove()"></button>
+                `;
+                container.insertBefore(warning, container.firstChild);
+            }
+        }
     
     /**
      * Render priority score bar with visual indicator
@@ -159,17 +177,17 @@ class PrioritySuggestionWidget {
         const maxScore = parseInt(scoreMatch[2]);
         const percentage = (score / maxScore) * 100;
         
-        // Color code based on percentage (aligned with backend thresholds where max_score = 22)
-        // Backend: urgent >= 12 (54.5%), high >= 7 (31.8%), medium >= 4 (18.2%), low < 4
+        // Color code based on percentage (aligned with backend thresholds where max_score = 25)
+        // Backend: urgent >= 15 (60%), high >= 9 (36%), medium >= 5 (20%), low < 5
         let barColor = 'secondary';
-        if (percentage >= 54) barColor = 'danger';      // 12+/22 = red (urgent)
-        else if (percentage >= 31) barColor = 'warning'; // 7-11/22 = orange (high)
-        else if (percentage >= 18) barColor = 'info';    // 4-6/22 = blue (medium)
+        if (percentage >= 60) barColor = 'danger';      // 15+/25 = red (urgent)
+        else if (percentage >= 36) barColor = 'warning'; // 9-14/25 = orange (high)
+        else if (percentage >= 20) barColor = 'info';    // 5-8/25 = blue (medium)
         
-        // Calculate threshold positions for visual markers (based on max_score = 22)
-        const mediumThreshold = (4 / maxScore) * 100;   // ~18%
-        const highThreshold = (7 / maxScore) * 100;     // ~32%
-        const urgentThreshold = (12 / maxScore) * 100;  // ~55%
+        // Calculate threshold positions for visual markers (based on max_score = 25)
+        const mediumThreshold = (5 / maxScore) * 100;   // 20%
+        const highThreshold = (9 / maxScore) * 100;     // 36%
+        const urgentThreshold = (15 / maxScore) * 100;  // 60%
         
         return `
             <div class="mb-3">
@@ -185,9 +203,9 @@ class PrioritySuggestionWidget {
                          aria-valuenow="${score}" aria-valuemin="0" aria-valuemax="${maxScore}">
                     </div>
                     <!-- Priority threshold markers -->
-                    <div class="position-absolute" style="left: ${mediumThreshold}%; height: 100%; border-left: 2px dashed rgba(0,0,0,0.3); top: 0;" title="Medium threshold (4pts)"></div>
-                    <div class="position-absolute" style="left: ${highThreshold}%; height: 100%; border-left: 2px dashed rgba(0,0,0,0.3); top: 0;" title="High threshold (7pts)"></div>
-                    <div class="position-absolute" style="left: ${urgentThreshold}%; height: 100%; border-left: 2px dashed rgba(0,0,0,0.3); top: 0;" title="Urgent threshold (12pts)"></div>
+                    <div class="position-absolute" style="left: ${mediumThreshold}%; height: 100%; border-left: 2px dashed rgba(0,0,0,0.3); top: 0;" title="Medium threshold (5pts)"></div>
+                    <div class="position-absolute" style="left: ${highThreshold}%; height: 100%; border-left: 2px dashed rgba(0,0,0,0.3); top: 0;" title="High threshold (9pts)"></div>
+                    <div class="position-absolute" style="left: ${urgentThreshold}%; height: 100%; border-left: 2px dashed rgba(0,0,0,0.3); top: 0;" title="Urgent threshold (15pts)"></div>
                 </div>
                 <div class="d-flex justify-content-between mt-1" style="font-size: 0.65rem; color: #888;">
                     <span>Low</span>
