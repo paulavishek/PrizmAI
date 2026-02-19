@@ -41,6 +41,19 @@
         .alert-danger .btn-close {
             filter: brightness(0) saturate(100%);
         }
+        .share-nav-btn {
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+            animation: sharePulse 2.5s ease-in-out infinite;
+        }
+        .share-nav-btn:hover {
+            transform: scale(1.07);
+            box-shadow: 0 4px 14px rgba(239,68,68,0.6) !important;
+            color: #fff !important;
+        }
+        @keyframes sharePulse {
+            0%, 100% { box-shadow: 0 2px 8px rgba(239,68,68,0.45); }
+            50%       { box-shadow: 0 2px 16px rgba(239,68,68,0.75); }
+        }
     </style>
     
     {% block extra_css %}{% endblock %}
@@ -144,11 +157,11 @@
                     {% if user.is_authenticated and not is_demo_account %}
                     <li class="nav-item me-1">
                         <button type="button"
-                                class="btn btn-sm fw-semibold"
+                                class="btn btn-sm fw-bold share-nav-btn"
                                 data-bs-toggle="modal"
                                 data-bs-target="#shareModal"
                                 title="Share PrizmAI with a friend"
-                                style="background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;padding:0.3rem 0.75rem;border:none;border-radius:20px;font-size:0.78rem;">
+                                style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff !important;padding:0.35rem 1rem;border:none;border-radius:20px;font-size:0.82rem;box-shadow:0 2px 8px rgba(239,68,68,0.45);letter-spacing:0.02em;">
                             <i class="fas fa-share-alt me-1"></i>Share
                         </button>
                     </li>
@@ -356,23 +369,23 @@
             <p class="text-muted small mb-2">Or share directly:</p>
             <div class="d-flex flex-wrap gap-2">
               <a id="shareTwitter" href="#" target="_blank" rel="noopener"
-                 class="btn btn-sm text-white fw-semibold"
-                 style="background:#000;border-radius:6px;">
+                 class="btn btn-sm fw-semibold"
+                 style="background:#1d9bf0;color:#fff !important;border-radius:6px;">
                 <i class="fab fa-x-twitter me-1"></i>X / Twitter
               </a>
               <a id="shareLinkedIn" href="#" target="_blank" rel="noopener"
-                 class="btn btn-sm text-white fw-semibold"
-                 style="background:#0a66c2;border-radius:6px;">
+                 class="btn btn-sm fw-semibold"
+                 style="background:#0a66c2;color:#fff !important;border-radius:6px;">
                 <i class="fab fa-linkedin me-1"></i>LinkedIn
               </a>
               <a id="shareWhatsApp" href="#" target="_blank" rel="noopener"
-                 class="btn btn-sm text-white fw-semibold"
-                 style="background:#25d366;border-radius:6px;">
+                 class="btn btn-sm fw-semibold"
+                 style="background:#128c7e;color:#fff !important;border-radius:6px;">
                 <i class="fab fa-whatsapp me-1"></i>WhatsApp
               </a>
               <a id="shareEmail" href="#"
-                 class="btn btn-sm btn-outline-secondary fw-semibold"
-                 style="border-radius:6px;">
+                 class="btn btn-sm fw-semibold"
+                 style="background:#6c757d;color:#fff !important;border-radius:6px;">
                 <i class="fas fa-envelope me-1"></i>Email
               </a>
             </div>
