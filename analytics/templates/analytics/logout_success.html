@@ -286,16 +286,96 @@
     </div>
     {% endif %}
     
+    <!-- Share with Friends -->
+    <div style="background:linear-gradient(135deg,#1e3a5f,#312e81);border-radius:15px;padding:36px 40px;margin-bottom:28px;box-shadow:0 8px 24px rgba(0,0,0,0.12);">
+        <div class="text-center mb-3">
+            <h3 class="text-white fw-bold mb-1">
+                <i class="fas fa-share-alt me-2"></i>Enjoyed PrizmAI? Share it!
+            </h3>
+            <p style="color:rgba(255,255,255,0.75);font-size:0.95rem;margin:0;">
+                Help others discover AI-powered project management — one share can make a difference.
+            </p>
+        </div>
+
+        <!-- Copy link -->
+        <div class="input-group my-3" style="max-width:520px;margin:0 auto;">
+            <input type="text" id="logoutShareUrl" class="form-control" readonly
+                   value="{{ request.scheme }}://{{ request.get_host }}{% url 'register' %}"
+                   style="background:rgba(255,255,255,0.12);border-color:rgba(255,255,255,0.2);color:#fff;font-size:0.88rem;">
+            <button class="btn fw-semibold" type="button" id="logoutCopyBtn"
+                    style="background:#3b82f6;color:#fff;border-color:#3b82f6;">
+                <i class="fas fa-copy me-1"></i>Copy Link
+            </button>
+        </div>
+        <div id="logoutCopyFeedback" class="text-center small mb-2" style="color:#86efac;display:none;">
+            <i class="fas fa-check-circle me-1"></i>Link copied!
+        </div>
+
+        <!-- Social buttons -->
+        <div class="d-flex flex-wrap justify-content-center gap-2 mt-3">
+            <a id="logoutShareTwitter" href="#" target="_blank" rel="noopener"
+               class="btn btn-sm fw-semibold text-white"
+               style="background:#000;border-radius:20px;padding:0.45rem 1.1rem;">
+                <i class="fab fa-x-twitter me-1"></i>X / Twitter
+            </a>
+            <a id="logoutShareLinkedIn" href="#" target="_blank" rel="noopener"
+               class="btn btn-sm fw-semibold text-white"
+               style="background:#0a66c2;border-radius:20px;padding:0.45rem 1.1rem;">
+                <i class="fab fa-linkedin me-1"></i>LinkedIn
+            </a>
+            <a id="logoutShareWhatsApp" href="#" target="_blank" rel="noopener"
+               class="btn btn-sm fw-semibold text-white"
+               style="background:#25d366;border-radius:20px;padding:0.45rem 1.1rem;">
+                <i class="fab fa-whatsapp me-1"></i>WhatsApp
+            </a>
+            <a id="logoutShareEmail" href="#"
+               class="btn btn-sm fw-semibold"
+               style="background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.3);border-radius:20px;padding:0.45rem 1.1rem;">
+                <i class="fas fa-envelope me-1"></i>Email
+            </a>
+        </div>
+    </div>
+
     <!-- Back to Home -->
     <div class="text-center mt-4">
-        <a href="{% url 'dashboard' %}" class="btn btn-outline-primary">
-            <i class="fas fa-home me-2"></i>Back to Dashboard
+        <a href="{% url 'welcome' %}" class="btn btn-outline-primary">
+            <i class="fas fa-home me-2"></i>Back to Home
         </a>
         <a href="{% url 'login' %}" class="btn btn-outline-secondary ms-2">
             <i class="fas fa-sign-in-alt me-2"></i>Login Again
         </a>
     </div>
 </div>
+
+{% block extra_js %}
+<script>
+(function () {
+    var shareUrl = "{{ request.scheme }}://{{ request.get_host }}{% url 'register' %}";
+    var shareText = "I've been using PrizmAI \u2014 an AI-powered project management tool with Kanban boards, Gantt charts, AI assistant, retrospectives and more. Try it free:";
+
+    document.getElementById('logoutCopyBtn').addEventListener('click', function () {
+        navigator.clipboard.writeText(shareUrl).then(function () {
+            var fb = document.getElementById('logoutCopyFeedback');
+            fb.style.display = 'block';
+            setTimeout(function () { fb.style.display = 'none'; }, 2500);
+        });
+    });
+
+    document.getElementById('logoutShareTwitter').href =
+        'https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareText + ' ' + shareUrl);
+
+    document.getElementById('logoutShareLinkedIn').href =
+        'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl);
+
+    document.getElementById('logoutShareWhatsApp').href =
+        'https://wa.me/?text=' + encodeURIComponent(shareText + ' ' + shareUrl);
+
+    document.getElementById('logoutShareEmail').href =
+        'mailto:?subject=' + encodeURIComponent('Check out PrizmAI') +
+        '&body=' + encodeURIComponent(shareText + '\n\n' + shareUrl);
+})();
+</script>
+{% endblock %}
 
 {% if show_feedback_form %}
 <script>

@@ -140,6 +140,19 @@
                             </span>
                         </li>
                     {% endif %}
+                    <!-- Share / Refer a Friend Button -->
+                    {% if user.is_authenticated and not is_demo_account %}
+                    <li class="nav-item me-1">
+                        <button type="button"
+                                class="btn btn-sm fw-semibold"
+                                data-bs-toggle="modal"
+                                data-bs-target="#shareModal"
+                                title="Share PrizmAI with a friend"
+                                style="background:linear-gradient(135deg,#3b82f6,#8b5cf6);color:#fff;padding:0.3rem 0.75rem;border:none;border-radius:20px;font-size:0.78rem;">
+                            <i class="fas fa-share-alt me-1"></i>Share
+                        </button>
+                    </li>
+                    {% endif %}
                     <!-- Accessibility Toggle Button -->
                     <li class="nav-item">
                         <button id="accessibility-toggle" 
@@ -309,6 +322,95 @@
         {% endif %}
     </script>
     
+    <!-- Share PrizmAI Modal -->
+    {% if user.is_authenticated and not is_demo_account %}
+    <div class="modal fade" id="shareModal" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+
+          <div class="modal-header border-0 pb-0" style="background:linear-gradient(135deg,#3b82f6,#8b5cf6);border-radius:0.5rem 0.5rem 0 0;">
+            <h5 class="modal-title text-white fw-bold" id="shareModalLabel">
+              <i class="fas fa-share-alt me-2"></i>Share Pri<span style="font-style:italic;">z</span>mAI
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+
+          <div class="modal-body p-4">
+            <p class="text-muted mb-3" style="font-size:0.93rem;">
+              Know someone who'd love AI-powered project management? Share the link — they'll land on the homepage and can sign up for free.
+            </p>
+
+            <!-- Copy link row -->
+            <div class="input-group mb-4">
+              <input type="text" id="shareUrl" class="form-control form-control-sm bg-light" readonly
+                     value="{{ request.scheme }}://{{ request.get_host }}{% url 'register' %}">
+              <button class="btn btn-outline-primary btn-sm" type="button" id="copyShareUrl">
+                <i class="fas fa-copy me-1"></i>Copy
+              </button>
+            </div>
+            <div id="copyShareFeedback" class="text-success small mb-3" style="display:none;">
+              <i class="fas fa-check-circle me-1"></i>Link copied to clipboard!
+            </div>
+
+            <!-- Social share buttons -->
+            <p class="text-muted small mb-2">Or share directly:</p>
+            <div class="d-flex flex-wrap gap-2">
+              <a id="shareTwitter" href="#" target="_blank" rel="noopener"
+                 class="btn btn-sm text-white fw-semibold"
+                 style="background:#000;border-radius:6px;">
+                <i class="fab fa-x-twitter me-1"></i>X / Twitter
+              </a>
+              <a id="shareLinkedIn" href="#" target="_blank" rel="noopener"
+                 class="btn btn-sm text-white fw-semibold"
+                 style="background:#0a66c2;border-radius:6px;">
+                <i class="fab fa-linkedin me-1"></i>LinkedIn
+              </a>
+              <a id="shareWhatsApp" href="#" target="_blank" rel="noopener"
+                 class="btn btn-sm text-white fw-semibold"
+                 style="background:#25d366;border-radius:6px;">
+                <i class="fab fa-whatsapp me-1"></i>WhatsApp
+              </a>
+              <a id="shareEmail" href="#"
+                 class="btn btn-sm btn-outline-secondary fw-semibold"
+                 style="border-radius:6px;">
+                <i class="fas fa-envelope me-1"></i>Email
+              </a>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <script>
+    (function () {
+      var shareUrl = "{{ request.scheme }}://{{ request.get_host }}{% url 'register' %}";
+      var shareText = "I've been using PrizmAI — an AI-powered project management tool with Kanban boards, Gantt charts, AI assistant, retrospectives and more. Try it free:";
+
+      document.getElementById('copyShareUrl').addEventListener('click', function () {
+        navigator.clipboard.writeText(shareUrl).then(function () {
+          var fb = document.getElementById('copyShareFeedback');
+          fb.style.display = 'block';
+          setTimeout(function () { fb.style.display = 'none'; }, 2500);
+        });
+      });
+
+      document.getElementById('shareTwitter').href =
+        'https://twitter.com/intent/tweet?text=' + encodeURIComponent(shareText + ' ' + shareUrl);
+
+      document.getElementById('shareLinkedIn').href =
+        'https://www.linkedin.com/sharing/share-offsite/?url=' + encodeURIComponent(shareUrl);
+
+      document.getElementById('shareWhatsApp').href =
+        'https://wa.me/?text=' + encodeURIComponent(shareText + ' ' + shareUrl);
+
+      document.getElementById('shareEmail').href =
+        'mailto:?subject=' + encodeURIComponent('Check out PrizmAI') +
+        '&body=' + encodeURIComponent(shareText + '\n\n' + shareUrl);
+    })();
+    </script>
+    {% endif %}
+
     <!-- Navigation Utilities JS (goBack function) -->
     <script src="{% static 'js/navigation.js' %}"></script>
     
