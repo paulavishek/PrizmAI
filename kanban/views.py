@@ -484,7 +484,10 @@ def board_detail(request, board_id):
     
     # Get scope creep data
     from kanban.models import ScopeCreepAlert
+    from kanban.utils.scope_analysis import refresh_active_alerts
     scope_status = board.get_current_scope_status()
+    # Refresh any stale alert metrics so the banner always matches live scope
+    refresh_active_alerts(board, scope_status)
     active_scope_alerts = ScopeCreepAlert.objects.filter(
         board=board,
         status__in=['active', 'acknowledged']

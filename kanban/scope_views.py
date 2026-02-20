@@ -18,7 +18,8 @@ from kanban.utils.scope_analysis import (
     get_scope_trend_data, 
     calculate_scope_velocity,
     analyze_scope_changes_with_ai,
-    create_scope_alert_if_needed
+    create_scope_alert_if_needed,
+    refresh_active_alerts,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,9 @@ def scope_dashboard(request, board_id):
     scope_status = board.get_current_scope_status()
     has_baseline = scope_status is not None
     
+    # Refresh stale alert metrics before rendering so numbers match live scope
+    refresh_active_alerts(board, scope_status)
+
     # Get all alerts
     all_alerts = ScopeCreepAlert.objects.filter(board=board).order_by('-detected_at')
     active_alerts = all_alerts.filter(status__in=['active', 'acknowledged'])

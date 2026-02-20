@@ -288,6 +288,75 @@ def create_scope_alert_if_needed(snapshot):
     return alert
 
 
+def refresh_active_alerts(board, scope_status):
+    """
+    Refresh stale active ScopeCreepAlert records so their stored metrics
+    (scope_increase_percentage, tasks_added, severity, ai_summary) always
+    reflect the *current* live scope rather than the values frozen at
+    alert-creation time.
+
+    This prevents the common discrepancy where, e.g., the alert was created
+    when 6 tasks had been added (25 %) but the board now has 8 tasks added
+    (33.3 %) and a new snapshot / alert was never triggered.
+
+    Args:
+        board: Board instance
+        scope_status: dict returned by board.get_current_scope_status()
+
+    Returns:
+        bool: True if any alert was updated, False otherwise
+    """
+    if not scope_status:
+        return False
+
+    from kanban.models import ScopeCreepAlert
+
+    current_pct = scope_status.get('scope_change_percentage', 0)
+    current_tasks_added = scope_status.get('tasks_added', 0)
+
+    # Severity must match the live percentage
+    abs_pct = abs(current_pct)
+    if abs_pct >= 30:
+        current_severity = 'critical'
+    elif abs_pct >= 15:
+        current_severity = 'warning'
+    elif abs_pct >= 5:
+        current_severity = 'info'
+    else:
+        # Scope is back within bounds – nothing to do
+        return False
+
+    top_alert = ScopeCreepAlert.objects.filter(
+        board=board,
+        status__in=['active', 'acknowledged']
+    ).order_by('-detected_at').first()
+
+    if not top_alert:
+        return False
+
+    # Only update when something has actually changed
+    needs_update = (
+        round(top_alert.scope_increase_percentage, 2) != round(current_pct, 2)
+        or top_alert.tasks_added != current_tasks_added
+        or top_alert.severity != current_severity
+    )
+    if not needs_update:
+        return False
+
+    new_summary = (
+        f"Scope has increased by {current_pct:.1f}% since baseline. "
+        f"{current_tasks_added} new task{'' if current_tasks_added == 1 else 's'} added."
+    )
+
+    ScopeCreepAlert.objects.filter(pk=top_alert.pk).update(
+        scope_increase_percentage=current_pct,
+        tasks_added=current_tasks_added,
+        severity=current_severity,
+        ai_summary=new_summary,
+    )
+    return True
+
+
 def get_scope_trend_data(board, days=30):
     """
     Get scope trend data for visualization
