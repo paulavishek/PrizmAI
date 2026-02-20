@@ -1318,7 +1318,7 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
                 
                 # Default reasoning
                 ai_response['reasoning'] = f"Estimated based on task complexity ({complexity_score}/10)"
-                ai_response['risk_factors'] = ["AI response parsing had issues", "Timeline based on complexity estimate"]
+                ai_response['risk_factors'] = ["Timeline based on complexity estimate"]
                 
                 logger.info(f"Deadline prediction extracted via regex fallback: {ai_response['estimated_days_to_complete']} days")
             
@@ -1781,6 +1781,67 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
                 result['factors_missing'] = factors_missing
             return result
 
+        def _fix_unescaped_json_strings(text):
+            """Escape raw control characters (newlines, tabs, etc.) that appear
+            inside JSON string values — a common issue with AI-generated JSON."""
+            result = []
+            in_string = False
+            escape_next = False
+            for ch in text:
+                if escape_next:
+                    result.append(ch)
+                    escape_next = False
+                elif ch == '\\' and in_string:
+                    result.append(ch)
+                    escape_next = True
+                elif ch == '"':
+                    in_string = not in_string
+                    result.append(ch)
+                elif in_string and ch == '\n':
+                    result.append('\\n')
+                elif in_string and ch == '\r':
+                    result.append('\\r')
+                elif in_string and ch == '\t':
+                    result.append('\\t')
+                else:
+                    result.append(ch)
+            return ''.join(result)
+
+        def _repair_truncated_json(text):
+            """Best-effort repair for truncated JSON: close any open string,
+            then close any unclosed arrays/objects in reverse order."""
+            text = text.rstrip()
+            in_string = False
+            escape_next = False
+            stack = []  # track '[' and '{'
+            for ch in text:
+                if escape_next:
+                    escape_next = False
+                    continue
+                if ch == '\\' and in_string:
+                    escape_next = True
+                    continue
+                if ch == '"':
+                    in_string = not in_string
+                elif not in_string:
+                    if ch in ('{', '['):
+                        stack.append(ch)
+                    elif ch == '}':
+                        if stack and stack[-1] == '{':
+                            stack.pop()
+                    elif ch == ']':
+                        if stack and stack[-1] == '[':
+                            stack.pop()
+
+            suffix = ''
+            if in_string:
+                suffix += '"'       # close the open string
+            # close unclosed arrays/objects
+            for opener in reversed(stack):
+                suffix += ']' if opener == '[' else '}'
+            repaired = text + suffix
+            return repaired
+
         response_text = generate_ai_content(prompt, task_type='task_breakdown')
         if response_text:
             # Handle code block formatting
@@ -1788,48 +1849,42 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
-            
-            # Clean up common JSON issues from AI responses
+
+            # Step 1: escape raw newlines/tabs inside JSON string values
+            response_text = _fix_unescaped_json_strings(response_text)
+
+            # Step 2: standard token fixes
             response_text = response_text.replace('True', 'true').replace('False', 'false')
             response_text = response_text.replace('None', 'null')
             response_text = re.sub(r',\s*([}\]])', r'\1', response_text)  # Remove trailing commas
-            
+
             try:
                 return _enrich_result(json.loads(response_text))
             except json.JSONDecodeError as json_err:
                 logger.error(f"Task breakdown JSON parse error: {json_err}. Response text (first 500 chars): {response_text[:500]}")
-                # Try a more aggressive cleanup
-                response_text = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', response_text)  # Remove control characters
-                
+
+                # Step 3: try repairing truncated JSON
                 try:
-                    return _enrich_result(json.loads(response_text))
+                    repaired = _repair_truncated_json(response_text)
+                    parsed = json.loads(repaired)
+                    logger.info("Successfully repaired truncated/incomplete JSON for task breakdown")
+                    return _enrich_result(parsed)
+                except json.JSONDecodeError as repair_err:
+                    logger.error(f"Repair attempt failed: {repair_err}")
+
+                # Step 4: strip remaining control characters and retry
+                cleaned = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', response_text)
+                try:
+                    return _enrich_result(json.loads(cleaned))
                 except json.JSONDecodeError as second_err:
                     logger.error(f"Second JSON parse attempt failed: {second_err}")
-                    # Try to repair truncated JSON
                     try:
-                        cleaned = response_text.rstrip()
-                        if not cleaned.endswith('}'):
-                            # Find the last properly closed object
-                            depth = 0
-                            last_valid_pos = -1
-                            for i, char in enumerate(cleaned):
-                                if char == '{':
-                                    depth += 1
-                                elif char == '}':
-                                    depth -= 1
-                                    if depth == 0:
-                                        last_valid_pos = i
-                            
-                            if last_valid_pos > 0:
-                                cleaned = cleaned[:last_valid_pos + 1]
-                                logger.info("Successfully repaired truncated JSON for task breakdown")
-                                return _enrich_result(json.loads(cleaned))
-                            else:
-                                raise json.JSONDecodeError("Could not repair JSON", response_text, 0)
-                        else:
-                            raise second_err
-                    except Exception as repair_err:
-                        logger.error(f"Failed to repair JSON: {repair_err}")
+                        repaired2 = _repair_truncated_json(cleaned)
+                        parsed2 = json.loads(repaired2)
+                        logger.info("Repaired JSON after control-char strip for task breakdown")
+                        return _enrich_result(parsed2)
+                    except Exception as repair2_err:
+                        logger.error(f"Failed to repair JSON after strip: {repair2_err}")
                         # Return a minimal valid response indicating failure
                         return _enrich_result({
                             "is_breakdown_recommended": False,

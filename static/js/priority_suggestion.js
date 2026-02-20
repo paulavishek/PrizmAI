@@ -162,6 +162,7 @@ class PrioritySuggestionWidget {
                 container.insertBefore(warning, container.firstChild);
             }
         }
+    }
     
     /**
      * Render priority score bar with visual indicator

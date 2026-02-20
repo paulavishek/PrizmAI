@@ -369,20 +369,7 @@
                                                     {% endif %}
                                                 </div>
                                             </div>
-                                            <div class="row mt-2">
-                                                <div class="col-12">
-                                                    <div class="card bg-light">
-                                                        <div class="card-body py-2">
-                                                            <small class="text-muted">
-                                                                <i class="fas fa-calculator me-1"></i>
-                                                                <strong>Estimated Labor Cost:</strong>
-                                                                <span id="laborCostPreview">$0.00</span>
-                                                                <span class="ms-2 text-secondary">(Hours × Hourly Rate)</span>
-                                                            </small>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
+
                                         </div>
 
                                         <hr>
@@ -804,45 +791,45 @@
     // Initialize Priority Suggestion Widget and assign to global variable
     document.addEventListener('DOMContentLoaded', function() {
         const boardId = {{ board.id }};
-        prioritySuggestion = new PrioritySuggestionWidget({ boardId: boardId });
-        prioritySuggestion.init();
-        
-        // Budget/Cost calculation preview
-        function updateLaborCostPreview() {
+        try {
+            prioritySuggestion = new PrioritySuggestionWidget({ boardId: boardId });
+            prioritySuggestion.init();
+        } catch(e) {
+            console.error('PrioritySuggestionWidget init error:', e);
+        }
+    });
+
+    // Budget/Cost auto-calculation — runs independently of PrioritySuggestionWidget
+    document.addEventListener('DOMContentLoaded', function() {
+        function updateEstimatedCost() {
             const hoursInput = document.getElementById('id_estimated_hours');
-            const rateInput = document.getElementById('id_hourly_rate');
-            const costInput = document.getElementById('id_estimated_cost');
-            const preview = document.getElementById('laborCostPreview');
-            
-            if (hoursInput && rateInput && preview) {
-                const hours = parseFloat(hoursInput.value) || 0;
-                const rate = parseFloat(rateInput.value) || 0;
-                const laborCost = hours * rate;
-                preview.textContent = '$' + laborCost.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                });
-                
-                // Auto-fill the Estimated Cost field with the calculated labor cost
-                if (costInput && laborCost > 0) {
-                    costInput.value = laborCost.toFixed(2);
-                }
+            const rateInput  = document.getElementById('id_hourly_rate');
+            const costInput  = document.getElementById('id_estimated_cost');
+
+            if (!hoursInput || !rateInput || !costInput) return;
+
+            const hours = parseFloat(hoursInput.value) || 0;
+            const rate  = parseFloat(rateInput.value)  || 0;
+            const total = hours * rate;
+
+            if (total > 0) {
+                costInput.value = total.toFixed(2);
             }
         }
-        
-        // Add event listeners for budget fields
-        const hoursInput = document.getElementById('id_estimated_hours');
-        const rateInput = document.getElementById('id_hourly_rate');
-        
-        if (hoursInput) {
-            hoursInput.addEventListener('input', updateLaborCostPreview);
+
+        const _budgetHours = document.getElementById('id_estimated_hours');
+        const _budgetRate  = document.getElementById('id_hourly_rate');
+
+        if (_budgetHours) {
+            _budgetHours.addEventListener('input',  updateEstimatedCost);
+            _budgetHours.addEventListener('change', updateEstimatedCost);
         }
-        if (rateInput) {
-            rateInput.addEventListener('input', updateLaborCostPreview);
+        if (_budgetRate) {
+            _budgetRate.addEventListener('input',  updateEstimatedCost);
+            _budgetRate.addEventListener('change', updateEstimatedCost);
         }
-        
-        // Initial calculation
-        updateLaborCostPreview();
+
+        updateEstimatedCost();
     });
 </script>
 {% endblock %}

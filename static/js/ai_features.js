@@ -435,60 +435,50 @@ function initAILssClassification() {
                         <div>
                             <strong>✨ AI Suggests:</strong> 
                             <span class="badge bg-${badgeClass} fs-6">${data.classification}</span>
-                            ${data.confidence_score ? `<span class="badge bg-secondary ms-1">${Math.round(data.confidence_score * 100)}% confident</span>` : ''}
                         </div>
                         <div>
-                            <button type="button" class="btn btn-sm btn-success me-1" onclick="acceptLssClassification('${radioValue}')">
+                            <button type="button" class="btn btn-sm btn-success" onclick="acceptLssClassification('${radioValue}')">
                                 <i class="fas fa-check"></i> Accept
                             </button>
-                            <button type="button" class="btn btn-sm btn-outline-info" onclick="toggleLssExplain()">
-                                <i class="bi bi-lightbulb"></i> Why?
-                            </button>
                         </div>
                     </div>
+                    ${data.confidence_score ? `
+                    <div class="mb-2">
+                        <strong class="small text-muted"><i class="bi bi-speedometer2 me-1"></i>CONFIDENCE</strong>
+                        <div class="progress mt-1" style="height: 15px;">
+                            <div class="progress-bar ${data.confidence_score >= 0.75 ? 'bg-success' : data.confidence_score >= 0.5 ? 'bg-warning' : 'bg-danger'}" 
+                                 style="width: ${Math.round(data.confidence_score * 100)}%">
+                                ${Math.round(data.confidence_score * 100)}%
+                            </div>
+                        </div>
+                    </div>` : ''}
                     <p class="mb-2 small">${stripMarkdown(data.justification)}</p>
-                    
-                    <div id="lss-explainability" class="why-this-section mt-2" style="display: none;">
-                        <div class="why-this-content">
-                            ${data.confidence_score ? `
-                                <div class="mb-2">
-                                    <strong class="small text-muted"><i class="bi bi-speedometer2 me-1"></i>CONFIDENCE</strong>
-                                    <div class="progress mt-1" style="height: 15px;">
-                                        <div class="progress-bar ${data.confidence_score >= 0.75 ? 'bg-success' : data.confidence_score >= 0.5 ? 'bg-warning' : 'bg-danger'}" 
-                                             style="width: ${Math.round(data.confidence_score * 100)}%">
-                                            ${Math.round(data.confidence_score * 100)}%
-                                        </div>
-                                    </div>
-                                </div>
-                            ` : ''}
-                            ${data.contributing_factors && data.contributing_factors.length > 0 ? `
-                                <div class="mb-2">
-                                    <strong class="small text-muted"><i class="bi bi-pie-chart me-1"></i>KEY FACTORS</strong>
-                                    <ul class="small mb-0 ps-3 mt-1">
-                                        ${data.contributing_factors.map(f => `
-                                            <li>${stripMarkdown(f.description || f.factor || f)}
-                                                ${f.contribution_percentage ? `<span class="badge bg-secondary ms-1">${f.contribution_percentage}%</span>` : ''}
-                                            </li>
-                                        `).join('')}
-                                    </ul>
-                                </div>
-                            ` : ''}
-                            ${data.lean_waste_type ? `
-                                <div class="mb-2">
-                                    <strong class="small text-muted"><i class="bi bi-exclamation-triangle me-1"></i>WASTE TYPE</strong>
-                                    <p class="small mb-0 mt-1 text-danger">${data.lean_waste_type}</p>
-                                </div>
-                            ` : ''}
-                            ${data.improvement_suggestions && data.improvement_suggestions.length > 0 ? `
-                                <div class="mb-2">
-                                    <strong class="small text-muted"><i class="bi bi-lightbulb me-1"></i>IMPROVEMENT IDEAS</strong>
-                                    <ul class="small mb-0 ps-3 mt-1">
-                                        ${data.improvement_suggestions.map(s => `<li>${stripMarkdown(s)}</li>`).join('')}
-                                    </ul>
-                                </div>
-                            ` : ''}
+                    ${data.contributing_factors && data.contributing_factors.length > 0 ? `
+                        <div class="mb-2">
+                            <strong class="small text-muted"><i class="bi bi-pie-chart me-1"></i>KEY FACTORS</strong>
+                            <ul class="small mb-0 ps-3 mt-1">
+                                ${data.contributing_factors.map(f => `
+                                    <li>${stripMarkdown(f.description || f.factor || f)}
+                                        ${f.contribution_percentage ? `<span class="badge bg-secondary ms-1">${f.contribution_percentage}%</span>` : ''}
+                                    </li>
+                                `).join('')}
+                            </ul>
                         </div>
-                    </div>
+                    ` : ''}
+                    ${data.lean_waste_type ? `
+                        <div class="mb-2">
+                            <strong class="small text-muted"><i class="bi bi-exclamation-triangle me-1"></i>WASTE TYPE</strong>
+                            <p class="small mb-0 mt-1 text-danger">${data.lean_waste_type}</p>
+                        </div>
+                    ` : ''}
+                    ${data.improvement_suggestions && data.improvement_suggestions.length > 0 ? `
+                        <div class="mb-2">
+                            <strong class="small text-muted"><i class="bi bi-lightbulb me-1"></i>IMPROVEMENT IDEAS</strong>
+                            <ul class="small mb-0 ps-3 mt-1">
+                                ${data.improvement_suggestions.map(s => `<li>${stripMarkdown(s)}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
                 `;
                 
                 suggestionText.innerHTML = suggestionHtml;
@@ -2425,18 +2415,17 @@ function displayTaskBreakdown(data) {
                 <h6 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> High Complexity Detected!</h6>
                 <p class="mb-2">The AI rates this task at <strong>${data.complexity_score}/10</strong> complexity.</p>
                 ${complexityMismatch ? `
-                <p class="mb-2 text-warning fw-bold">
-                    <i class="fas fa-exclamation-circle me-1"></i>
-                    Note: Your current complexity slider is set to <strong>${userScore}/10</strong>. 
-                    The deadline prediction currently uses your slider value, <strong>not</strong> the AI's ${data.complexity_score}/10.
-                    Click "Re-predict Deadline" below to predict using the AI complexity score.
-                </p>` : ''}
+                <div class="mt-2 mb-2 p-2 rounded" style="background:rgba(0,0,0,0.25);">
+                    <p class="mb-0 text-white">
+                        <i class="fas fa-exclamation-circle me-1"></i>
+                        <strong>Note:</strong> Your current complexity slider is set to <strong>${userScore}/10</strong>.
+                        The deadline prediction currently uses your slider value, <strong>not</strong> the AI's ${data.complexity_score}/10.
+                        Click <em>"Re-predict Deadline"</em> below to use the AI's score.
+                    </p>
+                </div>` : ''}
                 <p class="mb-2"><strong>Recommendation:</strong> Consider extending the deadline by <strong>2-3 days</strong> 
                 to account for the task complexity.</p>
-                <button type="button" class="btn btn-sm btn-warning mt-2" onclick="highlightDueDateForReview()">
-                    <i class="fas fa-calendar-check me-1"></i> Review Due Date
-                </button>
-                <button type="button" class="btn btn-sm btn-info mt-2 ms-2" onclick="repredictDeadlineWithComplexity(${data.complexity_score})">
+                <button type="button" class="btn btn-sm btn-info mt-2" onclick="repredictDeadlineWithComplexity(${data.complexity_score})">
                     <i class="fas fa-brain me-1"></i> Re-predict Deadline with AI Score (${data.complexity_score}/10)
                 </button>
             </div>
