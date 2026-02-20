@@ -132,7 +132,7 @@ Respond with ONLY valid JSON in the following exact schema (no markdown fences, 
             'temperature': 0.4,
             'top_p': 0.8,
             'top_k': 40,
-            'max_output_tokens': 2048,
+            'max_output_tokens': 8192,  # Large schema needs ample room
         }
 
         response = model.generate_content(prompt, generation_config=generation_config)
@@ -144,8 +144,23 @@ Respond with ONLY valid JSON in the following exact schema (no markdown fences, 
             if raw.startswith('json'):
                 raw = raw[4:]
             raw = raw.strip()
+        # Also strip any trailing fence that Gemini appended after the JSON
+        if raw.endswith('```'):
+            raw = raw[:-3].strip()
 
-        result = json.loads(raw)
+        try:
+            result = json.loads(raw)
+        except json.JSONDecodeError:
+            # Gemini occasionally truncates; try to recover the outermost object
+            last_brace = raw.rfind('}')
+            if last_brace != -1:
+                raw = raw[:last_brace + 1]
+                # Attempt to close any open arrays so the outer object can close cleanly
+                open_brackets = raw.count('[') - raw.count(']')
+                open_braces   = raw.count('{') - raw.count('}')
+                raw += ']' * max(open_brackets, 0) + '}' * max(open_braces, 0)
+            result = json.loads(raw)   # re-raises JSONDecodeError if still broken
+
         return result
 
     except json.JSONDecodeError as e:
