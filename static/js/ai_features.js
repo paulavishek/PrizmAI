@@ -1311,15 +1311,34 @@ function initDeadlinePrediction() {
         const prioritySelect = document.getElementById('id_priority');
         const boardId = this.dataset.boardId;
         const taskId = this.dataset.taskId;
-        
+
         if (!titleInput || !titleInput.value.trim()) {
             alert('Please enter a task title first.');
             return;
         }
-        
+
         // Double-check assignee is selected
         if (!assignedToSelect || !assignedToSelect.value || assignedToSelect.value === '') {
             alert('Please select an assignee first. The AI needs to analyze their historical velocity and current workload to make an accurate prediction.');
+            return;
+        }
+
+        // Require complexity analysis to have been run for an accurate deadline
+        if (!window.currentTaskBreakdown) {
+            const resultDiv = document.getElementById('deadline-prediction-result');
+            if (resultDiv) {
+                resultDiv.classList.remove('d-none');
+                resultDiv.innerHTML = `
+                    <div class="alert alert-warning d-flex align-items-start gap-2 mb-0" role="alert">
+                        <i class="fas fa-exclamation-triangle mt-1"></i>
+                        <div>
+                            <strong>Task Complexity Analysis required</strong><br>
+                            <span class="small">Please run <em>Analyze &amp; Break Down</em> in the AI Analysis section before
+                            predicting the due date. The AI uses the complexity score from that analysis
+                            to estimate a realistic timeline.</span>
+                        </div>
+                    </div>`;
+            }
             return;
         }
         

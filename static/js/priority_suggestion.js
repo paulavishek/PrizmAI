@@ -535,33 +535,50 @@ class PrioritySuggestionWidget {
             console.warn('Priority suggestion button not found');
             return;
         }
-        
-        button.onclick = () => this._triggerSuggestion();
+
+        button.onclick = () => {
+            // Require due date before suggesting priority
+            const dueDateField = document.getElementById('id_due_date');
+            const hasDueDate = dueDateField && dueDateField.value && dueDateField.value.trim() !== '';
+
+            if (!hasDueDate) {
+                // Show inline message inside the suggestion container
+                const container = document.getElementById(this.containerId);
+                if (container) {
+                    container.style.display = 'block';
+                    container.innerHTML = `
+                        <div class="alert alert-warning d-flex align-items-start gap-2 mb-0" role="alert">
+                            <i class="fas fa-calendar-exclamation mt-1"></i>
+                            <div>
+                                <strong>Due date required</strong><br>
+                                <span class="small">Please set a due date before requesting a priority suggestion.
+                                The AI uses the deadline to assess urgency and give a more accurate recommendation.</span>
+                            </div>
+                        </div>`;
+                }
+                return;
+            }
+
+            this._triggerSuggestion();
+        };
     }
     
     /**
      * Setup auto-triggers for suggestions
      */
     _setupAutoTriggers() {
-        // Auto-suggest when due date changes
+        // Auto-suggest when due date is set/changed — only if a value is actually present
         const dueDateField = document.getElementById('id_due_date');
         if (dueDateField) {
             dueDateField.addEventListener('change', () => {
-                if (!this.isVisible) {
+                const hasDueDate = dueDateField.value && dueDateField.value.trim() !== '';
+                if (hasDueDate && !this.isVisible) {
                     setTimeout(() => this._triggerSuggestion(), 500);
                 }
             });
         }
-        
-        // Auto-suggest when complexity changes
-        const complexityField = document.getElementById('id_complexity_score');
-        if (complexityField) {
-            complexityField.addEventListener('change', () => {
-                if (!this.isVisible) {
-                    setTimeout(() => this._triggerSuggestion(), 500);
-                }
-            });
-        }
+        // Note: complexity-score changes no longer auto-trigger priority suggestion.
+        // Priority requires a due date to assess urgency accurately.
     }
     
     /**
