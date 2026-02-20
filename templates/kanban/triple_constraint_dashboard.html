@@ -214,42 +214,135 @@
                             <h5 class="mb-0"><i class="fas fa-clock me-2 text-danger"></i>Time</h5>
                             <small class="text-muted">Schedule prediction</small>
                         </div>
-                        <span class="badge rounded-pill constraint-badge-{{ time_label }} px-3 py-2">
+                        <span class="badge rounded-pill px-3 py-2
+                            {% if time_label == 'on-track' %}constraint-badge-on-track
+                            {% elif time_label == 'at-risk' %}constraint-badge-at-risk
+                            {% elif time_label == 'over' %}constraint-badge-over
+                            {% else %}constraint-badge-unknown{% endif %}">
                             {% if time_label == 'on-track' %}On Track
                             {% elif time_label == 'at-risk' %}At Risk
                             {% elif time_label == 'over' %}Behind
-                            {% else %}Not Set{% endif %}
+                            {% elif time_label == 'no-target' %}No Target Set
+                            {% else %}Unknown{% endif %}
                         </span>
                     </div>
+
                     {% if time_data %}
-                    <div class="row text-center">
+                    {% if time_data.target_date %}
+                    <!-- Target + predicted dates -->
+                    <div class="row text-center mb-2">
                         <div class="col-6">
-                            <div class="big-number" style="font-size:1.1rem; color:#495057;">{{ time_data.target_date|default:"—" }}</div>
-                            <div class="sub-label">Target Date</div>
+                            <div class="big-number" style="font-size:1.0rem; color:#495057;">{{ time_data.target_date }}</div>
+                            <div class="sub-label">
+                                Target
+                                {% if time_data.deadline_source == 'burndown' %}
+                                <span class="text-muted" title="From burndown prediction"> <i class="fas fa-fire" style="font-size:.7rem;"></i></span>
+                                {% elif time_data.deadline_source == 'milestone' %}
+                                <span class="text-muted" title="From sprint milestone"> <i class="fas fa-flag" style="font-size:.7rem;"></i></span>
+                                {% elif time_data.deadline_source == 'tasks' %}
+                                <span class="text-muted" title="From latest task due date"> <i class="fas fa-tasks" style="font-size:.7rem;"></i></span>
+                                {% endif %}
+                            </div>
                         </div>
                         <div class="col-6">
-                            <div class="big-number {% if time_data.days_ahead_behind < -7 %}text-danger{% elif time_data.days_ahead_behind < 0 %}text-warning{% else %}text-success{% endif %}" style="font-size:1.1rem;">
-                                {{ time_data.predicted_date|default:"—" }}
+                            {% if time_data.predicted_date %}
+                            <div class="big-number {% if time_label == 'over' %}text-danger{% elif time_label == 'at-risk' %}text-warning{% else %}text-success{% endif %}" style="font-size:1.0rem;">
+                                {{ time_data.predicted_date }}
                             </div>
                             <div class="sub-label">Predicted</div>
+                            {% else %}
+                            <div class="big-number text-muted" style="font-size:.9rem;">Not yet calculated</div>
+                            <div class="sub-label">Predicted</div>
+                            {% endif %}
                         </div>
                     </div>
                     <hr class="my-2">
-                    <div class="d-flex justify-content-between">
+                    <div class="d-flex justify-content-between flex-wrap gap-1">
+                        {% if time_data.days_ahead_behind is not None %}
                         <small class="text-muted">
-                            Variance: <strong>{% if time_data.days_ahead_behind >= 0 %}+{% endif %}{{ time_data.days_ahead_behind }} days</strong>
+                            Variance:
+                            <strong class="{% if time_data.days_ahead_behind < 0 %}text-danger{% elif time_data.days_ahead_behind > 0 %}text-success{% endif %}">
+                                {% if time_data.days_ahead_behind >= 0 %}+{% endif %}{{ time_data.days_ahead_behind }} days
+                            </strong>
                         </small>
-                        <small class="text-muted">
-                            Risk: <span class="badge {% if time_data.risk_level == 'critical' %}bg-danger{% elif time_data.risk_level == 'high' %}bg-warning text-dark{% elif time_data.risk_level == 'medium' %}bg-info{% else %}bg-success{% endif %}">
-                                {{ time_data.risk_level|capfirst }}
-                            </span>
-                        </small>
+                        {% else %}
+                        <small class="text-muted">Variance: <strong>—</strong> (run burndown prediction)</small>
+                        {% endif %}
+                        {% if time_data.risk_level %}
+                        <small>Risk: <span class="badge {% if time_data.risk_level == 'critical' %}bg-danger{% elif time_data.risk_level == 'high' %}bg-warning text-dark{% elif time_data.risk_level == 'medium' %}bg-info{% else %}bg-success{% endif %}">
+                            {{ time_data.risk_level|capfirst }}
+                        </span></small>
+                        {% endif %}
                     </div>
                     {% else %}
-                    <p class="text-muted mb-2">No burndown prediction available.</p>
-                    <a href="{% url 'burndown_dashboard' board.id %}" class="btn btn-sm btn-outline-danger">
+                    <!-- Prediction exists but no target date -->
+                    {% if time_data.predicted_date %}
+                    <p class="mb-2 text-muted small">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Predicted completion: <strong>{{ time_data.predicted_date }}</strong>
+                        {% if time_data.risk_level %} &mdash; Risk: <strong>{{ time_data.risk_level|capfirst }}</strong>{% endif %}
+                    </p>
+                    {% endif %}
+                    <div class="alert alert-warning py-2 px-3 mb-2" style="font-size:.85rem;">
+                        <i class="fas fa-exclamation-triangle me-1"></i>
+                        No target date set — variance cannot be computed.
+                    </div>
+                    {% endif %}
+                    <!-- Set / change deadline inline -->
+                    <div class="mt-2">
+                        <button class="btn btn-sm btn-outline-secondary w-100" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#setDeadlineCollapse">
+                            <i class="fas fa-calendar-alt me-1"></i>
+                            {% if time_data.target_date and deadline_source == 'board' %}Change Deadline{% else %}Set Project Deadline{% endif %}
+                        </button>
+                        <div class="collapse mt-2" id="setDeadlineCollapse">
+                            <form method="post" action="{% url 'set_project_deadline' board.id %}">
+                                {% csrf_token %}
+                                <div class="input-group input-group-sm">
+                                    <input type="date" name="project_deadline" class="form-control"
+                                           value="{{ board.project_deadline|date:'Y-m-d'|default:'' }}"
+                                           placeholder="YYYY-MM-DD">
+                                    <button type="submit" class="btn btn-warning btn-sm">Save</button>
+                                </div>
+                                {% if board.project_deadline %}
+                                <div class="mt-1 text-end">
+                                    <form method="post" action="{% url 'set_project_deadline' board.id %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="project_deadline" value="">
+                                        <button type="submit" class="btn btn-link btn-sm text-danger p-0" style="font-size:.75rem;">
+                                            <i class="fas fa-times me-1"></i>Clear deadline
+                                        </button>
+                                    </form>
+                                </div>
+                                {% endif %}
+                            </form>
+                        </div>
+                    </div>
+
+                    {% else %}
+                    <!-- No burndown data at all -->
+                    <div class="alert alert-secondary py-2 px-3 mb-2" style="font-size:.85rem;">
+                        <i class="fas fa-info-circle me-1"></i>
+                        No burndown prediction available. Generate one to see schedule health.
+                    </div>
+                    <a href="{% url 'burndown_dashboard' board.id %}" class="btn btn-sm btn-outline-danger mb-2 w-100">
                         <i class="fas fa-fire me-1"></i>Generate Prediction
                     </a>
+                    <!-- Still allow setting a deadline even without a prediction -->
+                    <button class="btn btn-sm btn-outline-secondary w-100" type="button"
+                            data-bs-toggle="collapse" data-bs-target="#setDeadlineCollapse">
+                        <i class="fas fa-calendar-alt me-1"></i>Set Project Deadline
+                    </button>
+                    <div class="collapse mt-2" id="setDeadlineCollapse">
+                        <form method="post" action="{% url 'set_project_deadline' board.id %}">
+                            {% csrf_token %}
+                            <div class="input-group input-group-sm">
+                                <input type="date" name="project_deadline" class="form-control"
+                                       value="{{ board.project_deadline|date:'Y-m-d'|default:'' }}">
+                                <button type="submit" class="btn btn-warning btn-sm">Save</button>
+                            </div>
+                        </form>
+                    </div>
                     {% endif %}
                 </div>
             </div>

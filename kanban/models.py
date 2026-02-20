@@ -75,6 +75,13 @@ class Board(models.Model):
         help_text="Number of phases for this board (0 means phases are disabled). Users set this during board creation."
     )
 
+    # Triple Constraint – project deadline (Time constraint)
+    project_deadline = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Target completion date for the project (Time constraint). Set from the Triple Constraint dashboard."
+    )
+
     def __str__(self):
         return self.name
     

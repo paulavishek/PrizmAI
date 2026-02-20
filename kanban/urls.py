@@ -117,6 +117,7 @@ urlpatterns = [
 
     # Triple Constraint Dashboard (Scope + Cost + Time)
     path('boards/<int:board_id>/triple-constraint/', triple_constraint_views.triple_constraint_dashboard, name='triple_constraint_dashboard'),
+    path('boards/<int:board_id>/triple-constraint/set-deadline/', triple_constraint_views.set_project_deadline, name='set_project_deadline'),
 
     
     # Task Dependency Management API Endpoints
