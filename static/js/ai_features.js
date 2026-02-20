@@ -2423,30 +2423,13 @@ function displayTaskBreakdown(data) {
             <!-- ── End Explainability Panel ───────────────────────── -->
     `;
 
-    // High Complexity Warning - nudge user about due date
-    // Use >= 7 so that a score of exactly 7 is also flagged (previously > 7 silently dropped it)
+    // High Complexity Warning
     if (data.complexity_score >= 7) {
-        const userComplexityForWarning = document.querySelector('input[name="complexity_score"]');
-        const userScore = userComplexityForWarning ? parseInt(userComplexityForWarning.value) : null;
-        const complexityMismatch = userScore && userScore !== data.complexity_score;
         html += `
             <div class="alert alert-danger mt-3 mb-0" role="alert">
                 <h6 class="alert-heading"><i class="fas fa-exclamation-triangle"></i> High Complexity Detected!</h6>
-                <p class="mb-2">The AI rates this task at <strong>${data.complexity_score}/10</strong> complexity.</p>
-                ${complexityMismatch ? `
-                <div class="mt-2 mb-2 p-2 rounded" style="background:rgba(0,0,0,0.25);">
-                    <p class="mb-0 text-white">
-                        <i class="fas fa-exclamation-circle me-1"></i>
-                        <strong>Note:</strong> Your current complexity slider is set to <strong>${userScore}/10</strong>.
-                        The deadline prediction currently uses your slider value, <strong>not</strong> the AI's ${data.complexity_score}/10.
-                        Click <em>"Re-predict Deadline"</em> below to use the AI's score.
-                    </p>
-                </div>` : ''}
-                <p class="mb-2"><strong>Recommendation:</strong> Consider extending the deadline by <strong>2-3 days</strong> 
-                to account for the task complexity.</p>
-                <button type="button" class="btn btn-sm btn-info mt-2" onclick="repredictDeadlineWithComplexity(${data.complexity_score})">
-                    <i class="fas fa-brain me-1"></i> Re-predict Deadline with AI Score (${data.complexity_score}/10)
-                </button>
+                <p class="mb-0">The AI rates this task at <strong>${data.complexity_score}/10</strong> complexity.
+                Consider extending the deadline by <strong>2-3 days</strong> to account for the task complexity.</p>
             </div>
         `;
     }

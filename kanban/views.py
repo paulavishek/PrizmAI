@@ -754,8 +754,12 @@ def task_detail(request, task_id):
 @login_required
 def create_task(request, board_id, column_id=None):
     from kanban.audit_utils import log_model_change
-    
+
     board = get_object_or_404(Board, id=board_id)
+
+    # Demo mode flags — always False for authenticated users on this view
+    is_demo_mode = False
+    is_demo_board = getattr(board, 'is_demo', False)
     
     if column_id:
         column = get_object_or_404(Column, id=column_id, board=board)
