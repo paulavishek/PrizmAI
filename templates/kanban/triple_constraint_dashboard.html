@@ -249,7 +249,14 @@
                             <div class="big-number {% if time_label == 'over' %}text-danger{% elif time_label == 'at-risk' %}text-warning{% else %}text-success{% endif %}" style="font-size:1.0rem;">
                                 {{ time_data.predicted_date }}
                             </div>
-                            <div class="sub-label">Predicted</div>
+                            <div class="sub-label">
+                                Predicted
+                                <span data-bs-toggle="tooltip" data-bs-placement="top"
+                                      title="AI-computed estimate from the Burndown engine. Visit the Burndown chart to regenerate."
+                                      style="cursor:pointer;">
+                                    <i class="fas fa-info-circle text-muted" style="font-size:.7rem;"></i>
+                                </span>
+                            </div>
                             {% else %}
                             <div class="big-number text-muted" style="font-size:.9rem;">Not yet calculated</div>
                             <div class="sub-label">Predicted</div>
@@ -702,6 +709,12 @@ function simUpdate(driver) {
 }
 
 /* initialise display on page load */
-document.addEventListener('DOMContentLoaded', function() { simUpdate('scope'); });
+document.addEventListener('DOMContentLoaded', function() {
+    simUpdate('scope');
+    /* Bootstrap tooltips */
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function(el) {
+        new bootstrap.Tooltip(el);
+    });
+});
 </script>
 {% endblock %}
