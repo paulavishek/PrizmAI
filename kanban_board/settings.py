@@ -194,6 +194,13 @@ USE_I18N = True
 
 USE_TZ = True
 
+# Indian date/time format (DD-MM-YYYY)
+DATE_FORMAT = 'd-m-Y'
+SHORT_DATE_FORMAT = 'd/m/Y'
+DATETIME_FORMAT = 'd-m-Y H:i'
+SHORT_DATETIME_FORMAT = 'd/m/Y H:i'
+DATE_INPUT_FORMATS = ['%d-%m-%Y', '%d/%m/%Y', '%Y-%m-%d']
+
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/

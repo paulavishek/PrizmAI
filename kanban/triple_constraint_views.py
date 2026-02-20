@@ -30,7 +30,7 @@ def set_project_deadline(request, board_id):
             try:
                 board.project_deadline = date.fromisoformat(raw)
                 board.save(update_fields=['project_deadline'])
-                messages.success(request, f'Project deadline set to {board.project_deadline.strftime("%b %d, %Y")}.')
+                messages.success(request, f'Project deadline set to {board.project_deadline.strftime("%d %b %Y")}.')
             except ValueError:
                 messages.error(request, 'Invalid date format. Please use YYYY-MM-DD.')
         else:
@@ -128,8 +128,8 @@ def triple_constraint_dashboard(request, board_id):
             variance_days = None  # cannot compute without both dates
 
         time_data = {
-            'target_date': effective_deadline.strftime('%Y-%m-%d') if effective_deadline else None,
-            'predicted_date': predicted_date.strftime('%Y-%m-%d') if predicted_date else None,
+            'target_date': effective_deadline.strftime('%d-%m-%Y') if effective_deadline else None,
+            'predicted_date': predicted_date.strftime('%d-%m-%Y') if predicted_date else None,
             'days_ahead_behind': variance_days,
             'risk_level': latest_prediction.risk_level,
             'delay_probability': float(latest_prediction.delay_probability or 0),
@@ -142,7 +142,7 @@ def triple_constraint_dashboard(request, board_id):
     elif effective_deadline:
         # We have a deadline but no burndown prediction yet
         time_data = {
-            'target_date': effective_deadline.strftime('%Y-%m-%d'),
+            'target_date': effective_deadline.strftime('%d-%m-%Y'),
             'predicted_date': None,
             'days_ahead_behind': None,
             'risk_level': None,
