@@ -54,20 +54,13 @@ def update_workload_on_assignment_change(sender, instance, created, **kwargs):
     if not instance.column or not instance.column.board:
         return
     
-    organization = instance.column.board.organization
-    
-    # Skip workload updates if board has no organization (MVP mode)
-    if not organization:
-        return
-    
     old_assignee = getattr(instance, '_old_assigned_to', None)
     new_assignee = instance.assigned_to
     
     # Update old assignee's workload (if they had this task)
     if old_assignee and old_assignee != new_assignee:
         profile, _ = UserPerformanceProfile.objects.get_or_create(
-            user=old_assignee,
-            organization=organization
+            user=old_assignee
         )
         profile.update_current_workload()
         
@@ -84,8 +77,7 @@ def update_workload_on_assignment_change(sender, instance, created, **kwargs):
     # Update new assignee's workload (if task now has an assignee)
     if new_assignee:
         profile, _ = UserPerformanceProfile.objects.get_or_create(
-            user=new_assignee,
-            organization=organization
+            user=new_assignee
         )
         profile.update_current_workload()
         
@@ -137,10 +129,10 @@ def update_workload_on_assignment_change(sender, instance, created, **kwargs):
                 )
     
     # Invalidate stale AI suggestions after assignment change
-    _invalidate_related_suggestions(instance, old_assignee, new_assignee, organization)
+    _invalidate_related_suggestions(instance, old_assignee, new_assignee)
 
 
-def _invalidate_related_suggestions(task, old_assignee, new_assignee, organization):
+def _invalidate_related_suggestions(task, old_assignee, new_assignee):
     """
     Invalidate AI suggestions that are no longer relevant after an assignment change
     """
@@ -155,31 +147,27 @@ def _invalidate_related_suggestions(task, old_assignee, new_assignee, organizati
     # Expire suggestions recommending the new assignee if they're now overloaded
     if new_assignee:
         profile = UserPerformanceProfile.objects.filter(
-            user=new_assignee,
-            organization=organization
+            user=new_assignee
         ).first()
         
         if profile and profile.utilization_percentage > 85:
             # This user is now overloaded, expire all pending suggestions recommending them
             ResourceLevelingSuggestion.objects.filter(
                 suggested_assignee=new_assignee,
-                status='pending',
-                organization=organization
+                status='pending'
             ).update(status='expired')
     
     # Also check if old assignee is now underutilized and could take more work
     if old_assignee:
         old_profile = UserPerformanceProfile.objects.filter(
-            user=old_assignee,
-            organization=organization
+            user=old_assignee
         ).first()
         
         if old_profile and old_profile.utilization_percentage < 60:
             # Old assignee now has capacity - expire suggestions moving work AWAY from them
             ResourceLevelingSuggestion.objects.filter(
                 current_assignee=old_assignee,
-                status='pending',
-                organization=organization
+                status='pending'
             ).update(status='expired')
 
 
@@ -193,12 +181,9 @@ def update_profile_on_task_completion(sender, instance, **kwargs):
         if not instance.column or not instance.column.board:
             return
         
-        organization = instance.column.board.organization
-        
         # Update the assignee's performance profile
         profile, _ = UserPerformanceProfile.objects.get_or_create(
-            user=instance.assigned_to,
-            organization=organization
+            user=instance.assigned_to
         )
         
         # Update metrics (completion rate, velocity, etc.)
