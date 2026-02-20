@@ -166,6 +166,24 @@ class PrioritySuggestionService:
             delta = due_date - timezone.now()
             days_until_due = delta.total_seconds() / 86400
             is_overdue = days_until_due < 0
+            
+            # If there is a future start date, urgency is determined by the work
+            # window (start → due) rather than (today → due).  A task starting
+            # in 7 days with a 2-day window is more urgent than plain "due in 9
+            # days" suggests.
+            start_date = getattr(task, 'start_date', None)
+            if start_date and not is_overdue:
+                sd = start_date
+                # Normalise to datetime
+                if not hasattr(sd, 'hour'):
+                    from datetime import datetime
+                    sd = datetime.combine(sd, datetime.min.time())
+                if timezone.is_naive(sd):
+                    sd = timezone.make_aware(sd)
+                if sd > timezone.now():
+                    work_window = (due_date - sd).total_seconds() / 86400
+                    if work_window > 0:
+                        days_until_due = work_window
         
         # Count dependencies
         blocking_count = 0
@@ -288,8 +306,33 @@ class PrioritySuggestionService:
     
     def _describe_feature(self, feature_name, value, task):
         """Convert feature to human-readable description"""
+        # Build a context-aware due date label.  When days_until_due was
+        # already adjusted to the work window (future start date), show it as
+        # such so the user isn't confused by "Due in 2 days" on a task whose
+        # calendar due date is 9 days out.
+        due_label = "No due date set"
+        if feature_name == 'days_until_due' and value < 999:
+            start_date_attr = getattr(task, 'start_date', None)
+            if start_date_attr and task.due_date:
+                from django.utils import timezone as _tz
+                sd = start_date_attr
+                if not hasattr(sd, 'hour'):
+                    from datetime import datetime
+                    sd = datetime.combine(sd, datetime.min.time())
+                if _tz.is_naive(sd):
+                    sd = _tz.make_aware(sd)
+                if sd > _tz.now():
+                    due_date = task.due_date
+                    if _tz.is_naive(due_date):
+                        due_date = _tz.make_aware(due_date)
+                    days_from_today = (due_date - _tz.now()).total_seconds() / 86400
+                    due_label = f"{abs(int(value))}-day work window (due in {int(days_from_today)} days)"
+                else:
+                    due_label = f"Due in {abs(int(value))} days"
+            else:
+                due_label = f"Due in {abs(int(value))} days"
         descriptions = {
-            'days_until_due': f"Due in {abs(int(value))} days" if value < 999 else "No due date set",
+            'days_until_due': due_label,
             'is_overdue': "Task is overdue!" if value else None,
             'complexity_score': f"Complexity: {int(value)}/10",
             'blocking_count': f"Blocks {int(value)} other tasks" if value > 0 else None,
@@ -392,30 +435,57 @@ class PrioritySuggestionService:
             if timezone.is_naive(due_date):
                 due_date = timezone.make_aware(due_date)
             delta = due_date - timezone.now()
-            days_until_due = delta.total_seconds() / 86400
-            
+            days_from_today = delta.total_seconds() / 86400
+            days_until_due = days_from_today
+
+            # When there is a **future** start date, urgency is driven by the
+            # available work window (start → due), not (today → due).  A task
+            # that starts in 7 days and is due 2 days later is far more urgent
+            # than "due in 9 days" implies.
+            work_window_days = None
+            start_date_attr = getattr(task, 'start_date', None)
+            if start_date_attr and days_from_today > 0:
+                sd = start_date_attr
+                if not hasattr(sd, 'hour'):
+                    from datetime import datetime
+                    sd = datetime.combine(sd, datetime.min.time())
+                if timezone.is_naive(sd):
+                    sd = timezone.make_aware(sd)
+                if sd > timezone.now():
+                    ww = (due_date - sd).total_seconds() / 86400
+                    if ww > 0:
+                        work_window_days = ww
+                        days_until_due = ww  # use work window for urgency scoring
+
+            def _due_label(d_today, ww):
+                """Human-readable due-date factor text."""
+                if ww is not None:
+                    return f"{int(ww)}-day work window (due in {int(d_today)} days)"
+                return f"Due in {int(d_today)} days"
+
             if days_until_due < 0:
                 score += 5
                 factors.append("Task is overdue")
             elif days_until_due < 1:
                 score += 4
-                factors.append("Due within 24 hours")
+                factors.append("Due within 24 hours" if work_window_days is None else _due_label(days_from_today, work_window_days))
             elif days_until_due < 3:
                 score += 3
-                factors.append("Due within 3 days")
+                factors.append("Due within 3 days" if work_window_days is None else _due_label(days_from_today, work_window_days))
             elif days_until_due < 7:
                 score += 2
-                factors.append("Due within 7 days")
+                factors.append("Due within 7 days" if work_window_days is None else _due_label(days_from_today, work_window_days))
             elif days_until_due < 14:
                 score += 1
-                factors.append(f"Due in {int(days_until_due)} days")
+                factors.append(_due_label(days_from_today, work_window_days))
             elif days_until_due < 60:
                 # Neutral — upcoming but not imminent
-                factors.append(f"Due in {int(days_until_due)} days")
+                factors.append(_due_label(days_from_today, work_window_days))
             else:
                 # Long-term deadline reduces urgency
                 score -= 1
-                factors.append(f"Due in {int(days_until_due)} days (long-term deadline)")
+                label = _due_label(days_from_today, work_window_days)
+                factors.append(f"{label} (long-term deadline)")
         else:
             # No due date: urgency cannot be determined
             factors.append("No due date set — urgency cannot be assessed")
