@@ -8,6 +8,7 @@ from . import conflict_views
 from . import demo_views
 from . import permission_views
 from . import invitation_views
+from . import triple_constraint_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -113,6 +114,9 @@ urlpatterns = [
 
     path('board/<int:board_id>/burndown/history/', burndown_views.prediction_history, name='prediction_history'),
     path('board/<int:board_id>/burndown/suggestions/', burndown_views.actionable_suggestions_api, name='actionable_suggestions_api'),
+
+    # Triple Constraint Dashboard (Scope + Cost + Time)
+    path('boards/<int:board_id>/triple-constraint/', triple_constraint_views.triple_constraint_dashboard, name='triple_constraint_dashboard'),
 
     
     # Task Dependency Management API Endpoints

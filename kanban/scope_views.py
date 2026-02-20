@@ -115,56 +115,133 @@ def scope_dashboard(request, board_id):
 @require_POST
 def set_scope_baseline(request, board_id):
     """
-    Set or reset the scope baseline for a board
-    This captures the current state as the baseline for scope tracking
+    Set or reset the scope baseline for a board.
+    Supports three actions:
+      - 'set'    : Snapshot current live state as the new baseline (original behaviour)
+      - 'pick'   : Promote an existing snapshot (by snapshot_id) to be the baseline
+      - 'manual' : Enter task count + complexity manually and create a synthetic baseline
+      - 'reset'  : Clear the baseline entirely (kept for backwards-compat)
     """
     board = get_object_or_404(Board, id=board_id)
-    
-    # Check if there's already a baseline
+
+    # De-flag any existing baseline snapshot
     existing_baseline = ScopeChangeSnapshot.objects.filter(
         board=board, is_baseline=True
     ).first()
-    
+
     action = request.POST.get('action', 'set')
     notes = request.POST.get('notes', '')
-    
+
     if action == 'reset' and existing_baseline:
-        # Remove baseline flag from existing baseline
+        # Clear baseline entirely
         existing_baseline.is_baseline = False
         existing_baseline.save()
-        
-        # Clear board baseline fields
         board.baseline_task_count = None
         board.baseline_complexity_total = None
         board.baseline_set_date = None
         board.baseline_set_by = None
         board.save()
-        
-        messages.success(request, 'Scope baseline has been reset. You can set a new baseline when ready.')
-    else:
-        # Prepare notes
-        if existing_baseline and not notes:
-            notes = f"Baseline reset from {existing_baseline.snapshot_date.strftime('%Y-%m-%d')}"
-        
-        # Remove baseline flag from existing baseline if any
+        messages.success(request, 'Scope baseline has been cleared. Set a new one when ready.')
+
+    elif action == 'pick':
+        # Promote an existing historical snapshot to be the baseline
+        snapshot_id = request.POST.get('snapshot_id')
+        try:
+            picked_snapshot = ScopeChangeSnapshot.objects.get(id=snapshot_id, board=board)
+        except ScopeChangeSnapshot.DoesNotExist:
+            messages.error(request, 'Selected snapshot not found.')
+            return redirect('scope_dashboard', board_id=board.id)
+
+        # De-flag old baseline
+        if existing_baseline and existing_baseline.pk != picked_snapshot.pk:
+            existing_baseline.is_baseline = False
+            existing_baseline.save()
+
+        # Promote picked snapshot
+        picked_snapshot.is_baseline = True
+        if notes:
+            picked_snapshot.notes = notes
+        picked_snapshot.save()
+
+        # Sync Board baseline fields from snapshot data
+        board.baseline_task_count = picked_snapshot.total_tasks
+        board.baseline_complexity_total = picked_snapshot.total_complexity_points
+        board.baseline_set_date = picked_snapshot.snapshot_date
+        board.baseline_set_by = request.user
+        board.save()
+
+        messages.success(
+            request,
+            f'Baseline updated to snapshot from {picked_snapshot.snapshot_date.strftime("%b %d, %Y %H:%M")} '
+            f'({picked_snapshot.total_tasks} tasks, {picked_snapshot.total_complexity_points} pts).'
+        )
+
+    elif action == 'manual':
+        # Create a synthetic baseline from user-supplied numbers
+        try:
+            manual_task_count = int(request.POST.get('manual_task_count', 0))
+            manual_complexity = int(request.POST.get('manual_complexity', 0))
+        except (ValueError, TypeError):
+            messages.error(request, 'Invalid values. Please enter whole numbers for task count and complexity.')
+            return redirect('scope_dashboard', board_id=board.id)
+
+        if manual_task_count < 0 or manual_complexity < 0:
+            messages.error(request, 'Task count and complexity must be zero or positive.')
+            return redirect('scope_dashboard', board_id=board.id)
+
+        # De-flag old baseline
         if existing_baseline:
             existing_baseline.is_baseline = False
             existing_baseline.save()
-        
-        # Create new baseline snapshot
+
+        # Create synthetic snapshot
+        avg_complexity = round(manual_complexity / manual_task_count, 2) if manual_task_count > 0 else 0
+        snapshot = ScopeChangeSnapshot.objects.create(
+            board=board,
+            total_tasks=manual_task_count,
+            total_complexity_points=manual_complexity,
+            avg_complexity=avg_complexity,
+            high_priority_tasks=0,
+            urgent_priority_tasks=0,
+            todo_tasks=0,
+            in_progress_tasks=0,
+            completed_tasks=0,
+            is_baseline=True,
+            snapshot_type='milestone',
+            notes=notes or 'Manual baseline entry',
+            created_by=request.user,
+        )
+
+        board.baseline_task_count = manual_task_count
+        board.baseline_complexity_total = manual_complexity
+        board.baseline_set_date = snapshot.snapshot_date
+        board.baseline_set_by = request.user
+        board.save()
+
+        messages.success(
+            request,
+            f'Custom baseline set: {manual_task_count} tasks, {manual_complexity} complexity pts.'
+        )
+
+    else:
+        # Default 'set' action – snapshot current live state
+        if existing_baseline and not notes:
+            notes = f"Baseline updated from {existing_baseline.snapshot_date.strftime('%Y-%m-%d')}"
+        if existing_baseline:
+            existing_baseline.is_baseline = False
+            existing_baseline.save()
+
         snapshot = board.create_scope_snapshot(
             user=request.user,
             snapshot_type='milestone',
             is_baseline=True,
-            notes=notes or 'Initial baseline established'
+            notes=notes or 'Baseline established'
         )
-        
         messages.success(
-            request, 
-            f'Scope baseline set successfully! Tracking {snapshot.total_tasks} tasks '
-            f'({snapshot.total_complexity_points} complexity points).'
+            request,
+            f'Scope baseline set: {snapshot.total_tasks} tasks, {snapshot.total_complexity_points} complexity pts.'
         )
-    
+
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return JsonResponse({
             'success': True,
@@ -172,7 +249,7 @@ def set_scope_baseline(request, board_id):
             'baseline_tasks': board.baseline_task_count,
             'baseline_complexity': board.baseline_complexity_total,
         })
-    
+
     return redirect('scope_dashboard', board_id=board.id)
 
 

@@ -557,10 +557,13 @@
                             <i class="fas fa-brain me-2"></i>Run AI Analysis
                         </button>
                     </form>
-                    <button type="button" class="btn btn-outline-warning w-100 quick-action-btn"
-                            data-bs-toggle="modal" data-bs-target="#resetBaselineModal">
-                        <i class="fas fa-redo me-2"></i>Reset Baseline
+                    <button type="button" class="btn btn-outline-warning w-100 mb-3 quick-action-btn"
+                            data-bs-toggle="modal" data-bs-target="#setBaselineModal">
+                        <i class="fas fa-flag me-2"></i>Set Baseline
                     </button>
+                    <a href="{% url 'triple_constraint_dashboard' board.id %}" class="btn btn-outline-info w-100 quick-action-btn">
+                        <i class="fas fa-balance-scale me-2"></i>Triple Constraint
+                    </a>
                 </div>
             </div>
 
@@ -695,52 +698,203 @@
     </div>
 </div>
 
-<!-- Reset Baseline Modal -->
-<div class="modal fade" id="resetBaselineModal" tabindex="-1">
-    <div class="modal-dialog">
+<!-- Set Baseline Modal (3 tabs) -->
+<div class="modal fade" id="setBaselineModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form method="post" action="{% url 'set_scope_baseline' board.id %}">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="set">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="fas fa-redo me-2"></i>Reset Baseline</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Warning:</strong> Resetting the baseline will set the current project state as the new reference point. 
-                        Historical data and alerts will be preserved, but scope change calculations will start fresh from this point.
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Reason for Reset</label>
-                        <textarea name="notes" class="form-control" rows="3" 
-                                  placeholder="Why are you resetting the baseline? (e.g., 'New sprint started', 'Scope officially rebaselined')"></textarea>
-                    </div>
-                    <div class="bg-light p-3 rounded">
-                        <h6>New Baseline Values:</h6>
-                        <div class="row">
-                            <div class="col-6">
-                                <small class="text-muted">Tasks:</small>
-                                <strong>{{ current_metrics.total_tasks }}</strong>
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-flag me-2"></i>Set Scope Baseline</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted mb-3">
+                    Choose how you want to define the baseline. All three options update the same four board fields;
+                    historical snapshots and alerts are always preserved.
+                </p>
+
+                <!-- Tab Navigation -->
+                <ul class="nav nav-tabs mb-3" id="baselineTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="tab-current-tab" data-bs-toggle="tab"
+                                data-bs-target="#tab-current" type="button" role="tab">
+                            <i class="fas fa-crosshairs me-1"></i>Current State
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tab-history-tab" data-bs-toggle="tab"
+                                data-bs-target="#tab-history" type="button" role="tab">
+                            <i class="fas fa-history me-1"></i>From History
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tab-manual-tab" data-bs-toggle="tab"
+                                data-bs-target="#tab-manual" type="button" role="tab">
+                            <i class="fas fa-keyboard me-1"></i>Custom Values
+                        </button>
+                    </li>
+                </ul>
+
+                <!-- Tab Content -->
+                <div class="tab-content">
+
+                    <!-- Tab 1: Current live state -->
+                    <div class="tab-pane fade show active" id="tab-current" role="tabpanel">
+                        <form method="post" action="{% url 'set_scope_baseline' board.id %}" id="form-current">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="set">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                Takes a fresh snapshot of the board <strong>right now</strong> and marks it as the baseline.
                             </div>
-                            <div class="col-6">
-                                <small class="text-muted">Complexity:</small>
-                                <strong>{{ current_metrics.total_complexity }} pts</strong>
+                            <div class="bg-light p-3 rounded mb-3">
+                                <h6 class="mb-2">Values that will be captured:</h6>
+                                <div class="row">
+                                    <div class="col-6">
+                                        <small class="text-muted">Tasks</small>
+                                        <div class="fw-bold fs-5">{{ current_metrics.total_tasks }}</div>
+                                    </div>
+                                    <div class="col-6">
+                                        <small class="text-muted">Complexity</small>
+                                        <div class="fw-bold fs-5">{{ current_metrics.total_complexity }} pts</div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
+                            <div class="mb-3">
+                                <label class="form-label">Notes (optional)</label>
+                                <textarea name="notes" class="form-control" rows="2"
+                                          placeholder="e.g. Sprint 2 kickoff, post-planning rebaseline"></textarea>
+                            </div>
+                            <div class="d-flex justify-content-end">
+                                <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-warning">
+                                    <i class="fas fa-flag me-1"></i>Set Baseline to Current State
+                                </button>
+                            </div>
+                        </form>
                     </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-warning">
-                        <i class="fas fa-redo me-1"></i>Reset Baseline
-                    </button>
-                </div>
-            </form>
+
+                    <!-- Tab 2: Pick from snapshot history -->
+                    <div class="tab-pane fade" id="tab-history" role="tabpanel">
+                        <form method="post" action="{% url 'set_scope_baseline' board.id %}" id="form-history">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="pick">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                Pick any historical snapshot and promote it to the baseline. Useful when the project
+                                was already in a stable state in the past.
+                            </div>
+                            {% if snapshots %}
+                            <div class="mb-3">
+                                <label class="form-label fw-semibold">Select Snapshot</label>
+                                <select name="snapshot_id" class="form-select">
+                                    {% for snap in snapshots %}
+                                    <option value="{{ snap.id }}"
+                                            {% if snap.is_baseline %}selected{% endif %}>
+                                        {{ snap.snapshot_date|date:"M d, Y H:i" }}
+                                        {% if snap.is_baseline %}(current baseline){% endif %}
+                                        — {{ snap.total_tasks }} tasks, {{ snap.total_complexity_points }} pts
+                                        {% if snap.notes %} — {{ snap.notes|truncatechars:40 }}{% endif %}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Notes (optional)</label>
+                                <textarea name="notes" class="form-control" rows="2"
+                                          placeholder="Why is this snapshot the right baseline?"></textarea>
+                            </div>
+                            <div class="d-flex justify-content-end">
+                                <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-warning">
+                                    <i class="fas fa-history me-1"></i>Use Selected Snapshot as Baseline
+                                </button>
+                            </div>
+                            {% else %}
+                            <div class="alert alert-secondary">
+                                <i class="fas fa-exclamation-circle me-2"></i>
+                                No snapshots exist yet. Take a snapshot first using the <strong>Take Snapshot</strong> button.
+                            </div>
+                            {% endif %}
+                        </form>
+                    </div>
+
+                    <!-- Tab 3: Manual custom values -->
+                    <div class="tab-pane fade" id="tab-manual" role="tabpanel">
+                        <form method="post" action="{% url 'set_scope_baseline' board.id %}" id="form-manual">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="manual">
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                Enter exact numbers to define the baseline. A synthetic snapshot is created for the
+                                audit trail. Use this when the true baseline was established outside the system.
+                            </div>
+                            <div class="row mb-3">
+                                <div class="col-6">
+                                    <label class="form-label fw-semibold">Baseline Task Count <span class="text-danger">*</span></label>
+                                    <input type="number" name="manual_task_count" class="form-control" min="0"
+                                           id="manualTaskCount" placeholder="e.g. 20" required
+                                           oninput="updateManualPreview()">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label fw-semibold">Total Complexity Points <span class="text-danger">*</span></label>
+                                    <input type="number" name="manual_complexity" class="form-control" min="0"
+                                           id="manualComplexity" placeholder="e.g. 80" required
+                                           oninput="updateManualPreview()">
+                                </div>
+                            </div>
+                            <!-- Live preview -->
+                            <div class="bg-light p-3 rounded mb-3" id="manualPreview" style="display:none;">
+                                <h6 class="mb-2">Preview:</h6>
+                                <div class="row">
+                                    <div class="col-4 text-center">
+                                        <small class="text-muted">Tasks</small>
+                                        <div class="fw-bold fs-5" id="previewTasks">—</div>
+                                    </div>
+                                    <div class="col-4 text-center">
+                                        <small class="text-muted">Complexity</small>
+                                        <div class="fw-bold fs-5" id="previewComplexity">—</div>
+                                    </div>
+                                    <div class="col-4 text-center">
+                                        <small class="text-muted">Avg Complexity</small>
+                                        <div class="fw-bold fs-5" id="previewAvg">—</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Notes (optional)</label>
+                                <textarea name="notes" class="form-control" rows="2"
+                                          placeholder="e.g. Imported from legacy system, Sprint 0 scope"></textarea>
+                            </div>
+                            <div class="d-flex justify-content-end">
+                                <button type="button" class="btn btn-secondary me-2" data-bs-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-warning">
+                                    <i class="fas fa-keyboard me-1"></i>Set Custom Baseline
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                </div><!-- /tab-content -->
+            </div><!-- /modal-body -->
         </div>
     </div>
 </div>
+
+<script>
+function updateManualPreview() {
+    var tasks = parseInt(document.getElementById('manualTaskCount').value) || 0;
+    var complexity = parseInt(document.getElementById('manualComplexity').value) || 0;
+    var preview = document.getElementById('manualPreview');
+    if (tasks > 0 || complexity > 0) {
+        preview.style.display = 'block';
+        document.getElementById('previewTasks').textContent = tasks;
+        document.getElementById('previewComplexity').textContent = complexity + ' pts';
+        document.getElementById('previewAvg').textContent = tasks > 0 ? (complexity / tasks).toFixed(1) : '—';
+    } else {
+        preview.style.display = 'none';
+    }
+}
+</script>
 
 <!-- Run Analysis Modal -->
 <div class="modal fade" id="runAnalysisModal" tabindex="-1">

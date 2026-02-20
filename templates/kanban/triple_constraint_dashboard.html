@@ -1,0 +1,614 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Triple Constraint – {{ board.name }} – PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ── Constraint status badges ── */
+    .constraint-badge-on-track  { background: rgba(40,167,69,.15);  color: #1a6e30; border: 1px solid rgba(40,167,69,.4); }
+    .constraint-badge-at-risk   { background: rgba(255,193,7,.15);  color: #856404; border: 1px solid rgba(255,193,7,.4); }
+    .constraint-badge-over      { background: rgba(220,53,69,.15);  color: #842029; border: 1px solid rgba(220,53,69,.4); }
+    .constraint-badge-unknown   { background: rgba(108,117,125,.1); color: #6c757d; border: 1px solid rgba(108,117,125,.3); }
+
+    /* ── Constraint cards ── */
+    .constraint-card {
+        border-radius: 10px;
+        border-top: 4px solid #dee2e6;
+        transition: box-shadow .2s, transform .2s;
+    }
+    .constraint-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,.1); transform: translateY(-2px); }
+    .constraint-card.scope { border-top-color: #0d6efd; }
+    .constraint-card.cost  { border-top-color: #198754; }
+    .constraint-card.time  { border-top-color: #dc3545; }
+
+    .big-number { font-size: 2.2rem; font-weight: 700; line-height: 1; }
+    .sub-label  { font-size: .78rem; color: #6c757d; margin-top: 2px; }
+
+    /* ── What‑if simulator ── */
+    .sim-row { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+    .sim-label { width: 90px; font-weight: 600; font-size: .85rem; color: #495057; flex-shrink: 0; }
+    .sim-slider { flex: 1; }
+    .sim-value  { width: 120px; text-align: right; font-size: .85rem; font-weight: 600; }
+    .sim-impact { font-size: .78rem; color: #6c757d; }
+
+    /* ── AI result pane ── */
+    .health-score-circle {
+        width: 90px; height: 90px; border-radius: 50%;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        font-size: 1.8rem; font-weight: 700; border: 4px solid;
+    }
+    .health-circle-healthy  { border-color: #198754; color: #198754; background: rgba(25,135,84,.08); }
+    .health-circle-at-risk  { border-color: #ffc107; color: #856404; background: rgba(255,193,7,.08); }
+    .health-circle-critical { border-color: #dc3545; color: #dc3545; background: rgba(220,53,69,.08); }
+    .health-circle-unknown  { border-color: #6c757d; color: #6c757d; background: rgba(108,117,125,.08); }
+
+    .scenario-card { border-left: 4px solid #0d6efd; border-radius: 6px; padding: 14px 16px; background: #f8f9fa; margin-bottom: 12px; }
+    .scenario-card.reduce-scope    { border-color: #0d6efd; }
+    .scenario-card.increase-budget { border-color: #198754; }
+    .scenario-card.extend-timeline { border-color: #dc3545; }
+
+    /* ── Relationship matrix ── */
+    .matrix-table th, .matrix-table td { text-align: center; vertical-align: middle; padding: 10px; }
+    .matrix-table thead th { background: #f1f3f5; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+    .matrix-table .driver-cell { font-weight: 600; background: #f8f9fa; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+
+    <!-- ── Header ───────────────────────────────────────────────────────────── -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h2><i class="fas fa-balance-scale me-2 text-primary"></i>Triple Constraint</h2>
+                    <nav aria-label="breadcrumb">
+                        <ol class="breadcrumb mb-0">
+                            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+                            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+                            <li class="breadcrumb-item active">Triple Constraint</li>
+                        </ol>
+                    </nav>
+                </div>
+                <div class="d-flex gap-2 flex-wrap">
+                    <a href="{% url 'scope_dashboard' board.id %}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-chart-area me-1"></i>Scope Dashboard
+                    </a>
+                    {% if budget %}
+                    <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-outline-success btn-sm">
+                        <i class="fas fa-dollar-sign me-1"></i>Budget Dashboard
+                    </a>
+                    {% endif %}
+                    <a href="{% url 'burndown_dashboard' board.id %}" class="btn btn-outline-danger btn-sm">
+                        <i class="fas fa-fire me-1"></i>Burndown
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Intro callout ─────────────────────────────────────────────────────── -->
+    <div class="alert alert-light border mb-4" style="border-left: 4px solid #0d6efd !important;">
+        <div class="d-flex align-items-start gap-3">
+            <i class="fas fa-info-circle fa-lg text-primary mt-1"></i>
+            <div>
+                <strong>The Triple Constraint</strong> — every project is constrained by
+                <strong>Scope</strong>, <strong>Cost</strong>, and <strong>Time</strong>.
+                Changing one constraint forces a trade-off in at least one of the others.
+                Use this page to understand the current balance and simulate what-if scenarios
+                before committing to a change.
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Three Constraint Cards ────────────────────────────────────────────── -->
+    <div class="row mb-4">
+
+        <!-- Scope -->
+        <div class="col-md-4 mb-3">
+            <div class="card constraint-card scope h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h5 class="mb-0"><i class="fas fa-expand-arrows-alt me-2 text-primary"></i>Scope</h5>
+                            <small class="text-muted">Task count vs. baseline</small>
+                        </div>
+                        <span class="badge rounded-pill constraint-badge-{{ scope_label }} px-3 py-2">
+                            {% if scope_label == 'on-track' %}On Track
+                            {% elif scope_label == 'at-risk' %}At Risk
+                            {% elif scope_label == 'over' %}Over
+                            {% else %}No Baseline{% endif %}
+                        </span>
+                    </div>
+                    {% if has_baseline and scope_status %}
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <div class="big-number text-muted">{{ scope_status.baseline_tasks }}</div>
+                            <div class="sub-label">Baseline</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="big-number text-primary">{{ scope_status.current_tasks }}</div>
+                            <div class="sub-label">Current</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="big-number {% if scope_status.scope_change_percentage > 25 %}text-danger{% elif scope_status.scope_change_percentage > 10 %}text-warning{% else %}text-success{% endif %}">
+                                {% if scope_status.scope_change_percentage > 0 %}+{% endif %}{{ scope_status.scope_change_percentage|floatformat:1 }}%
+                            </div>
+                            <div class="sub-label">Change</div>
+                        </div>
+                    </div>
+                    <hr class="my-2">
+                    <small class="text-muted">
+                        <i class="fas fa-layer-group me-1"></i>
+                        Complexity: <strong>{{ scope_status.baseline_complexity }}</strong> → <strong>{{ scope_status.current_complexity }} pts</strong>
+                    </small>
+                    {% else %}
+                    <p class="text-muted mb-2">No scope baseline set.</p>
+                    <a href="{% url 'scope_dashboard' board.id %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-flag me-1"></i>Set Baseline
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Cost -->
+        <div class="col-md-4 mb-3">
+            <div class="card constraint-card cost h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h5 class="mb-0"><i class="fas fa-dollar-sign me-2 text-success"></i>Cost</h5>
+                            <small class="text-muted">Budget utilisation</small>
+                        </div>
+                        <span class="badge rounded-pill constraint-badge-{{ budget_label }} px-3 py-2">
+                            {% if budget_label == 'on-track' %}On Track
+                            {% elif budget_label == 'at-risk' %}At Risk
+                            {% elif budget_label == 'over' %}Over Budget
+                            {% else %}Not Set{% endif %}
+                        </span>
+                    </div>
+                    {% if budget_data %}
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <div class="big-number text-muted" style="font-size:1.4rem;">{{ budget_data.currency }} {{ budget_data.allocated_budget|floatformat:0 }}</div>
+                            <div class="sub-label">Allocated</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="big-number text-success" style="font-size:1.4rem;">{{ budget_data.currency }} {{ budget_data.spent_amount|floatformat:0 }}</div>
+                            <div class="sub-label">Spent</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="big-number {% if budget_data.utilization_pct > 95 %}text-danger{% elif budget_data.utilization_pct > 80 %}text-warning{% else %}text-success{% endif %}" style="font-size:1.4rem;">
+                                {{ budget_data.utilization_pct|floatformat:1 }}%
+                            </div>
+                            <div class="sub-label">Used</div>
+                        </div>
+                    </div>
+                    <hr class="my-2">
+                    <div class="progress mb-1" style="height: 6px;">
+                        <div class="progress-bar {% if budget_data.utilization_pct > 95 %}bg-danger{% elif budget_data.utilization_pct > 80 %}bg-warning{% else %}bg-success{% endif %}"
+                             style="width: {{ budget_data.utilization_pct|floatformat:0 }}%"></div>
+                    </div>
+                    <small class="text-muted">
+                        Remaining: <strong>{{ budget_data.currency }} {{ budget_data.remaining_budget|floatformat:0 }}</strong>
+                    </small>
+                    {% else %}
+                    <p class="text-muted mb-2">No budget configured for this board.</p>
+                    <a href="{% url 'budget_create_or_edit' board.id %}" class="btn btn-sm btn-outline-success">
+                        <i class="fas fa-plus me-1"></i>Set Up Budget
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Time -->
+        <div class="col-md-4 mb-3">
+            <div class="card constraint-card time h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div>
+                            <h5 class="mb-0"><i class="fas fa-clock me-2 text-danger"></i>Time</h5>
+                            <small class="text-muted">Schedule prediction</small>
+                        </div>
+                        <span class="badge rounded-pill constraint-badge-{{ time_label }} px-3 py-2">
+                            {% if time_label == 'on-track' %}On Track
+                            {% elif time_label == 'at-risk' %}At Risk
+                            {% elif time_label == 'over' %}Behind
+                            {% else %}Not Set{% endif %}
+                        </span>
+                    </div>
+                    {% if time_data %}
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="big-number" style="font-size:1.1rem; color:#495057;">{{ time_data.target_date|default:"—" }}</div>
+                            <div class="sub-label">Target Date</div>
+                        </div>
+                        <div class="col-6">
+                            <div class="big-number {% if time_data.days_ahead_behind < -7 %}text-danger{% elif time_data.days_ahead_behind < 0 %}text-warning{% else %}text-success{% endif %}" style="font-size:1.1rem;">
+                                {{ time_data.predicted_date|default:"—" }}
+                            </div>
+                            <div class="sub-label">Predicted</div>
+                        </div>
+                    </div>
+                    <hr class="my-2">
+                    <div class="d-flex justify-content-between">
+                        <small class="text-muted">
+                            Variance: <strong>{% if time_data.days_ahead_behind >= 0 %}+{% endif %}{{ time_data.days_ahead_behind }} days</strong>
+                        </small>
+                        <small class="text-muted">
+                            Risk: <span class="badge {% if time_data.risk_level == 'critical' %}bg-danger{% elif time_data.risk_level == 'high' %}bg-warning text-dark{% elif time_data.risk_level == 'medium' %}bg-info{% else %}bg-success{% endif %}">
+                                {{ time_data.risk_level|capfirst }}
+                            </span>
+                        </small>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-2">No burndown prediction available.</p>
+                    <a href="{% url 'burndown_dashboard' board.id %}" class="btn btn-sm btn-outline-danger">
+                        <i class="fas fa-fire me-1"></i>Generate Prediction
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── What‑If Simulator ──────────────────────────────────────────────────── -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-sliders-h me-2 text-primary"></i>What‑If Simulator</h5>
+                    <small class="text-muted">Adjust any constraint slider to see the estimated impact on the other two</small>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- Sliders column -->
+                        <div class="col-lg-7">
+
+                            <!-- Scope slider -->
+                            <div class="sim-row">
+                                <div class="sim-label text-primary"><i class="fas fa-expand-arrows-alt me-1"></i>Scope</div>
+                                <div class="sim-slider">
+                                    <input type="range" class="form-range" id="simScopeSlider"
+                                           min="0" max="200" value="{{ what_if.total_tasks }}"
+                                           oninput="simUpdate('scope')">
+                                    <div class="d-flex justify-content-between sim-impact">
+                                        <span>0 tasks</span>
+                                        <span>200 tasks</span>
+                                    </div>
+                                </div>
+                                <div class="sim-value" id="simScopeVal">{{ what_if.total_tasks }} tasks</div>
+                            </div>
+
+                            <!-- Cost slider -->
+                            <div class="sim-row">
+                                <div class="sim-label text-success"><i class="fas fa-dollar-sign me-1"></i>Budget</div>
+                                <div class="sim-slider">
+                                    <input type="range" class="form-range" id="simCostSlider"
+                                           min="0" max="{{ what_if.allocated_budget|default:100000|floatformat:0 }}"
+                                           step="100"
+                                           value="{{ budget_data.allocated_budget|default:0|floatformat:0 }}"
+                                           oninput="simUpdate('cost')">
+                                    <div class="d-flex justify-content-between sim-impact">
+                                        <span>0</span>
+                                        <span>{{ budget_data.currency|default:"" }} {{ what_if.allocated_budget|default:100000|floatformat:0 }}</span>
+                                    </div>
+                                </div>
+                                <div class="sim-value" id="simCostVal">{{ budget_data.currency|default:"" }} {{ budget_data.allocated_budget|default:0|floatformat:0 }}</div>
+                            </div>
+
+                            <!-- Time slider -->
+                            <div class="sim-row">
+                                <div class="sim-label text-danger"><i class="fas fa-calendar-plus me-1"></i>Timeline</div>
+                                <div class="sim-slider">
+                                    <input type="range" class="form-range" id="simTimeSlider"
+                                           min="-12" max="26" value="0"
+                                           oninput="simUpdate('time')">
+                                    <div class="d-flex justify-content-between sim-impact">
+                                        <span>–12 weeks</span>
+                                        <span>+26 weeks</span>
+                                    </div>
+                                </div>
+                                <div class="sim-value" id="simTimeVal">+0 weeks (no change)</div>
+                            </div>
+                        </div>
+
+                        <!-- Impact panel -->
+                        <div class="col-lg-5">
+                            <div class="bg-light rounded p-3 h-100">
+                                <h6 class="text-muted mb-3"><i class="fas fa-chart-pie me-1"></i>Estimated Impact</h6>
+                                <table class="table table-sm mb-0" id="simImpactTable">
+                                    <thead><tr><th>Constraint</th><th>Original</th><th>Adjusted</th><th>Δ</th></tr></thead>
+                                    <tbody>
+                                        <tr id="simScopeRow">
+                                            <td class="text-primary fw-semibold">Scope</td>
+                                            <td id="simScopeOrig">{{ what_if.total_tasks }} tasks</td>
+                                            <td id="simScopeAdj">{{ what_if.total_tasks }} tasks</td>
+                                            <td id="simScopeDelta">—</td>
+                                        </tr>
+                                        <tr id="simCostRow">
+                                            <td class="text-success fw-semibold">Cost</td>
+                                            <td id="simCostOrig">
+                                                {% if budget_data %}{{ budget_data.currency }} {{ budget_data.allocated_budget|floatformat:0 }}{% else %}—{% endif %}
+                                            </td>
+                                            <td id="simCostAdj">
+                                                {% if budget_data %}{{ budget_data.currency }} {{ budget_data.allocated_budget|floatformat:0 }}{% else %}—{% endif %}
+                                            </td>
+                                            <td id="simCostDelta">—</td>
+                                        </tr>
+                                        <tr id="simTimeRow">
+                                            <td class="text-danger fw-semibold">Time</td>
+                                            <td id="simTimeOrig">
+                                                {% if time_data %}{{ time_data.predicted_date }}{% else %}Not set{% endif %}
+                                            </td>
+                                            <td id="simTimeAdj">
+                                                {% if time_data %}{{ time_data.predicted_date }}{% else %}Not set{% endif %}
+                                            </td>
+                                            <td id="simTimeDelta">—</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                                <p class="text-muted small mt-2 mb-0">
+                                    <i class="fas fa-info-circle me-1"></i>Estimates based on current avg. cost/task
+                                    ({{ budget_data.currency|default:"" }} {{ what_if.avg_cost_per_task|default:0|floatformat:0 }})
+                                    and velocity ({{ what_if.velocity_tasks_per_week|default:0|floatformat:1 }} tasks/week).
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── AI Analysis ───────────────────────────────────────────────────────── -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="fas fa-robot me-2 text-primary"></i>AI Triple Constraint Analysis</h5>
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="ai_analyze">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="fas fa-brain me-1"></i>Get AI Recommendation
+                        </button>
+                    </form>
+                </div>
+                <div class="card-body">
+
+                    {% if ai_error %}
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i>{{ ai_error }}
+                    </div>
+                    {% endif %}
+
+                    {% if ai_result and not ai_error %}
+                    <!-- Health score + summary -->
+                    <div class="row align-items-center mb-4">
+                        <div class="col-auto">
+                            <div class="health-score-circle
+                                {% if ai_result.overall_health_label == 'Healthy' %}health-circle-healthy
+                                {% elif ai_result.overall_health_label == 'At Risk' %}health-circle-at-risk
+                                {% else %}health-circle-critical{% endif %}">
+                                <span>{{ ai_result.overall_health_score }}</span>
+                                <small style="font-size:.6rem; font-weight:400;">/ 10</small>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <h5 class="mb-1">{{ ai_result.overall_health_label }}
+                                {% if ai_result.most_stressed_constraint and ai_result.most_stressed_constraint != 'None' %}
+                                <span class="badge bg-warning text-dark ms-2" style="font-size:.75rem;">
+                                    <i class="fas fa-exclamation-triangle me-1"></i>{{ ai_result.most_stressed_constraint }} is most stressed
+                                </span>
+                                {% endif %}
+                            </h5>
+                            <p class="text-muted mb-0">{{ ai_result.risk_summary }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Per-constraint insights -->
+                    {% if ai_result.constraint_insights %}
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="p-3 rounded" style="background: rgba(13,110,253,.05); border-left: 3px solid #0d6efd;">
+                                <h6 class="text-primary mb-1"><i class="fas fa-expand-arrows-alt me-1"></i>Scope</h6>
+                                <p class="mb-0 small">{{ ai_result.constraint_insights.scope }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 rounded" style="background: rgba(25,135,84,.05); border-left: 3px solid #198754;">
+                                <h6 class="text-success mb-1"><i class="fas fa-dollar-sign me-1"></i>Cost</h6>
+                                <p class="mb-0 small">{{ ai_result.constraint_insights.cost }}</p>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-3 rounded" style="background: rgba(220,53,69,.05); border-left: 3px solid #dc3545;">
+                                <h6 class="text-danger mb-1"><i class="fas fa-clock me-1"></i>Time</h6>
+                                <p class="mb-0 small">{{ ai_result.constraint_insights.time }}</p>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Trade-off scenarios -->
+                    {% if ai_result.trade_off_scenarios %}
+                    <h6 class="mb-3"><i class="fas fa-exchange-alt me-2"></i>Trade-off Scenarios</h6>
+                    {% for scenario in ai_result.trade_off_scenarios %}
+                    <div class="scenario-card
+                        {% if 'scope' in scenario.title|lower or 'reduce' in scenario.title|lower %}reduce-scope
+                        {% elif 'budget' in scenario.title|lower or 'cost' in scenario.title|lower %}increase-budget
+                        {% else %}extend-timeline{% endif %}">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">{{ scenario.title }}
+                                    <span class="badge ms-2
+                                        {% if scenario.feasibility == 'High' %}bg-success
+                                        {% elif scenario.feasibility == 'Medium' %}bg-warning text-dark
+                                        {% else %}bg-danger{% endif %}" style="font-size:.7rem;">
+                                        {{ scenario.feasibility }} feasibility
+                                    </span>
+                                </h6>
+                                <p class="mb-1 small text-muted">{{ scenario.description }}</p>
+                                <div class="d-flex gap-3 mt-1 flex-wrap">
+                                    {% if scenario.estimated_cost_saving_pct %}
+                                    <small><i class="fas fa-dollar-sign text-success me-1"></i>Cost saving: <strong>~{{ scenario.estimated_cost_saving_pct }}%</strong></small>
+                                    {% endif %}
+                                    {% if scenario.estimated_time_saving_days %}
+                                    <small><i class="fas fa-clock text-danger me-1"></i>Time saving: <strong>~{{ scenario.estimated_time_saving_days }} days</strong></small>
+                                    {% endif %}
+                                    {% if scenario.recommended_budget_increase_pct %}
+                                    <small><i class="fas fa-arrow-up text-warning me-1"></i>Budget increase: <strong>~{{ scenario.recommended_budget_increase_pct }}%</strong></small>
+                                    {% endif %}
+                                    {% if scenario.recommended_extension_weeks %}
+                                    <small><i class="fas fa-calendar-plus text-danger me-1"></i>Extend by: <strong>~{{ scenario.recommended_extension_weeks }} weeks</strong></small>
+                                    {% endif %}
+                                    {% if scenario.estimated_scope_tasks_deliverable %}
+                                    <small><i class="fas fa-tasks text-primary me-1"></i>Tasks deliverable: <strong>~{{ scenario.estimated_scope_tasks_deliverable }}</strong></small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% endif %}
+
+                    <!-- Recommended action -->
+                    {% if ai_result.recommended_action %}
+                    <div class="alert alert-primary d-flex align-items-start gap-2 mt-3">
+                        <i class="fas fa-lightbulb fa-lg mt-1 flex-shrink-0"></i>
+                        <div>
+                            <strong>Recommended Action:</strong> {{ ai_result.recommended_action }}
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Optimal configuration -->
+                    {% if ai_result.optimal_configuration %}
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <h6 class="mb-2"><i class="fas fa-star me-2 text-warning"></i>Optimal Configuration</h6>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="bg-light rounded p-2">
+                                <small class="text-muted d-block">Scope</small>
+                                <span class="small">{{ ai_result.optimal_configuration.scope_recommendation }}</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="bg-light rounded p-2">
+                                <small class="text-muted d-block">Cost</small>
+                                <span class="small">{{ ai_result.optimal_configuration.cost_recommendation }}</span>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="bg-light rounded p-2">
+                                <small class="text-muted d-block">Time</small>
+                                <span class="small">{{ ai_result.optimal_configuration.time_recommendation }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    {% else %}
+                    <!-- No analysis yet -->
+                    <div class="text-center py-4">
+                        <i class="fas fa-robot fa-4x text-muted mb-3"></i>
+                        <h5 class="text-muted">No analysis yet</h5>
+                        <p class="text-muted mb-3">
+                            Click <strong>Get AI Recommendation</strong> above to analyse how Scope, Cost, and Time
+                            interact for <em>{{ board.name }}</em> and receive actionable trade-off suggestions.
+                        </p>
+                        <ul class="list-unstyled small text-muted">
+                            <li><i class="fas fa-check-circle text-success me-1"></i>Overall health score (1–10)</li>
+                            <li><i class="fas fa-check-circle text-success me-1"></i>Three trade-off scenarios with feasibility ratings</li>
+                            <li><i class="fas fa-check-circle text-success me-1"></i>Most stressed constraint identification</li>
+                            <li><i class="fas fa-check-circle text-success me-1"></i>Optimal configuration recommendation</li>
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div><!-- /container-fluid -->
+{% endblock %}
+
+{% block extra_js %}
+<script>
+/* ── What‑if simulator ───────────────────────────────────────────────────── */
+var WIF = {
+    avgCostPerTask:      {{ what_if.avg_cost_per_task|default:0|floatformat:4 }},
+    velocityPerWeek:     {{ what_if.velocity_tasks_per_week|default:1|floatformat:4 }},
+    origTasks:           {{ what_if.total_tasks|default:0 }},
+    origBudget:          {{ budget_data.allocated_budget|default:0|floatformat:2 }},
+    currency:            "{{ budget_data.currency|default:'' }}",
+    predictedDate:       "{{ time_data.predicted_date|default:'' }}",
+};
+
+function fmt(n) { return n.toLocaleString(undefined, {maximumFractionDigits: 0}); }
+function fmtDelta(n, suffix) {
+    var sign = n >= 0 ? '+' : '';
+    return '<span class="' + (n > 0 ? 'text-warning' : n < 0 ? 'text-success' : 'text-muted') + '">' + sign + fmt(n) + suffix + '</span>';
+}
+
+function simUpdate(driver) {
+    var tasks   = parseInt(document.getElementById('simScopeSlider').value) || 0;
+    var budget  = parseFloat(document.getElementById('simCostSlider').value) || 0;
+    var timeAdj = parseInt(document.getElementById('simTimeSlider').value) || 0; // weeks
+
+    /* When user moves a slider, recompute the other two */
+    if (driver === 'scope') {
+        // More tasks → more cost + more time
+        var extraTasks = tasks - WIF.origTasks;
+        budget = WIF.origBudget + extraTasks * WIF.avgCostPerTask;
+        budget = Math.max(0, budget);
+        // time: extra tasks / velocity = extra weeks
+        timeAdj = WIF.velocityPerWeek > 0 ? Math.round(extraTasks / WIF.velocityPerWeek) : 0;
+        document.getElementById('simCostSlider').value = budget;
+        document.getElementById('simTimeSlider').value = Math.min(26, Math.max(-12, timeAdj));
+    } else if (driver === 'cost') {
+        // More budget → can afford more tasks
+        var extraCost  = budget - WIF.origBudget;
+        var extraTasks = WIF.avgCostPerTask > 0 ? Math.round(extraCost / WIF.avgCostPerTask) : 0;
+        tasks = Math.max(0, WIF.origTasks + extraTasks);
+        timeAdj = WIF.velocityPerWeek > 0 ? Math.round(extraTasks / WIF.velocityPerWeek) : 0;
+        document.getElementById('simScopeSlider').value = Math.min(200, tasks);
+        document.getElementById('simTimeSlider').value = Math.min(26, Math.max(-12, timeAdj));
+    } else {
+        // Time → how many tasks can be delivered / dropped
+        var deliverableExtra = Math.round(timeAdj * WIF.velocityPerWeek);
+        tasks = Math.max(0, WIF.origTasks + deliverableExtra);
+        budget = WIF.origBudget + deliverableExtra * WIF.avgCostPerTask;
+        budget = Math.max(0, budget);
+        document.getElementById('simScopeSlider').value = Math.min(200, tasks);
+        document.getElementById('simCostSlider').value = budget;
+    }
+
+    /* Display: sliders */
+    document.getElementById('simScopeVal').textContent = tasks + ' tasks';
+    document.getElementById('simCostVal').textContent  = WIF.currency + ' ' + fmt(budget);
+    document.getElementById('simTimeVal').textContent  =
+        (timeAdj >= 0 ? '+' : '') + timeAdj + ' week' + (Math.abs(timeAdj) !== 1 ? 's' : '') +
+        (timeAdj === 0 ? ' (no change)' : '');
+
+    /* Impact table */
+    var taskDelta   = tasks - WIF.origTasks;
+    var budgetDelta = budget - WIF.origBudget;
+    document.getElementById('simScopeAdj').textContent  = tasks + ' tasks';
+    document.getElementById('simScopeDelta').innerHTML   = taskDelta !== 0 ? fmtDelta(taskDelta, ' tasks') : '—';
+    document.getElementById('simCostAdj').textContent    = WIF.currency + ' ' + fmt(budget);
+    document.getElementById('simCostDelta').innerHTML    = budgetDelta !== 0 ? fmtDelta(budgetDelta, '') : '—';
+    document.getElementById('simTimeAdj').textContent   = timeAdj !== 0 ? (timeAdj >= 0 ? '+' : '') + timeAdj + ' wks' : (WIF.predictedDate || 'No change');
+    document.getElementById('simTimeDelta').innerHTML   = timeAdj !== 0 ? fmtDelta(timeAdj, ' wks') : '—';
+}
+
+/* initialise display on page load */
+document.addEventListener('DOMContentLoaded', function() { simUpdate('scope'); });
+</script>
+{% endblock %}
