@@ -1308,9 +1308,20 @@ def time_entries_by_date(request):
     except ValueError:
         return JsonResponse({'success': False, 'error': 'Invalid date format'}, status=400)
     
+    # MVP Mode: use demo user when the logged-in user has no entries of their own
+    display_user = request.user
+    user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
+    if not user_has_entries:
+        demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+        for demo_username in demo_usernames:
+            demo_user = User.objects.filter(username=demo_username).first()
+            if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
+                display_user = demo_user
+                break
+    
     # Get entries for this date
     entries_qs = TimeEntry.objects.filter(
-        user=request.user,
+        user=display_user,
         work_date=work_date
     ).select_related('task', 'task__column', 'task__column__board')
     
@@ -1376,8 +1387,19 @@ def time_entries_by_period(request):
         end_date = None
         period_display = "All Time"
     
+    # MVP Mode: use demo user when the logged-in user has no entries of their own
+    display_user = request.user
+    user_has_entries = TimeEntry.objects.filter(user=request.user).exists()
+    if not user_has_entries:
+        demo_usernames = ['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
+        for demo_username in demo_usernames:
+            demo_user = User.objects.filter(username=demo_username).first()
+            if demo_user and TimeEntry.objects.filter(user=demo_user).exists():
+                display_user = demo_user
+                break
+
     # Get entries
-    entries_qs = TimeEntry.objects.filter(user=request.user)
+    entries_qs = TimeEntry.objects.filter(user=display_user)
     
     if start_date:
         entries_qs = entries_qs.filter(work_date__gte=start_date)
