@@ -73,16 +73,18 @@ def dashboard(request):
     completion_rate = 0
     if task_count > 0:
         completion_rate = (completed_count / task_count) * 100
-      # Get tasks due soon (next 3 days)
+      # Get tasks due soon (next 3 days) — exclude milestones
     due_soon = Task.objects.filter(
         column__board__in=boards,
+        item_type='task',
         due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
     ).exclude(
         progress=100
     ).count()
-      # Get overdue tasks (due date in the past and not completed)
+      # Get overdue tasks (due date in the past and not completed) — exclude milestones
     overdue_count = Task.objects.filter(
         column__board__in=boards,
+        item_type='task',
         due_date__lt=timezone.now()
     ).exclude(
         progress=100
@@ -92,8 +94,8 @@ def dashboard(request):
     # Items per page
     items_per_page = 10
     
-    # All Tasks
-    all_tasks_list = Task.objects.filter(column__board__in=boards).select_related('column', 'assigned_to', 'column__board').order_by('-created_at')
+    # All Tasks (exclude milestones)
+    all_tasks_list = Task.objects.filter(column__board__in=boards, item_type='task').select_related('column', 'assigned_to', 'column__board').order_by('-created_at')
     all_tasks_page = request.GET.get('all_tasks_page', 1)
     all_tasks_paginator = Paginator(all_tasks_list, items_per_page)
     try:
@@ -103,9 +105,10 @@ def dashboard(request):
     except EmptyPage:
         all_tasks = all_tasks_paginator.page(all_tasks_paginator.num_pages)
     
-    # Completed Tasks
+    # Completed Tasks (exclude milestones)
     completed_tasks_list = Task.objects.filter(
         column__board__in=boards,
+        item_type='task',
         progress=100
     ).select_related('column', 'assigned_to', 'column__board').order_by('-updated_at')
     completed_tasks_page = request.GET.get('completed_tasks_page', 1)
@@ -419,7 +422,8 @@ def board_detail(request, board_id):
     search_form = TaskSearchForm(request.GET or None, board=board)
     
     # Get all tasks for this board (with filtering if search is active)
-    tasks = Task.objects.filter(column__board=board)
+    # Exclude milestones (item_type='milestone') — they are Gantt-only items
+    tasks = Task.objects.filter(column__board=board, item_type='task')
     
     # Apply search filters if the form is valid
     any_filter_active = False
@@ -1045,17 +1049,17 @@ def board_analytics(request, board_id):
     # Get columns for this board
     columns = Column.objects.filter(board=board)
     
-    # Get tasks by column
+    # Get tasks by column (exclude milestones)
     tasks_by_column = []
     for column in columns:
-        count = Task.objects.filter(column=column).count()
+        count = Task.objects.filter(column=column, item_type='task').count()
         tasks_by_column.append({
             'name': column.name,
             'count': count
         })
     
     # Get tasks by priority - convert QuerySet to list of dictionaries
-    priority_queryset = Task.objects.filter(column__board=board).values('priority').annotate(
+    priority_queryset = Task.objects.filter(column__board=board, item_type='task').values('priority').annotate(
         count=Count('id')
     ).order_by('priority')
     
@@ -1068,8 +1072,8 @@ def board_analytics(request, board_id):
             'count': item['count']
         })
     
-    # Get tasks by assigned user - convert QuerySet to list of dictionaries
-    user_queryset = Task.objects.filter(column__board=board).values(
+    # Get tasks by assigned user - convert QuerySet to list of dictionaries (exclude milestones)
+    user_queryset = Task.objects.filter(column__board=board, item_type='task').values(
         'assigned_to__username'
     ).annotate(
         count=Count('id')
@@ -1081,6 +1085,7 @@ def board_analytics(request, board_id):
         # Count completed tasks for this user based on progress = 100%
         completed_user_tasks = Task.objects.filter(
             column__board=board,
+            item_type='task',
             assigned_to__username=item['assigned_to__username'],
             progress=100
         ).count()
@@ -1115,15 +1120,16 @@ def board_analytics(request, board_id):
             'count': item['count']
         })
     
-    # Calculate productivity based on task progress
-    total_tasks = Task.objects.filter(column__board=board).count()
+    # Calculate productivity based on task progress (exclude milestones)
+    total_tasks = Task.objects.filter(column__board=board, item_type='task').count()
     
-    # Get all tasks and their progress values
-    all_tasks = Task.objects.filter(column__board=board)
+    # Get all tasks and their progress values (exclude milestones)
+    all_tasks = Task.objects.filter(column__board=board, item_type='task')
     
     # Count completed tasks based on progress percentage (100%) instead of column name
     completed_count = Task.objects.filter(
         column__board=board,
+        item_type='task',
         progress=100
     ).count()
     
@@ -1132,10 +1138,11 @@ def board_analytics(request, board_id):
     if total_tasks > 0:
         productivity = (completed_count / total_tasks) * 100
     
-    # Get tasks due soon (next 7 days)
+    # Get tasks due soon (next 7 days) — exclude milestones
     today = timezone.now().date()
     upcoming_tasks = Task.objects.filter(
         column__board=board,
+        item_type='task',
         due_date__isnull=False,
         due_date__date__gte=today,
         due_date__date__lte=today + timedelta(days=7)
@@ -1143,9 +1150,10 @@ def board_analytics(request, board_id):
         progress=100
     ).order_by('due_date')
     
-    # Get overdue tasks (due date in the past and not completed)
+    # Get overdue tasks (due date in the past and not completed) — exclude milestones
     overdue_tasks = Task.objects.filter(
         column__board=board,
+        item_type='task',
         due_date__isnull=False,
         due_date__date__lt=today
     ).exclude(
@@ -1155,22 +1163,25 @@ def board_analytics(request, board_id):
     # Get count of overdue tasks
     overdue_count = overdue_tasks.count()
     
-    # Lean Six Sigma Metrics
+    # Lean Six Sigma Metrics (exclude milestones)
     # Get tasks by value added category
     value_added_count = Task.objects.filter(
-        column__board=board, 
+        column__board=board,
+        item_type='task',
         labels__name='Value-Added', 
         labels__category='lean'
     ).count()
     
     necessary_nva_count = Task.objects.filter(
-        column__board=board, 
+        column__board=board,
+        item_type='task',
         labels__name='Necessary NVA', 
         labels__category='lean'
     ).count()
     
     waste_count = Task.objects.filter(
-        column__board=board, 
+        column__board=board,
+        item_type='task',
         labels__name='Waste/Eliminate', 
         labels__category='lean'
     ).count()
@@ -2070,7 +2081,7 @@ def export_board(request, board_id):
             'tasks': []
         }
         
-        tasks = Task.objects.filter(column=column).order_by('position')
+        tasks = Task.objects.filter(column=column, item_type='task').order_by('position')
         
         for task in tasks:
             # Get task labels
@@ -2106,7 +2117,7 @@ def export_board(request, board_id):
                          'Due Date', 'Assigned To', 'Created By', 'Labels', 'Priority', 'Progress'])
         
         for column in columns:
-            tasks = Task.objects.filter(column=column).order_by('position')
+            tasks = Task.objects.filter(column=column, item_type='task').order_by('position')
             for task in tasks:
                 labels = ", ".join(list(task.labels.values_list('name', flat=True)))
                 writer.writerow([

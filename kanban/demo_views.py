@@ -906,22 +906,24 @@ def demo_board_detail(request, board_id):
     columns = Column.objects.filter(board=board).order_by('position')
     
     # Get all tasks with related data (same as real board_detail view)
-    tasks = Task.objects.filter(column__board=board).select_related(
+    # Exclude milestones (item_type='milestone') — they are Gantt-only items
+    tasks = Task.objects.filter(column__board=board, item_type='task').select_related(
         'assigned_to', 'assigned_to__profile', 'created_by', 'column'
     ).prefetch_related('labels', 'dependencies', 'dependent_tasks').order_by('position')
     
     # Also keep tasks_by_column for compatibility with other parts
     tasks_by_column = {}
     for column in columns:
-        column_tasks = Task.objects.filter(column=column).select_related(
+        column_tasks = Task.objects.filter(column=column, item_type='task').select_related(
             'assigned_to', 'created_by'
         ).prefetch_related('labels', 'dependencies', 'dependent_tasks')
         tasks_by_column[column.id] = column_tasks
     
-    # Get board statistics
-    total_tasks = Task.objects.filter(column__board=board).count()
+    # Get board statistics (exclude milestones)
+    total_tasks = Task.objects.filter(column__board=board, item_type='task').count()
     completed_tasks = Task.objects.filter(
         column__board=board,
+        item_type='task',
         progress=100
     ).count()
     
@@ -1944,8 +1946,10 @@ def demo_board_tasks_list(request, board_id):
     status_filter = request.GET.get('status', 'all')
     
     # Get all tasks with related data
+    # Exclude milestones (item_type='milestone') — they are Gantt-only items
     tasks_queryset = Task.objects.filter(
-        column__board=board
+        column__board=board,
+        item_type='task'
     ).select_related(
         'assigned_to', 'assigned_to__profile', 'created_by', 'column'
     ).prefetch_related('labels', 'dependencies').order_by('-created_at')
@@ -1972,12 +1976,12 @@ def demo_board_tasks_list(request, board_id):
     except EmptyPage:
         tasks = paginator.page(paginator.num_pages)
     
-    # Get statistics
-    total_tasks = Task.objects.filter(column__board=board).count()
-    completed_count = Task.objects.filter(column__board=board, progress=100).count()
-    in_progress_count = Task.objects.filter(column__board=board, progress__gt=0, progress__lt=100).count()
-    not_started_count = Task.objects.filter(column__board=board, progress=0).count()
-    high_priority_count = Task.objects.filter(column__board=board, priority__in=['high', 'urgent']).count()
+    # Get statistics (exclude milestones)
+    total_tasks = Task.objects.filter(column__board=board, item_type='task').count()
+    completed_count = Task.objects.filter(column__board=board, item_type='task', progress=100).count()
+    in_progress_count = Task.objects.filter(column__board=board, item_type='task', progress__gt=0, progress__lt=100).count()
+    not_started_count = Task.objects.filter(column__board=board, item_type='task', progress=0).count()
+    high_priority_count = Task.objects.filter(column__board=board, item_type='task', priority__in=['high', 'urgent']).count()
     
     # Completion rate
     completion_rate = round((completed_count / total_tasks * 100) if total_tasks > 0 else 0, 1)
@@ -2019,8 +2023,10 @@ def demo_all_tasks_list(request):
     status_filter = request.GET.get('status', 'all')
     
     # Get all tasks with related data
+    # Exclude milestones (item_type='milestone') — they are Gantt-only items
     tasks_queryset = Task.objects.filter(
-        column__board__in=demo_boards
+        column__board__in=demo_boards,
+        item_type='task'
     ).select_related(
         'assigned_to', 'assigned_to__profile', 'created_by', 'column', 'column__board'
     ).prefetch_related('labels', 'dependencies').order_by('-created_at')
@@ -2053,16 +2059,18 @@ def demo_all_tasks_list(request):
         tasks = paginator.page(paginator.num_pages)
     
     # Get statistics
-    total_tasks = Task.objects.filter(column__board__in=demo_boards).count()
-    completed_count = Task.objects.filter(column__board__in=demo_boards, progress=100).count()
-    in_progress_count = Task.objects.filter(column__board__in=demo_boards, progress__gt=0, progress__lt=100).count()
-    not_started_count = Task.objects.filter(column__board__in=demo_boards, progress=0).count()
+    # Get statistics (exclude milestones)
+    total_tasks = Task.objects.filter(column__board__in=demo_boards, item_type='task').count()
+    completed_count = Task.objects.filter(column__board__in=demo_boards, item_type='task', progress=100).count()
+    in_progress_count = Task.objects.filter(column__board__in=demo_boards, item_type='task', progress__gt=0, progress__lt=100).count()
+    not_started_count = Task.objects.filter(column__board__in=demo_boards, item_type='task', progress=0).count()
     overdue_count = Task.objects.filter(
         column__board__in=demo_boards,
+        item_type='task',
         due_date__lt=timezone.now().date(),
         progress__lt=100
     ).count()
-    high_priority_count = Task.objects.filter(column__board__in=demo_boards, priority__in=['high', 'urgent']).count()
+    high_priority_count = Task.objects.filter(column__board__in=demo_boards, item_type='task', priority__in=['high', 'urgent']).count()
     
     # Completion rate
     completion_rate = round((completed_count / total_tasks * 100) if total_tasks > 0 else 0, 1)

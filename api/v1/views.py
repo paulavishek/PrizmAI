@@ -68,7 +68,8 @@ class BoardViewSet(viewsets.ModelViewSet):
     def tasks(self, request, pk=None):
         """Get all tasks for a board"""
         board = self.get_object()
-        tasks = Task.objects.filter(column__board=board).select_related(
+        # Exclude milestones (item_type='milestone') — API returns real tasks only
+        tasks = Task.objects.filter(column__board=board, item_type='task').select_related(
             'column', 'assigned_to', 'created_by'
         ).prefetch_related('labels')
         

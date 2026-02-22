@@ -369,7 +369,8 @@ class BurndownPredictor:
         """Calculate current scope and completion metrics"""
         from kanban.models import Task
         
-        all_tasks = Task.objects.filter(column__board=board)
+        # Exclude milestones — only count real tasks
+        all_tasks = Task.objects.filter(column__board=board, item_type='task')
         
         total_tasks = all_tasks.count()
         completed_tasks = all_tasks.filter(progress=100).count()

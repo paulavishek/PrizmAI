@@ -62,8 +62,8 @@ def scope_dashboard(request, board_id):
     warning_count = all_alerts.filter(severity='warning').count()
     info_count = all_alerts.filter(severity='info').count()
     
-    # Calculate current task metrics
-    tasks = Task.objects.filter(column__board=board)
+    # Calculate current task metrics (exclude milestones)
+    tasks = Task.objects.filter(column__board=board, item_type='task')
     current_metrics = {
         'total_tasks': tasks.count(),
         'total_complexity': tasks.aggregate(Sum('complexity_score'))['complexity_score__sum'] or 0,

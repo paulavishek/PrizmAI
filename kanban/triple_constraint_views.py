@@ -52,7 +52,7 @@ def triple_constraint_dashboard(request, board_id):
     scope_status = board.get_current_scope_status()
     has_baseline = scope_status is not None
 
-    tasks = Task.objects.filter(column__board=board)
+    tasks = Task.objects.filter(column__board=board, item_type='task')
     total_tasks = tasks.count()
     total_complexity = tasks.aggregate(Sum('complexity_score'))['complexity_score__sum'] or 0
 
