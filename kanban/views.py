@@ -61,10 +61,11 @@ def dashboard(request):
     # Combine and deduplicate
     boards = (demo_boards | user_boards).distinct()
     
-    # Get analytics data
-    task_count = Task.objects.filter(column__board__in=boards).count()
+    # Get analytics data — exclude milestones (item_type='task' only)
+    task_count = Task.objects.filter(column__board__in=boards, item_type='task').count()
     completed_count = Task.objects.filter(
         column__board__in=boards,
+        item_type='task',
         progress=100
     ).count()
     
@@ -224,10 +225,11 @@ def dashboard(request):
             }
         ).order_by('-is_overdue', 'priority_order', 'due_date', 'created_at')[:8]
     
-    # Count of my tasks (for stats)
+    # Count of my tasks (for stats) — exclude milestones
     my_tasks_count = Task.objects.filter(
         column__board__in=boards,
-        assigned_to=request.user
+        assigned_to=request.user,
+        item_type='task'
     ).exclude(
         Q(column__name__icontains='done') |
         Q(column__name__icontains='closed') |
@@ -1380,6 +1382,7 @@ def add_gantt_milestone(request, board_id):
     phase = data.get('phase', '').strip()
     due_date_str = data.get('due_date', '').strip()
     status = data.get('status', 'upcoming').strip()
+    position_after_task_id = data.get('position_after_task_id', None)
 
     if not name:
         return JsonResponse({'error': 'Milestone name is required'}, status=400)
@@ -1393,6 +1396,16 @@ def add_gantt_milestone(request, board_id):
 
     if status not in ('upcoming', 'completed'):
         status = 'upcoming'
+
+    # Resolve position_after_task FK (must be a real task on this board)
+    position_after_task = None
+    if position_after_task_id:
+        try:
+            position_after_task = Task.objects.get(
+                id=int(position_after_task_id), item_type='task', column__board=board
+            )
+        except (Task.DoesNotExist, ValueError):
+            pass  # silently ignore invalid FK
 
     # Find a column to attach the milestone to (prefer Backlog, then first column)
     column = (
@@ -1415,6 +1428,7 @@ def add_gantt_milestone(request, board_id):
         progress=100 if status == 'completed' else 0,
         item_type='milestone',
         milestone_status=status,
+        position_after_task=position_after_task,
     )
 
     return JsonResponse({
@@ -1425,6 +1439,7 @@ def add_gantt_milestone(request, board_id):
             'due_date': due_date_str,
             'phase': milestone.phase or '',
             'status': milestone.milestone_status,
+            'position_after_task_id': milestone.position_after_task_id or '',
         }
     })
 
@@ -1475,6 +1490,7 @@ def milestone_detail(request, milestone_id):
         phase = request.POST.get('phase', '').strip()
         due_date_str = request.POST.get('due_date', '').strip()
         status = request.POST.get('status', 'upcoming').strip()
+        position_after_id = request.POST.get('position_after_task', '').strip()
         next_url_post = request.POST.get('next', next_url)
 
         errors = []
@@ -1495,6 +1511,15 @@ def milestone_detail(request, milestone_id):
 
         if not errors and due_date:
             from datetime import time as _time_cls, datetime as _dt2
+            # Resolve position_after FK
+            position_after_task = None
+            if position_after_id:
+                try:
+                    position_after_task = Task.objects.get(
+                        id=int(position_after_id), item_type='task', column__board=board
+                    )
+                except (Task.DoesNotExist, ValueError):
+                    pass
             milestone.title = name
             milestone.description = description
             milestone.phase = phase if phase else None
@@ -1502,6 +1527,7 @@ def milestone_detail(request, milestone_id):
             milestone.due_date = _dt2.combine(due_date, _time_cls.min)
             milestone.milestone_status = status
             milestone.progress = 100 if status == 'completed' else 0
+            milestone.position_after_task = position_after_task
             milestone.save()
             messages.success(request, 'Milestone updated successfully!')
             if next_url_post:
@@ -1511,16 +1537,21 @@ def milestone_detail(request, milestone_id):
             for err in errors:
                 messages.error(request, err)
 
-    # Build phase choices from board
+    # Build phase choices and board tasks for dropdowns
     phase_choices = []
     if hasattr(board, 'num_phases') and board.num_phases > 0:
         phase_choices = [f'Phase {i}' for i in range(1, board.num_phases + 1)]
+
+    board_tasks = Task.objects.filter(
+        column__board=board, item_type='task'
+    ).select_related('column').order_by('phase', 'id')
 
     context = {
         'milestone': milestone,
         'board': board,
         'next_url': next_url,
         'phase_choices': phase_choices,
+        'board_tasks': board_tasks,
     }
     return render(request, 'kanban/milestone_detail.html', context)
 

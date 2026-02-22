@@ -33,7 +33,7 @@
 
   <!-- Card -->
   <div class="card shadow-sm border-0">
-    <div class="card-header py-3" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white;">
+    <div class="card-header py-3" style="background: linear-gradient(135deg, #7c3aed, #5b21b6); color: white;">
       <div class="d-flex align-items-center justify-content-between">
         <span class="fw-semibold fs-5">
           <i class="fas fa-diamond me-2"></i>{{ milestone.title }}
@@ -42,7 +42,7 @@
           {% if milestone.milestone_status == 'completed' %}
             <i class="fas fa-check-circle text-success me-1"></i> Completed
           {% else %}
-            <i class="fas fa-clock text-warning me-1"></i> Upcoming
+            <i class="fas fa-clock" style="color:#7c3aed"></i> Upcoming
           {% endif %}
         </span>
       </div>
@@ -56,7 +56,7 @@
         <!-- Name -->
         <div class="mb-3">
           <label class="form-label fw-semibold">
-            <i class="fas fa-tag me-1 text-warning"></i> Name <span class="text-danger">*</span>
+            <i class="fas fa-tag me-1" style="color:#7c3aed"></i> Name <span class="text-danger">*</span>
           </label>
           <input type="text" class="form-control" name="name"
                  value="{{ milestone.title }}" maxlength="200" required>
@@ -76,16 +76,34 @@
             <i class="fas fa-layer-group me-1 text-info"></i> Phase
           </label>
           {% if phase_choices %}
-          <select class="form-select" name="phase">
+          <select class="form-select" name="phase" id="edit-milestone-phase">
             <option value="">— No phase —</option>
             {% for p in phase_choices %}
             <option value="{{ p }}" {% if milestone.phase == p %}selected{% endif %}>{{ p }}</option>
             {% endfor %}
           </select>
           {% else %}
-          <input type="text" class="form-control" name="phase"
+          <input type="text" class="form-control" name="phase" id="edit-milestone-phase"
                  value="{{ milestone.phase|default:'' }}" placeholder="e.g. Phase 1">
           {% endif %}
+        </div>
+
+        <!-- Following task -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">
+            <i class="fas fa-list-ol me-1 text-secondary"></i> Follows task
+            <small class="text-muted fw-normal">(controls row position in Gantt)</small>
+          </label>
+          <select class="form-select" name="position_after_task" id="edit-position-after">
+            <option value="">— At end of phase —</option>
+            {% for t in board_tasks %}
+            <option value="{{ t.id }}"
+              {% if milestone.position_after_task_id == t.id %}selected{% endif %}
+              data-phase="{{ t.phase|default:'' }}">
+              {% if t.phase %}[{{ t.phase }}] {% endif %}{{ t.title }}
+            </option>
+            {% endfor %}
+          </select>
         </div>
 
         <!-- Due Date -->
@@ -129,7 +147,7 @@
 
         <!-- Actions -->
         <div class="d-flex gap-2">
-          <button type="submit" class="btn btn-warning px-4">
+          <button type="submit" class="btn btn-primary px-4" style="background:linear-gradient(135deg,#7c3aed,#5b21b6);border:none;">
             <i class="fas fa-save me-1"></i> Save Changes
           </button>
           {% if next_url %}
@@ -162,4 +180,31 @@
   </div>
 
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Filter "Follows task" dropdown when phase changes
+(function() {
+    const phaseEl = document.getElementById('edit-milestone-phase');
+    const positionEl = document.getElementById('edit-position-after');
+    if (!phaseEl || !positionEl) return;
+
+    function filterByPhase() {
+        const selectedPhase = phaseEl.value;
+        const currentVal = positionEl.value;
+        Array.from(positionEl.options).forEach(opt => {
+            if (!opt.value) return; // always show "At end" option
+            const optPhase = opt.getAttribute('data-phase') || '';
+            opt.hidden = selectedPhase ? (optPhase !== selectedPhase) : false;
+        });
+        // Reset selection if now hidden
+        const currentOpt = positionEl.querySelector(`option[value="${currentVal}"]`);
+        if (currentOpt && currentOpt.hidden) positionEl.value = '';
+    }
+
+    phaseEl.addEventListener('change', filterByPhase);
+    filterByPhase(); // run on page load
+})();
+</script>
 {% endblock %}

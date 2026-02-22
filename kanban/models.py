@@ -92,7 +92,7 @@ class Board(models.Model):
         """
         from django.db.models import Q, Sum, Avg, Count
         
-        tasks = Task.objects.filter(column__board=self)
+        tasks = Task.objects.filter(column__board=self, item_type='task')
         
         # Calculate metrics
         total_tasks = tasks.count()
@@ -164,7 +164,7 @@ class Board(models.Model):
         if not self.baseline_task_count:
             return None
         
-        tasks = Task.objects.filter(column__board=self)
+        tasks = Task.objects.filter(column__board=self, item_type='task')
         current_count = tasks.count()
         current_complexity = tasks.aggregate(Sum('complexity_score'))['complexity_score__sum'] or 0
         
@@ -511,6 +511,14 @@ class Task(models.Model):
         blank=True,
         null=True,
         help_text="Status of the milestone (only used when item_type='milestone')"
+    )
+    position_after_task = models.ForeignKey(
+        'self',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='preceded_milestones',
+        help_text="For milestones: which task this milestone appears after in the Gantt chart rows"
     )
 
     class Meta:
