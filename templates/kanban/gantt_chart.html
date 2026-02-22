@@ -1196,6 +1196,19 @@
                 </div>
             </div>
         {% else %}
+            {% if any_filters_active %}
+            <div class="empty-state">
+                <i class="fas fa-search"></i>
+                <h3>No Tasks Found</h3>
+                <p>No tasks match your current filters{% if search_query %}: <strong>"{{ search_query }}"</strong>{% endif %}. Try adjusting your search or filters.</p>
+                <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-secondary me-2">
+                    <i class="fas fa-times me-1"></i> Clear Filters
+                </a>
+                <a href="{% if is_demo_mode %}{% url 'demo_board_detail' board.id %}{% else %}{% url 'board_detail' board.id %}{% endif %}" class="btn btn-primary">
+                    <i class="fas fa-arrow-left me-1"></i> Go to Board
+                </a>
+            </div>
+            {% else %}
             <div class="empty-state">
                 <i class="fas fa-calendar-times"></i>
                 <h3>No Tasks with Dates</h3>
@@ -1204,6 +1217,7 @@
                     <i class="fas fa-arrow-left me-1"></i> Go to Board
                 </a>
             </div>
+            {% endif %}
         {% endif %}
     </div>
 </div>
@@ -1368,7 +1382,10 @@
     const numPhases = {{ num_phases|default:0 }};
 
     // View state
-    let currentView = hasPhases ? 'phases' : 'all';
+    // When search/filter is active, force 'all' view so individual matched task
+    // bars are directly visible instead of being hidden inside collapsed phase bars.
+    const anyFiltersActive = {{ any_filters_active|yesno:"true,false" }};
+    let currentView = (hasPhases && !anyFiltersActive) ? 'phases' : 'all';
     let expandedPhases = new Set();
 
     // Prepare task data for Gantt chart with validated dependencies
@@ -1509,6 +1526,10 @@
     });
     console.log('Gantt milestones:', ganttMilestones);
 
+    // When a search or filter is active, hide milestones so only matching tasks
+    // are shown — milestones are not searchable items and would confuse results.
+    const visibleMilestones = anyFiltersActive ? [] : ganttMilestones;
+
     /**
      * Build the Gantt task list inserting each milestone immediately after its
      * position_after_task (if set), otherwise at the end of the list.
@@ -1599,13 +1620,21 @@
         // Build task map for quick lookup - FIRST PASS: create all entries
         const taskMap = new Map();
         validTasks.forEach(task => {
+            // Convert task.dependencies to a string no matter what type it is.
+            // Using || '' is unsafe because [] is truthy, causing [].split() TypeError.
+            let rawDeps = task.dependencies;
+            if (Array.isArray(rawDeps)) {
+                rawDeps = rawDeps.join(',');
+            } else if (typeof rawDeps !== 'string') {
+                rawDeps = String(rawDeps || '');
+            }
             taskMap.set(String(task.id), {
                 id: String(task.id),
                 name: task.name,
                 start: new Date(task.start),
                 end: new Date(task.end),
                 duration: Math.max(1, Math.ceil((new Date(task.end) - new Date(task.start)) / (1000 * 60 * 60 * 24))),
-                rawDependencies: task.dependencies || '',
+                rawDependencies: rawDeps,
                 dependencies: [], // Will be populated in second pass
                 successors: [],
                 ES: null, // Earliest Start
@@ -1619,7 +1648,11 @@
         // SECOND PASS: Parse dependencies now that all tasks are in the map
         taskMap.forEach((task, taskId) => {
             if (task.rawDependencies) {
-                const depIds = task.rawDependencies.split(',')
+                // Guard: rawDependencies must be a string before calling .split
+                const rawStr = typeof task.rawDependencies === 'string'
+                    ? task.rawDependencies
+                    : (Array.isArray(task.rawDependencies) ? task.rawDependencies.join(',') : String(task.rawDependencies));
+                const depIds = rawStr.split(',')
                     .map(d => String(d).trim())
                     .filter(d => d && validTaskIds.has(d));
                 task.dependencies = depIds;
@@ -1897,7 +1930,7 @@
             dependencies: t.dependencies
         })));
         
-        ganttChart = new Gantt('#gantt', buildOrderedTaskList(tasks, ganttMilestones), {
+        ganttChart = new Gantt('#gantt', buildOrderedTaskList(tasks, visibleMilestones), {
                 view_mode: viewMode,
                 bar_height: barHeight,
                 bar_corner_radius: 6,
@@ -2836,14 +2869,14 @@
                 });
                 
                 // Add all tasks + milestones in position-aware order for this phase
-                const phaseMilestones = ganttMilestones.filter(m => m.phase === phaseName);
+                const phaseMilestones = visibleMilestones.filter(m => m.phase === phaseName);
                 buildOrderedTaskList(regularTasks, phaseMilestones).forEach(item => ganttData.push(item));
             }
         }
 
         // Also add unphased milestones when not using phase filter
         // (they'll just appear at end)
-        ganttMilestones.filter(m => !m.phase).forEach(m => {
+        visibleMilestones.filter(m => !m.phase).forEach(m => {
             if (!ganttData.find(d => d.id === m.id)) ganttData.push(m);
         });
 
@@ -3031,9 +3064,13 @@
     if (hasPhases) {
         document.addEventListener('DOMContentLoaded', function() {
             updatePhaseInfoPanel();
-            // Start with phase view
             if (currentView === 'phases') {
+                // Start with phase view (no filters active)
                 renderGanttWithPhases();
+            } else {
+                // Filters are active — show all tasks directly so matched bars are visible
+                updateViewButtons();
+                initGantt(currentViewMode);
             }
         });
     }

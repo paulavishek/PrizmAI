@@ -1349,6 +1349,10 @@ def gantt_chart(request, board_id):
     else:
         phases_data_json = '{}'
 
+    # When any filter is active, the phases view should default to 'all tasks'
+    # so individual matched task bars are visible (not hidden inside collapsed phase bars)
+    any_filters_active = bool(search_query or status_filter or priority_filter or assignee_filter)
+
     context = {
         'board': board,
         'tasks': tasks,
@@ -1365,6 +1369,7 @@ def gantt_chart(request, board_id):
         'assignee_filter': assignee_filter,
         'assignees': assignees,
         'priority_choices': Task.PRIORITY_CHOICES,
+        'any_filters_active': any_filters_active,
     }
 
     return render(request, 'kanban/gantt_chart.html', context)
