@@ -488,7 +488,31 @@ class Task(models.Model):
         default=False,
         help_text="True if this is original seed demo data (not user-created)."
     )
-    
+
+    # Item Type (task vs milestone)
+    ITEM_TYPE_CHOICES = [
+        ('task', 'Task'),
+        ('milestone', 'Milestone'),
+    ]
+    item_type = models.CharField(
+        max_length=20,
+        choices=ITEM_TYPE_CHOICES,
+        default='task',
+        help_text="Whether this item is a regular task or a milestone marker"
+    )
+
+    MILESTONE_STATUS_CHOICES = [
+        ('upcoming', 'Upcoming'),
+        ('completed', 'Completed'),
+    ]
+    milestone_status = models.CharField(
+        max_length=20,
+        choices=MILESTONE_STATUS_CHOICES,
+        blank=True,
+        null=True,
+        help_text="Status of the milestone (only used when item_type='milestone')"
+    )
+
     class Meta:
         ordering = ['position']
         indexes = [

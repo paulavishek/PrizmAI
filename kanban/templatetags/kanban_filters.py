@@ -123,3 +123,15 @@ def get_item(dictionary, key):
         return dictionary.get(key)
     except (AttributeError, TypeError):
         return None
+
+@register.filter
+def make_range(value):
+    """
+    Return a range object from 0 to value-1 to allow {% for i in value|make_range %}
+    
+    Usage: {% for i in num_phases|make_range %}
+    """
+    try:
+        return range(int(value))
+    except (ValueError, TypeError):
+        return range(0)

@@ -1232,8 +1232,12 @@ def gantt_chart(request, board_id):
     # Get tasks for this board with dependencies prefetched for Gantt chart
     # Order by phase and id to maintain consistent task order regardless of date changes
     # This ensures tasks stay in their original position even after editing dates
-    tasks = Task.objects.filter(column__board=board).select_related('column', 'assigned_to').prefetch_related('dependencies').order_by('phase', 'id')
-    
+    # Exclude milestones from the regular tasks queryset (milestones fetched separately)
+    tasks = Task.objects.filter(column__board=board, item_type='task').select_related('column', 'assigned_to').prefetch_related('dependencies').order_by('phase', 'id')
+
+    # Always load milestones separately so filters don't affect them
+    milestones = Task.objects.filter(column__board=board, item_type='milestone').select_related('column').order_by('phase', 'id')
+
     # Process Gantt chart filters
     search_query = request.GET.get('search', '').strip()
     status_filter = request.GET.get('status', '')
@@ -1329,6 +1333,7 @@ def gantt_chart(request, board_id):
     context = {
         'board': board,
         'tasks': tasks,
+        'milestones': milestones,
         'is_demo_board': is_demo_board,
         'is_demo_mode': is_demo_mode,
         'has_phases': has_phases,
@@ -1344,6 +1349,92 @@ def gantt_chart(request, board_id):
     }
 
     return render(request, 'kanban/gantt_chart.html', context)
+
+
+def add_gantt_milestone(request, board_id):
+    """Create a new milestone (stored as a Task with item_type='milestone') from the Gantt chart."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
+    board = get_object_or_404(Board, id=board_id)
+
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    import json as _json
+    from datetime import datetime, date as _date, time as _time
+
+    try:
+        data = _json.loads(request.body)
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    name = data.get('name', '').strip()
+    description = data.get('description', '').strip()
+    phase = data.get('phase', '').strip()
+    due_date_str = data.get('due_date', '').strip()
+    status = data.get('status', 'upcoming').strip()
+
+    if not name:
+        return JsonResponse({'error': 'Milestone name is required'}, status=400)
+    if not due_date_str:
+        return JsonResponse({'error': 'Due date is required'}, status=400)
+
+    try:
+        due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+
+    if status not in ('upcoming', 'completed'):
+        status = 'upcoming'
+
+    # Find a column to attach the milestone to (prefer Backlog, then first column)
+    column = (
+        Column.objects.filter(board=board, name__icontains='backlog').first()
+        or Column.objects.filter(board=board).order_by('position').first()
+    )
+    if not column:
+        return JsonResponse({'error': 'Board has no columns'}, status=400)
+
+    # Milestones are single-day bar items on the Gantt chart (start=end)
+    milestone = Task.objects.create(
+        title=name,
+        description=description,
+        column=column,
+        created_by=request.user,
+        start_date=due_date,
+        due_date=datetime.combine(due_date, _time.min),  # DateTimeField expects datetime
+        phase=phase if phase else None,
+        priority='medium',
+        progress=100 if status == 'completed' else 0,
+        item_type='milestone',
+        milestone_status=status,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'milestone': {
+            'id': milestone.id,
+            'name': milestone.title,
+            'due_date': due_date_str,
+            'phase': milestone.phase or '',
+            'status': milestone.milestone_status,
+        }
+    })
+
+
+def delete_gantt_milestone(request, board_id, task_id):
+    """Delete a milestone from the Gantt chart."""
+    if not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+
+    if request.method != 'POST':
+        return JsonResponse({'error': 'POST required'}, status=405)
+
+    task = get_object_or_404(Task, id=task_id, item_type='milestone', column__board_id=board_id)
+    task.delete()
+    return JsonResponse({'success': True})
+
 
 def move_task(request):
     """
