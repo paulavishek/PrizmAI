@@ -1457,7 +1457,7 @@
             id: 'milestone-{{ milestone.id }}',
             name: '◆ {{ milestone.title|escapejs }}',
             fullName: '{{ milestone.title|escapejs }}',
-            start: '{{ milestone.start_date|date:"Y-m-d"|default:milestone.due_date|date:"Y-m-d" }}',
+            start: '{% if milestone.start_date %}{{ milestone.start_date|date:"Y-m-d" }}{% else %}{{ milestone.due_date|date:"Y-m-d" }}{% endif %}',
             end: '{{ milestone.due_date|date:"Y-m-d" }}',
             progress: 0,
             dependencies: '',
@@ -1997,10 +1997,10 @@
                         ).join(' ');
                         togglePhase(phaseName, e);
                     } else if (taskId.startsWith('milestone-')) {
-                        // Navigate to the underlying task detail for milestone
+                        // Navigate to the milestone detail page
                         const milestoneDbId = taskId.replace('milestone-', '');
                         const currentUrl = encodeURIComponent(window.location.href);
-                        window.location.href = `/tasks/${milestoneDbId}/?next=${currentUrl}`;
+                        window.location.href = `/milestones/${milestoneDbId}/?next=${currentUrl}`;
                     } else {
                         // Navigate to regular task detail with return URL
                         const currentUrl = encodeURIComponent(window.location.href);
@@ -2919,7 +2919,7 @@
                 } else if (task.isMilestone) {
                     const milestoneId = task.id.replace('milestone-', '');
                     const currentUrl = encodeURIComponent(window.location.href);
-                    window.location.href = `/tasks/${milestoneId}/?next=${currentUrl}`;
+                    window.location.href = `/milestones/${milestoneId}/?next=${currentUrl}`;
                 } else {
                     const currentUrl = encodeURIComponent(window.location.href);
                     window.location.href = `/tasks/${task.id}/?next=${currentUrl}`;

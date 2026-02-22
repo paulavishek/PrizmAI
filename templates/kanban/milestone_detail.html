@@ -1,0 +1,165 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ milestone.title }} – Milestone{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" style="max-width: 680px;">
+
+  <!-- Header row -->
+  <div class="d-flex align-items-center gap-3 mb-4">
+    {% if next_url %}
+    <a href="{{ next_url }}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-1"></i> Back
+    </a>
+    {% else %}
+    <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-arrow-left me-1"></i> Back to Gantt
+    </a>
+    {% endif %}
+    <div class="d-flex align-items-center gap-2">
+      <span style="color:#f59e0b; font-size:1.4rem;">◆</span>
+      <h4 class="mb-0 fw-bold">Milestone Details</h4>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  {% for message in messages %}
+  <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+    {{ message }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+  </div>
+  {% endfor %}
+
+  <!-- Card -->
+  <div class="card shadow-sm border-0">
+    <div class="card-header py-3" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: white;">
+      <div class="d-flex align-items-center justify-content-between">
+        <span class="fw-semibold fs-5">
+          <i class="fas fa-diamond me-2"></i>{{ milestone.title }}
+        </span>
+        <span class="badge bg-white text-dark">
+          {% if milestone.milestone_status == 'completed' %}
+            <i class="fas fa-check-circle text-success me-1"></i> Completed
+          {% else %}
+            <i class="fas fa-clock text-warning me-1"></i> Upcoming
+          {% endif %}
+        </span>
+      </div>
+    </div>
+
+    <div class="card-body p-4">
+      <form method="post" novalidate>
+        {% csrf_token %}
+        {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+
+        <!-- Name -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">
+            <i class="fas fa-tag me-1 text-warning"></i> Name <span class="text-danger">*</span>
+          </label>
+          <input type="text" class="form-control" name="name"
+                 value="{{ milestone.title }}" maxlength="200" required>
+        </div>
+
+        <!-- Description -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">
+            <i class="fas fa-align-left me-1 text-secondary"></i> Description
+          </label>
+          <textarea class="form-control" name="description" rows="3">{{ milestone.description|default:'' }}</textarea>
+        </div>
+
+        <!-- Phase -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">
+            <i class="fas fa-layer-group me-1 text-info"></i> Phase
+          </label>
+          {% if phase_choices %}
+          <select class="form-select" name="phase">
+            <option value="">— No phase —</option>
+            {% for p in phase_choices %}
+            <option value="{{ p }}" {% if milestone.phase == p %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+          </select>
+          {% else %}
+          <input type="text" class="form-control" name="phase"
+                 value="{{ milestone.phase|default:'' }}" placeholder="e.g. Phase 1">
+          {% endif %}
+        </div>
+
+        <!-- Due Date -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">
+            <i class="fas fa-calendar-alt me-1 text-primary"></i> Due Date <span class="text-danger">*</span>
+          </label>
+          <input type="date" class="form-control" name="due_date"
+                 value="{{ milestone.due_date|date:'Y-m-d' }}" required>
+        </div>
+
+        <!-- Status -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">
+            <i class="fas fa-flag me-1 text-success"></i> Status
+          </label>
+          <select class="form-select" name="status">
+            <option value="upcoming" {% if milestone.milestone_status != 'completed' %}selected{% endif %}>Upcoming</option>
+            <option value="completed" {% if milestone.milestone_status == 'completed' %}selected{% endif %}>Completed</option>
+          </select>
+        </div>
+
+        <!-- Divider -->
+        <hr class="my-3">
+
+        <!-- Created by (read-only) -->
+        <div class="mb-4">
+          <label class="form-label fw-semibold text-muted">
+            <i class="fas fa-user me-1"></i> Created by
+          </label>
+          <div class="form-control-plaintext ps-1">
+            {% if milestone.created_by %}
+              <span class="badge bg-secondary">
+                {{ milestone.created_by.get_full_name|default:milestone.created_by.username }}
+              </span>
+            {% else %}
+              <span class="text-muted">—</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-warning px-4">
+            <i class="fas fa-save me-1"></i> Save Changes
+          </button>
+          {% if next_url %}
+          <a href="{{ next_url }}" class="btn btn-outline-secondary">Cancel</a>
+          {% else %}
+          <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-secondary">Cancel</a>
+          {% endif %}
+
+          <!-- Delete -->
+          <form method="post"
+                action="{% url 'delete_gantt_milestone' board.id milestone.id %}"
+                class="ms-auto"
+                onsubmit="return confirm('Delete this milestone? This cannot be undone.');">
+            {% csrf_token %}
+            {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
+            <button type="submit" class="btn btn-outline-danger btn-sm">
+              <i class="fas fa-trash me-1"></i> Delete
+            </button>
+          </form>
+        </div>
+
+      </form>
+    </div>
+
+    <!-- Board info footer -->
+    <div class="card-footer text-muted small py-2 px-4">
+      <i class="fas fa-th-large me-1"></i>
+      Board: <a href="{% url 'board_detail' board.id %}">{{ board.name }}</a>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

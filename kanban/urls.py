@@ -59,6 +59,7 @@ urlpatterns = [
     path('boards/<int:board_id>/export/', views.export_board, name='export_board'),
     path('boards/import/', views.import_board, name='import_board'),
     path('tasks/<int:task_id>/', views.task_detail, name='task_detail'),
+    path('milestones/<int:milestone_id>/', views.milestone_detail, name='milestone_detail'),
     path('tasks/<int:task_id>/delete/', views.delete_task, name='delete_task'),
     path('tasks/move/', views.move_task, name='move_task'),
     path('tasks/<int:task_id>/update-progress/', views.update_task_progress, name='update_task_progress'),

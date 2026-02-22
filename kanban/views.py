@@ -568,7 +568,13 @@ def task_detail(request, task_id):
         id=task_id
     )
     board = task.column.board
-    
+
+    # Milestones have their own dedicated detail page
+    if task.item_type == 'milestone':
+        next_url = request.GET.get('next', '')
+        qs = f'?next={next_url}' if next_url else ''
+        return redirect(f'/milestones/{task.id}/{qs}')
+
     if request.method == 'POST':
         form = TaskForm(request.POST, instance=task, board=board)
         if form.is_valid():
@@ -1433,7 +1439,90 @@ def delete_gantt_milestone(request, board_id, task_id):
 
     task = get_object_or_404(Task, id=task_id, item_type='milestone', column__board_id=board_id)
     task.delete()
-    return JsonResponse({'success': True})
+
+    # AJAX callers (Gantt JS) expect JSON; regular form submissions get a redirect
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or \
+              'application/json' in request.headers.get('Accept', '')
+    if is_ajax:
+        return JsonResponse({'success': True})
+
+    # Regular form delete (from milestone_detail page)
+    next_url = request.POST.get('next', '')
+    messages.success(request, 'Milestone deleted.')
+    if next_url:
+        return redirect(next_url)
+    return redirect('gantt_chart', board_id=board_id)
+
+
+def milestone_detail(request, milestone_id):
+    """Simple view for Gantt chart milestones (item_type='milestone').
+    Shows only: name, description, phase, due date, status, and who created it.
+    """
+    milestone = get_object_or_404(
+        Task.objects.select_related('column__board', 'created_by'),
+        id=milestone_id,
+        item_type='milestone'
+    )
+    board = milestone.column.board
+    next_url = request.GET.get('next', '')
+
+    if request.method == 'POST':
+        from datetime import datetime as _dt
+        import json as _json
+
+        name = request.POST.get('name', '').strip()
+        description = request.POST.get('description', '').strip()
+        phase = request.POST.get('phase', '').strip()
+        due_date_str = request.POST.get('due_date', '').strip()
+        status = request.POST.get('status', 'upcoming').strip()
+        next_url_post = request.POST.get('next', next_url)
+
+        errors = []
+        if not name:
+            errors.append('Name is required.')
+        if not due_date_str:
+            errors.append('Due date is required.')
+
+        due_date = None
+        if due_date_str:
+            try:
+                due_date = _dt.strptime(due_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                errors.append('Invalid date format.')
+
+        if status not in ('upcoming', 'completed'):
+            status = 'upcoming'
+
+        if not errors and due_date:
+            from datetime import time as _time_cls, datetime as _dt2
+            milestone.title = name
+            milestone.description = description
+            milestone.phase = phase if phase else None
+            milestone.start_date = due_date
+            milestone.due_date = _dt2.combine(due_date, _time_cls.min)
+            milestone.milestone_status = status
+            milestone.progress = 100 if status == 'completed' else 0
+            milestone.save()
+            messages.success(request, 'Milestone updated successfully!')
+            if next_url_post:
+                return redirect(next_url_post)
+            return redirect('milestone_detail', milestone_id=milestone.id)
+        else:
+            for err in errors:
+                messages.error(request, err)
+
+    # Build phase choices from board
+    phase_choices = []
+    if hasattr(board, 'num_phases') and board.num_phases > 0:
+        phase_choices = [f'Phase {i}' for i in range(1, board.num_phases + 1)]
+
+    context = {
+        'milestone': milestone,
+        'board': board,
+        'next_url': next_url,
+        'phase_choices': phase_choices,
+    }
+    return render(request, 'kanban/milestone_detail.html', context)
 
 
 def move_task(request):
