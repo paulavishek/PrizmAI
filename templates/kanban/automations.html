@@ -1,0 +1,247 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ board.name }} - Automations{% endblock %}
+
+{% block extra_css %}
+<style>
+    .rule-card {
+        border-radius: 10px;
+        border: 1px solid #dee2e6;
+        padding: 20px;
+        background: #fff;
+        transition: box-shadow 0.2s;
+    }
+    .rule-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+    .rule-card.inactive { opacity: 0.6; }
+    .trigger-badge { background: #e0f0ff; color: #0d6efd; font-size: 0.8rem; padding: 3px 10px; border-radius: 20px; }
+    .action-badge  { background: #e8f8e8; color: #198754; font-size: 0.8rem; padding: 3px 10px; border-radius: 20px; }
+    .arrow-icon    { font-size: 1.2rem; color: #adb5bd; }
+    .create-card {
+        background: linear-gradient(135deg, #f8f9fa, #fff);
+        border-radius: 12px;
+        border: 2px dashed #dee2e6;
+        padding: 28px;
+    }
+    .info-section {
+        background: #fffbeb;
+        border: 1px solid #fde68a;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 24px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+        <div>
+            <h1 class="h3 mb-0">
+                <i class="fas fa-bolt me-2 text-warning"></i>Automations
+            </h1>
+            <p class="text-muted mb-0">{{ board.name }} — trigger-based rules that run automatically</p>
+        </div>
+        <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-columns me-1"></i> Back to Board
+        </a>
+    </div>
+
+    <!-- Info -->
+    <div class="info-section">
+        <strong><i class="fas fa-info-circle me-2 text-warning"></i>How Automations Work</strong>
+        <p class="mb-0 small mt-1">
+            Each rule has a <strong>trigger</strong> (something that happens) and an <strong>action</strong>
+            (what PrizmAI does automatically).<br>
+            Example: <em>"When a task is moved to Review → set priority to High"</em> or
+            <em>"When a task becomes overdue → set priority to Urgent"</em>.
+        </p>
+    </div>
+
+    <div class="row g-4">
+
+        <!-- Active Rules -->
+        <div class="col-lg-7">
+            <h5 class="mb-3"><i class="fas fa-list me-2 text-secondary"></i>Rules ({{ automations.count }})</h5>
+            {% if not automations %}
+            <div class="text-center text-muted py-5 border rounded">
+                <i class="fas fa-bolt fa-3x mb-3 text-light"></i>
+                <p>No automation rules yet. Create your first rule →</p>
+            </div>
+            {% endif %}
+            {% for rule in automations %}
+            <div class="rule-card mb-3 {% if not rule.is_active %}inactive{% endif %}">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <strong>{{ rule.name }}</strong>
+                            {% if rule.is_active %}
+                            <span class="badge bg-success">Active</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Paused</span>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="trigger-badge">
+                                <i class="fas fa-play-circle me-1"></i>
+                                {% if rule.trigger_type == 'task_overdue' %}
+                                    Task becomes overdue
+                                {% else %}
+                                    Moved to column containing "{{ rule.trigger_value }}"
+                                {% endif %}
+                            </span>
+                            <span class="arrow-icon">→</span>
+                            <span class="action-badge">
+                                <i class="fas fa-cogs me-1"></i>
+                                {% if rule.action_type == 'set_priority' %}
+                                    Set priority to "{{ rule.action_value|title }}"
+                                {% else %}
+                                    Add label "{{ rule.action_value }}"
+                                {% endif %}
+                            </span>
+                        </div>
+                        <div class="text-muted small mt-2">
+                            Fired {{ rule.run_count }} time{{ rule.run_count|pluralize }}
+                            {% if rule.last_run_at %}· last run {{ rule.last_run_at|date:"M d, Y H:i" }}{% endif %}
+                            · Created by {{ rule.created_by.username|default:"—" }}
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2 ms-3">
+                        <!-- Toggle -->
+                        <form method="post" action="{% url 'automation_toggle' board.id rule.id %}">
+                            {% csrf_token %}
+                            <button class="btn btn-sm {% if rule.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
+                                    title="{% if rule.is_active %}Pause{% else %}Enable{% endif %}">
+                                <i class="fas {% if rule.is_active %}fa-pause{% else %}fa-play{% endif %}"></i>
+                            </button>
+                        </form>
+                        <!-- Delete -->
+                        <form method="post" action="{% url 'automation_delete' board.id rule.id %}"
+                              onsubmit="return confirm('Delete automation \'{{ rule.name }}\'?');">
+                            {% csrf_token %}
+                            <button class="btn btn-sm btn-outline-danger" title="Delete">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Create Rule Form -->
+        <div class="col-lg-5">
+            <div class="create-card">
+                <h5 class="mb-3"><i class="fas fa-plus-circle me-2 text-primary"></i>Create New Rule</h5>
+                <form method="post">
+                    {% csrf_token %}
+
+                    <!-- Name -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Rule Name</label>
+                        <input type="text" name="name" class="form-control"
+                               placeholder="e.g. Mark overdue as Urgent" required maxlength="120">
+                    </div>
+
+                    <!-- Trigger -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Trigger</label>
+                        <select name="trigger_type" id="triggerType" class="form-select" onchange="toggleTriggerValue()">
+                            {% for value, label in trigger_choices %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3" id="triggerValueGroup">
+                        <label class="form-label text-muted small">Column name fragment (e.g. "Review" matches "In Review")</label>
+                        <input type="text" name="trigger_value" class="form-control form-control-sm"
+                               placeholder="e.g. Review">
+                    </div>
+
+                    <!-- Action -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Action</label>
+                        <select name="action_type" id="actionType" class="form-select" onchange="toggleActionValue()">
+                            {% for value, label in action_choices %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-4" id="actionValueGroup">
+                        <label class="form-label text-muted small" id="actionValueLabel">Value</label>
+                        <!-- Priority selector (default shown) -->
+                        <select name="action_value" id="prioritySelect" class="form-select" required>
+                            <option value="urgent">Urgent</option>
+                            <option value="high">High</option>
+                            <option value="medium">Medium</option>
+                            <option value="low">Low</option>
+                        </select>
+                        <!-- Label selector (hidden by default) -->
+                        <select name="action_value_label" id="labelSelect" class="form-select" style="display:none;">
+                            {% if labels %}
+                                {% for label in labels %}
+                                <option value="{{ label.name }}">{{ label.name }}</option>
+                                {% endfor %}
+                            {% else %}
+                                <option value="" disabled>No labels on this board yet</option>
+                            {% endif %}
+                        </select>
+                        <!-- Hidden input to unify the two selects -->
+                        <input type="hidden" name="action_value_hidden" id="actionValueHidden">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100" onclick="prepareActionValue()">
+                        <i class="fas fa-plus me-2"></i>Create Rule
+                    </button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleTriggerValue() {
+    const t = document.getElementById('triggerType').value;
+    document.getElementById('triggerValueGroup').style.display =
+        t === 'moved_to_column' ? 'block' : 'none';
+}
+function toggleActionValue() {
+    const a = document.getElementById('actionType').value;
+    if (a === 'set_priority') {
+        document.getElementById('prioritySelect').style.display = 'block';
+        document.getElementById('prioritySelect').required = true;
+        document.getElementById('labelSelect').style.display = 'none';
+        document.getElementById('labelSelect').required = false;
+        document.getElementById('actionValueLabel').textContent = 'Priority';
+    } else {
+        document.getElementById('prioritySelect').style.display = 'none';
+        document.getElementById('prioritySelect').required = false;
+        document.getElementById('labelSelect').style.display = 'block';
+        document.getElementById('labelSelect').required = true;
+        document.getElementById('actionValueLabel').textContent = 'Label';
+    }
+}
+function prepareActionValue() {
+    const a = document.getElementById('actionType').value;
+    const prioritySelect = document.getElementById('prioritySelect');
+    const labelSelect   = document.getElementById('labelSelect');
+    // The form posts both selects; the view uses action_value (priority) and
+    // action_value_label (label). We need to ensure the right one goes into action_value.
+    if (a === 'add_label') {
+        prioritySelect.name = '';
+        labelSelect.name = 'action_value';
+    } else {
+        prioritySelect.name = 'action_value';
+        labelSelect.name = '';
+    }
+}
+// Init
+toggleTriggerValue();
+toggleActionValue();
+</script>
+{% endblock %}

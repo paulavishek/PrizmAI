@@ -3781,3 +3781,58 @@ def summarize_task_details(task_data: Dict) -> Optional[Dict]:
         logger.error(f"Error summarizing task details: {str(e)}")
         return None
 
+
+def generate_status_report(report_data: Dict) -> Optional[str]:
+    """
+    Generate a concise, stakeholder-ready status report for a board.
+
+    Args:
+        report_data: Dictionary containing board metrics (tasks, completion,
+                     velocity, overdue, budget, blockers, etc.)
+
+    Returns:
+        A formatted plain-text/markdown status report string, or None on failure.
+    """
+    try:
+        board_name = report_data.get('board_name', 'Project')
+        total_tasks = report_data.get('total_tasks', 0)
+        completed = report_data.get('completed_count', 0)
+        in_progress = report_data.get('in_progress_count', 0)
+        overdue = report_data.get('overdue_count', 0)
+        completion_pct = report_data.get('completion_pct', 0)
+        velocity = report_data.get('velocity', 'N/A')
+        high_risk_count = report_data.get('high_risk_count', 0)
+        budget_status = report_data.get('budget_status', 'N/A')
+        tasks_by_column = report_data.get('tasks_by_column', [])
+        report_date = report_data.get('report_date', datetime.now().strftime('%B %d, %Y'))
+
+        column_summary = ', '.join(
+            [f"{col['name']}: {col['count']}" for col in tasks_by_column]
+        ) or 'N/A'
+
+        prompt = f"""You are an experienced project manager writing a weekly status report.
+Write a concise, professional stakeholder update for the project "{board_name}" using the metrics below.
+
+## Project Metrics ({report_date})
+- Total tasks: {total_tasks} | Completed: {completed} ({completion_pct}%) | In Progress: {in_progress}
+- Overdue tasks: {overdue}
+- Velocity: {velocity} tasks/week
+- High-risk tasks: {high_risk_count}
+- Budget status: {budget_status}
+- Column breakdown: {column_summary}
+
+## Instructions
+Write in 4 short sections using markdown headings:
+1. **Overall Status** — One sentence with RAG status (🟢 On Track / 🟡 At Risk / 🔴 Off Track) and headline.
+2. **Progress This Week** — 2-3 bullet points on what's been accomplished.
+3. **Key Risks & Blockers** — 2-3 bullets on issues needing attention (be specific to the numbers).
+4. **Next Steps** — 2-3 action items for the upcoming period.
+
+Keep it concise, factual, and actionable. Write for a non-technical stakeholder audience.
+Do not invent data not listed above."""
+
+        result = generate_ai_content(prompt, task_type='board_analytics_summary', use_cache=False)
+        return result
+    except Exception as e:
+        logger.error(f"Error generating status report: {str(e)}")
+        return None

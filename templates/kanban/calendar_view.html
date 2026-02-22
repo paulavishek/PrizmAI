@@ -1,0 +1,231 @@
+{% extends 'base.html' %}
+{% load static kanban_filters %}
+
+{% block title %}{{ board.name }} - Calendar{% endblock %}
+
+{% block extra_css %}
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css' rel='stylesheet' />
+<style>
+    .calendar-container {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+    .fc-event {
+        cursor: pointer;
+        border-radius: 4px !important;
+        font-size: 0.8rem;
+        padding: 2px 4px;
+    }
+    .fc-event:hover {
+        opacity: 0.85;
+        transform: translateY(-1px);
+        transition: 0.15s;
+    }
+    .unscheduled-card {
+        border-left: 4px solid #6c757d;
+    }
+    .unscheduled-task-item {
+        padding: 8px 12px;
+        border-bottom: 1px solid #f0f0f0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .unscheduled-task-item:last-child { border-bottom: none; }
+    .stat-card {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 16px;
+        text-align: center;
+    }
+    .stat-card .stat-number { font-size: 2rem; font-weight: 700; }
+    /* Tooltip */
+    #cal-tooltip {
+        position: fixed;
+        z-index: 9999;
+        background: #212529;
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 0.82rem;
+        pointer-events: none;
+        display: none;
+        max-width: 240px;
+        line-height: 1.5;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="fas fa-calendar-alt me-2 text-primary"></i>{{ board.name }}
+            </h1>
+            <p class="text-muted mb-0">Task Calendar — tasks plotted by due date</p>
+        </div>
+        <div class="btn-group">
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-columns me-1"></i> Kanban
+            </a>
+            <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-info btn-sm">
+                <i class="fas fa-chart-gantt me-1"></i> Gantt
+            </a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-primary">{{ total_tasks }}</div>
+                <div class="text-muted small">Total Tasks</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-success">{{ scheduled_count }}</div>
+                <div class="text-muted small">Scheduled</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-warning">{{ unscheduled_count }}</div>
+                <div class="text-muted small">No Due Date</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="stat-card">
+                <div class="stat-number text-danger" id="overdue-count">—</div>
+                <div class="text-muted small">Overdue</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="d-flex flex-wrap gap-3 mb-3">
+        <span><span class="badge" style="background:#dc3545;">●</span> Urgent</span>
+        <span><span class="badge" style="background:#fd7e14;">●</span> High</span>
+        <span><span class="badge" style="background:#0d6efd;">●</span> Medium</span>
+        <span><span class="badge" style="background:#198754;">●</span> Low</span>
+    </div>
+
+    <!-- Calendar -->
+    <div class="calendar-container">
+        <div id='calendar'></div>
+    </div>
+
+    <!-- Unscheduled Tasks -->
+    {% if tasks_without_dates %}
+    <div class="card unscheduled-card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="fas fa-clock me-2 text-secondary"></i>Unscheduled Tasks (no due date)</span>
+            <span class="badge bg-secondary">{{ unscheduled_count }}</span>
+        </div>
+        <div class="card-body p-0">
+            {% for task in tasks_without_dates %}
+            <div class="unscheduled-task-item">
+                <span class="badge priority-{{ task.priority }}"
+                      style="min-width:60px; background:
+                        {% if task.priority == 'urgent' %}#dc3545
+                        {% elif task.priority == 'high' %}#fd7e14
+                        {% elif task.priority == 'medium' %}#0d6efd
+                        {% else %}#198754{% endif %};">
+                    {{ task.get_priority_display }}
+                </span>
+                <a href="{% url 'task_detail' task.id %}" class="text-decoration-none flex-grow-1">
+                    {{ task.title }}
+                </a>
+                <span class="text-muted small">{{ task.column.name }}</span>
+                {% if task.assigned_to %}
+                <span class="badge bg-light text-dark">{{ task.assigned_to.username }}</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- Hover Tooltip -->
+<div id="cal-tooltip"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const events = {{ events_json|safe }};
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Count overdue
+    let overdueCount = 0;
+    events.forEach(e => {
+        const d = new Date(e.start);
+        const progress = e.extendedProps ? e.extendedProps.progress : 100;
+        if (d < today && progress < 100) overdueCount++;
+    });
+    document.getElementById('overdue-count').textContent = overdueCount;
+
+    // Tooltip element
+    const tooltip = document.getElementById('cal-tooltip');
+
+    const calendarEl = document.getElementById('calendar');
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        headerToolbar: {
+            left: 'prev,next today',
+            center: 'title',
+            right: 'dayGridMonth,dayGridWeek,listMonth'
+        },
+        events: events,
+        eventClick: function(info) {
+            info.jsEvent.preventDefault();
+            window.location.href = info.event.url;
+        },
+        eventMouseEnter: function(info) {
+            const p = info.event.extendedProps;
+            tooltip.innerHTML = `
+                <strong>${info.event.title}</strong><br>
+                <span>📌 ${p.column}</span><br>
+                <span>🚩 ${p.priority}</span>
+                ${p.assignee ? `<br><span>👤 ${p.assignee}</span>` : ''}
+                <br><span>⬜ ${p.progress}% complete</span>
+            `;
+            tooltip.style.display = 'block';
+        },
+        eventMouseLeave: function() {
+            tooltip.style.display = 'none';
+        },
+        eventDidMount: function(info) {
+            // Mark overdue events with a striped border
+            const d = new Date(info.event.start);
+            const progress = info.event.extendedProps.progress;
+            if (d < today && progress < 100) {
+                info.el.style.opacity = '0.75';
+                info.el.style.textDecoration = 'line-through';
+                info.el.title = 'OVERDUE — ' + info.event.title;
+            }
+        },
+        height: 'auto',
+        firstDay: 1,  // Monday
+    });
+    calendar.render();
+
+    // Keep tooltip following mouse
+    document.addEventListener('mousemove', function(e) {
+        tooltip.style.left = (e.clientX + 14) + 'px';
+        tooltip.style.top  = (e.clientY - 10) + 'px';
+    });
+});
+</script>
+{% endblock %}

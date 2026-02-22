@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ board.name }} - Status Report{% endblock %}
+
+{% block extra_css %}
+<style>
+    .report-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        padding: 32px;
+        max-width: 860px;
+        margin: 0 auto;
+    }
+    .report-output {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 24px;
+        font-size: 1rem;
+        line-height: 1.8;
+        border-left: 4px solid #0d6efd;
+        white-space: pre-wrap;
+        font-family: 'Segoe UI', sans-serif;
+    }
+    /* Render markdown-like formatting for report text */
+    .report-output h2 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin-top: 1.2rem;
+        color: #212529;
+    }
+    .report-output ul { padding-left: 1.5rem; }
+    .info-banner {
+        background: linear-gradient(135deg, #e8f4fd, #f0f9ff);
+        border-radius: 10px;
+        padding: 20px 24px;
+        border: 1px solid #bee3f8;
+        margin-bottom: 24px;
+    }
+    .generate-btn {
+        background: linear-gradient(135deg, #0d6efd, #6610f2);
+        border: none;
+        color: white;
+        padding: 12px 32px;
+        border-radius: 8px;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: 0.2s;
+    }
+    .generate-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .generate-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .copy-btn {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+    }
+    .report-wrapper { position: relative; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="fas fa-file-alt me-2 text-dark"></i>AI Status Report
+            </h1>
+            <p class="text-muted mb-0">{{ board.name }} — stakeholder-ready weekly update</p>
+        </div>
+        <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-columns me-1"></i> Back to Board
+        </a>
+    </div>
+
+    <div class="report-card">
+
+        <!-- Info Banner -->
+        <div class="info-banner">
+            <div class="d-flex gap-3 align-items-start">
+                <i class="fas fa-robot text-primary" style="font-size:1.8rem; margin-top:2px;"></i>
+                <div>
+                    <strong>How it works</strong>
+                    <p class="mb-0 text-muted small mt-1">
+                        PrizmAI scans your board's live metrics — tasks, completion rate, overdue items,
+                        velocity, risk levels, and budget — then asks Gemini to write a concise
+                        stakeholder update. Each generation uses 1 AI request from your daily quota.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generate Form -->
+        <form method="post" id="report-form">
+            {% csrf_token %}
+            <div class="text-center mb-4">
+                <button type="submit" class="generate-btn" id="generate-btn">
+                    <i class="fas fa-magic me-2"></i>Generate Status Report
+                </button>
+                <p class="text-muted small mt-2">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Counts as 1 AI request
+                </p>
+            </div>
+        </form>
+
+        <!-- Error -->
+        {% if error %}
+        <div class="alert alert-danger d-flex align-items-center gap-2">
+            <i class="fas fa-exclamation-circle"></i>
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <!-- Report Output -->
+        {% if report_text %}
+        <div class="report-wrapper">
+            <div class="report-output" id="report-output">{{ report_text }}</div>
+            <button class="btn btn-sm btn-outline-secondary copy-btn" onclick="copyReport()" title="Copy to clipboard">
+                <i class="fas fa-copy me-1"></i>Copy
+            </button>
+        </div>
+
+        <div class="mt-3 text-muted small text-center">
+            <i class="fas fa-clock me-1"></i>Generated just now &nbsp;·&nbsp;
+            <i class="fas fa-robot me-1"></i>Powered by Google Gemini &nbsp;·&nbsp;
+            <i class="fas fa-redo me-1"></i><a href="{% url 'board_status_report' board.id %}" class="text-muted">Regenerate</a>
+        </div>
+        {% endif %}
+
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('report-form').addEventListener('submit', function() {
+    const btn = document.getElementById('generate-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generating…';
+});
+
+function copyReport() {
+    const text = document.getElementById('report-output').innerText;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = event.target.closest('button');
+        btn.innerHTML = '<i class="fas fa-check me-1"></i>Copied!';
+        setTimeout(() => { btn.innerHTML = '<i class="fas fa-copy me-1"></i>Copy'; }, 2000);
+    });
+}
+</script>
+{% endblock %}

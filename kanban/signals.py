@@ -28,6 +28,108 @@ def track_task_assignment_change(sender, instance, **kwargs):
 
 
 @receiver(pre_save, sender=Task)
+def track_column_entry_time(sender, instance, **kwargs):
+    """
+    Record when a task enters a new column so WIP age can be calculated.
+    Sets column_entered_at on first save or when the task changes column.
+    Also stores _old_column_id for use by the automation signal.
+    """
+    from django.utils import timezone
+    if instance.pk:
+        try:
+            old_task = Task.objects.get(pk=instance.pk)
+            instance._old_column_id = old_task.column_id
+            if old_task.column_id != instance.column_id:
+                instance.column_entered_at = timezone.now()
+        except Task.DoesNotExist:
+            instance._old_column_id = None
+            if not instance.column_entered_at:
+                instance.column_entered_at = timezone.now()
+    else:
+        instance._old_column_id = None
+        # Brand-new task
+        if not instance.column_entered_at:
+            instance.column_entered_at = timezone.now()
+
+
+@receiver(post_save, sender=Task)
+def run_board_automations(sender, instance, created, **kwargs):
+    """
+    Fire active BoardAutomation rules after a task is saved.
+    Handles two triggers:
+      - moved_to_column: fires when a task changes column
+      - task_overdue: fires when an uncompleted task's due date has passed
+    """
+    from django.utils import timezone as tz
+    try:
+        from kanban.automation_models import BoardAutomation
+        from kanban.models import TaskLabel
+
+        board = instance.column.board if instance.column_id else None
+        if not board:
+            return
+
+        automations = BoardAutomation.objects.filter(board=board, is_active=True)
+        if not automations.exists():
+            return
+
+        now = tz.now()
+        old_column_id = getattr(instance, '_old_column_id', None)
+        column_changed = (not created) and (old_column_id != instance.column_id)
+
+        for rule in automations:
+            fired = False
+
+            # --- Trigger: moved_to_column ---
+            if rule.trigger_type == 'moved_to_column' and column_changed:
+                col_name = instance.column.name.lower()
+                if rule.trigger_value.lower() in col_name:
+                    fired = True
+
+            # --- Trigger: task_overdue ---
+            elif rule.trigger_type == 'task_overdue':
+                if (
+                    instance.due_date
+                    and instance.due_date < now
+                    and instance.progress < 100
+                ):
+                    fired = True
+
+            if fired:
+                _apply_automation_action(instance, rule)
+                rule.run_count += 1
+                rule.last_run_at = now
+                BoardAutomation.objects.filter(pk=rule.pk).update(
+                    run_count=rule.run_count,
+                    last_run_at=rule.last_run_at,
+                )
+
+    except Exception:
+        # Never let automations crash core task saves
+        import logging
+        logging.getLogger(__name__).exception("BoardAutomation runner failed silently")
+
+
+def _apply_automation_action(task, rule):
+    """Apply the action defined in a BoardAutomation rule to a task."""
+    VALID_PRIORITIES = {'low', 'medium', 'high', 'urgent'}
+
+    if rule.action_type == 'set_priority':
+        new_priority = rule.action_value.lower()
+        if new_priority in VALID_PRIORITIES and task.priority != new_priority:
+            Task.objects.filter(pk=task.pk).update(priority=new_priority)
+
+    elif rule.action_type == 'add_label':
+        from kanban.models import TaskLabel
+        label = TaskLabel.objects.filter(
+            board=task.column.board,
+            name__iexact=rule.action_value,
+        ).first()
+        if label:
+            task.labels.add(label)
+
+
+@receiver(pre_save, sender=Task)
 def auto_update_progress_for_done_column(sender, instance, **kwargs):
     """
     Automatically set progress to 100% when a task is moved to a Done or Complete column

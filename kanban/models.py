@@ -26,6 +26,9 @@ from kanban.conflict_models import (
     ConflictNotification
 )
 
+# Import automation models
+from kanban.automation_models import BoardAutomation
+
 class Board(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
@@ -487,6 +490,13 @@ class Task(models.Model):
     is_seed_demo_data = models.BooleanField(
         default=False,
         help_text="True if this is original seed demo data (not user-created)."
+    )
+
+    # WIP Age Tracking
+    column_entered_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when the task last entered its current column (used for WIP age calculation)"
     )
 
     # Item Type (task vs milestone)

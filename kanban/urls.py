@@ -9,6 +9,7 @@ from . import demo_views
 from . import permission_views
 from . import invitation_views
 from . import triple_constraint_views
+from . import automation_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -41,6 +42,8 @@ urlpatterns = [
     path('boards/<int:board_id>/scope-tracking/', views.scope_tracking_dashboard, name='scope_tracking_dashboard'),
     path('boards/<int:board_id>/skill-gaps/', views.skill_gap_dashboard, name='skill_gap_dashboard'),
     path('boards/<int:board_id>/gantt/', views.gantt_chart, name='gantt_chart'),
+    path('boards/<int:board_id>/calendar/', views.board_calendar, name='board_calendar'),
+    path('boards/<int:board_id>/status-report/', views.board_status_report, name='board_status_report'),
     path('boards/<int:board_id>/gantt/add-milestone/', views.add_gantt_milestone, name='add_gantt_milestone'),
     path('boards/<int:board_id>/gantt/milestones/<int:task_id>/delete/', views.delete_gantt_milestone, name='delete_gantt_milestone'),
     path('boards/<int:board_id>/edit/', views.edit_board, name='edit_board'),
@@ -121,6 +124,11 @@ urlpatterns = [
     # Triple Constraint Dashboard (Scope + Cost + Time)
     path('boards/<int:board_id>/triple-constraint/', triple_constraint_views.triple_constraint_dashboard, name='triple_constraint_dashboard'),
     path('boards/<int:board_id>/triple-constraint/set-deadline/', triple_constraint_views.set_project_deadline, name='set_project_deadline'),
+
+    # Board Automations
+    path('boards/<int:board_id>/automations/', automation_views.automations_list, name='automations_list'),
+    path('boards/<int:board_id>/automations/<int:automation_id>/delete/', automation_views.automation_delete, name='automation_delete'),
+    path('boards/<int:board_id>/automations/<int:automation_id>/toggle/', automation_views.automation_toggle, name='automation_toggle'),
 
     
     # Task Dependency Management API Endpoints

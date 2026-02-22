@@ -260,6 +260,12 @@
         <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-info">
             <i class="fas fa-chart-gantt me-1"></i> Gantt Chart
         </a>
+        <a href="{% url 'board_calendar' board.id %}" class="btn btn-outline-secondary">
+            <i class="fas fa-calendar-alt me-1"></i> Calendar
+        </a>
+        <a href="{% url 'board_status_report' board.id %}" class="btn btn-outline-dark">
+            <i class="fas fa-file-alt me-1"></i> Status Report
+        </a>
         <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-outline-success">
             <i class="fas fa-dollar-sign me-1"></i> Budget & ROI
         </a>
@@ -299,6 +305,9 @@
             </a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}">Edit Board</a></li>
+            <li><a class="dropdown-item" href="{% url 'automations_list' board.id %}">
+                <i class="fas fa-bolt me-2 text-warning"></i>Automations
+            </a></li>
             <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}">
                 <i class="fas fa-plug me-2 text-info"></i>Webhooks & Integrations
             </a></li>
@@ -684,6 +693,16 @@
                               title="Click to see why - AI Risk Assessment">
                             🛡️ Risk: {{ task.risk_level|title }} ({{ task.risk_score }}/9)
                             <i class="bi bi-lightbulb ms-1" style="font-size: 0.8em;"></i>
+                        </span>
+                    </div>
+                    {% endif %}
+
+                    <!-- WIP Age Badge -->
+                    {% if task.column_entered_at and task.progress < 100 %}
+                    <div class="mt-1">
+                        <span class="badge {% if task.column_entered_at|wip_age_days > 7 %}bg-danger{% elif task.column_entered_at|wip_age_days > 3 %}bg-warning text-dark{% else %}bg-secondary{% endif %} wip-age-badge"
+                              title="Time spent in this column">
+                            <i class="fas fa-hourglass-half me-1"></i>{{ task.column_entered_at|wip_age_days }}d in column
                         </span>
                     </div>
                     {% endif %}

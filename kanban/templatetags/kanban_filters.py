@@ -135,3 +135,25 @@ def make_range(value):
         return range(int(value))
     except (ValueError, TypeError):
         return range(0)
+
+
+@register.filter
+def wip_age_days(value):
+    """
+    Return the number of days since a task entered its current column.
+    Used for WIP age badges on the Kanban board.
+
+    Usage: {{ task.column_entered_at|wip_age_days }}
+    """
+    try:
+        if value is None:
+            return 0
+        now = timezone.now()
+        if hasattr(value, 'tzinfo') and value.tzinfo is None:
+            # Naive datetime – make it aware
+            import pytz
+            value = pytz.utc.localize(value)
+        delta = now - value
+        return max(0, delta.days)
+    except (AttributeError, TypeError):
+        return 0

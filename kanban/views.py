@@ -1375,6 +1375,71 @@ def gantt_chart(request, board_id):
     return render(request, 'kanban/gantt_chart.html', context)
 
 
+@login_required
+def board_calendar(request, board_id):
+    """
+    Calendar view: shows all tasks with due dates laid out by month/week.
+    Tasks with no due date are listed in a separate 'unscheduled' section.
+    """
+    board = get_object_or_404(Board, id=board_id)
+
+    # Fetch all tasks that have a due date, ordered by due date
+    tasks_with_dates = (
+        Task.objects
+        .filter(column__board=board, item_type='task', due_date__isnull=False)
+        .select_related('column', 'assigned_to')
+        .order_by('due_date')
+    )
+
+    tasks_without_dates = (
+        Task.objects
+        .filter(column__board=board, item_type='task', due_date__isnull=True)
+        .select_related('column', 'assigned_to')
+        .order_by('column__position', 'position')
+    )
+
+    # Build a simple serialisable list of events for FullCalendar (JS)
+    import json as _json
+    events = []
+    for t in tasks_with_dates:
+        color = {
+            'urgent': '#dc3545',
+            'high':   '#fd7e14',
+            'medium': '#0d6efd',
+            'low':    '#198754',
+        }.get(t.priority, '#6c757d')
+
+        due = t.due_date
+        if hasattr(due, 'date'):
+            due_str = due.date().isoformat()
+        else:
+            due_str = due.isoformat()
+
+        events.append({
+            'id': t.id,
+            'title': t.title,
+            'start': due_str,
+            'url': f'/tasks/{t.id}/',
+            'color': color,
+            'extendedProps': {
+                'column': t.column.name,
+                'priority': t.get_priority_display(),
+                'progress': t.progress,
+                'assignee': t.assigned_to.get_full_name() or t.assigned_to.username if t.assigned_to else None,
+            }
+        })
+
+    context = {
+        'board': board,
+        'tasks_without_dates': tasks_without_dates,
+        'events_json': _json.dumps(events),
+        'total_tasks': tasks_with_dates.count() + tasks_without_dates.count(),
+        'scheduled_count': tasks_with_dates.count(),
+        'unscheduled_count': tasks_without_dates.count(),
+    }
+    return render(request, 'kanban/calendar_view.html', context)
+
+
 def add_gantt_milestone(request, board_id):
     """Create a new milestone (stored as a Task with item_type='milestone') from the Gantt chart."""
     if not request.user.is_authenticated:
@@ -3076,3 +3141,95 @@ def load_demo_data(request):
     }
     return render(request, 'kanban/load_demo_data.html', context)
 
+
+@login_required
+def board_status_report(request, board_id):
+    """
+    AI-generated stakeholder status report for a board.
+    Gathers key metrics and calls Gemini to produce a concise weekly update.
+    """
+    from api.ai_usage_utils import check_ai_quota, track_ai_request
+    from kanban.utils.ai_utils import generate_status_report
+    import time as _time
+
+    board = get_object_or_404(Board, id=board_id)
+
+    # Only generate on POST so users explicitly trigger the AI call
+    report_text = None
+    error = None
+
+    if request.method == 'POST':
+        start = _time.time()
+
+        # Quota guard
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            error = 'AI usage quota exceeded. Please wait for your quota to reset.'
+        else:
+            # Gather metrics
+            all_tasks = Task.objects.filter(column__board=board, item_type='task')
+            total_tasks = all_tasks.count()
+            completed = all_tasks.filter(progress=100).count()
+            in_progress = all_tasks.filter(progress__gt=0, progress__lt=100).count()
+            completion_pct = round((completed / total_tasks * 100), 1) if total_tasks else 0
+
+            today = timezone.now().date()
+            overdue = all_tasks.filter(due_date__date__lt=today).exclude(progress=100).count()
+
+            # Velocity: tasks completed in last 7 days
+            week_ago = timezone.now() - timedelta(days=7)
+            velocity = all_tasks.filter(completed_at__gte=week_ago, progress=100).count()
+
+            # High-risk tasks
+            high_risk = all_tasks.filter(risk_level__in=['high', 'critical']).count()
+
+            # Budget status (optional)
+            try:
+                from kanban.budget_models import ProjectBudget
+                budget = ProjectBudget.objects.filter(board=board).order_by('-created_at').first()
+                budget_status = budget.status.title() if budget else 'Not tracked'
+            except Exception:
+                budget_status = 'Not tracked'
+
+            # Column breakdown
+            columns = Column.objects.filter(board=board)
+            tasks_by_column = [
+                {'name': col.name, 'count': all_tasks.filter(column=col).count()}
+                for col in columns
+            ]
+
+            report_data = {
+                'board_name': board.name,
+                'total_tasks': total_tasks,
+                'completed_count': completed,
+                'in_progress_count': in_progress,
+                'completion_pct': completion_pct,
+                'overdue_count': overdue,
+                'velocity': velocity,
+                'high_risk_count': high_risk,
+                'budget_status': budget_status,
+                'tasks_by_column': tasks_by_column,
+                'report_date': today.strftime('%B %d, %Y'),
+            }
+
+            report_text = generate_status_report(report_data)
+
+            elapsed_ms = int((_time.time() - start) * 1000)
+            track_ai_request(
+                user=request.user,
+                feature='status_report',
+                request_type='generate',
+                board_id=board.id,
+                success=bool(report_text),
+                response_time_ms=elapsed_ms,
+            )
+
+            if not report_text:
+                error = 'AI could not generate the report at this time. Please try again shortly.'
+
+    context = {
+        'board': board,
+        'report_text': report_text,
+        'error': error,
+    }
+    return render(request, 'kanban/status_report.html', context)
