@@ -122,6 +122,14 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link position-relative px-3" href="{% url 'messaging:notifications' %}">
+                                <i class="fas fa-bell"></i><span class="d-none d-lg-inline ms-1">Notifications</span>
+                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="unread-notification-badge" style="display: none; font-size: 0.65rem;">
+                                    <span id="notification-count">0</span>
+                                </span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link position-relative px-3" href="{% url 'conflict_dashboard' %}">
                                 <i class="fas fa-exclamation-triangle"></i><span class="d-none d-lg-inline ms-1">Conflicts</span>
                                 {% if active_conflict_count > 0 %}
@@ -332,6 +340,33 @@
         // Auto-refresh unread count every 30 seconds
         {% if user.is_authenticated %}
         setInterval(updateUnreadMessageCount, 30000);
+        {% endif %}
+
+        // Function to update unread notification count
+        function updateUnreadNotificationCount() {
+            {% if user.is_authenticated %}
+            fetch('{% url "messaging:get_unread_notification_count" %}')
+                .then(response => response.json())
+                .then(data => {
+                    const badge = document.getElementById('unread-notification-badge');
+                    const countSpan = document.getElementById('notification-count');
+                    if (data.count > 0) {
+                        countSpan.textContent = data.count > 99 ? '99+' : data.count;
+                        badge.style.display = 'inline-block';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                })
+                .catch(error => console.error('Error fetching notification count:', error));
+            {% endif %}
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            updateUnreadNotificationCount();
+        });
+
+        {% if user.is_authenticated %}
+        setInterval(updateUnreadNotificationCount, 30000);
         {% endif %}
     </script>
     
