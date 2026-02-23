@@ -1,13 +1,22 @@
 """
-Simple trigger-based automation rules for Kanban boards.
+Trigger-based automation rules for Kanban boards.
 
-Supported workflow:
-  - Trigger: task_overdue  → fires when a task's due date has passed and progress < 100
-  - Trigger: moved_to_column → fires when a task is moved to a column whose name contains
-                                the trigger_value string (case-insensitive)
+Triggers:
+  task_overdue         → fires when a task's due date has passed and progress < 100
+  moved_to_column      → fires when a task is moved to a column whose name contains trigger_value
+  task_created         → fires when a task is created on this board
+  task_completed       → fires when a task reaches 100% progress
+  priority_changed     → fires when a task's priority changes to trigger_value (low/medium/high/urgent)
+  task_assigned        → fires when a task is assigned to any team member
+  due_date_approaching → fires (via scheduled task) when due_date is within trigger_value days
 
-  - Action: set_priority   → changes task.priority to action_value (e.g., 'urgent')
-  - Action: add_label      → adds the label matching action_value name to the task
+Actions:
+  set_priority      → changes task.priority to action_value (low/medium/high/urgent)
+  add_label         → adds the label matching action_value name to the task
+  send_notification → notifies action_value recipients (assignee / board_members / creator)
+  move_to_column    → moves the task to the column whose name contains action_value
+  assign_to_user    → assigns the task to the user whose username == action_value
+  set_due_date      → sets due_date = now + action_value days (int string)
 """
 from django.db import models
 from django.contrib.auth.models import User
@@ -15,13 +24,25 @@ from django.contrib.auth.models import User
 
 class BoardAutomation(models.Model):
     TRIGGER_CHOICES = [
-        ('task_overdue',     'Task becomes overdue (due date passed, not done)'),
-        ('moved_to_column',  'Task moved to a column'),
+        ('task_overdue',         'Task becomes overdue (due date passed, not done)'),
+        ('moved_to_column',      'Task moved to a column'),
+        ('task_created',         'Task is created'),
+        ('task_completed',       'Task is marked as complete / done (100%)'),
+        ('priority_changed',     'Task priority changes to…'),
+        ('task_assigned',        'Task is assigned to a team member'),
+        ('due_date_approaching', 'Task due date is approaching (X days before)'),
     ]
     ACTION_CHOICES = [
-        ('set_priority', 'Set priority'),
-        ('add_label',    'Add label'),
+        ('set_priority',      'Set priority'),
+        ('add_label',         'Add label'),
+        ('send_notification', 'Send notification'),
+        ('move_to_column',    'Move task to column'),
+        ('assign_to_user',    'Assign to a specific person'),
+        ('set_due_date',      'Set due date (now + N days)'),
     ]
+
+    # Triggers that require trigger_value
+    TRIGGERS_WITH_VALUE = {'moved_to_column', 'priority_changed', 'due_date_approaching'}
 
     board = models.ForeignKey(
         'kanban.Board',

@@ -14,6 +14,10 @@ from kanban.tasks.demo_tasks import (
     refresh_demo_dates_task,
 )
 
+from kanban.tasks.automation_tasks import (
+    run_due_date_approaching_automations,
+)
+
 __all__ = [
     # Conflict tasks
     'detect_conflicts_task',
@@ -23,4 +27,6 @@ __all__ = [
     'detect_board_conflicts_task',
     # Demo tasks
     'refresh_demo_dates_task',
+    # Automation tasks
+    'run_due_date_approaching_automations',
 ]

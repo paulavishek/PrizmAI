@@ -28,6 +28,31 @@ def track_task_assignment_change(sender, instance, **kwargs):
 
 
 @receiver(pre_save, sender=Task)
+def track_priority_and_progress_change(sender, instance, **kwargs):
+    """
+    Track priority and progress changes before task is saved so automation
+    signals can fire on 'priority_changed' and 'task_completed' triggers.
+    """
+    if instance.pk:
+        try:
+            old_task = Task.objects.get(pk=instance.pk)
+            instance._old_priority = old_task.priority
+            instance._priority_changed = (old_task.priority != instance.priority)
+            instance._old_progress = old_task.progress
+            instance._just_completed = (old_task.progress < 100 and instance.progress >= 100)
+        except Task.DoesNotExist:
+            instance._old_priority = None
+            instance._priority_changed = False
+            instance._old_progress = 0
+            instance._just_completed = False
+    else:
+        instance._old_priority = None
+        instance._priority_changed = False
+        instance._old_progress = 0
+        instance._just_completed = False
+
+
+@receiver(pre_save, sender=Task)
 def track_column_entry_time(sender, instance, **kwargs):
     """
     Record when a task enters a new column so WIP age can be calculated.
@@ -74,8 +99,12 @@ def run_board_automations(sender, instance, created, **kwargs):
             return
 
         now = tz.now()
+
         old_column_id = getattr(instance, '_old_column_id', None)
         column_changed = (not created) and (old_column_id != instance.column_id)
+        priority_changed = getattr(instance, '_priority_changed', False)
+        just_completed   = getattr(instance, '_just_completed', False)
+        assignment_changed = getattr(instance, '_assignment_changed', False)
 
         for rule in automations:
             fired = False
@@ -95,6 +124,23 @@ def run_board_automations(sender, instance, created, **kwargs):
                 ):
                     fired = True
 
+            # --- Trigger: task_created ---
+            elif rule.trigger_type == 'task_created' and created:
+                fired = True
+
+            # --- Trigger: task_completed ---
+            elif rule.trigger_type == 'task_completed' and just_completed:
+                fired = True
+
+            # --- Trigger: priority_changed ---
+            elif rule.trigger_type == 'priority_changed' and priority_changed:
+                if instance.priority.lower() == rule.trigger_value.lower():
+                    fired = True
+
+            # --- Trigger: task_assigned ---
+            elif rule.trigger_type == 'task_assigned' and assignment_changed and instance.assigned_to:
+                fired = True
+
             if fired:
                 _apply_automation_action(instance, rule)
                 rule.run_count += 1
@@ -112,6 +158,9 @@ def run_board_automations(sender, instance, created, **kwargs):
 
 def _apply_automation_action(task, rule):
     """Apply the action defined in a BoardAutomation rule to a task."""
+    import logging
+    from django.utils import timezone as tz
+    log = logging.getLogger(__name__)
     VALID_PRIORITIES = {'low', 'medium', 'high', 'urgent'}
 
     if rule.action_type == 'set_priority':
@@ -127,6 +176,74 @@ def _apply_automation_action(task, rule):
         ).first()
         if label:
             task.labels.add(label)
+
+    elif rule.action_type == 'send_notification':
+        _send_automation_notification(task, rule)
+
+    elif rule.action_type == 'move_to_column':
+        from kanban.models import Column
+        target_col = Column.objects.filter(
+            board=task.column.board,
+            name__icontains=rule.action_value,
+        ).exclude(pk=task.column_id).first()
+        if target_col:
+            Task.objects.filter(pk=task.pk).update(column=target_col)
+
+    elif rule.action_type == 'assign_to_user':
+        from django.contrib.auth.models import User as AuthUser
+        user = AuthUser.objects.filter(username=rule.action_value).first()
+        if user:
+            Task.objects.filter(pk=task.pk).update(assigned_to=user)
+
+    elif rule.action_type == 'set_due_date':
+        try:
+            days = int(rule.action_value)
+            new_due = tz.now() + tz.timedelta(days=days)
+            Task.objects.filter(pk=task.pk).update(due_date=new_due)
+        except (ValueError, TypeError):
+            log.warning("BoardAutomation set_due_date: couldn't parse days from '%s'", rule.action_value)
+
+
+def _send_automation_notification(task, rule):
+    """Send in-app notifications triggered by an automation rule."""
+    try:
+        from messaging.models import Notification
+        from django.contrib.auth.models import User as AuthUser
+
+        board = task.column.board
+        # Determine sender: use the automation creator or board creator
+        sender = rule.created_by or board.created_by
+        if not sender:
+            return
+
+        recipient_key = rule.action_value.strip().lower()  # assignee / board_members / creator
+        recipients = []
+
+        if recipient_key == 'assignee' and task.assigned_to:
+            recipients = [task.assigned_to]
+        elif recipient_key == 'creator' and task.created_by:
+            recipients = [task.created_by]
+        elif recipient_key == 'board_members':
+            recipients = list(board.members.all())
+            if board.created_by and board.created_by not in recipients:
+                recipients.append(board.created_by)
+
+        text = (
+            f'Automation "{rule.name}" was triggered for task "{task.title}" '
+            f'on board "{board.name}".' 
+        )
+        for recipient in recipients:
+            if recipient == sender:
+                continue  # skip self-notification
+            Notification.objects.create(
+                recipient=recipient,
+                sender=sender,
+                notification_type='ACTIVITY',
+                text=text,
+            )
+    except Exception:
+        import logging
+        logging.getLogger(__name__).exception("_send_automation_notification failed silently")
 
 
 @receiver(pre_save, sender=Task)

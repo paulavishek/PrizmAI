@@ -129,6 +129,7 @@ urlpatterns = [
     path('boards/<int:board_id>/automations/', automation_views.automations_list, name='automations_list'),
     path('boards/<int:board_id>/automations/<int:automation_id>/delete/', automation_views.automation_delete, name='automation_delete'),
     path('boards/<int:board_id>/automations/<int:automation_id>/toggle/', automation_views.automation_toggle, name='automation_toggle'),
+    path('boards/<int:board_id>/automations/templates/<str:template_id>/activate/', automation_views.automation_activate_template, name='automation_activate_template'),
 
     
     # Task Dependency Management API Endpoints

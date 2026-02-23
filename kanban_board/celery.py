@@ -48,6 +48,11 @@ app.conf.beat_schedule = {
         'task': 'kanban.weekly_time_summary',
         'schedule': crontab(hour=8, minute=0, day_of_week='1'),  # Monday at 8 AM
     },
+    # Due-date approaching automations - runs every hour
+    'due-date-approaching-automations': {
+        'task': 'kanban.run_due_date_approaching_automations',
+        'schedule': crontab(minute=30),  # Every hour at :30 (offset from conflict detection)
+    },
 }
 
 

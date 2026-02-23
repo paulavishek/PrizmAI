@@ -1,247 +1,413 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}{{ board.name }} - Automations{% endblock %}
+{% block title %}{{ board.name }} — Automations{% endblock %}
 
 {% block extra_css %}
 <style>
-    .rule-card {
-        border-radius: 10px;
-        border: 1px solid #dee2e6;
-        padding: 20px;
-        background: #fff;
-        transition: box-shadow 0.2s;
-    }
-    .rule-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
-    .rule-card.inactive { opacity: 0.6; }
-    .trigger-badge { background: #e0f0ff; color: #0d6efd; font-size: 0.8rem; padding: 3px 10px; border-radius: 20px; }
-    .action-badge  { background: #e8f8e8; color: #198754; font-size: 0.8rem; padding: 3px 10px; border-radius: 20px; }
-    .arrow-icon    { font-size: 1.2rem; color: #adb5bd; }
-    .create-card {
-        background: linear-gradient(135deg, #f8f9fa, #fff);
-        border-radius: 12px;
-        border: 2px dashed #dee2e6;
-        padding: 28px;
-    }
-    .info-section {
-        background: #fffbeb;
-        border: 1px solid #fde68a;
-        border-radius: 8px;
-        padding: 16px;
-        margin-bottom: 24px;
-    }
+  .rule-card          { border-radius:10px; border:1px solid #dee2e6; padding:18px 20px;
+                        background:#fff; transition:box-shadow .2s; }
+  .rule-card:hover    { box-shadow:0 4px 16px rgba(0,0,0,.08); }
+  .rule-card.inactive { opacity:.55; }
+  .trigger-badge { background:#e0f0ff; color:#0d6efd; font-size:.78rem;
+                   padding:3px 10px; border-radius:20px; white-space:nowrap; }
+  .action-badge  { background:#e8f8e8; color:#198754; font-size:.78rem;
+                   padding:3px 10px; border-radius:20px; white-space:nowrap; }
+  .arrow-icon    { font-size:1.1rem; color:#adb5bd; }
+  .create-card {
+    background:linear-gradient(135deg,#f8f9fa,#fff);
+    border-radius:12px; border:2px dashed #dee2e6; padding:26px;
+  }
+  .info-section {
+    background:#fffbeb; border:1px solid #fde68a; border-radius:8px;
+    padding:14px; margin-bottom:22px;
+  }
+  .tpl-card {
+    border-radius:10px; border:1px solid #e9ecef; padding:14px 16px;
+    background:#fff; transition:border-color .2s, box-shadow .2s;
+  }
+  .tpl-card:hover { border-color:#0d6efd33; box-shadow:0 2px 10px rgba(13,110,253,.07); }
+  .tpl-card.activated { opacity:.6; }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="container-fluid px-4">
 
-    <!-- Header -->
-    <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
-        <div>
-            <h1 class="h3 mb-0">
-                <i class="fas fa-bolt me-2 text-warning"></i>Automations
-            </h1>
-            <p class="text-muted mb-0">{{ board.name }} — trigger-based rules that run automatically</p>
-        </div>
-        <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary btn-sm">
-            <i class="fas fa-columns me-1"></i> Back to Board
-        </a>
+  <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+    <div>
+      <h1 class="h3 mb-0">
+        <i class="fas fa-bolt me-2 text-warning"></i>Automations
+      </h1>
+      <p class="text-muted mb-0">{{ board.name }} — trigger-based rules that run automatically</p>
     </div>
+    <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary btn-sm">
+      <i class="fas fa-columns me-1"></i> Back to Board
+    </a>
+  </div>
 
-    <!-- Info -->
-    <div class="info-section">
-        <strong><i class="fas fa-info-circle me-2 text-warning"></i>How Automations Work</strong>
-        <p class="mb-0 small mt-1">
-            Each rule has a <strong>trigger</strong> (something that happens) and an <strong>action</strong>
-            (what PrizmAI does automatically).<br>
-            Example: <em>"When a task is moved to Review → set priority to High"</em> or
-            <em>"When a task becomes overdue → set priority to Urgent"</em>.
-        </p>
-    </div>
+  <div class="info-section">
+    <strong><i class="fas fa-info-circle me-2 text-warning"></i>How Automations Work</strong>
+    <p class="mb-0 small mt-1">
+      Each rule has a <strong>trigger</strong> (something that happens) and an <strong>action</strong>
+      (what PrizmAI does automatically).<br>
+      Example: <em>"When a task is completed → notify the creator"</em> or
+      <em>"When due date is 2 days away → notify the assignee"</em>.
+    </p>
+  </div>
 
-    <div class="row g-4">
+  <div class="row g-4">
 
-        <!-- Active Rules -->
-        <div class="col-lg-7">
-            <h5 class="mb-3"><i class="fas fa-list me-2 text-secondary"></i>Rules ({{ automations.count }})</h5>
-            {% if not automations %}
-            <div class="text-center text-muted py-5 border rounded">
-                <i class="fas fa-bolt fa-3x mb-3 text-light"></i>
-                <p>No automation rules yet. Create your first rule →</p>
-            </div>
-            {% endif %}
-            {% for rule in automations %}
-            <div class="rule-card mb-3 {% if not rule.is_active %}inactive{% endif %}">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div class="flex-grow-1">
-                        <div class="d-flex align-items-center gap-2 mb-2">
-                            <strong>{{ rule.name }}</strong>
-                            {% if rule.is_active %}
-                            <span class="badge bg-success">Active</span>
-                            {% else %}
-                            <span class="badge bg-secondary">Paused</span>
-                            {% endif %}
-                        </div>
-                        <div class="d-flex align-items-center gap-2 flex-wrap">
-                            <span class="trigger-badge">
-                                <i class="fas fa-play-circle me-1"></i>
-                                {% if rule.trigger_type == 'task_overdue' %}
-                                    Task becomes overdue
-                                {% else %}
-                                    Moved to column containing "{{ rule.trigger_value }}"
-                                {% endif %}
-                            </span>
-                            <span class="arrow-icon">→</span>
-                            <span class="action-badge">
-                                <i class="fas fa-cogs me-1"></i>
-                                {% if rule.action_type == 'set_priority' %}
-                                    Set priority to "{{ rule.action_value|title }}"
-                                {% else %}
-                                    Add label "{{ rule.action_value }}"
-                                {% endif %}
-                            </span>
-                        </div>
-                        <div class="text-muted small mt-2">
-                            Fired {{ rule.run_count }} time{{ rule.run_count|pluralize }}
-                            {% if rule.last_run_at %}· last run {{ rule.last_run_at|date:"M d, Y H:i" }}{% endif %}
-                            · Created by {{ rule.created_by.username|default:"—" }}
-                        </div>
-                    </div>
-                    <div class="d-flex gap-2 ms-3">
-                        <!-- Toggle -->
-                        <form method="post" action="{% url 'automation_toggle' board.id rule.id %}">
-                            {% csrf_token %}
-                            <button class="btn btn-sm {% if rule.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
-                                    title="{% if rule.is_active %}Pause{% else %}Enable{% endif %}">
-                                <i class="fas {% if rule.is_active %}fa-pause{% else %}fa-play{% endif %}"></i>
-                            </button>
-                        </form>
-                        <!-- Delete -->
-                        <form method="post" action="{% url 'automation_delete' board.id rule.id %}"
-                              onsubmit="return confirm('Delete automation \'{{ rule.name }}\'?');">
-                            {% csrf_token %}
-                            <button class="btn btn-sm btn-outline-danger" title="Delete">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
+    <!-- LEFT: Templates + Rules -->
+    <div class="col-lg-7">
 
-        <!-- Create Rule Form -->
-        <div class="col-lg-5">
-            <div class="create-card">
-                <h5 class="mb-3"><i class="fas fa-plus-circle me-2 text-primary"></i>Create New Rule</h5>
-                <form method="post">
-                    {% csrf_token %}
-
-                    <!-- Name -->
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Rule Name</label>
-                        <input type="text" name="name" class="form-control"
-                               placeholder="e.g. Mark overdue as Urgent" required maxlength="120">
-                    </div>
-
-                    <!-- Trigger -->
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Trigger</label>
-                        <select name="trigger_type" id="triggerType" class="form-select" onchange="toggleTriggerValue()">
-                            {% for value, label in trigger_choices %}
-                            <option value="{{ value }}">{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-3" id="triggerValueGroup">
-                        <label class="form-label text-muted small">Column name fragment (e.g. "Review" matches "In Review")</label>
-                        <input type="text" name="trigger_value" class="form-control form-control-sm"
-                               placeholder="e.g. Review">
-                    </div>
-
-                    <!-- Action -->
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold">Action</label>
-                        <select name="action_type" id="actionType" class="form-select" onchange="toggleActionValue()">
-                            {% for value, label in action_choices %}
-                            <option value="{{ value }}">{{ label }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="mb-4" id="actionValueGroup">
-                        <label class="form-label text-muted small" id="actionValueLabel">Value</label>
-                        <!-- Priority selector (default shown) -->
-                        <select name="action_value" id="prioritySelect" class="form-select" required>
-                            <option value="urgent">Urgent</option>
-                            <option value="high">High</option>
-                            <option value="medium">Medium</option>
-                            <option value="low">Low</option>
-                        </select>
-                        <!-- Label selector (hidden by default) -->
-                        <select name="action_value_label" id="labelSelect" class="form-select" style="display:none;">
-                            {% if labels %}
-                                {% for label in labels %}
-                                <option value="{{ label.name }}">{{ label.name }}</option>
-                                {% endfor %}
-                            {% else %}
-                                <option value="" disabled>No labels on this board yet</option>
-                            {% endif %}
-                        </select>
-                        <!-- Hidden input to unify the two selects -->
-                        <input type="hidden" name="action_value_hidden" id="actionValueHidden">
-                    </div>
-
-                    <button type="submit" class="btn btn-primary w-100" onclick="prepareActionValue()">
-                        <i class="fas fa-plus me-2"></i>Create Rule
-                    </button>
+      {% if templates %}
+      <div class="mb-4">
+        <h6 class="text-uppercase text-muted fw-semibold mb-3" style="letter-spacing:.06em;font-size:.78rem;">
+          <i class="fas fa-magic me-1"></i> Quick-start templates — activate with one click
+        </h6>
+        <div class="row g-2">
+          {% for tpl in templates %}
+          <div class="col-md-4">
+            <div class="tpl-card h-100 {% if tpl.already_active %}activated{% endif %}">
+              <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="text-{{ tpl.color }}"><i class="fas {{ tpl.icon }}"></i></span>
+                <strong class="small">{{ tpl.name }}</strong>
+              </div>
+              <p class="text-muted mb-2" style="font-size:.78rem;line-height:1.4;">{{ tpl.description }}</p>
+              {% if tpl.already_active %}
+                <span class="badge bg-success-subtle text-success border border-success-subtle">
+                  <i class="fas fa-check me-1"></i>Active
+                </span>
+              {% else %}
+                <form method="post" action="{% url 'automation_activate_template' board.id tpl.id %}">
+                  {% csrf_token %}
+                  <button class="btn btn-sm btn-outline-primary w-100">
+                    <i class="fas fa-bolt me-1"></i>Activate
+                  </button>
                 </form>
+              {% endif %}
             </div>
+          </div>
+          {% endfor %}
         </div>
+      </div>
+      {% endif %}
 
+      <h5 class="mb-3">
+        <i class="fas fa-list me-2 text-secondary"></i>Rules ({{ automations.count }})
+      </h5>
+
+      {% if not automations %}
+      <div class="text-center text-muted py-5 border rounded bg-white">
+        <i class="fas fa-bolt fa-3x mb-3 text-light"></i>
+        <p class="mb-1">No automation rules yet.</p>
+        <p class="small">Activate a template above or build a custom rule on the right &rarr;</p>
+      </div>
+      {% endif %}
+
+      {% for rule in automations %}
+      <div class="rule-card mb-3 {% if not rule.is_active %}inactive{% endif %}">
+        <div class="d-flex justify-content-between align-items-start">
+          <div class="flex-grow-1">
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <strong>{{ rule.name }}</strong>
+              {% if rule.is_active %}
+                <span class="badge bg-success">Active</span>
+              {% else %}
+                <span class="badge bg-secondary">Paused</span>
+              {% endif %}
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+              <span class="trigger-badge">
+                <i class="fas fa-play-circle me-1"></i>
+                {% if rule.trigger_type == 'task_overdue' %}Task becomes overdue
+                {% elif rule.trigger_type == 'moved_to_column' %}Moved to column "{{ rule.trigger_value }}"
+                {% elif rule.trigger_type == 'task_created' %}Task is created
+                {% elif rule.trigger_type == 'task_completed' %}Task is completed (100%)
+                {% elif rule.trigger_type == 'priority_changed' %}Priority changes to "{{ rule.trigger_value|title }}"
+                {% elif rule.trigger_type == 'task_assigned' %}Task is assigned
+                {% elif rule.trigger_type == 'due_date_approaching' %}Due date &le; {{ rule.trigger_value }} day{{ rule.trigger_value|pluralize }} away
+                {% else %}{{ rule.get_trigger_type_display }}{% endif %}
+              </span>
+              <span class="arrow-icon">&rarr;</span>
+              <span class="action-badge">
+                <i class="fas fa-cogs me-1"></i>
+                {% if rule.action_type == 'set_priority' %}Set priority &rarr; {{ rule.action_value|title }}
+                {% elif rule.action_type == 'add_label' %}Add label "{{ rule.action_value }}"
+                {% elif rule.action_type == 'send_notification' %}Notify {{ rule.action_value }}
+                {% elif rule.action_type == 'move_to_column' %}Move to column "{{ rule.action_value }}"
+                {% elif rule.action_type == 'assign_to_user' %}Assign to @{{ rule.action_value }}
+                {% elif rule.action_type == 'set_due_date' %}Set due date &rarr; now + {{ rule.action_value }} day{{ rule.action_value|pluralize }}
+                {% else %}{{ rule.get_action_type_display }}{% endif %}
+              </span>
+            </div>
+            <div class="text-muted small mt-2">
+              Fired {{ rule.run_count }} time{{ rule.run_count|pluralize }}
+              {% if rule.last_run_at %}&middot; last run {{ rule.last_run_at|date:"M d, Y H:i" }}{% endif %}
+              &middot; Created by {{ rule.created_by.username|default:"&mdash;" }}
+            </div>
+          </div>
+          <div class="d-flex gap-2 ms-3 flex-shrink-0">
+            <form method="post" action="{% url 'automation_toggle' board.id rule.id %}">
+              {% csrf_token %}
+              <button class="btn btn-sm {% if rule.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
+                      title="{% if rule.is_active %}Pause{% else %}Enable{% endif %}">
+                <i class="fas {% if rule.is_active %}fa-pause{% else %}fa-play{% endif %}"></i>
+              </button>
+            </form>
+            <form method="post" action="{% url 'automation_delete' board.id rule.id %}"
+                  onsubmit="return confirm('Delete automation \'{{ rule.name|escapejs }}\'?');">
+              {% csrf_token %}
+              <button class="btn btn-sm btn-outline-danger" title="Delete">
+                <i class="fas fa-trash-alt"></i>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
     </div>
+
+    <!-- RIGHT: Create Rule Form -->
+    <div class="col-lg-5">
+      <div class="create-card">
+        <h5 class="mb-3"><i class="fas fa-plus-circle me-2 text-primary"></i>Create New Rule</h5>
+
+        {% if messages %}
+          {% for msg in messages %}
+          <div class="alert alert-{{ msg.tags|default:'info' }} alert-dismissible py-2 small" role="alert">
+            {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+          </div>
+          {% endfor %}
+        {% endif %}
+
+        <form id="createRuleForm" method="post" novalidate>
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Rule Name <span class="text-danger">*</span></label>
+            <input type="text" name="name" id="ruleName" class="form-control"
+                   placeholder="e.g. Notify assignee before deadline" required maxlength="120">
+            <div class="invalid-feedback">Please enter a rule name.</div>
+          </div>
+
+          <!-- TRIGGER -->
+          <div class="mb-2">
+            <label class="form-label fw-semibold">Trigger</label>
+            <select name="trigger_type" id="triggerType" class="form-select" onchange="onTriggerChange()">
+              {% for value, label in trigger_choices %}
+              <option value="{{ value }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3" id="tvColumnFragment" style="display:none;">
+            <label class="form-label text-muted small">Column name fragment (e.g. "Review" matches "In Review")</label>
+            <input type="text" id="tvColInput" class="form-control form-control-sm" placeholder="e.g. Review">
+          </div>
+          <div class="mb-3" id="tvPriority" style="display:none;">
+            <label class="form-label text-muted small">When priority changes to</label>
+            <select id="tvPrioritySelect" class="form-select form-select-sm">
+              <option value="urgent">Urgent</option><option value="high">High</option>
+              <option value="medium">Medium</option><option value="low">Low</option>
+            </select>
+          </div>
+          <div class="mb-3" id="tvDays" style="display:none;">
+            <label class="form-label text-muted small">Days before due date</label>
+            <input type="number" id="tvDaysInput" class="form-control form-control-sm" value="2" min="1" max="365">
+          </div>
+          <!-- hidden field — populated by JS before submit -->
+          <input type="hidden" name="trigger_value" id="triggerValueHidden">
+
+          <!-- ACTION -->
+          <div class="mb-2">
+            <label class="form-label fw-semibold">Action</label>
+            <select name="action_type" id="actionType" class="form-select" onchange="onActionChange()">
+              {% for value, label in action_choices %}
+              <option value="{{ value }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3" id="avPriority" style="display:none;">
+            <label class="form-label text-muted small">Priority</label>
+            <select id="avPrioritySelect" class="form-select form-select-sm">
+              <option value="urgent">Urgent</option><option value="high">High</option>
+              <option value="medium">Medium</option><option value="low">Low</option>
+            </select>
+          </div>
+          <div class="mb-3" id="avLabel" style="display:none;">
+            <label class="form-label text-muted small">Label</label>
+            <select id="avLabelSelect" class="form-select form-select-sm">
+              {% for label in labels %}<option value="{{ label.name }}">{{ label.name }}</option>
+              {% empty %}<option value="" disabled>No labels on this board yet</option>{% endfor %}
+            </select>
+          </div>
+          <div class="mb-3" id="avNotify" style="display:none;">
+            <label class="form-label text-muted small">Notify</label>
+            <select id="avNotifySelect" class="form-select form-select-sm">
+              <option value="assignee">Task assignee</option>
+              <option value="board_members">All board members</option>
+              <option value="creator">Task creator</option>
+            </select>
+          </div>
+          <div class="mb-3" id="avMoveCol" style="display:none;">
+            <label class="form-label text-muted small">Destination column</label>
+            <select id="avMoveColSelect" class="form-select form-select-sm">
+              {% for col in columns %}<option value="{{ col.name }}">{{ col.name }}</option>
+              {% empty %}<option value="" disabled>No columns available</option>{% endfor %}
+            </select>
+          </div>
+          <div class="mb-3" id="avAssign" style="display:none;">
+            <label class="form-label text-muted small">Assign to</label>
+            <select id="avAssignSelect" class="form-select form-select-sm">
+              {% for member in members %}
+              <option value="{{ member.username }}">{{ member.get_full_name|default:member.username }} (@{{ member.username }})</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3" id="avDays" style="display:none;">
+            <label class="form-label text-muted small">Days from now</label>
+            <input type="number" id="avDaysInput" class="form-control form-control-sm" value="7" min="0" max="9999">
+          </div>
+          <!-- hidden field — populated by JS before submit -->
+          <input type="hidden" name="action_value" id="actionValueHidden">
+
+          <button type="button" class="btn btn-primary w-100 mt-1" onclick="openConfirmModal()">
+            <i class="fas fa-eye me-2"></i>Review &amp; Create Rule
+          </button>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- CONFIRMATION MODAL -->
+<div class="modal fade" id="confirmRuleModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-bolt text-warning me-2"></i>Confirm New Rule</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          Review the rule below. Once saved it will start running automatically on
+          <strong>{{ board.name }}</strong>.
+        </p>
+        <div class="bg-light rounded p-3 border" id="confirmRuleSummary"></div>
+        <p class="text-muted small mt-3 mb-0">
+          <i class="fas fa-info-circle me-1"></i>
+          This rule will affect <strong>all current and future tasks</strong> on this board that
+          match the trigger. You can pause or delete it at any time.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="submitRuleForm()">
+          <i class="fas fa-plus me-1"></i>Create Rule
+        </button>
+      </div>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-function toggleTriggerValue() {
-    const t = document.getElementById('triggerType').value;
-    document.getElementById('triggerValueGroup').style.display =
-        t === 'moved_to_column' ? 'block' : 'none';
+const TRIGGER_LABELS = {
+  task_overdue:'Task becomes overdue (due date passed, not done)',
+  moved_to_column:'Task moved to a column containing\u2026',
+  task_created:'Task is created',
+  task_completed:'Task is marked as complete / done (100%)',
+  priority_changed:'Task priority changes to\u2026',
+  task_assigned:'Task is assigned to a team member',
+  due_date_approaching:'Task due date is approaching (X days before)',
+};
+const ACTION_LABELS = {
+  set_priority:'Set priority', add_label:'Add label',
+  send_notification:'Send notification', move_to_column:'Move task to column',
+  assign_to_user:'Assign to a specific person', set_due_date:'Set due date (now + N days)',
+};
+
+function onTriggerChange() {
+  const t = document.getElementById('triggerType').value;
+  ['tvColumnFragment','tvPriority','tvDays'].forEach(id =>
+    document.getElementById(id).style.display = 'none');
+  if      (t === 'moved_to_column')       document.getElementById('tvColumnFragment').style.display = 'block';
+  else if (t === 'priority_changed')      document.getElementById('tvPriority').style.display = 'block';
+  else if (t === 'due_date_approaching')  document.getElementById('tvDays').style.display = 'block';
 }
-function toggleActionValue() {
-    const a = document.getElementById('actionType').value;
-    if (a === 'set_priority') {
-        document.getElementById('prioritySelect').style.display = 'block';
-        document.getElementById('prioritySelect').required = true;
-        document.getElementById('labelSelect').style.display = 'none';
-        document.getElementById('labelSelect').required = false;
-        document.getElementById('actionValueLabel').textContent = 'Priority';
-    } else {
-        document.getElementById('prioritySelect').style.display = 'none';
-        document.getElementById('prioritySelect').required = false;
-        document.getElementById('labelSelect').style.display = 'block';
-        document.getElementById('labelSelect').required = true;
-        document.getElementById('actionValueLabel').textContent = 'Label';
-    }
+
+function onActionChange() {
+  const a = document.getElementById('actionType').value;
+  ['avPriority','avLabel','avNotify','avMoveCol','avAssign','avDays'].forEach(id =>
+    document.getElementById(id).style.display = 'none');
+  const map = {set_priority:'avPriority',add_label:'avLabel',send_notification:'avNotify',
+               move_to_column:'avMoveCol',assign_to_user:'avAssign',set_due_date:'avDays'};
+  if (map[a]) document.getElementById(map[a]).style.display = 'block';
 }
-function prepareActionValue() {
-    const a = document.getElementById('actionType').value;
-    const prioritySelect = document.getElementById('prioritySelect');
-    const labelSelect   = document.getElementById('labelSelect');
-    // The form posts both selects; the view uses action_value (priority) and
-    // action_value_label (label). We need to ensure the right one goes into action_value.
-    if (a === 'add_label') {
-        prioritySelect.name = '';
-        labelSelect.name = 'action_value';
-    } else {
-        prioritySelect.name = 'action_value';
-        labelSelect.name = '';
-    }
+
+function getValues() {
+  const triggerType = document.getElementById('triggerType').value;
+  const actionType  = document.getElementById('actionType').value;
+  let triggerValue = '';
+  if (triggerType === 'moved_to_column')        triggerValue = document.getElementById('tvColInput').value.trim();
+  else if (triggerType === 'priority_changed')  triggerValue = document.getElementById('tvPrioritySelect').value;
+  else if (triggerType === 'due_date_approaching') triggerValue = document.getElementById('tvDaysInput').value;
+  let actionValue = '';
+  const avMap = {set_priority:'avPrioritySelect',add_label:'avLabelSelect',
+                 send_notification:'avNotifySelect',move_to_column:'avMoveColSelect',
+                 assign_to_user:'avAssignSelect',set_due_date:'avDaysInput'};
+  if (avMap[actionType]) actionValue = document.getElementById(avMap[actionType]).value;
+  return {name:document.getElementById('ruleName').value.trim(), triggerType, triggerValue, actionType, actionValue};
 }
-// Init
-toggleTriggerValue();
-toggleActionValue();
+
+function openConfirmModal() {
+  const form = document.getElementById('createRuleForm');
+  if (!form.checkValidity()) { form.classList.add('was-validated'); return; }
+  const v = getValues();
+  if (!v.name) { alert('Please enter a rule name.'); return; }
+
+  document.getElementById('triggerValueHidden').value = v.triggerValue;
+  document.getElementById('actionValueHidden').value  = v.actionValue;
+
+  let triggerText = TRIGGER_LABELS[v.triggerType] || v.triggerType;
+  if      (v.triggerType === 'moved_to_column')        triggerText = 'Moved to column containing "' + v.triggerValue + '"';
+  else if (v.triggerType === 'priority_changed')       triggerText = 'Priority changes to "' + v.triggerValue + '"';
+  else if (v.triggerType === 'due_date_approaching')   triggerText = 'Due date \u2264 ' + v.triggerValue + ' day(s) away';
+
+  let actionText = ACTION_LABELS[v.actionType] || v.actionType;
+  if      (v.actionType === 'set_priority')     actionText = 'Set priority to "' + v.actionValue + '"';
+  else if (v.actionType === 'add_label')         actionText = 'Add label "' + v.actionValue + '"';
+  else if (v.actionType === 'send_notification') {
+    const t={assignee:'task assignee',board_members:'all board members',creator:'task creator'};
+    actionText = 'Send notification to ' + (t[v.actionValue] || v.actionValue);
+  }
+  else if (v.actionType === 'move_to_column')   actionText = 'Move task to column "' + v.actionValue + '"';
+  else if (v.actionType === 'assign_to_user')    actionText = 'Assign to @' + v.actionValue;
+  else if (v.actionType === 'set_due_date')      actionText = 'Set due date to now + ' + v.actionValue + ' day(s)';
+
+  document.getElementById('confirmRuleSummary').innerHTML =
+    '<div class="fw-semibold mb-2">' + esc(v.name) + '</div>' +
+    '<div class="d-flex align-items-center gap-2 flex-wrap">' +
+    '<span class="trigger-badge"><i class="fas fa-play-circle me-1"></i>' + esc(triggerText) + '</span>' +
+    '<span class="arrow-icon">\u2192</span>' +
+    '<span class="action-badge"><i class="fas fa-cogs me-1"></i>' + esc(actionText) + '</span></div>';
+
+  new bootstrap.Modal(document.getElementById('confirmRuleModal')).show();
+}
+
+function submitRuleForm() {
+  bootstrap.Modal.getInstance(document.getElementById('confirmRuleModal')).hide();
+  document.getElementById('createRuleForm').submit();
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                  .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
+document.addEventListener('DOMContentLoaded', function() { onTriggerChange(); onActionChange(); });
 </script>
 {% endblock %}
