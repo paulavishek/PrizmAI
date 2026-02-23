@@ -190,141 +190,109 @@ def _refresh_task_dates(now, base_date):
     """
     Refresh task due_date and start_date fields.
     ONLY refreshes original seed demo data, not user-created content.
-    
-    IMPORTANT: This function now respects phase ordering to ensure that:
-    - Phase 1 tasks have dates BEFORE Phase 2 tasks
-    - Phase 2 tasks have dates BEFORE Phase 3 tasks
-    This maintains proper Gantt chart display order.
+
+    APPROACH: Offset-preserving shift.
+    ─────────────────────────────────
+    Rather than rescheduling every task from scratch (which destroys the
+    carefully designed parallel dependency chains in populate_demo_data),
+    we shift ALL tasks in each board by a single uniform delta so that
+    the earliest task in the board starts a fixed number of days before
+    today.  This means:
+
+    • The *relative* positions of tasks (offsets) are unchanged → the
+      critical-path topology and slack values are preserved.
+    • The *absolute* dates are updated to stay current so the Gantt chart
+      always looks like an active project.
+    • Task durations (due_date − start_date) are never modified.
+
+    Edge-case: tasks that have no start_date are left untouched.
     """
     try:
         from kanban.models import Task
         from django.db.models import Q
-        
+        import datetime as _dt
+
         demo_org_ids = _get_demo_organizations()
         if not demo_org_ids:
-            # Fall back to name-based detection
             from accounts.models import Organization
             demo_org_ids = list(Organization.objects.filter(
                 name__icontains='demo'
             ).values_list('id', flat=True))
-        
-        # Only get tasks that are SEED demo data (not user-created)
-        # User-created tasks have created_by_session set
+
+        # Only seed demo tasks (not user-created)
         tasks = list(Task.objects.filter(
             column__board__organization_id__in=demo_org_ids
         ).filter(
             Q(created_by_session__isnull=True) | Q(created_by_session='')
         ).select_related('column'))
-        
+
         if not tasks:
             return 0
-        
-        # Group tasks by phase and board for proper staggered scheduling
-        # Tasks within the same board/phase should be sequential (no overlaps)
-        tasks_by_board_phase = {}
+
+        # ── Group by board ────────────────────────────────────────────────────
+        tasks_by_board = {}
         for task in tasks:
-            if not task.due_date and not task.start_date:
-                continue
-            phase_name = getattr(task, 'phase', None) or 'No Phase'
+            if task.start_date is None:
+                continue  # milestones/tasks without start_date are left alone
             board_id = task.column.board_id if task.column else 0
-            key = (board_id, phase_name)
-            if key not in tasks_by_board_phase:
-                tasks_by_board_phase[key] = []
-            tasks_by_board_phase[key].append(task)
-        
+            tasks_by_board.setdefault(board_id, []).append(task)
+
         tasks_to_update = []
-        
-        # Process each board separately so their tasks don't interfere
-        boards_processed = set()
-        for (board_id, phase_name), _ in tasks_by_board_phase.items():
-            boards_processed.add(board_id)
-        
-        for board_id in boards_processed:
-            # Process all phases for this board in order
-            # Start from a fixed offset for the board
-            board_start_offset = -10  # Start tasks 10 days before today
-            prev_due_date = base_date + timedelta(days=board_start_offset)
-            
-            for phase_num in range(1, 4):  # Phase 1, 2, 3
-                phase_name = f'Phase {phase_num}'
-                key = (board_id, phase_name)
-                
-                if key not in tasks_by_board_phase:
-                    continue
-                
-                phase_tasks = tasks_by_board_phase[key]
-                
-                # Add a small gap between phases (3-5 days) for visual separation
-                if phase_num > 1:
-                    prev_due_date = prev_due_date + timedelta(days=(board_id % 3) + 3)
-                
-                # Sort tasks by ID for consistent ordering
-                phase_tasks_sorted = sorted(phase_tasks, key=lambda t: t.id)
-                
-                for idx, task in enumerate(phase_tasks_sorted):
-                    # Each task starts 0-2 days after the previous task's due date
-                    # This creates staggered, non-overlapping tasks in the Gantt chart
-                    gap = (task.id + idx) % 3  # 0, 1, or 2 days gap (deterministic)
-                    task_start = prev_due_date + timedelta(days=gap)
-                    
-                    # Task duration based on complexity (3-6 days)
+
+        for board_id, board_tasks in tasks_by_board.items():
+            # Find the earliest start_date across this entire board.
+            min_start = min(t.start_date for t in board_tasks)
+
+            # We want the first task to start `anchor_offset` days before today
+            # so Phase 1 appears to be in-flight/recently started.
+            anchor_offset = 3  # days before today
+            new_anchor = base_date - timedelta(days=anchor_offset)
+
+            # Shift delta: how many days to move every date
+            shift = (new_anchor - min_start).days  # can be positive or negative
+
+            if shift == 0:
+                continue  # dates are already current – nothing to do
+
+            for task in board_tasks:
+                # New start_date (always a date object on the model)
+                new_start = task.start_date + timedelta(days=shift)
+
+                # Preserve the original duration: due_date − start_date
+                if task.due_date:
+                    # due_date is a DateTimeField (datetime)
+                    if hasattr(task.due_date, 'date'):
+                        old_due_date = task.due_date.date()
+                    else:
+                        old_due_date = task.due_date
+                    duration_days = (old_due_date - task.start_date).days
+                else:
+                    # Fallback duration from complexity when due_date is absent
                     complexity = getattr(task, 'complexity_score', 5) or 5
-                    duration = max(3, min((complexity // 2) + 3, 6))  # 3-6 days
-                    
-                    task_due = task_start + timedelta(days=duration)
-                    
-                    # Set start_date and due_date
-                    task.start_date = task_start
-                    task.due_date = task_due
-                    
-                    # Update prev_due_date for the next task
-                    prev_due_date = task_due
-                    
-                    tasks_to_update.append(task)
-            
-            # Also handle tasks without a phase (if any)
-            key = (board_id, 'No Phase')
-            if key in tasks_by_board_phase:
-                phase_tasks = tasks_by_board_phase[key]
-                phase_tasks_sorted = sorted(phase_tasks, key=lambda t: t.id)
-                
-                for idx, task in enumerate(phase_tasks_sorted):
-                    gap = (task.id + idx) % 3
-                    task_start = prev_due_date + timedelta(days=gap)
-                    
-                    complexity = getattr(task, 'complexity_score', 5) or 5
-                    duration = max(3, min((complexity // 2) + 3, 6))
-                    
-                    task_due = task_start + timedelta(days=duration)
-                    
-                    task.start_date = task_start
-                    task.due_date = task_due
-                    prev_due_date = task_due
-                    
-                    tasks_to_update.append(task)
-        
+                    duration_days = max(3, min((complexity // 2) + 3, 6))
+
+                new_due_date = new_start + timedelta(days=duration_days)
+                new_due_datetime = timezone.make_aware(
+                    _dt.datetime.combine(new_due_date, _dt.time.min)
+                )
+
+                task.start_date = new_start
+                task.due_date = new_due_datetime
+                tasks_to_update.append(task)
+
         if tasks_to_update:
             Task.objects.bulk_update(tasks_to_update, ['due_date', 'start_date'], batch_size=500)
-            
-            # CRITICAL: Also update created_at to be before start_date
-            # created_at has auto_now_add=True, so we must update it individually
-            # to bypass the auto_now_add behavior
+
+            # Also update created_at to be before start_date
+            # (created_at has auto_now_add=True, so bypass via .update())
             for task in tasks_to_update:
                 if task.start_date:
-                    # created_at should be 1-7 days before start_date
-                    days_before = (task.id % 7) + 1  # Deterministic based on task ID
-                    if hasattr(task.start_date, 'date'):
-                        created_date = task.start_date - timedelta(days=days_before)
-                    else:
-                        created_date = now.replace(
-                            year=task.start_date.year,
-                            month=task.start_date.month,
-                            day=task.start_date.day
-                        ) - timedelta(days=days_before)
+                    days_before = (task.id % 7) + 1  # deterministic per task
+                    created_date = task.start_date - timedelta(days=days_before)
                     Task.objects.filter(pk=task.pk).update(created_at=created_date)
-        
+
         return len(tasks_to_update)
-        
+
     except Exception as e:
         logger.warning(f"Error refreshing task dates: {e}")
         return 0
