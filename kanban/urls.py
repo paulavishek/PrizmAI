@@ -57,7 +57,9 @@ urlpatterns = [
     path('missions/<int:mission_id>/strategies/<int:strategy_id>/delete/', mission_views.delete_strategy, name='delete_strategy'),
     path('missions/<int:mission_id>/strategies/<int:strategy_id>/link-board/', mission_views.link_board_to_strategy, name='link_board_to_strategy'),
     path('missions/<int:mission_id>/strategies/<int:strategy_id>/unlink-board/<int:board_id>/', mission_views.unlink_board_from_strategy, name='unlink_board_from_strategy'),
-    # -----------------------------------------------------------------------    path('boards/<int:board_id>/', views.board_detail, name='board_detail'),    path('boards/<int:board_id>/analytics/', views.board_analytics, name='board_analytics'),
+    # -----------------------------------------------------------------------
+    path('boards/<int:board_id>/', views.board_detail, name='board_detail'),
+    path('boards/<int:board_id>/analytics/', views.board_analytics, name='board_analytics'),
     path('boards/<int:board_id>/scope-tracking/', views.scope_tracking_dashboard, name='scope_tracking_dashboard'),
     path('boards/<int:board_id>/skill-gaps/', views.skill_gap_dashboard, name='skill_gap_dashboard'),
     path('boards/<int:board_id>/gantt/', views.gantt_chart, name='gantt_chart'),
