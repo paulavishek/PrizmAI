@@ -39,7 +39,21 @@ def track_priority_and_progress_change(sender, instance, **kwargs):
             instance._old_priority = old_task.priority
             instance._priority_changed = (old_task.priority != instance.priority)
             instance._old_progress = old_task.progress
-            instance._just_completed = (old_task.progress < 100 and instance.progress >= 100)
+
+            # Also detect when a task is being moved to a Done/Complete column.
+            # auto_update_progress_for_done_column runs as a later pre_save signal
+            # and will set instance.progress = 100, but at this point instance.progress
+            # still holds the old value, so we must detect the column change here.
+            column_name = instance.column.name.lower() if instance.column else ''
+            moving_to_done_column = (
+                ('done' in column_name or 'complete' in column_name)
+                and old_task.progress < 100
+                and old_task.column_id != instance.column_id
+            )
+            instance._just_completed = (
+                (old_task.progress < 100 and instance.progress >= 100)
+                or moving_to_done_column
+            )
         except Task.DoesNotExist:
             instance._old_priority = None
             instance._priority_changed = False
@@ -230,11 +244,9 @@ def _send_automation_notification(task, rule):
 
         text = (
             f'Automation "{rule.name}" was triggered for task "{task.title}" '
-            f'on board "{board.name}".' 
+            f'on board "{board.name}".'
         )
         for recipient in recipients:
-            if recipient == sender:
-                continue  # skip self-notification
             Notification.objects.create(
                 recipient=recipient,
                 sender=sender,
