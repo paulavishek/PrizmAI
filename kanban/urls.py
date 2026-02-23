@@ -10,6 +10,8 @@ from . import permission_views
 from . import invitation_views
 from . import triple_constraint_views
 from . import automation_views
+from . import mission_views
+from . import mission_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -38,7 +40,24 @@ urlpatterns = [
     path('demo/reset/', demo_views.reset_demo_data, name='reset_demo'),
     
     path('boards/', views.board_list, name='board_list'),
-    path('boards/create/', views.create_board, name='create_board'),    path('boards/<int:board_id>/', views.board_detail, name='board_detail'),    path('boards/<int:board_id>/analytics/', views.board_analytics, name='board_analytics'),
+    path('boards/create/', views.create_board, name='create_board'),
+
+    # -----------------------------------------------------------------------
+    # Mission & Strategy hierarchy  (Mission → Strategy → Board)
+    # No access restrictions — all authenticated users can use these.
+    # -----------------------------------------------------------------------
+    path('missions/', mission_views.mission_list, name='mission_list'),
+    path('missions/create/', mission_views.create_mission, name='create_mission'),
+    path('missions/<int:mission_id>/', mission_views.mission_detail, name='mission_detail'),
+    path('missions/<int:mission_id>/edit/', mission_views.edit_mission, name='edit_mission'),
+    path('missions/<int:mission_id>/delete/', mission_views.delete_mission, name='delete_mission'),
+    path('missions/<int:mission_id>/strategies/create/', mission_views.create_strategy, name='create_strategy'),
+    path('missions/<int:mission_id>/strategies/<int:strategy_id>/', mission_views.strategy_detail, name='strategy_detail'),
+    path('missions/<int:mission_id>/strategies/<int:strategy_id>/edit/', mission_views.edit_strategy, name='edit_strategy'),
+    path('missions/<int:mission_id>/strategies/<int:strategy_id>/delete/', mission_views.delete_strategy, name='delete_strategy'),
+    path('missions/<int:mission_id>/strategies/<int:strategy_id>/link-board/', mission_views.link_board_to_strategy, name='link_board_to_strategy'),
+    path('missions/<int:mission_id>/strategies/<int:strategy_id>/unlink-board/<int:board_id>/', mission_views.unlink_board_from_strategy, name='unlink_board_from_strategy'),
+    # -----------------------------------------------------------------------    path('boards/<int:board_id>/', views.board_detail, name='board_detail'),    path('boards/<int:board_id>/analytics/', views.board_analytics, name='board_analytics'),
     path('boards/<int:board_id>/scope-tracking/', views.scope_tracking_dashboard, name='scope_tracking_dashboard'),
     path('boards/<int:board_id>/skill-gaps/', views.skill_gap_dashboard, name='skill_gap_dashboard'),
     path('boards/<int:board_id>/gantt/', views.gantt_chart, name='gantt_chart'),

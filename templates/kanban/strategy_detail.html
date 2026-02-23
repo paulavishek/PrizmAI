@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ strategy.name }} - Strategy - PrizmAI{% endblock %}
+
+{% block content %}
+<!-- Breadcrumb (full traceability chain) -->
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'mission_list' %}">Missions</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'mission_detail' mission.id %}">{{ mission.name }}</a></li>
+        <li class="breadcrumb-item active">{{ strategy.name }}</li>
+    </ol>
+</nav>
+
+<!-- Mission context pill -->
+<div class="mb-3">
+    <small class="text-muted">
+        <i class="fas fa-bullseye text-primary me-1"></i>
+        <a href="{% url 'mission_detail' mission.id %}" class="text-decoration-none text-primary fw-semibold">{{ mission.name }}</a>
+        <i class="fas fa-chevron-right mx-2 text-muted" style="font-size:0.65rem;"></i>
+        <span class="text-success fw-semibold">{{ strategy.name }}</span>
+    </small>
+</div>
+
+<!-- Strategy header -->
+<div class="card shadow-sm mb-4" style="border-left: 4px solid #1cc88a;">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <i class="fas fa-lightbulb text-success fa-lg"></i>
+                    <h2 class="h4 mb-0">{{ strategy.name }}</h2>
+                    {% if strategy.status == 'active' %}
+                        <span class="badge bg-success">Active</span>
+                    {% elif strategy.status == 'completed' %}
+                        <span class="badge bg-primary">Completed</span>
+                    {% else %}
+                        <span class="badge bg-warning text-dark">On Hold</span>
+                    {% endif %}
+                </div>
+                <p class="text-muted small mb-1">
+                    <i class="fas fa-tag me-1"></i><strong>Strategy</strong> &bull;
+                    Created by {{ strategy.created_by.get_full_name|default:strategy.created_by.username }} on {{ strategy.created_at|date:"M d, Y" }}
+                </p>
+                {% if strategy.description %}
+                <p class="mb-0 mt-2">{{ strategy.description }}</p>
+                {% endif %}
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <a href="{% url 'edit_strategy' mission.id strategy.id %}" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-edit me-1"></i>Edit
+                </a>
+                <a href="{% url 'create_board' %}?strategy_id={{ strategy.id }}" class="btn btn-sm btn-primary">
+                    <i class="fas fa-plus me-1"></i>New Board
+                </a>
+                <a href="{% url 'delete_strategy' mission.id strategy.id %}" class="btn btn-sm btn-outline-danger">
+                    <i class="fas fa-trash me-1"></i>Delete
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Boards linked to this Strategy -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">
+        <i class="fas fa-clipboard-list text-info me-2"></i>Boards
+        <span class="badge bg-secondary ms-1">{{ linked_boards|length }}</span>
+    </h5>
+    <button class="btn btn-sm btn-outline-info shadow-sm" data-bs-toggle="collapse" data-bs-target="#linkBoardPanel">
+        <i class="fas fa-link fa-sm me-1"></i>Link Existing Board
+    </button>
+</div>
+
+<!-- Link existing board panel (collapsed by default) -->
+<div class="collapse mb-4" id="linkBoardPanel">
+    <div class="card card-body border-info bg-light">
+        <p class="small text-muted mb-2">Select an existing board to link to this strategy:</p>
+        <form method="post" action="{% url 'link_board_to_strategy' mission.id strategy.id %}" class="d-flex gap-2 align-items-center flex-wrap">
+            {% csrf_token %}
+            <select name="board_id" class="form-select form-select-sm" style="max-width:300px;" required>
+                <option value="">-- Choose a board --</option>
+                {% for board in all_boards %}
+                <option value="{{ board.id }}">{{ board.name }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-sm btn-info text-white">
+                <i class="fas fa-link me-1"></i>Link Board
+            </button>
+        </form>
+        {% if not all_boards %}
+        <small class="text-muted mt-2">All existing boards are already linked to this strategy.</small>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    {% if linked_boards %}
+        {% for board in linked_boards %}
+        <div class="col-md-4 mb-4">
+            <div class="card dashboard-card h-100 shadow-sm" style="border-left: 3px solid #36b9cc;">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-clipboard-list text-info me-1"></i>{{ board.name }}
+                    </h5>
+                    <p class="card-text text-muted small">
+                        {% if board.description %}
+                            {{ board.description|truncatechars:100 }}
+                        {% else %}
+                            <em>No description provided.</em>
+                        {% endif %}
+                    </p>
+                    <div class="text-end mt-2">
+                        <a href="{% url 'board_detail' board.id %}" class="btn btn-sm btn-info text-white">Open Board</a>
+                        <a href="{% url 'board_analytics' board.id %}" class="btn btn-sm btn-outline-secondary" title="Analytics">
+                            <i class="fas fa-chart-pie fa-sm"></i>
+                        </a>
+                    </div>
+                </div>
+                <div class="card-footer bg-transparent border-top-0 d-flex justify-content-between align-items-center">
+                    <small class="text-muted">{{ board.created_at|date:"M d, Y" }}</small>
+                    <form method="post" action="{% url 'unlink_board_from_strategy' mission.id strategy.id board.id %}"
+                          onsubmit="return confirm('Unlink this board from the strategy?');">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Unlink board">
+                            <i class="fas fa-unlink fa-sm"></i>
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-body text-center py-5">
+                <i class="fas fa-clipboard-list fa-4x text-gray-300 mb-3"></i>
+                <h5 class="text-muted mb-2">No Boards yet</h5>
+                <p class="text-muted mb-4">
+                    Create a new Board under this Strategy or link an existing one.<br>
+                    <small>Example boards: Market Research, Software Development, Marketing Campaign</small>
+                </p>
+                <a href="{% url 'create_board' %}?strategy_id={{ strategy.id }}" class="btn btn-primary me-2">
+                    <i class="fas fa-plus fa-sm me-1"></i>Create New Board
+                </a>
+                <button class="btn btn-outline-info" data-bs-toggle="collapse" data-bs-target="#linkBoardPanel">
+                    <i class="fas fa-link fa-sm me-1"></i>Link Existing Board
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

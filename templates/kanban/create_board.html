@@ -54,6 +54,16 @@
                     <form method="post">
                         {% csrf_token %}
 
+                        {% if selected_strategy %}
+                        <!-- Strategy context banner (board will be auto-linked) -->
+                        <div class="alert alert-light border small mb-4 py-2" style="border-color:#1cc88a!important;">
+                            <i class="fas fa-lightbulb text-success me-1"></i>
+                            This board will be linked to <strong>{{ selected_strategy.name }}</strong>
+                            (Mission: <em>{{ selected_strategy.mission.name }}</em>)
+                        </div>
+                        <input type="hidden" name="strategy_id" value="{{ selected_strategy.id }}">
+                        {% endif %}
+
                         <!-- Basic Board Info -->
                         <div class="mb-4">
                             <h6 class="border-bottom pb-2 mb-3">

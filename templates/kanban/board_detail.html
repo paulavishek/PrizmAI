@@ -212,6 +212,24 @@
 {% endblock %}
 
 {% block content %}
+<!-- Hierarchy breadcrumb — shows Mission → Strategy → Board chain when available -->
+{% if board.strategy %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'mission_list' %}">Missions</a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'mission_detail' board.strategy.mission_id %}">{{ board.strategy.mission.name }}</a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'strategy_detail' board.strategy.mission_id board.strategy_id %}">{{ board.strategy.name }}</a>
+        </li>
+        <li class="breadcrumb-item active">{{ board.name }}</li>
+    </ol>
+</nav>
+{% endif %}
 <!-- Demo Mode Banner - only show in legacy (non-simplified) mode -->
 {% if is_demo_board and not simplified_mode %}
 <div class="alert alert-info border-0 shadow-sm mb-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">

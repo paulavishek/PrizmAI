@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import (
+    Mission, Strategy,
     Board, Column, Task, TaskLabel, Comment, TaskActivity,
     TeamSkillProfile, SkillGap, SkillDevelopmentPlan,
     ScopeChangeSnapshot, ScopeCreepAlert, BoardInvitation
@@ -30,6 +31,21 @@ class BoardAutomationAdmin(admin.ModelAdmin):
     list_display = ('name', 'board', 'trigger_type', 'action_type', 'is_active', 'run_count', 'last_run_at')
     list_filter = ('is_active', 'trigger_type', 'action_type')
     search_fields = ('name', 'board__name')
+
+
+@admin.register(Mission)
+class MissionAdmin(admin.ModelAdmin):
+    list_display = ('name', 'status', 'created_by', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('name', 'description')
+
+
+@admin.register(Strategy)
+class StrategyAdmin(admin.ModelAdmin):
+    list_display = ('name', 'mission', 'status', 'created_by', 'created_at')
+    list_filter = ('status', 'mission', 'created_at')
+    search_fields = ('name', 'description', 'mission__name')
+
 
 
 @admin.register(Board)

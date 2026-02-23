@@ -293,7 +293,8 @@ def board_list(request):
 def create_board(request):
     from kanban.audit_utils import log_model_change
     from kanban.permission_utils import assign_default_role_to_user
-    
+    from kanban.models import Strategy as KanbanStrategy
+
     # Ensure user has a profile (MVP mode: auto-create without organization)
     try:
         profile = request.user.profile
@@ -307,7 +308,16 @@ def create_board(request):
     
     # MVP Mode: Organization is optional (can be None)
     organization = profile.organization
-    
+
+    # Optional: link new board directly to a Strategy when coming from strategy_detail
+    strategy_id = request.GET.get('strategy_id') or request.POST.get('strategy_id')
+    selected_strategy = None
+    if strategy_id:
+        try:
+            selected_strategy = KanbanStrategy.objects.get(id=strategy_id)
+        except KanbanStrategy.DoesNotExist:
+            selected_strategy = None
+
     if request.method == 'POST':
         form = BoardForm(request.POST)
         if form.is_valid():
@@ -315,7 +325,11 @@ def create_board(request):
             # MVP Mode: organization can be None
             board.organization = organization
             board.created_by = request.user
-            
+
+            # Auto-link to strategy if one was passed
+            if selected_strategy:
+                board.strategy = selected_strategy
+
             board.save()
             board.members.add(request.user)
             
@@ -381,13 +395,19 @@ def create_board(request):
                 for i, name in enumerate(default_columns):
                     Column.objects.create(name=name, board=board, position=i)
                 messages.success(request, f'Board "{board.name}" created successfully!')
-            
+
+            # Redirect back to strategy if we came from one
+            if selected_strategy:
+                return redirect('strategy_detail',
+                                mission_id=selected_strategy.mission_id,
+                                strategy_id=selected_strategy.id)
             return redirect('board_detail', board_id=board.id)
     else:
         form = BoardForm()
     
     return render(request, 'kanban/create_board.html', {
         'form': form,
+        'selected_strategy': selected_strategy,
     })
 
 @login_required

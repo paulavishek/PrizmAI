@@ -29,6 +29,95 @@ from kanban.conflict_models import (
 # Import automation models
 from kanban.automation_models import BoardAutomation
 
+
+# ---------------------------------------------------------------------------
+# MISSION — top-level strategic layer (the "problem / challenge" statement)
+# No access restrictions: all authenticated users can view and create these.
+# ---------------------------------------------------------------------------
+class Mission(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+        ('on_hold', 'On Hold'),
+    ]
+
+    name = models.CharField(max_length=200)
+    description = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Describe the problem or challenge this Mission addresses.",
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    created_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='created_missions'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # Demo support
+    is_demo = models.BooleanField(default=False)
+    is_seed_demo_data = models.BooleanField(default=False)
+
+    # Workspace FK stub — reserved for future Workspace layer (currently unused)
+    # workspace = models.ForeignKey('Workspace', null=True, blank=True, ...)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.name
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+        return reverse('mission_detail', kwargs={'mission_id': self.pk})
+
+
+# ---------------------------------------------------------------------------
+# STRATEGY — second-level layer (the "solution / response" statement)
+# Sits between Mission and Board.
+# No access restrictions: all authenticated users can view and create these.
+# ---------------------------------------------------------------------------
+class Strategy(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+        ('on_hold', 'On Hold'),
+    ]
+
+    name = models.CharField(max_length=200)
+    description = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Describe the solution or approach this Strategy proposes.",
+    )
+    mission = models.ForeignKey(
+        Mission, on_delete=models.CASCADE, related_name='strategies'
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    created_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='created_strategies'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # Demo support
+    is_seed_demo_data = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name_plural = 'Strategies'
+
+    def __str__(self):
+        return f"{self.mission.name} — {self.name}"
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+        return reverse(
+            'strategy_detail',
+            kwargs={'mission_id': self.mission_id, 'strategy_id': self.pk},
+        )
+
+
 class Board(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
@@ -83,6 +172,16 @@ class Board(models.Model):
         null=True,
         blank=True,
         help_text="Target completion date for the project (Time constraint). Set from the Triple Constraint dashboard."
+    )
+
+    # Hierarchy: Mission → Strategy → Board
+    strategy = models.ForeignKey(
+        'Strategy',
+        on_delete=models.SET_NULL,
+        related_name='boards',
+        null=True,
+        blank=True,
+        help_text="The Strategy this board belongs to (optional — existing boards unaffected).",
     )
 
     def __str__(self):

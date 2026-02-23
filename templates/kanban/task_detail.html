@@ -4,6 +4,27 @@
 {% block title %}{{ task.title }} - Task Details{% endblock %}
 
 {% block content %}
+<!-- Hierarchy breadcrumb — full traceability: Mission → Strategy → Board → Task -->
+{% with board=task.column.board %}
+{% if board.strategy %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'mission_list' %}">Missions</a></li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'mission_detail' board.strategy.mission_id %}">{{ board.strategy.mission.name }}</a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'strategy_detail' board.strategy.mission_id board.strategy_id %}">{{ board.strategy.name }}</a>
+        </li>
+        <li class="breadcrumb-item">
+            <a href="{% url 'board_detail' board.id %}">{{ board.name }}</a>
+        </li>
+        <li class="breadcrumb-item active">{{ task.title|truncatechars:40 }}</li>
+    </ol>
+</nav>
+{% endif %}
+{% endwith %}
 <div class="row">
     <div class="col-md-8">
         <!-- AI Task Summary Card -->

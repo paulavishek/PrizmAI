@@ -28,7 +28,7 @@ import json
 
 # Import all required models
 from accounts.models import Organization
-from kanban.models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile
+from kanban.models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Mission, Strategy
 from kanban.permission_models import Role
 from kanban.budget_models import TimeEntry, ProjectBudget, TaskCost, ProjectROI
 from kanban.burndown_models import TeamVelocitySnapshot, BurndownPrediction
@@ -187,6 +187,11 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(
                 f'   ✅ Time Tracking: {time_stats["entries"]} time entries for {time_stats["users"]} users'
             ))
+
+            # 7. Mission & Strategy (hierarchy layer above Boards)
+            self.stdout.write(self.style.NOTICE('\n🎯 PHASE 7: Creating Demo Mission & Strategy...'))
+            self.seed_demo_mission_strategy()
+            self.stdout.write(self.style.SUCCESS('   ✅ Demo Mission & Strategy seeded'))
 
         # Final Summary
         self.print_final_summary()
@@ -1626,6 +1631,58 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
             'entries': entries_created,
             'users': len(users_with_entries)
         }
+
+    def seed_demo_mission_strategy(self):
+        """
+        Create (or ensure) a demo Mission and Strategy and link all official
+        demo boards to the Strategy. Idempotent — safe to run multiple times.
+        """
+        creator = self.alex or User.objects.filter(is_superuser=True).first()
+
+        # --- Mission ---
+        mission, _ = Mission.objects.get_or_create(
+            name='Prevent AI Security Threats',
+            defaults=dict(
+                description=(
+                    'Cyber security threats are growing rapidly due to the increasing adoption '
+                    'of AI tools. This Mission focuses on identifying those threats and eliminating '
+                    'them before they impact our customers.'
+                ),
+                status='active',
+                created_by=creator,
+                is_demo=True,
+                is_seed_demo_data=True,
+            )
+        )
+
+        # --- Strategy ---
+        strategy, _ = Strategy.objects.get_or_create(
+            name='Develop Security Software',
+            mission=mission,
+            defaults=dict(
+                description=(
+                    'Build a comprehensive security software suite that monitors AI-related '
+                    'vulnerabilities, provides real-time threat detection, and automates '
+                    'incident response workflows.'
+                ),
+                status='active',
+                created_by=creator,
+                is_seed_demo_data=True,
+            )
+        )
+
+        # --- Link all official demo boards to the Strategy ---
+        linked = 0
+        for board in self.demo_boards:
+            if board.strategy_id != strategy.id:
+                board.strategy = strategy
+                board.save(update_fields=['strategy'])
+                linked += 1
+
+        self.stdout.write(
+            f'   Mission: "{mission.name}" | Strategy: "{strategy.name}" | '
+            f'Boards linked: {linked}'
+        )
 
     def print_final_summary(self):
         """Print final summary of all demo data"""
