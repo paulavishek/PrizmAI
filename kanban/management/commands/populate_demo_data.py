@@ -478,6 +478,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('\n🔗 Creating task dependencies...\n'))
         self.create_dependencies(software_tasks, [], [])
 
+        # Create Gantt milestones (item_type='milestone' Tasks, 2 per phase)
+        self.stdout.write(self.style.SUCCESS('\n◆  Creating Gantt milestones...\n'))
+        self.create_gantt_milestones(software_tasks, software_board, alex)
+
         # Create and assign Lean Six Sigma labels
         self.stdout.write(self.style.SUCCESS('\n🏷️  Creating Lean Six Sigma labels...\n'))
         self.create_lean_labels(software_board, None, None)
@@ -631,19 +635,42 @@ class Command(BaseCommand):
 
         # =====================================================================
         # Phase 2: Core Features (10 tasks)
+        #
+        # Dependency structure (same generic pattern, indices 0-9 within this phase):
+        #   [4] depends on [0],[1]   [5] depends on [2],[3]
+        #   [6] depends on [5]       [7] depends on [4]
+        #   [8] depends on [5]       [9] depends on [7],[8]
+        #
+        # Critical-path design (durations chosen so only ONE chain has 0 slack):
+        #   CRITICAL: [0](d=10) → [4](d=7) → [7](d=5) → [9](d=2)  total = 24 days
+        #   [1] slack=3  [2] slack=3  [3] slack=1  [5] slack=1  [6] slack=3  [8] slack=1
+        #
+        # Tasks [1],[2],[3] start in PARALLEL with [0] at phase_start (not after it),
+        # which is the key difference from the old data that caused every task to appear
+        # critical by forcing them all to start at phase_start+10.
         # =====================================================================
         phase_start = 28
         phase2_data = [
+            # [0] Critical-path anchor – longest parallel starter (d=10)
             {'title': 'Dashboard UI Development', 'desc': 'Create responsive dashboard with charts and widgets', 'priority': 'urgent', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': phase_start, 'duration': 10},
-            {'title': 'File Upload System', 'desc': 'Support multiple file types with S3 storage integration', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 80, 'column': review, 'start_offset': phase_start + 10, 'duration': 8},
-            {'title': 'Notification Service', 'desc': 'Real-time notifications via WebSocket and email queues', 'priority': 'high', 'complexity': 7, 'assignee': jordan, 'progress': 70, 'column': in_progress, 'start_offset': phase_start + 10, 'duration': 6},
-            {'title': 'User Management API', 'desc': 'CRUD operations for users with role-based access control', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 75, 'column': in_progress, 'start_offset': phase_start + 10, 'duration': 5},
-            {'title': 'Search & Indexing Engine', 'desc': 'Full-text search with Elasticsearch and filters', 'priority': 'urgent', 'complexity': 7, 'assignee': alex, 'progress': 30, 'column': in_progress, 'start_offset': phase_start + 18, 'duration': 7},
-            {'title': 'Real-time Collaboration', 'desc': 'WebSocket-based real-time editing and presence features', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 6},
-            {'title': 'Data Caching Layer', 'desc': 'Redis-based caching for improved performance', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 31, 'duration': 5},
-            {'title': 'API Rate Limiting', 'desc': 'Implement rate limiting and throttling for API endpoints', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 5},
-            {'title': 'Integration Testing Suite', 'desc': 'End-to-end integration tests for all core features', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 30, 'duration': 4},
-            {'title': 'Core Features Code Review', 'desc': 'Comprehensive code review and refactoring', 'priority': 'urgent', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 36, 'duration': 2},
+            # [1] Parallel to Dashboard, shorter (d=7) → 3 days slack
+            {'title': 'File Upload System', 'desc': 'Support multiple file types with S3 storage integration', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 80, 'column': review, 'start_offset': phase_start, 'duration': 7},
+            # [2] Parallel starter, shortest (d=6) → 3 days slack
+            {'title': 'Notification Service', 'desc': 'Real-time notifications via WebSocket and email queues', 'priority': 'high', 'complexity': 7, 'assignee': jordan, 'progress': 70, 'column': in_progress, 'start_offset': phase_start, 'duration': 6},
+            # [3] Parallel starter (d=8), one day shorter than [0]'s effective gate → 1 day slack
+            {'title': 'User Management API', 'desc': 'CRUD operations for users with role-based access control', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 60, 'column': in_progress, 'start_offset': phase_start, 'duration': 8},
+            # [4] Waits for [0] and [1]; driven by [0] (d=10+7=17). Critical.
+            {'title': 'Search & Indexing Engine', 'desc': 'Full-text search with Elasticsearch and filters', 'priority': 'urgent', 'complexity': 7, 'assignee': alex, 'progress': 30, 'column': in_progress, 'start_offset': phase_start + 10, 'duration': 7},
+            # [5] Waits for [2] and [3]; driven by [3] (d=8+9=17). 1 day slack vs critical path.
+            {'title': 'Real-time Collaboration', 'desc': 'WebSocket-based real-time editing and presence features', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 8, 'duration': 9},
+            # [6] After [5] (EF=17+4=21 vs project end 24) → 3 days slack
+            {'title': 'Data Caching Layer', 'desc': 'Redis-based caching for improved performance', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 17, 'duration': 4},
+            # [7] After [4] (EF=17+5=22, then +2=24). Critical.
+            {'title': 'API Rate Limiting', 'desc': 'Implement rate limiting and throttling for API endpoints', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 17, 'duration': 5},
+            # [8] After [5] (EF=17+4=21 vs 22) → 1 day slack
+            {'title': 'Integration Testing Suite', 'desc': 'End-to-end integration tests for all core features', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 17, 'duration': 4},
+            # [9] After max([7],[8])=22. Critical.
+            {'title': 'Core Features Code Review', 'desc': 'Comprehensive code review and refactoring', 'priority': 'urgent', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 22, 'duration': 2},
         ]
 
         for i, t in enumerate(phase2_data):
@@ -690,6 +717,119 @@ class Command(BaseCommand):
             items.append(task)
 
         return items
+
+    def create_gantt_milestones(self, software_tasks, board, creator):
+        """
+        Create Gantt-chart milestones (item_type='milestone') for the Software
+        Development board – 2 per phase, positioned between real tasks so the
+        Gantt diamond markers appear in meaningful places.
+
+        Phase 1 (Foundation & Setup):
+          M1 – "Foundation Architecture Complete"  after task[2] (System Architecture Design, EF day 10)
+          M2 – "Core Authentication Ready"          after task[5] (Authentication System, EF day 13)
+
+        Phase 2 (Core Features) – uses redesigned task timeline:
+          M1 – "Search Infrastructure Ready"        after task[14] (Search & Indexing, EF day 45)
+          M2 – "API Layer Complete"                 after task[17] (API Rate Limiting, EF day 50)
+
+        Phase 3 (Polish & Launch):
+          M1 – "Beta Release Checkpoint"            after task[24] (User Onboarding Flow, EF day 80)
+          M2 – "Go-Live Authorization"              after task[28] (Deployment Automation, EF day 91)
+        """
+        from datetime import datetime, time as _time
+        from django.utils import timezone
+
+        now = timezone.now().date()
+
+        # Attach to the backlog/first column (same logic as add_gantt_milestone view)
+        column = (
+            Column.objects.filter(board=board, name__icontains='backlog').first()
+            or Column.objects.filter(board=board).order_by('position').first()
+        )
+        if not column:
+            self.stdout.write(self.style.WARNING('   ⚠️  No column found for milestones – skipping'))
+            return
+
+        def _make_milestone(title, desc, phase, day_offset, position_task, status):
+            """Helper to create a single milestone Task."""
+            due_date = now + timedelta(days=day_offset)
+            Task.objects.create(
+                title=title,
+                description=desc,
+                column=column,
+                created_by=creator,
+                start_date=due_date,
+                due_date=timezone.make_aware(datetime.combine(due_date, _time.min)),
+                phase=phase,
+                priority='medium',
+                progress=100 if status == 'completed' else 0,
+                item_type='milestone',
+                milestone_status=status,
+                position_after_task=position_task,
+                is_seed_demo_data=True,
+            )
+
+        # ── Phase 1 milestones ────────────────────────────────────────────────
+        # M1: after System Architecture Design (task index 2, EF = day 10)
+        _make_milestone(
+            title='Foundation Architecture Complete',
+            desc='All architecture decisions finalised; base API and DB schema unblocked.',
+            phase='Phase 1',
+            day_offset=10,
+            position_task=software_tasks[2],   # System Architecture Design
+            status='completed',
+        )
+        # M2: after Authentication System (task index 5, EF = day 13)
+        _make_milestone(
+            title='Core Authentication Ready',
+            desc='JWT auth system in review; user registration and testing can now proceed in parallel.',
+            phase='Phase 1',
+            day_offset=13,
+            position_task=software_tasks[5],   # Authentication System
+            status='upcoming',
+        )
+
+        # ── Phase 2 milestones ────────────────────────────────────────────────
+        # M1: after Search & Indexing Engine (task index 14, EF = phase_start+17 = day 45)
+        _make_milestone(
+            title='Search Infrastructure Ready',
+            desc='Full-text search and indexing complete; API rate limiting sprint can begin.',
+            phase='Phase 2',
+            day_offset=45,
+            position_task=software_tasks[14],  # Search & Indexing Engine
+            status='upcoming',
+        )
+        # M2: after API Rate Limiting (task index 17, EF = phase_start+22 = day 50)
+        _make_milestone(
+            title='API Layer Complete',
+            desc='Rate limiting, caching, and core API hardening signed off; integration testing gates cleared.',
+            phase='Phase 2',
+            day_offset=50,
+            position_task=software_tasks[17],  # API Rate Limiting
+            status='upcoming',
+        )
+
+        # ── Phase 3 milestones ────────────────────────────────────────────────
+        # M1: after User Onboarding Flow (task index 24, EF = day 80)
+        _make_milestone(
+            title='Beta Release Checkpoint',
+            desc='Performance, security, onboarding and UX validated. Green light to enter deployment pipeline.',
+            phase='Phase 3',
+            day_offset=80,
+            position_task=software_tasks[24],  # User Onboarding Flow
+            status='upcoming',
+        )
+        # M2: after Deployment Automation (task index 28, EF = day 91)
+        _make_milestone(
+            title='Go-Live Authorization',
+            desc='Deployment pipeline verified and stakeholder sign-off received. Ready for production launch.',
+            phase='Phase 3',
+            day_offset=91,
+            position_task=software_tasks[28],  # Deployment Automation
+            status='upcoming',
+        )
+
+        self.stdout.write('   ✅ Gantt milestones created (2 per phase, placed between key tasks)')
 
     def create_marketing_tasks(self, board, alex, sam, jordan):
         """
