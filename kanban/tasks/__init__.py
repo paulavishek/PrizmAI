@@ -18,6 +18,12 @@ from kanban.tasks.automation_tasks import (
     run_due_date_approaching_automations,
 )
 
+from kanban.tasks.time_tracking_tasks import (
+    send_time_tracking_reminders,
+    detect_time_anomalies,
+    send_weekly_time_summary,
+)
+
 __all__ = [
     # Conflict tasks
     'detect_conflicts_task',
@@ -29,4 +35,8 @@ __all__ = [
     'refresh_demo_dates_task',
     # Automation tasks
     'run_due_date_approaching_automations',
+    # Time tracking tasks
+    'send_time_tracking_reminders',
+    'detect_time_anomalies',
+    'send_weekly_time_summary',
 ]
