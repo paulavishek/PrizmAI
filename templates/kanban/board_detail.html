@@ -275,6 +275,9 @@
         <a href="{% url 'retrospective_dashboard' board.id %}" class="btn btn-outline-secondary">
             <i class="fas fa-history me-1"></i> Retrospectives
         </a>
+        <a href="{% url 'automations_list' board.id %}" class="btn btn-outline-warning" title="Automation rules for this board">
+            <i class="fas fa-bolt me-1"></i> Automations
+        </a>
         <div class="btn-group">
             <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="fas fa-file-export me-1"></i> Export
@@ -305,9 +308,6 @@
             </a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}">Edit Board</a></li>
-            <li><a class="dropdown-item" href="{% url 'automations_list' board.id %}">
-                <i class="fas fa-bolt me-2 text-warning"></i>Automations
-            </a></li>
             <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}">
                 <i class="fas fa-plug me-2 text-info"></i>Webhooks & Integrations
             </a></li>
