@@ -583,6 +583,24 @@ CELERY_BROKER_TRANSPORT_OPTIONS = {
 }
 CELERY_RESULT_EXPIRES = 3600  # Results expire after 1 hour
 
+# Route AI summary tasks to the dedicated 'summaries' Celery queue.
+# Start the worker with: celery -A kanban_board worker -Q celery,summaries
+CELERY_TASK_ROUTES = {
+    'kanban.ai_summary.*': {'queue': 'summaries'},
+}
+
+# ---------------------------------------------------------------------------
+# AI Summary configuration
+# ---------------------------------------------------------------------------
+# How long (seconds) to hold the Redis debounce lock after a major task event.
+# The board summary Celery task is queued with countdown=this value, so at most
+# one LLM call is triggered per board per window.
+AI_SUMMARY_DEBOUNCE_SECONDS = 600          # 10 minutes
+
+# Summaries older than this many minutes are flagged as "stale" in the
+# dashboard UI and in the /api/summary-status/ polling endpoint.
+AI_SUMMARY_STALE_THRESHOLD_MINUTES = 120   # 2 hours
+
 # ============================================
 # REST FRAMEWORK CONFIGURATION
 # ============================================

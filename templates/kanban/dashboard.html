@@ -472,6 +472,17 @@
     .btn-spinner { display: none; }
     .btn-loading .btn-spinner { display: inline-block; }
     .btn-loading .btn-label  { display: none; }
+
+    /* Summary flash highlight when a new result arrives */
+    @keyframes summaryfade {
+        0%   { background: #d1ecf1; }
+        100% { background: transparent; }
+    }
+    .summary-flash {
+        animation: summaryfade 2s ease-out forwards;
+        border-radius: 4px;
+        padding: 2px 4px;
+    }
 </style>
 {% endblock %}
 
@@ -780,7 +791,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                         <span class="summary-content">{{ mission.ai_summary }}</span>
                                         <a href="#" class="summary-read-more ms-1 small text-info" onclick="toggleSummary(this,'mission-summary-text-{{ mission.id }}'); return false;">read more</a>
                                     </div>
-                                    <small class="text-muted summary-ts" id="mission-ts-{{ mission.id }}">
+                                    <small class="text-muted summary-ts" id="mission-ts-{{ mission.id }}"
+                                          {% if mission.ai_summary_generated_at %}data-ts="{{ mission.ai_summary_generated_at|date:'c' }}"{% endif %}>
                                         <i class="far fa-clock me-1"></i>Updated {{ mission.ai_summary_generated_at|date:"M d, Y H:i" }}
                                     </small>
                                     {% else %}
@@ -844,7 +856,8 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 <span class="summary-content">{{ strategy.ai_summary }}</span>
                                                 <a href="#" class="summary-read-more ms-1 text-info" onclick="toggleSummary(this,'strategy-summary-text-{{ strategy.id }}'); return false;">read more</a>
                                             </div>
-                                            <small class="text-muted summary-ts" id="strategy-ts-{{ strategy.id }}">Updated {{ strategy.ai_summary_generated_at|date:"M d, Y H:i" }}</small>
+                                            <small class="text-muted summary-ts" id="strategy-ts-{{ strategy.id }}"
+                                                  {% if strategy.ai_summary_generated_at %}data-ts="{{ strategy.ai_summary_generated_at|date:'c' }}"{% endif %}>Updated {{ strategy.ai_summary_generated_at|date:"M d, Y H:i" }}</small>
                                             {% else %}
                                             <div class="ai-summary-text text-muted fst-italic small d-none" id="strategy-summary-text-{{ strategy.id }}">
                                                 No AI summary yet.
@@ -899,6 +912,14 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 <i class="fas fa-robot me-1" style="font-size:0.65rem;"></i>
                                                 <span class="summary-content">{{ board.ai_summary }}</span>
                                             </div>
+                                            <small class="text-muted summary-ts" id="board-ts-{{ board.id }}"
+                                                  {% if board.ai_summary_generated_at %}data-ts="{{ board.ai_summary_generated_at|date:'c' }}"{% endif %}
+                                                  style="font-size:0.68rem;">
+                                                {% if board.ai_summary_generated_at %}<i class="far fa-clock me-1"></i>Updated {{ board.ai_summary_generated_at|date:"M d, Y H:i" }}{% endif %}
+                                            </small>
+                                            {% else %}
+                                            <div class="ai-summary-text small text-muted fst-italic mt-1 d-none" id="board-summary-text-{{ board.id }}"></div>
+                                            <small class="text-muted summary-ts d-none" id="board-ts-{{ board.id }}"></small>
                                             {% endif %}
                                             <div class="mt-1" onclick="event.stopPropagation()">
                                                 <button class="btn btn-xs btn-outline-info generate-summary-btn"
@@ -2027,28 +2048,147 @@ document.addEventListener('DOMContentLoaded', function() {
         link.textContent = isExpanded ? 'read more' : 'show less';
     };
 
-    // AI Generate Summary (AJAX POST)
+    // AI Generate Summary — async Celery-backed with polling
+    // Active pollers: Map<"level-id", intervalId>
+    var summaryPollers = new Map();
+
+    /**
+     * Convert an ISO timestamp string to a human-readable relative string.
+     * E.g. "Updated 4 minutes ago", "Updated just now", "Updated 2 hours ago".
+     */
+    function timeAgo(isoStr) {
+        if (!isoStr) return '';
+        var d = new Date(isoStr);
+        var diffMs  = Date.now() - d.getTime();
+        var diffSec = Math.round(diffMs / 1000);
+        if (diffSec < 5)   return 'Updated just now';
+        if (diffSec < 60)  return 'Updated ' + diffSec + ' seconds ago';
+        var diffMin = Math.round(diffSec / 60);
+        if (diffMin < 60)  return 'Updated ' + diffMin + ' minute' + (diffMin === 1 ? '' : 's') + ' ago';
+        var diffHr  = Math.round(diffMin / 60);
+        if (diffHr  < 24)  return 'Updated ' + diffHr  + ' hour'   + (diffHr  === 1 ? '' : 's') + ' ago';
+        var diffDay = Math.round(diffHr  / 24);
+        return 'Updated ' + diffDay + ' day' + (diffDay === 1 ? '' : 's') + ' ago';
+    }
+
+    /** Refresh all summary-ts elements that have a data-ts attribute. */
+    function refreshAllTimestamps() {
+        document.querySelectorAll('.summary-ts[data-ts]').forEach(function(el) {
+            el.innerHTML = '<i class="far fa-clock me-1"></i>' + timeAgo(el.dataset.ts);
+        });
+    }
+    // Run once on load and then every 60 s
+    refreshAllTimestamps();
+    setInterval(refreshAllTimestamps, 60000);
+
+    /** Flash-highlight an element to signal a new summary arrived. */
+    function flashElement(el) {
+        el.classList.remove('summary-flash');
+        void el.offsetWidth; // reflow to restart animation
+        el.classList.add('summary-flash');
+    }
+
+    /** Update the DOM for a given level/id with new summary data. */
+    function applySummaryToDOM(level, objId, data) {
+        var textEl = document.getElementById(level + '-summary-text-' + objId);
+        var tsEl   = document.getElementById(level + '-ts-' + objId);
+
+        if (data.summary && textEl) {
+            if (level === 'board') {
+                textEl.innerHTML = '<i class="fas fa-robot me-1" style="font-size:0.65rem;"></i>'
+                    + '<span class="summary-content">' + escapeHtml(data.summary) + '</span>';
+            } else {
+                textEl.innerHTML = '<i class="fas fa-robot text-info me-1" style="font-size:0.75rem;"></i>'
+                    + '<span class="summary-content">' + escapeHtml(data.summary) + '</span> '
+                    + '<a href="#" class="summary-read-more ms-1 small text-info" '
+                    + 'onclick="toggleSummary(this,\'' + level + '-summary-text-' + objId + '\'); return false;">read more</a>';
+            }
+            textEl.classList.remove('text-muted', 'fst-italic', 'd-none');
+            textEl.classList.add('summary-truncated');
+            flashElement(textEl);
+        }
+
+        if (tsEl && data.generated_at) {
+            tsEl.dataset.ts = data.generated_at;
+            tsEl.innerHTML  = '<i class="far fa-clock me-1"></i>' + timeAgo(data.generated_at);
+            tsEl.classList.remove('d-none');
+        }
+    }
+
+    /** Start polling /api/summary-status/{level}/{id}/ until the summary updates. */
+    function startPolling(level, objId, previousGeneratedAt) {
+        var pollerKey = level + '-' + objId;
+        // Cancel any already-running poller for the same object
+        if (summaryPollers.has(pollerKey)) {
+            clearInterval(summaryPollers.get(pollerKey));
+        }
+
+        var pollCount = 0;
+        var MAX_POLLS = 24; // 24 × 5 s = 2 min max
+        var btn = document.querySelector('.generate-summary-btn[data-level="' + level + '"][data-id="' + objId + '"]');
+        var labelEl = btn ? btn.querySelector('.btn-label') : null;
+
+        var intervalId = setInterval(function() {
+            pollCount++;
+            fetch('/api/summary-status/' + level + '/' + objId + '/', {
+                method: 'GET',
+                headers: { 'X-CSRFToken': getCookie('csrftoken') },
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var isNew = (
+                    data.generated_at
+                    && data.generated_at !== previousGeneratedAt
+                    && !data.queued
+                );
+                if (isNew || pollCount >= MAX_POLLS) {
+                    clearInterval(intervalId);
+                    summaryPollers.delete(pollerKey);
+                    if (btn) {
+                        btn.classList.remove('btn-loading');
+                        btn.disabled = false;
+                        if (labelEl) labelEl.textContent = (level === 'board' ? '\u2728 Board AI' : '\u2728 ' + level.charAt(0).toUpperCase() + level.slice(1) + ' AI');
+                    }
+                    if (isNew) {
+                        applySummaryToDOM(level, objId, data);
+                    }
+                }
+            })
+            .catch(function() {
+                if (pollCount >= MAX_POLLS) {
+                    clearInterval(intervalId);
+                    summaryPollers.delete(pollerKey);
+                    if (btn) { btn.classList.remove('btn-loading'); btn.disabled = false; }
+                }
+            });
+        }, 5000);
+
+        summaryPollers.set(pollerKey, intervalId);
+    }
+
     document.querySelectorAll('.generate-summary-btn').forEach(function(btn) {
         btn.addEventListener('click', function(e) {
             e.preventDefault();
             e.stopPropagation();
-            const level  = btn.dataset.level;   // mission | strategy | board
-            const objId  = btn.dataset.id;
-            const url    = btn.dataset.url;
+            var level  = btn.dataset.level;
+            var objId  = btn.dataset.id;
+            var url    = btn.dataset.url;
 
             // Spinner state
             btn.classList.add('btn-loading');
             btn.disabled = true;
-            // Insert spinner if not present
             if (!btn.querySelector('.btn-spinner')) {
-                const spinner = document.createElement('span');
+                var spinner = document.createElement('span');
                 spinner.className = 'btn-spinner spinner-border spinner-border-sm me-1';
                 spinner.setAttribute('role', 'status');
                 btn.prepend(spinner);
             }
+            var labelEl = btn.querySelector('.btn-label');
+            if (labelEl) labelEl.textContent = '\uD83D\uDD04 Refreshing…';
 
-            const abortCtrl = new AbortController();
-            const fetchTimeout = setTimeout(function() { abortCtrl.abort(); }, 90000); // 90s timeout
+            // Read the current generated_at so we can detect a new result during polling
+            var tsEl = document.getElementById(level + '-ts-' + objId);
+            var previousGeneratedAt = tsEl ? (tsEl.dataset.ts || null) : null;
 
             fetch(url, {
                 method: 'POST',
@@ -2057,49 +2197,37 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({}),
-                signal: abortCtrl.signal,
             })
-            .then(function(resp) { clearTimeout(fetchTimeout); return resp.json(); })
+            .then(function(resp) { return resp.json(); })
             .then(function(data) {
-                btn.classList.remove('btn-loading');
-                btn.disabled = false;
                 if (data.error) {
+                    btn.classList.remove('btn-loading');
+                    btn.disabled = false;
+                    if (labelEl) labelEl.textContent = (level === 'board' ? '\u2728 Board AI' : '\u2728 ' + level.charAt(0).toUpperCase() + level.slice(1) + ' AI');
                     alert('Error: ' + data.error);
                     return;
                 }
-                // Update summary text
-                const textEl = document.getElementById(level + '-summary-text-' + objId);
-                const tsEl   = document.getElementById(level + '-ts-' + objId);
-                if (textEl) {
-                    textEl.innerHTML = '<i class="fas fa-robot text-info me-1" style="font-size:0.75rem;"></i>'
-                        + '<span class="summary-content">' + escapeHtml(data.summary) + '</span> '
-                        + '<a href="#" class="summary-read-more ms-1 small text-info" '
-                        + 'onclick="toggleSummary(this,\'' + level + '-summary-text-' + objId + '\'); return false;">read more</a>';
-                    textEl.classList.remove('text-muted', 'fst-italic', 'd-none');
-                    textEl.classList.add('summary-truncated');
+
+                // Show the cached summary immediately if available
+                if (data.summary) {
+                    applySummaryToDOM(level, objId, data);
                 }
-                if (tsEl && data.generated_at) {
-                    const d = new Date(data.generated_at);
-                    tsEl.innerHTML = '<i class="far fa-clock me-1"></i>Updated ' + d.toLocaleString();
-                    tsEl.classList.remove('d-none');
-                }
+
+                // Begin polling for the fresh result
+                startPolling(level, objId, previousGeneratedAt);
             })
             .catch(function(err) {
-                clearTimeout(fetchTimeout);
                 btn.classList.remove('btn-loading');
                 btn.disabled = false;
-                if (err.name === 'AbortError') {
-                    alert('Summary generation timed out (90s). Try generating task-level summaries first from individual task pages, then retry.');
-                } else {
-                    console.error('Summary generation error:', err);
-                    alert('Failed to generate summary. Please try again.');
-                }
+                if (labelEl) labelEl.textContent = (level === 'board' ? '\u2728 Board AI' : '\u2728 ' + level.charAt(0).toUpperCase() + level.slice(1) + ' AI');
+                console.error('Summary generation error:', err);
+                alert('Failed to queue summary. Please try again.');
             });
         });
     });
 
     function escapeHtml(text) {
-        const map = { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' };
+        var map = { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;' };
         return String(text).replace(/[&<>"']/g, function(m){ return map[m]; });
     }
 </script>

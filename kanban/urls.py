@@ -110,6 +110,8 @@ urlpatterns = [
     path('api/generate-board-summary/<int:board_id>/', api_views.generate_board_summary_api, name='generate_board_summary_api'),
     path('api/generate-strategy-summary/<int:strategy_id>/', api_views.generate_strategy_summary_api, name='generate_strategy_summary_api'),
     path('api/generate-mission-summary/<int:mission_id>/', api_views.generate_mission_summary_api, name='generate_mission_summary_api'),
+    # Polling endpoint — returns current saved summary + stale/queued flags
+    path('api/summary-status/<str:level>/<int:obj_id>/', api_views.summary_status_api, name='summary_status_api'),
 
       # New AI Enhancement API Endpoints
     path('api/suggest-task-priority/', api_views.suggest_task_priority_api, name='suggest_task_priority_api'),

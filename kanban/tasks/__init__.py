@@ -24,6 +24,13 @@ from kanban.tasks.time_tracking_tasks import (
     send_weekly_time_summary,
 )
 
+from kanban.tasks.ai_summary_tasks import (
+    generate_board_summary_task,
+    generate_strategy_summary_task,
+    generate_mission_summary_task,
+    generate_daily_executive_briefing,
+)
+
 __all__ = [
     # Conflict tasks
     'detect_conflicts_task',
@@ -39,4 +46,9 @@ __all__ = [
     'send_time_tracking_reminders',
     'detect_time_anomalies',
     'send_weekly_time_summary',
+    # AI summary tasks
+    'generate_board_summary_task',
+    'generate_strategy_summary_task',
+    'generate_mission_summary_task',
+    'generate_daily_executive_briefing',
 ]

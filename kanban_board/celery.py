@@ -53,6 +53,17 @@ app.conf.beat_schedule = {
         'task': 'kanban.run_due_date_approaching_automations',
         'schedule': crontab(minute=30),  # Every hour at :30 (offset from conflict detection)
     },
+    # Daily executive briefing - 08:00 IST (CELERY_TIMEZONE = 'Asia/Kolkata')
+    'daily-executive-briefing': {
+        'task': 'kanban.ai_summary.generate_daily_executive_briefing',
+        'schedule': crontab(hour=8, minute=0),
+    },
+}
+
+# Route all AI summary tasks to a dedicated 'summaries' queue so they never
+# compete with user-facing operations (auth, data saves, conflict detection).
+app.conf.task_routes = {
+    'kanban.ai_summary.*': {'queue': 'summaries'},
 }
 
 

@@ -428,3 +428,87 @@ def update_profile_on_task_completion(sender, instance, **kwargs):
         
         if latest_assignment:
             latest_assignment.calculate_actual_metrics()
+
+
+# ---------------------------------------------------------------------------
+# AI summary debounce trigger
+# ---------------------------------------------------------------------------
+
+@receiver(post_save, sender=Task)
+def trigger_debounced_board_summary(sender, instance, created, **kwargs):
+    """
+    Enqueue a background Celery task to refresh the board's AI summary whenever
+    a "major event" occurs on any task:
+      - Task moved to a different column
+      - Priority escalated to urgent or high
+      - Task completed (progress → 100)
+
+    Race-condition guard: cache.add() maps to Redis SET NX (atomic set-if-not-
+    exists).  If two tasks are saved simultaneously on the same board, only the
+    first cache.add() call succeeds and returns True; the second returns False and
+    silently skips.  This guarantees exactly ONE Celery task is queued per board
+    per debounce window — regardless of web-worker concurrency.
+
+    The Celery task itself deletes the lock key when it finishes so the board can
+    be re-queued immediately after the previous summary completes.
+    """
+    if created:
+        # New tasks don't have pre-save change flags — skip
+        return
+
+    if not instance.column or not instance.column.board_id:
+        return
+
+    # Check whether a "major event" happened (flags set by pre_save receivers)
+    column_changed = (
+        getattr(instance, '_old_column_id', None) is not None
+        and instance._old_column_id != instance.column_id
+    )
+    priority_escalated = (
+        getattr(instance, '_priority_changed', False)
+        and instance.priority in ('urgent', 'high')
+    )
+    just_completed = getattr(instance, '_just_completed', False)
+
+    if not (column_changed or priority_escalated or just_completed):
+        return  # Minor edit — no need to refresh the board summary
+
+    board_id = instance.column.board_id
+    debounce_seconds = _get_debounce_seconds()
+    lock_key = f'board_ai_lock_{board_id}'
+
+    try:
+        from django.core.cache import caches
+        try:
+            ai_cache = caches['ai_cache']
+        except Exception:
+            from django.core.cache import cache as ai_cache
+
+        # Atomic SET NX — only the first concurrent caller gets True
+        acquired = ai_cache.add(lock_key, True, timeout=debounce_seconds)
+        if not acquired:
+            # Another event already queued the task for this board — skip
+            return
+
+        # Import here to avoid circular imports at module load time
+        from kanban.tasks.ai_summary_tasks import generate_board_summary_task
+        generate_board_summary_task.apply_async(
+            args=[board_id],
+            countdown=debounce_seconds,
+        )
+
+    except Exception as exc:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            f"trigger_debounced_board_summary: could not enqueue task for "
+            f"board {board_id}: {exc}"
+        )
+
+
+def _get_debounce_seconds():
+    """Read AI_SUMMARY_DEBOUNCE_SECONDS from settings, default 600 (10 min)."""
+    try:
+        from django.conf import settings
+        return getattr(settings, 'AI_SUMMARY_DEBOUNCE_SECONDS', 600)
+    except Exception:
+        return 600
