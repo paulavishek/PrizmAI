@@ -699,193 +699,15 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 
-<!-- Analytics Cards -->
-<div class="row mb-4">
-    <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card stats-card primary shadow h-100 py-2 metrics-card" data-bs-toggle="modal"
-            data-bs-target="#totalTasksModal">
-            <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Tasks</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ task_count }}</div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="fas fa-clipboard-list stats-icon text-gray-300"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+<!-- Dashboard Main Layout: Mission+Tasks (left) + Metrics sidebar (right) -->
+<div class="row g-4 mb-4">
 
-    <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card stats-card success shadow h-100 py-2 metrics-card" data-bs-toggle="modal"
-            data-bs-target="#completedTasksModal">
-            <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Completed Tasks</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completed_count }}</div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="fas fa-check-circle stats-icon text-gray-300"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card stats-card warning shadow h-100 py-2 metrics-card" data-bs-toggle="modal"
-            data-bs-target="#completionRateModal">
-            <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Completion Rate</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completion_rate }}%</div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="fas fa-chart-line stats-icon text-gray-300"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card stats-card danger shadow h-100 py-2 metrics-card" data-bs-toggle="modal"
-            data-bs-target="#overdueTasksModal">
-            <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Overdue Tasks</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ overdue_count }}</div>
-                    </div>
-                    <div class="col-auto">
-                        <i class="fas fa-exclamation-triangle stats-icon text-gray-300"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-xl-3 col-md-6 mb-4">
-        <div class="card stats-card info shadow h-100 py-2 metrics-card" data-bs-toggle="modal"
-            data-bs-target="#dueSoonTasksModal">
-            <div class="card-body">
-                <div class="row no-gutters align-items-center">
-                    <div class="col mr-2">
-                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Tasks Due Soon</div>
-                        <div class="h5 mb-0 font-weight-bold text-gray-800">{{ due_soon }}</div>
-                        <small class="text-muted">Next 3 days</small>
-                    </div>
-                    <div class="col-auto">
-                        <i class="fas fa-calendar-alt stats-icon text-gray-300"></i>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+    <!-- ======================================================== -->
+    <!-- LEFT COLUMN: Mission Overview (top) + My Tasks (below)   -->
+    <!-- ======================================================== -->
+    <div class="col-lg-9">
 
-<!-- My Tasks Section -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card shadow mb-4">
-            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                <div class="d-flex align-items-center">
-                    <h6 class="m-0 font-weight-bold text-primary me-3">
-                        <i class="fas fa-user-check me-2"></i>My Tasks
-                    </h6>
-                    <small class="text-muted">
-                        ({{ my_tasks_count }} total{% if my_tasks_count != my_tasks|length %}, showing top 8{% endif %})
-                    </small>
-                </div>
-                <div class="d-flex align-items-center">
-                    <label for="taskSortSelect" class="form-label me-2 mb-0 small text-muted">Sort by:</label>
-                    <select id="taskSortSelect" class="form-select form-select-sm" style="width: auto;"
-                        onchange="changeSortOrder(this.value)">
-                        <option value="urgency" {% if my_tasks_sort_by == 'urgency' %}selected{% endif %}>
-                            🚨 Urgency (Overdue First)
-                        </option>
-                        <option value="due_date" {% if my_tasks_sort_by == 'due_date' %}selected{% endif %}>
-                            📅 Due Date (Chronological)
-                        </option>
-                        <option value="priority" {% if my_tasks_sort_by == 'priority' %}selected{% endif %}>
-                            🔥 Priority (High to Low)
-                        </option>
-                        <option value="recent" {% if my_tasks_sort_by == 'recent' %}selected{% endif %}>
-                            🕒 Recent (Latest First)
-                        </option>
-                    </select>
-                </div>
-            </div>
-            <div class="card-body">
-                {% if my_tasks %}
-                <div class="row">
-                    {% for task in my_tasks %}
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <div
-                            class="card h-100 border-left-{% if task.priority == 'urgent' %}danger{% elif task.priority == 'high' %}warning{% elif task.priority == 'medium' %}info{% else %}success{% endif %} shadow-sm">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <h6 class="card-title mb-0">{{ task.title|truncatechars:40 }}</h6>
-                                    <span class="badge priority-{{ task.priority }}">{{ task.priority|title }}</span>
-                                </div>
-
-                                {% if task.description %}
-                                <p class="card-text text-muted small mb-2">{{ task.description|truncatechars:80 }}</p>
-                                {% endif %}
-
-                                <div class="mb-2">
-                                    <small class="text-muted">
-                                        <i class="fas fa-project-diagram me-1"></i>{{ task.column.board.name }} - {{ task.column.name }}
-                                    </small>
-                                </div>
-
-                                {% if task.due_date %}
-                                <div class="mb-2">
-                                    <small
-                                        class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
-                                        <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
-                                        {% if task.due_date < now and task.progress < 100 %}<span
-                                            class="badge bg-danger ms-1">Overdue</span>{% endif %}
-                                    </small>
-                                </div>
-                                {% endif %}
-
-                                <div class="progress mb-2" style="height: 6px;">
-                                    <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
-                                        role="progressbar" style="width: {{ task.progress }}%"></div>
-                                </div>
-                                <small class="text-muted">{{ task.progress }}% complete</small>
-
-                                <div class="text-end mt-2">
-                                    <a href="{% url 'task_detail' task.id %}" class="btn btn-sm btn-primary">
-                                        <i class="fas fa-eye"></i> View
-                                    </a>
-                                    <a href="{% url 'board_detail' task.column.board.id %}"
-                                        class="btn btn-sm btn-outline-secondary">
-                                        <i class="fas fa-project-diagram"></i> Board
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <div class="text-center py-5">
-                    <i class="fas fa-user-check fa-4x text-gray-300 mb-3"></i>
-                    <p class="mb-4">No tasks are currently assigned to you.</p>
-                    <p class="text-muted">Tasks assigned to you will appear here for quick access.</p>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Mission Overview Tree -->
-<div class="row">
-    <div class="col-12">
+        <!-- Mission Overview Tree -->
         <div class="card shadow mb-4" id="mission-overview-card">
             <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
                 <div class="d-flex align-items-center gap-2">
@@ -921,12 +743,17 @@ document.addEventListener('DOMContentLoaded', function() {
                     {% with mission=mission_item.mission %}
                     <div class="mission-node mb-4" id="mission-node-{{ mission.id }}">
                         <!-- Mission Card -->
-                        <div class="mission-card card border-0 shadow-sm mb-0">
+                        <div class="mission-card card border-0 shadow-sm mb-0" style="border-left: 4px solid #4e73df !important;">
                             <div class="card-body p-3">
                                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
                                     <div class="d-flex align-items-center gap-2 flex-grow-1">
                                         <i class="fas fa-bullseye text-primary mt-1"></i>
                                         <div>
+                                            <!-- MISSION label -->
+                                            <span class="badge text-uppercase fw-semibold me-1 mb-1"
+                                                  style="background:#e8f0fe; color:#3a5bd9; border:1px solid #c0d0f8; font-size:0.6rem; letter-spacing:0.07em; padding:3px 7px;">
+                                                Mission
+                                            </span>
                                             <h6 class="mb-0 fw-bold">
                                                 <a href="{{ mission.get_absolute_url }}" class="text-decoration-none text-dark stretched-link-override">{{ mission.name }}</a>
                                             </h6>
@@ -981,12 +808,17 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <!-- Strategy Row (always visible) -->
                                 <div class="strategy-row d-flex align-items-start gap-2 p-2 rounded"
                                      data-strategy-id="{{ strategy.id }}"
-                                     style="cursor:pointer;">
+                                     style="cursor:pointer; background:#f8f9fa; border-left: 3px solid #858796;">
                                     <span class="tree-branch-icon mt-1 text-muted">&#9492;&#9472;</span>
                                     <i class="fas fa-chess-knight text-secondary mt-1 flex-shrink-0"></i>
                                     <div class="flex-grow-1">
                                         <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
                                             <div>
+                                                <!-- STRATEGY label -->
+                                                <span class="badge text-uppercase fw-semibold me-1"
+                                                      style="background:#f1f1f3; color:#555; border:1px solid #d0d0d8; font-size:0.58rem; letter-spacing:0.07em; padding:3px 7px;">
+                                                    Strategy
+                                                </span>
                                                 <span class="fw-semibold strategy-name">
                                                     <a href="{{ strategy.get_absolute_url }}" class="text-decoration-none text-dark" onclick="event.stopPropagation()">{{ strategy.name }}</a>
                                                 </span>
@@ -1114,8 +946,201 @@ document.addEventListener('DOMContentLoaded', function() {
                 {% endif %}
             </div>
         </div>
+        <!-- /Mission Overview -->
+
+        <!-- My Tasks Section -->
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <div class="d-flex align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary me-3">
+                        <i class="fas fa-user-check me-2"></i>My Tasks
+                    </h6>
+                    <small class="text-muted">
+                        ({{ my_tasks_count }} total{% if my_tasks_count != my_tasks|length %}, showing top 8{% endif %})
+                    </small>
+                </div>
+                <div class="d-flex align-items-center">
+                    <label for="taskSortSelect" class="form-label me-2 mb-0 small text-muted">Sort by:</label>
+                    <select id="taskSortSelect" class="form-select form-select-sm" style="width: auto;"
+                        onchange="changeSortOrder(this.value)">
+                        <option value="urgency" {% if my_tasks_sort_by == 'urgency' %}selected{% endif %}>
+                            🚨 Urgency (Overdue First)
+                        </option>
+                        <option value="due_date" {% if my_tasks_sort_by == 'due_date' %}selected{% endif %}>
+                            📅 Due Date (Chronological)
+                        </option>
+                        <option value="priority" {% if my_tasks_sort_by == 'priority' %}selected{% endif %}>
+                            🔥 Priority (High to Low)
+                        </option>
+                        <option value="recent" {% if my_tasks_sort_by == 'recent' %}selected{% endif %}>
+                            🕒 Recent (Latest First)
+                        </option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if my_tasks %}
+                <div class="row">
+                    {% for task in my_tasks %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div
+                            class="card h-100 border-left-{% if task.priority == 'urgent' %}danger{% elif task.priority == 'high' %}warning{% elif task.priority == 'medium' %}info{% else %}success{% endif %} shadow-sm">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="card-title mb-0">{{ task.title|truncatechars:40 }}</h6>
+                                    <span class="badge priority-{{ task.priority }}">{{ task.priority|title }}</span>
+                                </div>
+
+                                {% if task.description %}
+                                <p class="card-text text-muted small mb-2">{{ task.description|truncatechars:80 }}</p>
+                                {% endif %}
+
+                                <div class="mb-2">
+                                    <small class="text-muted">
+                                        <i class="fas fa-project-diagram me-1"></i>{{ task.column.board.name }} - {{ task.column.name }}
+                                    </small>
+                                </div>
+
+                                {% if task.due_date %}
+                                <div class="mb-2">
+                                    <small
+                                        class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
+                                        <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
+                                        {% if task.due_date < now and task.progress < 100 %}<span
+                                            class="badge bg-danger ms-1">Overdue</span>{% endif %}
+                                    </small>
+                                </div>
+                                {% endif %}
+
+                                <div class="progress mb-2" style="height: 6px;">
+                                    <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                        role="progressbar" style="width: {{ task.progress }}%"></div>
+                                </div>
+                                <small class="text-muted">{{ task.progress }}% complete</small>
+
+                                <div class="text-end mt-2">
+                                    <a href="{% url 'task_detail' task.id %}" class="btn btn-sm btn-primary">
+                                        <i class="fas fa-eye"></i> View
+                                    </a>
+                                    <a href="{% url 'board_detail' task.column.board.id %}"
+                                        class="btn btn-sm btn-outline-secondary">
+                                        <i class="fas fa-project-diagram"></i> Board
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-user-check fa-4x text-gray-300 mb-3"></i>
+                    <p class="mb-4">No tasks are currently assigned to you.</p>
+                    <p class="text-muted">Tasks assigned to you will appear here for quick access.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        <!-- /My Tasks -->
+
     </div>
+    <!-- /col-lg-9 -->
+
+    <!-- ======================================================== -->
+    <!-- RIGHT SIDEBAR: Metric Cards (stacked)                    -->
+    <!-- ======================================================== -->
+    <div class="col-lg-3">
+        <div class="card shadow" style="position:sticky; top:76px;">
+            <div class="card-header py-2 border-bottom" style="background:#f8f9fc;">
+                <h6 class="m-0 font-weight-bold text-secondary small text-uppercase" style="letter-spacing:0.05em;">
+                    <i class="fas fa-chart-bar me-2"></i>At a Glance
+                </h6>
+            </div>
+            <div class="card-body p-2">
+
+                <!-- Total Tasks -->
+                <div class="card stats-card primary shadow-sm mb-2 metrics-card"
+                     data-bs-toggle="modal" data-bs-target="#totalTasksModal"
+                     style="border-left: 4px solid #4e73df; cursor:pointer;">
+                    <div class="card-body py-2 px-3">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Tasks</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ task_count }}</div>
+                            </div>
+                            <i class="fas fa-clipboard-list fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Completed Tasks -->
+                <div class="card stats-card success shadow-sm mb-2 metrics-card"
+                     data-bs-toggle="modal" data-bs-target="#completedTasksModal"
+                     style="border-left: 4px solid #1cc88a; cursor:pointer;">
+                    <div class="card-body py-2 px-3">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Completed Tasks</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completed_count }}</div>
+                            </div>
+                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Completion Rate -->
+                <div class="card stats-card warning shadow-sm mb-2 metrics-card"
+                     data-bs-toggle="modal" data-bs-target="#completionRateModal"
+                     style="border-left: 4px solid #f6c23e; cursor:pointer;">
+                    <div class="card-body py-2 px-3">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Completion Rate</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completion_rate }}%</div>
+                            </div>
+                            <i class="fas fa-chart-line fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Overdue Tasks -->
+                <div class="card stats-card danger shadow-sm mb-2 metrics-card"
+                     data-bs-toggle="modal" data-bs-target="#overdueTasksModal"
+                     style="border-left: 4px solid #e74a3b; cursor:pointer;">
+                    <div class="card-body py-2 px-3">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Overdue Tasks</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ overdue_count }}</div>
+                            </div>
+                            <i class="fas fa-exclamation-triangle fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tasks Due Soon -->
+                <div class="card stats-card info shadow-sm mb-0 metrics-card"
+                     data-bs-toggle="modal" data-bs-target="#dueSoonTasksModal"
+                     style="border-left: 4px solid #36b9cc; cursor:pointer;">
+                    <div class="card-body py-2 px-3">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Tasks Due Soon</div>
+                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ due_soon }}</div>
+                                <small class="text-muted">Next 3 days</small>
+                            </div>
+                            <i class="fas fa-calendar-alt fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+    <!-- /col-lg-3 -->
+
 </div>
+<!-- /Dashboard Main Layout row -->
 
 <!-- Standalone Boards (not linked to any strategy) -->
 {% if standalone_boards %}
