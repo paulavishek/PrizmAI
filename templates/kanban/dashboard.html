@@ -2115,6 +2115,33 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    /** Default label for a summary button based on level. */
+    function defaultBtnLabel(level) {
+        if (level === 'board') return '\u2728 Board AI';
+        return '\u2728 ' + level.charAt(0).toUpperCase() + level.slice(1) + ' AI';
+    }
+
+    /** Stop spinner and restore button to its normal enabled state. */
+    function resetBtn(btn, labelEl, level) {
+        if (!btn) return;
+        btn.classList.remove('btn-loading');
+        btn.disabled = false;
+        var spinnerEl = btn.querySelector('.btn-spinner');
+        if (spinnerEl) spinnerEl.remove();
+        if (labelEl) labelEl.textContent = defaultBtnLabel(level);
+    }
+
+    /** Put the button into a ⚠ Retry state when polling times out. */
+    function setRetryState(btn, labelEl) {
+        if (!btn) return;
+        btn.classList.remove('btn-loading');
+        btn.disabled = false;
+        var spinnerEl = btn.querySelector('.btn-spinner');
+        if (spinnerEl) spinnerEl.remove();
+        if (labelEl) labelEl.textContent = '\u26A0 Timed out \u2014 Retry';
+        btn.title = 'AI generation is taking longer than expected. Click to try again.';
+    }
+
     /** Start polling /api/summary-status/{level}/{id}/ until the summary updates. */
     function startPolling(level, objId, previousGeneratedAt) {
         var pollerKey = level + '-' + objId;
@@ -2124,51 +2151,75 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         var pollCount = 0;
-        var MAX_POLLS = 24; // 24 × 5 s = 2 min max
+        var MAX_POLLS = 72; // 72 × 5 s = 6 min max (covers slow Celery startup)
         var btn = document.querySelector('.generate-summary-btn[data-level="' + level + '"][data-id="' + objId + '"]');
         var labelEl = btn ? btn.querySelector('.btn-label') : null;
+        var timedOut = false;
+        var onVisibilityChange = null; // declared up-front so doPoll can reference it
 
-        var intervalId = setInterval(function() {
-            pollCount++;
+        function stopPoller(success) {
+            clearInterval(intervalId);
+            summaryPollers.delete(pollerKey);
+            if (onVisibilityChange) {
+                document.removeEventListener('visibilitychange', onVisibilityChange);
+                onVisibilityChange = null;
+            }
+            if (success) {
+                resetBtn(btn, labelEl, level);
+            } else {
+                timedOut = true;
+                setRetryState(btn, labelEl);
+            }
+        }
+
+        function doPoll() {
             fetch('/api/summary-status/' + level + '/' + objId + '/', {
                 method: 'GET',
                 headers: { 'X-CSRFToken': getCookie('csrftoken') },
             })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                // Consider the summary "new" when generated_at changed and the
-                // task is no longer queued (lock released).  Also treat it as
-                // new if generated_at changed and we have reached MAX_POLLS —
-                // this is a safety net for the case where the lock was released
-                // between polls and we missed the !queued window.
                 var generatedAtChanged = (
                     data.generated_at
                     && data.generated_at !== previousGeneratedAt
                 );
+                // isNew: task finished AND lock released, OR task finished AND we've
+                // hit MAX_POLLS (safety net for edge-case where lock-release was missed).
                 var isNew = generatedAtChanged && (!data.queued || pollCount >= MAX_POLLS);
-                if (isNew || pollCount >= MAX_POLLS) {
-                    clearInterval(intervalId);
-                    summaryPollers.delete(pollerKey);
-                    if (btn) {
-                        btn.classList.remove('btn-loading');
-                        btn.disabled = false;
-                        if (labelEl) labelEl.textContent = (level === 'board' ? '\u2728 Board AI' : '\u2728 ' + level.charAt(0).toUpperCase() + level.slice(1) + ' AI');
-                    }
-                    if (isNew) {
-                        applySummaryToDOM(level, objId, data);
-                    }
+                if (isNew) {
+                    stopPoller(true);
+                    applySummaryToDOM(level, objId, data);
+                } else if (pollCount >= MAX_POLLS) {
+                    stopPoller(false);
                 }
             })
             .catch(function() {
                 if (pollCount >= MAX_POLLS) {
-                    clearInterval(intervalId);
-                    summaryPollers.delete(pollerKey);
-                    if (btn) { btn.classList.remove('btn-loading'); btn.disabled = false; }
+                    stopPoller(false);
                 }
             });
+        }
+
+        var intervalId = setInterval(function() {
+            pollCount++;
+            doPoll();
         }, 5000);
 
         summaryPollers.set(pollerKey, intervalId);
+
+        // When the user switches back to this tab, immediately do one extra check.
+        // This catches the common case where the task finished while the tab was
+        // in the background and the poller hasn't had its next 5-second tick yet.
+        onVisibilityChange = function() {
+            if (document.visibilityState !== 'visible') return;
+            if (summaryPollers.has(pollerKey)) {
+                pollCount++;
+                doPoll();
+            } else {
+                document.removeEventListener('visibilitychange', onVisibilityChange);
+            }
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
     }
 
     document.querySelectorAll('.generate-summary-btn').forEach(function(btn) {
@@ -2206,9 +2257,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(function(resp) { return resp.json(); })
             .then(function(data) {
                 if (data.error) {
-                    btn.classList.remove('btn-loading');
-                    btn.disabled = false;
-                    if (labelEl) labelEl.textContent = (level === 'board' ? '\u2728 Board AI' : '\u2728 ' + level.charAt(0).toUpperCase() + level.slice(1) + ' AI');
+                    resetBtn(btn, labelEl, level);
                     alert('Error: ' + data.error);
                     return;
                 }
@@ -2222,9 +2271,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 startPolling(level, objId, previousGeneratedAt);
             })
             .catch(function(err) {
-                btn.classList.remove('btn-loading');
-                btn.disabled = false;
-                if (labelEl) labelEl.textContent = (level === 'board' ? '\u2728 Board AI' : '\u2728 ' + level.charAt(0).toUpperCase() + level.slice(1) + ' AI');
+                resetBtn(btn, labelEl, level);
                 console.error('Summary generation error:', err);
                 alert('Failed to queue summary. Please try again.');
             });
