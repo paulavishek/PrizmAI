@@ -10,7 +10,7 @@ timeout /t 3 > nul
 
 :: Start Celery Worker
 echo [2/4] Starting Celery Worker...
-start cmd /k "title Celery Worker && cd /d "C:\Users\Avishek Paul\PrizmAI" && venv\Scripts\activate && celery -A kanban_board worker --pool=solo -l info"
+start cmd /k "title Celery Worker && cd /d "C:\Users\Avishek Paul\PrizmAI" && venv\Scripts\activate && celery -A kanban_board worker --pool=solo -l info -Q celery,summaries"
 echo Celery worker started.
 
 :: Start Celery Beat
