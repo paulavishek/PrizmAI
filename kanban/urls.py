@@ -104,6 +104,13 @@ urlpatterns = [
     path('api/summarize-board-analytics/<int:board_id>/', api_views.summarize_board_analytics_api, name='summarize_board_analytics_api'),
     path('api/download-analytics-pdf/<int:board_id>/', api_views.download_analytics_summary_pdf, name='download_analytics_summary_pdf'),
     path('api/summarize-task-details/<int:task_id>/', api_views.summarize_task_details_api, name='summarize_task_details_api'),
+
+    # Bubble-up AI Summary endpoints (persist summaries at each hierarchy level)
+    path('api/generate-task-summary/<int:task_id>/', api_views.generate_task_summary_api, name='generate_task_summary_api'),
+    path('api/generate-board-summary/<int:board_id>/', api_views.generate_board_summary_api, name='generate_board_summary_api'),
+    path('api/generate-strategy-summary/<int:strategy_id>/', api_views.generate_strategy_summary_api, name='generate_strategy_summary_api'),
+    path('api/generate-mission-summary/<int:mission_id>/', api_views.generate_mission_summary_api, name='generate_mission_summary_api'),
+
       # New AI Enhancement API Endpoints
     path('api/suggest-task-priority/', api_views.suggest_task_priority_api, name='suggest_task_priority_api'),
     path('api/predict-deadline/', api_views.predict_deadline_api, name='predict_deadline_api'),

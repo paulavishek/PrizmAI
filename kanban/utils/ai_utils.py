@@ -3836,3 +3836,237 @@ Do not invent data not listed above."""
     except Exception as e:
         logger.error(f"Error generating status report: {str(e)}")
         return None
+
+
+# ---------------------------------------------------------------------------
+# BUBBLE-UP AI SUMMARY CHAIN
+# Task → Board → Strategy → Mission
+# Each level generates a persistent plain-text executive summary stored in the
+# model's ai_summary + ai_summary_generated_at fields.
+# ---------------------------------------------------------------------------
+
+def generate_and_save_task_summary(task) -> Optional[str]:
+    """
+    Generate a plain-text executive summary for a task, persist it to the DB,
+    and return the summary string (or None on failure).
+    Reuses the existing summarize_task_details() function and extracts
+    the executive_summary section.
+    """
+    try:
+        from django.utils import timezone as tz
+        from kanban.stakeholder_models import StakeholderTaskInvolvement
+
+        task_data = {
+            'title': task.title,
+            'description': task.description or 'No description provided',
+            'status': task.column.name,
+            'priority': task.get_priority_display(),
+            'progress': task.progress if task.progress is not None else 0,
+            'due_date': task.due_date.strftime('%B %d, %Y') if task.due_date else 'No due date set',
+            'assigned_to': task.assigned_to.username if task.assigned_to else 'Unassigned',
+            'created_by': task.created_by.username,
+            'created_at': task.created_at.strftime('%B %d, %Y'),
+            'risk_level': task.risk_level,
+            'risk_score': task.risk_score,
+            'risk_likelihood': task.risk_likelihood,
+            'risk_impact': task.risk_impact,
+            'risk_indicators': task.risk_indicators if task.risk_indicators else [],
+            'mitigation_suggestions': task.mitigation_suggestions if task.mitigation_suggestions else [],
+            'stakeholders': [
+                {
+                    'name': inv.stakeholder.name,
+                    'involvement_type': inv.get_involvement_type_display(),
+                    'engagement_status': inv.get_engagement_status_display(),
+                    'satisfaction_rating': inv.satisfaction_rating,
+                    'feedback': inv.feedback,
+                }
+                for inv in StakeholderTaskInvolvement.objects.filter(task=task).select_related('stakeholder')
+            ],
+            'required_skills': task.required_skills if task.required_skills else [],
+            'skill_match_score': task.skill_match_score,
+            'workload_impact': task.get_workload_impact_display() if task.workload_impact else None,
+            'collaboration_required': task.collaboration_required,
+            'complexity_score': task.complexity_score,
+            'parent_task': task.parent_task.title if task.parent_task else None,
+            'subtasks': [s.title for s in task.subtasks.all()],
+            'dependencies': [
+                f"{dep.title} ({dep.progress}% complete)"
+                for dep in task.dependencies.all()
+            ],
+            'dependent_tasks': [f"{t.title} (waiting)" for t in task.dependent_tasks.all()],
+            'related_tasks': [r.title for r in task.related_tasks.all()],
+            'labels': [{'name': l.name, 'category': l.category} for l in task.labels.all()],
+            'comments_count': task.comments.count(),
+        }
+
+        result = summarize_task_details(task_data)
+        if not result:
+            return None
+
+        # Extract the executive summary text — fall back to markdown_summary if missing
+        summary_text = None
+        es = result.get('executive_summary')
+        if isinstance(es, dict):
+            summary_text = es.get('one_line_summary') or es.get('summary') or str(es)
+        elif isinstance(es, str):
+            summary_text = es
+        if not summary_text:
+            summary_text = result.get('markdown_summary') or str(result)
+
+        # Persist
+        task.ai_summary = summary_text
+        task.ai_summary_generated_at = tz.now()
+        task.save(update_fields=['ai_summary', 'ai_summary_generated_at'])
+        return summary_text
+
+    except Exception as e:
+        logger.error(f"Error in generate_and_save_task_summary (task {task.pk}): {e}")
+        return None
+
+
+def generate_and_save_board_summary(board) -> Optional[str]:
+    """
+    Collect ai_summary values from all tasks on the board (generating any that are
+    missing), send them to the LLM for a board-level synthesis, persist to the Board
+    model, and return the summary string.
+    """
+    try:
+        from django.utils import timezone as tz
+        from kanban.models import Task
+
+        tasks = Task.objects.filter(column__board=board, item_type='task').select_related(
+            'column', 'assigned_to', 'created_by', 'parent_task'
+        ).prefetch_related('labels')
+
+        task_snippets = []
+        for task in tasks:
+            snippet = task.ai_summary
+            if not snippet:
+                snippet = generate_and_save_task_summary(task)
+            if snippet:
+                task_snippets.append(f"- [{task.title}] {snippet}")
+
+        if not task_snippets:
+            summary_text = f"No tasks available yet on board '{board.name}'."
+        else:
+            snippets_block = "\n".join(task_snippets[:40])  # cap to keep prompt manageable
+            total = tasks.count()
+            completed = tasks.filter(progress=100).count()
+            prompt = f"""You are a senior project manager. Synthesise the following individual task summaries
+for the project board "{board.name}" into one concise board-level summary (3-5 sentences).
+Focus on: overall progress, key risks, critical next steps, and team health.
+Be factual and actionable. Do NOT invent data not listed below.
+
+Board stats: {total} total tasks, {completed} completed ({round(completed/total*100) if total else 0}% done).
+
+Task summaries:
+{snippets_block}
+
+Write ONLY the summary paragraph — no headings, no bullet points, no JSON."""
+
+            summary_text = generate_ai_content(prompt, task_type='board_analytics_summary', use_cache=False)
+
+        if not summary_text:
+            return None
+
+        board.ai_summary = summary_text
+        board.ai_summary_generated_at = tz.now()
+        board.save(update_fields=['ai_summary', 'ai_summary_generated_at'])
+        return summary_text
+
+    except Exception as e:
+        logger.error(f"Error in generate_and_save_board_summary (board {board.pk}): {e}")
+        return None
+
+
+def generate_and_save_strategy_summary(strategy) -> Optional[str]:
+    """
+    Collect ai_summary values from all boards under the strategy (generating any that
+    are missing), synthesise a strategy-level summary, persist it, and return the text.
+    """
+    try:
+        from django.utils import timezone as tz
+
+        boards = strategy.boards.all()
+        board_snippets = []
+        for board in boards:
+            snippet = board.ai_summary
+            if not snippet:
+                snippet = generate_and_save_board_summary(board)
+            if snippet:
+                board_snippets.append(f"- [{board.name}] {snippet}")
+
+        if not board_snippets:
+            summary_text = f"No boards linked to strategy '{strategy.name}' yet."
+        else:
+            snippets_block = "\n".join(board_snippets)
+            prompt = f"""You are a senior strategy analyst. Synthesise the following board-level summaries
+for the strategy "{strategy.name}" (under mission: "{strategy.mission.name}") into one concise
+strategy-level summary (3-5 sentences).
+Focus on: strategic progress, cross-board risks and dependencies, and highest-priority actions.
+Be factual and actionable. Do NOT invent data not listed below.
+
+Board summaries:
+{snippets_block}
+
+Write ONLY the summary paragraph — no headings, no bullet points, no JSON."""
+
+            summary_text = generate_ai_content(prompt, task_type='board_analytics_summary', use_cache=False)
+
+        if not summary_text:
+            return None
+
+        strategy.ai_summary = summary_text
+        strategy.ai_summary_generated_at = tz.now()
+        strategy.save(update_fields=['ai_summary', 'ai_summary_generated_at'])
+        return summary_text
+
+    except Exception as e:
+        logger.error(f"Error in generate_and_save_strategy_summary (strategy {strategy.pk}): {e}")
+        return None
+
+
+def generate_and_save_mission_summary(mission) -> Optional[str]:
+    """
+    Collect ai_summary values from all strategies under the mission (generating any
+    that are missing), synthesise a mission-level summary, persist it, and return the text.
+    """
+    try:
+        from django.utils import timezone as tz
+
+        strategies = mission.strategies.all()
+        strategy_snippets = []
+        for strategy in strategies:
+            snippet = strategy.ai_summary
+            if not snippet:
+                snippet = generate_and_save_strategy_summary(strategy)
+            if snippet:
+                strategy_snippets.append(f"- [{strategy.name}] {snippet}")
+
+        if not strategy_snippets:
+            summary_text = f"No strategies defined for mission '{mission.name}' yet."
+        else:
+            snippets_block = "\n".join(strategy_snippets)
+            prompt = f"""You are a C-level executive advisor. Synthesise the following strategy-level summaries
+for the mission "{mission.name}" into one concise mission-level executive summary (3-5 sentences).
+Focus on: mission progress, strategic alignment, key risks, and critical next steps.
+Be factual, high-level, and actionable. Do NOT invent data not listed below.
+
+Strategy summaries:
+{snippets_block}
+
+Write ONLY the summary paragraph — no headings, no bullet points, no JSON."""
+
+            summary_text = generate_ai_content(prompt, task_type='board_analytics_summary', use_cache=False)
+
+        if not summary_text:
+            return None
+
+        mission.ai_summary = summary_text
+        mission.ai_summary_generated_at = tz.now()
+        mission.save(update_fields=['ai_summary', 'ai_summary_generated_at'])
+        return summary_text
+
+    except Exception as e:
+        logger.error(f"Error in generate_and_save_mission_summary (mission {mission.pk}): {e}")
+        return None

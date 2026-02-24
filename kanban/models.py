@@ -58,6 +58,18 @@ class Mission(models.Model):
     is_demo = models.BooleanField(default=False)
     is_seed_demo_data = models.BooleanField(default=False)
 
+    # AI Summary (bubble-up from strategies)
+    ai_summary = models.TextField(
+        blank=True,
+        null=True,
+        help_text="AI-generated summary synthesised from all strategy summaries."
+    )
+    ai_summary_generated_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="When the AI summary was last generated."
+    )
+
     # Workspace FK stub — reserved for future Workspace layer (currently unused)
     # workspace = models.ForeignKey('Workspace', null=True, blank=True, ...)
 
@@ -102,6 +114,18 @@ class Strategy(models.Model):
 
     # Demo support
     is_seed_demo_data = models.BooleanField(default=False)
+
+    # AI Summary (bubble-up from boards)
+    ai_summary = models.TextField(
+        blank=True,
+        null=True,
+        help_text="AI-generated summary synthesised from all board summaries under this strategy."
+    )
+    ai_summary_generated_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="When the AI summary was last generated."
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -182,6 +206,18 @@ class Board(models.Model):
         null=True,
         blank=True,
         help_text="The Strategy this board belongs to (optional — existing boards unaffected).",
+    )
+
+    # AI Summary (bubble-up from tasks)
+    ai_summary = models.TextField(
+        blank=True,
+        null=True,
+        help_text="AI-generated summary synthesised from all task summaries on this board."
+    )
+    ai_summary_generated_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="When the AI summary was last generated."
     )
 
     def __str__(self):
@@ -397,6 +433,18 @@ class Task(models.Model):
                                       help_text="AI-calculated risk score (0-100)")
     ai_recommendations = models.TextField(blank=True, null=True, help_text="AI-generated recommendations for this task")
     last_ai_analysis = models.DateTimeField(blank=True, null=True, help_text="When AI last analyzed this task")
+
+    # AI Summary (persisted plain-text executive summary for dashboard bubble-up)
+    ai_summary = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Persisted AI-generated executive summary for this task."
+    )
+    ai_summary_generated_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="When the AI task summary was last generated."
+    )
     
     # Smart Resource Analysis Fields
     required_skills = models.JSONField(

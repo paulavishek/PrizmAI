@@ -37,7 +37,11 @@ from kanban.utils.ai_utils import (
     calculate_task_risk_score,
     generate_risk_mitigation_suggestions,
     assess_task_dependencies_and_risks,
-    generate_board_setup_recommendations
+    generate_board_setup_recommendations,
+    generate_and_save_task_summary,
+    generate_and_save_board_summary,
+    generate_and_save_strategy_summary,
+    generate_and_save_mission_summary,
 )
 from api.ai_usage_utils import track_ai_request, check_ai_quota
 from kanban.utils.demo_limits import check_ai_generation_limit, record_limitation_hit, increment_ai_generation_count
@@ -4220,3 +4224,143 @@ def add_phase(request, board_id):
         'new_phase_name': f'Phase {board.num_phases}'
     })
 
+
+# ---------------------------------------------------------------------------
+# BUBBLE-UP AI SUMMARY ENDPOINTS
+# POST endpoints that generate and persist AI summaries for the dashboard tree.
+# ---------------------------------------------------------------------------
+
+@login_required
+@require_http_methods(["POST"])
+def generate_task_summary_api(request, task_id):
+    """Generate and persist an AI summary for a single task."""
+    start_time = time.time()
+    try:
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({'error': 'AI quota exceeded.', 'quota_exceeded': True}, status=429)
+
+        task = get_object_or_404(Task, id=task_id)
+
+        summary = generate_and_save_task_summary(task)
+        if not summary:
+            return JsonResponse({'error': 'Failed to generate task summary.'}, status=500)
+
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='task_summary_dashboard',
+            request_type='summarize',
+            board_id=task.column.board_id,
+            success=True,
+            response_time_ms=response_time_ms,
+        )
+        return JsonResponse({
+            'summary': summary,
+            'generated_at': task.ai_summary_generated_at.isoformat() if task.ai_summary_generated_at else None,
+        })
+    except Exception as e:
+        logger.error(f"generate_task_summary_api error: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def generate_board_summary_api(request, board_id):
+    """Generate and persist an AI summary for a board (from its task summaries)."""
+    start_time = time.time()
+    try:
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({'error': 'AI quota exceeded.', 'quota_exceeded': True}, status=429)
+
+        board = get_object_or_404(Board, id=board_id)
+
+        summary = generate_and_save_board_summary(board)
+        if not summary:
+            return JsonResponse({'error': 'Failed to generate board summary.'}, status=500)
+
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='board_summary_dashboard',
+            request_type='summarize',
+            board_id=board.id,
+            success=True,
+            response_time_ms=response_time_ms,
+        )
+        return JsonResponse({
+            'summary': summary,
+            'generated_at': board.ai_summary_generated_at.isoformat() if board.ai_summary_generated_at else None,
+        })
+    except Exception as e:
+        logger.error(f"generate_board_summary_api error: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def generate_strategy_summary_api(request, strategy_id):
+    """Generate and persist an AI summary for a strategy (from its board summaries)."""
+    start_time = time.time()
+    try:
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({'error': 'AI quota exceeded.', 'quota_exceeded': True}, status=429)
+
+        from kanban.models import Strategy
+        strategy = get_object_or_404(Strategy, id=strategy_id)
+
+        summary = generate_and_save_strategy_summary(strategy)
+        if not summary:
+            return JsonResponse({'error': 'Failed to generate strategy summary.'}, status=500)
+
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='strategy_summary_dashboard',
+            request_type='summarize',
+            success=True,
+            response_time_ms=response_time_ms,
+        )
+        return JsonResponse({
+            'summary': summary,
+            'generated_at': strategy.ai_summary_generated_at.isoformat() if strategy.ai_summary_generated_at else None,
+        })
+    except Exception as e:
+        logger.error(f"generate_strategy_summary_api error: {e}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def generate_mission_summary_api(request, mission_id):
+    """Generate and persist an AI summary for a mission (from its strategy summaries)."""
+    start_time = time.time()
+    try:
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({'error': 'AI quota exceeded.', 'quota_exceeded': True}, status=429)
+
+        from kanban.models import Mission
+        mission = get_object_or_404(Mission, id=mission_id)
+
+        summary = generate_and_save_mission_summary(mission)
+        if not summary:
+            return JsonResponse({'error': 'Failed to generate mission summary.'}, status=500)
+
+        response_time_ms = int((time.time() - start_time) * 1000)
+        track_ai_request(
+            user=request.user,
+            feature='mission_summary_dashboard',
+            request_type='summarize',
+            success=True,
+            response_time_ms=response_time_ms,
+        )
+        return JsonResponse({
+            'summary': summary,
+            'generated_at': mission.ai_summary_generated_at.isoformat() if mission.ai_summary_generated_at else None,
+        })
+    except Exception as e:
+        logger.error(f"generate_mission_summary_api error: {e}")
+        return JsonResponse({'error': str(e)}, status=500)

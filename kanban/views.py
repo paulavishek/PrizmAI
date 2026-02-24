@@ -16,7 +16,7 @@ from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 # Configure logger
 logger = logging.getLogger(__name__)
 
-from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile
+from .models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Mission, Strategy
 from .forms import BoardForm, ColumnForm, TaskForm, TaskLabelForm, CommentForm, TaskMoveForm, TaskSearchForm, TaskFileForm
 from accounts.models import UserProfile, Organization
 from .stakeholder_models import StakeholderTaskInvolvement, ProjectStakeholder
@@ -238,7 +238,58 @@ def dashboard(request):
         Q(column__name__icontains='closed') |
         Q(column__name__icontains='completed') |
         Q(progress=100)
-    ).count()        
+    ).count()
+
+    # ------------------------------------------------------------------
+    # Mission tree data for the new dashboard hierarchy panel
+    # ------------------------------------------------------------------
+    # Missions accessible to the user: created by them, or they are a
+    # member of any board linked to a strategy under that mission,
+    # or it is a demo mission.
+    user_board_ids = list(boards.values_list('id', flat=True))
+
+    # Missions the user has direct ownership of or demo missions
+    missions_qs = Mission.objects.filter(
+        Q(created_by=request.user) |
+        Q(is_demo=True) |
+        Q(strategies__boards__id__in=user_board_ids)
+    ).distinct().prefetch_related(
+        'strategies__boards'
+    ).order_by('-created_at')
+
+    # Build mission tree as a plain list (for easy template iteration)
+    # Each mission dict holds: mission obj + list of strategy dicts
+    # Each strategy dict holds: strategy obj + list of board dicts (with stats)
+    from django.db.models import Count as DjCount, FloatField as DjFloat, ExpressionWrapper
+    mission_tree = []
+    for mission in missions_qs:
+        strategy_list = []
+        for strategy in mission.strategies.all().order_by('-created_at'):
+            board_list = []
+            for board in strategy.boards.all().order_by('name'):
+                total_t = Task.objects.filter(column__board=board, item_type='task').count()
+                done_t = Task.objects.filter(column__board=board, item_type='task', progress=100).count()
+                pct = round((done_t / total_t * 100), 1) if total_t else 0
+                board_list.append({
+                    'board': board,
+                    'total_tasks': total_t,
+                    'done_tasks': done_t,
+                    'completion_pct': pct,
+                })
+            strategy_list.append({
+                'strategy': strategy,
+                'boards': board_list,
+                'board_count': len(board_list),
+            })
+        mission_tree.append({
+            'mission': mission,
+            'strategies': strategy_list,
+            'strategy_count': len(strategy_list),
+        })
+
+    # Standalone boards: user-accessible boards not linked to any strategy
+    standalone_boards = boards.filter(strategy__isnull=True).order_by('name')
+
     return render(request, 'kanban/dashboard.html', {
         'boards': boards,
         'task_count': task_count,
@@ -256,6 +307,10 @@ def dashboard(request):
             'my_tasks_sort_by': sort_by,  # Current sort preference
             'now': timezone.now(),  # For comparing dates in the template
             'show_welcome_modal': show_welcome_modal,  # Show welcome modal for first-time users
+        # Mission tree  
+        'mission_tree': mission_tree,
+        'standalone_boards': standalone_boards,
+        'mission_count': missions_qs.count(),
         })
 
 @login_required
