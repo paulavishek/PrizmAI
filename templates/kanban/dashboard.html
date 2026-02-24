@@ -2047,6 +2047,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 btn.prepend(spinner);
             }
 
+            const abortCtrl = new AbortController();
+            const fetchTimeout = setTimeout(function() { abortCtrl.abort(); }, 90000); // 90s timeout
+
             fetch(url, {
                 method: 'POST',
                 headers: {
@@ -2054,8 +2057,9 @@ document.addEventListener('DOMContentLoaded', function() {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({}),
+                signal: abortCtrl.signal,
             })
-            .then(function(resp) { return resp.json(); })
+            .then(function(resp) { clearTimeout(fetchTimeout); return resp.json(); })
             .then(function(data) {
                 btn.classList.remove('btn-loading');
                 btn.disabled = false;
@@ -2081,10 +2085,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             })
             .catch(function(err) {
+                clearTimeout(fetchTimeout);
                 btn.classList.remove('btn-loading');
                 btn.disabled = false;
-                console.error('Summary generation error:', err);
-                alert('Failed to generate summary. Please try again.');
+                if (err.name === 'AbortError') {
+                    alert('Summary generation timed out (90s). Try generating task-level summaries first from individual task pages, then retry.');
+                } else {
+                    console.error('Summary generation error:', err);
+                    alert('Failed to generate summary. Please try again.');
+                }
             });
         });
     });

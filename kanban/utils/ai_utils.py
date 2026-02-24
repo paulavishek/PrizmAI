@@ -285,8 +285,12 @@ def generate_ai_content(prompt: str, task_type='simple', use_cache: bool = True,
         
         logger.debug(f"Generating AI content - Task: {task_type}, Temperature: {temperature}, MaxTokens: {max_tokens}")
         
-        # Generate content with optimized settings
-        response = model.generate_content(prompt, generation_config=generation_config)
+        # Generate content with optimized settings (60s hard timeout prevents hangs)
+        response = model.generate_content(
+            prompt,
+            generation_config=generation_config,
+            request_options={"timeout": 60},
+        )
         
         if response and response.text:
             result = response.text.strip()
@@ -3942,7 +3946,14 @@ def generate_and_save_board_summary(board) -> Optional[str]:
         for task in tasks:
             snippet = task.ai_summary
             if not snippet:
-                snippet = generate_and_save_task_summary(task)
+                # Use raw task data as fallback instead of generating a full AI summary
+                # per task (avoids 30+ sequential API calls that cause 15-20 min hangs).
+                desc = (task.description or '').strip()[:200]
+                status = task.column.name if task.column else 'Unknown'
+                progress = task.progress or 0
+                snippet = f"{status}, {progress}% complete" + (
+                    f" — {desc}" if desc else ""
+                )
             if snippet:
                 task_snippets.append(f"- [{task.title}] {snippet}")
 
@@ -3992,7 +4003,20 @@ def generate_and_save_strategy_summary(strategy) -> Optional[str]:
         for board in boards:
             snippet = board.ai_summary
             if not snippet:
-                snippet = generate_and_save_board_summary(board)
+                # Use board stats as fallback instead of triggering a full board
+                # summary (which would cascade into generating all task summaries).
+                try:
+                    from kanban.models import Task as _Task
+                    total = _Task.objects.filter(column__board=board, item_type='task').count()
+                    completed = _Task.objects.filter(
+                        column__board=board, item_type='task', progress=100
+                    ).count()
+                    snippet = (
+                        f"{total} tasks, {completed} completed "
+                        f"({round(completed / total * 100) if total else 0}% done)"
+                    )
+                except Exception:
+                    snippet = board.name
             if snippet:
                 board_snippets.append(f"- [{board.name}] {snippet}")
 
@@ -4039,7 +4063,12 @@ def generate_and_save_mission_summary(mission) -> Optional[str]:
         for strategy in strategies:
             snippet = strategy.ai_summary
             if not snippet:
-                snippet = generate_and_save_strategy_summary(strategy)
+                # Use description/status as fallback instead of triggering recursive
+                # board + task summary generation for every missing strategy.
+                snippet = (
+                    (strategy.description or '').strip()[:200]
+                    or f"Strategy '{strategy.name}' — status: {strategy.status}"
+                )
             if snippet:
                 strategy_snippets.append(f"- [{strategy.name}] {snippet}")
 
