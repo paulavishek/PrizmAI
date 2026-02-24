@@ -2136,11 +2136,16 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                var isNew = (
+                // Consider the summary "new" when generated_at changed and the
+                // task is no longer queued (lock released).  Also treat it as
+                // new if generated_at changed and we have reached MAX_POLLS —
+                // this is a safety net for the case where the lock was released
+                // between polls and we missed the !queued window.
+                var generatedAtChanged = (
                     data.generated_at
                     && data.generated_at !== previousGeneratedAt
-                    && !data.queued
                 );
+                var isNew = generatedAtChanged && (!data.queued || pollCount >= MAX_POLLS);
                 if (isNew || pollCount >= MAX_POLLS) {
                     clearInterval(intervalId);
                     summaryPollers.delete(pollerKey);

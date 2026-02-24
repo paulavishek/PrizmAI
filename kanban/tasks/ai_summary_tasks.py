@@ -44,6 +44,30 @@ def _release_board_lock(board_id):
         logger.warning(f"Could not release board AI lock for board {board_id}: {exc}")
 
 
+def _strategy_lock_key(strategy_id):
+    return f'strategy_ai_lock_{strategy_id}'
+
+
+def _release_strategy_lock(strategy_id):
+    """Delete the debounce lock after the strategy task finishes (or fails)."""
+    try:
+        _ai_cache().delete(_strategy_lock_key(strategy_id))
+    except Exception as exc:
+        logger.warning(f"Could not release strategy AI lock for strategy {strategy_id}: {exc}")
+
+
+def _mission_lock_key(mission_id):
+    return f'mission_ai_lock_{mission_id}'
+
+
+def _release_mission_lock(mission_id):
+    """Delete the debounce lock after the mission task finishes (or fails)."""
+    try:
+        _ai_cache().delete(_mission_lock_key(mission_id))
+    except Exception as exc:
+        logger.warning(f"Could not release mission AI lock for mission {mission_id}: {exc}")
+
+
 def _build_board_prompt(board_name, exception_lines, agg):
     """
     Build the structured Program-Manager prompt from pruned task data.
@@ -332,6 +356,10 @@ def generate_strategy_summary_task(self, strategy_id):
             raise self.retry(exc=exc)
         except self.MaxRetriesExceededError:
             return None
+    finally:
+        # Always release the debounce lock so the strategy can be re-queued after
+        # this task finishes (even on failure / retry exhaustion).
+        _release_strategy_lock(strategy_id)
 
 
 # ---------------------------------------------------------------------------
@@ -404,6 +432,10 @@ def generate_mission_summary_task(self, mission_id):
             raise self.retry(exc=exc)
         except self.MaxRetriesExceededError:
             return None
+    finally:
+        # Always release the debounce lock so the mission can be re-queued after
+        # this task finishes (even on failure / retry exhaustion).
+        _release_mission_lock(mission_id)
 
 
 # ---------------------------------------------------------------------------
