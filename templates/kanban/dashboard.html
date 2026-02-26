@@ -589,7 +589,7 @@
         text-align: right;
         flex-shrink: 0;
     }
-    .panel-chart-wrap { position: relative; }
+    .panel-chart-wrap { position: relative; height: 180px; }
     .panel-risk-badge {
         display: inline-block;
         font-size: 0.65rem;
@@ -834,11 +834,93 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 
-<!-- Dashboard Main Layout: Mission+Tasks (left) + Metrics sidebar (right) -->
+{{ chart_data_json|json_script:"dashboardChartData" }}
+
+<!-- ============================================================ -->
+<!-- METRICS CHARTS ROW (full-width, 3 cards)                    -->
+<!-- ============================================================ -->
+<div class="row g-3 mb-4" id="metrics-charts-row">
+    {% if chart_missions %}
+    <div class="col-lg-4 col-md-6">
+        <div class="card shadow h-100">
+            <div class="card-header py-2 d-flex align-items-center" style="background:#e8f0fe;">
+                <i class="fas fa-bullseye me-2 text-primary"></i>
+                <span class="fw-semibold small text-primary">Mission Metrics</span>
+                <small class="text-muted ms-2">Completion &amp; Risk</small>
+            </div>
+            <div class="card-body p-2 position-relative" style="height:220px;">
+                <canvas id="missionChart"></canvas>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-lg-4 col-md-6">
+        <div class="card shadow h-100">
+            <div class="card-header py-2" style="background:#e8f0fe;"><i class="fas fa-bullseye me-2 text-primary"></i><span class="fw-semibold small text-primary">Mission Metrics</span></div>
+            <div class="card-body p-3 text-center text-muted small d-flex align-items-center justify-content-center" style="height:220px;"><i class="fas fa-info-circle me-1"></i>No mission data yet.</div>
+        </div>
+    </div>
+    {% endif %}
+    {% if chart_strategies %}
+    <div class="col-lg-4 col-md-6">
+        <div class="card shadow h-100">
+            <div class="card-header py-2 d-flex align-items-center" style="background:#f0f4ff;">
+                <i class="fas fa-chess-knight me-2 text-secondary"></i>
+                <span class="fw-semibold small">Strategy Metrics</span>
+                <small class="text-muted ms-2">Done vs Remaining</small>
+            </div>
+            <div class="card-body p-2 position-relative" style="height:220px;">
+                <canvas id="strategyChart"></canvas>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-lg-4 col-md-6">
+        <div class="card shadow h-100">
+            <div class="card-header py-2" style="background:#f0f4ff;"><i class="fas fa-chess-knight me-2 text-secondary"></i><span class="fw-semibold small">Strategy Metrics</span></div>
+            <div class="card-body p-3 text-center text-muted small d-flex align-items-center justify-content-center" style="height:220px;"><i class="fas fa-info-circle me-1"></i>No strategy data yet.</div>
+        </div>
+    </div>
+    {% endif %}
+    <div class="col-lg-4 col-md-12">
+        <div class="card shadow h-100">
+            <div class="card-header py-2 d-flex align-items-center" style="background:#f8f9fc;">
+                <i class="fas fa-clipboard-list me-2 text-primary"></i>
+                <span class="fw-semibold small">Board Metrics</span>
+            </div>
+            <div class="card-body p-2">
+                {% if chart_boards %}
+                {% for b in chart_boards %}
+                <div class="panel-board-row">
+                    <span class="panel-board-name" title="{{ b.name }}">{{ b.name }}</span>
+                    <div class="panel-board-bar-wrap">
+                        <div class="panel-board-bar {% if b.completion_pct < 30 %}bg-danger{% elif b.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                             style="width:{{ b.completion_pct }}%;"></div>
+                    </div>
+                    <span class="panel-board-pct">{{ b.completion_pct }}%</span>
+                </div>
+                {% if b.high_risk > 0 %}
+                <div class="mb-1" style="padding-left:118px;">
+                    <span class="panel-risk-badge {% if b.high_risk > 3 %}danger{% endif %}">
+                        <i class="fas fa-exclamation-triangle me-1"></i>{{ b.high_risk }} high-risk
+                    </span>
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% else %}
+                <div class="text-center text-muted small d-flex align-items-center justify-content-center h-100 py-5"><i class="fas fa-info-circle me-1"></i>No board data yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+<!-- /Metrics Charts Row -->
+
+<!-- Dashboard Main Layout: Mission Overview (left) + My Tasks (right) -->
 <div class="row g-4 mb-4">
 
     <!-- ======================================================== -->
-    <!-- MAIN COLUMN: Mission Overview (top) + My Tasks (below)   -->
+    <!-- MAIN COLUMN: Mission Overview                            -->
     <!-- ======================================================== -->
     <div class="col-lg-8 col-md-12">
 
@@ -969,19 +1051,23 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <!-- Mission AI Summary -->
                                 <div class="ai-summary-block mt-2" id="mission-summary-block-{{ mission.id }}">
                                     {% if mission.ai_summary %}
-                                    <div class="ai-summary-text summary-truncated" id="mission-summary-text-{{ mission.id }}">
-                                        <i class="fas fa-robot text-info me-1" style="font-size:0.75rem;"></i>
-                                        {{ mission.ai_summary|render_bullets }}
-                                        <a href="#" class="summary-read-more ms-1 small text-info d-block mt-1" onclick="toggleSummary(this,'mission-summary-text-{{ mission.id }}'); return false;">read more</a>
+                                    <button class="btn btn-xs btn-outline-secondary py-0 px-2 mb-1" type="button"
+                                            data-bs-toggle="collapse" data-bs-target="#mission-ai-collapse-{{ mission.id }}"
+                                            aria-expanded="false">
+                                        <i class="fas fa-robot text-info me-1" style="font-size:0.7rem;"></i><span style="font-size:0.72rem;">AI Summary</span>
+                                        <i class="fas fa-chevron-down ms-1" style="font-size:0.6rem;"></i>
+                                    </button>
+                                    <div class="collapse" id="mission-ai-collapse-{{ mission.id }}">
+                                        <div class="ai-summary-text" id="mission-summary-text-{{ mission.id }}">
+                                            {{ mission.ai_summary|render_bullets }}
+                                        </div>
+                                        <small class="text-muted summary-ts" id="mission-ts-{{ mission.id }}"
+                                              {% if mission.ai_summary_generated_at %}data-ts="{{ mission.ai_summary_generated_at|date:'c' }}"{% endif %}>
+                                            <i class="far fa-clock me-1"></i>Updated {{ mission.ai_summary_generated_at|date:"M d, Y H:i" }}
+                                        </small>
                                     </div>
-                                    <small class="text-muted summary-ts" id="mission-ts-{{ mission.id }}"
-                                          {% if mission.ai_summary_generated_at %}data-ts="{{ mission.ai_summary_generated_at|date:'c' }}"{% endif %}>
-                                        <i class="far fa-clock me-1"></i>Updated {{ mission.ai_summary_generated_at|date:"M d, Y H:i" }}
-                                    </small>
                                     {% else %}
-                                    <div class="ai-summary-text text-muted fst-italic small" id="mission-summary-text-{{ mission.id }}">
-                                        <i class="fas fa-robot me-1"></i>No AI summary yet — click Generate to create one.
-                                    </div>
+                                    <div class="ai-summary-text text-muted fst-italic small d-none" id="mission-summary-text-{{ mission.id }}"></div>
                                     <small class="text-muted summary-ts d-none" id="mission-ts-{{ mission.id }}"></small>
                                     {% endif %}
                                     <button class="btn btn-xs btn-outline-info mt-1 generate-summary-btn"
@@ -1037,17 +1123,21 @@ document.addEventListener('DOMContentLoaded', function() {
                                         <!-- Strategy AI Summary -->
                                         <div class="ai-summary-block mt-1" id="strategy-summary-block-{{ strategy.id }}" onclick="event.stopPropagation()">
                                             {% if strategy.ai_summary %}
-                                            <div class="ai-summary-text summary-truncated small" id="strategy-summary-text-{{ strategy.id }}">
-                                                <i class="fas fa-robot text-info me-1" style="font-size:0.7rem;"></i>
-                                                {{ strategy.ai_summary|render_bullets }}
-                                                <a href="#" class="summary-read-more ms-1 text-info d-block mt-1" onclick="toggleSummary(this,'strategy-summary-text-{{ strategy.id }}'); return false;">read more</a>
+                                            <button class="btn btn-xs btn-outline-secondary py-0 px-2 mb-1" type="button"
+                                                    data-bs-toggle="collapse" data-bs-target="#strategy-ai-collapse-{{ strategy.id }}"
+                                                    aria-expanded="false" onclick="event.stopPropagation()">
+                                                <i class="fas fa-robot text-info me-1" style="font-size:0.65rem;"></i><span style="font-size:0.7rem;">AI Summary</span>
+                                                <i class="fas fa-chevron-down ms-1" style="font-size:0.55rem;"></i>
+                                            </button>
+                                            <div class="collapse" id="strategy-ai-collapse-{{ strategy.id }}">
+                                                <div class="ai-summary-text small" id="strategy-summary-text-{{ strategy.id }}">
+                                                    {{ strategy.ai_summary|render_bullets }}
+                                                </div>
+                                                <small class="text-muted summary-ts" id="strategy-ts-{{ strategy.id }}"
+                                                      {% if strategy.ai_summary_generated_at %}data-ts="{{ strategy.ai_summary_generated_at|date:'c' }}"{% endif %}>Updated {{ strategy.ai_summary_generated_at|date:"M d, Y H:i" }}</small>
                                             </div>
-                                            <small class="text-muted summary-ts" id="strategy-ts-{{ strategy.id }}"
-                                                  {% if strategy.ai_summary_generated_at %}data-ts="{{ strategy.ai_summary_generated_at|date:'c' }}"{% endif %}>Updated {{ strategy.ai_summary_generated_at|date:"M d, Y H:i" }}</small>
                                             {% else %}
-                                            <div class="ai-summary-text text-muted fst-italic small d-none" id="strategy-summary-text-{{ strategy.id }}">
-                                                No AI summary yet.
-                                            </div>
+                                            <div class="ai-summary-text text-muted fst-italic small d-none" id="strategy-summary-text-{{ strategy.id }}"></div>
                                             <small class="text-muted summary-ts d-none" id="strategy-ts-{{ strategy.id }}"></small>
                                             {% endif %}
                                             <button class="btn btn-xs btn-outline-info mt-1 generate-summary-btn"
@@ -1094,16 +1184,22 @@ document.addEventListener('DOMContentLoaded', function() {
                                             </div>
                                             <!-- Board AI summary -->
                                             {% if board.ai_summary %}
-                                            <div class="ai-summary-text small mt-1 summary-truncated board-summary" id="board-summary-text-{{ board.id }}">
-                                                <i class="fas fa-robot me-1" style="font-size:0.65rem;"></i>
-                                                {{ board.ai_summary|render_bullets }}
-                                                <a href="#" class="summary-read-more ms-1 small text-info d-block mt-1" onclick="toggleSummary(this,'board-summary-text-{{ board.id }}'); return false;">read more</a>
+                                            <button class="btn btn-xs btn-outline-secondary py-0 px-2 mt-1 mb-1" type="button"
+                                                    data-bs-toggle="collapse" data-bs-target="#board-ai-collapse-{{ board.id }}"
+                                                    aria-expanded="false" onclick="event.stopPropagation()">
+                                                <i class="fas fa-robot me-1" style="font-size:0.6rem;"></i><span style="font-size:0.68rem;">AI Summary</span>
+                                                <i class="fas fa-chevron-down ms-1" style="font-size:0.55rem;"></i>
+                                            </button>
+                                            <div class="collapse" id="board-ai-collapse-{{ board.id }}">
+                                                <div class="ai-summary-text small mt-1" id="board-summary-text-{{ board.id }}">
+                                                    {{ board.ai_summary|render_bullets }}
+                                                </div>
+                                                <small class="text-muted summary-ts" id="board-ts-{{ board.id }}"
+                                                      {% if board.ai_summary_generated_at %}data-ts="{{ board.ai_summary_generated_at|date:'c' }}"{% endif %}
+                                                      style="font-size:0.68rem;">
+                                                    {% if board.ai_summary_generated_at %}<i class="far fa-clock me-1"></i>Updated {{ board.ai_summary_generated_at|date:"M d, Y H:i" }}{% endif %}
+                                                </small>
                                             </div>
-                                            <small class="text-muted summary-ts" id="board-ts-{{ board.id }}"
-                                                  {% if board.ai_summary_generated_at %}data-ts="{{ board.ai_summary_generated_at|date:'c' }}"{% endif %}
-                                                  style="font-size:0.68rem;">
-                                                {% if board.ai_summary_generated_at %}<i class="far fa-clock me-1"></i>Updated {{ board.ai_summary_generated_at|date:"M d, Y H:i" }}{% endif %}
-                                            </small>
                                             {% else %}
                                             <div class="ai-summary-text small text-muted fst-italic mt-1 d-none" id="board-summary-text-{{ board.id }}"></div>
                                             <small class="text-muted summary-ts d-none" id="board-ts-{{ board.id }}"></small>
@@ -1166,242 +1262,69 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
         <!-- /Mission Overview -->
 
-        <!-- My Tasks Section -->
-        <div class="card shadow mb-4">
-            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                <div class="d-flex align-items-center">
-                    <h6 class="m-0 font-weight-bold text-primary me-3">
-                        <i class="fas fa-user-check me-2"></i>My Tasks
-                    </h6>
-                    <small class="text-muted">
-                        ({{ my_tasks_count }} total{% if my_tasks_count != my_tasks|length %}, showing top 8{% endif %})
-                    </small>
-                </div>
-                <div class="d-flex align-items-center">
-                    <label for="taskSortSelect" class="form-label me-2 mb-0 small text-muted">Sort by:</label>
-                    <select id="taskSortSelect" class="form-select form-select-sm" style="width: auto;"
-                        onchange="changeSortOrder(this.value)">
-                        <option value="urgency" {% if my_tasks_sort_by == 'urgency' %}selected{% endif %}>
-                            🚨 Urgency (Overdue First)
-                        </option>
-                        <option value="due_date" {% if my_tasks_sort_by == 'due_date' %}selected{% endif %}>
-                            📅 Due Date (Chronological)
-                        </option>
-                        <option value="priority" {% if my_tasks_sort_by == 'priority' %}selected{% endif %}>
-                            🔥 Priority (High to Low)
-                        </option>
-                        <option value="recent" {% if my_tasks_sort_by == 'recent' %}selected{% endif %}>
-                            🕒 Recent (Latest First)
-                        </option>
-                    </select>
-                </div>
-            </div>
-            <div class="card-body">
-                {% if my_tasks %}
-                <div class="row">
-                    {% for task in my_tasks %}
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <div
-                            class="card h-100 border-left-{% if task.priority == 'urgent' %}danger{% elif task.priority == 'high' %}warning{% elif task.priority == 'medium' %}info{% else %}success{% endif %} shadow-sm">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <h6 class="card-title mb-0">{{ task.title|truncatechars:40 }}</h6>
-                                    <span class="badge priority-{{ task.priority }}">{{ task.priority|title }}</span>
-                                </div>
-
-                                {% if task.description %}
-                                <p class="card-text text-muted small mb-2">{{ task.description|truncatechars:80 }}</p>
-                                {% endif %}
-
-                                <div class="mb-2">
-                                    <small class="text-muted">
-                                        <i class="fas fa-project-diagram me-1"></i>{{ task.column.board.name }} - {{ task.column.name }}
-                                    </small>
-                                </div>
-
-                                {% if task.due_date %}
-                                <div class="mb-2">
-                                    <small
-                                        class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
-                                        <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
-                                        {% if task.due_date < now and task.progress < 100 %}<span
-                                            class="badge bg-danger ms-1">Overdue</span>{% endif %}
-                                    </small>
-                                </div>
-                                {% endif %}
-
-                                <div class="progress mb-2" style="height: 6px;">
-                                    <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
-                                        role="progressbar" style="width: {{ task.progress }}%"></div>
-                                </div>
-                                <small class="text-muted">{{ task.progress }}% complete</small>
-
-                                <div class="text-end mt-2">
-                                    <a href="{% url 'task_detail' task.id %}" class="btn btn-sm btn-primary">
-                                        <i class="fas fa-eye"></i> View
-                                    </a>
-                                    <a href="{% url 'board_detail' task.column.board.id %}"
-                                        class="btn btn-sm btn-outline-secondary">
-                                        <i class="fas fa-project-diagram"></i> Board
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <div class="text-center py-5">
-                    <i class="fas fa-user-check fa-4x text-gray-300 mb-3"></i>
-                    <p class="mb-4">No tasks are currently assigned to you.</p>
-                    <p class="text-muted">Tasks assigned to you will appear here for quick access.</p>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-        <!-- /My Tasks -->
-
     </div>
     <!-- /col-lg-8 -->
 
     <!-- ======================================================== -->
-    <!-- METRICS SIDE PANEL                                       -->
+    <!-- RIGHT PANEL: My Tasks                                    -->
     <!-- ======================================================== -->
     <div class="col-lg-4 col-md-12">
-        <div class="metrics-panel">
-            {# Embed chart data for Chart.js #}
-            {{ chart_data_json|json_script:"dashboardChartData" }}
-
-            <!-- KPI Summary -->
-            <div class="card shadow-sm mb-3">
-                <div class="card-body p-3">
-                    <div class="panel-section-header">
-                        <i class="fas fa-tachometer-alt me-1"></i> Portfolio Overview
-                    </div>
-                    <div class="panel-kpi-row">
-                        <div class="panel-kpi-box">
-                            <div class="kpi-value text-primary">{{ task_count }}</div>
-                            <div class="kpi-label">Total Tasks</div>
-                        </div>
-                        <div class="panel-kpi-box">
-                            <div class="kpi-value text-success">{{ completed_count }}</div>
-                            <div class="kpi-label">Completed</div>
-                        </div>
-                        <div class="panel-kpi-box">
-                            <div class="kpi-value text-danger">{{ overdue_count }}</div>
-                            <div class="kpi-label">Overdue</div>
-                        </div>
-                        <div class="panel-kpi-box">
-                            <div class="kpi-value text-warning">{{ due_soon }}</div>
-                            <div class="kpi-label">Due Soon</div>
-                        </div>
-                    </div>
-                    {% if task_count > 0 %}
-                    <div class="d-flex align-items-center gap-2 mt-1">
-                        <div class="flex-grow-1">
-                            <div class="progress" style="height:8px;">
-                                <div class="progress-bar bg-success" style="width:{{ completion_rate }}%"></div>
-                            </div>
-                        </div>
-                        <small class="text-muted flex-shrink-0" style="font-size:0.7rem;">{{ completion_rate }}% done</small>
-                    </div>
-                    {% endif %}
+        <div class="card shadow h-100">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <div class="d-flex align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary me-2">
+                        <i class="fas fa-user-check me-2"></i>My Tasks
+                    </h6>
+                    <span class="badge bg-secondary rounded-pill">{{ my_tasks_count }}</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <select id="taskSortSelect" class="form-select form-select-sm" style="width:auto; font-size:0.75rem;"
+                        onchange="changeSortOrder(this.value)">
+                        <option value="urgency" {% if my_tasks_sort_by == 'urgency' %}selected{% endif %}>🚨 Urgency</option>
+                        <option value="due_date" {% if my_tasks_sort_by == 'due_date' %}selected{% endif %}>📅 Due Date</option>
+                        <option value="priority" {% if my_tasks_sort_by == 'priority' %}selected{% endif %}>🔥 Priority</option>
+                        <option value="recent" {% if my_tasks_sort_by == 'recent' %}selected{% endif %}>🕒 Recent</option>
+                    </select>
                 </div>
             </div>
-
-            <!-- Accordion: Mission / Strategy / Board -->
-            <div class="accordion accordion-flush" id="metricsPanelAccordion">
-
-                <!-- Mission Metrics -->
-                <div class="accordion-item border rounded shadow-sm mb-3">
-                    <h2 class="accordion-header" id="accordionMissionHeader">
-                        <button class="accordion-button py-2 px-3" type="button"
-                                data-bs-toggle="collapse" data-bs-target="#accordionMission"
-                                aria-expanded="true" aria-controls="accordionMission"
-                                style="font-size:0.8rem;font-weight:600;background:#e8f0fe;color:#3a5bd9;">
-                            <i class="fas fa-bullseye me-2 text-primary"></i>Mission Metrics
-                        </button>
-                    </h2>
-                    <div id="accordionMission" class="accordion-collapse collapse show"
-                         aria-labelledby="accordionMissionHeader">
-                        <div class="accordion-body p-2">
-                            {% if chart_missions %}
-                            <div class="panel-chart-wrap">
-                                <canvas id="missionChart"></canvas>
-                            </div>
-                            {% else %}
-                            <p class="text-muted small text-center py-3"><i class="fas fa-info-circle me-1"></i>No mission data yet.</p>
-                            {% endif %}
+            <div class="card-body p-0" style="overflow-y:auto; max-height:600px;">
+                {% if my_tasks %}
+                <ul class="list-group list-group-flush">
+                    {% for task in my_tasks %}
+                    <li class="list-group-item px-3 py-2">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <span class="fw-semibold small">{{ task.title|truncatechars:50 }}</span>
+                            <span class="badge priority-{{ task.priority }} ms-1 flex-shrink-0">{{ task.priority|title }}</span>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Strategy Metrics -->
-                <div class="accordion-item border rounded shadow-sm mb-3">
-                    <h2 class="accordion-header" id="accordionStrategyHeader">
-                        <button class="accordion-button collapsed py-2 px-3" type="button"
-                                data-bs-toggle="collapse" data-bs-target="#accordionStrategy"
-                                aria-expanded="false" aria-controls="accordionStrategy"
-                                style="font-size:0.8rem;font-weight:600;background:#f8f9fc;color:#444;">
-                            <i class="fas fa-chess-knight me-2 text-secondary"></i>Strategy Metrics
-                        </button>
-                    </h2>
-                    <div id="accordionStrategy" class="accordion-collapse collapse"
-                         aria-labelledby="accordionStrategyHeader">
-                        <div class="accordion-body p-2">
-                            {% if chart_strategies %}
-                            <div class="panel-chart-wrap">
-                                <canvas id="strategyChart"></canvas>
-                            </div>
-                            {% else %}
-                            <p class="text-muted small text-center py-3"><i class="fas fa-info-circle me-1"></i>No strategy data yet.</p>
-                            {% endif %}
+                        <div class="text-muted" style="font-size:0.72rem;">
+                            <i class="fas fa-project-diagram me-1"></i>{{ task.column.board.name }}
+                            <span class="text-muted ms-1">/ {{ task.column.name }}</span>
                         </div>
-                    </div>
-                </div>
-
-                <!-- Board Metrics -->
-                <div class="accordion-item border rounded shadow-sm mb-3">
-                    <h2 class="accordion-header" id="accordionBoardHeader">
-                        <button class="accordion-button collapsed py-2 px-3" type="button"
-                                data-bs-toggle="collapse" data-bs-target="#accordionBoard"
-                                aria-expanded="false" aria-controls="accordionBoard"
-                                style="font-size:0.8rem;font-weight:600;background:#f8f9fc;color:#444;">
-                            <i class="fas fa-clipboard-list me-2 text-primary"></i>Board Metrics
-                        </button>
-                    </h2>
-                    <div id="accordionBoard" class="accordion-collapse collapse"
-                         aria-labelledby="accordionBoardHeader">
-                        <div class="accordion-body p-2">
-                            {% if chart_boards %}
-                            {% for b in chart_boards %}
-                            <div class="panel-board-row">
-                                <span class="panel-board-name" title="{{ b.name }}">{{ b.name }}</span>
-                                <div class="panel-board-bar-wrap">
-                                    <div class="panel-board-bar {% if b.completion_pct < 30 %}bg-danger{% elif b.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
-                                         style="width:{{ b.completion_pct }}%;"></div>
-                                </div>
-                                <span class="panel-board-pct">{{ b.completion_pct }}%</span>
-                            </div>
-                            {% if b.high_risk > 0 %}
-                            <div class="mb-2" style="padding-left:118px;">
-                                <span class="panel-risk-badge {% if b.high_risk > 3 %}danger{% endif %}">
-                                    <i class="fas fa-exclamation-triangle me-1"></i>{{ b.high_risk }} high-risk
-                                </span>
-                            </div>
-                            {% endif %}
-                            {% endfor %}
-                            {% else %}
-                            <p class="text-muted small text-center py-3"><i class="fas fa-info-circle me-1"></i>No board data yet.</p>
-                            {% endif %}
+                        {% if task.due_date %}
+                        <div style="font-size:0.72rem;" class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
+                            <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
+                            {% if task.due_date < now and task.progress < 100 %}<span class="badge bg-danger ms-1" style="font-size:0.6rem;">Overdue</span>{% endif %}
                         </div>
-                    </div>
+                        {% endif %}
+                        <div class="d-flex align-items-center gap-2 mt-1">
+                            <div class="progress flex-grow-1" style="height:5px;">
+                                <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                     role="progressbar" style="width:{{ task.progress }}%"></div>
+                            </div>
+                            <span style="font-size:0.68rem;" class="text-muted flex-shrink-0">{{ task.progress }}%</span>
+                            <a href="{% url 'task_detail' task.id %}" class="btn btn-xs btn-primary flex-shrink-0">View</a>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-user-check fa-3x text-muted mb-3" style="opacity:0.3;"></i>
+                    <p class="text-muted small">No tasks assigned to you.</p>
                 </div>
-
+                {% endif %}
             </div>
-            <!-- /accordion -->
         </div>
-        <!-- /metrics-panel -->
     </div>
     <!-- /col-lg-4 -->
 
@@ -2009,8 +1932,9 @@ document.addEventListener('DOMContentLoaded', function() {
 {% load static %}
 <!-- Analytics CSS for clickable metric cards -->
 <link rel="stylesheet" href="{% static 'css/analytics.css' %}">
-<!-- Chart.js for metrics side panel -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<!-- Chart.js for metrics side panel (local copy, CDN fallback) -->
+<script src="{% static 'js/chart.umd.min.js' %}"></script>
+<script>window.Chart || document.write('<script src="https:\/\/cdn.jsdelivr.net\/npm\/chart.js@4.4.2\/dist\/chart.umd.min.js"><\/script>')</script>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -2360,15 +2284,17 @@ document.addEventListener('DOMContentLoaded', function() {
         var tsEl   = document.getElementById(level + '-ts-' + objId);
 
         if (data.summary && textEl) {
-            var iconStyle = (level === 'board') ? 'font-size:0.65rem;' : 'font-size:0.75rem;';
-            var iconClass = (level === 'board') ? 'fas fa-robot me-1' : 'fas fa-robot text-info me-1';
-            textEl.innerHTML = '<i class="' + iconClass + '" style="' + iconStyle + '"></i>'
-                + renderBullets(data.summary)
-                + '<a href="#" class="summary-read-more ms-1 small text-info d-block mt-1" '
-                + 'onclick="toggleSummary(this,\'' + level + '-summary-text-' + objId + '\'); return false;">read more</a>';
-            textEl.classList.remove('text-muted', 'fst-italic', 'd-none', 'summary-expanded');
-            textEl.classList.add('summary-truncated');
+            textEl.innerHTML = renderBullets(data.summary);
+            textEl.classList.remove('text-muted', 'fst-italic', 'd-none', 'summary-truncated', 'summary-expanded');
             flashElement(textEl);
+            // If the text element is inside a Bootstrap collapse, expand it
+            var collapseEl = document.getElementById(level + '-ai-collapse-' + objId);
+            if (collapseEl && typeof bootstrap !== 'undefined') {
+                var bsCollapse = bootstrap.Collapse.getOrCreateInstance(collapseEl, {toggle: false});
+                bsCollapse.show();
+            } else if (textEl.classList.contains('d-none')) {
+                textEl.classList.remove('d-none');
+            }
         }
 
         if (tsEl && data.generated_at) {
@@ -2563,7 +2489,10 @@ document.addEventListener('DOMContentLoaded', function() {
     /* ==========================================================
        METRICS SIDE PANEL — Chart.js initialisation
        ========================================================== */
-    (function initMetricsCharts() {
+    var _metricsMissionChart = null;
+    var _metricsStrategyChart = null;
+
+    function initMetricsCharts() {
         var el = document.getElementById('dashboardChartData');
         if (!el || typeof Chart === 'undefined') return;
         var chartData;
@@ -2575,21 +2504,13 @@ document.addEventListener('DOMContentLoaded', function() {
             highRisk: 'rgba(231, 74, 59, 0.75)',
             gridLine: 'rgba(0,0,0,0.05)',
         };
-        var baseOpts = {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: { legend: { display: false }, tooltip: { mode: 'index' } },
-            scales: {
-                x: { grid: { color: COLORS.gridLine }, ticks: { font: { size: 10 } } },
-                y: { grid: { color: COLORS.gridLine }, ticks: { font: { size: 10 } } },
-            },
-        };
 
         // --- Mission grouped bar chart (completion % + high-risk count) ---
         var mCanvas = document.getElementById('missionChart');
         if (mCanvas && chartData.missions && chartData.missions.length) {
+            if (_metricsMissionChart) { _metricsMissionChart.destroy(); }
             var mLabels = chartData.missions.map(function(m){ return m.name; });
-            new Chart(mCanvas, {
+            _metricsMissionChart = new Chart(mCanvas, {
                 type: 'bar',
                 data: {
                     labels: mLabels,
@@ -2613,7 +2534,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 options: {
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins: {
                         legend: { display: true, position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12, padding: 6 } },
                         tooltip: { mode: 'index', intersect: false },
@@ -2642,12 +2563,14 @@ document.addEventListener('DOMContentLoaded', function() {
         // --- Strategy horizontal bar chart ---
         var sCanvas = document.getElementById('strategyChart');
         if (sCanvas && chartData.strategies && chartData.strategies.length) {
+            if (_metricsStrategyChart) { _metricsStrategyChart.destroy(); }
             var sLabels = chartData.strategies.map(function(s){ return s.name; });
             var sDone   = chartData.strategies.map(function(s){ return s.completion_pct; });
             var sRem    = chartData.strategies.map(function(s){ return +(100 - s.completion_pct).toFixed(1); });
-            // Adjust canvas height relative to number of strategies
-            sCanvas.style.maxHeight = Math.max(120, Math.min(350, chartData.strategies.length * 28)) + 'px';
-            new Chart(sCanvas, {
+            // Adjust canvas height (container .panel-chart-wrap has height: 180px by default)
+            var sHeight = Math.max(120, Math.min(350, chartData.strategies.length * 40));
+            sCanvas.parentElement.style.height = sHeight + 'px';
+            _metricsStrategyChart = new Chart(sCanvas, {
                 type: 'bar',
                 data: {
                     labels: sLabels,
@@ -2671,6 +2594,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
             });
         }
-    })();
+    }  // end initMetricsCharts
+
+    // Charts are now in permanent visible card containers — initialize on DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', function() { initMetricsCharts(); });
+    // Fallback if DOMContentLoaded already fired (script loaded late)
+    if (document.readyState !== 'loading') { initMetricsCharts(); }
 </script>
 {% endblock %}
