@@ -217,6 +217,15 @@
                                     </a></li>
                                     <li><hr class="dropdown-divider"></li>
                                 {% endif %}
+                                {% if is_demo_account %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item text-warning" href="#" onclick="demoResetFromNav(event); return false;">
+                                        <i class="fas fa-redo me-1"></i> Reset Demo Data
+                                    </a>
+                                </li>
+                                {% endif %}
+                                <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item" href="{% url 'logout' %}">Logout</a></li>
                             </ul>
                         </li>
@@ -485,5 +494,31 @@
     
     <!-- Custom JS -->
     {% block extra_js %}{% endblock %}
+{% if is_demo_account %}
+<script>
+function demoResetFromNav(e) {
+    e.preventDefault();
+    if (!confirm('Reset Demo Environment?\n\nThis will:\n\u2022 Delete all boards, tasks, and data you created\n\u2022 Restore all original demo data to its initial state\n\nThis cannot be undone.')) return;
+    var token = null;
+    document.cookie.split(';').forEach(function(c) {
+        var p = c.trim().split('=');
+        if (p[0] === 'csrftoken') token = decodeURIComponent(p[1]);
+    });
+    fetch('/demo/reset/', {
+        method: 'POST',
+        headers: {'Content-Type':'application/x-www-form-urlencoded','X-CSRFToken': token,'X-Requested-With':'XMLHttpRequest'}
+    }).then(function(r){ return r.json(); }).then(function(data){
+        if (data.status === 'success') {
+            alert('\u2705 Demo reset successfully! All demo data has been restored.');
+            location.reload();
+        } else {
+            alert('Failed to reset demo: ' + (data.message || 'Unknown error'));
+        }
+    }).catch(function(){
+        alert('Failed to reset demo. Please try again.');
+    });
+}
+</script>
+{% endif %}
 </body>
 </html>

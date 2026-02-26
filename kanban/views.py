@@ -279,22 +279,53 @@ def dashboard(request):
                 done_t = _bstats.get('done_tasks', 0)
                 high_risk_t = _bstats.get('high_risk_tasks', 0)
                 pct = round((done_t / total_t * 100), 1) if total_t else 0
+                # Board health level (green / amber / red)
+                if total_t == 0:
+                    b_health = 'green'
+                elif high_risk_t / total_t >= 0.3:
+                    b_health = 'red'
+                elif high_risk_t / total_t >= 0.1:
+                    b_health = 'amber'
+                else:
+                    b_health = 'green'
                 board_list.append({
                     'board': board,
                     'total_tasks': total_t,
                     'done_tasks': done_t,
                     'high_risk_tasks': high_risk_t,
                     'completion_pct': pct,
+                    'health_level': b_health,
                 })
+            # Strategy health = worst of its boards
+            s_health = 'green'
+            for b in board_list:
+                if b['health_level'] == 'red':
+                    s_health = 'red'; break
+                if b['health_level'] == 'amber':
+                    s_health = 'amber'
+            s_total = sum(b['total_tasks'] for b in board_list)
+            s_done  = sum(b['done_tasks']  for b in board_list)
             strategy_list.append({
                 'strategy': strategy,
                 'boards': board_list,
                 'board_count': len(board_list),
+                'health_level': s_health,
+                'total_tasks': s_total,
+                'done_tasks':  s_done,
+                'completion_pct': round(s_done / s_total * 100, 1) if s_total else 0,
             })
+        # Mission health = worst of its strategies
+        m_health = 'green'
+        for s in strategy_list:
+            if s['health_level'] == 'red':
+                m_health = 'red'; break
+            if s['health_level'] == 'amber':
+                m_health = 'amber'
         item = {
             'mission': mission,
             'strategies': strategy_list,
             'strategy_count': len(strategy_list),
+            'health_level': m_health,
         }
         mission_tree.append(item)
         mission_item_map[mission.id] = item
@@ -359,11 +390,157 @@ def dashboard(request):
                     'completion_pct': board_item['completion_pct'],
                 })
 
+    # ----------------------------------------------------------------
+    # Total high-risk count across all accessible boards
+    # ----------------------------------------------------------------
+    total_high_risk = sum(r.get('high_risk_tasks', 0) for r in _board_stats_map.values())
+
+    # ----------------------------------------------------------------
+    # SPI / CPI per board  (uses ProjectBudget when present)
+    # ----------------------------------------------------------------
+    from kanban.budget_models import ProjectBudget
+    _now_dt = timezone.now()
+
+    # Tasks due by now per board — used for SPI (Schedule Performance Index)
+    _due_stats = (
+        Task.objects
+        .filter(column__board_id__in=_board_ids, item_type='task', due_date__lte=_now_dt)
+        .values('column__board_id')
+        .annotate(
+            due_total=Count('id'),
+            due_done=Count('id', filter=Q(progress=100)),
+        )
+    )
+    _due_stats_map = {row['column__board_id']: row for row in _due_stats}
+
+    _budgets_qs = ProjectBudget.objects.filter(board_id__in=_board_ids)
+    _budget_map = {b.board_id: b for b in _budgets_qs}
+
+    spi_cpi_data = []
+    for b_id in _board_ids:
+        bstats   = _board_stats_map.get(b_id, {})
+        due_info = _due_stats_map.get(b_id, {})
+        budget   = _budget_map.get(b_id)
+
+        total_t = bstats.get('total_tasks', 0)
+        done_t  = bstats.get('done_tasks', 0)
+        comp_ratio = (done_t / total_t) if total_t else 0
+
+        due_total = due_info.get('due_total', 0)
+        due_done  = due_info.get('due_done', 0)
+        spi = round(due_done / due_total, 2) if due_total else None
+
+        cpi = None
+        budget_allocated = None
+        budget_spent     = None
+        if budget:
+            budget_allocated = float(budget.allocated_budget)
+            budget_spent     = float(budget.get_spent_amount())
+            earned_value     = comp_ratio * budget_allocated
+            if budget_spent > 0:
+                cpi = round(earned_value / budget_spent, 2)
+
+        # resolve board name from already-built mission tree
+        board_name = f'Board {b_id}'
+        for _mi in mission_tree:
+            for _si in _mi['strategies']:
+                for _bi in _si['boards']:
+                    if _bi['board'].id == b_id:
+                        board_name = _bi['board'].name[:30]
+        # also check standalone boards
+        for _sb in boards.filter(id=b_id):
+            board_name = _sb.name[:30]
+
+        spi_cpi_data.append({
+            'board_id':         b_id,
+            'name':             board_name,
+            'spi':              spi,
+            'cpi':              cpi,
+            'budget_allocated': budget_allocated,
+            'budget_spent':     budget_spent,
+            'completion_pct':   round(comp_ratio * 100, 1),
+        })
+
+    # ----------------------------------------------------------------
+    # Risk Heatmap  (3×3 grid: likelihood 1-3 × impact 1-3)
+    # ----------------------------------------------------------------
+    _risk_rows = (
+        Task.objects
+        .filter(
+            column__board_id__in=_board_ids,
+            item_type='task',
+            risk_likelihood__isnull=False,
+            risk_impact__isnull=False,
+        )
+        .values('risk_likelihood', 'risk_impact')
+        .annotate(count=Count('id'))
+    )
+    risk_matrix = [[0] * 3 for _ in range(3)]
+    risk_total  = 0
+    for row in _risk_rows:
+        lik = row['risk_likelihood'] - 1   # 0-indexed (0=low, 1=med, 2=high)
+        imp = row['risk_impact']     - 1   # 0-indexed
+        if 0 <= lik <= 2 and 0 <= imp <= 2:
+            risk_matrix[lik][imp] += row['count']
+            risk_total += row['count']
+    risk_heatmap_data = {
+        'matrix':   risk_matrix,  # [likelihood_row][impact_col]
+        'total':    risk_total,
+        'has_data': risk_total > 0,
+    }
+
+    # ----------------------------------------------------------------
+    # Daily AI Briefing  (synthesised from stored summaries — no AI call)
+    # ----------------------------------------------------------------
+    briefing_pulse  = None
+    briefing_risk   = None
+    briefing_action = None
+
+    for mission_item in mission_tree:
+        m = mission_item['mission']
+        if m.ai_summary:
+            lines = [l.strip().lstrip('•-* ').strip() for l in m.ai_summary.split('\n') if l.strip()]
+            if lines:
+                briefing_pulse = lines[0][:200]
+            break
+
+    if overdue_count > 0 or total_high_risk > 0:
+        parts = []
+        if overdue_count > 0:
+            parts.append(f"{overdue_count} task{'s' if overdue_count != 1 else ''} overdue")
+        if total_high_risk > 0:
+            parts.append(f"{total_high_risk} high-risk item{'s' if total_high_risk != 1 else ''} flagged")
+        briefing_risk = ' and '.join(parts)
+
+    if overdue_count > 0:
+        briefing_action = (
+            f"Review and reassign the {overdue_count} overdue task"
+            f"{'s' if overdue_count != 1 else ''} to unblock your team today."
+        )
+    elif total_high_risk > 0:
+        briefing_action = (
+            f"Address {total_high_risk} high-risk item"
+            f"{'s' if total_high_risk != 1 else ''} to protect on-time delivery."
+        )
+    elif completion_rate >= 80:
+        briefing_action = "Strong progress — verify final tasks are assigned before the sprint ends."
+    else:
+        briefing_action = "Focus on in-progress tasks to maintain momentum toward your delivery goals."
+
+    daily_briefing = {
+        'pulse':       briefing_pulse,
+        'risk':        briefing_risk,
+        'action':      briefing_action,
+        'has_content': bool(briefing_pulse or briefing_risk or briefing_action),
+    }
+
     # Pass raw dict for json_script filter (don't pre-serialize with json.dumps)
     chart_data = {
-        'missions': chart_missions,
-        'strategies': chart_strategies,
-        'boards': chart_boards,
+        'missions':     chart_missions,
+        'strategies':   chart_strategies,
+        'boards':       chart_boards,
+        'spi_cpi':      spi_cpi_data,
+        'risk_heatmap': risk_heatmap_data,
     }
 
     # Standalone boards: user-accessible boards not linked to any strategy
@@ -395,6 +572,11 @@ def dashboard(request):
         'chart_missions': chart_missions,
         'chart_strategies': chart_strategies,
         'chart_boards': chart_boards,
+        # New dashboard data
+        'total_high_risk':   total_high_risk,
+        'spi_cpi_data':      spi_cpi_data,
+        'risk_heatmap_data': risk_heatmap_data,
+        'daily_briefing':    daily_briefing,
         })
 
 @login_required
