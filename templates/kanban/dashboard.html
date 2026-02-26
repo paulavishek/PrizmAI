@@ -714,9 +714,9 @@ document.addEventListener('DOMContentLoaded', function() {
 <div class="row g-4 mb-4">
 
     <!-- ======================================================== -->
-    <!-- LEFT COLUMN: Mission Overview (top) + My Tasks (below)   -->
+    <!-- MAIN COLUMN: Mission Overview (top) + My Tasks (below)   -->
     <!-- ======================================================== -->
-    <div class="col-lg-9">
+    <div class="col-lg-12">
 
         <!-- Mission Overview Tree -->
         <div class="card shadow mb-4" id="mission-overview-card">
@@ -1138,100 +1138,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <!-- /My Tasks -->
 
     </div>
-    <!-- /col-lg-9 -->
-
-    <!-- ======================================================== -->
-    <!-- RIGHT SIDEBAR: Metric Cards (stacked)                    -->
-    <!-- ======================================================== -->
-    <div class="col-lg-3">
-        <div class="card shadow" style="position:sticky; top:76px;">
-            <div class="card-header py-2 border-bottom" style="background:#f8f9fc;">
-                <h6 class="m-0 font-weight-bold text-secondary small text-uppercase" style="letter-spacing:0.05em;">
-                    <i class="fas fa-chart-bar me-2"></i>At a Glance
-                </h6>
-            </div>
-            <div class="card-body p-2">
-
-                <!-- Total Tasks -->
-                <div class="card stats-card primary shadow-sm mb-2 metrics-card"
-                     data-bs-toggle="modal" data-bs-target="#totalTasksModal"
-                     style="border-left: 4px solid #4e73df; cursor:pointer;">
-                    <div class="card-body py-2 px-3">
-                        <div class="d-flex align-items-center justify-content-between">
-                            <div>
-                                <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Tasks</div>
-                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ task_count }}</div>
-                            </div>
-                            <i class="fas fa-clipboard-list fa-2x text-gray-300"></i>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Completed Tasks -->
-                <div class="card stats-card success shadow-sm mb-2 metrics-card"
-                     data-bs-toggle="modal" data-bs-target="#completedTasksModal"
-                     style="border-left: 4px solid #1cc88a; cursor:pointer;">
-                    <div class="card-body py-2 px-3">
-                        <div class="d-flex align-items-center justify-content-between">
-                            <div>
-                                <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Completed Tasks</div>
-                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completed_count }}</div>
-                            </div>
-                            <i class="fas fa-check-circle fa-2x text-gray-300"></i>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Completion Rate -->
-                <div class="card stats-card warning shadow-sm mb-2 metrics-card"
-                     data-bs-toggle="modal" data-bs-target="#completionRateModal"
-                     style="border-left: 4px solid #f6c23e; cursor:pointer;">
-                    <div class="card-body py-2 px-3">
-                        <div class="d-flex align-items-center justify-content-between">
-                            <div>
-                                <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Completion Rate</div>
-                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ completion_rate }}%</div>
-                            </div>
-                            <i class="fas fa-chart-line fa-2x text-gray-300"></i>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Overdue Tasks -->
-                <div class="card stats-card danger shadow-sm mb-2 metrics-card"
-                     data-bs-toggle="modal" data-bs-target="#overdueTasksModal"
-                     style="border-left: 4px solid #e74a3b; cursor:pointer;">
-                    <div class="card-body py-2 px-3">
-                        <div class="d-flex align-items-center justify-content-between">
-                            <div>
-                                <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">Overdue Tasks</div>
-                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ overdue_count }}</div>
-                            </div>
-                            <i class="fas fa-exclamation-triangle fa-2x text-gray-300"></i>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Tasks Due Soon -->
-                <div class="card stats-card info shadow-sm mb-0 metrics-card"
-                     data-bs-toggle="modal" data-bs-target="#dueSoonTasksModal"
-                     style="border-left: 4px solid #36b9cc; cursor:pointer;">
-                    <div class="card-body py-2 px-3">
-                        <div class="d-flex align-items-center justify-content-between">
-                            <div>
-                                <div class="text-xs font-weight-bold text-info text-uppercase mb-1">Tasks Due Soon</div>
-                                <div class="h5 mb-0 font-weight-bold text-gray-800">{{ due_soon }}</div>
-                                <small class="text-muted">Next 3 days</small>
-                            </div>
-                            <i class="fas fa-calendar-alt fa-2x text-gray-300"></i>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-        </div>
-    </div>
-    <!-- /col-lg-3 -->
+    <!-- /col-lg-12 -->
 
 </div>
 <!-- /Dashboard Main Layout row -->

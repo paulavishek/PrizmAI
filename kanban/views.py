@@ -358,13 +358,103 @@ def board_list(request):
     
     # Combine and deduplicate
     boards = (demo_boards | user_boards).distinct()
-    
+
+    # Compute summary metrics across all accessible boards
+    task_count = Task.objects.filter(column__board__in=boards, item_type='task').count()
+    completed_count = Task.objects.filter(
+        column__board__in=boards,
+        item_type='task',
+        progress=100
+    ).count()
+    completion_rate = 0
+    if task_count > 0:
+        completion_rate = round((completed_count / task_count) * 100, 1)
+    remaining_tasks = task_count - completed_count
+
+    due_soon = Task.objects.filter(
+        column__board__in=boards,
+        item_type='task',
+        due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
+    ).exclude(progress=100).count()
+
+    overdue_count = Task.objects.filter(
+        column__board__in=boards,
+        item_type='task',
+        due_date__lt=timezone.now()
+    ).exclude(progress=100).count()
+
+    items_per_page = 10
+
+    # All Tasks modal data
+    all_tasks_list = Task.objects.filter(
+        column__board__in=boards, item_type='task'
+    ).select_related('column', 'assigned_to', 'column__board').order_by('-created_at')
+    all_tasks_page = request.GET.get('all_tasks_page', 1)
+    all_tasks_paginator = Paginator(all_tasks_list, items_per_page)
+    try:
+        all_tasks = all_tasks_paginator.page(all_tasks_page)
+    except PageNotAnInteger:
+        all_tasks = all_tasks_paginator.page(1)
+    except EmptyPage:
+        all_tasks = all_tasks_paginator.page(all_tasks_paginator.num_pages)
+
+    # Completed Tasks modal data
+    completed_tasks_list = Task.objects.filter(
+        column__board__in=boards, item_type='task', progress=100
+    ).select_related('column', 'assigned_to', 'column__board').order_by('-updated_at')
+    completed_tasks_page = request.GET.get('completed_tasks_page', 1)
+    completed_tasks_paginator = Paginator(completed_tasks_list, items_per_page)
+    try:
+        completed_tasks = completed_tasks_paginator.page(completed_tasks_page)
+    except PageNotAnInteger:
+        completed_tasks = completed_tasks_paginator.page(1)
+    except EmptyPage:
+        completed_tasks = completed_tasks_paginator.page(completed_tasks_paginator.num_pages)
+
+    # Overdue Tasks modal data
+    overdue_tasks_list = Task.objects.filter(
+        column__board__in=boards,
+        due_date__lt=timezone.now()
+    ).exclude(progress=100).select_related('column', 'assigned_to', 'column__board').order_by('due_date')
+    overdue_tasks_page = request.GET.get('overdue_tasks_page', 1)
+    overdue_tasks_paginator = Paginator(overdue_tasks_list, items_per_page)
+    try:
+        overdue_tasks = overdue_tasks_paginator.page(overdue_tasks_page)
+    except PageNotAnInteger:
+        overdue_tasks = overdue_tasks_paginator.page(1)
+    except EmptyPage:
+        overdue_tasks = overdue_tasks_paginator.page(overdue_tasks_paginator.num_pages)
+
+    # Due Soon Tasks modal data
+    due_soon_tasks_list = Task.objects.filter(
+        column__board__in=boards,
+        due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
+    ).exclude(progress=100).select_related('column', 'assigned_to', 'column__board').order_by('due_date')
+    due_soon_tasks_page = request.GET.get('due_soon_tasks_page', 1)
+    due_soon_tasks_paginator = Paginator(due_soon_tasks_list, items_per_page)
+    try:
+        due_soon_tasks = due_soon_tasks_paginator.page(due_soon_tasks_page)
+    except PageNotAnInteger:
+        due_soon_tasks = due_soon_tasks_paginator.page(1)
+    except EmptyPage:
+        due_soon_tasks = due_soon_tasks_paginator.page(due_soon_tasks_paginator.num_pages)
+
     # For board_list, we only display boards, creation is handled by create_board view
     form = BoardForm()
-    
+
     return render(request, 'kanban/board_list.html', {
         'boards': boards,
-        'form': form
+        'form': form,
+        'task_count': task_count,
+        'completed_count': completed_count,
+        'completion_rate': completion_rate,
+        'remaining_tasks': remaining_tasks,
+        'due_soon': due_soon,
+        'overdue_count': overdue_count,
+        'all_tasks': all_tasks,
+        'completed_tasks': completed_tasks,
+        'overdue_tasks': overdue_tasks,
+        'due_soon_tasks': due_soon_tasks,
     })
 
 @login_required
