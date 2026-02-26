@@ -385,8 +385,9 @@ def generate_mission_summary_task(self, mission_id):
         from kanban.models import Mission
         from kanban.utils.ai_utils import generate_ai_content
 
-        mission = Mission.objects.get(pk=mission_id)
+        mission = Mission.objects.select_related('organization_goal').get(pk=mission_id)
         strategies = mission.strategies.all()
+        org_goal = mission.organization_goal
 
         strategy_lines = []
         for s in strategies:
@@ -402,14 +403,44 @@ def generate_mission_summary_task(self, mission_id):
             summary_text = f"No strategies defined for mission '{mission.name}' yet."
         else:
             snippets_block = "\n".join(strategy_lines)
+
+            # Build Organization Goal context block (injected when a goal is linked)
+            if org_goal:
+                goal_block = (
+                    f"ORGANIZATION GOAL (the North Star this mission must move):\n"
+                    f"  Name: {org_goal.name}\n"
+                )
+                if org_goal.target_metric:
+                    goal_block += f"  Target Metric: {org_goal.target_metric}\n"
+                if org_goal.description:
+                    goal_block += f"  Context: {org_goal.description[:300]}\n"
+                goal_instruction = (
+                    "CRITICAL EVALUATION REQUIREMENT: Beyond reporting strategy progress, "
+                    "explicitly assess whether this mission's current trajectory is genuinely "
+                    "advancing the Organization Goal above. Answer the question: "
+                    f"\"Are the strategies under this mission actually moving the needle on "
+                    f"'{org_goal.name}'?\" "
+                    "If there is a disconnect between task activity and the stated goal, flag it clearly."
+                )
+            else:
+                goal_block = ""
+                goal_instruction = ""
+
             prompt = (
                 f"You are a C-level executive advisor.\n"
-                f"Synthesise the following strategy-level summaries for the mission "
-                f'"{mission.name}" into one concise executive summary (3–5 sentences).\n'
-                f"Focus on: mission progress, strategic alignment, key risks, and "
-                f"critical next steps.\n"
-                f"Be factual, high-level, and actionable — do NOT invent data not listed below.\n\n"
-                f"Strategy summaries:\n{snippets_block}\n\n"
+                f"{goal_block}\n"
+                f"MISSION: \"{mission.name}\"\n"
+                f"Mission description: {(mission.description or 'Not provided.')[:300]}\n\n"
+                f"Strategy summaries (what the teams are actually doing):\n{snippets_block}\n\n"
+                f"{goal_instruction}\n\n"
+                f"Synthesise all of the above into one concise executive summary (4–6 sentences).\n"
+                f"Structure your answer to cover:\n"
+                f"1. Overall mission progress and status.\n"
+                f"2. Key risks and critical blockers.\n"
+                f"3. Whether this mission is on track to contribute to the Organization Goal "
+                f"(if one is set) — be direct and honest.\n"
+                f"4. The single most important next step.\n\n"
+                f"Be factual and actionable — do NOT invent data not listed above.\n"
                 f"Write ONLY the summary paragraph — no headings, no bullets, no JSON."
             )
             summary_text = generate_ai_content(

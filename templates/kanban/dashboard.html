@@ -863,8 +863,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                     <button class="btn btn-xs btn-outline-info mt-1 generate-summary-btn"
                                             data-level="mission" data-id="{{ mission.id }}"
                                             data-url="{% url 'generate_mission_summary_api' mission.id %}"
-                                            title="Generate/refresh AI summary (collects from all strategies)">
-                                        <i class="fas fa-robot me-1"></i><span class="btn-label">✨ Generate Summary</span>
+                                            title="{% if mission.organization_goal %}Goal-Aware: evaluates whether this mission is moving the needle on '{{ mission.organization_goal.name }}'{% else %}Generate AI executive summary from strategy summaries{% endif %}">
+                                        <i class="fas fa-robot me-1"></i>
+                                        <span class="btn-label">
+                                            {% if mission.organization_goal %}<i class="fas fa-trophy text-warning me-1" style="font-size:0.65rem;"></i>Goal-Aware Summary{% else %}✨ Generate Summary{% endif %}
+                                        </span>
                                     </button>
                                 </div>
                             </div>
