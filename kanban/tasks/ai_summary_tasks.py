@@ -98,14 +98,14 @@ Budget variance   : Estimated ${agg['estimated_cost']:.2f} vs Actual ${agg['actu
 {exc_block}
 
 === YOUR TASK ===
-Write a concise board-level health summary in 4–6 sentences.
-1. Overall progress & health.
-2. Top 3 critical blockers (name the tasks explicitly if present above).
-3. One actionable Lean Six Sigma 'Value-Add' improvement you recommend.
-4. Budget flag if over by more than 10 %.
+Write 4–6 concise bullet points covering:
+• Overall progress & health (tasks done, % complete, status)
+• Top critical blockers — name tasks explicitly if listed above
+• One actionable Lean Six Sigma Value-Add improvement
+• Budget flag if actual cost exceeds estimate by more than 10%
 
 Rules: Be factual. Do NOT invent data not listed above.
-Write ONLY the summary paragraph — no headings, no bullet points, no JSON."""
+Each bullet MUST start with the • character. Output ONLY the bullet list — no headings, no paragraphs, no JSON."""
 
 
 # ---------------------------------------------------------------------------
@@ -334,7 +334,10 @@ def generate_strategy_summary_task(self, strategy_id):
                 f"and highest-priority actions.\n"
                 f"Be factual — do NOT invent data not listed below.\n\n"
                 f"Board summaries:\n{snippets_block}\n\n"
-                f"Write ONLY the summary paragraph — no headings, no bullets, no JSON."
+                f"Write 3–5 concise bullet points covering strategic progress, "
+                f"cross-board risks and dependencies, and highest-priority actions.\n"
+                f"Each bullet MUST start with the \u2022 character. "
+                f"Output ONLY the bullet list — no headings, no paragraphs, no JSON."
             )
             summary_text = generate_ai_content(
                 prompt, task_type='board_analytics_summary', use_cache=False
@@ -433,15 +436,15 @@ def generate_mission_summary_task(self, mission_id):
                 f"Mission description: {(mission.description or 'Not provided.')[:300]}\n\n"
                 f"Strategy summaries (what the teams are actually doing):\n{snippets_block}\n\n"
                 f"{goal_instruction}\n\n"
-                f"Synthesise all of the above into one concise executive summary (4–6 sentences).\n"
-                f"Structure your answer to cover:\n"
-                f"1. Overall mission progress and status.\n"
-                f"2. Key risks and critical blockers.\n"
-                f"3. Whether this mission is on track to contribute to the Organization Goal "
-                f"(if one is set) — be direct and honest.\n"
-                f"4. The single most important next step.\n\n"
-                f"Be factual and actionable — do NOT invent data not listed above.\n"
-                f"Write ONLY the summary paragraph — no headings, no bullets, no JSON."
+            f"Write 4\u20136 concise bullet points covering:\n"
+                f"\u2022 Overall mission progress and status\n"
+                f"\u2022 Key risks and critical blockers\n"
+                f"\u2022 Whether this mission is on track for the Organization Goal "
+                f"(if one is set) \u2014 be direct and honest\n"
+                f"\u2022 The single most important next step\n\n"
+                f"Be factual and actionable \u2014 do NOT invent data not listed above.\n"
+                f"Each bullet MUST start with the \u2022 character. "
+                f"Output ONLY the bullet list \u2014 no headings, no paragraphs, no JSON."
             )
             summary_text = generate_ai_content(
                 prompt, task_type='board_analytics_summary', use_cache=False

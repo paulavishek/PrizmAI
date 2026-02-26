@@ -61,34 +61,24 @@ def dashboard(request):
     # Combine and deduplicate
     boards = (demo_boards | user_boards).distinct()
     
-    # Get analytics data — exclude milestones (item_type='task' only)
-    task_count = Task.objects.filter(column__board__in=boards, item_type='task').count()
-    completed_count = Task.objects.filter(
-        column__board__in=boards,
-        item_type='task',
-        progress=100
-    ).count()
-    
+    # Get analytics data — all 4 stats in one DB aggregate call (avoids 4 separate queries)
+    _now = timezone.now()
+    _stats = Task.objects.filter(column__board__in=boards, item_type='task').aggregate(
+        task_count=Count('id'),
+        completed_count=Count('id', filter=Q(progress=100)),
+        overdue_count=Count('id', filter=Q(due_date__lt=_now) & ~Q(progress=100)),
+        due_soon_count=Count('id', filter=Q(
+            due_date__range=[_now, _now + timedelta(days=3)]) & ~Q(progress=100)),
+    )
+    task_count = _stats['task_count']
+    completed_count = _stats['completed_count']
+    overdue_count = _stats['overdue_count']
+    due_soon = _stats['due_soon_count']
+
     # Get completion rate
     completion_rate = 0
     if task_count > 0:
         completion_rate = (completed_count / task_count) * 100
-      # Get tasks due soon (next 3 days) — exclude milestones
-    due_soon = Task.objects.filter(
-        column__board__in=boards,
-        item_type='task',
-        due_date__range=[timezone.now(), timezone.now() + timedelta(days=3)]
-    ).exclude(
-        progress=100
-    ).count()
-      # Get overdue tasks (due date in the past and not completed) — exclude milestones
-    overdue_count = Task.objects.filter(
-        column__board__in=boards,
-        item_type='task',
-        due_date__lt=timezone.now()
-    ).exclude(
-        progress=100
-    ).count()
     
     # Get detailed task data for modals with pagination
     # Items per page
@@ -260,7 +250,23 @@ def dashboard(request):
     # Build mission tree as a plain list (for easy template iteration)
     # Each mission dict holds: mission obj + list of strategy dicts
     # Each strategy dict holds: strategy obj + list of board dicts (with stats)
-    from django.db.models import Count as DjCount, FloatField as DjFloat, ExpressionWrapper
+    # Pre-compute all board task stats in ONE query — avoids N+1 (2 queries × N boards)
+    _board_ids = list(boards.values_list('id', flat=True))
+    _board_task_stats = (
+        Task.objects
+        .filter(column__board_id__in=_board_ids, item_type='task')
+        .values('column__board_id')
+        .annotate(
+            total_tasks=Count('id'),
+            done_tasks=Count('id', filter=Q(progress=100)),
+            high_risk_tasks=Count('id', filter=Q(risk_level__in=['high', 'critical'])),
+        )
+    )
+    _board_stats_map = {
+        row['column__board_id']: row
+        for row in _board_task_stats
+    }
+
     mission_tree = []
     mission_item_map = {}  # id -> item dict, used for goal_tree grouping
     for mission in missions_qs:
@@ -268,13 +274,16 @@ def dashboard(request):
         for strategy in mission.strategies.all().order_by('-created_at'):
             board_list = []
             for board in strategy.boards.all().order_by('name'):
-                total_t = Task.objects.filter(column__board=board, item_type='task').count()
-                done_t = Task.objects.filter(column__board=board, item_type='task', progress=100).count()
+                _bstats = _board_stats_map.get(board.id, {})
+                total_t = _bstats.get('total_tasks', 0)
+                done_t = _bstats.get('done_tasks', 0)
+                high_risk_t = _bstats.get('high_risk_tasks', 0)
                 pct = round((done_t / total_t * 100), 1) if total_t else 0
                 board_list.append({
                     'board': board,
                     'total_tasks': total_t,
                     'done_tasks': done_t,
+                    'high_risk_tasks': high_risk_t,
                     'completion_pct': pct,
                 })
             strategy_list.append({
@@ -309,6 +318,53 @@ def dashboard(request):
     if ungrouped_missions:
         goal_tree.append({'goal': None, 'missions': ungrouped_missions})
 
+    # Build chart data for the metrics side panel (used by Chart.js)
+    # Rolled up from already-computed board stats — zero additional DB queries
+    chart_missions = []
+    chart_strategies = []
+    chart_boards = []
+    for mission_item in mission_tree:
+        m = mission_item['mission']
+        m_total = sum(b['total_tasks'] for s in mission_item['strategies'] for b in s['boards'])
+        m_done  = sum(b['done_tasks']  for s in mission_item['strategies'] for b in s['boards'])
+        m_high_risk = sum(b['high_risk_tasks'] for s in mission_item['strategies'] for b in s['boards'])
+        m_pct = round(m_done / m_total * 100, 1) if m_total else 0
+        chart_missions.append({
+            'name': m.name[:35],  # truncate for chart label readability
+            'id': m.id,
+            'total': m_total,
+            'done': m_done,
+            'high_risk': m_high_risk,
+            'completion_pct': m_pct,
+        })
+        for strategy_item in mission_item['strategies']:
+            s = strategy_item['strategy']
+            s_total = sum(b['total_tasks'] for b in strategy_item['boards'])
+            s_done  = sum(b['done_tasks']  for b in strategy_item['boards'])
+            s_pct   = round(s_done / s_total * 100, 1) if s_total else 0
+            chart_strategies.append({
+                'name': s.name[:35],
+                'mission': m.name[:25],
+                'total': s_total,
+                'done': s_done,
+                'completion_pct': s_pct,
+            })
+            for board_item in strategy_item['boards']:
+                chart_boards.append({
+                    'name': board_item['board'].name[:35],
+                    'strategy': s.name[:25],
+                    'total': board_item['total_tasks'],
+                    'done': board_item['done_tasks'],
+                    'high_risk': board_item['high_risk_tasks'],
+                    'completion_pct': board_item['completion_pct'],
+                })
+
+    chart_data_json = json.dumps({
+        'missions': chart_missions,
+        'strategies': chart_strategies,
+        'boards': chart_boards,
+    })
+
     # Standalone boards: user-accessible boards not linked to any strategy
     standalone_boards = boards.filter(strategy__isnull=True).order_by('name')
 
@@ -333,7 +389,11 @@ def dashboard(request):
         'mission_tree': mission_tree,
         'goal_tree': goal_tree,
         'standalone_boards': standalone_boards,
-        'mission_count': missions_qs.count(),
+        'mission_count': len(mission_tree),
+        'chart_data_json': chart_data_json,
+        'chart_missions': chart_missions,
+        'chart_strategies': chart_strategies,
+        'chart_boards': chart_boards,
         })
 
 @login_required
