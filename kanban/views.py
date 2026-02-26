@@ -359,11 +359,12 @@ def dashboard(request):
                     'completion_pct': board_item['completion_pct'],
                 })
 
-    chart_data_json = json.dumps({
+    # Pass raw dict for json_script filter (don't pre-serialize with json.dumps)
+    chart_data = {
         'missions': chart_missions,
         'strategies': chart_strategies,
         'boards': chart_boards,
-    })
+    }
 
     # Standalone boards: user-accessible boards not linked to any strategy
     standalone_boards = boards.filter(strategy__isnull=True).order_by('name')
@@ -390,7 +391,7 @@ def dashboard(request):
         'goal_tree': goal_tree,
         'standalone_boards': standalone_boards,
         'mission_count': len(mission_tree),
-        'chart_data_json': chart_data_json,
+        'chart_data': chart_data,  # Raw dict for json_script filter
         'chart_missions': chart_missions,
         'chart_strategies': chart_strategies,
         'chart_boards': chart_boards,
