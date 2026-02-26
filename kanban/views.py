@@ -253,7 +253,7 @@ def dashboard(request):
         Q(created_by=request.user) |
         Q(is_demo=True) |
         Q(strategies__boards__id__in=user_board_ids)
-    ).distinct().prefetch_related(
+    ).distinct().select_related('organization_goal').prefetch_related(
         'strategies__boards'
     ).order_by('-created_at')
 
@@ -262,6 +262,7 @@ def dashboard(request):
     # Each strategy dict holds: strategy obj + list of board dicts (with stats)
     from django.db.models import Count as DjCount, FloatField as DjFloat, ExpressionWrapper
     mission_tree = []
+    mission_item_map = {}  # id -> item dict, used for goal_tree grouping
     for mission in missions_qs:
         strategy_list = []
         for strategy in mission.strategies.all().order_by('-created_at'):
@@ -281,11 +282,32 @@ def dashboard(request):
                 'boards': board_list,
                 'board_count': len(board_list),
             })
-        mission_tree.append({
+        item = {
             'mission': mission,
             'strategies': strategy_list,
             'strategy_count': len(strategy_list),
-        })
+        }
+        mission_tree.append(item)
+        mission_item_map[mission.id] = item
+
+    # Build goal_tree: group missions under their Organization Goal.
+    # Missions without a goal are collected in an "ungrouped" bucket.
+    from kanban.models import OrganizationGoal
+    goal_map = {}   # goal_id -> {'goal': obj, 'missions': [...]}
+    ungrouped_missions = []
+    for mission in missions_qs:
+        item = mission_item_map[mission.id]
+        if mission.organization_goal:
+            gid = mission.organization_goal.id
+            if gid not in goal_map:
+                goal_map[gid] = {'goal': mission.organization_goal, 'missions': []}
+            goal_map[gid]['missions'].append(item)
+        else:
+            ungrouped_missions.append(item)
+
+    goal_tree = list(goal_map.values())
+    if ungrouped_missions:
+        goal_tree.append({'goal': None, 'missions': ungrouped_missions})
 
     # Standalone boards: user-accessible boards not linked to any strategy
     standalone_boards = boards.filter(strategy__isnull=True).order_by('name')
@@ -309,6 +331,7 @@ def dashboard(request):
             'show_welcome_modal': show_welcome_modal,  # Show welcome modal for first-time users
         # Mission tree  
         'mission_tree': mission_tree,
+        'goal_tree': goal_tree,
         'standalone_boards': standalone_boards,
         'mission_count': missions_qs.count(),
         })

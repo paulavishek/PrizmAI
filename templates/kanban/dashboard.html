@@ -728,7 +728,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     {% if mission_count %}
                     <span class="badge bg-primary rounded-pill ms-2">{{ mission_count }}</span>
                     {% endif %}
-                    <small class="text-muted ms-2">Mission &rarr; Strategy &rarr; Board &rarr; Tasks</small>
+                    <small class="text-muted ms-2">Goal &rarr; Mission &rarr; Strategy &rarr; Board &rarr; Tasks</small>
                 </div>
                 <div class="d-flex align-items-center gap-2">
                     {% regroup boards by is_official_demo_board as board_groups %}
@@ -739,6 +739,9 @@ document.addEventListener('DOMContentLoaded', function() {
                             </button>
                         {% endif %}
                     {% endfor %}
+                    <a href="{% url 'goal_list' %}" class="btn btn-sm btn-outline-warning text-dark">
+                        <i class="fas fa-trophy fa-sm"></i> All Goals
+                    </a>
                     <a href="{% url 'mission_list' %}" class="btn btn-sm btn-outline-primary">
                         <i class="fas fa-bullseye fa-sm"></i> All Missions
                     </a>
@@ -748,11 +751,67 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
             </div>
             <div class="card-body p-3">
-                {% if mission_tree %}
+                {% if goal_tree %}
                 <div class="mission-tree">
-                    {% for mission_item in mission_tree %}
-                    {% with mission=mission_item.mission %}
-                    <div class="mission-node mb-4" id="mission-node-{{ mission.id }}">
+                    {% for goal_entry in goal_tree %}
+
+                    {% if goal_entry.goal %}
+                    {# ---- ORGANIZATION GOAL node ---- #}
+                    <div class="goal-node mb-4" id="goal-node-{{ goal_entry.goal.id }}">
+                        <div class="card border-0 shadow-sm mb-0" style="border-left: 4px solid #ffc107 !important;">
+                            <div class="card-body p-3">
+                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                    <div class="d-flex align-items-center gap-2">
+                                        <i class="fas fa-trophy text-warning mt-1"></i>
+                                        <div>
+                                            <span class="badge text-uppercase fw-semibold me-1 mb-1"
+                                                  style="background:#fff8e1; color:#b8860b; border:1px solid #ffe082; font-size:0.6rem; letter-spacing:0.07em; padding:3px 7px;">
+                                                Organization Goal
+                                            </span>
+                                            <h6 class="mb-0 fw-bold">
+                                                <a href="{% url 'goal_detail' goal_entry.goal.id %}" class="text-decoration-none text-dark">{{ goal_entry.goal.name }}</a>
+                                            </h6>
+                                            {% if goal_entry.goal.target_metric %}
+                                            <small class="text-warning fw-semibold">
+                                                <i class="fas fa-bullseye me-1"></i>{{ goal_entry.goal.target_metric }}
+                                            </small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                                        {% if goal_entry.goal.status == 'active' %}
+                                            <span class="badge bg-success">Active</span>
+                                        {% elif goal_entry.goal.status == 'completed' %}
+                                            <span class="badge bg-primary">Completed</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark">On Hold</span>
+                                        {% endif %}
+                                        <span class="badge bg-light text-dark border">
+                                            <i class="fas fa-bullseye text-primary me-1"></i>{{ goal_entry.missions|length }} mission{{ goal_entry.missions|length|pluralize }}
+                                        </span>
+                                        <a href="{% url 'goal_detail' goal_entry.goal.id %}" class="btn btn-sm btn-outline-warning text-dark" title="Open Goal">
+                                            <i class="fas fa-external-link-alt fa-xs"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {# missions indented under this goal #}
+                        <div class="ps-4 mt-1">
+                    {% else %}
+                    {# ---- Ungrouped missions (no Organization Goal) ---- #}
+                    <div class="ungrouped-missions-section mb-4">
+                        <div class="text-muted small mb-2 ps-1">
+                            <i class="fas fa-minus-circle me-1"></i><em>Missions not linked to an Organization Goal</em>
+                        </div>
+                        <div>
+                    {% endif %}
+
+                        {# ---- MISSION nodes (inside either Goal or Ungrouped wrapper) ---- #}
+                        {% for mission_item in goal_entry.missions %}
+                        {% with mission=mission_item.mission %}
+                        <div class="mission-node mb-4" id="mission-node-{{ mission.id }}">
                         <!-- Mission Card -->
                         <div class="mission-card card border-0 shadow-sm mb-0" style="border-left: 4px solid #4e73df !important;">
                             <div class="card-body p-3">
@@ -950,15 +1009,25 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                     {% endwith %}
                     {% endfor %}
+                    {# close the indentation div inside the goal/ungrouped wrapper #}
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
                 {% else %}
-                <!-- Empty state: no missions yet -->
+                <!-- Empty state: no goals or missions yet -->
                 <div class="text-center py-5">
-                    <i class="fas fa-bullseye fa-4x text-gray-300 mb-3"></i>
-                    <p class="mb-2 fw-semibold">No Missions yet</p>
-                    <p class="text-muted small mb-4">Missions define the problems you are solving. Create one to organise your boards into strategies.</p>
-                    <a href="{% url 'create_mission' %}" class="btn btn-primary">
-                        <i class="fas fa-plus fa-sm me-1"></i> Create Your First Mission
+                    <i class="fas fa-trophy fa-4x text-warning mb-3" style="opacity:0.3;"></i>
+                    <p class="mb-2 fw-semibold">No Organization Goals or Missions yet</p>
+                    <p class="text-muted small mb-4">
+                        Start at the top — define an <strong>Organization Goal</strong> (your North Star),
+                        then add Missions, Strategies and Boards underneath it.
+                    </p>
+                    <a href="{% url 'create_goal' %}" class="btn btn-warning text-dark">
+                        <i class="fas fa-trophy fa-sm me-1"></i> Create Organization Goal
+                    </a>
+                    <a href="{% url 'create_mission' %}" class="btn btn-primary ms-2">
+                        <i class="fas fa-bullseye fa-sm me-1"></i> New Mission
                     </a>
                     <a href="{% url 'create_board' %}" class="btn btn-outline-secondary ms-2">
                         <i class="fas fa-plus fa-sm me-1"></i> New Board
