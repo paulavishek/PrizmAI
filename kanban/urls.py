@@ -43,6 +43,17 @@ urlpatterns = [
     path('boards/create/', views.create_board, name='create_board'),
 
     # -----------------------------------------------------------------------
+    # Organization Goal hierarchy  (Goal → Mission → Strategy → Board → Task)
+    # No access restrictions — all authenticated users can use these.
+    # -----------------------------------------------------------------------
+    path('goals/', mission_views.goal_list, name='goal_list'),
+    path('goals/create/', mission_views.create_goal, name='create_goal'),
+    path('goals/<int:goal_id>/', mission_views.goal_detail, name='goal_detail'),
+    path('goals/<int:goal_id>/edit/', mission_views.edit_goal, name='edit_goal'),
+    path('goals/<int:goal_id>/delete/', mission_views.delete_goal, name='delete_goal'),
+    path('goals/<int:goal_id>/link-mission/', mission_views.link_mission_to_goal, name='link_mission_to_goal'),
+    path('goals/<int:goal_id>/unlink-mission/<int:mission_id>/', mission_views.unlink_mission_from_goal, name='unlink_mission_from_goal'),
+    # -----------------------------------------------------------------------
     # Mission & Strategy hierarchy  (Mission → Strategy → Board)
     # No access restrictions — all authenticated users can use these.
     # -----------------------------------------------------------------------

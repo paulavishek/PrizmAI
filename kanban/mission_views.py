@@ -13,7 +13,164 @@ from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.db.models import Count, Q
 
-from .models import Mission, Strategy, Board
+from .models import OrganizationGoal, Mission, Strategy, Board
+from accounts.models import Organization
+
+
+# ---------------------------------------------------------------------------
+# OrganizationGoal views  (apex of the hierarchy: Goal → Mission → Strategy → Board → Task)
+# ---------------------------------------------------------------------------
+
+@login_required
+def goal_list(request):
+    """Show all Organization Goals."""
+    goals = OrganizationGoal.objects.all().annotate(
+        mission_count=Count('missions', distinct=True),
+    ).order_by('-created_at')
+
+    return render(request, 'kanban/goal_list.html', {
+        'goals': goals,
+    })
+
+
+@login_required
+def goal_detail(request, goal_id):
+    """Show a single Organization Goal and its linked Missions."""
+    goal = get_object_or_404(OrganizationGoal, id=goal_id)
+    linked_missions = goal.missions.all().annotate(
+        strategy_count=Count('strategies', distinct=True),
+        board_count=Count('strategies__boards', distinct=True),
+    ).order_by('-created_at')
+
+    # All missions not yet linked to this goal (for the link dropdown)
+    all_missions = Mission.objects.exclude(organization_goal=goal).order_by('name')
+
+    return render(request, 'kanban/goal_detail.html', {
+        'goal': goal,
+        'linked_missions': linked_missions,
+        'all_missions': all_missions,
+    })
+
+
+@login_required
+def create_goal(request):
+    """Create a new Organization Goal."""
+    organizations = Organization.objects.all().order_by('name')
+
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        description = request.POST.get('description', '').strip()
+        target_metric = request.POST.get('target_metric', '').strip()
+        target_date = request.POST.get('target_date', '').strip() or None
+        status = request.POST.get('status', 'active')
+        org_id = request.POST.get('organization', '').strip()
+
+        if not name:
+            messages.error(request, 'Goal name is required.')
+            return render(request, 'kanban/create_goal.html', {
+                'post': request.POST,
+                'organizations': organizations,
+            })
+
+        organization = None
+        if org_id:
+            organization = Organization.objects.filter(id=org_id).first()
+
+        goal = OrganizationGoal.objects.create(
+            name=name,
+            description=description or None,
+            target_metric=target_metric or None,
+            target_date=target_date,
+            status=status,
+            organization=organization,
+            created_by=request.user,
+        )
+        messages.success(request, f'Organization Goal "{goal.name}" created successfully!')
+        return redirect('goal_detail', goal_id=goal.id)
+
+    return render(request, 'kanban/create_goal.html', {
+        'organizations': organizations,
+    })
+
+
+@login_required
+def edit_goal(request, goal_id):
+    """Edit an existing Organization Goal."""
+    goal = get_object_or_404(OrganizationGoal, id=goal_id)
+    organizations = Organization.objects.all().order_by('name')
+
+    if request.method == 'POST':
+        name = request.POST.get('name', '').strip()
+        description = request.POST.get('description', '').strip()
+        target_metric = request.POST.get('target_metric', '').strip()
+        target_date = request.POST.get('target_date', '').strip() or None
+        status = request.POST.get('status', 'active')
+        org_id = request.POST.get('organization', '').strip()
+
+        if not name:
+            messages.error(request, 'Goal name is required.')
+            return render(request, 'kanban/edit_goal.html', {
+                'goal': goal,
+                'organizations': organizations,
+            })
+
+        goal.name = name
+        goal.description = description or None
+        goal.target_metric = target_metric or None
+        goal.target_date = target_date
+        goal.status = status
+        goal.organization = Organization.objects.filter(id=org_id).first() if org_id else None
+        goal.save()
+        messages.success(request, f'Organization Goal "{goal.name}" updated.')
+        return redirect('goal_detail', goal_id=goal.id)
+
+    return render(request, 'kanban/edit_goal.html', {
+        'goal': goal,
+        'organizations': organizations,
+    })
+
+
+@login_required
+def delete_goal(request, goal_id):
+    """Delete an Organization Goal. Linked Missions become unlinked (SET_NULL)."""
+    goal = get_object_or_404(OrganizationGoal, id=goal_id)
+
+    if request.method == 'POST':
+        name = goal.name
+        goal.delete()
+        messages.success(request, f'Organization Goal "{name}" has been deleted.')
+        return redirect('goal_list')
+
+    return render(request, 'kanban/delete_goal.html', {'goal': goal})
+
+
+@login_required
+def link_mission_to_goal(request, goal_id):
+    """Link an existing Mission to this Organization Goal."""
+    goal = get_object_or_404(OrganizationGoal, id=goal_id)
+
+    if request.method == 'POST':
+        mission_id = request.POST.get('mission_id')
+        mission = get_object_or_404(Mission, id=mission_id)
+        mission.organization_goal = goal
+        mission.save(update_fields=['organization_goal'])
+        messages.success(request, f'Mission "{mission.name}" linked to goal "{goal.name}".')
+
+    return redirect('goal_detail', goal_id=goal.id)
+
+
+@login_required
+def unlink_mission_from_goal(request, goal_id, mission_id):
+    """Remove the link between a Mission and an Organization Goal."""
+    goal = get_object_or_404(OrganizationGoal, id=goal_id)
+    mission = get_object_or_404(Mission, id=mission_id, organization_goal=goal)
+
+    if request.method == 'POST':
+        mission.organization_goal = None
+        mission.save(update_fields=['organization_goal'])
+        messages.success(request, f'Mission "{mission.name}" unlinked from goal.')
+
+    return redirect('goal_detail', goal_id=goal.id)
 
 
 # ---------------------------------------------------------------------------
@@ -23,7 +180,7 @@ from .models import Mission, Strategy, Board
 @login_required
 def mission_list(request):
     """Show all missions — no filtering, everyone sees everything (same as board list)."""
-    missions = Mission.objects.all().annotate(
+    missions = Mission.objects.select_related('organization_goal').all().annotate(
         strategy_count=Count('strategies', distinct=True),
         board_count=Count('strategies__boards', distinct=True),
     ).order_by('-created_at')
@@ -36,7 +193,7 @@ def mission_list(request):
 @login_required
 def mission_detail(request, mission_id):
     """Show a single mission and its strategies."""
-    mission = get_object_or_404(Mission, id=mission_id)
+    mission = get_object_or_404(Mission.objects.select_related('organization_goal'), id=mission_id)
     strategies = mission.strategies.all().annotate(
         board_count=Count('boards', distinct=True)
     ).order_by('-created_at')

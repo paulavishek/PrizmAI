@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+
+{% block title %}Create Organization Goal - PrizmAI{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb small">
+        <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Organization Goals</a></li>
+        <li class="breadcrumb-item active">Create Goal</li>
+    </ol>
+</nav>
+
+<div class="row justify-content-center">
+    <div class="col-md-7">
+        <div class="card shadow-sm">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0"><i class="fas fa-trophy me-2"></i>Create New Organization Goal</h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-4">
+                    An <strong>Organization Goal</strong> is your highest-level strategic ambition — the North Star that Missions, Strategies and Boards should collectively drive towards.
+                    <br><small>Example: <em>"Increase Market Share in Asia by 15%"</em> or <em>"Achieve $10M ARR by Q4 2026"</em></small>
+                </p>
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label for="name" class="form-label fw-semibold">Goal Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name"
+                               placeholder="e.g., Increase Market Share in Asia by 15%"
+                               value="{{ post.name|default:'' }}" required>
+                        <div class="form-text">Use a clear, outcome-oriented statement.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="form-label fw-semibold">Context & Success Criteria</label>
+                        <textarea class="form-control" id="description" name="description" rows="4"
+                                  placeholder="Describe the context, motivation and what success looks like…">{{ post.description|default:'' }}</textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="target_metric" class="form-label fw-semibold">Target Metric</label>
+                        <input type="text" class="form-control" id="target_metric" name="target_metric"
+                               placeholder="e.g., 15% market share increase"
+                               value="{{ post.target_metric|default:'' }}">
+                        <div class="form-text">The measurable number or KPI that defines success.</div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="target_date" class="form-label fw-semibold">Target Date</label>
+                            <input type="date" class="form-control" id="target_date" name="target_date"
+                                   value="{{ post.target_date|default:'' }}">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label for="status" class="form-label fw-semibold">Status</label>
+                            <select class="form-select" id="status" name="status">
+                                <option value="active" {% if post.status == 'active' or not post %}selected{% endif %}>Active</option>
+                                <option value="on_hold" {% if post.status == 'on_hold' %}selected{% endif %}>On Hold</option>
+                                <option value="completed" {% if post.status == 'completed' %}selected{% endif %}>Completed</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {% if organizations %}
+                    <div class="mb-4">
+                        <label for="organization" class="form-label fw-semibold">Organization <span class="text-muted small">(optional)</span></label>
+                        <select class="form-select" id="organization" name="organization">
+                            <option value="">— No organization —</option>
+                            {% for org in organizations %}
+                            <option value="{{ org.id }}" {% if post.organization == org.id|stringformat:"s" %}selected{% endif %}>
+                                {{ org.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-warning text-dark">
+                            <i class="fas fa-check me-1"></i>Create Goal
+                        </button>
+                        <a href="{% url 'goal_list' %}" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

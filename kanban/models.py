@@ -31,6 +31,82 @@ from kanban.automation_models import BoardAutomation
 
 
 # ---------------------------------------------------------------------------
+# ORGANIZATION GOAL — apex strategic layer
+# Sits above Mission.  Owned by an Organization.  One Goal → many Missions.
+# No access restrictions: all authenticated users can view and create these.
+# ---------------------------------------------------------------------------
+class OrganizationGoal(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+        ('on_hold', 'On Hold'),
+    ]
+
+    name = models.CharField(
+        max_length=200,
+        help_text="The high-level organizational goal (e.g., 'Increase Market Share in Asia by 15%').",
+    )
+    description = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Context, motivation and success criteria for this goal.",
+    )
+    target_metric = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        help_text="Measurable target (e.g., '15% market share increase', '$5M revenue').",
+    )
+    target_date = models.DateField(
+        blank=True,
+        null=True,
+        help_text="Target completion / measurement date.",
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='active')
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.SET_NULL,
+        related_name='organization_goals',
+        null=True,
+        blank=True,
+        help_text="Owning organization (optional — matches MVP open-access model).",
+    )
+    created_by = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='created_organization_goals'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    # Demo support
+    is_demo = models.BooleanField(default=False)
+    is_seed_demo_data = models.BooleanField(default=False)
+
+    # AI Summary (bubble-up from Mission summaries)
+    ai_summary = models.TextField(
+        blank=True,
+        null=True,
+        help_text="AI-generated summary synthesised from all linked Mission summaries.",
+    )
+    ai_summary_generated_at = models.DateTimeField(
+        blank=True,
+        null=True,
+        help_text="When the AI summary was last generated.",
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Organization Goal'
+        verbose_name_plural = 'Organization Goals'
+
+    def __str__(self):
+        return self.name
+
+    def get_absolute_url(self):
+        from django.urls import reverse
+        return reverse('goal_detail', kwargs={'goal_id': self.pk})
+
+
+# ---------------------------------------------------------------------------
 # MISSION — top-level strategic layer (the "problem / challenge" statement)
 # No access restrictions: all authenticated users can view and create these.
 # ---------------------------------------------------------------------------
@@ -53,6 +129,16 @@ class Mission(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    # Parent goal — one OrganizationGoal supports many Missions (nullable FK)
+    organization_goal = models.ForeignKey(
+        'OrganizationGoal',
+        on_delete=models.SET_NULL,
+        related_name='missions',
+        null=True,
+        blank=True,
+        help_text="The Organization Goal this Mission contributes to.",
+    )
 
     # Demo support
     is_demo = models.BooleanField(default=False)

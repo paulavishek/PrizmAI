@@ -28,7 +28,7 @@ import json
 
 # Import all required models
 from accounts.models import Organization
-from kanban.models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Mission, Strategy
+from kanban.models import Board, Column, Task, TaskLabel, Comment, TaskActivity, TaskFile, Mission, Strategy, OrganizationGoal
 from kanban.permission_models import Role
 from kanban.budget_models import TimeEntry, ProjectBudget, TaskCost, ProjectROI
 from kanban.burndown_models import TeamVelocitySnapshot, BurndownPrediction
@@ -192,6 +192,11 @@ class Command(BaseCommand):
             self.stdout.write(self.style.NOTICE('\n🎯 PHASE 7: Creating Demo Mission & Strategy...'))
             self.seed_demo_mission_strategy()
             self.stdout.write(self.style.SUCCESS('   ✅ Demo Mission & Strategy seeded'))
+
+            # 8. Organization Goal (apex of hierarchy — sits above Mission)
+            self.stdout.write(self.style.NOTICE('\n🏆 PHASE 8: Creating Demo Organization Goal...'))
+            self.seed_demo_organization_goal()
+            self.stdout.write(self.style.SUCCESS('   ✅ Demo Organization Goal seeded'))
 
         # Final Summary
         self.print_final_summary()
@@ -1631,6 +1636,44 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
             'entries': entries_created,
             'users': len(users_with_entries)
         }
+
+    def seed_demo_organization_goal(self):
+        """
+        Create (or ensure) a demo Organization Goal and link the demo Mission to it.
+        Idempotent — safe to run multiple times.
+        """
+        creator = self.alex or User.objects.filter(is_superuser=True).first()
+
+        # --- Organization Goal ---
+        goal, created = OrganizationGoal.objects.get_or_create(
+            name='Increase Market Share in Asia by 15%',
+            defaults=dict(
+                description=(
+                    'Capture 15% of the Asia-Pacific enterprise security market within 24 months '
+                    'by launching localized AI-driven security products, building a regional partner '
+                    'ecosystem, and establishing brand recognition in key markets including India, '
+                    'Japan, and Singapore.'
+                ),
+                target_metric='15% market share increase in Asia-Pacific',
+                status='active',
+                organization=self.demo_org,
+                created_by=creator,
+                is_demo=True,
+                is_seed_demo_data=True,
+            )
+        )
+
+        # --- Link the demo Mission to this Goal ---
+        linked_count = Mission.objects.filter(
+            name='Prevent AI Security Threats',
+            is_seed_demo_data=True,
+        ).exclude(organization_goal=goal).update(organization_goal=goal)
+
+        action = 'created' if created else 'already exists'
+        self.stdout.write(
+            f'   Organization Goal "{goal.name}" ({action}) | '
+            f'Missions linked/updated: {linked_count}'
+        )
 
     def seed_demo_mission_strategy(self):
         """

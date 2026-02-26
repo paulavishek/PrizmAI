@@ -169,6 +169,53 @@ class TaskFlowChatbotService:
                 context += f"Board: {self.board.name}\n"
                 if self.board.description:
                     context += f"Description: {self.board.description}\n"
+
+                # ---------------------------------------------------------------
+                # Strategic hierarchy context (Goal → Mission → Strategy → Board)
+                # Walk the chain and prepend a strategic framing block so Gemini can
+                # evaluate task progress against the top-level Organization Goal.
+                # ---------------------------------------------------------------
+                try:
+                    strategy = getattr(self.board, 'strategy', None)
+                    mission = getattr(strategy, 'mission', None) if strategy else None
+                    org_goal = getattr(mission, 'organization_goal', None) if mission else None
+
+                    if org_goal or mission or strategy:
+                        context += "\n**Strategic Hierarchy (Top → Bottom):**\n"
+
+                    if org_goal:
+                        context += f"  🏆 Organization Goal: {org_goal.name}\n"
+                        if org_goal.target_metric:
+                            context += f"     Target Metric: {org_goal.target_metric}\n"
+                        if org_goal.description:
+                            context += f"     Context: {org_goal.description[:200]}\n"
+                        if org_goal.ai_summary:
+                            context += f"     AI Assessment: {org_goal.ai_summary[:300]}\n"
+                        context += (
+                            "\n  ⚡ PRIMARY EVALUATION FRAME: When analysing this board's tasks, "
+                            "evaluate whether current progress is actually moving the needle on the "
+                            f"Organization Goal (\"{org_goal.name}\"), not merely completing work. "
+                            "Flag if task activity appears disconnected from the stated goal.\n"
+                        )
+
+                    if mission:
+                        context += f"\n  🎯 Mission: {mission.name} (Status: {mission.status})\n"
+                        if mission.description:
+                            context += f"     Problem: {mission.description[:200]}\n"
+                        if mission.ai_summary:
+                            context += f"     AI Summary: {mission.ai_summary[:300]}\n"
+
+                    if strategy:
+                        context += f"\n  💡 Strategy: {strategy.name} (Status: {strategy.status})\n"
+                        if strategy.description:
+                            context += f"     Approach: {strategy.description[:200]}\n"
+                        if strategy.ai_summary:
+                            context += f"     AI Summary: {strategy.ai_summary[:300]}\n"
+
+                    context += "\n"
+                except Exception as hierarchy_err:
+                    logger.warning(f"Could not build strategic hierarchy context: {hierarchy_err}")
+                # ---------------------------------------------------------------
                 
                 # Get tasks with comprehensive information
                 tasks = Task.objects.filter(column__board=self.board).select_related(

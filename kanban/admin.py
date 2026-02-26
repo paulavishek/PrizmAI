@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import (
-    Mission, Strategy,
+    OrganizationGoal, Mission, Strategy,
     Board, Column, Task, TaskLabel, Comment, TaskActivity,
     TeamSkillProfile, SkillGap, SkillDevelopmentPlan,
     ScopeChangeSnapshot, ScopeCreepAlert, BoardInvitation
@@ -33,10 +33,33 @@ class BoardAutomationAdmin(admin.ModelAdmin):
     search_fields = ('name', 'board__name')
 
 
+class MissionInline(admin.TabularInline):
+    model = Mission
+    extra = 0
+    fields = ('name', 'status', 'created_by')
+    show_change_link = True
+    readonly_fields = ('created_by',)
+
+
+@admin.register(OrganizationGoal)
+class OrganizationGoalAdmin(admin.ModelAdmin):
+    list_display = ('name', 'organization', 'status', 'target_metric', 'target_date', 'created_by', 'created_at')
+    list_filter = ('status', 'organization', 'is_demo', 'created_at')
+    search_fields = ('name', 'description', 'target_metric')
+    inlines = [MissionInline]
+    fieldsets = (
+        (None, {'fields': ('name', 'description', 'status')}),
+        ('Target', {'fields': ('target_metric', 'target_date')}),
+        ('Ownership', {'fields': ('organization', 'created_by')}),
+        ('Demo', {'fields': ('is_demo', 'is_seed_demo_data'), 'classes': ('collapse',)}),
+        ('AI Summary', {'fields': ('ai_summary', 'ai_summary_generated_at'), 'classes': ('collapse',)}),
+    )
+
+
 @admin.register(Mission)
 class MissionAdmin(admin.ModelAdmin):
-    list_display = ('name', 'status', 'created_by', 'created_at')
-    list_filter = ('status', 'created_at')
+    list_display = ('name', 'organization_goal', 'status', 'created_by', 'created_at')
+    list_filter = ('status', 'organization_goal', 'created_at')
     search_fields = ('name', 'description')
 
 

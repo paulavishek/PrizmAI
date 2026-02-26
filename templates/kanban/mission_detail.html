@@ -7,10 +7,32 @@
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb small">
         <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'goal_list' %}">Goals</a></li>
+        {% if mission.organization_goal %}
+        <li class="breadcrumb-item"><a href="{% url 'goal_detail' mission.organization_goal.id %}">{{ mission.organization_goal.name|truncatechars:30 }}</a></li>
+        {% endif %}
         <li class="breadcrumb-item"><a href="{% url 'mission_list' %}">Missions</a></li>
         <li class="breadcrumb-item active">{{ mission.name }}</li>
     </ol>
 </nav>
+
+{% if mission.organization_goal %}
+<!-- Parent Organization Goal banner -->
+<div class="alert py-2 mb-3" role="alert" style="background:linear-gradient(135deg,#fffbea,#fff);border:1px solid #ffe08a;">
+    <div class="d-flex align-items-center gap-2">
+        <i class="fas fa-trophy text-warning"></i>
+        <small class="text-muted">
+            <strong>Contributing to:</strong>
+            <a href="{% url 'goal_detail' mission.organization_goal.id %}" class="text-warning fw-semibold text-decoration-none">
+                {{ mission.organization_goal.name }}
+            </a>
+            {% if mission.organization_goal.target_metric %}
+            <span class="badge bg-warning text-dark ms-2">{{ mission.organization_goal.target_metric }}</span>
+            {% endif %}
+        </small>
+    </div>
+</div>
+{% endif %}
 
 <!-- Mission header -->
 <div class="card shadow-sm mb-4" style="border-left: 4px solid #4e73df;">
