@@ -437,15 +437,15 @@ CACHES = {
     },
     
     # AI Response Cache - longer TTL for expensive AI calls
+    # Uses Django's built-in Redis backend (no django_redis dependency needed).
+    # Must stay on Redis (NOT LocMemCache) even in DEBUG mode so that debounce
+    # lock keys are visible across all processes (Daphne + Celery worker).
     'ai_cache': {
-        'BACKEND': 'django_redis.cache.RedisCache',
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
         'LOCATION': REDIS_URL.replace('/0', '/1'),  # Use DB 1 for AI cache
         'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            'IGNORE_EXCEPTIONS': True,
-            'SOCKET_CONNECT_TIMEOUT': 5,
-            'SOCKET_TIMEOUT': 5,
-            'COMPRESSOR': 'django_redis.compressors.zlib.ZlibCompressor',
+            'socket_connect_timeout': 5,
+            'socket_timeout': 5,
         },
         'KEY_PREFIX': 'prizmAI:ai',
         'TIMEOUT': 1800,  # 30 minutes for AI responses
@@ -499,15 +499,13 @@ if DEBUG and not os.getenv('FORCE_REDIS_CACHE'):
             'MAX_ENTRIES': 2000,
         },
     }
-    # Also replace other Redis caches with LocMemCache in debug mode
-    CACHES['ai_cache'] = {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'prizmAI-ai-cache',
-        'TIMEOUT': 1800,
-        'OPTIONS': {
-            'MAX_ENTRIES': 1000,
-        },
-    }
+    # NOTE: ai_cache is intentionally NOT overridden here.
+    # The AI summary debounce lock must be visible across ALL processes
+    # (Daphne web server + Celery worker). LocMemCache is per-process, so
+    # the Celery worker's lock-release would be invisible to the web process,
+    # causing the polling spinner to run for the full 10-minute lock TTL.
+    # Redis is always available in this project, so keep ai_cache as Redis
+    # even in DEBUG mode.
     CACHES['session_cache'] = {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'prizmAI-session-cache',

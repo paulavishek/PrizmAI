@@ -973,6 +973,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                             <div class="ai-summary-text small text-muted fst-italic mt-1 summary-truncated board-summary" id="board-summary-text-{{ board.id }}">
                                                 <i class="fas fa-robot me-1" style="font-size:0.65rem;"></i>
                                                 <span class="summary-content">{{ board.ai_summary }}</span>
+                                                <a href="#" class="summary-read-more ms-1 small text-info" onclick="toggleSummary(this,'board-summary-text-{{ board.id }}'); return false;">read more</a>
                                             </div>
                                             <small class="text-muted summary-ts" id="board-ts-{{ board.id }}"
                                                   {% if board.ai_summary_generated_at %}data-ts="{{ board.ai_summary_generated_at|date:'c' }}"{% endif %}
@@ -2168,7 +2169,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (data.summary && textEl) {
             if (level === 'board') {
                 textEl.innerHTML = '<i class="fas fa-robot me-1" style="font-size:0.65rem;"></i>'
-                    + '<span class="summary-content">' + escapeHtml(data.summary) + '</span>';
+                    + '<span class="summary-content">' + escapeHtml(data.summary) + '</span> '
+                    + '<a href="#" class="summary-read-more ms-1 small text-info" '
+                    + 'onclick="toggleSummary(this,\'board-summary-text-' + objId + '\'); return false;">read more</a>';
             } else {
                 textEl.innerHTML = '<i class="fas fa-robot text-info me-1" style="font-size:0.75rem;"></i>'
                     + '<span class="summary-content">' + escapeHtml(data.summary) + '</span> '
@@ -2255,9 +2258,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     data.generated_at
                     && data.generated_at !== previousGeneratedAt
                 );
-                // isNew: task finished AND lock released, OR task finished AND we've
-                // hit MAX_POLLS (safety net for edge-case where lock-release was missed).
-                var isNew = generatedAtChanged && (!data.queued || pollCount >= MAX_POLLS);
+                // A changed generated_at is definitive DB-level proof that the
+                // Celery task completed and saved a fresh summary.  Do NOT gate
+                // on !data.queued: in multi-process deployments (web process +
+                // Celery worker) the lock-release may be invisible to the web
+                // process when LocMemCache is used (each process has its own
+                // in-memory store), so queued can stay true for the full 10-min
+                // TTL even after the task finishes.
+                var isNew = generatedAtChanged;
                 if (isNew) {
                     stopPoller(true);
                     applySummaryToDOM(level, objId, data);
@@ -2271,6 +2279,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             });
         }
+
+        // Fire one poll immediately so fast tasks (< 5 s) are detected right away
+        pollCount++;
+        doPoll();
 
         var intervalId = setInterval(function() {
             pollCount++;
@@ -2314,10 +2326,6 @@ document.addEventListener('DOMContentLoaded', function() {
             var labelEl = btn.querySelector('.btn-label');
             if (labelEl) labelEl.textContent = '\uD83D\uDD04 Refreshing…';
 
-            // Read the current generated_at so we can detect a new result during polling
-            var tsEl = document.getElementById(level + '-ts-' + objId);
-            var previousGeneratedAt = tsEl ? (tsEl.dataset.ts || null) : null;
-
             fetch(url, {
                 method: 'POST',
                 headers: {
@@ -2338,6 +2346,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (data.summary) {
                     applySummaryToDOM(level, objId, data);
                 }
+
+                // Use the API's generated_at as the polling baseline.
+                // IMPORTANT: do NOT use the template-rendered data-ts value here.
+                // Django's |date:'c' filter omits microseconds (e.g. "...+05:30")
+                // while Python's .isoformat() includes them ("...123456+05:30").
+                // Using mismatched formats causes generatedAtChanged to fire true
+                // on the very first poll (before the Celery task finishes), which
+                // stops the poller immediately and the fresh result is never seen.
+                var previousGeneratedAt = data.generated_at || null;
 
                 // Begin polling for the fresh result
                 startPolling(level, objId, previousGeneratedAt);
