@@ -1,4 +1,5 @@
 import logging
+import re
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileResponse
@@ -511,9 +512,16 @@ def dashboard(request):
     for mission_item in mission_tree:
         m = mission_item['mission']
         if m.ai_summary:
-            lines = [l.strip().lstrip('•-* ').strip() for l in m.ai_summary.split('\n') if l.strip()]
+            lines = [l.strip().lstrip('\u2022-* ').strip() for l in m.ai_summary.split('\n') if l.strip()]
             if lines:
-                briefing_pulse = lines[0][:200]
+                # Use the first complete sentence; fall back to full first line (no hard truncation)
+                first_line = lines[0]
+                # Find sentence boundary (. ! ?) not followed by a digit (e.g. "20.5%")
+                m_sent = re.search(r'(?<=[.!?])(?=\s+[A-Z]|$)', first_line)
+                if m_sent:
+                    briefing_pulse = first_line[:m_sent.start() + 1].strip()
+                else:
+                    briefing_pulse = first_line
             break
 
     if overdue_count > 0 or total_high_risk > 0:

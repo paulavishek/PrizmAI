@@ -37,53 +37,60 @@
         color: white;
     }
 
-    /* Collapsible Demo Credentials Banner */
+    /* Demo Credentials — compact pill style */
     .demo-credentials-banner {
-        background: linear-gradient(135deg, #e3f2fd 0%, #e1f5fe 100%);
-        border: 2px solid #0288d1;
-        border-radius: 12px;
-        margin-bottom: 1.5rem;
-        overflow: hidden;
-        box-shadow: 0 4px 12px rgba(2, 136, 209, 0.15);
-        transition: all 0.3s ease;
+        background: transparent;
+        border: none;
+        border-radius: 0;
+        margin-bottom: 0.75rem;
+        overflow: visible;
+        box-shadow: none;
+        transition: none;
+        text-align: right;
     }
 
     .demo-credentials-banner.expanded {
-        box-shadow: 0 6px 20px rgba(2, 136, 209, 0.25);
+        box-shadow: none;
     }
 
     .demo-banner-header {
-        padding: 1rem 1.5rem;
+        padding: 0;
         cursor: pointer;
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        justify-content: space-between;
+        gap: 0.35rem;
         user-select: none;
+        background: #f0f9ff;
+        border: 1px solid #bae6fd;
+        border-radius: 20px;
+        padding: 0.25rem 0.75rem;
+        font-size: 0.78rem;
+        color: #0369a1;
         transition: background-color 0.2s ease;
     }
 
     .demo-banner-header:hover {
-        background: rgba(2, 136, 209, 0.08);
+        background: #e0f2fe;
     }
 
     .demo-banner-title {
-        display: flex;
+        display: inline-flex;
         align-items: center;
-        gap: 0.75rem;
+        gap: 0.35rem;
         margin: 0;
-        font-size: 1.1rem;
-        font-weight: 700;
-        color: #01579b;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #0369a1;
     }
 
     .demo-banner-icon {
-        font-size: 1.3rem;
-        color: #0288d1;
+        font-size: 0.75rem;
+        color: #0369a1;
     }
 
     .demo-toggle-icon {
-        font-size: 1.2rem;
-        color: #0288d1;
+        font-size: 0.7rem;
+        color: #0369a1;
         transition: transform 0.3s ease;
     }
 
@@ -95,12 +102,17 @@
         max-height: 0;
         overflow: hidden;
         transition: max-height 0.4s ease, padding 0.4s ease;
-        padding: 0 1.5rem;
+        padding: 0;
+        text-align: left;
+        margin-top: 0.5rem;
+        background: white;
+        border: 1px solid #bae6fd;
+        border-radius: 10px;
     }
 
     .demo-credentials-banner.expanded .demo-banner-content {
         max-height: 500px;
-        padding: 0 1.5rem 1.5rem 1.5rem;
+        padding: 1rem 1.25rem 1.25rem 1.25rem;
     }
 
     .demo-users-row {
@@ -325,8 +337,8 @@
 
     /* Adjust max-height for expanded content with new sections */
     .demo-credentials-banner.expanded .demo-banner-content {
-        max-height: 800px;
-        padding: 0 1.5rem 1.5rem 1.5rem;
+        max-height: 850px;
+        padding: 1rem 1.25rem 1.25rem 1.25rem;
     }
     
     /* Welcome Modal Styles */
@@ -1066,14 +1078,11 @@ document.addEventListener('DOMContentLoaded', function() {
 {% endif %}
 <!-- /Daily AI Briefing -->
 
-<!-- Collapsible Demo Credentials Banner -->
+<!-- Demo Credentials — compact pill -->
 <div class="demo-credentials-banner" id="demoCredentialsBanner">
     <div class="demo-banner-header" onclick="toggleDemoBanner()">
-        <div class="demo-banner-title">
-            <i class="fas fa-user-shield demo-banner-icon"></i>
-            <span>Demo Credentials</span>
-            <small class="text-muted" style="font-weight: normal; font-size: 0.85rem;">(Click to expand)</small>
-        </div>
+        <i class="fas fa-user-shield demo-banner-icon"></i>
+        <span class="demo-banner-title">Demo Credentials</span>
         <i class="fas fa-chevron-down demo-toggle-icon"></i>
     </div>
     <div class="demo-banner-content">
@@ -1315,11 +1324,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                         <span class="badge ms-status-badge status-{{ mission.status }}">{{ mission.get_status_display }}</span>
                                         {# Health pill — derived from high-risk ratio across all boards under this mission #}
                                         {% if mission_item.health_level == 'red' %}
-                                        <span class="health-pill red"><span class="health-dot"></span>At Risk</span>
+                                        <span class="health-pill red" data-bs-toggle="tooltip" data-bs-placement="top" title="At Risk: 30%+ of tasks across this mission's boards are high or critical risk."><span class="health-dot"></span>At Risk</span>
                                         {% elif mission_item.health_level == 'amber' %}
-                                        <span class="health-pill amber"><span class="health-dot"></span>Caution</span>
+                                        <span class="health-pill amber" data-bs-toggle="tooltip" data-bs-placement="top" title="Caution: 10–29% of tasks across this mission's boards are high or critical risk."><span class="health-dot"></span>Caution</span>
                                         {% else %}
-                                        <span class="health-pill green"><span class="health-dot"></span>On Track</span>
+                                        <span class="health-pill green" data-bs-toggle="tooltip" data-bs-placement="top" title="On Track: Fewer than 10% of tasks are high or critical risk."><span class="health-dot"></span>On Track</span>
                                         {% endif %}
                                         <span class="badge bg-light text-dark border">
                                             <i class="fas fa-sitemap text-primary me-1"></i>{{ mission_item.strategy_count }} strateg{{ mission_item.strategy_count|pluralize:"y,ies" }}
@@ -1395,11 +1404,11 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 <span class="badge ms-status-badge status-{{ strategy.status }}">{{ strategy.get_status_display }}</span>
                                                 {# Strategy health pill #}
                                                 {% if strategy_item.health_level == 'red' %}
-                                                <span class="health-pill red" style="font-size:0.58rem;"><span class="health-dot"></span>At Risk</span>
+                                                <span class="health-pill red" style="font-size:0.58rem;" data-bs-toggle="tooltip" data-bs-placement="top" title="At Risk: 30%+ of tasks across this strategy's boards are high or critical risk."><span class="health-dot"></span>At Risk</span>
                                                 {% elif strategy_item.health_level == 'amber' %}
-                                                <span class="health-pill amber" style="font-size:0.58rem;"><span class="health-dot"></span>Caution</span>
+                                                <span class="health-pill amber" style="font-size:0.58rem;" data-bs-toggle="tooltip" data-bs-placement="top" title="Caution: 10–29% of tasks across this strategy's boards are high or critical risk."><span class="health-dot"></span>Caution</span>
                                                 {% else %}
-                                                <span class="health-pill green" style="font-size:0.58rem;"><span class="health-dot"></span>On Track</span>
+                                                <span class="health-pill green" style="font-size:0.58rem;" data-bs-toggle="tooltip" data-bs-placement="top" title="On Track: Fewer than 10% of tasks are high or critical risk."><span class="health-dot"></span>On Track</span>
                                                 {% endif %}
                                                 <span class="badge bg-light text-dark border small">
                                                     <i class="fas fa-clipboard-list text-primary me-1"></i>{{ strategy_item.board_count }} board{{ strategy_item.board_count|pluralize }}
@@ -1581,7 +1590,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 {% if my_tasks %}
                 <ul class="list-group list-group-flush">
                     {% for task in my_tasks %}
-                    <li class="list-group-item px-3 py-2">
+                    <li class="list-group-item px-3 py-2" style="list-style:none;">
                         <div class="d-flex justify-content-between align-items-start mb-1">
                             <span class="fw-semibold small">{{ task.title|truncatechars:50 }}</span>
                             <span class="badge priority-{{ task.priority }} ms-1 flex-shrink-0">{{ task.priority|title }}</span>
@@ -1608,9 +1617,15 @@ document.addEventListener('DOMContentLoaded', function() {
                     {% endfor %}
                 </ul>
                 {% else %}
-                <div class="text-center py-5">
-                    <i class="fas fa-user-check fa-3x text-muted mb-3" style="opacity:0.3;"></i>
-                    <p class="text-muted small">No tasks assigned to you.</p>
+                <div class="text-center py-4 px-3">
+                    <i class="fas fa-user-check fa-3x text-muted mb-3" style="opacity:0.25;"></i>
+                    <p class="fw-semibold text-muted mb-1" style="font-size:0.9rem;">No tasks assigned to you yet.</p>
+                    <p class="text-muted" style="font-size:0.78rem; line-height:1.5;">
+                        Open any board, click a task, and assign it to yourself — it will appear here.
+                    </p>
+                    <a href="{% url 'board_list' %}" class="btn btn-sm btn-outline-primary mt-1" style="font-size:0.78rem;">
+                        <i class="fas fa-clipboard-list me-1"></i>Browse Boards
+                    </a>
                 </div>
                 {% endif %}
             </div>
@@ -1709,6 +1724,10 @@ document.addEventListener('DOMContentLoaded', function() {
             <div class="card-header py-2 d-flex align-items-center" style="background:#f0fff4;">
                 <i class="fas fa-dollar-sign me-2 text-success"></i>
                 <span class="fw-semibold small text-success">Budget vs Actual Spend</span>
+                <span class="ms-auto" data-bs-toggle="tooltip" data-bs-placement="top"
+                      title="Allocated = planned budget. Spent = all tracked costs to date. A large gap means the project is spending ahead of its budget — consistent with a low CPI gauge.">
+                    <i class="fas fa-info-circle text-muted" style="font-size:0.75rem; cursor:help;"></i>
+                </span>
             </div>
             <div class="card-body p-2" style="height:220px; position:relative;">
                 {% if spi_cpi_data %}
@@ -2530,6 +2549,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        // Initialize Bootstrap tooltips across the page
+        var tooltipEls = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        tooltipEls.forEach(function(el) {
+            new bootstrap.Tooltip(el, { trigger: 'hover focus' });
+        });
+
         // Initialize metric cards to open modals when clicked
         const metricCards = document.querySelectorAll('.metrics-card');
         metricCards.forEach(card => {
@@ -3264,8 +3289,10 @@ document.addEventListener('DOMContentLoaded', function() {
         function buildGauge(canvasId, valueTextId, subTextId, value, label) {
             var canvas = document.getElementById(canvasId);
             if (!canvas) return;
-            var capped = Math.min(Math.max(value, 0), 1.5);  // clamp 0-1.5 for visual
-            var remaining = Math.max(0, 1.5 - capped);
+            // Range 0–2.0: midpoint 1.0 fills exactly 50% of arc; <0.5 is severely off
+            var MAX_GAUGE = 2.0;
+            var capped = Math.min(Math.max(value, 0), MAX_GAUGE);
+            var remaining = Math.max(0, MAX_GAUGE - capped);
             var color = capped >= 1.0 ? 'rgba(28,200,138,0.85)' : capped >= 0.8 ? 'rgba(245,158,11,0.85)' : 'rgba(231,74,59,0.85)';
             new Chart(canvas, {
                 type: 'doughnut',
@@ -3297,8 +3324,10 @@ document.addEventListener('DOMContentLoaded', function() {
             var cpiVals = chartData.spi_cpi.map(function(b){ return b.cpi; }).filter(function(v){ return v > 0; });
             var avgSpi  = spiVals.length ? spiVals.reduce(function(a,b){ return a+b; }, 0) / spiVals.length : 0;
             var avgCpi  = cpiVals.length ? cpiVals.reduce(function(a,b){ return a+b; }, 0) / cpiVals.length : 0;
-            if (avgSpi > 0) buildGauge('spiGauge', 'spi-gauge-val', 'spi-gauge-sub', avgSpi, avgSpi >= 1.0 ? 'On Schedule' : avgSpi >= 0.8 ? 'Slight Delay' : 'Behind Schedule');
-            if (avgCpi > 0) buildGauge('cpiGauge', 'cpi-gauge-val', 'cpi-gauge-sub', avgCpi, avgCpi >= 1.0 ? 'On Budget'   : avgCpi >= 0.8 ? 'Slight Overrun' : 'Over Budget');
+            var spiLabel = avgSpi >= 1.0 ? 'On Schedule' : avgSpi >= 0.8 ? 'Slight Delay' : avgSpi >= 0.5 ? 'Behind Schedule' : 'Severely Behind';
+            var cpiLabel = avgCpi >= 1.0 ? 'On Budget'   : avgCpi >= 0.8 ? 'Slight Overrun' : avgCpi >= 0.5 ? 'Over Budget' : 'Severely Over Budget';
+            if (avgSpi > 0) buildGauge('spiGauge', 'spi-gauge-val', 'spi-gauge-sub', avgSpi, spiLabel);
+            if (avgCpi > 0) buildGauge('cpiGauge', 'cpi-gauge-val', 'cpi-gauge-sub', avgCpi, cpiLabel);
         }
 
     }  // end initMetricsCharts
