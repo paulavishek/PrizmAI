@@ -532,26 +532,47 @@ def dashboard(request):
             parts.append(f"{total_high_risk} high-risk item{'s' if total_high_risk != 1 else ''} flagged")
         briefing_risk = ' and '.join(parts)
 
+    briefing_action_type = None
+    briefing_action_tasks = []
+
     if overdue_count > 0:
         briefing_action = (
             f"Review and reassign the {overdue_count} overdue task"
             f"{'s' if overdue_count != 1 else ''} to unblock your team today."
+        )
+        briefing_action_type = 'overdue'
+        briefing_action_tasks = list(
+            Task.objects
+            .filter(
+                column__board_id__in=_board_ids,
+                item_type='task',
+                due_date__lt=timezone.now(),
+            )
+            .exclude(progress=100)
+            .select_related('column__board', 'assigned_to')
+            .order_by('due_date')[:6]
         )
     elif total_high_risk > 0:
         briefing_action = (
             f"Address {total_high_risk} high-risk item"
             f"{'s' if total_high_risk != 1 else ''} to protect on-time delivery."
         )
+        briefing_action_type = 'high_risk'
+        briefing_action_tasks = list(high_risk_tasks_qs[:6])
     elif completion_rate >= 80:
         briefing_action = "Strong progress — verify final tasks are assigned before the sprint ends."
+        briefing_action_type = 'progress'
     else:
         briefing_action = "Focus on in-progress tasks to maintain momentum toward your delivery goals."
+        briefing_action_type = 'general'
 
     daily_briefing = {
-        'pulse':       briefing_pulse,
-        'risk':        briefing_risk,
-        'action':      briefing_action,
-        'has_content': bool(briefing_pulse or briefing_risk or briefing_action),
+        'pulse':        briefing_pulse,
+        'risk':         briefing_risk,
+        'action':       briefing_action,
+        'action_type':  briefing_action_type,
+        'action_tasks': briefing_action_tasks,
+        'has_content':  bool(briefing_pulse or briefing_risk or briefing_action),
     }
 
     # Pass raw dict for json_script filter (don't pre-serialize with json.dumps)
