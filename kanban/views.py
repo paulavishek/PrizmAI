@@ -395,6 +395,18 @@ def dashboard(request):
     # ----------------------------------------------------------------
     total_high_risk = sum(r.get('high_risk_tasks', 0) for r in _board_stats_map.values())
 
+    # Queryset of individual high-risk tasks (for modal)
+    high_risk_tasks_qs = (
+        Task.objects
+        .filter(
+            column__board_id__in=_board_ids,
+            item_type='task',
+            risk_level__in=['high', 'critical'],
+        )
+        .select_related('column__board', 'assigned_to')
+        .order_by('-risk_level', 'due_date')
+    )
+
     # ----------------------------------------------------------------
     # SPI / CPI per board  (uses ProjectBudget when present)
     # ----------------------------------------------------------------
@@ -574,6 +586,7 @@ def dashboard(request):
         'chart_boards': chart_boards,
         # New dashboard data
         'total_high_risk':   total_high_risk,
+        'high_risk_tasks':   high_risk_tasks_qs,
         'spi_cpi_data':      spi_cpi_data,
         'risk_heatmap_data': risk_heatmap_data,
         'daily_briefing':    daily_briefing,
