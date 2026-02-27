@@ -138,6 +138,8 @@ class Notification(models.Model):
         ('COMMENT', 'Comment Reply'),
         ('CHAT_MESSAGE', 'Chat Message'),
         ('ACTIVITY', 'Activity Update'),
+        ('TASK_ASSIGNED_CAL', 'Task Assigned via Calendar'),
+        ('EVENT_INVITED', 'Calendar Event Invitation'),
     ]
     
     recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
@@ -152,6 +154,9 @@ class Notification(models.Model):
     # Links to related objects
     task_thread_comment = models.ForeignKey(TaskThreadComment, on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
     chat_message = models.ForeignKey(ChatMessage, on_delete=models.CASCADE, null=True, blank=True, related_name='notifications')
+    # Generic URL for calendar-sourced notifications (task or event page)
+    action_url = models.CharField(max_length=500, blank=True, null=True,
+                                   help_text="Optional URL the notification links to")
     
     created_at = models.DateTimeField(auto_now_add=True)
     is_read = models.BooleanField(default=False)

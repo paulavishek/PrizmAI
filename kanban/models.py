@@ -1680,3 +1680,69 @@ class BoardInvitation(models.Model):
         self.accepted_at = timezone.now()
         self.accepted_by = user
         self.save()
+
+
+class CalendarEvent(models.Model):
+    """
+    Internal calendar events (meetings, reminders, etc.) that are not tasks.
+    Visible only to the creator and invited participants.
+    """
+    EVENT_TYPE_CHOICES = [
+        ('meeting', 'Meeting'),
+        ('reminder', 'Reminder'),
+        ('deadline', 'Deadline'),
+        ('other', 'Other'),
+    ]
+
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True, null=True)
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPE_CHOICES, default='meeting')
+
+    start_datetime = models.DateTimeField()
+    end_datetime = models.DateTimeField()
+    is_all_day = models.BooleanField(default=False)
+
+    location = models.CharField(max_length=255, blank=True, null=True,
+                                help_text="Optional physical or virtual meeting location")
+
+    # Optional board association
+    board = models.ForeignKey(
+        Board,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='calendar_events',
+    )
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='created_calendar_events',
+    )
+    participants = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name='calendar_events',
+        help_text="Users invited to this event (excluding creator)",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['start_datetime']
+        indexes = [
+            models.Index(fields=['start_datetime', 'end_datetime']),
+            models.Index(fields=['created_by']),
+        ]
+
+    def __str__(self):
+        return f"{self.title} ({self.start_datetime.date()})"
+
+    def get_event_type_color(self):
+        """Return a hex colour for FullCalendar based on event type."""
+        return {
+            'meeting': '#6f42c1',   # purple
+            'reminder': '#fd7e14',  # orange
+            'deadline': '#dc3545',  # red
+            'other': '#20c997',     # teal
+        }.get(self.event_type, '#6c757d')

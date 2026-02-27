@@ -12,6 +12,7 @@ from . import triple_constraint_views
 from . import automation_views
 from . import mission_views
 from . import mission_views
+from . import calendar_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -75,6 +76,18 @@ urlpatterns = [
     path('boards/<int:board_id>/skill-gaps/', views.skill_gap_dashboard, name='skill_gap_dashboard'),
     path('boards/<int:board_id>/gantt/', views.gantt_chart, name='gantt_chart'),
     path('boards/<int:board_id>/calendar/', views.board_calendar, name='board_calendar'),
+
+    # -----------------------------------------------------------------------
+    # Unified Cross-Board Calendar
+    # -----------------------------------------------------------------------
+    path('calendar/', calendar_views.unified_calendar, name='unified_calendar'),
+    path('calendar/events/', calendar_views.unified_calendar_events_api, name='unified_calendar_events_api'),
+    path('calendar/create-task/', calendar_views.calendar_create_task, name='calendar_create_task'),
+    path('calendar/create-event/', calendar_views.calendar_create_event, name='calendar_create_event'),
+    path('calendar/boards/<int:board_id>/columns/', calendar_views.calendar_get_board_columns, name='calendar_get_board_columns'),
+    path('calendar/events/<int:event_id>/', calendar_views.calendar_event_detail, name='calendar_event_detail'),
+    path('calendar/events/<int:event_id>/delete/', calendar_views.calendar_event_delete, name='calendar_event_delete'),
+    # -----------------------------------------------------------------------
     path('boards/<int:board_id>/status-report/', views.board_status_report, name='board_status_report'),
     path('boards/<int:board_id>/gantt/add-milestone/', views.add_gantt_milestone, name='add_gantt_milestone'),
     path('boards/<int:board_id>/gantt/milestones/<int:task_id>/delete/', views.delete_gantt_milestone, name='delete_gantt_milestone'),

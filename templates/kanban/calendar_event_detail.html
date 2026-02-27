@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ event.title }} — Calendar Event{% endblock %}
+
+{% block content %}
+<div class="container py-4" style="max-width:700px;">
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'unified_calendar' %}">Calendar</a></li>
+            <li class="breadcrumb-item active">{{ event.title }}</li>
+        </ol>
+    </nav>
+
+    <div class="card shadow-sm">
+        <div class="card-header d-flex justify-content-between align-items-center"
+             style="background:{{ event.get_event_type_color }}10; border-left:4px solid {{ event.get_event_type_color }};">
+            <div>
+                <h5 class="mb-0">{{ event.title }}</h5>
+                <span class="badge mt-1" style="background:{{ event.get_event_type_color }};">
+                    {{ event.get_event_type_display }}
+                </span>
+                {% if event.board %}
+                <span class="badge bg-secondary ms-1">{{ event.board.name }}</span>
+                {% endif %}
+            </div>
+            {% if event.created_by == request.user %}
+            <button class="btn btn-outline-danger btn-sm" id="btn-delete-event"
+                    data-event-id="{{ event.id }}">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+            {% endif %}
+        </div>
+        <div class="card-body">
+            <table class="table table-borderless mb-0" style="font-size:0.95rem;">
+                <tbody>
+                    <tr>
+                        <th style="width:130px;">Start</th>
+                        <td>
+                            {% if event.is_all_day %}
+                                {{ event.start_datetime|date:"N j, Y" }} (All day)
+                            {% else %}
+                                {{ event.start_datetime|date:"N j, Y, g:i a" }}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>End</th>
+                        <td>
+                            {% if event.is_all_day %}
+                                {{ event.end_datetime|date:"N j, Y" }}
+                            {% else %}
+                                {{ event.end_datetime|date:"N j, Y, g:i a" }}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% if event.location %}
+                    <tr>
+                        <th>Location</th>
+                        <td>{{ event.location }}</td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <th>Organiser</th>
+                        <td>{{ event.created_by.get_full_name|default:event.created_by.username }}</td>
+                    </tr>
+                    {% with participants=event.participants.all %}
+                    <tr>
+                        <th>Participants</th>
+                        <td>
+                            {% if participants %}
+                                {% for p in participants %}
+                                <span class="badge bg-light text-dark border me-1">{{ p.get_full_name|default:p.username }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted">None invited</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endwith %}
+                    {% if event.description %}
+                    <tr>
+                        <th>Notes</th>
+                        <td>{{ event.description|linebreaksbr }}</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+        <div class="card-footer text-muted small">
+            Created {{ event.created_at|date:"N j, Y" }}
+            &nbsp;·&nbsp; Last updated {{ event.updated_at|date:"N j, Y" }}
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <a href="{% url 'unified_calendar' %}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1"></i> Back to Calendar
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const deleteBtn = document.getElementById('btn-delete-event');
+if (deleteBtn) {
+    deleteBtn.addEventListener('click', function () {
+        if (!confirm('Delete this event? Participants will not be notified.')) return;
+        const eventId = this.dataset.eventId;
+        fetch(`/calendar/events/${eventId}/delete/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = '{% url "unified_calendar" %}';
+            } else {
+                alert('Could not delete event.');
+            }
+        });
+    });
+}
+</script>
+{% endblock %}

@@ -100,6 +100,13 @@
                         <li class="nav-item">
                             <a class="nav-link px-3" href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'board_list' %}{% endif %}">Boards</a>
                         </li>
+                        {% if not request.session.is_demo_mode %}
+                        <li class="nav-item">
+                            <a class="nav-link px-3" href="{% url 'unified_calendar' %}">
+                                <i class="fas fa-calendar-alt"></i><span class="d-none d-lg-inline ms-1">Calendar</span>
+                            </a>
+                        </li>
+                        {% endif %}
                         <li class="nav-item">
                             <a class="nav-link px-3" href="{% url 'wiki:knowledge_hub_home' %}">
                                 <i class="fas fa-book-open"></i><span class="d-none d-lg-inline ms-1">Wiki</span>

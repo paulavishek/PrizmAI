@@ -3,7 +3,8 @@ from .models import (
     OrganizationGoal, Mission, Strategy,
     Board, Column, Task, TaskLabel, Comment, TaskActivity,
     TeamSkillProfile, SkillGap, SkillDevelopmentPlan,
-    ScopeChangeSnapshot, ScopeCreepAlert, BoardInvitation
+    ScopeChangeSnapshot, ScopeCreepAlert, BoardInvitation,
+    CalendarEvent,
 )
 from .automation_models import BoardAutomation
 from .priority_models import PriorityDecision, PriorityModel, PrioritySuggestionLog
@@ -83,6 +84,15 @@ class BoardInvitationAdmin(admin.ModelAdmin):
     list_filter = ('status', 'created_at')
     search_fields = ('email', 'board__name', 'invited_by__username')
     readonly_fields = ('token', 'created_at', 'accepted_at', 'accepted_by')
+
+
+@admin.register(CalendarEvent)
+class CalendarEventAdmin(admin.ModelAdmin):
+    list_display = ('title', 'event_type', 'start_datetime', 'end_datetime', 'is_all_day', 'board', 'created_by', 'created_at')
+    list_filter = ('event_type', 'is_all_day', 'start_datetime')
+    search_fields = ('title', 'description', 'created_by__username', 'board__name')
+    filter_horizontal = ('participants',)
+    readonly_fields = ('created_at', 'updated_at')
 
 @admin.register(Column)
 class ColumnAdmin(admin.ModelAdmin):

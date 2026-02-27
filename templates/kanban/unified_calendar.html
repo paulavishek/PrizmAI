@@ -1,0 +1,708 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}My Calendar — PrizmAI{% endblock %}
+
+{% block extra_css %}
+<link href='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.css' rel='stylesheet' />
+<style>
+    .calendar-container {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+    .fc-event {
+        cursor: pointer;
+        border-radius: 4px !important;
+        font-size: 0.8rem;
+        padding: 2px 4px;
+    }
+    .fc-event:hover { opacity: 0.85; transform: translateY(-1px); transition: 0.15s; }
+    .stat-card {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 16px;
+        text-align: center;
+    }
+    .stat-card .stat-number { font-size: 2rem; font-weight: 700; }
+    /* Tooltip */
+    #cal-tooltip {
+        position: fixed;
+        z-index: 9999;
+        background: #212529;
+        color: #fff;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 0.82rem;
+        pointer-events: none;
+        display: none;
+        max-width: 260px;
+        line-height: 1.6;
+    }
+    /* Board filter chips */
+    .board-chip {
+        cursor: pointer;
+        transition: opacity 0.15s;
+        user-select: none;
+    }
+    .board-chip.inactive { opacity: 0.4; }
+    /* Modal adjustments */
+    .nav-tabs .nav-link { font-size: 0.9rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="fas fa-calendar-alt me-2 text-primary"></i>My Calendar
+            </h1>
+            <p class="text-muted mb-0">All tasks &amp; events across your boards — {{ current_month }}</p>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-new">
+            <i class="fas fa-plus me-1"></i> New
+        </button>
+    </div>
+
+    <!-- Stats -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-4">
+            <div class="stat-card">
+                <div class="stat-number text-primary">{{ total_tasks }}</div>
+                <div class="text-muted small">My Scheduled Tasks</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="stat-card">
+                <div class="stat-number text-purple" style="color:#6f42c1">{{ events_this_month }}</div>
+                <div class="text-muted small">Events This Month</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-4">
+            <div class="stat-card">
+                <div class="stat-number text-danger">{{ overdue_count }}</div>
+                <div class="text-muted small">Overdue Tasks</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Legend -->
+    <div class="d-flex flex-wrap gap-3 mb-2 align-items-center">
+        <strong class="small text-muted me-1">Tasks:</strong>
+        <span class="small"><span class="badge" style="background:#dc3545;">●</span> Urgent</span>
+        <span class="small"><span class="badge" style="background:#fd7e14;">●</span> High</span>
+        <span class="small"><span class="badge" style="background:#0d6efd;">●</span> Medium</span>
+        <span class="small"><span class="badge" style="background:#198754;">●</span> Low</span>
+        <span class="ms-3 small text-muted me-1">Events:</span>
+        <span class="small"><span class="badge" style="background:#6f42c1;">●</span> Meeting</span>
+        <span class="small"><span class="badge" style="background:#fd7e14;">●</span> Reminder</span>
+        <span class="small"><span class="badge" style="background:#dc3545;">●</span> Deadline</span>
+        <span class="small"><span class="badge" style="background:#20c997;">●</span> Other</span>
+    </div>
+
+    <!-- Board filter chips -->
+    {% if boards %}
+    <div class="d-flex flex-wrap gap-2 mb-3" id="board-chips">
+        <span class="badge board-chip bg-secondary" data-board-id="all" style="font-size:0.8rem; padding:6px 10px;">All Boards</span>
+        {% for b in boards %}
+        <span class="badge board-chip bg-primary" data-board-id="{{ b.id }}" style="font-size:0.8rem; padding:6px 10px;">{{ b.name }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Calendar -->
+    <div class="calendar-container">
+        <div id='calendar'></div>
+    </div>
+
+</div>
+
+<!-- Hover Tooltip -->
+<div id="cal-tooltip"></div>
+
+<!-- ============================
+     Create / New popup (tiny)
+============================= -->
+<div id="create-popup" class="card shadow" style="
+    display:none; position:fixed; z-index:1055; min-width:180px;
+    border-radius:10px; overflow:hidden;">
+    <div class="list-group list-group-flush">
+        <button class="list-group-item list-group-item-action py-2 px-3" id="popup-create-task">
+            <i class="fas fa-tasks me-2 text-primary"></i> Create Task
+        </button>
+        <button class="list-group-item list-group-item-action py-2 px-3" id="popup-create-event">
+            <i class="fas fa-calendar-plus me-2 text-purple" style="color:#6f42c1"></i> Schedule Event
+        </button>
+    </div>
+</div>
+
+<!-- ============================
+     CREATE TASK MODAL
+============================= -->
+<div class="modal fade" id="createTaskModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-tasks me-2 text-primary"></i>New Task from Calendar</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="task-form-error" class="alert alert-danger d-none"></div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="task-title" placeholder="Task title…">
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Board <span class="text-danger">*</span></label>
+            <select class="form-select" id="task-board">
+              <option value="">— select board —</option>
+              {% for b in boards %}
+              <option value="{{ b.id }}">{{ b.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Column</label>
+            <select class="form-select" id="task-column" disabled>
+              <option value="">— select board first —</option>
+            </select>
+          </div>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Due Date</label>
+            <input type="date" class="form-control" id="task-due-date">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Start Date</label>
+            <input type="date" class="form-control" id="task-start-date">
+          </div>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Priority</label>
+            <select class="form-select" id="task-priority">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Assignee</label>
+            <select class="form-select" id="task-assignee" disabled>
+              <option value="">— unassigned —</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-save-task">
+          <i class="fas fa-save me-1"></i> Create Task
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================
+     CREATE EVENT MODAL
+============================= -->
+<div class="modal fade" id="createEventModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-calendar-plus me-2" style="color:#6f42c1"></i>Schedule Event</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="event-form-error" class="alert alert-danger d-none"></div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="event-title" placeholder="Event title…">
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Event Type</label>
+            <select class="form-select" id="event-type">
+              <option value="meeting">Meeting</option>
+              <option value="reminder">Reminder</option>
+              <option value="deadline">Deadline</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="col-md-6 d-flex align-items-end">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="event-all-day">
+              <label class="form-check-label" for="event-all-day">All Day</label>
+            </div>
+          </div>
+        </div>
+        <div class="row g-2 mb-3" id="event-datetime-row">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Start <span class="text-danger">*</span></label>
+            <input type="datetime-local" class="form-control" id="event-start">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">End <span class="text-danger">*</span></label>
+            <input type="datetime-local" class="form-control" id="event-end">
+          </div>
+        </div>
+        <div class="row g-2 mb-3" id="event-allday-row" style="display:none!important">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="event-start-date">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">End Date</label>
+            <input type="date" class="form-control" id="event-end-date">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Location</label>
+          <input type="text" class="form-control" id="event-location" placeholder="Room, Zoom link, etc.">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Description</label>
+          <textarea class="form-control" id="event-description" rows="2" placeholder="Agenda or notes…"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Participants</label>
+          <select class="form-select" id="event-participants" multiple style="height:100px;">
+          </select>
+          <small class="text-muted">Hold Ctrl/Cmd to select multiple</small>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Board (optional)</label>
+          <select class="form-select" id="event-board">
+            <option value="">— none —</option>
+            {% for b in boards %}
+            <option value="{{ b.id }}">{{ b.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-save-event">
+          <i class="fas fa-save me-1"></i> Schedule
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================
+     EVENT / TASK DETAIL POPOVER
+============================= -->
+<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title" id="detail-title">Details</h6>
+        <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="detail-body" style="font-size:0.9rem;"></div>
+      <div class="modal-footer py-2">
+        <a href="#" id="detail-open-link" class="btn btn-primary btn-sm">Open</a>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.11/index.global.min.js'></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // ---- Data from Django ----
+    const boardsData   = {{ boards_json|safe }};
+    const allParticipants = {{ participants_json|safe }};
+    const CSRF = '{{ csrf_token }}';
+    const EVENTS_URL  = '{% url "unified_calendar_events_api" %}';
+    const CREATE_TASK_URL  = '{% url "calendar_create_task" %}';
+    const CREATE_EVENT_URL = '{% url "calendar_create_event" %}';
+
+    // ---- Board columns mapping ----
+    const boardColumnsMap = {};
+    const boardMembersMap = {};
+    boardsData.forEach(b => { boardColumnsMap[b.id] = b.columns; });
+
+    // ---- Board filter state ----
+    let activeBoardIds = [];  // empty = all
+
+    // ---- Create popup & last clicked date ----
+    const createPopup = document.getElementById('create-popup');
+    let clickedDateStr = null;
+    let clickedDatetime = null;
+
+    // ---- Tooltip ----
+    const tooltip = document.getElementById('cal-tooltip');
+    document.addEventListener('mousemove', e => {
+        tooltip.style.left = (e.clientX + 14) + 'px';
+        tooltip.style.top  = (e.clientY - 10) + 'px';
+    });
+
+    // ---- FullCalendar ----
+    const calendarEl = document.getElementById('calendar');
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        firstDay: 1,
+        headerToolbar: {
+            left:   'prev,next today',
+            center: 'title',
+            right:  'dayGridMonth,timeGridWeek,listMonth',
+        },
+        height: 'auto',
+        events: function (fetchInfo, successCallback, failureCallback) {
+            let url = `${EVENTS_URL}?start=${fetchInfo.startStr}&end=${fetchInfo.endStr}`;
+            if (activeBoardIds.length > 0) {
+                url += `&boards=${activeBoardIds.join(',')}`;
+            }
+            fetch(url)
+                .then(r => r.json())
+                .then(data => successCallback(data))
+                .catch(() => failureCallback());
+        },
+        // Click on empty date cell → show create popup
+        dateClick: function (info) {
+            clickedDateStr = info.dateStr;
+            clickedDatetime = info.date;
+            const rect = info.dayEl.getBoundingClientRect();
+            createPopup.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
+            createPopup.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 200) + 'px';
+            createPopup.style.display = 'block';
+        },
+        // Click on existing event → show detail popover
+        eventClick: function (info) {
+            info.jsEvent.preventDefault();
+            createPopup.style.display = 'none';
+            const p = info.event.extendedProps;
+            const title = info.event.title;
+            const source = p.source;
+
+            document.getElementById('detail-title').textContent = title;
+
+            let body = '';
+            if (source === 'task') {
+                body = `
+                    <div><strong>Board:</strong> ${p.board}</div>
+                    <div><strong>Column:</strong> ${p.column}</div>
+                    <div><strong>Priority:</strong> ${p.priority}</div>
+                    ${p.assignee ? `<div><strong>Assignee:</strong> ${p.assignee}</div>` : ''}
+                    <div><strong>Progress:</strong> ${p.progress}%</div>
+                `;
+                document.getElementById('detail-open-link').href = info.event.url;
+            } else {
+                const participants = p.participants && p.participants.length
+                    ? p.participants.join(', ')
+                    : '(none beyond you)';
+                body = `
+                    <div><strong>Type:</strong> ${p.event_type}</div>
+                    ${p.board ? `<div><strong>Board:</strong> ${p.board}</div>` : ''}
+                    ${p.location ? `<div><strong>Location:</strong> ${p.location}</div>` : ''}
+                    ${p.description ? `<div><strong>Notes:</strong> ${p.description}</div>` : ''}
+                    <div><strong>Participants:</strong> ${participants}</div>
+                    <div><strong>Organiser:</strong> ${p.created_by}</div>
+                `;
+                document.getElementById('detail-open-link').href = `/calendar/events/${p.event_id}/`;
+            }
+            document.getElementById('detail-body').innerHTML = body;
+            new bootstrap.Modal(document.getElementById('detailModal')).show();
+        },
+        eventMouseEnter: function (info) {
+            const p = info.event.extendedProps;
+            if (p.source === 'task') {
+                tooltip.innerHTML = `
+                    <strong>${info.event.title}</strong><br>
+                    📋 ${p.board} › ${p.column}<br>
+                    🚩 ${p.priority}
+                    ${p.assignee ? `<br>👤 ${p.assignee}` : ''}
+                    <br>⬜ ${p.progress}% complete
+                `;
+            } else {
+                tooltip.innerHTML = `
+                    <strong>${info.event.title}</strong><br>
+                    🗓 ${p.event_type}
+                    ${p.board ? `<br>📋 ${p.board}` : ''}
+                    ${p.location ? `<br>📍 ${p.location}` : ''}
+                `;
+            }
+            tooltip.style.display = 'block';
+        },
+        eventMouseLeave: function () { tooltip.style.display = 'none'; },
+        eventDidMount: function (info) {
+            const p = info.event.extendedProps;
+            if (p.source === 'task') {
+                const d = new Date(info.event.start);
+                const today = new Date(); today.setHours(0,0,0,0);
+                if (d < today && p.progress < 100) {
+                    info.el.style.opacity = '0.7';
+                    info.el.style.textDecoration = 'line-through';
+                }
+            }
+        },
+    });
+    calendar.render();
+
+    // Close popup on outside click
+    document.addEventListener('click', function (e) {
+        if (!createPopup.contains(e.target) && e.target.id !== 'btn-new') {
+            createPopup.style.display = 'none';
+        }
+    });
+
+    // "New" button in header → anchor popup near button
+    document.getElementById('btn-new').addEventListener('click', function (e) {
+        e.stopPropagation();
+        const rect = this.getBoundingClientRect();
+        createPopup.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
+        createPopup.style.left = (rect.left  + window.scrollX) + 'px';
+        createPopup.style.display = 'block';
+        // Default to today if no date clicked
+        if (!clickedDateStr) {
+            const d = new Date();
+            clickedDateStr = d.toISOString().split('T')[0];
+            clickedDatetime = d;
+        }
+    });
+
+    // ---- Board filter chips ----
+    document.querySelectorAll('.board-chip').forEach(chip => {
+        chip.addEventListener('click', function () {
+            const boardId = this.dataset.boardId;
+            if (boardId === 'all') {
+                activeBoardIds = [];
+                document.querySelectorAll('.board-chip').forEach(c => c.classList.remove('inactive'));
+            } else {
+                const idx = activeBoardIds.indexOf(boardId);
+                if (idx === -1) {
+                    activeBoardIds.push(boardId);
+                    this.classList.remove('inactive');
+                    // Deactivate "All" chip
+                    document.querySelector('.board-chip[data-board-id="all"]').classList.add('inactive');
+                } else {
+                    activeBoardIds.splice(idx, 1);
+                    this.classList.add('inactive');
+                    if (activeBoardIds.length === 0) {
+                        document.querySelector('.board-chip[data-board-id="all"]').classList.remove('inactive');
+                    }
+                }
+            }
+            calendar.refetchEvents();
+        });
+    });
+
+    // ================================================================
+    //  CREATE TASK FLOW
+    // ================================================================
+    document.getElementById('popup-create-task').addEventListener('click', function () {
+        createPopup.style.display = 'none';
+        // Pre-fill date
+        if (clickedDateStr) {
+            document.getElementById('task-due-date').value = clickedDateStr;
+        }
+        new bootstrap.Modal(document.getElementById('createTaskModal')).show();
+    });
+
+    // Board → columns + members
+    document.getElementById('task-board').addEventListener('change', function () {
+        const boardId = this.value;
+        const colSel = document.getElementById('task-column');
+        const assigSel = document.getElementById('task-assignee');
+
+        colSel.innerHTML = '<option value="">Loading…</option>';
+        colSel.disabled = true;
+        assigSel.innerHTML = '<option value="">— unassigned —</option>';
+        assigSel.disabled = true;
+
+        if (!boardId) return;
+
+        fetch(`/calendar/boards/${boardId}/columns/`)
+            .then(r => r.json())
+            .then(data => {
+                colSel.innerHTML = data.columns.map(c =>
+                    `<option value="${c.id}">${c.name}</option>`
+                ).join('');
+                colSel.disabled = false;
+
+                assigSel.innerHTML = '<option value="">— unassigned —</option>' +
+                    data.members.map(m =>
+                        `<option value="${m.id}">${m.display} (${m.username})</option>`
+                    ).join('');
+                assigSel.disabled = false;
+            });
+    });
+
+    document.getElementById('btn-save-task').addEventListener('click', function () {
+        const errDiv = document.getElementById('task-form-error');
+        errDiv.classList.add('d-none');
+
+        const title   = document.getElementById('task-title').value.trim();
+        const boardId = document.getElementById('task-board').value;
+        if (!title)   { errDiv.textContent = 'Title is required.';  errDiv.classList.remove('d-none'); return; }
+        if (!boardId) { errDiv.textContent = 'Board is required.';  errDiv.classList.remove('d-none'); return; }
+
+        const payload = {
+            title,
+            board_id: boardId,
+            column_id: document.getElementById('task-column').value || null,
+            due_date:  document.getElementById('task-due-date').value || null,
+            start_date: document.getElementById('task-start-date').value || null,
+            assignee_id: document.getElementById('task-assignee').value || null,
+            priority:  document.getElementById('task-priority').value,
+        };
+
+        this.disabled = true;
+        fetch(CREATE_TASK_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': CSRF,
+            },
+            body: JSON.stringify(payload),
+        })
+        .then(r => r.json())
+        .then(data => {
+            this.disabled = false;
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('createTaskModal')).hide();
+                // Clear form
+                document.getElementById('task-title').value = '';
+                document.getElementById('task-board').value = '';
+                document.getElementById('task-column').innerHTML = '<option value="">— select board first —</option>';
+                document.getElementById('task-column').disabled = true;
+                document.getElementById('task-assignee').innerHTML = '<option value="">— unassigned —</option>';
+                document.getElementById('task-assignee').disabled = true;
+                // Add to calendar immediately
+                calendar.addEvent(data.event);
+            } else {
+                errDiv.textContent = data.error || 'Failed to create task.';
+                errDiv.classList.remove('d-none');
+            }
+        })
+        .catch(() => {
+            this.disabled = false;
+            errDiv.textContent = 'Network error. Please try again.';
+            errDiv.classList.remove('d-none');
+        });
+    });
+
+    // ================================================================
+    //  CREATE EVENT FLOW
+    // ================================================================
+
+    // Populate participants list
+    const partSelect = document.getElementById('event-participants');
+    allParticipants.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `${p.display} (${p.username})`;
+        partSelect.appendChild(opt);
+    });
+
+    document.getElementById('popup-create-event').addEventListener('click', function () {
+        createPopup.style.display = 'none';
+        // Pre-fill date/time
+        if (clickedDateStr) {
+            document.getElementById('event-start-date').value = clickedDateStr;
+            document.getElementById('event-end-date').value   = clickedDateStr;
+            const startDT = clickedDateStr + 'T09:00';
+            const endDT   = clickedDateStr + 'T10:00';
+            document.getElementById('event-start').value = startDT;
+            document.getElementById('event-end').value   = endDT;
+        }
+        new bootstrap.Modal(document.getElementById('createEventModal')).show();
+    });
+
+    // All-day toggle
+    document.getElementById('event-all-day').addEventListener('change', function () {
+        const isAllDay = this.checked;
+        document.getElementById('event-datetime-row').style.display = isAllDay ? 'none' : '';
+        document.getElementById('event-allday-row').style.display   = isAllDay ? '' : 'none';
+    });
+
+    document.getElementById('btn-save-event').addEventListener('click', function () {
+        const errDiv = document.getElementById('event-form-error');
+        errDiv.classList.add('d-none');
+
+        const title = document.getElementById('event-title').value.trim();
+        if (!title) { errDiv.textContent = 'Title is required.'; errDiv.classList.remove('d-none'); return; }
+
+        const isAllDay = document.getElementById('event-all-day').checked;
+        let startDT, endDT;
+        if (isAllDay) {
+            startDT = document.getElementById('event-start-date').value + 'T00:00:00';
+            endDT   = (document.getElementById('event-end-date').value ||
+                       document.getElementById('event-start-date').value) + 'T23:59:59';
+        } else {
+            startDT = document.getElementById('event-start').value;
+            endDT   = document.getElementById('event-end').value;
+        }
+
+        if (!startDT || !endDT) {
+            errDiv.textContent = 'Start and end are required.';
+            errDiv.classList.remove('d-none');
+            return;
+        }
+
+        // Gather selected participants
+        const selectedOpts = Array.from(partSelect.selectedOptions);
+        const participantIds = selectedOpts.map(o => parseInt(o.value));
+
+        const payload = {
+            title,
+            event_type:    document.getElementById('event-type').value,
+            is_all_day:    isAllDay,
+            start_datetime: startDT,
+            end_datetime:   endDT,
+            location:      document.getElementById('event-location').value.trim(),
+            description:   document.getElementById('event-description').value.trim(),
+            participant_ids: participantIds,
+            board_id:      document.getElementById('event-board').value || null,
+        };
+
+        this.disabled = true;
+        fetch(CREATE_EVENT_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': CSRF,
+            },
+            body: JSON.stringify(payload),
+        })
+        .then(r => r.json())
+        .then(data => {
+            this.disabled = false;
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('createEventModal')).hide();
+                // Clear form
+                document.getElementById('event-title').value       = '';
+                document.getElementById('event-location').value    = '';
+                document.getElementById('event-description').value = '';
+                Array.from(partSelect.options).forEach(o => o.selected = false);
+                // Add to calendar immediately
+                calendar.addEvent(data.event);
+            } else {
+                errDiv.textContent = data.error || 'Failed to create event.';
+                errDiv.classList.remove('d-none');
+            }
+        })
+        .catch(() => {
+            this.disabled = false;
+            errDiv.textContent = 'Network error. Please try again.';
+            errDiv.classList.remove('d-none');
+        });
+    });
+});
+</script>
+{% endblock %}
