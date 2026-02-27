@@ -4,7 +4,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileResponse
 from django.contrib import messages
-from django.db.models import Count, Q, Case, When, IntegerField, Max, Sum
+from django.db.models import Count, Q, Case, When, IntegerField, Max, Sum, Value, F
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from datetime import timedelta
@@ -397,6 +397,7 @@ def dashboard(request):
     total_high_risk = sum(r.get('high_risk_tasks', 0) for r in _board_stats_map.values())
 
     # Queryset of individual high-risk tasks (for modal)
+    # Sort: critical first (0), then high (1); within each group earliest due date first (nulls last)
     high_risk_tasks_qs = (
         Task.objects
         .filter(
@@ -405,7 +406,15 @@ def dashboard(request):
             risk_level__in=['high', 'critical'],
         )
         .select_related('column__board', 'assigned_to')
-        .order_by('-risk_level', 'due_date')
+        .annotate(
+            risk_sort=Case(
+                When(risk_level='critical', then=Value(0)),
+                When(risk_level='high', then=Value(1)),
+                default=Value(2),
+                output_field=IntegerField(),
+            )
+        )
+        .order_by('risk_sort', F('due_date').asc(nulls_last=True))
     )
 
     # ----------------------------------------------------------------
@@ -534,6 +543,8 @@ def dashboard(request):
 
     briefing_action_type = None
     briefing_action_tasks = []
+    briefing_action_plan  = []  # list of {task, why, next_action} for top-3 PM advice
+    briefing_action_summary = ''
 
     if overdue_count > 0:
         briefing_action = (
@@ -549,8 +560,16 @@ def dashboard(request):
                 due_date__lt=timezone.now(),
             )
             .exclude(progress=100)
+            .annotate(
+                risk_sort=Case(
+                    When(risk_level='critical', then=Value(0)),
+                    When(risk_level='high', then=Value(1)),
+                    default=Value(2),
+                    output_field=IntegerField(),
+                )
+            )
             .select_related('column__board', 'assigned_to')
-            .order_by('due_date')[:6]
+            .order_by('risk_sort', F('due_date').asc(nulls_last=True))[:3]
         )
     elif total_high_risk > 0:
         briefing_action = (
@@ -558,7 +577,7 @@ def dashboard(request):
             f"{'s' if total_high_risk != 1 else ''} to protect on-time delivery."
         )
         briefing_action_type = 'high_risk'
-        briefing_action_tasks = list(high_risk_tasks_qs[:6])
+        briefing_action_tasks = list(high_risk_tasks_qs[:3])
     elif completion_rate >= 80:
         briefing_action = "Strong progress — verify final tasks are assigned before the sprint ends."
         briefing_action_type = 'progress'
@@ -566,13 +585,98 @@ def dashboard(request):
         briefing_action = "Focus on in-progress tasks to maintain momentum toward your delivery goals."
         briefing_action_type = 'general'
 
+    # Build PM-style action plan for top-3 tasks
+    _now_for_plan = timezone.now()
+    for _t in briefing_action_tasks[:3]:
+        _is_critical  = _t.risk_level == 'critical'
+        _is_overdue   = bool(_t.due_date and _t.due_date < _now_for_plan)
+        _progress     = _t.progress or 0
+        _unassigned   = _t.assigned_to is None
+        _assignee     = (
+            (_t.assigned_to.get_full_name() or _t.assigned_to.username)
+            if _t.assigned_to else None
+        )
+        _days = int((_t.due_date - _now_for_plan).days) if _t.due_date else None
+
+        # --- WHY explanation ---
+        if _is_critical and _progress == 0 and _unassigned:
+            _why = "Critical risk with no owner and zero progress — a hard blocker with no one driving it forward."
+        elif _is_critical and _progress == 0:
+            _why = "Critical risk and not yet started — needs immediate kick-off to avoid cascading delays."
+        elif _is_critical and _is_overdue:
+            _days_late = abs(_days) if _days is not None else '?'
+            _why = f"Critical risk and already {_days_late} day{'s' if _days_late != 1 else ''} overdue — every day of further delay compounds delivery impact."
+        elif _is_critical and _days is not None and _days <= 7:
+            _why = f"Critical risk with only {_days} day{'s' if _days != 1 else ''} remaining and {_progress}% complete — needs urgent escalation."
+        elif _is_critical:
+            _why = f"Flagged critical risk at {_progress}% progress — requires close monitoring and active mitigation."
+        elif _progress == 0 and _unassigned:
+            _why = "High-risk and unassigned with no progress — without an owner this will continue to slip."
+        elif _is_overdue:
+            _days_late = abs(_days) if _days is not None else '?'
+            _why = f"High-risk and {_days_late} day{'s' if _days_late != 1 else ''} overdue — remaining work needs to be replanned immediately."
+        elif _days is not None and _days <= 7 and _progress < 50:
+            _why = f"High-risk, due in {_days} day{'s' if _days != 1 else ''}, and only {_progress}% done — not enough time at the current pace."
+        else:
+            _why = f"High-risk at {_progress}% progress — needs active oversight to prevent escalation."
+
+        # --- NEXT ACTION ---
+        if _unassigned:
+            _next = "Assign to an available team member immediately."
+        elif _progress == 0 and _is_critical:
+            _next = f"Schedule an unblock session with {_assignee} — this must start today."
+        elif _is_overdue and _progress == 0:
+            _next = f"Escalate to {_assignee} or reassign — overdue and not yet started."
+        elif _is_overdue:
+            _next = f"Replan the due date with {_assignee} and confirm they are unblocked."
+        elif _days is not None and _days <= 3 and _progress < 70:
+            _next = f"Review blockers with {_assignee} today — insufficient time at current pace."
+        elif _days is not None and _days <= 7 and _progress < 30:
+            _next = f"Fast-track or scope-reduce with {_assignee} and flag risk to stakeholders."
+        elif _progress == 0:
+            _next = f"Confirm {_assignee} has started this task and identify any blockers."
+        else:
+            _next = f"Check in with {_assignee} on blockers and update progress status."
+
+        briefing_action_plan.append({'task': _t, 'why': _why, 'next_action': _next})
+
+    # One-sentence modal intro summary
+    _critical_zeros = [x for x in briefing_action_plan
+                       if x['task'].risk_level == 'critical' and x['task'].progress == 0]
+    if _critical_zeros:
+        _cnames = ' and '.join(f'"{x["task"].title}"' for x in _critical_zeros[:2])
+        _pl = 's' if len(_critical_zeros) > 1 else ''
+        briefing_action_summary = (
+            f"Your critical blocker{_pl} — {_cnames} — {'are' if _pl else 'is'} at 0% progress "
+            f"and blocking team momentum. Here\u2019s your recommended sequence:"
+        )
+    elif any(x['task'].risk_level == 'critical' for x in briefing_action_plan):
+        briefing_action_summary = (
+            "Critical-risk items are your highest delivery threat. "
+            "Address them in this order to protect your timeline:"
+        )
+    elif briefing_action_type == 'overdue':
+        briefing_action_summary = (
+            f"{overdue_count} task{'s are' if overdue_count != 1 else ' is'} past the due date. "
+            "Here\u2019s the recommended sequence to get back on track:"
+        )
+    elif briefing_action_tasks:
+        briefing_action_summary = (
+            "These high-risk items need your attention before they escalate. "
+            "Here\u2019s the recommended order of action:"
+        )
+    else:
+        briefing_action_summary = briefing_action
+
     daily_briefing = {
-        'pulse':        briefing_pulse,
-        'risk':         briefing_risk,
-        'action':       briefing_action,
-        'action_type':  briefing_action_type,
-        'action_tasks': briefing_action_tasks,
-        'has_content':  bool(briefing_pulse or briefing_risk or briefing_action),
+        'pulse':          briefing_pulse,
+        'risk':           briefing_risk,
+        'action':         briefing_action,
+        'action_type':    briefing_action_type,
+        'action_tasks':   briefing_action_tasks,
+        'action_plan':    briefing_action_plan,
+        'action_summary': briefing_action_summary,
+        'has_content':    bool(briefing_pulse or briefing_risk or briefing_action),
     }
 
     # Pass raw dict for json_script filter (don't pre-serialize with json.dumps)

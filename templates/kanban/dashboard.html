@@ -730,6 +730,51 @@
     }
     .briefing-item-clickable:hover .briefing-action-footer { opacity: 1; }
 
+    /* PM Action Plan step cards */
+    .action-step-card {
+        border-radius: 10px;
+        border: 1px solid #e9ecef;
+        padding: 1rem 1rem 0.85rem;
+        background: #fff;
+        position: relative;
+    }
+    .action-step-card.step-critical { border-left: 4px solid #ef4444; }
+    .action-step-card.step-high     { border-left: 4px solid #f59e0b; }
+    .action-step-card.step-overdue  { border-left: 4px solid #ef4444; }
+    .action-step-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px; height: 26px;
+        border-radius: 50%;
+        font-size: 0.78rem;
+        font-weight: 800;
+        flex-shrink: 0;
+        margin-right: 0.6rem;
+    }
+    .step-critical .action-step-number { background:#fee2e2; color:#b91c1c; }
+    .step-high     .action-step-number { background:#fef3c7; color:#92400e; }
+    .step-overdue  .action-step-number { background:#fee2e2; color:#b91c1c; }
+    .action-why-text {
+        font-size: 0.81rem;
+        color: #4b5563;
+        line-height: 1.5;
+        margin-bottom: 0.55rem;
+    }
+    .action-next-box {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.4rem;
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        border-radius: 6px;
+        padding: 0.45rem 0.65rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #065f46;
+    }
+    .action-next-box i { color: #10b981; margin-top: 2px; flex-shrink: 0; }
+
     /* ================================================================
        ZONE 3 — ENLARGED CHART CARDS
        ================================================================ */
@@ -1113,114 +1158,100 @@ document.addEventListener('DOMContentLoaded', function() {
         <div class="modal-content">
             <div class="modal-header" style="background: linear-gradient(135deg,#1e40af,#3b82f6); color:#fff;">
                 <h5 class="modal-title" id="aiRecommendedActionsLabel">
-                    <i class="fas fa-robot me-2"></i>AI Recommended Actions
+                    <i class="fas fa-robot me-2"></i>Spectra's Recommended Action Plan
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
                         aria-label="Close"></button>
             </div>
-            <div class="modal-body">
-                <!-- Recommendation summary -->
-                <div class="alert mb-3 d-flex align-items-start gap-2"
-                     style="background:#dbeafe; border:1px solid #93c5fd; border-radius:10px;">
-                    <i class="fas fa-lightbulb mt-1" style="color:#1e40af;"></i>
-                    <div>
-                        <p class="mb-0 fw-semibold" style="color:#1e40af;">{{ daily_briefing.action }}</p>
-                        <small class="text-muted" style="font-size:0.72rem;">
-                            <i class="fas fa-robot me-1"></i>Generated from your live project data
-                        </small>
-                    </div>
+            <div class="modal-body p-3">
+
+                {# ── Situation summary ── #}
+                <div class="d-flex align-items-start gap-2 mb-3 p-3"
+                     style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:10px;">
+                    <i class="fas fa-lightbulb mt-1 flex-shrink-0" style="color:#1e40af;"></i>
+                    <p class="mb-0" style="font-size:0.88rem; color:#1e3a8a; line-height:1.55;">
+                        {{ daily_briefing.action_summary }}
+                    </p>
                 </div>
 
-                {% if daily_briefing.action_tasks %}
-                    {% if daily_briefing.action_type == 'high_risk' %}
-                        <h6 class="fw-bold mb-2" style="color:#92400e;">
-                            <i class="fas fa-shield-alt me-1 text-warning"></i>High-Risk Items to Address
-                        </h6>
-                        <p class="text-muted small mb-3">These tasks have been flagged as high or critical risk. Resolving or mitigating them will protect your delivery timelines.</p>
-                    {% elif daily_briefing.action_type == 'overdue' %}
-                        <h6 class="fw-bold mb-2" style="color:#7f1d1d;">
-                            <i class="fas fa-clock me-1 text-danger"></i>Overdue Tasks Needing Attention
-                        </h6>
-                        <p class="text-muted small mb-3">These tasks are past their due date. Reassigning or updating their status will unblock your team.</p>
-                    {% endif %}
-
-                    <div class="list-group list-group-flush">
-                    {% for task in daily_briefing.action_tasks %}
-                        <div class="list-group-item list-group-item-action d-flex align-items-center justify-content-between gap-2 px-2 py-2 rounded mb-1"
-                             style="border:1px solid #e9ecef; border-radius:8px !important;">
+                {# ── Numbered PM steps ── #}
+                {% if daily_briefing.action_plan %}
+                <div class="d-flex flex-column gap-2">
+                {% for step in daily_briefing.action_plan %}
+                    <div class="action-step-card {% if step.task.risk_level == 'critical' %}step-critical{% elif step.task.risk_level == 'high' %}step-high{% else %}step-overdue{% endif %}">
+                        {# Title row #}
+                        <div class="d-flex align-items-center mb-2">
+                            <span class="action-step-number">{{ forloop.counter }}</span>
                             <div class="flex-grow-1 min-w-0">
-                                <div class="fw-semibold text-truncate" style="font-size:0.88rem;">{{ task.title }}</div>
-                                <div class="d-flex flex-wrap align-items-center gap-2 mt-1">
-                                    <span class="text-muted" style="font-size:0.72rem;">
-                                        <i class="fas fa-columns me-1"></i>{{ task.column.board.name }}
-                                    </span>
-                                    {% if task.risk_level == 'critical' %}
-                                        <span class="badge bg-danger" style="font-size:0.68rem;">Critical</span>
-                                    {% elif task.risk_level == 'high' %}
-                                        <span class="badge bg-warning text-dark" style="font-size:0.68rem;">High Risk</span>
-                                    {% endif %}
-                                    {% if task.due_date %}
-                                        <span class="text-muted" style="font-size:0.72rem;">
-                                            <i class="fas fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
-                                        </span>
-                                    {% endif %}
-                                    {% if task.assigned_to %}
-                                        <span class="text-muted" style="font-size:0.72rem;">
-                                            <i class="fas fa-user me-1"></i>{{ task.assigned_to.username }}
-                                        </span>
-                                    {% else %}
-                                        <span class="text-danger" style="font-size:0.72rem;">
-                                            <i class="fas fa-user-slash me-1"></i>Unassigned
-                                        </span>
-                                    {% endif %}
-                                    <span class="badge priority-{{ task.priority }}" style="font-size:0.68rem;">{{ task.priority|title }}</span>
-                                </div>
+                                <span class="fw-bold" style="font-size:0.92rem;">{{ step.task.title }}</span>
                             </div>
-                            <a href="{% url 'task_detail' task.id %}"
-                               class="btn btn-sm btn-outline-primary flex-shrink-0"
-                               style="font-size:0.76rem;">
-                                <i class="fas fa-arrow-right me-1"></i>View
-                            </a>
+                            <div class="d-flex align-items-center gap-1 flex-shrink-0 ms-2">
+                                {% if step.task.risk_level == 'critical' %}
+                                    <span class="badge bg-danger" style="font-size:0.68rem;">Critical</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark" style="font-size:0.68rem;">High Risk</span>
+                                {% endif %}
+                                {% if step.task.due_date %}
+                                <span class="text-muted" style="font-size:0.71rem;">
+                                    <i class="fas fa-calendar-alt me-1"></i>{{ step.task.due_date|date:"M d" }}
+                                </span>
+                                {% endif %}
+                                {% if step.task.assigned_to %}
+                                <span class="text-muted" style="font-size:0.71rem;">
+                                    <i class="fas fa-user me-1"></i>{{ step.task.assigned_to.username }}
+                                </span>
+                                {% else %}
+                                <span style="font-size:0.71rem; color:#dc2626;">
+                                    <i class="fas fa-user-slash me-1"></i>Unassigned
+                                </span>
+                                {% endif %}
+                                <span class="badge priority-{{ step.task.priority }}" style="font-size:0.68rem;">{{ step.task.priority|title }}</span>
+                                <span style="font-size:0.71rem; color:#6b7280;">{{ step.task.progress }}%</span>
+                                <a href="{% url 'task_detail' step.task.id %}"
+                                   class="btn btn-xs btn-outline-primary ms-1"
+                                   style="font-size:0.72rem; padding:0.15rem 0.5rem;">
+                                    Open
+                                </a>
+                            </div>
                         </div>
-                    {% endfor %}
+                        {# Why #}
+                        <p class="action-why-text mb-2">{{ step.why }}</p>
+                        {# Next action #}
+                        <div class="action-next-box">
+                            <i class="fas fa-arrow-right"></i>
+                            {{ step.next_action }}
+                        </div>
                     </div>
+                {% endfor %}
+                </div>
 
-                    {% if daily_briefing.action_type == 'high_risk' and total_high_risk > daily_briefing.action_tasks|length %}
-                    <div class="text-center mt-2">
-                        <button class="btn btn-sm btn-warning text-dark"
-                                data-bs-dismiss="modal"
-                                data-bs-toggle="modal" data-bs-target="#highRiskModal">
-                            <i class="fas fa-shield-alt me-1"></i>View All {{ total_high_risk }} High-Risk Items
-                        </button>
-                    </div>
-                    {% endif %}
-
+                {% elif daily_briefing.action_type == 'progress' %}
+                <div class="text-center py-3">
+                    <i class="fas fa-rocket fa-3x text-success mb-2"></i>
+                    <p class="fw-semibold text-success mb-1">Great momentum!</p>
+                    <p class="text-muted small">Your team is at {{ completion_rate }}% completion. Review remaining open tasks and ensure they are all assigned before the sprint closes.</p>
+                </div>
                 {% else %}
-                    {# No specific tasks but has a general/progress recommendation #}
-                    {% if daily_briefing.action_type == 'progress' %}
-                        <div class="text-center py-3">
-                            <i class="fas fa-rocket fa-2x text-success mb-2"></i>
-                            <p class="fw-semibold text-success mb-1">Great momentum!</p>
-                            <p class="text-muted small">Your team is {{ completion_rate }}% complete. Review remaining tasks to ensure delivery stays on track.</p>
-                        </div>
-                    {% else %}
-                        <div class="text-center py-3">
-                            <i class="fas fa-tasks fa-2x text-primary mb-2"></i>
-                            <p class="text-muted small">Navigate to your boards to review and assign in-progress tasks.</p>
-                        </div>
-                    {% endif %}
+                <div class="text-center py-3">
+                    <i class="fas fa-tasks fa-3x text-primary mb-2"></i>
+                    <p class="text-muted small">Navigate to your boards to review and assign in-progress tasks to maintain delivery momentum.</p>
+                </div>
                 {% endif %}
+
             </div>
             <div class="modal-footer d-flex justify-content-between align-items-center">
-                <small class="text-muted">
-                    <i class="fas fa-sync-alt me-1"></i>Based on live data &middot; <i class="fas fa-robot me-1"></i>Spectra AI
+                <small class="text-muted" style="font-size:0.72rem;">
+                    <i class="fas fa-sync-alt me-1"></i>Based on live project data
+                    &middot;
+                    <i class="fas fa-robot me-1"></i>Spectra AI
                 </small>
                 <div class="d-flex gap-2">
-                    {% if daily_briefing.action_type == 'high_risk' %}
-                    <button class="btn btn-warning btn-sm text-dark"
+                    {% if daily_briefing.action_type == 'high_risk' or daily_briefing.action_type == 'overdue' %}
+                    <button class="btn btn-outline-secondary btn-sm"
                             data-bs-dismiss="modal"
-                            data-bs-toggle="modal" data-bs-target="#highRiskModal">
-                        <i class="fas fa-table me-1"></i>Full Risk Table
+                            data-bs-toggle="modal" data-bs-target="#highRiskModal"
+                            style="font-size:0.78rem;">
+                        <i class="fas fa-table me-1"></i>See Full Risk List
                     </button>
                     {% endif %}
                     <button type="button" class="btn btn-secondary btn-sm"
