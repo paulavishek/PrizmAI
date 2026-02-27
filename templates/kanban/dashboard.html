@@ -1241,9 +1241,13 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="modal-footer d-flex justify-content-between align-items-center">
                 <small class="text-muted" style="font-size:0.72rem;">
-                    <i class="fas fa-sync-alt me-1"></i>Based on live project data
-                    &middot;
-                    <i class="fas fa-robot me-1"></i>Spectra AI
+                    {% if daily_briefing.ai_powered %}
+                        <i class="fas fa-robot me-1" style="color:#3b82f6;"></i>
+                        <span style="color:#1e40af; font-weight:600;">Spectra AI</span>
+                        &middot; AI-generated analysis &middot; Live project data
+                    {% else %}
+                        <i class="fas fa-sync-alt me-1"></i>Based on live project data
+                    {% endif %}
                 </small>
                 <div class="d-flex gap-2">
                     {% if daily_briefing.action_type == 'high_risk' or daily_briefing.action_type == 'overdue' %}
