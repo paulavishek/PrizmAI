@@ -1126,8 +1126,32 @@ document.addEventListener('DOMContentLoaded', function() {
             {% if daily_briefing.risk %}
             <div class="col-md-4">
                 <div class="briefing-item">
-                    <span class="briefing-tag briefing-risk">⚠️ Key Risk</span>
-                    <p class="mb-0 small mt-2" style="color:#374151;">{{ daily_briefing.risk }}</p>
+                    <span class="briefing-tag briefing-risk">⚠️ Top Risk Item</span>
+                    {% if daily_briefing.top_risk %}
+                    <div class="mt-2">
+                        <a href="{% url 'task_detail' daily_briefing.top_risk.task.id %}"
+                           class="fw-semibold text-decoration-none"
+                           style="font-size:0.82rem; color:#1e3a8a;"
+                           title="{{ daily_briefing.top_risk.task.title }}">
+                            {{ daily_briefing.top_risk.task.title|truncatechars:52 }}
+                        </a>
+                        <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+                            {% if daily_briefing.top_risk.risk_level == 'critical' %}
+                                <span class="badge bg-danger" style="font-size:0.65rem;">Critical</span>
+                            {% else %}
+                                <span class="badge bg-warning text-dark" style="font-size:0.65rem;">High Risk</span>
+                            {% endif %}
+                            <small class="text-muted" style="font-size:0.72rem;">
+                                <i class="fas fa-calendar-alt me-1"></i>{{ daily_briefing.top_risk.due_label }}
+                            </small>
+                            {% if daily_briefing.top_risk.board_name %}
+                            <small class="text-muted" style="font-size:0.72rem;">
+                                <i class="fas fa-columns me-1"></i>{{ daily_briefing.top_risk.board_name|truncatechars:20 }}
+                            </small>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
             {% endif %}

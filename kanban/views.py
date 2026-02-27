@@ -568,13 +568,41 @@ def dashboard(request):
                     briefing_pulse = first_line
             break
 
+    # Top risk item for the Key Risk panel — the single highest-priority
+    # risk task (critical before high, earliest due date, then unassigned first)
+    _top_risk_task = high_risk_tasks_qs.first()  # already sorted: critical→due date
+    briefing_top_risk = None
+    if _top_risk_task:
+        _tr_due = _top_risk_task.due_date
+        _tr_now = timezone.now()
+        if _tr_due:
+            _tr_days = int((_tr_due - _tr_now).days)
+            # Localise to server timezone before extracting day/month so that a
+            # due date entered as "22 Mar midnight local" (stored as 21 Mar UTC)
+            # doesn't show as Mar 21 on the dashboard.
+            _tr_due_local = timezone.localtime(_tr_due)
+            _tr_date_str = _tr_due_local.strftime('%b') + ' ' + str(_tr_due_local.day)
+            if _tr_days < 0:
+                _tr_due_label = f"Overdue · {_tr_date_str}"
+            elif _tr_days == 0:
+                _tr_due_label = "Due today"
+            elif _tr_days == 1:
+                _tr_due_label = "Due tomorrow"
+            else:
+                _tr_due_label = f"Due {_tr_date_str}"
+        else:
+            _tr_due_label = "No due date"
+        briefing_top_risk = {
+            'task':       _top_risk_task,
+            'risk_level': _top_risk_task.risk_level,
+            'due_label':  _tr_due_label,
+            'due_date':   _tr_due,
+            'board_name': (_top_risk_task.column.board.name
+                          if _top_risk_task.column and _top_risk_task.column.board else ''),
+        }
+    # briefing_risk is kept for has_content check
     if overdue_count > 0 or total_high_risk > 0:
-        parts = []
-        if overdue_count > 0:
-            parts.append(f"{overdue_count} task{'s' if overdue_count != 1 else ''} overdue")
-        if total_high_risk > 0:
-            parts.append(f"{total_high_risk} high-risk item{'s' if total_high_risk != 1 else ''} flagged")
-        briefing_risk = ' and '.join(parts)
+        briefing_risk = True  # sentinel — actual display uses briefing_top_risk
 
     briefing_action_type = None
     briefing_action_tasks = []
@@ -634,6 +662,7 @@ def dashboard(request):
     daily_briefing = {
         'pulse':          briefing_pulse,
         'risk':           briefing_risk,
+        'top_risk':       briefing_top_risk,
         'action':         briefing_action,
         'action_type':    briefing_action_type,
         'action_tasks':   briefing_action_tasks,

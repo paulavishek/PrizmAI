@@ -314,7 +314,7 @@ def refresh_active_alerts(board, scope_status):
     current_pct = scope_status.get('scope_change_percentage', 0)
     current_tasks_added = scope_status.get('tasks_added', 0)
 
-    # Severity must match the live percentage
+    # Determine severity tier for the *current* live percentage
     abs_pct = abs(current_pct)
     if abs_pct >= 30:
         current_severity = 'critical'
@@ -323,18 +323,36 @@ def refresh_active_alerts(board, scope_status):
     elif abs_pct >= 5:
         current_severity = 'info'
     else:
-        # Scope is back within bounds – nothing to do
-        return False
+        current_severity = None  # Scope is back within acceptable bounds
 
-    top_alert = ScopeCreepAlert.objects.filter(
+    active_alerts = ScopeCreepAlert.objects.filter(
         board=board,
         status__in=['active', 'acknowledged']
-    ).order_by('-detected_at').first()
+    ).order_by('-detected_at')
 
+    top_alert = active_alerts.first()
     if not top_alert:
         return False
 
-    # Only update when something has actually changed
+    # ── Scope has recovered below threshold ──────────────────────────────
+    # Auto-resolve all lingering active/acknowledged alerts so stale banners
+    # with old numbers no longer show on the board page.
+    if current_severity is None:
+        auto_summary = (
+            f"Scope returned to within acceptable bounds "
+            f"({current_pct:+.1f}% vs baseline, {current_tasks_added:+d} tasks). "
+            f"Alert auto-resolved."
+        )
+        active_alerts.update(
+            status='resolved',
+            scope_increase_percentage=current_pct,
+            tasks_added=current_tasks_added,
+            ai_summary=auto_summary,
+            resolved_at=timezone.now(),
+        )
+        return True
+
+    # ── Scope still above threshold – refresh metrics if anything changed ─
     needs_update = (
         round(top_alert.scope_increase_percentage, 2) != round(current_pct, 2)
         or top_alert.tasks_added != current_tasks_added
