@@ -513,6 +513,40 @@ def dashboard(request):
     }
 
     # ----------------------------------------------------------------
+    # Scope Creep Index  (boards that have a baseline set)
+    # ----------------------------------------------------------------
+    _baseline_boards_qs = boards.filter(baseline_task_count__isnull=False)
+    _sci_boards = []
+    for _bb in _baseline_boards_qs:
+        _current = _board_stats_map.get(_bb.id, {}).get('total_tasks', 0)
+        _baseline = _bb.baseline_task_count or 0
+        _added = _current - _baseline
+        _growth = round((_added / _baseline * 100), 1) if _baseline else 0
+        _sci_boards.append({
+            'name':           _bb.name[:32],
+            'id':             _bb.id,
+            'baseline':       _baseline,
+            'current':        _current,
+            'added':          _added,
+            'growth_pct':     _growth,
+            'baseline_date':  _bb.baseline_set_date,
+        })
+    _sci_total_baseline = sum(b['baseline'] for b in _sci_boards)
+    _sci_total_current  = sum(b['current']  for b in _sci_boards)
+    _sci_total_added    = _sci_total_current - _sci_total_baseline
+    _sci_growth_pct     = round(
+        _sci_total_added / _sci_total_baseline * 100, 1
+    ) if _sci_total_baseline else 0
+    scope_creep_data = {
+        'boards':          _sci_boards,
+        'total_baseline':  _sci_total_baseline,
+        'total_current':   _sci_total_current,
+        'tasks_added':     _sci_total_added,
+        'growth_pct':      _sci_growth_pct,
+        'has_data':        bool(_sci_boards),
+    }
+
+    # ----------------------------------------------------------------
     # Daily AI Briefing  (synthesised from stored summaries — no AI call)
     # ----------------------------------------------------------------
     briefing_pulse  = None
@@ -652,6 +686,7 @@ def dashboard(request):
         'high_risk_tasks':   high_risk_tasks_qs,
         'spi_cpi_data':      spi_cpi_data,
         'risk_heatmap_data': risk_heatmap_data,
+        'scope_creep_data':  scope_creep_data,
         'daily_briefing':    daily_briefing,
         })
 

@@ -1828,7 +1828,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- ============================================================ -->
 <!-- ZONE 3: PERFORMANCE ANALYTICS                               -->
 <!-- Row 1 — Mission + Strategy charts (enlarged)               -->
-<!-- Row 2 — Board bars, Budget vs Actual, Velocity sparkline   -->
+<!-- Row 2 — Board bars, Scope Creep Index, Velocity sparkline   -->
 <!-- Row 3 — SPI/CPI gauges + Risk Heatmap                      -->
 <!-- ============================================================ -->
 <div class="mb-2">
@@ -1875,7 +1875,7 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 </div>
 
-<!-- Row 2: Board Bars + Budget vs Actual + Velocity -->
+<!-- Row 2: Board Bars + Scope Creep Index + Velocity -->
 <div class="row g-3 mb-3">
     <!-- Board Completion Bars -->
     <div class="col-lg-4">
@@ -1884,7 +1884,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <i class="fas fa-clipboard-list me-2 text-primary"></i>
                 <span class="fw-semibold small">Board Progress</span>
             </div>
-            <div class="card-body p-3">
+            <div class="card-body p-3" style="max-height:220px; overflow-y:auto;">
                 {% if chart_boards %}
                 {% for b in chart_boards %}
                 <div class="mb-2">
@@ -1907,26 +1907,74 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         </div>
     </div>
-    <!-- Budget vs Actual -->
+    <!-- Scope Creep Index -->
     <div class="col-lg-4">
         <div class="card shadow-sm h-100">
-            <div class="card-header py-2 d-flex align-items-center" style="background:#f0fff4;">
-                <i class="fas fa-dollar-sign me-2 text-success"></i>
-                <span class="fw-semibold small text-success">Budget vs Actual Spend</span>
+            <div class="card-header py-2 d-flex align-items-center" style="background:#fdf4ff;">
+                <i class="fas fa-expand-arrows-alt me-2" style="color:#9333ea;"></i>
+                <span class="fw-semibold small" style="color:#7e22ce;">Scope Creep Index</span>
                 <span class="ms-auto" data-bs-toggle="tooltip" data-bs-placement="top"
-                      title="Allocated = planned budget. Spent = all tracked costs to date. A large gap means the project is spending ahead of its budget — consistent with a low CPI gauge.">
+                      title="Compares the current total task count against the baseline snapshot set at project kick-off. Growth above 20% is a typical PM warning threshold.">
                     <i class="fas fa-info-circle text-muted" style="font-size:0.75rem; cursor:help;"></i>
                 </span>
             </div>
-            <div class="card-body p-2" style="height:220px; position:relative;">
-                {% if spi_cpi_data %}
-                {% with has_budget=False %}
-                {% for item in spi_cpi_data %}{% if item.budget_allocated %}{% with has_budget=True %}{% endwith %}{% endif %}{% endfor %}
-                {% endwith %}
-                <canvas id="budgetChart"></canvas>
+            <div class="card-body p-3" style="height:220px; overflow-y:auto;">
+                {% if scope_creep_data.has_data %}
+                {# ── Headline summary ── #}
+                <div class="d-flex align-items-center gap-2 mb-3 p-2 rounded"
+                     style="background:{% if scope_creep_data.growth_pct > 20 %}#fef2f2{% elif scope_creep_data.growth_pct > 0 %}#fffbeb{% else %}#f0fdf4{% endif %};">
+                    <span style="font-size:1.5rem; font-weight:700; line-height:1;
+                                 color:{% if scope_creep_data.growth_pct > 20 %}#dc2626{% elif scope_creep_data.growth_pct > 0 %}#d97706{% else %}#16a34a{% endif %}">
+                        {% if scope_creep_data.tasks_added > 0 %}+{% endif %}{{ scope_creep_data.tasks_added }}
+                    </span>
+                    <div>
+                        <div class="fw-semibold" style="font-size:0.78rem;">tasks added since baseline</div>
+                        <div class="text-muted" style="font-size:0.7rem;">
+                            {% if scope_creep_data.growth_pct > 0 %}
+                                <span style="color:{% if scope_creep_data.growth_pct > 20 %}#dc2626{% else %}#d97706{% endif %}; font-weight:600;">
+                                    +{{ scope_creep_data.growth_pct }}% scope growth
+                                </span>
+                            {% elif scope_creep_data.growth_pct < 0 %}
+                                <span style="color:#16a34a; font-weight:600;">{{ scope_creep_data.growth_pct }}% scope reduction</span>
+                            {% else %}
+                                <span style="color:#16a34a; font-weight:600;">Scope stable</span>
+                            {% endif %}
+                            &middot; baseline: {{ scope_creep_data.total_baseline }} tasks
+                        </div>
+                    </div>
+                </div>
+                {# ── Per-board breakdown ── #}
+                {% for b in scope_creep_data.boards %}
+                <div class="mb-2">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="small text-truncate fw-semibold" style="max-width:130px;" title="{{ b.name }}">{{ b.name }}</span>
+                        <span class="small" style="white-space:nowrap;
+                              color:{% if b.added > 0 %}{% if b.growth_pct > 20 %}#dc2626{% else %}#d97706{% endif %}{% else %}#16a34a{% endif %}; font-weight:600;">
+                            {% if b.added > 0 %}+{% endif %}{{ b.added }}
+                            <span class="text-muted fw-normal">({% if b.added > 0 %}+{% endif %}{{ b.growth_pct }}%)</span>
+                        </span>
+                    </div>
+                    <div class="progress" style="height:6px; border-radius:4px; background:#e5e7eb;">
+                        {# baseline fill #}
+                        <div class="progress-bar" role="progressbar"
+                             style="width:{% if b.current %}{% widthratio b.baseline b.current 100 %}{% else %}100{% endif %}%; background:#a78bfa; border-radius:4px 0 0 4px;"></div>
+                        {# scope-added fill #}
+                        {% if b.added > 0 %}
+                        <div class="progress-bar" role="progressbar"
+                             style="width:{% widthratio b.added b.current 100 %}%; background:{% if b.growth_pct > 20 %}#f87171{% else %}#fcd34d{% endif %}; border-radius:0 4px 4px 0;"></div>
+                        {% endif %}
+                    </div>
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted" style="font-size:0.62rem;"><span style="color:#a78bfa;">&#9646;</span> Baseline {{ b.baseline }}</small>
+                        <small class="text-muted" style="font-size:0.62rem;">Now {{ b.current }}</small>
+                    </div>
+                </div>
+                {% endfor %}
                 {% else %}
-                <div class="d-flex align-items-center justify-content-center h-100 text-muted small">
-                    <div class="text-center"><i class="fas fa-dollar-sign fa-2x mb-2 d-block" style="opacity:0.2;"></i>No budget data.<br><small>Set up a project budget on your board.</small></div>
+                <div class="d-flex flex-column align-items-center justify-content-center h-100 text-center text-muted">
+                    <i class="fas fa-ruler-combined fa-2x mb-2" style="opacity:0.2; color:#9333ea;"></i>
+                    <p class="small mb-1">No baseline set yet.</p>
+                    <p class="text-muted" style="font-size:0.72rem;">Open any board &rarr; <strong>Set Baseline</strong> to start tracking scope growth.</p>
                 </div>
                 {% endif %}
             </div>
@@ -3400,41 +3448,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
             });
         }
-        // --- Budget vs Actual horizontal bar chart ---
-        var bCanvas = document.getElementById('budgetChart');
-        if (bCanvas && chartData.spi_cpi && chartData.spi_cpi.length) {
-            var bItems = chartData.spi_cpi.filter(function(b){ return b.budget_allocated > 0 || b.budget_spent > 0; });
-            if (bItems.length) {
-                new Chart(bCanvas, {
-                    type: 'bar',
-                    data: {
-                        labels: bItems.map(function(b){ return b.name; }),
-                        datasets: [
-                            { label: 'Allocated', data: bItems.map(function(b){ return b.budget_allocated; }), backgroundColor: 'rgba(78,115,223,0.7)', borderRadius: 4 },
-                            { label: 'Spent',     data: bItems.map(function(b){ return b.budget_spent; }),     backgroundColor: 'rgba(231,74,59,0.65)', borderRadius: 4 },
-                        ],
-                    },
-                    options: {
-                        indexAxis: 'y',
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 12, padding: 6 } },
-                            tooltip: { callbacks: { label: function(ctx){ return ctx.dataset.label + ': $' + ctx.parsed.x.toLocaleString(); } } },
-                        },
-                        scales: {
-                            x: { grid: { color: COLORS.gridLine }, ticks: { font: { size: 9 }, callback: function(v){ return '$' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v); } } },
-                            y: { grid: { display: false }, ticks: { font: { size: 10 } } },
-                        },
-                    },
-                });
-            } else {
-                var bWrap = bCanvas.parentElement;
-                bCanvas.style.display = 'none';
-                bWrap.insertAdjacentHTML('beforeend', '<p class="text-muted small text-center pt-3">No budget data available</p>');
-            }
-        }
-
         // --- Velocity sparkline (weekly task completions) ---
         var vCanvas = document.getElementById('velocityChart');
         if (vCanvas && chartData.spi_cpi && chartData.spi_cpi.length) {
