@@ -56,6 +56,11 @@
         max-width: 240px;
         line-height: 1.5;
     }
+    /* Pointer cursor on clickable day cells */
+    .fc .fc-daygrid-day,
+    .fc .fc-timegrid-slot,
+    .fc .fc-daygrid-bg-harness,
+    .fc .fc-daygrid-day-frame { cursor: pointer; }
 </style>
 {% endblock %}
 
@@ -121,6 +126,10 @@
 
     <!-- Calendar -->
     <div class="calendar-container">
+        <div class="d-flex align-items-center gap-2 mb-3 text-muted" style="font-size:0.82rem;">
+            <i class="fas fa-hand-pointer" style="color:#0d6efd;"></i>
+            <span>Click any date to quickly <strong>create a task</strong> or <strong>schedule an event</strong> on that day.</span>
+        </div>
         <div id='calendar'></div>
     </div>
 
@@ -157,6 +166,153 @@
 
 </div>
 
+<!-- Board Calendar: Create Popup -->
+<div id="bc-create-popup" class="card shadow" style="display:none; position:fixed; z-index:1055; min-width:180px; border-radius:10px; overflow:hidden;">
+    <div class="list-group list-group-flush">
+        <button class="list-group-item list-group-item-action py-2 px-3" id="bc-popup-create-task">
+            <i class="fas fa-tasks me-2 text-primary"></i> Create Task
+        </button>
+        <button class="list-group-item list-group-item-action py-2 px-3" id="bc-popup-create-event">
+            <i class="fas fa-calendar-plus me-2" style="color:#6f42c1"></i> Schedule Event
+        </button>
+    </div>
+</div>
+
+<!-- Board Calendar: Create Task Modal -->
+<div class="modal fade" id="bcCreateTaskModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-tasks me-2 text-primary"></i>New Task — {{ board.name }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="bc-task-form-error" class="alert alert-danger d-none"></div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="bc-task-title" placeholder="Task title…">
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Column</label>
+            <select class="form-select" id="bc-task-column">
+              {% for col in board.columns.all %}
+              <option value="{{ col.id }}">{{ col.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Priority</label>
+            <select class="form-select" id="bc-task-priority">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+              <option value="urgent">Urgent</option>
+            </select>
+          </div>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Due Date</label>
+            <input type="date" class="form-control" id="bc-task-due-date">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Start Date</label>
+            <input type="date" class="form-control" id="bc-task-start-date">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Assignee</label>
+          <select class="form-select" id="bc-task-assignee">
+            <option value="">— unassigned —</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="bc-btn-save-task">
+          <i class="fas fa-save me-1"></i> Create Task
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Board Calendar: Schedule Event Modal -->
+<div class="modal fade" id="bcCreateEventModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-calendar-plus me-2" style="color:#6f42c1"></i>Schedule Event — {{ board.name }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="bc-event-form-error" class="alert alert-danger d-none"></div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="bc-event-title" placeholder="Event title…">
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Event Type</label>
+            <select class="form-select" id="bc-event-type">
+              <option value="meeting">Meeting</option>
+              <option value="reminder">Reminder</option>
+              <option value="deadline">Deadline</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="col-md-6 d-flex align-items-end">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="bc-event-all-day">
+              <label class="form-check-label" for="bc-event-all-day">All Day</label>
+            </div>
+          </div>
+        </div>
+        <div class="row g-2 mb-3" id="bc-event-datetime-row">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Start <span class="text-danger">*</span></label>
+            <input type="datetime-local" class="form-control" id="bc-event-start">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">End <span class="text-danger">*</span></label>
+            <input type="datetime-local" class="form-control" id="bc-event-end">
+          </div>
+        </div>
+        <div class="row g-2 mb-3" id="bc-event-allday-row" style="display:none!important">
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" id="bc-event-start-date">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">End Date</label>
+            <input type="date" class="form-control" id="bc-event-end-date">
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Location</label>
+          <input type="text" class="form-control" id="bc-event-location" placeholder="Room, Zoom link, etc.">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Description</label>
+          <textarea class="form-control" id="bc-event-description" rows="2"></textarea>
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Participants</label>
+          <select class="form-select" id="bc-event-participants" multiple style="height:90px;"></select>
+          <small class="text-muted">Hold Ctrl/Cmd to select multiple.</small>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary btn-sm" id="bc-btn-save-event">
+          <i class="fas fa-save me-1"></i> Schedule
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Hover Tooltip -->
 <div id="cal-tooltip"></div>
 
@@ -182,6 +338,18 @@ document.addEventListener('DOMContentLoaded', function() {
     // Tooltip element
     const tooltip = document.getElementById('cal-tooltip');
 
+    // ---- Date-click create feature ----
+    var bcClickedDate = null;
+    function bcShowPopup(clientX, clientY) {
+        const POPUP_H = 88, POPUP_W = 200;
+        let top = clientY + 10, left = clientX;
+        if (top  + POPUP_H > window.innerHeight - 8) top  = clientY - POPUP_H - 10;
+        if (left + POPUP_W > window.innerWidth  - 8) left = window.innerWidth - POPUP_W - 8;
+        if (left < 8) left = 8; if (top < 8) top = 8;
+        const p = document.getElementById('bc-create-popup');
+        p.style.top = top + 'px'; p.style.left = left + 'px'; p.style.display = 'block';
+    }
+
     const calendarEl = document.getElementById('calendar');
     const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
@@ -191,6 +359,10 @@ document.addEventListener('DOMContentLoaded', function() {
             right: 'dayGridMonth,dayGridWeek,listMonth'
         },
         events: events,
+        dateClick: function(info) {
+            bcClickedDate = info.dateStr;
+            bcShowPopup(info.jsEvent.clientX, info.jsEvent.clientY);
+        },
         eventClick: function(info) {
             info.jsEvent.preventDefault();
             window.location.href = info.event.url;
@@ -228,6 +400,147 @@ document.addEventListener('DOMContentLoaded', function() {
     document.addEventListener('mousemove', function(e) {
         tooltip.style.left = (e.clientX + 14) + 'px';
         tooltip.style.top  = (e.clientY - 10) + 'px';
+    });
+
+    // ================================================================
+    // BOARD CALENDAR: DATE-CLICK CREATE TASK / SCHEDULE EVENT
+    // ================================================================
+    const BC_CSRF     = '{{ csrf_token }}';
+    const BC_TASK_URL = '{% url "calendar_create_task" %}';
+    const BC_EVT_URL  = '{% url "calendar_create_event" %}';
+    const BC_BOARD_ID = '{{ board.id }}';
+    const bcMembersData      = {{ members_json|safe }};
+    const bcParticipantsData = {{ participants_json|safe }};
+    const bcPopup = document.getElementById('bc-create-popup');
+
+    // Close popup on outside click
+    document.addEventListener('click', function(e) {
+        if (bcPopup && !bcPopup.contains(e.target)) bcPopup.style.display = 'none';
+    });
+
+    // Populate assignee dropdown from pre-loaded board members
+    const bcAssigneeSel = document.getElementById('bc-task-assignee');
+    bcMembersData.forEach(function(m) {
+        const o = document.createElement('option');
+        o.value = m.id; o.textContent = m.display + ' (' + m.username + ')';
+        bcAssigneeSel.appendChild(o);
+    });
+
+    // Populate participants dropdown
+    const bcPartSel = document.getElementById('bc-event-participants');
+    bcParticipantsData.forEach(function(p) {
+        const o = document.createElement('option');
+        o.value = p.id; o.textContent = p.display + ' (' + p.username + ')';
+        bcPartSel.appendChild(o);
+    });
+
+    // Popup buttons
+    document.getElementById('bc-popup-create-task').addEventListener('click', function() {
+        bcPopup.style.display = 'none';
+        if (bcClickedDate) document.getElementById('bc-task-due-date').value = bcClickedDate;
+        new bootstrap.Modal(document.getElementById('bcCreateTaskModal')).show();
+    });
+
+    document.getElementById('bc-popup-create-event').addEventListener('click', function() {
+        bcPopup.style.display = 'none';
+        if (bcClickedDate) {
+            document.getElementById('bc-event-start-date').value = bcClickedDate;
+            document.getElementById('bc-event-end-date').value   = bcClickedDate;
+            document.getElementById('bc-event-start').value = bcClickedDate + 'T09:00';
+            document.getElementById('bc-event-end').value   = bcClickedDate + 'T10:00';
+        }
+        new bootstrap.Modal(document.getElementById('bcCreateEventModal')).show();
+    });
+
+    // All-day toggle
+    document.getElementById('bc-event-all-day').addEventListener('change', function() {
+        const allDay = this.checked;
+        document.getElementById('bc-event-datetime-row').style.display = allDay ? 'none' : '';
+        document.getElementById('bc-event-allday-row').style.display   = allDay ? '' : 'none';
+    });
+
+    // Save Task
+    document.getElementById('bc-btn-save-task').addEventListener('click', function() {
+        const errDiv = document.getElementById('bc-task-form-error');
+        errDiv.classList.add('d-none');
+        const title = document.getElementById('bc-task-title').value.trim();
+        if (!title) { errDiv.textContent = 'Title is required.'; errDiv.classList.remove('d-none'); return; }
+        const payload = {
+            title,
+            board_id:    BC_BOARD_ID,
+            column_id:   document.getElementById('bc-task-column').value || null,
+            due_date:    document.getElementById('bc-task-due-date').value || null,
+            start_date:  document.getElementById('bc-task-start-date').value || null,
+            assignee_id: document.getElementById('bc-task-assignee').value || null,
+            priority:    document.getElementById('bc-task-priority').value,
+        };
+        this.disabled = true;
+        fetch(BC_TASK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': BC_CSRF },
+            body: JSON.stringify(payload),
+        })
+        .then(r => r.json())
+        .then(data => {
+            this.disabled = false;
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('bcCreateTaskModal')).hide();
+                document.getElementById('bc-task-title').value = '';
+                if (data.event) calendar.addEvent(data.event);
+            } else {
+                errDiv.textContent = data.error || 'Failed to create task.';
+                errDiv.classList.remove('d-none');
+            }
+        })
+        .catch(() => { this.disabled = false; errDiv.textContent = 'Network error.'; errDiv.classList.remove('d-none'); });
+    });
+
+    // Save Event
+    document.getElementById('bc-btn-save-event').addEventListener('click', function() {
+        const errDiv = document.getElementById('bc-event-form-error');
+        errDiv.classList.add('d-none');
+        const title = document.getElementById('bc-event-title').value.trim();
+        if (!title) { errDiv.textContent = 'Title is required.'; errDiv.classList.remove('d-none'); return; }
+        const isAllDay = document.getElementById('bc-event-all-day').checked;
+        const startDT = isAllDay
+            ? document.getElementById('bc-event-start-date').value + 'T00:00:00'
+            : document.getElementById('bc-event-start').value;
+        const endDT = isAllDay
+            ? (document.getElementById('bc-event-end-date').value ||
+               document.getElementById('bc-event-start-date').value) + 'T23:59:59'
+            : document.getElementById('bc-event-end').value;
+        if (!startDT || !endDT) { errDiv.textContent = 'Start and end are required.'; errDiv.classList.remove('d-none'); return; }
+        const participantIds = Array.from(bcPartSel.selectedOptions).map(o => parseInt(o.value));
+        const payload = {
+            title,
+            event_type:     document.getElementById('bc-event-type').value,
+            is_all_day:     isAllDay,
+            start_datetime: startDT,
+            end_datetime:   endDT,
+            location:       document.getElementById('bc-event-location').value.trim(),
+            description:    document.getElementById('bc-event-description').value.trim(),
+            participant_ids: participantIds,
+            board_id:       BC_BOARD_ID,
+        };
+        this.disabled = true;
+        fetch(BC_EVT_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': BC_CSRF },
+            body: JSON.stringify(payload),
+        })
+        .then(r => r.json())
+        .then(data => {
+            this.disabled = false;
+            if (data.success) {
+                bootstrap.Modal.getInstance(document.getElementById('bcCreateEventModal')).hide();
+                document.getElementById('bc-event-title').value = '';
+                if (data.event) calendar.addEvent(data.event);
+            } else {
+                errDiv.textContent = data.error || 'Failed to schedule event.';
+                errDiv.classList.remove('d-none');
+            }
+        })
+        .catch(() => { this.disabled = false; errDiv.textContent = 'Network error.'; errDiv.classList.remove('d-none'); });
     });
 });
 </script>

@@ -20,6 +20,11 @@
         padding: 2px 4px;
     }
     .fc-event:hover { opacity: 0.85; transform: translateY(-1px); transition: 0.15s; }
+    /* Pointer cursor on clickable day cells */
+    .fc .fc-daygrid-day,
+    .fc .fc-timegrid-slot,
+    .fc .fc-daygrid-bg-harness,
+    .fc .fc-daygrid-day-frame { cursor: pointer; }
     .stat-card {
         background: #f8f9fa;
         border-radius: 8px;
@@ -74,7 +79,7 @@
         <div class="col-6 col-md-4">
             <div class="stat-card">
                 <div class="stat-number text-primary">{{ total_tasks }}</div>
-                <div class="text-muted small">My Scheduled Tasks</div>
+                <div class="text-muted small">Scheduled Tasks</div>
             </div>
         </div>
         <div class="col-6 col-md-4">
@@ -100,8 +105,8 @@
         <span class="small"><span class="badge" style="background:#198754;">●</span> Low</span>
         <span class="ms-3 small text-muted me-1">Events:</span>
         <span class="small"><span class="badge" style="background:#6f42c1;">●</span> Meeting</span>
-        <span class="small"><span class="badge" style="background:#fd7e14;">●</span> Reminder</span>
-        <span class="small"><span class="badge" style="background:#dc3545;">●</span> Deadline</span>
+        <span class="small"><span class="badge" style="background:#0dcaf0; color:#000;">●</span> Reminder</span>
+        <span class="small"><span class="badge" style="background:#e83e8c;">●</span> Deadline</span>
         <span class="small"><span class="badge" style="background:#20c997;">●</span> Other</span>
     </div>
 
@@ -117,6 +122,10 @@
 
     <!-- Calendar -->
     <div class="calendar-container">
+        <div class="d-flex align-items-center gap-2 mb-3 text-muted" style="font-size:0.82rem;">
+            <i class="fas fa-hand-pointer" style="color:#0d6efd;"></i>
+            <span>Click any date to quickly <strong>create a task</strong> or <strong>schedule an event</strong> on that day.</span>
+        </div>
         <div id='calendar'></div>
     </div>
 
@@ -345,6 +354,20 @@ document.addEventListener('DOMContentLoaded', function () {
     let clickedDateStr = null;
     let clickedDatetime = null;
 
+    // Smart popup positioning — position:fixed uses viewport coords, never scrollY
+    function showPopup(clientX, clientY) {
+        const POPUP_H = 88, POPUP_W = 200;
+        let top  = clientY + 10;
+        let left = clientX;
+        if (top  + POPUP_H > window.innerHeight - 8) top  = clientY - POPUP_H - 10;
+        if (left + POPUP_W > window.innerWidth  - 8) left = window.innerWidth - POPUP_W - 8;
+        if (left < 8) left = 8;
+        if (top  < 8) top  = 8;
+        createPopup.style.top  = top  + 'px';
+        createPopup.style.left = left + 'px';
+        createPopup.style.display = 'block';
+    }
+
     // ---- Tooltip ----
     const tooltip = document.getElementById('cal-tooltip');
     document.addEventListener('mousemove', e => {
@@ -377,10 +400,7 @@ document.addEventListener('DOMContentLoaded', function () {
         dateClick: function (info) {
             clickedDateStr = info.dateStr;
             clickedDatetime = info.date;
-            const rect = info.dayEl.getBoundingClientRect();
-            createPopup.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
-            createPopup.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 200) + 'px';
-            createPopup.style.display = 'block';
+            showPopup(info.jsEvent.clientX, info.jsEvent.clientY);
         },
         // Click on existing event → show detail popover
         eventClick: function (info) {
@@ -465,9 +485,7 @@ document.addEventListener('DOMContentLoaded', function () {
     document.getElementById('btn-new').addEventListener('click', function (e) {
         e.stopPropagation();
         const rect = this.getBoundingClientRect();
-        createPopup.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
-        createPopup.style.left = (rect.left  + window.scrollX) + 'px';
-        createPopup.style.display = 'block';
+        showPopup(rect.left, rect.bottom + 4);
         // Default to today if no date clicked
         if (!clickedDateStr) {
             const d = new Date();

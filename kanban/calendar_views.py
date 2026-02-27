@@ -97,8 +97,7 @@ def unified_calendar(request):
     month_end = now.replace(day=last_day, hour=23, minute=59, second=59)
 
     user_tasks_qs = Task.objects.filter(
-        Q(column__board__in=boards),
-        Q(assigned_to=request.user) | Q(created_by=request.user),
+        column__board__in=boards,
         item_type='task',
         due_date__isnull=False,
     ).distinct()
@@ -152,8 +151,7 @@ def unified_calendar_events_api(request):
     end_str = request.GET.get('end')
 
     task_qs = Task.objects.filter(
-        Q(column__board__in=boards),
-        Q(assigned_to=request.user) | Q(created_by=request.user),
+        column__board__in=boards,
         item_type='task',
         due_date__isnull=False,
     ).select_related('column', 'column__board', 'assigned_to').distinct()

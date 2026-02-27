@@ -2000,6 +2000,17 @@ def board_calendar(request, board_id):
             }
         })
 
+    # Extra context for date-click task/event creation
+    from django.contrib.auth.models import User as _CalUser
+    from django.db.models import Q as _CalQ
+    _col_data = list(board.columns.order_by('position').values('id', 'name'))
+    _mem_qs = _CalUser.objects.filter(
+        _CalQ(member_boards=board) | _CalQ(created_boards=board)
+    ).distinct().order_by('username')
+    _mem_data = [
+        {'id': u.id, 'username': u.username, 'display': u.get_full_name() or u.username}
+        for u in _mem_qs
+    ]
     context = {
         'board': board,
         'tasks_without_dates': tasks_without_dates,
@@ -2007,6 +2018,9 @@ def board_calendar(request, board_id):
         'total_tasks': tasks_with_dates.count() + tasks_without_dates.count(),
         'scheduled_count': tasks_with_dates.count(),
         'unscheduled_count': tasks_without_dates.count(),
+        'columns_json': _json.dumps(_col_data),
+        'members_json': _json.dumps(_mem_data),
+        'participants_json': _json.dumps([m for m in _mem_data if m['id'] != request.user.id]),
     }
     return render(request, 'kanban/calendar_view.html', context)
 

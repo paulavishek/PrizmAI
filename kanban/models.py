@@ -1739,10 +1739,13 @@ class CalendarEvent(models.Model):
         return f"{self.title} ({self.start_datetime.date()})"
 
     def get_event_type_color(self):
-        """Return a hex colour for FullCalendar based on event type."""
+        """Return a hex colour for FullCalendar based on event type.
+        Colours are intentionally distinct from task priority colours
+        (urgent=#dc3545 red, high=#fd7e14 orange, medium=#0d6efd blue, low=#198754 green).
+        """
         return {
-            'meeting': '#6f42c1',   # purple
-            'reminder': '#fd7e14',  # orange
-            'deadline': '#dc3545',  # red
-            'other': '#20c997',     # teal
+            'meeting':  '#6f42c1',  # purple  — unique
+            'reminder': '#0dcaf0',  # cyan    — distinct from orange High
+            'deadline': '#e83e8c',  # pink    — distinct from red Urgent
+            'other':    '#20c997',  # teal    — distinct from green Low
         }.get(self.event_type, '#6c757d')
