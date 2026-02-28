@@ -1954,12 +1954,46 @@ def gantt_chart(request, board_id):
 
 
 @login_required
+@login_required
 def board_calendar(request, board_id):
     """
     Calendar view: shows all tasks with due dates laid out by month/week.
     Tasks with no due date are listed in a separate 'unscheduled' section.
+    Each task is colour-coded by assignee (not by priority) so a PM can
+    visually distinguish who owns what at a glance.
     """
     board = get_object_or_404(Board, id=board_id)
+
+    # Membership guard — only board owner/members may view this calendar
+    from django.db.models import Q as _CalQ
+    from django.contrib.auth.models import User as _CalUser
+    if not (board.created_by == request.user or
+            board.members.filter(id=request.user.id).exists()):
+        from django.http import HttpResponseForbidden
+        return HttpResponseForbidden("You are not a member of this board.")
+
+    # ---------------------------------------------------------------------------
+    # Assignee colour palette — distinct from priority colours
+    # (priority: #dc3545 red, #fd7e14 orange, #0d6efd blue, #198754 green)
+    # ---------------------------------------------------------------------------
+    _ASSIGNEE_PALETTE = [
+        '#7c3aed',  # violet
+        '#db2777',  # hot pink
+        '#0891b2',  # teal
+        '#ca8a04',  # golden yellow
+        '#c026d3',  # fuchsia
+        '#0f766e',  # dark teal
+        '#b45309',  # amber brown
+        '#4338ca',  # indigo
+        '#be185d',  # deep rose
+        '#0369a1',  # steel blue
+    ]
+    _UNASSIGNED_COLOR = '#9ca3af'  # neutral grey for tasks with no assignee
+
+    def _assignee_color(uid):
+        if uid is None:
+            return _UNASSIGNED_COLOR
+        return _ASSIGNEE_PALETTE[uid % len(_ASSIGNEE_PALETTE)]
 
     # Fetch all tasks that have a due date, ordered by due date
     tasks_with_dates = (
@@ -1976,22 +2010,36 @@ def board_calendar(request, board_id):
         .order_by('column__position', 'position')
     )
 
-    # Build a simple serialisable list of events for FullCalendar (JS)
+    # Build a serialisable list of events for FullCalendar — colour = assignee
     import json as _json
+
+    # Collect all board members and map user_id → color (for the legend)
+    _mem_qs = _CalUser.objects.filter(
+        _CalQ(member_boards=board) | _CalQ(created_boards=board)
+    ).distinct().order_by('username')
+
+    _mem_data = []
+    for u in _mem_qs:
+        _mem_data.append({
+            'id': u.id,
+            'username': u.username,
+            'display': u.get_full_name() or u.username,
+            'color': _assignee_color(u.id),
+        })
+
+    # uid → color map for fast event lookup
+    _color_map = {m['id']: m['color'] for m in _mem_data}
+
     events = []
     for t in tasks_with_dates:
-        color = {
-            'urgent': '#dc3545',
-            'high':   '#fd7e14',
-            'medium': '#0d6efd',
-            'low':    '#198754',
-        }.get(t.priority, '#6c757d')
-
         due = t.due_date
-        if hasattr(due, 'date'):
-            due_str = due.date().isoformat()
-        else:
-            due_str = due.isoformat()
+        due_str = due.date().isoformat() if hasattr(due, 'date') else due.isoformat()
+
+        assignee_id = t.assigned_to_id
+        color = _color_map.get(assignee_id, _UNASSIGNED_COLOR)
+        assignee_display = None
+        if t.assigned_to:
+            assignee_display = t.assigned_to.get_full_name() or t.assigned_to.username
 
         events.append({
             'id': t.id,
@@ -2003,21 +2051,13 @@ def board_calendar(request, board_id):
                 'column': t.column.name,
                 'priority': t.get_priority_display(),
                 'progress': t.progress,
-                'assignee': t.assigned_to.get_full_name() or t.assigned_to.username if t.assigned_to else None,
+                'assignee': assignee_display,
+                'assignee_id': assignee_id,
             }
         })
 
-    # Extra context for date-click task/event creation
-    from django.contrib.auth.models import User as _CalUser
-    from django.db.models import Q as _CalQ
     _col_data = list(board.columns.order_by('position').values('id', 'name'))
-    _mem_qs = _CalUser.objects.filter(
-        _CalQ(member_boards=board) | _CalQ(created_boards=board)
-    ).distinct().order_by('username')
-    _mem_data = [
-        {'id': u.id, 'username': u.username, 'display': u.get_full_name() or u.username}
-        for u in _mem_qs
-    ]
+
     context = {
         'board': board,
         'tasks_without_dates': tasks_without_dates,
@@ -2027,6 +2067,7 @@ def board_calendar(request, board_id):
         'unscheduled_count': tasks_without_dates.count(),
         'columns_json': _json.dumps(_col_data),
         'members_json': _json.dumps(_mem_data),
+        'members_with_colors_json': _json.dumps(_mem_data),
         'participants_json': _json.dumps([m for m in _mem_data if m['id'] != request.user.id]),
     }
     return render(request, 'kanban/calendar_view.html', context)

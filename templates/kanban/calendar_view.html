@@ -61,6 +61,15 @@
     .fc .fc-timegrid-slot,
     .fc .fc-daygrid-bg-harness,
     .fc .fc-daygrid-day-frame { cursor: pointer; }
+    /* Assignee chips */
+    .assignee-chip {
+        cursor: pointer;
+        transition: opacity 0.15s;
+        user-select: none;
+        font-size: 0.8rem !important;
+        padding: 5px 10px !important;
+    }
+    .assignee-chip.inactive { opacity: 0.35; text-decoration: line-through; }
 </style>
 {% endblock %}
 
@@ -116,12 +125,24 @@
         </div>
     </div>
 
-    <!-- Legend -->
-    <div class="d-flex flex-wrap gap-3 mb-3">
+    <!-- Priority legend (priority shown in tooltip, not by colour) -->
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-1" style="font-size:0.8rem;">
+        <span class="text-muted fw-semibold me-1">Priority (see tooltip):</span>
         <span><span class="badge" style="background:#dc3545;">●</span> Urgent</span>
         <span><span class="badge" style="background:#fd7e14;">●</span> High</span>
         <span><span class="badge" style="background:#0d6efd;">●</span> Medium</span>
         <span><span class="badge" style="background:#198754;">●</span> Low</span>
+        <span class="ms-2"><span class="badge" style="background:#9ca3af;">●</span> Unassigned</span>
+    </div>
+    <!-- Assignee colour legend (built by JS) -->
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3" id="assignee-legend" style="font-size:0.8rem;">
+        <span class="text-muted fw-semibold me-1">Team colours:</span>
+    </div>
+
+    <!-- Assignee filter chips (built by JS) -->
+    <div class="d-flex flex-wrap gap-2 mb-3" id="assignee-chips">
+        <span class="badge assignee-chip" data-assignee-id="all"
+              style="background:#495057;">All Members</span>
     </div>
 
     <!-- Calendar -->
@@ -265,8 +286,18 @@
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     const events = {{ events_json|safe }};
+    const membersWithColors = {{ members_with_colors_json|safe }};
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+
+    // Assignee filter state — IDs in this set are HIDDEN
+    let hiddenAssigneeIds = new Set();
+
+    // Priority colour map (for tooltip badges)
+    const PRIORITY_COLORS = {
+        'urgent': '#dc3545', 'high': '#fd7e14',
+        'medium': '#0d6efd', 'low': '#198754'
+    };
 
     // Count overdue
     let overdueCount = 0;
@@ -300,7 +331,17 @@ document.addEventListener('DOMContentLoaded', function() {
             center: 'title',
             right: 'dayGridMonth,dayGridWeek,listMonth'
         },
-        events: events,
+        events: function(fetchInfo, successCallback, failureCallback) {
+            if (hiddenAssigneeIds.size === 0) {
+                successCallback(events);
+            } else {
+                const filtered = events.filter(function(e) {
+                    const aid = e.extendedProps ? e.extendedProps.assignee_id : undefined;
+                    return !hiddenAssigneeIds.has(aid);
+                });
+                successCallback(filtered);
+            }
+        },
         dateClick: function(info) {
             bcClickedDate = info.dateStr;
             bcShowPopup(info.jsEvent.clientX, info.jsEvent.clientY);
@@ -311,11 +352,15 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         eventMouseEnter: function(info) {
             const p = info.event.extendedProps;
+            const pKey = (p.priority || '').toLowerCase();
+            const pColor = PRIORITY_COLORS[pKey] || '#6c757d';
             tooltip.innerHTML = `
                 <strong>${info.event.title}</strong><br>
                 <span>📌 ${p.column}</span><br>
-                <span>🚩 ${p.priority}</span>
-                ${p.assignee ? `<br><span>👤 ${p.assignee}</span>` : ''}
+                <span>🚩 <span style="color:${pColor}; font-weight:600;">${p.priority}</span></span>
+                ${p.assignee
+                    ? `<br><span>👤 <span style="color:${info.event.backgroundColor};">${p.assignee}</span></span>`
+                    : '<br><span style="color:#9ca3af;">👤 Unassigned</span>'}
                 <br><span>⬜ ${p.progress}% complete</span>
             `;
             tooltip.style.display = 'block';
@@ -337,6 +382,58 @@ document.addEventListener('DOMContentLoaded', function() {
         firstDay: 1,  // Monday
     });
     calendar.render();
+
+    // ---- Build assignee legend and filter chips ----
+    const legendEl = document.getElementById('assignee-legend');
+    const chipsEl  = document.getElementById('assignee-chips');
+
+    membersWithColors.forEach(function(m) {
+        // Legend entry
+        const legend = document.createElement('span');
+        legend.innerHTML = `<span class="badge" style="background:${m.color};">●</span> ${m.display}`;
+        legendEl.appendChild(legend);
+
+        // Filter chip
+        const chip = document.createElement('span');
+        chip.className = 'badge assignee-chip';
+        chip.dataset.assigneeId = m.id;
+        chip.style.background = m.color;
+        chip.textContent = m.display;
+        chipsEl.appendChild(chip);
+    });
+
+    // Unassigned chip
+    const unassignedChip = document.createElement('span');
+    unassignedChip.className = 'badge assignee-chip';
+    unassignedChip.dataset.assigneeId = 'unassigned';
+    unassignedChip.style.background = '#9ca3af';
+    unassignedChip.textContent = 'Unassigned';
+    chipsEl.appendChild(unassignedChip);
+
+    // Chip click handler
+    chipsEl.addEventListener('click', function(e) {
+        const chip = e.target.closest('.assignee-chip');
+        if (!chip) return;
+        const rawId = chip.dataset.assigneeId;
+        if (rawId === 'all') {
+            hiddenAssigneeIds.clear();
+            chipsEl.querySelectorAll('.assignee-chip').forEach(c => c.classList.remove('inactive'));
+        } else {
+            const numId = rawId === 'unassigned' ? null : parseInt(rawId, 10);
+            if (hiddenAssigneeIds.has(numId)) {
+                hiddenAssigneeIds.delete(numId);
+                chip.classList.remove('inactive');
+            } else {
+                hiddenAssigneeIds.add(numId);
+                chip.classList.add('inactive');
+            }
+            // All chip dims if anything hidden
+            const allChip = chipsEl.querySelector('.assignee-chip[data-assignee-id="all"]');
+            if (hiddenAssigneeIds.size > 0) allChip.classList.add('inactive');
+            else allChip.classList.remove('inactive');
+        }
+        calendar.refetchEvents();
+    });
 
     // Keep tooltip following mouse
     document.addEventListener('mousemove', function(e) {

@@ -66,6 +66,32 @@ def _priority_color(priority):
 
 
 # ---------------------------------------------------------------------------
+# Assignee colour palette — completely distinct from priority colours
+# Avoids: #dc3545 red, #fd7e14 orange, #0d6efd blue, #198754 green, #6c757d grey
+# ---------------------------------------------------------------------------
+_ASSIGNEE_PALETTE = [
+    '#7c3aed',  # violet
+    '#db2777',  # hot pink
+    '#0891b2',  # teal
+    '#ca8a04',  # golden yellow
+    '#c026d3',  # fuchsia
+    '#0f766e',  # dark teal
+    '#b45309',  # amber brown
+    '#4338ca',  # indigo
+    '#be185d',  # deep rose
+    '#0369a1',  # steel blue
+]
+_UNASSIGNED_COLOR = '#9ca3af'  # neutral grey for unassigned tasks
+
+
+def _assignee_color(user_id):
+    """Return a deterministic, palette-based colour for a given user_id."""
+    if user_id is None:
+        return _UNASSIGNED_COLOR
+    return _ASSIGNEE_PALETTE[user_id % len(_ASSIGNEE_PALETTE)]
+
+
+# ---------------------------------------------------------------------------
 # Main calendar page
 # ---------------------------------------------------------------------------
 
@@ -86,6 +112,17 @@ def unified_calendar(request):
     participants_data = [
         {'id': u.id, 'username': u.username,
          'display': u.get_full_name() or u.username}
+        for u in participant_qs
+    ]
+
+    # Teammates list with assigned colours (for filter chips & availability mode)
+    teammates_data = [
+        {
+            'id': u.id,
+            'username': u.username,
+            'display': u.get_full_name() or u.username,
+            'color': _assignee_color(u.id),
+        }
         for u in participant_qs
     ]
 
@@ -115,6 +152,7 @@ def unified_calendar(request):
         'boards': boards,
         'boards_json': json.dumps(boards_data),
         'participants_json': json.dumps(participants_data),
+        'teammates_json': json.dumps(teammates_data),
         'total_tasks': total_tasks,
         'overdue_count': overdue_count,
         'events_this_month': events_this_month,
@@ -176,23 +214,43 @@ def unified_calendar_events_api(request):
 
     events = []
 
-    # --- Tasks ---
+    # --- Tasks — split into "mine" (priority colour) vs "teammate" (assignee colour) ---
     for task in task_qs:
+        # Determine layer
+        is_mine = (
+            (task.assigned_to_id is not None and task.assigned_to_id == request.user.id) or
+            (task.assigned_to_id is None and task.created_by_id == request.user.id)
+        )
+        if is_mine:
+            layer = 'mine'
+            color = _priority_color(task.priority)
+        else:
+            layer = 'teammate'
+            color = _assignee_color(task.assigned_to_id)
+
+        assignee_name = None
+        if task.assigned_to:
+            assignee_name = task.assigned_to.get_full_name() or task.assigned_to.username
+
         events.append({
             'id': f'task-{task.id}',
             'title': task.title,
             'start': task.due_date.strftime('%Y-%m-%d'),
             'url': f'/tasks/{task.id}/',
-            'color': _priority_color(task.priority),
+            'color': color,
             'source': 'task',
             'extendedProps': {
                 'source': 'task',
+                'layer': layer,
                 'board': task.column.board.name,
                 'board_id': task.column.board_id,
                 'column': task.column.name,
                 'priority': task.get_priority_display(),
                 'progress': task.progress,
                 'assignee': task.assigned_to.username if task.assigned_to else None,
+                'assignee_id': task.assigned_to_id,
+                'assignee_name': assignee_name,
+                'assignee_color': color if layer == 'teammate' else None,
             },
         })
 
@@ -216,6 +274,7 @@ def unified_calendar_events_api(request):
             'source': 'event',
             'extendedProps': {
                 'source': 'event',
+                'layer': 'event',
                 'event_id': ev.id,
                 'event_type': ev.get_event_type_display(),
                 'description': ev.description or '',

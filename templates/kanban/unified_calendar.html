@@ -53,6 +53,15 @@
         user-select: none;
     }
     .board-chip.inactive { opacity: 0.4; }
+    /* Teammate chips */
+    .teammate-chip {
+        cursor: pointer;
+        transition: opacity 0.15s;
+        user-select: none;
+        font-size: 0.78rem !important;
+        padding: 5px 10px !important;
+    }
+    .teammate-chip.inactive { opacity: 0.35; text-decoration: line-through; }
     /* Modal adjustments */
     .nav-tabs .nav-link { font-size: 0.9rem; }
 </style>
@@ -97,8 +106,8 @@
     </div>
 
     <!-- Legend -->
-    <div class="d-flex flex-wrap gap-3 mb-2 align-items-center">
-        <strong class="small text-muted me-1">Tasks:</strong>
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-1" style="font-size:0.8rem;">
+        <strong class="small text-muted me-1">Your tasks (priority):</strong>
         <span class="small"><span class="badge" style="background:#dc3545;">●</span> Urgent</span>
         <span class="small"><span class="badge" style="background:#fd7e14;">●</span> High</span>
         <span class="small"><span class="badge" style="background:#0d6efd;">●</span> Medium</span>
@@ -108,6 +117,10 @@
         <span class="small"><span class="badge" style="background:#0dcaf0; color:#000;">●</span> Reminder</span>
         <span class="small"><span class="badge" style="background:#e83e8c;">●</span> Deadline</span>
         <span class="small"><span class="badge" style="background:#20c997;">●</span> Other</span>
+    </div>
+    <!-- Teammate colour legend (built by JS) -->
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3" id="teammate-legend" style="font-size:0.8rem;">
+        <strong class="small text-muted me-1">Teammates:</strong>
     </div>
 
     <!-- Board filter chips -->
@@ -119,6 +132,22 @@
         {% endfor %}
     </div>
     {% endif %}
+
+    <!-- Team view mode toggle -->
+    <div class="d-flex align-items-center gap-3 mb-2 flex-wrap">
+        <span class="small text-muted fw-semibold">Team view:</span>
+        <div class="btn-group btn-group-sm" role="group" aria-label="Team view mode">
+            <button type="button" class="btn btn-outline-secondary" id="btn-mode-detail">
+                <i class="fas fa-list-ul me-1"></i> Detail
+            </button>
+            <button type="button" class="btn btn-outline-secondary" id="btn-mode-avail">
+                <i class="fas fa-calendar-check me-1"></i> Availability
+            </button>
+        </div>
+        <span class="text-muted small" id="team-mode-badge"></span>
+    </div>
+    <!-- Teammate filter chips (built by JS) -->
+    <div class="d-flex flex-wrap gap-2 mb-3" id="teammate-chips" style="display:none!important;"></div>
 
     <!-- Calendar -->
     <div class="calendar-container">
@@ -297,14 +326,68 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // ---- Data from Django ----
-    const boardsData   = {{ boards_json|safe }};
+    const boardsData      = {{ boards_json|safe }};
     const allParticipants = {{ participants_json|safe }};
-    const CSRF = '{{ csrf_token }}';
-    const EVENTS_URL  = '{% url "unified_calendar_events_api" %}';
+    const teammatesData   = {{ teammates_json|safe }};
+    const CSRF            = '{{ csrf_token }}';
+    const EVENTS_URL      = '{% url "unified_calendar_events_api" %}';
     const CREATE_EVENT_URL = '{% url "calendar_create_event" %}';
 
     // ---- Board filter state ----
     let activeBoardIds = [];  // empty = all
+
+    // ---- Team layer / view mode state ----
+    let teamViewMode      = localStorage.getItem('prizmTeamViewMode') || 'detail';
+    let hiddenTeammateIds = new Set();
+
+    // ---- Layer/mode event processing ----
+    function processEvents(data) {
+        let filtered = data;
+        // Apply teammate visibility filter
+        if (hiddenTeammateIds.size > 0) {
+            filtered = data.filter(function(e) {
+                const p = e.extendedProps;
+                if (!p || p.layer !== 'teammate') return true;
+                return !hiddenTeammateIds.has(p.assignee_id);
+            });
+        }
+
+        if (teamViewMode === 'detail') return filtered;
+
+        // Availability mode: aggregate teammate tasks into "busy" blocks
+        const pass = [];
+        const busyMap = {};
+        filtered.forEach(function(e) {
+            const p = e.extendedProps;
+            if (p && p.layer === 'teammate') {
+                const key = `${p.assignee_id}_${e.start}`;
+                if (!busyMap[key]) {
+                    busyMap[key] = {
+                        assignee_id: p.assignee_id,
+                        name: p.assignee_name || p.assignee || 'Teammate',
+                        color: e.color,
+                        date: e.start,
+                        count: 0,
+                    };
+                }
+                busyMap[key].count++;
+            } else {
+                pass.push(e);
+            }
+        });
+        Object.values(busyMap).forEach(function(b) {
+            const n = b.count;
+            pass.push({
+                id: `busy-${b.assignee_id}-${b.date}`,
+                title: `${b.name} — busy (${n} task${n !== 1 ? 's' : ''})`,
+                start: b.date,
+                color: b.color,
+                extendedProps: { source: 'busy', layer: 'busy',
+                                 assignee_name: b.name, count: n },
+            });
+        });
+        return pass;
+    }
 
     // ---- Create popup & last clicked date ----
     const createPopup = document.getElementById('create-popup');
@@ -350,7 +433,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
             fetch(url)
                 .then(r => r.json())
-                .then(data => successCallback(data))
+                .then(data => successCallback(processEvents(data)))
                 .catch(() => failureCallback());
         },
         // Click on empty date cell → show create popup
@@ -398,11 +481,16 @@ document.addEventListener('DOMContentLoaded', function () {
         },
         eventMouseEnter: function (info) {
             const p = info.event.extendedProps;
-            if (p.source === 'task') {
+            if (p.source === 'busy') {
+                tooltip.innerHTML = `<strong>${info.event.title}</strong><br><span style="color:#aaa;">Switch to Detail view to see individual tasks.</span>`;
+            } else if (p.source === 'task') {
+                const layerBit = p.layer === 'teammate'
+                    ? `<br><span style="color:${info.event.backgroundColor}; font-weight:600;">● ${p.assignee_name || p.assignee}’s task</span>`
+                    : '';
                 tooltip.innerHTML = `
                     <strong>${info.event.title}</strong><br>
                     📋 ${p.board} › ${p.column}<br>
-                    🚩 ${p.priority}
+                    🚩 ${p.priority}${layerBit}
                     ${p.assignee ? `<br>👤 ${p.assignee}` : ''}
                     <br>⬜ ${p.progress}% complete
                 `;
@@ -419,7 +507,11 @@ document.addEventListener('DOMContentLoaded', function () {
         eventMouseLeave: function () { tooltip.style.display = 'none'; },
         eventDidMount: function (info) {
             const p = info.event.extendedProps;
-            if (p.source === 'task') {
+            // Teammate tasks: slightly muted so yours stand out
+            if (p.layer === 'teammate') {
+                info.el.style.opacity = '0.72';
+            }
+            if (p.source === 'task' && p.layer === 'mine') {
                 const d = new Date(info.event.start);
                 const today = new Date(); today.setHours(0,0,0,0);
                 if (d < today && p.progress < 100) {
@@ -430,6 +522,84 @@ document.addEventListener('DOMContentLoaded', function () {
         },
     });
     calendar.render();
+
+    // ---- Apply stored team view mode ----
+    (function applyMode() {
+        const detailBtn = document.getElementById('btn-mode-detail');
+        const availBtn  = document.getElementById('btn-mode-avail');
+        const badge     = document.getElementById('team-mode-badge');
+        if (!detailBtn) return;
+        if (teamViewMode === 'detail') {
+            detailBtn.classList.add('active');
+            availBtn.classList.remove('active');
+            if (badge) badge.textContent = 'Showing teammate task details';
+        } else {
+            availBtn.classList.add('active');
+            detailBtn.classList.remove('active');
+            if (badge) badge.textContent = 'Showing busy / free blocks';
+        }
+    })();
+
+    document.getElementById('btn-mode-detail').addEventListener('click', function() {
+        teamViewMode = 'detail';
+        localStorage.setItem('prizmTeamViewMode', 'detail');
+        document.getElementById('btn-mode-detail').classList.add('active');
+        document.getElementById('btn-mode-avail').classList.remove('active');
+        const b = document.getElementById('team-mode-badge');
+        if (b) b.textContent = 'Showing teammate task details';
+        calendar.refetchEvents();
+    });
+    document.getElementById('btn-mode-avail').addEventListener('click', function() {
+        teamViewMode = 'availability';
+        localStorage.setItem('prizmTeamViewMode', 'availability');
+        document.getElementById('btn-mode-avail').classList.add('active');
+        document.getElementById('btn-mode-detail').classList.remove('active');
+        const b = document.getElementById('team-mode-badge');
+        if (b) b.textContent = 'Showing busy / free blocks';
+        calendar.refetchEvents();
+    });
+
+    // ---- Build teammate legend + filter chips ----
+    const tmLegendEl = document.getElementById('teammate-legend');
+    const tmChipsEl  = document.getElementById('teammate-chips');
+
+    if (teammatesData.length > 0) {
+        if (tmChipsEl) tmChipsEl.style.removeProperty('display');
+        teammatesData.forEach(function(t) {
+            // Legend entry
+            if (tmLegendEl) {
+                const ls = document.createElement('span');
+                ls.className = 'small';
+                ls.innerHTML = `<span class="badge" style="background:${t.color};">●</span> ${t.display}`;
+                tmLegendEl.appendChild(ls);
+            }
+            // Filter chip
+            if (tmChipsEl) {
+                const chip = document.createElement('span');
+                chip.className = 'badge teammate-chip';
+                chip.dataset.teammateId = t.id;
+                chip.style.background = t.color;
+                chip.textContent = t.display;
+                tmChipsEl.appendChild(chip);
+            }
+        });
+
+        if (tmChipsEl) {
+            tmChipsEl.addEventListener('click', function(e) {
+                const chip = e.target.closest('.teammate-chip');
+                if (!chip) return;
+                const tid = parseInt(chip.dataset.teammateId, 10);
+                if (hiddenTeammateIds.has(tid)) {
+                    hiddenTeammateIds.delete(tid);
+                    chip.classList.remove('inactive');
+                } else {
+                    hiddenTeammateIds.add(tid);
+                    chip.classList.add('inactive');
+                }
+                calendar.refetchEvents();
+            });
+        }
+    }
 
     // Close popup on outside click
     document.addEventListener('click', function (e) {
