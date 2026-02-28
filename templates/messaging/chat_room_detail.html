@@ -1042,6 +1042,146 @@
         }
     }
 
+    // ── AI Chat File Analysis ─────────────────────────────────────────────────
+
+    function analyzeChatFile(fileId, filename) {
+        const panel = document.getElementById('chat-ai-result-' + fileId);
+        const btn = document.querySelector('#chat-file-row-' + fileId + ' .ai-analyze-chat-btn');
+
+        panel.style.display = 'block';
+        panel.innerHTML = `<div class="d-flex align-items-center text-muted mt-1">
+            <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+            <small>Analyzing <strong>${chatEscHtml(filename)}</strong>…</small>
+        </div>`;
+        if (btn) btn.disabled = true;
+
+        fetch(`{% url 'messaging:ai_analyze_chat_file' file_id=0 %}`.replace('0', fileId), {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                'X-Requested-With': 'XMLHttpRequest',
+            }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (btn) btn.disabled = false;
+            if (data.error && !data.summary) {
+                panel.innerHTML = `<div class="alert alert-danger mt-1 mb-0 py-1 small">
+                    <i class="fas fa-exclamation-triangle me-1"></i>${chatEscHtml(data.error)}
+                </div>`;
+                return;
+            }
+            renderChatAiResult(panel, fileId, data);
+        })
+        .catch(err => {
+            if (btn) btn.disabled = false;
+            panel.innerHTML = `<div class="alert alert-danger mt-1 mb-0 py-1 small">Network error: ${err.message}</div>`;
+        });
+    }
+
+    function renderChatAiResult(panel, fileId, data) {
+        const columnsData = JSON.parse(
+            document.getElementById('chatBoardColumnsData').getAttribute('data-columns') || '[]'
+        );
+        const columnOptions = columnsData.map(c =>
+            `<option value="${c.id}">${c.name}</option>`
+        ).join('');
+
+        let tasksHtml = '';
+        if (data.tasks && data.tasks.length > 0) {
+            const taskRows = data.tasks.map((t, i) => `
+                <div class="form-check mb-1">
+                    <input class="form-check-input chat-ai-task-check" type="checkbox"
+                           id="chat-ai-task-${fileId}-${i}" value="${i}" checked>
+                    <label class="form-check-label small" for="chat-ai-task-${fileId}-${i}">
+                        <strong>${chatEscHtml(t.title)}</strong>
+                        <span class="badge bg-${chatPriorityColor(t.priority)} ms-1" style="font-size:0.6rem;">${t.priority}</span>
+                        ${t.description ? `<span class="text-muted"> — ${chatEscHtml(t.description)}</span>` : ''}
+                    </label>
+                </div>`).join('');
+
+            tasksHtml = `<div class="mt-2">
+                <small><strong><i class="fas fa-tasks me-1"></i>Suggested Tasks (${data.tasks.length})</strong></small>
+                <div class="mt-1">${taskRows}</div>
+                <div class="d-flex align-items-center gap-1 mt-1 flex-wrap">
+                    <select class="form-select form-select-sm chat-ai-column-select" style="max-width:180px;">
+                        ${columnOptions}
+                    </select>
+                    <button type="button" class="btn btn-xs btn-success"
+                            onclick="createTasksFromChatFile(${fileId})">
+                        <i class="fas fa-plus me-1"></i>Create Selected
+                    </button>
+                </div>
+                <div class="chat-ai-task-result mt-1"></div>
+            </div>`;
+        } else {
+            tasksHtml = `<p class="text-muted mb-0 mt-1 small"><i class="fas fa-info-circle me-1"></i>No actionable tasks found.</p>`;
+        }
+
+        panel.innerHTML = `
+            <div class="border rounded p-2 bg-white mt-1" style="font-size:0.85rem;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <strong class="text-info"><i class="fas fa-robot me-1"></i>AI Analysis</strong>
+                    <button type="button" class="btn-close btn-sm"
+                            onclick="document.getElementById('chat-ai-result-${fileId}').style.display='none'"
+                            style="font-size:0.6rem;"></button>
+                </div>
+                <p class="mb-0 mt-1 small">${chatEscHtml(data.summary || 'No summary available.')}</p>
+                ${tasksHtml}
+            </div>`;
+    }
+
+    function createTasksFromChatFile(fileId) {
+        const panel = document.getElementById('chat-ai-result-' + fileId);
+        const checks = panel.querySelectorAll('.chat-ai-task-check:checked');
+        const selectedIndices = Array.from(checks).map(c => parseInt(c.value));
+        const columnId = panel.querySelector('.chat-ai-column-select')?.value;
+        const resultDiv = panel.querySelector('.chat-ai-task-result');
+
+        if (selectedIndices.length === 0) {
+            resultDiv.innerHTML = `<div class="alert alert-warning py-1 mb-0 small">Select at least one task.</div>`;
+            return;
+        }
+
+        resultDiv.innerHTML = `<small class="text-muted"><span class="spinner-border spinner-border-sm me-1"></span>Creating…</small>`;
+
+        fetch(`{% url 'messaging:ai_create_tasks_chat_file' file_id=0 %}`.replace('0', fileId), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            },
+            body: JSON.stringify({ task_indices: selectedIndices, column_id: columnId ? parseInt(columnId) : null })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                resultDiv.innerHTML = `<div class="alert alert-danger py-1 mb-0 small">${chatEscHtml(data.error)}</div>`;
+                return;
+            }
+            const links = data.created.map(t =>
+                `<a href="${t.url}" target="_blank" class="me-1 small">${chatEscHtml(t.title)}</a>`
+            ).join('');
+            resultDiv.innerHTML = `<div class="alert alert-success py-1 mb-0 small">
+                <i class="fas fa-check me-1"></i>${data.created.length} task(s) created in <strong>${chatEscHtml(data.column_name)}</strong>: ${links}
+            </div>`;
+            checks.forEach(c => { c.disabled = true; c.checked = false; });
+        })
+        .catch(err => {
+            resultDiv.innerHTML = `<div class="alert alert-danger py-1 mb-0 small">Error: ${err.message}</div>`;
+        });
+    }
+
+    function chatPriorityColor(p) {
+        return { high: 'danger', medium: 'warning text-dark', low: 'secondary' }[p] || 'secondary';
+    }
+
+    function chatEscHtml(str) {
+        const d = document.createElement('div');
+        d.textContent = str || '';
+        return d.innerHTML;
+    }
+
     // Initialize event listeners after DOM is loaded
     document.addEventListener('DOMContentLoaded', function() {
         // Update message count when modal opens
@@ -1550,14 +1690,24 @@ function aiConfirmCreateTasks() {
                     <ul class="list-unstyled">
                         {% for file in chat_room.file_attachments.all %}
                             {% if not file.is_deleted %}
-                                <li class="mb-2 p-2 bg-light rounded">
+                                <li class="mb-2 p-2 bg-light rounded" id="chat-file-row-{{ file.id }}">
                                     <div class="d-flex justify-content-between align-items-start">
                                         <div class="flex-grow-1">
-                                            <div>
+                                            <div class="d-flex align-items-center flex-wrap gap-1">
                                                 <i class="fas {{ file.get_file_icon }} me-1"></i>
                                                 <a href="{% url 'messaging:download_chat_room_file' file_id=file.id %}" target="_blank" class="text-decoration-none">
                                                     {{ file.filename }}
                                                 </a>
+                                                {% if file.file_type|lower in "pdf,docx,txt,doc" %}
+                                                    <button type="button"
+                                                            class="btn btn-xs btn-outline-info ai-analyze-chat-btn"
+                                                            onclick="analyzeChatFile({{ file.id }}, '{{ file.filename|escapejs }}')"
+                                                            title="AI: summarize and extract tasks">
+                                                        <i class="fas fa-robot"></i>
+                                                    </button>
+                                                {% else %}
+                                                    <span class="badge bg-secondary" title="AI analysis only supports PDF, DOCX and TXT" style="font-size:0.65rem;">AI N/A</span>
+                                                {% endif %}
                                             </div>
                                             <small class="text-muted d-block">
                                                 By {{ file.uploaded_by.username }} • {{ file.file_size|filesizeformat }}
@@ -1565,6 +1715,8 @@ function aiConfirmCreateTasks() {
                                             {% if file.description %}
                                                 <small class="text-muted">{{ file.description }}</small>
                                             {% endif %}
+                                            <!-- AI result panel -->
+                                            <div id="chat-ai-result-{{ file.id }}" class="chat-ai-file-result" style="display:none;"></div>
                                         </div>
                                         {% if user == file.uploaded_by or user == chat_room.created_by or user.is_staff %}
                                             <button type="button" class="btn btn-sm btn-link text-danger" onclick="deleteFile({{ file.id }}, '{{ file.filename }}')">
@@ -1579,6 +1731,10 @@ function aiConfirmCreateTasks() {
                 {% else %}
                     <p class="text-muted small">No files yet</p>
                 {% endif %}
+            </div>
+            <!-- Hidden: board columns data for task creation -->
+            <div id="chatBoardColumnsData" style="display:none;"
+                 data-columns='[{% for col in board_columns %}{"id":{{ col.id }},"name":"{{ col.name|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]'>
             </div>
         </div>
 

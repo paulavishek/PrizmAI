@@ -65,7 +65,17 @@ class AIAssistantMessage(models.Model):
     
     # Context tracking
     context_data = models.JSONField(default=dict, blank=True, help_text="Context used to generate response")
-    
+
+    # File attachment reference (optional — set when a file was analysed in this turn)
+    attachment = models.ForeignKey(
+        'AIAssistantAttachment',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='messages',
+        help_text='File attachment that was analysed in this message turn',
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
@@ -240,3 +250,46 @@ class UserPreference(models.Model):
     
     def __str__(self):
         return f"Preferences for {self.user.username}"
+
+
+class AIAssistantAttachment(models.Model):
+    """
+    File attachment uploaded to a Spectra (AI Assistant) session.
+    The extracted text is cached at upload time so subsequent questions
+    in the same session can reference the document without re-parsing.
+    """
+    ALLOWED_FILE_TYPES = ['pdf', 'docx', 'doc', 'txt']
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
+
+    session = models.ForeignKey(
+        AIAssistantSession,
+        on_delete=models.CASCADE,
+        related_name='attachments',
+    )
+    uploaded_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='ai_assistant_uploads',
+    )
+    file = models.FileField(upload_to='ai_assistant/%Y/%m/%d/')
+    filename = models.CharField(max_length=255)
+    file_size = models.BigIntegerField(help_text='File size in bytes')
+    file_type = models.CharField(max_length=10, help_text='File extension without dot')
+
+    # Cached extraction — populated at upload time
+    extracted_text = models.TextField(
+        blank=True,
+        default='',
+        help_text='Text extracted from the file at upload time',
+    )
+
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-uploaded_at']
+
+    def __str__(self):
+        return f'{self.filename} (session {self.session_id})'
+
+    def is_valid_type(self):
+        return self.file_type.lower() in self.ALLOWED_FILE_TYPES

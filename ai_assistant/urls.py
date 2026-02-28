@@ -11,6 +11,8 @@ urlpatterns = [
     
     # API endpoints
     path('api/send-message/', views.send_message, name='send_message'),
+    path('api/upload-attachment/', views.upload_attachment, name='upload_attachment'),
+    path('api/attachment/<int:attachment_id>/remove/', views.remove_attachment, name='remove_attachment'),
     path('api/sessions/', views.get_sessions, name='get_sessions'),
     path('api/session/<int:session_id>/messages/', views.get_session_messages, name='get_session_messages'),
     path('api/sessions/<int:session_id>/rename/', views.rename_session, name='rename_session'),

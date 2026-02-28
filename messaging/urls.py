@@ -46,6 +46,8 @@ urlpatterns = [
     path('room/<int:room_id>/files/list/', views.list_chat_room_files, name='list_chat_room_files'),
     path('file/<int:file_id>/download/', views.download_chat_room_file, name='download_chat_room_file'),
     path('file/<int:file_id>/delete/', views.delete_chat_room_file, name='delete_chat_room_file'),
+    path('file/<int:file_id>/ai-analyze/', ai_views.analyze_chat_attachment, name='ai_analyze_chat_file'),
+    path('file/<int:file_id>/ai-create-tasks/', ai_views.create_tasks_from_chat_attachment, name='ai_create_tasks_chat_file'),
 
     # AI Features (Thread Summary & Task Extraction)
     path('room/<int:room_id>/ai/summarize/', ai_views.summarize_thread, name='ai_summarize_thread'),

@@ -1335,6 +1335,7 @@ def task_detail(request, task_id):
         'total_time_logged': total_time_logged,
         'is_demo_mode': False,
         'is_demo_board': False,
+        'board_columns': Column.objects.filter(board=board).order_by('position'),
     })
 
 @login_required
@@ -3542,6 +3543,178 @@ def list_task_files(request, task_id):
     return JsonResponse({
         'success': True,
         'files': list(files)
+    })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AI file analysis endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+@require_http_methods(["POST"])
+def analyze_task_file(request, file_id):
+    """
+    POST /tasks/files/<file_id>/ai-analyze/
+    Run AI analysis on a task attachment (PDF, DOCX, TXT only).
+    Stores results on the TaskFile record and returns them as JSON.
+    """
+    from api.ai_usage_utils import check_ai_quota, track_ai_request
+    import time as _time
+
+    file_obj = get_object_or_404(TaskFile, id=file_id)
+
+    if file_obj.is_deleted():
+        return JsonResponse({'error': 'File has been deleted.'}, status=404)
+
+    # Quota check
+    has_quota, quota, _ = check_ai_quota(request.user)
+    if not has_quota:
+        return JsonResponse({
+            'error': 'AI usage quota exceeded. Please wait for your quota to reset.',
+            'quota_exceeded': True,
+        }, status=429)
+
+    start = _time.time()
+
+    from kanban.utils.file_ai_utils import analyze_attachment, AI_SUPPORTED_TYPES
+
+    ft = file_obj.file_type.lower()
+    if ft not in AI_SUPPORTED_TYPES:
+        return JsonResponse({
+            'error': (
+                f'AI analysis is only available for PDF, DOCX, and TXT files. '
+                f'This file is {file_obj.file_type.upper()}.'
+            ),
+            'unsupported_type': True,
+        }, status=400)
+
+    try:
+        file_path = file_obj.file.path
+    except Exception:
+        return JsonResponse({'error': 'File not found on disk.'}, status=404)
+
+    result = analyze_attachment(file_path, ft, filename=file_obj.filename)
+
+    if result.get('error') and not result.get('summary'):
+        return JsonResponse({'error': result['error']}, status=500)
+
+    # Persist results
+    file_obj.ai_summary = result.get('summary', '')
+    file_obj.ai_tasks_suggested = result.get('tasks', [])
+    file_obj.ai_analyzed_at = timezone.now()
+    file_obj.save(update_fields=['ai_summary', 'ai_tasks_suggested', 'ai_analyzed_at'])
+
+    elapsed_ms = int((_time.time() - start) * 1000)
+    try:
+        track_ai_request(
+            user=request.user,
+            feature='file_analysis',
+            request_type='analyze_task_file',
+            board_id=file_obj.task.column.board.id,
+            success=True,
+            response_time_ms=elapsed_ms,
+        )
+    except Exception:
+        pass
+
+    return JsonResponse({
+        'success': True,
+        'summary': file_obj.ai_summary,
+        'tasks': file_obj.ai_tasks_suggested,
+        'analyzed_at': file_obj.ai_analyzed_at.isoformat(),
+        'warning': result.get('error'),  # partial failure (e.g. had summary but no tasks)
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def create_tasks_from_task_file(request, file_id):
+    """
+    POST /tasks/files/<file_id>/ai-create-tasks/
+    Body (JSON): {"task_indices": [0, 2], "column_id": 5}
+    Creates confirmed tasks from ai_tasks_suggested on the TaskFile.
+    """
+    file_obj = get_object_or_404(TaskFile, id=file_id)
+
+    if file_obj.is_deleted():
+        return JsonResponse({'error': 'File has been deleted.'}, status=404)
+
+    if not file_obj.ai_tasks_suggested:
+        return JsonResponse({'error': 'No AI-suggested tasks found. Please run AI analysis first.'}, status=400)
+
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'error': 'Invalid JSON body.'}, status=400)
+
+    task_indices = data.get('task_indices', [])
+    column_id = data.get('column_id')
+
+    if not task_indices:
+        return JsonResponse({'error': 'No tasks selected.'}, status=400)
+
+    board = file_obj.task.column.board
+
+    # Resolve target column
+    if column_id:
+        column = get_object_or_404(Column, id=column_id, board=board)
+    else:
+        column = (
+            Column.objects.filter(board=board, name__icontains='to do').first()
+            or Column.objects.filter(board=board, name__icontains='todo').first()
+            or Column.objects.filter(board=board).order_by('position').first()
+        )
+
+    if not column:
+        return JsonResponse({'error': 'No columns found on this board.'}, status=400)
+
+    valid_priorities = {'low', 'medium', 'high'}
+    suggested = file_obj.ai_tasks_suggested
+    created_tasks = []
+
+    for idx in task_indices:
+        try:
+            task_data = suggested[int(idx)]
+        except (IndexError, ValueError, TypeError):
+            continue
+
+        title = str(task_data.get('title', '')).strip()[:200]
+        if not title:
+            continue
+
+        priority = task_data.get('priority', 'medium').lower()
+        if priority not in valid_priorities:
+            priority = 'medium'
+
+        last_pos = (
+            Task.objects.filter(column=column)
+            .order_by('-position')
+            .values_list('position', flat=True)
+            .first()
+        )
+        next_pos = (last_pos + 1) if last_pos is not None else 0
+
+        task = Task.objects.create(
+            title=title,
+            description=str(task_data.get('description', '')).strip(),
+            priority=priority,
+            column=column,
+            created_by=request.user,
+            position=next_pos,
+        )
+
+        try:
+            from django.urls import reverse
+            task_url = reverse('task_detail', args=[task.id])
+        except Exception:
+            task_url = f'/tasks/{task.id}/'
+
+        created_tasks.append({'id': task.id, 'title': task.title, 'url': task_url})
+
+    return JsonResponse({
+        'created': created_tasks,
+        'board_name': board.name,
+        'column_name': column.name,
     })
 
 

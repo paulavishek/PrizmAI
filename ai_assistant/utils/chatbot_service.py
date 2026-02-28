@@ -2947,7 +2947,7 @@ Format responses clearly with:
 - Specific numbers and metrics
 - Actionable recommendations"""
     
-    def get_response(self, prompt, use_cache=True):
+    def get_response(self, prompt, use_cache=True, file_context=None):
         """
         Get response from chatbot using Gemini in STATELESS mode.
         Each request is completely independent to prevent token accumulation.
@@ -2957,6 +2957,9 @@ Format responses clearly with:
         Args:
             prompt (str): User message
             use_cache (bool): Use cached data for context building (NOT for AI responses)
+            file_context (str|None): Pre-extracted text from an attached file (session-scoped).
+                When provided it is injected as the first context block so Gemini can
+                answer questions about the document in addition to the project data.
             
         Returns:
             dict: Response with content, source, and metadata
@@ -3002,6 +3005,11 @@ Format responses clearly with:
             
             # Build context in priority order
             context_parts = []
+
+            # 0. Attached document context (highest priority — user is querying this document)
+            if file_context:
+                context_parts.append(file_context)
+                logger.debug('Added attached file context')
             
             # 1. Wiki context (documentation, guides, best practices)
             if is_wiki_query:

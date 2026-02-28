@@ -9,7 +9,7 @@ from django.core.files.storage import default_storage
 from django.utils import timezone
 import os
 
-from kanban.models import Board, Task
+from kanban.models import Board, Task, Column
 from .models import ChatRoom, ChatMessage, TaskThreadComment, Notification, FileAttachment
 from .forms import ChatRoomForm, ChatMessageForm, TaskThreadCommentForm, MentionForm, ChatRoomFileForm
 
@@ -123,11 +123,14 @@ def chat_room_detail(request, room_id):
         Q(read_by=request.user) | Q(author=request.user)
     ).values_list('id', flat=True))
     
+    board_columns = Column.objects.filter(board=chat_room.board).order_by('position')
+
     context = {
         'chat_room': chat_room,
         'chat_messages': chat_messages,
         'form': form,
         'read_message_ids': read_message_ids,
+        'board_columns': board_columns,
     }
     return render(request, 'messaging/chat_room_detail.html', context)
 

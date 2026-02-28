@@ -610,12 +610,32 @@
         
         <!-- Input Area -->
         <div class="chat-input-area">
+            <!-- Active file badge (shown when a file is attached to this session) -->
+            <div id="active-file-badge" style="display:none; padding: 4px 12px; background:#e8f4fd; border-radius:6px 6px 0 0; border:1px solid #bee5eb; border-bottom:none; font-size:0.82rem; color:#0c5460; display:none; align-items:center; gap:6px;">
+                <i class="fas fa-paperclip text-info"></i>
+                <span id="active-file-name" class="fw-semibold"></span>
+                <small class="text-muted">(active for this session)</small>
+                <button type="button" class="btn-close ms-auto" style="font-size:0.65rem;" onclick="removeActiveAttachment()" title="Remove file attachment"></button>
+            </div>
             <div class="input-group">
-                <input type="text" id="chat-input" class="form-control" placeholder="Ask about your projects, tasks, risks, resources..." style="border-radius: 20px;">
+                <!-- Hidden file input -->
+                <input type="file" id="spectra-file-input" style="display:none;"
+                       accept=".pdf,.txt,.doc,.docx"
+                       onchange="handleSpectraFileSelect(this)">
+                <!-- Paperclip button -->
+                <button type="button" class="btn btn-outline-secondary" id="attach-file-btn"
+                        onclick="document.getElementById('spectra-file-input').click()"
+                        title="Attach a PDF, DOCX or TXT file to analyze"
+                        style="border-radius:20px 0 0 20px; border-right:none;">
+                    <i class="fas fa-paperclip"></i>
+                </button>
+                <input type="text" id="chat-input" class="form-control" placeholder="Ask about your projects, tasks, risks, resources..." style="border-radius: 0; border-left:none;">
                 <button class="btn-send" id="send-btn" onclick="sendMessage()">
                     <i class="fas fa-paper-plane"></i>
                 </button>
             </div>
+            <!-- Upload progress indicator -->
+            <div id="spectra-upload-status" style="display:none; font-size:0.8rem; padding:2px 8px;" class="text-muted"></div>
         </div>
         {% else %}
         <!-- No Session State - Prompt user to create a new chat -->
@@ -798,6 +818,97 @@
         container.scrollTop = container.scrollHeight;
     }
     
+    // ── Spectra file attachment ───────────────────────────────────────────────
+
+    // Tracks the currently active attachment for this session
+    let activeAttachmentId = null;
+    let activeAttachmentName = null;
+
+    function handleSpectraFileSelect(input) {
+        const file = input.files[0];
+        if (!file) return;
+
+        const statusEl = document.getElementById('spectra-upload-status');
+        const attachBtn = document.getElementById('attach-file-btn');
+
+        statusEl.style.display = 'block';
+        statusEl.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>Uploading ${file.name}…`;
+        attachBtn.disabled = true;
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('session_id', sessionId);
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+        fetch('{% url "ai_assistant:upload_attachment" %}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
+            body: formData,
+        })
+        .then(r => r.json())
+        .then(data => {
+            attachBtn.disabled = false;
+            input.value = '';  // reset so same file can be re-selected
+
+            if (data.error) {
+                statusEl.innerHTML = `<span class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>${spectraEscHtml(data.error)}</span>`;
+                setTimeout(() => { statusEl.style.display = 'none'; }, 5000);
+                return;
+            }
+
+            // Set session-active attachment
+            activeAttachmentId = data.attachment_id;
+            activeAttachmentName = data.filename;
+            updateActiveFileBadge();
+
+            statusEl.innerHTML = `<span class="text-success"><i class="fas fa-check me-1"></i>${spectraEscHtml(data.filename)} uploaded.${data.text_extracted ? ' Text extracted ✓' : ' (Text extraction failed — AI will note this.)'}</span>`;
+            setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
+        })
+        .catch(err => {
+            attachBtn.disabled = false;
+            input.value = '';
+            statusEl.innerHTML = `<span class="text-danger">Upload failed: ${err.message}</span>`;
+            setTimeout(() => { statusEl.style.display = 'none'; }, 5000);
+        });
+    }
+
+    function updateActiveFileBadge() {
+        const badge = document.getElementById('active-file-badge');
+        const nameEl = document.getElementById('active-file-name');
+        if (activeAttachmentId) {
+            nameEl.textContent = activeAttachmentName;
+            badge.style.display = 'flex';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
+
+    function removeActiveAttachment() {
+        if (!activeAttachmentId) return;
+
+        fetch(`{% url "ai_assistant:remove_attachment" attachment_id=0 %}`.replace('0', activeAttachmentId), {
+            method: 'POST',
+            headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
+        })
+        .then(() => {
+            activeAttachmentId = null;
+            activeAttachmentName = null;
+            updateActiveFileBadge();
+        })
+        .catch(() => {
+            // Even if the server call fails, clear locally
+            activeAttachmentId = null;
+            activeAttachmentName = null;
+            updateActiveFileBadge();
+        });
+    }
+
+    function spectraEscHtml(str) {
+        const d = document.createElement('div');
+        d.textContent = str || '';
+        return d.innerHTML;
+    }
+
     // Send message
     function sendMessage() {
         // Check if there's an active session
@@ -821,18 +932,24 @@
         typing.innerHTML = '<div class="typing-indicator"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>';
         container.appendChild(typing);
         
-        // Send to server (removed board_id since board selector was removed)
+        const payload = {
+            message: message,
+            session_id: sessionId,
+            // Note: history removed - each request is stateless to prevent token accumulation
+        };
+        // Include active attachment if present (session-scoped persistence)
+        if (activeAttachmentId) {
+            payload.attachment_id = activeAttachmentId;
+        }
+
+        // Send to server
         fetch('{% url "ai_assistant:send_message" %}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
             },
-            body: JSON.stringify({
-                message: message,
-                session_id: sessionId,
-                // Note: history removed - each request is stateless to prevent token accumulation
-            })
+            body: JSON.stringify(payload)
         })
         .then(r => r.json())
         .then(data => {
@@ -848,6 +965,14 @@
                     badge.className = 'search-badge';
                     badge.innerHTML = '<i class="fas fa-globe"></i> Web search used';
                     document.querySelector('.chat-messages > :last-child').appendChild(badge);
+                }
+
+                // Show file chip if a document was in context
+                if (data.active_attachment) {
+                    const chip = document.createElement('div');
+                    chip.style.cssText = 'font-size:0.75rem;color:#666;margin-top:4px;';
+                    chip.innerHTML = `<i class="fas fa-paperclip me-1 text-info"></i><em>${spectraEscHtml(data.active_attachment.filename)}</em> was in context`;
+                    document.querySelector('.chat-messages > :last-child').appendChild(chip);
                 }
             } else if (data.error) {
                 addMessageToUI('assistant', `Error: ${data.error}`);

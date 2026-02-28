@@ -272,6 +272,11 @@ class FileAttachment(models.Model):
     description = models.TextField(blank=True, null=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     deleted_at = models.DateTimeField(blank=True, null=True)  # Soft delete
+
+    # AI analysis fields
+    ai_summary = models.TextField(blank=True, default='', help_text="AI-generated summary of file contents")
+    ai_tasks_suggested = models.JSONField(default=list, blank=True, help_text="AI-suggested tasks extracted from file")
+    ai_analyzed_at = models.DateTimeField(null=True, blank=True, help_text="When AI last analyzed this file")
     
     class Meta:
         ordering = ['-uploaded_at']

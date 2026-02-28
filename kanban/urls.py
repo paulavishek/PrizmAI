@@ -228,6 +228,8 @@ urlpatterns = [
     path('tasks/<int:task_id>/files/list/', views.list_task_files, name='list_task_files'),
     path('files/<int:file_id>/download/', views.download_task_file, name='download_task_file'),
     path('files/<int:file_id>/delete/', views.delete_task_file, name='delete_task_file'),
+    path('files/<int:file_id>/ai-analyze/', views.analyze_task_file, name='analyze_task_file'),
+    path('files/<int:file_id>/ai-create-tasks/', views.create_tasks_from_task_file, name='create_tasks_from_task_file'),
     
     # Retrospective URLs
     path('', include('kanban.retrospective_urls')),

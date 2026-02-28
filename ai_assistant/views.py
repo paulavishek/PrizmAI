@@ -17,6 +17,7 @@ from .models import (
     AIAssistantAnalytics,
     AITaskRecommendation,
     UserPreference,
+    AIAssistantAttachment,
 )
 from .forms import AISessionForm, UserPreferenceForm
 from .utils.chatbot_service import TaskFlowChatbotService
@@ -188,6 +189,7 @@ def send_message(request):
             except (ValueError, TypeError):
                 board_id = None
         refresh_data = data.get('refresh_data', False)
+        attachment_id = data.get('attachment_id')  # optional file reference
         # Note: history is no longer used - each AI request is stateless to prevent token accumulation
         
         if not message_text:
@@ -198,6 +200,38 @@ def send_message(request):
             session = AIAssistantSession.objects.get(id=session_id, user=request.user)
         except AIAssistantSession.DoesNotExist:
             return JsonResponse({'error': 'Session not found'}, status=404)
+        
+        # ── Resolve file context ─────────────────────────────────────────────
+        # Priority: explicitly passed attachment_id > most recent session attachment
+        active_attachment = None
+        file_context = None
+
+        if attachment_id:
+            try:
+                active_attachment = AIAssistantAttachment.objects.get(
+                    id=attachment_id, uploaded_by=request.user, session=session
+                )
+            except AIAssistantAttachment.DoesNotExist:
+                return JsonResponse({'error': 'Attachment not found or access denied.'}, status=404)
+        else:
+            # Session-level persistence: use the most recent attachment for this session
+            active_attachment = (
+                AIAssistantAttachment.objects
+                .filter(session=session, uploaded_by=request.user)
+                .order_by('-uploaded_at')
+                .first()
+            )
+
+        if active_attachment and active_attachment.extracted_text.strip():
+            MAX_FILE_CHARS = 12_000
+            text = active_attachment.extracted_text[:MAX_FILE_CHARS]
+            if len(active_attachment.extracted_text) > MAX_FILE_CHARS:
+                text += f'\n\n[... Content truncated — showing first {MAX_FILE_CHARS:,} characters ...]'
+            file_context = (
+                f'[Attached Document — {active_attachment.filename}]\n'
+                f'{text}\n'
+                f'[End of Document]\n'
+            )
         
         # Get board context if specified
         board = None
@@ -210,7 +244,8 @@ def send_message(request):
         user_message = AIAssistantMessage.objects.create(
             session=session,
             role='user',
-            content=message_text
+            content=message_text,
+            attachment=active_attachment,
         )
         
         # Get response from chatbot service
@@ -218,7 +253,8 @@ def send_message(request):
         chatbot = TaskFlowChatbotService(user=request.user, board=board)
         response = chatbot.get_response(
             message_text,
-            use_cache=not refresh_data
+            use_cache=not refresh_data,
+            file_context=file_context,
         )
         
         # Save assistant message
@@ -230,7 +266,8 @@ def send_message(request):
             tokens_used=response.get('tokens', 0),
             used_web_search=response.get('used_web_search', False),
             search_sources=response.get('search_sources', []),
-            context_data=response.get('context', {})
+            context_data=response.get('context', {}),
+            attachment=active_attachment,
         )
         
         # Update session message count
@@ -308,6 +345,10 @@ def send_message(request):
             'source': response.get('source', 'gemini'),
             'used_web_search': response.get('used_web_search', False),
             'search_sources': response.get('search_sources', []),
+            'active_attachment': {
+                'id': active_attachment.id,
+                'filename': active_attachment.filename,
+            } if active_attachment else None,
             'ai_usage': {
                 'remaining': remaining,
                 'used': quota.requests_used + 1 if quota else 0
@@ -336,6 +377,99 @@ def send_message(request):
         except Exception as track_error:
             print(f"Error tracking failed AI request: {track_error}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Spectra file attachment
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def upload_attachment(request):
+    """
+    POST /ai-assistant/api/upload-attachment/
+    Accepts multipart/form-data: file + session_id.
+    Extracts text and stores in AIAssistantAttachment for session-scoped Q&A.
+    Returns: {attachment_id, filename, file_size, file_type}
+    """
+    import os
+
+    session_id = request.POST.get('session_id')
+    if not session_id:
+        return JsonResponse({'error': 'session_id is required.'}, status=400)
+
+    try:
+        session = AIAssistantSession.objects.get(id=session_id, user=request.user)
+    except AIAssistantSession.DoesNotExist:
+        return JsonResponse({'error': 'Session not found.'}, status=404)
+
+    uploaded_file = request.FILES.get('file')
+    if not uploaded_file:
+        return JsonResponse({'error': 'No file provided.'}, status=400)
+
+    # Validate file type
+    raw_name = uploaded_file.name or ''
+    ext = raw_name.rsplit('.', 1)[-1].lower() if '.' in raw_name else ''
+    if ext not in AIAssistantAttachment.ALLOWED_FILE_TYPES:
+        return JsonResponse({
+            'error': (
+                f'Unsupported file type ".{ext}". '
+                'Spectra accepts PDF, DOCX, DOC and TXT files only.'
+            )
+        }, status=400)
+
+    # Validate size
+    if uploaded_file.size > AIAssistantAttachment.MAX_FILE_SIZE:
+        return JsonResponse({
+            'error': f'File exceeds the 10 MB limit ({uploaded_file.size // (1024*1024)} MB).'
+        }, status=400)
+
+    # Save the file record first (Django saves the file to disk on create)
+    attachment = AIAssistantAttachment.objects.create(
+        session=session,
+        uploaded_by=request.user,
+        file=uploaded_file,
+        filename=raw_name[:255],
+        file_size=uploaded_file.size,
+        file_type=ext,
+    )
+
+    # Extract text and cache it
+    try:
+        from wiki.ai_utils import extract_text_from_file
+        text = extract_text_from_file(attachment.file.path, ext)
+        if text and text.strip():
+            attachment.extracted_text = text
+            attachment.save(update_fields=['extracted_text'])
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning(
+            'Could not extract text from Spectra attachment %s: %s', attachment.id, exc
+        )
+        # Don't fail the upload — text extraction failure is non-fatal;
+        # the AI will simply receive an empty context block.
+
+    return JsonResponse({
+        'attachment_id': attachment.id,
+        'filename': attachment.filename,
+        'file_size': attachment.file_size,
+        'file_type': attachment.file_type,
+        'text_extracted': bool(attachment.extracted_text.strip()),
+    })
+
+
+@login_required
+@require_POST
+def remove_attachment(request, attachment_id):
+    """
+    POST /ai-assistant/api/attachment/<id>/remove/
+    Removes a Spectra session attachment.
+    """
+    attachment = get_object_or_404(
+        AIAssistantAttachment, id=attachment_id, uploaded_by=request.user
+    )
+    attachment.delete()
+    return JsonResponse({'success': True})
 
 
 @login_required
