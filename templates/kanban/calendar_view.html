@@ -219,10 +219,10 @@
           <div class="col-md-6">
             <label class="form-label fw-semibold">Event Type</label>
             <select class="form-select" id="bc-event-type">
-              <option value="meeting">Meeting</option>
-              <option value="reminder">Reminder</option>
-              <option value="deadline">Deadline</option>
-              <option value="other">Other</option>
+              <option value="meeting">🤝 Meeting</option>
+              <option value="out_of_office">🏖 Out of Office</option>
+              <option value="busy_block">🔴 Busy Block</option>
+              <option value="team_event">🏟 Team Event</option>
             </select>
           </div>
           <div class="col-md-6 d-flex align-items-end">
@@ -252,7 +252,7 @@
             <input type="date" class="form-control" id="bc-event-end-date">
           </div>
         </div>
-        <div class="mb-3">
+        <div class="mb-3" id="bc-event-location-row">
           <label class="form-label fw-semibold">Location</label>
           <input type="text" class="form-control" id="bc-event-location" placeholder="Room, Zoom link, etc.">
         </div>
@@ -260,7 +260,7 @@
           <label class="form-label fw-semibold">Description</label>
           <textarea class="form-control" id="bc-event-description" rows="2"></textarea>
         </div>
-        <div class="mb-3">
+        <div class="mb-3" id="bc-event-participants-row">
           <label class="form-label fw-semibold">Participants</label>
           <select class="form-select" id="bc-event-participants" multiple style="height:90px;"></select>
           <small class="text-muted">Hold Ctrl/Cmd to select multiple.</small>
@@ -491,6 +491,23 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('bc-event-datetime-row').style.display = allDay ? 'none' : '';
         document.getElementById('bc-event-allday-row').style.display   = allDay ? '' : 'none';
     });
+
+    // Event type change: hide participants + location for solo types
+    const BC_SOLO_TYPES = new Set(['out_of_office', 'busy_block']);
+    function bcApplyTypeFields(type) {
+        const isSolo = BC_SOLO_TYPES.has(type);
+        document.getElementById('bc-event-participants-row').style.display = isSolo ? 'none' : '';
+        document.getElementById('bc-event-location-row').style.display    = isSolo ? 'none' : '';
+        if (type === 'out_of_office') {
+            document.getElementById('bc-event-all-day').checked = true;
+            document.getElementById('bc-event-datetime-row').style.display = 'none';
+            document.getElementById('bc-event-allday-row').style.removeProperty('display');
+        }
+    }
+    document.getElementById('bc-event-type').addEventListener('change', function() {
+        bcApplyTypeFields(this.value);
+    });
+    bcApplyTypeFields('meeting');  // init
 
         // Save Event
     document.getElementById('bc-btn-save-event').addEventListener('click', function() {

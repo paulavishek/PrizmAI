@@ -114,9 +114,9 @@
         <span class="small"><span class="badge" style="background:#198754;">●</span> Low</span>
         <span class="ms-3 small text-muted me-1">Events:</span>
         <span class="small"><span class="badge" style="background:#6f42c1;">●</span> Meeting</span>
-        <span class="small"><span class="badge" style="background:#0dcaf0; color:#000;">●</span> Reminder</span>
-        <span class="small"><span class="badge" style="background:#e83e8c;">●</span> Deadline</span>
-        <span class="small"><span class="badge" style="background:#20c997;">●</span> Other</span>
+        <span class="small"><span class="badge" style="background:#f59e0b;">●</span> Out of Office</span>
+        <span class="small"><span class="badge" style="background:#64748b;">●</span> Busy Block</span>
+        <span class="small"><span class="badge" style="background:#0284c7;">●</span> Team Event</span>
     </div>
     <!-- Teammate colour legend (built by JS) -->
     <div class="d-flex flex-wrap gap-2 align-items-center mb-3" id="teammate-legend" style="font-size:0.8rem;">
@@ -220,30 +220,46 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title"><i class="fas fa-calendar-plus me-2" style="color:#6f42c1"></i>Schedule Event</h5>
+        <h5 class="modal-title" id="createEventModalLabel">
+          <i class="fas fa-calendar-plus me-2" style="color:#6f42c1"></i>Schedule Event
+        </h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <div id="event-form-error" class="alert alert-danger d-none"></div>
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
-          <input type="text" class="form-control" id="event-title" placeholder="Event title…">
-        </div>
+
+        <!-- Type row (determines which fields are shown below) -->
         <div class="row g-2 mb-3">
           <div class="col-md-6">
             <label class="form-label fw-semibold">Event Type</label>
             <select class="form-select" id="event-type">
-              <option value="meeting">Meeting</option>
-              <option value="reminder">Reminder</option>
-              <option value="deadline">Deadline</option>
-              <option value="other">Other</option>
+              <option value="meeting">🤝 Meeting</option>
+              <option value="out_of_office">🏖 Out of Office</option>
+              <option value="busy_block">🔴 Busy Block</option>
+              <option value="team_event">🏟 Team Event</option>
             </select>
           </div>
-          <div class="col-md-6 d-flex align-items-end">
-            <div class="form-check mb-2">
-              <input class="form-check-input" type="checkbox" id="event-all-day">
-              <label class="form-check-label" for="event-all-day">All Day</label>
-            </div>
+          <div class="col-md-6">
+            <label class="form-label fw-semibold">Visibility</label>
+            <select class="form-select" id="event-visibility">
+              <option value="team">Team can see I’m busy</option>
+              <option value="private">🔒 Private (only me)</option>
+            </select>
+            <small class="text-muted" id="event-visibility-hint" style="font-size:0.78rem;">Teammates see you’re blocked but not the reason.</small>
+          </div>
+        </div>
+
+        <!-- Title -->
+        <div class="mb-3">
+          <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="event-title" placeholder="Event title…">
+        </div>
+
+        <!-- All-day toggle + Date/Time -->
+        <div class="mb-2">
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" id="event-all-day">
+            <label class="form-check-label" for="event-all-day">All Day</label>
           </div>
         </div>
         <div class="row g-2 mb-3" id="event-datetime-row">
@@ -258,7 +274,7 @@
         </div>
         <div class="row g-2 mb-3" id="event-allday-row" style="display:none!important">
           <div class="col-md-6">
-            <label class="form-label fw-semibold">Date <span class="text-danger">*</span></label>
+            <label class="form-label fw-semibold">Start Date <span class="text-danger">*</span></label>
             <input type="date" class="form-control" id="event-start-date">
           </div>
           <div class="col-md-6">
@@ -266,22 +282,38 @@
             <input type="date" class="form-control" id="event-end-date">
           </div>
         </div>
-        <div class="mb-3">
+
+        <!-- Linked Task (Busy Block only) -->
+        <div class="mb-3" id="event-linked-task-row" style="display:none;">
+          <label class="form-label fw-semibold">Linked Task <span class="text-muted fw-normal small">(optional)</span></label>
+          <select class="form-select" id="event-linked-task">
+            <option value="">— None (show generic busy) —</option>
+          </select>
+          <small class="text-muted">Teammates will see “busy (Task Name)” instead of just “busy”.</small>
+        </div>
+
+        <!-- Location (Meeting / Team Event) -->
+        <div class="mb-3" id="event-location-row">
           <label class="form-label fw-semibold">Location</label>
           <input type="text" class="form-control" id="event-location" placeholder="Room, Zoom link, etc.">
         </div>
+
+        <!-- Description -->
         <div class="mb-3">
           <label class="form-label fw-semibold">Description</label>
           <textarea class="form-control" id="event-description" rows="2" placeholder="Agenda or notes…"></textarea>
         </div>
-        <div class="mb-3">
+
+        <!-- Participants (Meeting / Team Event) -->
+        <div class="mb-3" id="event-participants-row">
           <label class="form-label fw-semibold">Participants</label>
-          <select class="form-select" id="event-participants" multiple style="height:100px;">
-          </select>
+          <select class="form-select" id="event-participants" multiple style="height:100px;"></select>
           <small class="text-muted">Hold Ctrl/Cmd to select multiple</small>
         </div>
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Board (optional)</label>
+
+        <!-- Board (optional, shown for non-OOO/non-busy) -->
+        <div class="mb-3" id="event-board-row">
+          <label class="form-label fw-semibold">Board <span class="text-muted fw-normal small">(optional)</span></label>
           <select class="form-select" id="event-board">
             <option value="">— none —</option>
             {% for b in boards %}
@@ -329,6 +361,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const boardsData      = {{ boards_json|safe }};
     const allParticipants = {{ participants_json|safe }};
     const teammatesData   = {{ teammates_json|safe }};
+    const allTasksData    = {{ all_tasks_json|safe }};
     const CSRF            = '{{ csrf_token }}';
     const EVENTS_URL      = '{% url "unified_calendar_events_api" %}';
     const CREATE_EVENT_URL = '{% url "calendar_create_event" %}';
@@ -343,23 +376,28 @@ document.addEventListener('DOMContentLoaded', function () {
     // ---- Layer/mode event processing ----
     function processEvents(data) {
         let filtered = data;
-        // Apply teammate visibility filter
+        // Apply teammate visibility filter (hides tasks AND status events from that teammate)
         if (hiddenTeammateIds.size > 0) {
             filtered = data.filter(function(e) {
                 const p = e.extendedProps;
-                if (!p || p.layer !== 'teammate') return true;
-                return !hiddenTeammateIds.has(p.assignee_id);
+                if (!p) return true;
+                if (p.layer === 'teammate')        return !hiddenTeammateIds.has(p.assignee_id);
+                if (p.layer === 'teammate_status') return !hiddenTeammateIds.has(p.creator_id);
+                return true;
             });
         }
 
         if (teamViewMode === 'detail') return filtered;
 
-        // Availability mode: aggregate teammate tasks into "busy" blocks
+        // Availability mode: aggregate teammate *tasks* into compact "busy" blocks;
+        // teammate_status CalendarEvents (OOO/Busy Block/Team Event) pass through with
+        // their already-sanitized titles from the server.
         const pass = [];
         const busyMap = {};
         filtered.forEach(function(e) {
             const p = e.extendedProps;
             if (p && p.layer === 'teammate') {
+                // Aggregate task-due-date busy signals
                 const key = `${p.assignee_id}_${e.start}`;
                 if (!busyMap[key]) {
                     busyMap[key] = {
@@ -372,6 +410,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 busyMap[key].count++;
             } else {
+                // 'mine', 'event', 'teammate_status' — always pass through
                 pass.push(e);
             }
         });
@@ -447,13 +486,13 @@ document.addEventListener('DOMContentLoaded', function () {
             info.jsEvent.preventDefault();
             createPopup.style.display = 'none';
             const p = info.event.extendedProps;
+            if (!p || p.source === 'busy') return;  // aggregated busy block — no detail
             const title = info.event.title;
-            const source = p.source;
 
             document.getElementById('detail-title').textContent = title;
 
             let body = '';
-            if (source === 'task') {
+            if (p.source === 'task') {
                 body = `
                     <div><strong>Board:</strong> ${p.board}</div>
                     <div><strong>Column:</strong> ${p.column}</div>
@@ -462,19 +501,34 @@ document.addEventListener('DOMContentLoaded', function () {
                     <div><strong>Progress:</strong> ${p.progress}%</div>
                 `;
                 document.getElementById('detail-open-link').href = info.event.url;
+                document.getElementById('detail-open-link').style.display = '';
+            } else if (p.layer === 'teammate_status') {
+                // Teammate’s status event — show limited info
+                body = `
+                    <div><strong>Type:</strong> ${p.event_type}</div>
+                    ${p.linked_task_title ? `<div><strong>Working on:</strong> ${p.linked_task_title}</div>` : ''}
+                `;
+                document.getElementById('detail-open-link').href = `/calendar/events/${p.event_id}/`;
+                document.getElementById('detail-open-link').style.display = '';
             } else {
+                // My own events — full detail
                 const participants = p.participants && p.participants.length
                     ? p.participants.join(', ')
                     : '(none beyond you)';
+                const privBadge = p.visibility === 'private'
+                    ? '<div class="mt-2"><span class="badge bg-secondary">🔒 Private</span></div>' : '';
                 body = `
                     <div><strong>Type:</strong> ${p.event_type}</div>
                     ${p.board ? `<div><strong>Board:</strong> ${p.board}</div>` : ''}
                     ${p.location ? `<div><strong>Location:</strong> ${p.location}</div>` : ''}
                     ${p.description ? `<div><strong>Notes:</strong> ${p.description}</div>` : ''}
-                    <div><strong>Participants:</strong> ${participants}</div>
-                    <div><strong>Organiser:</strong> ${p.created_by}</div>
+                    ${p.linked_task_title ? `<div><strong>Linked task:</strong> ${p.linked_task_title}</div>` : ''}
+                    ${p.event_type_key === 'meeting' || p.event_type_key === 'team_event'
+                        ? `<div><strong>Participants:</strong> ${participants}</div>` : ''}
+                    ${privBadge}
                 `;
                 document.getElementById('detail-open-link').href = `/calendar/events/${p.event_id}/`;
+                document.getElementById('detail-open-link').style.display = '';
             }
             document.getElementById('detail-body').innerHTML = body;
             new bootstrap.Modal(document.getElementById('detailModal')).show();
@@ -494,12 +548,28 @@ document.addEventListener('DOMContentLoaded', function () {
                     ${p.assignee ? `<br>👤 ${p.assignee}` : ''}
                     <br>⬜ ${p.progress}% complete
                 `;
+            } else if (p.layer === 'teammate_status') {
+                // Sanitized title already contains name + status
+                const icons = {
+                    'out_of_office': '🏖',
+                    'busy_block': '🔴',
+                    'team_event': '🏟',
+                    'meeting': '🤝',
+                };
+                const icon = icons[p.event_type_key] || '🗓';
+                tooltip.innerHTML = `${icon} <strong>${info.event.title}</strong>
+                    ${p.linked_task_title ? `<br>📋 Task: ${p.linked_task_title}` : ''}`;  
             } else {
+                // My own event
+                const privBadge = p.visibility === 'private'
+                    ? '<br><span style="color:#9ca3af;">🔒 Private — only you see this</span>' : '';
                 tooltip.innerHTML = `
                     <strong>${info.event.title}</strong><br>
                     🗓 ${p.event_type}
                     ${p.board ? `<br>📋 ${p.board}` : ''}
                     ${p.location ? `<br>📍 ${p.location}` : ''}
+                    ${p.linked_task_title ? `<br>📋 Task: ${p.linked_task_title}` : ''}
+                    ${privBadge}
                 `;
             }
             tooltip.style.display = 'block';
@@ -682,6 +752,51 @@ document.addEventListener('DOMContentLoaded', function () {
         partSelect.appendChild(opt);
     });
 
+    // Populate linked task dropdown (grouped by board)
+    const linkedTaskSel = document.getElementById('event-linked-task');
+    const tasksByBoard = {};
+    allTasksData.forEach(function(t) {
+        if (!tasksByBoard[t.board_name]) tasksByBoard[t.board_name] = [];
+        tasksByBoard[t.board_name].push(t);
+    });
+    Object.entries(tasksByBoard).forEach(function([boardName, tasks]) {
+        const grp = document.createElement('optgroup');
+        grp.label = boardName;
+        tasks.forEach(function(t) {
+            const o = document.createElement('option');
+            o.value = t.id;
+            o.textContent = t.title;
+            grp.appendChild(o);
+        });
+        linkedTaskSel.appendChild(grp);
+    });
+
+    // ---- Event Type change handler: show/hide contextual fields ----
+    const TYPE_FIELDS = {
+        meeting:       { participants: true,  location: true,  linked_task: false, board: true  },
+        out_of_office: { participants: false, location: false, linked_task: false, board: false },
+        busy_block:    { participants: false, location: false, linked_task: true,  board: false },
+        team_event:    { participants: true,  location: true,  linked_task: false, board: true  },
+    };
+    function applyEventTypeFields(type) {
+        const cfg = TYPE_FIELDS[type] || TYPE_FIELDS.meeting;
+        document.getElementById('event-participants-row').style.display = cfg.participants ? '' : 'none';
+        document.getElementById('event-location-row').style.display    = cfg.location    ? '' : 'none';
+        document.getElementById('event-linked-task-row').style.display = cfg.linked_task ? '' : 'none';
+        document.getElementById('event-board-row').style.display       = cfg.board       ? '' : 'none';
+        // Out of Office defaults to All Day
+        if (type === 'out_of_office') {
+            document.getElementById('event-all-day').checked = true;
+            document.getElementById('event-datetime-row').style.display = 'none';
+            document.getElementById('event-allday-row').style.removeProperty('display');
+        }
+    }
+    document.getElementById('event-type').addEventListener('change', function() {
+        applyEventTypeFields(this.value);
+    });
+    // Apply on load (default = meeting)
+    applyEventTypeFields('meeting');
+
     document.getElementById('popup-create-event').addEventListener('click', function () {
         createPopup.style.display = 'none';
         // Pre-fill date/time
@@ -733,14 +848,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const payload = {
             title,
-            event_type:    document.getElementById('event-type').value,
-            is_all_day:    isAllDay,
+            event_type:     document.getElementById('event-type').value,
+            visibility:     document.getElementById('event-visibility').value,
+            is_all_day:     isAllDay,
             start_datetime: startDT,
             end_datetime:   endDT,
-            location:      document.getElementById('event-location').value.trim(),
-            description:   document.getElementById('event-description').value.trim(),
+            location:       document.getElementById('event-location').value.trim(),
+            description:    document.getElementById('event-description').value.trim(),
             participant_ids: participantIds,
-            board_id:      document.getElementById('event-board').value || null,
+            board_id:       document.getElementById('event-board').value || null,
+            linked_task_id: document.getElementById('event-linked-task').value || null,
         };
 
         this.disabled = true;
@@ -758,9 +875,13 @@ document.addEventListener('DOMContentLoaded', function () {
             if (data.success) {
                 bootstrap.Modal.getInstance(document.getElementById('createEventModal')).hide();
                 // Clear form
-                document.getElementById('event-title').value       = '';
-                document.getElementById('event-location').value    = '';
-                document.getElementById('event-description').value = '';
+                document.getElementById('event-title').value           = '';
+                document.getElementById('event-location').value        = '';
+                document.getElementById('event-description').value     = '';
+                document.getElementById('event-linked-task').value     = '';
+                document.getElementById('event-visibility').value      = 'team';
+                document.getElementById('event-type').value            = 'meeting';
+                applyEventTypeFields('meeting');
                 Array.from(partSelect.options).forEach(o => o.selected = false);
                 // Add to calendar immediately
                 calendar.addEvent(data.event);

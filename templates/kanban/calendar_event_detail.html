@@ -20,6 +20,9 @@
                 <span class="badge mt-1" style="background:{{ event.get_event_type_color }};">
                     {{ event.get_event_type_display }}
                 </span>
+                {% if event.visibility == 'private' %}
+                <span class="badge bg-secondary ms-1">🔒 Private</span>
+                {% endif %}
                 {% if event.board %}
                 <span class="badge bg-secondary ms-1">{{ event.board.name }}</span>
                 {% endif %}
@@ -61,9 +64,24 @@
                     </tr>
                     {% endif %}
                     <tr>
-                        <th>Organiser</th>
+                        <th style="width:130px;">Organiser</th>
                         <td>{{ event.created_by.get_full_name|default:event.created_by.username }}</td>
                     </tr>
+                    <tr>
+                        <th>Visibility</th>
+                        <td>{{ event.get_visibility_display }}</td>
+                    </tr>
+                    {% if event.linked_task %}
+                    <tr>
+                        <th>Linked Task</th>
+                        <td>
+                            <a href="{% url 'task_detail' event.linked_task.id %}">
+                                {{ event.linked_task.title }}
+                            </a>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% if not event.is_solo_type %}
                     {% with participants=event.participants.all %}
                     <tr>
                         <th>Participants</th>
@@ -78,6 +96,7 @@
                         </td>
                     </tr>
                     {% endwith %}
+                    {% endif %}
                     {% if event.description %}
                     <tr>
                         <th>Notes</th>

@@ -148,6 +148,13 @@ def unified_calendar(request):
         start_datetime__range=(month_start, month_end),
     ).distinct().count()
 
+    # Build a flat task list for the "linked task" dropdown in the event form
+    _all_tasks = []
+    for _t in Task.objects.filter(
+        column__board__in=boards, item_type='task',
+    ).select_related('column__board').order_by('column__board__name', 'title'):
+        _all_tasks.append({'id': _t.id, 'title': _t.title, 'board_name': _t.column.board.name})
+
     context = {
         'boards': boards,
         'boards_json': json.dumps(boards_data),
@@ -157,6 +164,7 @@ def unified_calendar(request):
         'overdue_count': overdue_count,
         'events_this_month': events_this_month,
         'current_month': now.strftime('%B %Y'),
+        'all_tasks_json': json.dumps(_all_tasks),
     }
     return render(request, 'kanban/unified_calendar.html', context)
 
@@ -194,9 +202,25 @@ def unified_calendar_events_api(request):
         due_date__isnull=False,
     ).select_related('column', 'column__board', 'assigned_to').distinct()
 
+    # Collect board member IDs (not including self) for teammate-status event query
+    board_member_ids = list(
+        User.objects.filter(
+            Q(member_boards__in=boards) | Q(created_boards__in=boards)
+        ).exclude(id=request.user.id).values_list('id', flat=True)
+    )
+
     event_qs = CalendarEvent.objects.filter(
-        Q(created_by=request.user) | Q(participants=request.user),
-    ).prefetch_related('participants').distinct()
+        # My own events — all types, all visibility
+        Q(created_by=request.user) |
+        # Events I'm invited to, team-visible only
+        Q(participants=request.user, visibility='team') |
+        # Teammate OOO / busy blocks / team events that they chose to share
+        Q(
+            created_by__in=board_member_ids,
+            event_type__in=['out_of_office', 'busy_block', 'team_event'],
+            visibility='team',
+        )
+    ).select_related('board', 'linked_task', 'created_by').prefetch_related('participants').distinct()
 
     if start_str and end_str:
         try:
@@ -256,6 +280,9 @@ def unified_calendar_events_api(request):
 
     # --- Calendar Events ---
     for ev in event_qs:
+        is_mine = (ev.created_by_id == request.user.id)
+        layer = 'event' if is_mine else 'teammate_status'
+
         if ev.is_all_day:
             start_str_fc = ev.start_datetime.strftime('%Y-%m-%d')
             end_str_fc = ev.end_datetime.strftime('%Y-%m-%d')
@@ -263,10 +290,28 @@ def unified_calendar_events_api(request):
             start_str_fc = ev.start_datetime.isoformat()
             end_str_fc = ev.end_datetime.isoformat()
 
+        linked_task_title = ev.linked_task.title if ev.linked_task else None
+
+        # Sanitize title for teammate events — protect personal details
+        if is_mine:
+            fc_title = ev.title
+        else:
+            owner_name = ev.created_by.get_full_name() or ev.created_by.username
+            if ev.event_type == 'out_of_office':
+                fc_title = f"{owner_name} — Out of Office"
+            elif ev.event_type == 'busy_block':
+                fc_title = (
+                    f"{owner_name} — busy ({linked_task_title})"
+                    if linked_task_title
+                    else f"{owner_name} — busy"
+                )
+            else:  # team_event — show actual title
+                fc_title = ev.title
+
         participant_names = [p.username for p in ev.participants.all()]
         events.append({
             'id': f'event-{ev.id}',
-            'title': ev.title,
+            'title': fc_title,
             'start': start_str_fc,
             'end': end_str_fc,
             'allDay': ev.is_all_day,
@@ -274,14 +319,20 @@ def unified_calendar_events_api(request):
             'source': 'event',
             'extendedProps': {
                 'source': 'event',
-                'layer': 'event',
+                'layer': layer,
                 'event_id': ev.id,
                 'event_type': ev.get_event_type_display(),
+                'event_type_key': ev.event_type,
+                'visibility': ev.visibility,
+                'is_mine': is_mine,
                 'description': ev.description or '',
                 'location': ev.location or '',
                 'board': ev.board.name if ev.board else '',
                 'participants': participant_names,
                 'created_by': ev.created_by.username,
+                'creator_id': ev.created_by_id,
+                'linked_task_title': linked_task_title,
+                'linked_task_id': ev.linked_task_id,
             },
         })
 
@@ -457,8 +508,13 @@ def calendar_create_event(request):
         return JsonResponse({'success': False, 'error': 'End must be after start.'}, status=400)
 
     event_type = data.get('event_type', 'meeting')
-    if event_type not in ('meeting', 'reminder', 'deadline', 'other'):
+    if event_type not in ('meeting', 'out_of_office', 'busy_block', 'team_event'):
         event_type = 'meeting'
+
+    # Visibility field
+    visibility = data.get('visibility', 'team')
+    if visibility not in ('team', 'private'):
+        visibility = 'team'
 
     description = data.get('description', '').strip()
     location = data.get('location', '').strip()
@@ -469,20 +525,35 @@ def calendar_create_event(request):
     if board_id:
         board = _user_boards(request.user).filter(id=board_id).first()
 
+    # Optional linked task (for busy_block context)
+    linked_task = None
+    linked_task_id = data.get('linked_task_id')
+    if linked_task_id:
+        try:
+            linked_task = Task.objects.filter(
+                id=int(linked_task_id),
+                column__board__in=_user_boards(request.user),
+            ).first()
+        except (ValueError, TypeError):
+            pass
+
     event = CalendarEvent.objects.create(
         title=title,
         description=description or None,
         event_type=event_type,
+        visibility=visibility,
         start_datetime=start_dt,
         end_datetime=end_dt,
         is_all_day=is_all_day,
         location=location or None,
         board=board,
+        linked_task=linked_task,
         created_by=request.user,
     )
 
-    # Participants
-    participant_ids = data.get('participant_ids', [])
+    # Participants — only relevant for Meeting and Team Event
+    SOLO_TYPES = ('out_of_office', 'busy_block')
+    participant_ids = [] if event_type in SOLO_TYPES else data.get('participant_ids', [])
     if isinstance(participant_ids, str):
         try:
             participant_ids = json.loads(participant_ids)
@@ -530,13 +601,19 @@ def calendar_create_event(request):
             'source': 'event',
             'extendedProps': {
                 'source': 'event',
+                'layer': 'event',
                 'event_id': event.id,
                 'event_type': event.get_event_type_display(),
+                'event_type_key': event.event_type,
+                'visibility': event.visibility,
+                'is_mine': True,
                 'description': event.description or '',
                 'location': event.location or '',
                 'board': board.name if board else '',
                 'participants': [u.username for u in notified_participants],
                 'created_by': request.user.username,
+                'linked_task_title': linked_task.title if linked_task else None,
+                'linked_task_id': linked_task.id if linked_task else None,
             },
         },
     })
@@ -577,8 +654,18 @@ def calendar_event_detail(request, event_id):
         CalendarEvent.objects.prefetch_related('participants'),
         id=event_id,
     )
-    # Only creator or participants can view
-    if event.created_by != request.user and not event.participants.filter(id=request.user.id).exists():
+    # Only creator or participants can view, OR board members for team-visible events
+    can_view = (
+        event.created_by == request.user or
+        event.participants.filter(id=request.user.id).exists()
+    )
+    if not can_view and event.visibility == 'team':
+        # Board members may view team-shared OOO/busy/team events
+        shared_boards = _user_boards(request.user).filter(
+            Q(created_by=event.created_by) | Q(members=event.created_by)
+        )
+        can_view = shared_boards.exists()
+    if not can_view:
         from django.http import HttpResponseForbidden
         return HttpResponseForbidden("You don't have access to this event.")
 

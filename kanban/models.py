@@ -1684,19 +1684,42 @@ class BoardInvitation(models.Model):
 
 class CalendarEvent(models.Model):
     """
-    Internal calendar events (meetings, reminders, etc.) that are not tasks.
-    Visible only to the creator and invited participants.
+    Internal calendar events (meetings, OOO, busy blocks, team events).
+
+    event_type controls how the event is interpreted and shown to others:
+      meeting      — formal meeting; participants are invited
+      out_of_office — holiday / sick day; shows as "unavailable" to teammates
+      busy_block   — ad-hoc busy period (working on something, not available)
+      team_event   — training, all-hands; visible to all board members
+
+    visibility controls who sees the event on the calendar:
+      team    (default) — teammates see you're blocked (but not the private reason)
+      private           — only you see it; completely hidden from others
     """
     EVENT_TYPE_CHOICES = [
-        ('meeting', 'Meeting'),
-        ('reminder', 'Reminder'),
-        ('deadline', 'Deadline'),
-        ('other', 'Other'),
+        ('meeting',       'Meeting'),
+        ('out_of_office', 'Out of Office'),
+        ('busy_block',    'Busy Block'),
+        ('team_event',    'Team Event'),
     ]
+
+    VISIBILITY_CHOICES = [
+        ('team',    "Team can see I'm busy"),
+        ('private', 'Private (only me)'),
+    ]
+
+    # Types that don't involve inviting other participants
+    SOLO_TYPES = ('out_of_office', 'busy_block')
 
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, null=True)
     event_type = models.CharField(max_length=20, choices=EVENT_TYPE_CHOICES, default='meeting')
+    visibility = models.CharField(
+        max_length=10,
+        choices=VISIBILITY_CHOICES,
+        default='team',
+        help_text="Controls whether teammates can see you're busy on this day",
+    )
 
     start_datetime = models.DateTimeField()
     end_datetime = models.DateTimeField()
@@ -1713,6 +1736,15 @@ class CalendarEvent(models.Model):
         related_name='calendar_events',
     )
 
+    # Optional task link — lets a busy block say "I'm working on X today"
+    linked_task = models.ForeignKey(
+        'Task',
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='calendar_events',
+        help_text="Link to a task to give teammates context (e.g. 'busy on Auth System')",
+    )
+
     created_by = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -1722,7 +1754,7 @@ class CalendarEvent(models.Model):
         User,
         blank=True,
         related_name='calendar_events',
-        help_text="Users invited to this event (excluding creator)",
+        help_text="Users invited to this event (for Meetings and Team Events only)",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1741,11 +1773,17 @@ class CalendarEvent(models.Model):
     def get_event_type_color(self):
         """Return a hex colour for FullCalendar based on event type.
         Colours are intentionally distinct from task priority colours
-        (urgent=#dc3545 red, high=#fd7e14 orange, medium=#0d6efd blue, low=#198754 green).
+        (urgent=#dc3545 red, high=#fd7e14 orange, medium=#0d6efd blue, low=#198754 green)
+        and assignee palette colours.
         """
         return {
-            'meeting':  '#6f42c1',  # purple  — unique
-            'reminder': '#0dcaf0',  # cyan    — distinct from orange High
-            'deadline': '#e83e8c',  # pink    — distinct from red Urgent
-            'other':    '#20c997',  # teal    — distinct from green Low
+            'meeting':       '#6f42c1',  # purple
+            'out_of_office': '#f59e0b',  # amber  — vacation/holiday feel
+            'busy_block':    '#64748b',  # slate  — "I'm blocked/working"
+            'team_event':    '#0284c7',  # sky blue — company-wide
         }.get(self.event_type, '#6c757d')
+
+    @property
+    def is_solo_type(self):
+        """True for event types that don't make sense to invite participants to."""
+        return self.event_type in self.SOLO_TYPES
