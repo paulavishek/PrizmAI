@@ -13,6 +13,7 @@ from . import automation_views
 from . import mission_views
 from . import mission_views
 from . import calendar_views
+from . import prizmbrief_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -89,6 +90,7 @@ urlpatterns = [
     path('calendar/events/<int:event_id>/delete/', calendar_views.calendar_event_delete, name='calendar_event_delete'),
     # -----------------------------------------------------------------------
     path('boards/<int:board_id>/status-report/', views.board_status_report, name='board_status_report'),
+    path('boards/<int:board_id>/prizmbrief/', prizmbrief_views.prizmbrief_setup, name='prizmbrief_setup'),
     path('boards/<int:board_id>/gantt/add-milestone/', views.add_gantt_milestone, name='add_gantt_milestone'),
     path('boards/<int:board_id>/gantt/milestones/<int:task_id>/delete/', views.delete_gantt_milestone, name='delete_gantt_milestone'),
     path('boards/<int:board_id>/edit/', views.edit_board, name='edit_board'),

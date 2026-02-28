@@ -1,0 +1,209 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}PrizmBrief – {{ board.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ── Page container ────────────────────────────────────────── */
+  .pb-hero {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 16px;
+    padding: 36px 40px 28px;
+    color: #fff;
+    margin-bottom: 32px;
+    position: relative;
+    overflow: hidden;
+  }
+  .pb-hero::before {
+    content: "✨";
+    position: absolute;
+    right: 32px; top: 20px;
+    font-size: 72px;
+    opacity: 0.15;
+    line-height: 1;
+  }
+  .pb-hero h1 { font-size: 1.8rem; font-weight: 700; margin-bottom: 4px; }
+  .pb-hero .sub { opacity: 0.85; font-size: 0.95rem; }
+
+  /* ── Form card ─────────────────────────────────────────────── */
+  .pb-card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+    padding: 32px;
+    margin-bottom: 24px;
+  }
+  .pb-question-label {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #212529;
+    margin-bottom: 14px;
+    display: block;
+  }
+  .pb-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 18px;
+    border: 2px solid #e9ecef;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .pb-option:hover { border-color: #667eea; background: #f8f5ff; }
+  .pb-option input[type="radio"] { margin-top: 3px; flex-shrink: 0; }
+  .pb-option.selected { border-color: #667eea; background: #f3efff; }
+  .pb-option-label { font-weight: 600; font-size: 0.97rem; margin-bottom: 2px; }
+  .pb-option-desc  { font-size: 0.83rem; color: #6c757d; }
+
+  /* ── Generate button ───────────────────────────────────────── */
+  .pb-generate-btn {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: #fff;
+    font-size: 1.05rem;
+    font-weight: 700;
+    padding: 14px 42px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .pb-generate-btn:hover   { opacity: 0.9; transform: translateY(-2px); }
+  .pb-generate-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+  /* ── Progress overlay ──────────────────────────────────────── */
+  #pb-loading { display: none; }
+  .pb-spinner {
+    width: 42px; height: 42px;
+    border: 4px solid #e9ecef;
+    border-top-color: #667eea;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Error alert ───────────────────────────────────────────── */
+  .pb-alert-err {
+    background: #fff3f3;
+    border: 1px solid #f5c6cb;
+    color: #842029;
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-bottom: 24px;
+  }
+  /* ── Back link ─────────────────────────────────────────────── */
+  .pb-back { font-size: 0.9rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4" style="max-width: 760px; margin: 0 auto;">
+
+  <!-- Back link -->
+  <div class="mb-3 pb-back">
+    <a href="{% url 'board_detail' board.id %}" class="text-decoration-none text-muted">
+      ← Back to {{ board.name }}
+    </a>
+  </div>
+
+  <!-- Hero banner -->
+  <div class="pb-hero">
+    <h1>✨ PrizmBrief</h1>
+    <div class="sub">AI Presentation Content Generator &nbsp;·&nbsp; <strong>{{ board.name }}</strong></div>
+    <div class="sub mt-1" style="opacity:0.7; font-size:0.85rem;">
+      Answer 3 quick questions and PrizmBrief will pull live board data to generate
+      structured slide content you can paste straight into Gamma or PowerPoint.
+    </div>
+  </div>
+
+  <!-- Error -->
+  {% if error %}
+  <div class="pb-alert-err">
+    <strong>⚠️ {{ error }}</strong>
+  </div>
+  {% endif %}
+
+  <form method="post" id="pb-form">
+    {% csrf_token %}
+
+    <!-- ── Q1 Audience ──────────────────────────────────────── -->
+    <div class="pb-card">
+      <span class="pb-question-label">Question 1 &nbsp;·&nbsp; Who is your audience?</span>
+      {% for key, label in audience_choices %}
+      <label class="pb-option {% if request.POST.audience == key %}selected{% endif %}" onclick="selectOption(this)">
+        <input type="radio" name="audience" value="{{ key }}"
+               {% if request.POST.audience == key %}checked{% endif %} required>
+        <span>{{ label }}</span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <!-- ── Q2 Purpose ───────────────────────────────────────── -->
+    <div class="pb-card">
+      <span class="pb-question-label">Question 2 &nbsp;·&nbsp; What is the purpose of this presentation?</span>
+      {% for key, label in purpose_choices %}
+      <label class="pb-option {% if request.POST.purpose == key %}selected{% endif %}" onclick="selectOption(this)">
+        <input type="radio" name="purpose" value="{{ key }}"
+               {% if request.POST.purpose == key %}checked{% endif %} required>
+        <span>{{ label }}</span>
+      </label>
+      {% endfor %}
+    </div>
+
+    <!-- ── Q3 Mode ──────────────────────────────────────────── -->
+    <div class="pb-card">
+      <span class="pb-question-label">Question 3 &nbsp;·&nbsp; How much detail?</span>
+      {% for key, label, desc in mode_choices %}
+      <label class="pb-option {% if request.POST.mode == key %}selected{% elif not request.POST.mode and key == 'executive_summary' %}selected{% endif %}"
+             onclick="selectOption(this)">
+        <input type="radio" name="mode" value="{{ key }}"
+               {% if request.POST.mode == key %}checked{% elif not request.POST.mode and key == 'executive_summary' %}checked{% endif %} required>
+        <div>
+          <div class="pb-option-label">{{ label }}</div>
+          <div class="pb-option-desc">{{ desc }}</div>
+        </div>
+      </label>
+      {% endfor %}
+    </div>
+
+    <!-- ── Action ───────────────────────────────────────────── -->
+    <div class="d-flex align-items-center gap-3 mt-2 mb-4">
+      <button type="submit" class="pb-generate-btn" id="pb-submit-btn">
+        ✨ Generate Brief
+      </button>
+      <span class="text-muted small">Usually takes 10–20 seconds</span>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="pb-loading" class="text-center py-4">
+      <div class="pb-spinner"></div>
+      <div class="text-muted">PrizmBrief is reading your board data and crafting the slides…</div>
+    </div>
+  </form>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Highlight selected option card */
+  function selectOption(label) {
+    const group = label.closest('.pb-card');
+    group.querySelectorAll('.pb-option').forEach(l => l.classList.remove('selected'));
+    label.classList.add('selected');
+  }
+
+  /* Show loader on submit */
+  document.getElementById('pb-form').addEventListener('submit', function () {
+    document.getElementById('pb-submit-btn').disabled = true;
+    document.getElementById('pb-submit-btn').innerHTML = '⏳ Generating…';
+    document.getElementById('pb-loading').style.display = 'block';
+  });
+</script>
+{% endblock %}

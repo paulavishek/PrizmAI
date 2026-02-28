@@ -4099,3 +4099,198 @@ Write ONLY the summary paragraph — no headings, no bullet points, no JSON."""
     except Exception as e:
         logger.error(f"Error in generate_and_save_mission_summary (mission {mission.pk}): {e}")
         return None
+
+
+# ---------------------------------------------------------------------------
+# PRIZMBRIEF — AI Presentation Content Generator
+# Generates structured slide-by-slide presentation content from live board data,
+# tailored to the chosen audience (client / executive / team / technical)
+# and detail mode (Executive Summary / Full Briefing).
+# ---------------------------------------------------------------------------
+
+def generate_prizmbrief(brief_data: Dict) -> Optional[str]:
+    """
+    Generate audience-aware, slide-by-slide presentation content for a board.
+
+    Args:
+        brief_data: Dict with board metrics + audience / purpose / mode choices.
+
+    Returns:
+        Formatted plain-text string with slides delimited by
+        --- SLIDE N: Title --- markers, or None on failure.
+    """
+    try:
+        board_name      = brief_data.get('board_name', 'Project')
+        report_date     = brief_data.get('report_date', datetime.now().strftime('%B %d, %Y'))
+        user_name       = brief_data.get('user_name', 'Project Manager')
+        audience        = brief_data.get('audience', 'client')
+        audience_label  = brief_data.get('audience_label', audience)
+        purpose_label   = brief_data.get('purpose_label', 'Project Status Update')
+        mode            = brief_data.get('mode', 'executive_summary')
+
+        total_tasks     = brief_data.get('total_tasks', 0)
+        completed       = brief_data.get('completed', 0)
+        in_progress     = brief_data.get('in_progress', 0)
+        not_started     = brief_data.get('not_started', 0)
+        completion_pct  = brief_data.get('completion_pct', 0)
+        overdue         = brief_data.get('overdue', 0)
+        blocked_count   = brief_data.get('blocked_count', 0)
+        blocked_list    = brief_data.get('blocked_list', [])
+        velocity_now    = brief_data.get('velocity_now', 0)
+        velocity_change = brief_data.get('velocity_change', 0)
+        high_risk_count = brief_data.get('high_risk_count', 0)
+        tasks_by_column = brief_data.get('tasks_by_column', [])
+        workload        = brief_data.get('workload', [])
+        budget          = brief_data.get('budget', {})
+        milestones      = brief_data.get('milestones', [])
+        new_tasks_count = brief_data.get('new_tasks_count', 0)
+        total_open      = brief_data.get('total_open', 0)
+
+        # ── Derive overall RAG status ─────────────────────────────────────────
+        if completion_pct >= 70 and overdue == 0 and blocked_count == 0:
+            rag = "🟢 ON TRACK"
+        elif overdue > 3 or blocked_count > 3 or high_risk_count > 2:
+            rag = "🔴 AT RISK"
+        else:
+            rag = "🟡 ON TRACK WITH MINOR RISKS"
+
+        # ── Budget summary line ───────────────────────────────────────────────
+        if budget:
+            currency   = budget.get('currency', 'USD')
+            allocated  = budget.get('allocated', 0)
+            spent      = budget.get('spent', 0)
+            remaining  = budget.get('remaining', 0)
+            pct_spent  = budget.get('pct_spent', 0)
+            budget_str = (
+                f"Allocated: {currency} {allocated:,.2f} | "
+                f"Spent: {currency} {spent:,.2f} ({pct_spent}%) | "
+                f"Remaining: {currency} {remaining:,.2f}"
+            )
+        else:
+            budget_str = "Budget data not available"
+
+        # ── Column & team summaries ───────────────────────────────────────────
+        column_summary = ", ".join(
+            f"{c['name']}: {c['count']}" for c in tasks_by_column
+        ) or "N/A"
+
+        workload_summary = "\n".join(
+            f"  - {w['name']}: {w['open_tasks']} open tasks ({w['capacity']}% of board load)"
+            for w in workload
+        ) or "  No individual assignments found"
+
+        blocked_summary = "\n".join(
+            f"  - '{b['title']}' — Owner: {b['assigned_to__username'] or 'Unassigned'}"
+            for b in blocked_list
+        ) or "  None identified"
+
+        milestone_summary = "\n".join(
+            f"  - {m['due_date']}: {m['title']}" for m in milestones
+        ) or "  No upcoming milestones found"
+
+        velocity_trend = (
+            f"{velocity_now} tasks/week ({'+' if velocity_change >= 0 else ''}{velocity_change}% vs prior week)"
+        )
+
+        # ── Audience-specific instruction block ───────────────────────────────
+        if audience in ('client', 'executive'):
+            audience_instructions = """
+AUDIENCE FOCUS — Client / Executive:
+- Emphasise: Overall health (RAG), schedule variance, budget status, top 3 risks, next milestone, decisions needed.
+- Omit: Individual task names, developer workload details, sprint velocity, technical jargon.
+- Tone: Non-technical, leadership-friendly, concise paragraphs with supporting bullet points."""
+
+        elif audience == 'team':
+            audience_instructions = """
+AUDIENCE FOCUS — Internal Team:
+- Emphasise: Task status breakdown, blocked tasks with specific reasons, individual workload, sprint velocity trend, scope creep notice, clear action items with named owners.
+- Include budget headline only (no breakdown).
+- Tone: Collaborative, direct, action-oriented."""
+
+        else:  # technical
+            audience_instructions = """
+AUDIENCE FOCUS — Technical Team / Developers:
+- Emphasise: Detailed task breakdown by status, blocked tasks with reasons, dependency conflicts, sprint velocity, burndown trend, specific technical action items.
+- Include workload data and who is overloaded.
+- Omit: Deep budget financials (show headline only).
+- Tone: Precise, technical, no marketing fluff."""
+
+        # ── Slide count instruction ───────────────────────────────────────────
+        if mode == 'executive_summary':
+            slide_count_instruction = """
+SLIDE COUNT: Generate exactly 5–6 slides covering:
+  Slide 1: Project Snapshot (name, date, presenter, overall RAG status)
+  Slide 2: Progress Overview (completion %, tasks done/total, timeline variance)
+  Slide 3: Budget Health (if budget data available, else replace with Key Achievements)
+  Slide 4: Key Risks & Issues
+  Slide 5: Next Milestones / Roadmap
+  Slide 6: Decisions & Actions Needed"""
+        else:  # full_briefing
+            slide_count_instruction = """
+SLIDE COUNT: Generate exactly 8–10 slides covering:
+  Slide 1: Project Snapshot (name, date, presenter, overall RAG status)
+  Slide 2: Progress Overview (completion %, tasks done/total, timeline variance)
+  Slide 3: Budget Health (if budget data available, else replace with Key Achievements)
+  Slide 4: Key Risks & Issues
+  Slide 5: Next Milestones / Roadmap
+  Slide 6: Decisions & Actions Needed
+  Slide 7: Team & Workload Analysis
+  Slide 8: Task Detail Breakdown (by status, top blocked tasks)
+  Slide 9: AI Insights & Anomalies (velocity trend, scope creep, forecast)
+  Slide 10: Recommended Priority Actions (next 7 days, with named owners)"""
+
+        # ── Full prompt ───────────────────────────────────────────────────────
+        prompt = f"""You are an expert project manager and business storyteller.
+Generate a slide-by-slide presentation content brief for the project "{board_name}".
+Each slide must be wrapped in a delimiter on its own line:  --- SLIDE N: Title ---
+where N is the slide number and Title is the descriptive slide heading.
+
+The user will copy this output into Gamma AI or PowerPoint to build the actual deck.
+Write the content in a way that a presentation tool can directly use it — clear headings,
+tight bullet points, one key insight per bullet, and a "Suggested visual:" note in italics
+for each slide indicating the best chart or graphic type.
+
+## Live Board Data ({report_date})
+- Board: {board_name}
+- Prepared by: {user_name}
+- Purpose: {purpose_label}
+- Audience: {audience_label}
+- Overall Status: {rag}
+- Total tasks: {total_tasks} | Completed: {completed} ({completion_pct}%) | In Progress: {in_progress} | Not Started: {not_started}
+- Overdue tasks: {overdue}
+- Blocked tasks: {blocked_count}
+  Top blocked:
+{blocked_summary}
+- Sprint velocity: {velocity_trend}
+- High-risk tasks: {high_risk_count}
+- Scope: {new_tasks_count} tasks added in last 2 weeks (possible scope creep signal)
+- Budget: {budget_str}
+- Column breakdown: {column_summary}
+- Next milestones:
+{milestone_summary}
+- Team workload (open tasks per person):
+{workload_summary}
+
+{audience_instructions}
+
+{slide_count_instruction}
+
+## Output Rules
+1. Start each slide immediately with its delimiter: --- SLIDE N: Title ---
+2. Under each slide write: bullet points for the main content, then one line: *Suggested visual: [chart/image type]*
+3. Do NOT add any text before the first slide delimiter.
+4. Do NOT add any preamble, preamble headings, or closing remarks outside the slide blocks.
+5. Be factual — only use numbers from the data above. Do not invent data.
+6. If a data point is "Not available", acknowledge it briefly rather than fabricating a number.
+"""
+
+        result = generate_ai_content(
+            prompt,
+            task_type='board_analytics_summary',
+            use_cache=False,
+        )
+        return result
+
+    except Exception as e:
+        logger.error(f"Error generating PrizmBrief: {e}")
+        return None

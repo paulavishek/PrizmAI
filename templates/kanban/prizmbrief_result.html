@@ -1,0 +1,308 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}PrizmBrief Results – {{ board.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* ── Page ─────────────────────────────────────────────────── */
+  .pb-results-wrap { max-width: 900px; margin: 0 auto; }
+
+  /* ── Zone 1: Info banner ───────────────────────────────────── */
+  .pb-info-banner {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 14px;
+    color: #fff;
+    padding: 20px 28px;
+    margin-bottom: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .pb-info-banner .pb-meta { font-size: 0.88rem; opacity: 0.9; }
+  .pb-info-banner .pb-meta strong { opacity: 1; }
+  .pb-info-badge {
+    background: rgba(255,255,255,0.2);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+
+  /* ── Data richness warnings ────────────────────────────────── */
+  .pb-warn-bar {
+    background: #fff8e1;
+    border: 1px solid #ffe082;
+    border-radius: 10px;
+    padding: 12px 18px;
+    margin-bottom: 20px;
+    font-size: 0.88rem;
+    color: #5d4037;
+  }
+  .pb-warn-bar ul { margin: 6px 0 0 0; padding-left: 1.3rem; }
+
+  /* ── Zone 2: Slide cards ───────────────────────────────────── */
+  .pb-slide-card {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 3px 20px rgba(0,0,0,0.07);
+    padding: 28px 32px;
+    margin-bottom: 20px;
+    position: relative;
+    border-left: 5px solid #667eea;
+    transition: box-shadow 0.15s;
+  }
+  .pb-slide-card:hover { box-shadow: 0 6px 28px rgba(102,126,234,0.15); }
+
+  .pb-slide-number {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: #667eea;
+    margin-bottom: 4px;
+  }
+  .pb-slide-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #212529;
+    margin-bottom: 16px;
+  }
+  .pb-slide-body {
+    white-space: pre-wrap;
+    font-size: 0.94rem;
+    line-height: 1.75;
+    color: #343a40;
+  }
+  /* Style the "Suggested visual:" note italic */
+  .pb-visual-hint {
+    font-style: italic;
+    color: #6c757d;
+    font-size: 0.85rem;
+    margin-top: 8px;
+    display: block;
+  }
+
+  /* ── Per-slide copy button ─────────────────────────────────── */
+  .pb-copy-slide-btn {
+    position: absolute;
+    top: 16px; right: 20px;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 4px 11px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 0.15s;
+    color: #495057;
+  }
+  .pb-copy-slide-btn:hover { background: #e9ecef; }
+  .pb-copy-slide-btn.copied { background: #d4edda; border-color: #c3e6cb; color: #155724; }
+
+  /* ── Zone 3: Bottom action bar ────────────────────────────── */
+  .pb-action-bar {
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 3px 20px rgba(0,0,0,0.07);
+    padding: 24px 32px;
+    margin-bottom: 32px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+  }
+  .pb-action-btn {
+    border-radius: 8px;
+    padding: 10px 22px;
+    font-weight: 600;
+    font-size: 0.92rem;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    text-decoration: none;
+  }
+  .pb-action-btn:hover { opacity: 0.88; transform: translateY(-1px); }
+  .pb-btn-primary   { background: #667eea; color: #fff; }
+  .pb-btn-secondary { background: #f8f9fa; color: #495057; border: 1px solid #dee2e6; }
+  .pb-btn-regen     { background: #764ba2; color: #fff; }
+
+  /* ── Gamma helper collapsible ──────────────────────────────── */
+  .pb-helper-toggle {
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: #667eea;
+    text-decoration: underline;
+    background: none;
+    border: none;
+    padding: 0;
+    margin-left: auto;
+  }
+  .pb-helper-box {
+    display: none;
+    background: #f3efff;
+    border: 1px solid #c9b8f5;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-top: 16px;
+    font-size: 0.86rem;
+    color: #4a3472;
+    width: 100%;
+    line-height: 1.65;
+  }
+  .pb-helper-box ol { margin: 6px 0 0; padding-left: 1.3rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4 pb-results-wrap">
+
+  <!-- Back link -->
+  <div class="mb-3" style="font-size:0.9rem;">
+    <a href="{% url 'board_detail' board.id %}" class="text-decoration-none text-muted">
+      ← Back to {{ board.name }}
+    </a>
+  </div>
+
+  <!-- ── Zone 1: Info banner ─────────────────────────────────── -->
+  <div class="pb-info-banner">
+    <div>
+      <div style="font-size:1.15rem; font-weight:700;">✨ PrizmBrief</div>
+      <div class="pb-meta">
+        Generated from live board data &nbsp;·&nbsp; <strong>{{ board.name }}</strong>
+        &nbsp;·&nbsp; {{ report_date }} at {{ report_time }}
+      </div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <span class="pb-info-badge">👤 {{ audience_label }}</span>
+      <span class="pb-info-badge">🎯 {{ purpose_label }}</span>
+      <span class="pb-info-badge">📋 {{ mode_label }}</span>
+    </div>
+  </div>
+
+  <!-- ── Data richness warnings ────────────────────────────────── -->
+  {% if data_warnings %}
+  <div class="pb-warn-bar">
+    <strong>⚠️ Limited data notice</strong> — The brief may be incomplete. Consider enriching your board for a fuller output:
+    <ul>
+      {% for w in data_warnings %}<li>{{ w }}</li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  <!-- ── Zone 2: Slide cards ───────────────────────────────────── -->
+  {% for slide in slides %}
+  <div class="pb-slide-card" id="slide-{{ slide.number }}">
+    <button class="pb-copy-slide-btn" onclick="copySlide(this, 'slide-body-{{ slide.number }}')"
+            title="Copy this slide to clipboard">
+      📋 Copy slide
+    </button>
+    <div class="pb-slide-number">Slide {{ slide.number }}</div>
+    <div class="pb-slide-title">{{ slide.title }}</div>
+    <div class="pb-slide-body" id="slide-body-{{ slide.number }}">{{ slide.body }}</div>
+  </div>
+  {% empty %}
+  <div class="alert alert-warning">No slides were generated. Please try regenerating.</div>
+  {% endfor %}
+
+  <!-- ── Zone 3: Action bar ─────────────────────────────────────── -->
+  <div class="pb-action-bar">
+    <button class="pb-action-btn pb-btn-primary" id="pb-copy-all-btn" onclick="copyAllText()">
+      📋 Copy All
+    </button>
+    <button class="pb-action-btn pb-btn-secondary" onclick="downloadTxt()">
+      ⬇️ Download (.txt)
+    </button>
+    <a href="{% url 'prizmbrief_setup' board.id %}" class="pb-action-btn pb-btn-regen">
+      🔄 Regenerate
+    </a>
+    <button class="pb-helper-toggle" onclick="toggleHelper()">
+      How to use this in Gamma / PowerPoint →
+    </button>
+    <div class="pb-helper-box" id="pb-helper-box">
+      <strong>3 steps to turn this into a polished deck:</strong>
+      <ol>
+        <li>Click <strong>Copy All</strong> above to copy the full brief to your clipboard.</li>
+        <li>Open <a href="https://gamma.app" target="_blank" rel="noopener">Gamma.app</a>
+            → New Presentation → <em>Import text / Generate from text</em>.</li>
+        <li>Paste, choose a theme, and let Gamma design it automatically. Done.</li>
+      </ol>
+      <div style="margin-top:8px; font-size:0.82rem; opacity:0.8;">
+        For PowerPoint: paste into a blank slide, then use <em>Design Ideas</em> (Home → Designer)
+        to format automatically.
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden full text for copy/download -->
+  <textarea id="pb-full-text" style="position:absolute;left:-9999px;" readonly>{{ full_text }}</textarea>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const downloadFilename = "{{ download_name }}";
+
+  /* Copy a single slide body */
+  function copySlide(btn, slideBodyId) {
+    const text = document.getElementById(slideBodyId).innerText;
+    navigator.clipboard.writeText(text).then(function () {
+      btn.textContent = '✅ Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => {
+        btn.textContent = '📋 Copy slide';
+        btn.classList.remove('copied');
+      }, 2000);
+    }).catch(function () {
+      fallbackCopy(text);
+    });
+  }
+
+  /* Copy all slides */
+  function copyAllText() {
+    const text = document.getElementById('pb-full-text').value;
+    const btn  = document.getElementById('pb-copy-all-btn');
+    navigator.clipboard.writeText(text).then(function () {
+      btn.textContent = '✅ Copied!';
+      setTimeout(() => { btn.textContent = '📋 Copy All'; }, 2500);
+    }).catch(function () {
+      fallbackCopy(text);
+    });
+  }
+
+  /* Download as .txt */
+  function downloadTxt() {
+    const text = document.getElementById('pb-full-text').value;
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = downloadFilename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /* Fallback clipboard for browsers without async clipboard API */
+  function fallbackCopy(text) {
+    const ta = document.getElementById('pb-full-text');
+    ta.style.position = 'static';
+    ta.select();
+    document.execCommand('copy');
+    ta.style.position = 'absolute';
+    alert('Copied to clipboard!');
+  }
+
+  /* Toggle Gamma/PPT helper */
+  function toggleHelper() {
+    const box = document.getElementById('pb-helper-box');
+    box.style.display = box.style.display === 'block' ? 'none' : 'block';
+  }
+</script>
+{% endblock %}

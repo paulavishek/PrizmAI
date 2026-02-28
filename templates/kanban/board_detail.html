@@ -284,6 +284,11 @@
         <a href="{% url 'board_status_report' board.id %}" class="btn btn-outline-dark">
             <i class="fas fa-file-alt me-1"></i> Status Report
         </a>
+        <a href="{% url 'prizmbrief_setup' board.id %}"
+           class="btn btn-outline-primary"
+           title="Generate AI Presentation Content for this board">
+            ✨ AI Presentation
+        </a>
         <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-outline-success">
             <i class="fas fa-dollar-sign me-1"></i> Budget & ROI
         </a>

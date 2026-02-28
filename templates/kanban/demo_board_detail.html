@@ -441,6 +441,11 @@ kbd {
         <a href="{% url 'retrospective_dashboard' board.id %}" class="btn btn-outline-secondary">
             <i class="fas fa-history me-1"></i> Retrospectives
         </a>
+        <a href="{% url 'prizmbrief_setup' board.id %}"
+           class="btn btn-outline-primary"
+           title="Generate AI Presentation Content for this board">
+            ✨ AI Presentation
+        </a>
         <div class="btn-group">
             <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="fas fa-file-export me-1"></i> Export
