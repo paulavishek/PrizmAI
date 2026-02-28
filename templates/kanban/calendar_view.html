@@ -178,65 +178,7 @@
     </div>
 </div>
 
-<!-- Board Calendar: Create Task Modal -->
-<div class="modal fade" id="bcCreateTaskModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="fas fa-tasks me-2 text-primary"></i>New Task — {{ board.name }}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div id="bc-task-form-error" class="alert alert-danger d-none"></div>
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Title <span class="text-danger">*</span></label>
-          <input type="text" class="form-control" id="bc-task-title" placeholder="Task title…">
-        </div>
-        <div class="row g-2 mb-3">
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Column</label>
-            <select class="form-select" id="bc-task-column">
-              {% for col in board.columns.all %}
-              <option value="{{ col.id }}">{{ col.name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Priority</label>
-            <select class="form-select" id="bc-task-priority">
-              <option value="low">Low</option>
-              <option value="medium" selected>Medium</option>
-              <option value="high">High</option>
-              <option value="urgent">Urgent</option>
-            </select>
-          </div>
-        </div>
-        <div class="row g-2 mb-3">
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Due Date</label>
-            <input type="date" class="form-control" id="bc-task-due-date">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label fw-semibold">Start Date</label>
-            <input type="date" class="form-control" id="bc-task-start-date">
-          </div>
-        </div>
-        <div class="mb-3">
-          <label class="form-label fw-semibold">Assignee</label>
-          <select class="form-select" id="bc-task-assignee">
-            <option value="">— unassigned —</option>
-          </select>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary btn-sm" id="bc-btn-save-task">
-          <i class="fas fa-save me-1"></i> Create Task
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
+<!-- Board Calendar: Create Task — redirects to full board create form -->
 
 <!-- Board Calendar: Schedule Event Modal -->
 <div class="modal fade" id="bcCreateEventModal" tabindex="-1" aria-hidden="true">
@@ -418,14 +360,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (bcPopup && !bcPopup.contains(e.target)) bcPopup.style.display = 'none';
     });
 
-    // Populate assignee dropdown from pre-loaded board members
-    const bcAssigneeSel = document.getElementById('bc-task-assignee');
-    bcMembersData.forEach(function(m) {
-        const o = document.createElement('option');
-        o.value = m.id; o.textContent = m.display + ' (' + m.username + ')';
-        bcAssigneeSel.appendChild(o);
-    });
-
     // Populate participants dropdown
     const bcPartSel = document.getElementById('bc-event-participants');
     bcParticipantsData.forEach(function(p) {
@@ -437,8 +371,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Popup buttons
     document.getElementById('bc-popup-create-task').addEventListener('click', function() {
         bcPopup.style.display = 'none';
-        if (bcClickedDate) document.getElementById('bc-task-due-date').value = bcClickedDate;
-        new bootstrap.Modal(document.getElementById('bcCreateTaskModal')).show();
+        // Redirect to the full Kanban board task creation form with date pre-filled
+        var url = '/boards/{{ board.id }}/create-task/';
+        if (bcClickedDate) url += '?due_date=' + bcClickedDate;
+        window.location.href = url;
     });
 
     document.getElementById('bc-popup-create-event').addEventListener('click', function() {
@@ -459,43 +395,7 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById('bc-event-allday-row').style.display   = allDay ? '' : 'none';
     });
 
-    // Save Task
-    document.getElementById('bc-btn-save-task').addEventListener('click', function() {
-        const errDiv = document.getElementById('bc-task-form-error');
-        errDiv.classList.add('d-none');
-        const title = document.getElementById('bc-task-title').value.trim();
-        if (!title) { errDiv.textContent = 'Title is required.'; errDiv.classList.remove('d-none'); return; }
-        const payload = {
-            title,
-            board_id:    BC_BOARD_ID,
-            column_id:   document.getElementById('bc-task-column').value || null,
-            due_date:    document.getElementById('bc-task-due-date').value || null,
-            start_date:  document.getElementById('bc-task-start-date').value || null,
-            assignee_id: document.getElementById('bc-task-assignee').value || null,
-            priority:    document.getElementById('bc-task-priority').value,
-        };
-        this.disabled = true;
-        fetch(BC_TASK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': BC_CSRF },
-            body: JSON.stringify(payload),
-        })
-        .then(r => r.json())
-        .then(data => {
-            this.disabled = false;
-            if (data.success) {
-                bootstrap.Modal.getInstance(document.getElementById('bcCreateTaskModal')).hide();
-                document.getElementById('bc-task-title').value = '';
-                if (data.event) calendar.addEvent(data.event);
-            } else {
-                errDiv.textContent = data.error || 'Failed to create task.';
-                errDiv.classList.remove('d-none');
-            }
-        })
-        .catch(() => { this.disabled = false; errDiv.textContent = 'Network error.'; errDiv.classList.remove('d-none'); });
-    });
-
-    // Save Event
+        // Save Event
     document.getElementById('bc-btn-save-event').addEventListener('click', function() {
         const errDiv = document.getElementById('bc-event-form-error');
         errDiv.classList.add('d-none');

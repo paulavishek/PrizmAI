@@ -1448,7 +1448,14 @@ def create_task(request, board_id, column_id=None):
         # If form has duplicate tasks, add them to context for display
         duplicate_tasks = getattr(form, '_duplicate_tasks', None)
     else:
-        form = TaskForm(board=board)
+        initial = {}
+        due_date_param = request.GET.get('due_date')
+        if due_date_param:
+            initial['due_date'] = due_date_param
+        start_date_param = request.GET.get('start_date')
+        if start_date_param:
+            initial['start_date'] = start_date_param
+        form = TaskForm(board=board, initial=initial)
         duplicate_tasks = None
     
     return render(request, 'kanban/create_task.html', {
