@@ -13,7 +13,7 @@ Provides:
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
@@ -284,8 +284,14 @@ def unified_calendar_events_api(request):
         layer = 'event' if is_mine else 'teammate_status'
 
         if ev.is_all_day:
-            start_str_fc = ev.start_datetime.strftime('%Y-%m-%d')
-            end_str_fc = ev.end_datetime.strftime('%Y-%m-%d')
+            # Convert UTC→IST before extracting date, otherwise UTC midnight-5:30
+            # would roll back to the previous calendar day.
+            local_start = timezone.localtime(ev.start_datetime)
+            local_end   = timezone.localtime(ev.end_datetime)
+            start_str_fc = local_start.strftime('%Y-%m-%d')
+            # FullCalendar all-day end is EXCLUSIVE, so advance by 1 day so that
+            # the user's chosen end date is actually the last visible day.
+            end_str_fc   = (local_end + timedelta(days=1)).strftime('%Y-%m-%d')
         else:
             start_str_fc = ev.start_datetime.isoformat()
             end_str_fc = ev.end_datetime.isoformat()
