@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import ai_views
 
 app_name = 'messaging'
 
@@ -45,4 +46,10 @@ urlpatterns = [
     path('room/<int:room_id>/files/list/', views.list_chat_room_files, name='list_chat_room_files'),
     path('file/<int:file_id>/download/', views.download_chat_room_file, name='download_chat_room_file'),
     path('file/<int:file_id>/delete/', views.delete_chat_room_file, name='delete_chat_room_file'),
+
+    # AI Features (Thread Summary & Task Extraction)
+    path('room/<int:room_id>/ai/summarize/', ai_views.summarize_thread, name='ai_summarize_thread'),
+    path('room/<int:room_id>/ai/extract-tasks/', ai_views.extract_tasks_from_thread, name='ai_extract_tasks_thread'),
+    path('message/<int:message_id>/ai/extract-tasks/', ai_views.extract_tasks_from_message, name='ai_extract_tasks_message'),
+    path('room/<int:room_id>/ai/confirm-tasks/', ai_views.confirm_create_tasks, name='ai_confirm_tasks'),
 ]
