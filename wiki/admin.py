@@ -3,7 +3,7 @@ from django.utils.html import format_html
 from .models import (
     WikiCategory, WikiPage, WikiAttachment, WikiLink,
     MeetingNotes, WikiPageVersion, WikiLinkBetweenPages, WikiPageAccess,
-    WikiMeetingAnalysis, WikiMeetingTask
+    WikiMeetingAnalysis, WikiMeetingTask, WikiTemplate
 )
 
 
@@ -259,4 +259,26 @@ class WikiMeetingTaskAdmin(admin.ModelAdmin):
     
     def has_add_permission(self, request):
         # Prevent manual creation - tasks are created via API
+        return False
+
+
+@admin.register(WikiTemplate)
+class WikiTemplateAdmin(admin.ModelAdmin):
+    list_display = ['name', 'category_name', 'icon', 'color', 'order', 'is_active']
+    list_filter = ['is_active', 'category_name']
+    search_fields = ['name', 'description', 'category_name']
+    ordering = ['order', 'name']
+    list_editable = ['order', 'is_active']
+
+    fieldsets = (
+        ('Template Info', {
+            'fields': ('name', 'description', 'category_name', 'icon', 'color', 'order', 'is_active')
+        }),
+        ('Content', {
+            'fields': ('content',),
+        }),
+    )
+
+    def has_add_permission(self, request):
+        # Templates are system data — added via migrations, not the admin UI
         return False

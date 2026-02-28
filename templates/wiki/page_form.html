@@ -105,7 +105,20 @@
                 </div>
             </div>
         </div>
-        
+
+        <!-- Template-in-use Banner (shown only when creating from a template) -->
+        {% if active_template %}
+        <div class="alert alert-success alert-dismissible fade show d-flex align-items-start" role="alert">
+            <i class="fas fa-layer-group fa-lg me-3 mt-1 text-success"></i>
+            <div>
+                <strong>Starting from the {{ active_template.name }} template.</strong>
+                The title, category, and content have been pre-filled — customize everything for your
+                project before saving. Saving creates a brand-new page; the template is never modified.
+            </div>
+            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endif %}
+
         <form method="post" class="page-form-container" enctype="multipart/form-data">
             {% csrf_token %}
             

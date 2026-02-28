@@ -1,0 +1,137 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Template Library — Knowledge Hub{% endblock %}
+
+{% block extra_css %}
+<style>
+    .template-card {
+        transition: all 0.25s ease;
+        border-top: 4px solid var(--tpl-color, #3498db);
+        height: 100%;
+    }
+    .template-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    }
+    .template-icon-wrap {
+        width: 52px;
+        height: 52px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.4rem;
+        color: white;
+        flex-shrink: 0;
+    }
+    .hero-banner {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 12px;
+        color: white;
+        padding: 36px 40px;
+        margin-bottom: 32px;
+    }
+    .hero-banner h1 { font-size: 1.75rem; font-weight: 700; }
+    .hero-banner p  { opacity: .87; margin-bottom: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item">
+                <a href="{% url 'wiki:knowledge_hub_home' %}">
+                    <i class="fas fa-brain me-1"></i>Knowledge Hub
+                </a>
+            </li>
+            <li class="breadcrumb-item active" aria-current="page">Template Library</li>
+        </ol>
+    </nav>
+
+    <!-- Hero banner -->
+    <div class="hero-banner">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h1><i class="fas fa-layer-group me-3"></i>Template Library</h1>
+                <p class="mt-2">
+                    Start faster with a pre-built PM template. Pick one, customise the content for your
+                    project, and save — your template is never affected.
+                </p>
+            </div>
+            <div class="col-md-4 text-md-end mt-3 mt-md-0">
+                <a href="{% url 'wiki:page_create' %}" class="btn btn-light btn-lg">
+                    <i class="fas fa-file-alt me-2"></i>Blank Page
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Template cards grid -->
+    {% if templates %}
+    <div class="row g-4">
+        {% for tpl in templates %}
+        <div class="col-md-6 col-xl-4">
+            <div class="card border-0 shadow-sm template-card" style="--tpl-color: {{ tpl.color }};">
+                <div class="card-body d-flex flex-column p-4">
+
+                    <!-- Icon + title row -->
+                    <div class="d-flex align-items-start gap-3 mb-3">
+                        <div class="template-icon-wrap" style="background-color: {{ tpl.color }};">
+                            <i class="fas fa-{{ tpl.icon }}"></i>
+                        </div>
+                        <div>
+                            <h5 class="mb-1 fw-semibold">{{ tpl.name }}</h5>
+                            <span class="badge rounded-pill text-white small"
+                                  style="background-color: {{ tpl.color }};">
+                                {{ tpl.category_name }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Description -->
+                    <p class="text-muted small flex-grow-1">{{ tpl.description }}</p>
+
+                    <!-- Preview accordion -->
+                    <div class="accordion accordion-flush mb-3" id="preview-{{ tpl.pk }}">
+                        <div class="accordion-item border rounded">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed py-2 small" type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#preview-body-{{ tpl.pk }}"
+                                        aria-expanded="false"
+                                        aria-controls="preview-body-{{ tpl.pk }}">
+                                    <i class="fas fa-eye me-2 text-muted"></i>Preview content
+                                </button>
+                            </h2>
+                            <div id="preview-body-{{ tpl.pk }}" class="accordion-collapse collapse"
+                                 data-bs-parent="#preview-{{ tpl.pk }}">
+                                <div class="accordion-body py-2">
+                                    <pre class="small text-muted mb-0"
+                                         style="white-space: pre-wrap; max-height: 220px; overflow-y: auto; font-family: inherit;">{{ tpl.content|truncatechars:600 }}</pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CTA -->
+                    <a href="{% url 'wiki:page_create' %}?template={{ tpl.pk }}"
+                       class="btn btn-primary w-100">
+                        <i class="fas fa-arrow-right me-2"></i>Use This Template
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="fas fa-info-circle me-2"></i>No templates available at the moment.
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

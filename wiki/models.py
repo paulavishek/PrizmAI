@@ -612,3 +612,30 @@ class WikiMeetingTask(models.Model):
     
     def __str__(self):
         return f"Task '{self.task.title}' from {self.meeting_analysis.wiki_page.title}"
+
+
+class WikiTemplate(models.Model):
+    """
+    Pre-built, read-only wiki page templates for common PM documents.
+    These are system-level records — not user-created and not editable from the UI.
+    Content is seeded via a data migration and can be toggled with is_active.
+    """
+    name = models.CharField(max_length=200)
+    description = models.CharField(max_length=300, help_text='One-line summary shown on template cards')
+    category_name = models.CharField(
+        max_length=100,
+        help_text='Suggested WikiCategory name; auto-created for the org if it does not exist'
+    )
+    content = models.TextField(help_text='Full Markdown body pre-filled into the create form')
+    icon = models.CharField(max_length=50, default='file-alt', help_text='Font Awesome icon name (without fa- prefix)')
+    color = models.CharField(max_length=7, default='#3498db', help_text='Hex accent color for the card')
+    order = models.IntegerField(default=0, help_text='Display order in the gallery (lower = first)')
+    is_active = models.BooleanField(default=True, help_text='Inactive templates are hidden from the gallery')
+
+    class Meta:
+        ordering = ['order', 'name']
+        verbose_name = 'Wiki Template'
+        verbose_name_plural = 'Wiki Templates'
+
+    def __str__(self):
+        return self.name

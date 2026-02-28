@@ -43,6 +43,7 @@ urlpatterns = [
     # Page Management
     path('', views.WikiPageListView.as_view(), name='page_list'),
     path('category/<int:category_id>/', views.WikiPageListView.as_view(), name='page_list_by_category'),
+    path('templates/', views.template_gallery, name='template_gallery'),
     path('create/', views.WikiPageCreateView.as_view(), name='page_create'),
     path('page/<slug:slug>/', views.WikiPageDetailView.as_view(), name='page_detail'),
     path('page/<slug:slug>/edit/', views.WikiPageUpdateView.as_view(), name='page_edit'),

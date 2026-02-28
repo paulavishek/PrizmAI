@@ -10,8 +10,9 @@ from django.views.decorators.http import require_http_methods
 from django.contrib import messages
 
 from .models import (
-    WikiPage, WikiCategory, WikiAttachment, WikiLink, 
-    MeetingNotes, WikiPageVersion, WikiLinkBetweenPages, WikiPageAccess
+    WikiPage, WikiCategory, WikiAttachment, WikiLink,
+    MeetingNotes, WikiPageVersion, WikiLinkBetweenPages, WikiPageAccess,
+    WikiTemplate
 )
 from .forms import (
     WikiPageForm, WikiCategoryForm, WikiAttachmentForm, WikiLinkForm,
@@ -197,7 +198,43 @@ class WikiPageCreateView(WikiBaseView, CreateView):
     model = WikiPage
     form_class = WikiPageForm
     template_name = 'wiki/page_form.html'
-    
+
+    def _get_active_template(self):
+        """Return the WikiTemplate requested via ?template=<pk>, or None."""
+        template_id = self.request.GET.get('template')
+        if template_id:
+            try:
+                return WikiTemplate.objects.get(pk=template_id, is_active=True)
+            except (WikiTemplate.DoesNotExist, ValueError):
+                pass
+        return None
+
+    def get_initial(self):
+        """Pre-fill the form when a ?template=<pk> query parameter is present."""
+        initial = super().get_initial()
+        tpl = self._get_active_template()
+        if tpl:
+            org = self.get_organization()
+            # Auto-create the suggested category for this org if it doesn't exist yet
+            category, _ = WikiCategory.objects.get_or_create(
+                name=tpl.category_name,
+                organization=org,
+                defaults={
+                    'icon': 'folder-open',
+                    'color': tpl.color,
+                    'ai_assistant_type': 'meeting' if 'meeting' in tpl.category_name.lower() else 'documentation',
+                }
+            )
+            initial['title'] = tpl.name
+            initial['content'] = tpl.content
+            initial['category'] = category.pk
+        return initial
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['active_template'] = self._get_active_template()
+        return context
+
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
         kwargs['organization'] = self.get_organization()
@@ -703,6 +740,19 @@ import json
 # ============================================================================
 
 @login_required
+def template_gallery(request):
+    """
+    Template Library page (/wiki/templates/).
+    Shows all active WikiTemplate records as browsable cards.
+    Any logged-in user can view and use templates.
+    """
+    templates = WikiTemplate.objects.filter(is_active=True).order_by('order')
+    return render(request, 'wiki/template_gallery.html', {
+        'templates': templates,
+    })
+
+
+@login_required
 def knowledge_hub_home(request):
     """Unified Knowledge Hub - Wiki Documentation with AI"""
     org = request.user.profile.organization if hasattr(request.user, 'profile') else None
@@ -742,6 +792,8 @@ def knowledge_hub_home(request):
     # Get wiki categories (include demo org categories)
     wiki_categories = WikiCategory.objects.filter(org_filter).prefetch_related('pages').distinct()
     
+    wiki_templates = WikiTemplate.objects.filter(is_active=True).order_by('order')
+
     return render(request, 'wiki/knowledge_hub_home.html', {
         'organization': org,
         'wiki_pages': wiki_pages,
@@ -749,6 +801,7 @@ def knowledge_hub_home(request):
         'total_wiki_pages': total_wiki_pages,
         'total_views': total_views,
         'wiki_categories': wiki_categories,
+        'wiki_templates': wiki_templates,
     })
 
 
