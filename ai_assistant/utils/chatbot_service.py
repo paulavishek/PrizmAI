@@ -142,9 +142,10 @@ ACTION_INTENT_PATTERNS = {
         'create board', 'new project board', 'create a new board',
     ],
     'activate_automation': [
-        'set up automation', 'create automation', 'automate',
-        'set up a rule', 'add automation', 'automation for',
-        'notify me when', 'alert me when', 'automatically',
+        'set up automation', 'set up an automation', 'setup automation',
+        'create automation', 'create an automation', 'automate',
+        'activate automation', 'set up a rule', 'add automation',
+        'automation for', 'notify me when', 'alert me when', 'automatically',
     ],
     'confirm_action': [
         'yes', 'confirm', 'go ahead', 'do it', 'create it',

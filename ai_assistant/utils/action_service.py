@@ -5,6 +5,7 @@ This service is completely separate from the AI / Gemini logic.
 Every database write is wrapped in try / except and returns a structured dict.
 """
 import logging
+from django.db import transaction
 from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
@@ -56,6 +57,8 @@ class SpectraActionService:
         ``(None, member_names_list)`` on failure.
         """
         name_lower = name.lower().strip()
+        if not name_lower:
+            return None, []
         candidates = list(board.members.all())
         if board.created_by and board.created_by not in candidates:
             candidates.append(board.created_by)
@@ -136,17 +139,19 @@ class SpectraActionService:
 
             # Set change-tracking attribute used by signals
             task._changed_by_user = user
-            task.save()
 
-            # Record activity
-            TaskActivity.objects.create(
-                task=task,
-                user=user,
-                activity_type='created',
-                description=f"Created task '{task.title}' via Spectra",
-            )
+            with transaction.atomic():
+                task.save()
 
-            # Audit trail
+                # Record activity
+                TaskActivity.objects.create(
+                    task=task,
+                    user=user,
+                    activity_type='created',
+                    description=f"Created task '{task.title}' via Spectra",
+                )
+
+            # Audit trail (non-critical — outside the atomic block)
             try:
                 log_model_change('task.created', task, user)
             except Exception as audit_err:
@@ -183,39 +188,40 @@ class SpectraActionService:
             if hasattr(user, 'profile') and user.profile:
                 organization = user.profile.organization
 
-            board = Board(
-                name=collected_data['name'],
-                description=collected_data.get('description', '') or '',
-                organization=organization,
-                created_by=user,
-            )
-            board.save()
-            board.members.add(user)
+            with transaction.atomic():
+                board = Board(
+                    name=collected_data['name'],
+                    description=collected_data.get('description', '') or '',
+                    organization=organization,
+                    created_by=user,
+                )
+                board.save()
+                board.members.add(user)
 
-            # Assign Admin role via RBAC if organization exists
-            if organization:
-                try:
-                    from kanban.permission_models import Role, BoardMembership
-                    admin_role = Role.objects.filter(
-                        organization=organization,
-                        name='Admin',
-                    ).first()
-                    if admin_role:
-                        BoardMembership.objects.create(
-                            board=board,
-                            user=user,
-                            role=admin_role,
-                            added_by=user,
-                        )
-                except Exception as rbac_err:
-                    logger.warning('Spectra RBAC setup failed for board %s: %s', board.id, rbac_err)
+                # Assign Admin role via RBAC if organization exists
+                if organization:
+                    try:
+                        from kanban.permission_models import Role, BoardMembership
+                        admin_role = Role.objects.filter(
+                            organization=organization,
+                            name='Admin',
+                        ).first()
+                        if admin_role:
+                            BoardMembership.objects.create(
+                                board=board,
+                                user=user,
+                                role=admin_role,
+                                added_by=user,
+                            )
+                    except Exception as rbac_err:
+                        logger.warning('Spectra RBAC setup failed for board %s: %s', board.id, rbac_err)
 
-            # Create 3 default columns (matching existing board creation behaviour)
-            default_columns = ['To Do', 'In Progress', 'Done']
-            for i, col_name in enumerate(default_columns):
-                Column.objects.create(name=col_name, board=board, position=i)
+                # Create 3 default columns (matching existing board creation behaviour)
+                default_columns = ['To Do', 'In Progress', 'Done']
+                for i, col_name in enumerate(default_columns):
+                    Column.objects.create(name=col_name, board=board, position=i)
 
-            # Audit trail
+            # Audit trail (non-critical — outside the atomic block)
             try:
                 log_model_change('board.created', board, user)
             except Exception as audit_err:
@@ -283,6 +289,15 @@ class SpectraActionService:
             )
 
             if not created:
+                if not automation.is_active:
+                    # Re-activate previously deactivated automation
+                    automation.is_active = True
+                    automation.save(update_fields=['is_active'])
+                    logger.info(
+                        'Spectra re-activated automation "%s" on board #%s for user %s',
+                        tpl['name'], board.id, user.username,
+                    )
+                    return {'success': True, 'automation': automation}
                 return {
                     'success': False,
                     'error': f'The automation "{tpl["name"]}" is already active on this board.',

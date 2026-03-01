@@ -237,6 +237,16 @@ def send_message(request):
         board = None
         if board_id:
             board = get_object_or_404(Board, id=board_id)
+            # Verify user has access to this board
+            if not (
+                board.is_official_demo_board
+                or board.created_by_id == request.user.id
+                or board.members.filter(id=request.user.id).exists()
+            ):
+                return JsonResponse(
+                    {'error': 'You do not have access to this board.'},
+                    status=403,
+                )
             session.board = board
             session.save()
         
@@ -308,7 +318,7 @@ def send_message(request):
                 } if active_attachment else None,
                 'ai_usage': {
                     'remaining': remaining,
-                    'used': quota.requests_used if quota else 0,
+                    'used': quota.requests_used + 1 if quota else 0,
                 },
             })
         # ── End Conversational Spectra ───────────────────────────────

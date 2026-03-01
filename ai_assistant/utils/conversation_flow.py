@@ -11,8 +11,9 @@ Every public method returns a plain-text response string that Spectra sends
 back to the user.  State is read/written through ``SpectraConversationState``.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
+from django.db import IntegrityError
 from django.db.models import Q
 from django.utils import timezone
 
@@ -41,6 +42,7 @@ def get_or_create_state(user, board=None):
             user=user,
             board=board,
         )
+        _auto_reset_stale(state)
         return state
 
     # board is None — NULLs are distinct in unique constraints
@@ -49,8 +51,31 @@ def get_or_create_state(user, board=None):
         board__isnull=True,
     ).first()
     if state is None:
-        state = SpectraConversationState.objects.create(user=user, board=None)
+        try:
+            state = SpectraConversationState.objects.create(user=user, board=None)
+        except IntegrityError:
+            # Concurrent request beat us — re-fetch
+            state = SpectraConversationState.objects.filter(
+                user=user,
+                board__isnull=True,
+            ).first()
+    _auto_reset_stale(state)
     return state
+
+
+STALE_STATE_MINUTES = 30
+
+
+def _auto_reset_stale(state):
+    """Auto-reset state if the user hasn't interacted in >30 minutes."""
+    if state and state.mode != 'normal':
+        cutoff = timezone.now() - timedelta(minutes=STALE_STATE_MINUTES)
+        if state.updated_at < cutoff:
+            logger.info(
+                'Auto-resetting stale conversation state %s (last updated %s)',
+                state.id, state.updated_at,
+            )
+            state.reset()
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -552,6 +577,13 @@ class ConversationFlowManager:
                     state.reset()
                     return "The board no longer exists. Please try again."
 
+        if board is None:
+            state.reset()
+            return (
+                "I need a board to create the task in. "
+                "Please select a board from the dropdown above and try again."
+            )
+
         # Prepare collected_data for the service
         create_data = {
             'title': data.get('title', 'Untitled Task'),
@@ -627,6 +659,13 @@ class ConversationFlowManager:
                 except Board.DoesNotExist:
                     state.reset()
                     return "The board no longer exists. Please try again."
+
+        if board is None:
+            state.reset()
+            return (
+                "I need a board to set up the automation. "
+                "Please select a board from the dropdown above and try again."
+            )
 
         template_number = data.get('template_number', 1)
         result = action_service.activate_automation_template(user, board, template_number)
