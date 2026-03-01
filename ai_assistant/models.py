@@ -293,3 +293,55 @@ class AIAssistantAttachment(models.Model):
 
     def is_valid_type(self):
         return self.file_type.lower() in self.ALLOWED_FILE_TYPES
+
+
+class SpectraConversationState(models.Model):
+    """
+    Tracks conversation state for Spectra's action-capable flows.
+    One state record per user per board. When a flow completes or is
+    cancelled, mode resets to 'normal' and collected_data is cleared.
+    """
+    MODE_CHOICES = [
+        ('normal', 'Normal Q&A'),
+        ('collecting_task', 'Collecting task details'),
+        ('collecting_board', 'Collecting board details'),
+        ('collecting_automation', 'Collecting automation selection'),
+        ('awaiting_confirmation', 'Awaiting user confirmation'),
+    ]
+    PENDING_ACTION_CHOICES = [
+        ('', 'None'),
+        ('create_task', 'Create Task'),
+        ('create_board', 'Create Board'),
+        ('activate_automation', 'Activate Automation'),
+    ]
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='spectra_conversation_states',
+    )
+    board = models.ForeignKey(
+        'kanban.Board', on_delete=models.CASCADE,
+        null=True, blank=True,
+        related_name='spectra_conversation_states',
+    )
+    mode = models.CharField(max_length=50, choices=MODE_CHOICES, default='normal')
+    collected_data = models.JSONField(default=dict, blank=True)
+    pending_action = models.CharField(
+        max_length=50, choices=PENDING_ACTION_CHOICES, blank=True, default='',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ['user', 'board']
+
+    def __str__(self):
+        board_name = self.board.name if self.board else 'No board'
+        return f'{self.user.username} | {board_name} | {self.mode}'
+
+    def reset(self):
+        """Reset state back to normal Q&A mode."""
+        self.mode = 'normal'
+        self.collected_data = {}
+        self.pending_action = ''
+        self.save(update_fields=['mode', 'collected_data', 'pending_action', 'updated_at'])

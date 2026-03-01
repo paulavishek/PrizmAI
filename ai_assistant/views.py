@@ -248,6 +248,71 @@ def send_message(request):
             attachment=active_attachment,
         )
         
+        # ── Conversational Spectra: check conversation state ─────────
+        from ai_assistant.utils.conversation_flow import (
+            ConversationFlowManager, get_or_create_state,
+        )
+
+        conv_state = get_or_create_state(request.user, board)
+        flow_mgr = ConversationFlowManager()
+        flow_response = flow_mgr.handle_message(
+            request.user, board, message_text, conv_state,
+        )
+
+        if flow_response is not None:
+            # Spectra handled this message via a conversation flow.
+            # Build an assistant message and return immediately —
+            # skip the normal Gemini Q&A path.
+            assistant_message = AIAssistantMessage.objects.create(
+                session=session,
+                role='assistant',
+                content=flow_response,
+                model='system',
+                tokens_used=0,
+                context_data={'spectra_action_flow': True},
+                attachment=active_attachment,
+            )
+
+            session.message_count = AIAssistantMessage.objects.filter(
+                session=session
+            ).count()
+            session.save()
+
+            # Track usage (no tokens consumed for flow messages)
+            try:
+                response_time_ms = int((time.time() - start_time) * 1000)
+                track_ai_request(
+                    user=request.user,
+                    feature='ai_assistant',
+                    request_type='spectra_action',
+                    board_id=board_id,
+                    success=True,
+                    tokens_used=0,
+                    response_time_ms=response_time_ms,
+                )
+            except Exception:
+                pass
+
+            _, _, remaining = check_ai_quota(request.user)
+
+            return JsonResponse({
+                'status': 'success',
+                'message_id': assistant_message.id,
+                'response': flow_response,
+                'source': 'spectra_action',
+                'used_web_search': False,
+                'search_sources': [],
+                'active_attachment': {
+                    'id': active_attachment.id,
+                    'filename': active_attachment.filename,
+                } if active_attachment else None,
+                'ai_usage': {
+                    'remaining': remaining,
+                    'used': quota.requests_used if quota else 0,
+                },
+            })
+        # ── End Conversational Spectra ───────────────────────────────
+        
         # Get response from chatbot service
         # Note: Using stateless mode - no history passed to prevent session persistence
         chatbot = TaskFlowChatbotService(user=request.user, board=board)

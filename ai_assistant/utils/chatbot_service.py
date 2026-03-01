@@ -127,6 +127,55 @@ def classify_spectra_query(prompt: str) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Action intent detection for Conversational Spectra
+# ---------------------------------------------------------------------------
+
+ACTION_INTENT_PATTERNS = {
+    'create_task': [
+        'create a task', 'add a task', 'new task', 'make a task',
+        'create task', 'add task', 'i need a task', 'can you create a task',
+        'create a new task', 'add a new task',
+    ],
+    'create_board': [
+        'create a board', 'new board', 'make a board', 'add a board',
+        'create board', 'new project board', 'create a new board',
+    ],
+    'activate_automation': [
+        'set up automation', 'create automation', 'automate',
+        'set up a rule', 'add automation', 'automation for',
+        'notify me when', 'alert me when', 'automatically',
+    ],
+    'confirm_action': [
+        'yes', 'confirm', 'go ahead', 'do it', 'create it',
+        'looks good', 'correct',
+    ],
+    'cancel_action': [
+        'no', 'cancel', 'stop', 'nevermind', 'abort',
+        'dont create', "don't create",
+    ],
+}
+
+
+def detect_action_intent(message: str) -> str | None:
+    """
+    Detect whether a user message expresses an action intent
+    (create task, create board, activate automation, confirm, cancel).
+
+    This runs BEFORE the general ``classify_spectra_query()`` so that
+    specific action phrases take priority over the broader pattern matching.
+
+    Returns the intent key (e.g. ``'create_task'``) or ``None``.
+    """
+    msg = message.lower().strip()
+
+    for intent, phrases in ACTION_INTENT_PATTERNS.items():
+        for phrase in phrases:
+            if phrase in msg:
+                return intent
+    return None
+
+
 class TaskFlowChatbotService:
     """
     Chatbot service for PrizmAI project assistant

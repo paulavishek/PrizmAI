@@ -6,6 +6,7 @@ from .models import (
     AIAssistantAnalytics,
     AITaskRecommendation,
     UserPreference,
+    SpectraConversationState,
 )
 
 
@@ -58,4 +59,12 @@ class UserPreferenceAdmin(admin.ModelAdmin):
     list_display = ['user', 'enable_web_search', 'updated_at']
     list_filter = ['enable_web_search']
     search_fields = ['user__username']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(SpectraConversationState)
+class SpectraConversationStateAdmin(admin.ModelAdmin):
+    list_display = ['user', 'board', 'mode', 'pending_action', 'updated_at']
+    list_filter = ['mode', 'pending_action']
+    search_fields = ['user__username', 'board__name']
     readonly_fields = ['created_at', 'updated_at']
