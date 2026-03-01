@@ -160,7 +160,7 @@
        MILESTONE STYLING - GLOWING DIAMOND EFFECT
        ============================================ */
 
-    /* Animation for milestone glowing pulsing effect */
+    /* Animation for active/upcoming milestone diamond - purple glow */
     @keyframes milestonePulse {
         0%, 100% {
             filter: drop-shadow(0 0 4px rgba(124, 58, 237, 0.7)) drop-shadow(0 0 8px rgba(124, 58, 237, 0.5));
@@ -170,36 +170,48 @@
         }
     }
 
-    /* Milestone bar - purple color with continuous glow */
+    /* Animation for completed milestone diamond - green glow */
+    @keyframes milestoneCompletedPulse {
+        0%, 100% {
+            filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.7)) drop-shadow(0 0 8px rgba(16, 185, 129, 0.5));
+        }
+        50% {
+            filter: drop-shadow(0 0 10px rgba(16, 185, 129, 1)) drop-shadow(0 0 20px rgba(16, 185, 129, 0.7));
+        }
+    }
+
+    /* Hide the native milestone bar rect - the diamond SVG shape is the visual.
+       Use opacity:0 instead of fill:none so the element keeps its geometric
+       bounding box (needed by getAttribute reads) and also does not flash on load. */
     .gantt .bar-wrapper .bar[data-is-milestone="true"],
     .gantt .bar-wrapper .bar[data-is-milestone="true"][data-priority="low"],
     .gantt .bar-wrapper .bar[data-is-milestone="true"][data-priority="medium"],
     .gantt .bar-wrapper .bar[data-is-milestone="true"][data-priority="high"],
     .gantt .bar-wrapper .bar[data-is-milestone="true"][data-priority="urgent"] {
-        fill: #7c3aed !important;
-        stroke: #5b21b6 !important;
-        stroke-width: 2.5px !important;
-        rx: 4 !important;
-        ry: 4 !important;
-        animation: milestonePulse 2.4s ease-in-out infinite !important;
+        opacity: 0 !important;
+        animation: none !important;
     }
 
     .gantt .bar-wrapper .bar[data-is-milestone="true"]:hover {
-        fill: #6d28d9 !important;
+        opacity: 0 !important;
         animation: none !important;
-        filter: brightness(1.2) drop-shadow(0 0 14px rgba(124, 58, 237, 0.9)) !important;
+        filter: none !important;
     }
 
-    /* Milestone completed variant - green to indicate done */
-    .gantt .bar-wrapper .bar[data-is-milestone="true"][data-milestone-status="completed"] {
-        fill: #047857 !important;
-        stroke: #064e3b !important;
-        animation: milestonePulse 3s ease-in-out infinite !important;
+    /* Hide the progress fill slab inside milestone bar rows */
+    .gantt .bar-wrapper[data-is-milestone="true"] .bar-progress {
+        opacity: 0 !important;
     }
 
-    /* Diamond shape overlay on milestone bars */
+    /* Standalone diamond shape - active/upcoming milestone (purple glow) */
     .milestone-diamond-shape {
         pointer-events: none;
+        animation: milestonePulse 2.4s ease-in-out infinite;
+    }
+
+    /* Standalone diamond shape - completed milestone (green glow) */
+    .milestone-diamond-shape.completed {
+        animation: milestoneCompletedPulse 3s ease-in-out infinite;
     }
 
     /* ============================================
@@ -1177,11 +1189,16 @@
                     <span>Critical Path</span>
                 </div>
                 <div class="legend-item">
-                    <span class="legend-color" style="background: #7c3aed; border: 2px solid #5b21b6; box-shadow: 0 0 6px rgba(124,58,237,0.7);"></span>
-                    <svg width="14" height="14" style="vertical-align:middle; margin-left:-2px; margin-right:2px; flex-shrink:0;">
-                        <polygon points="7,1 13,7 7,13 1,7" fill="#7c3aed" stroke="#5b21b6" stroke-width="1.5"/>
+                    <svg width="16" height="16" style="vertical-align:middle; margin-right:4px; flex-shrink:0;">
+                        <polygon points="8,1 15,8 8,15 1,8" fill="#7c3aed" stroke="#5b21b6" stroke-width="1.5"/>
                     </svg>
                     <span>Milestone</span>
+                </div>
+                <div class="legend-item">
+                    <svg width="16" height="16" style="vertical-align:middle; margin-right:4px; flex-shrink:0;">
+                        <polygon points="8,1 15,8 8,15 1,8" fill="#10b981" stroke="#064e3b" stroke-width="1.5"/>
+                    </svg>
+                    <span>Completed Milestone</span>
                 </div>
                 <div class="legend-item" style="margin-left: auto;">
                     <svg width="40" height="12" style="vertical-align: middle;">
@@ -1478,7 +1495,7 @@
         {% if milestone.due_date %}
         {
             id: 'milestone-{{ milestone.id }}',
-            name: '◆ {{ milestone.title|escapejs }}',
+            name: '{{ milestone.title|escapejs }}',
             fullName: '{{ milestone.title|escapejs }}',
             start: '{% if milestone.start_date %}{{ milestone.start_date|date:"Y-m-d" }}{% else %}{{ milestone.due_date|date:"Y-m-d" }}{% endif %}',
             end: '{{ milestone.due_date|date:"Y-m-d" }}',
@@ -1999,40 +2016,17 @@
             }
         });
 
-        // Apply milestone-specific styling
+        // PASS 1 – mark data attributes only (needed by CSS to hide the native rect/progress).
+        // Diamond drawing deliberately happens in PASS 2, after cloneNode replaces wrappers.
         ganttMilestones.forEach(milestone => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${milestone.id}"]`);
             if (!barWrapper) return;
-
+            barWrapper.setAttribute('data-is-milestone', 'true');
             const barElement = barWrapper.querySelector('.bar');
             if (barElement) {
                 barElement.setAttribute('data-is-milestone', 'true');
                 barElement.setAttribute('data-milestone-status', milestone.milestoneStatus || 'upcoming');
-                barElement.setAttribute('data-priority', 'medium'); // prevent priority color override clashing
-
-                // Overlay a diamond shape on the milestone bar (if not already done)
-                const existingDiamond = barWrapper.querySelector('.milestone-diamond-shape');
-                if (!existingDiamond) {
-                    try {
-                        const barRect = barElement.getBBox();
-                        if (barRect.width > 0 && barRect.height > 0) {
-                            const cx = barRect.x + barRect.width / 2;
-                            const cy = barRect.y + barRect.height / 2;
-                            const halfSide = Math.min(barRect.height * 0.46, barRect.width * 0.38, 10);
-                            const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-                            diamond.setAttribute('points',
-                                `${cx},${cy - halfSide} ${cx + halfSide},${cy} ${cx},${cy + halfSide} ${cx - halfSide},${cy}`
-                            );
-                            diamond.setAttribute('fill', milestone.milestoneStatus === 'completed' ? 'rgba(16,185,129,0.9)' : 'rgba(255,215,0,0.92)');
-                            diamond.setAttribute('stroke', milestone.milestoneStatus === 'completed' ? '#064e3b' : '#92400e');
-                            diamond.setAttribute('stroke-width', '1.5');
-                            diamond.classList.add('milestone-diamond-shape');
-                            barWrapper.appendChild(diamond);
-                        }
-                    } catch (e) {
-                        // getBBox can fail – silently ignore
-                    }
-                }
+                barElement.setAttribute('data-priority', 'medium');
             }
         });
         
@@ -2045,7 +2039,8 @@
         // Enhance dependency arrows with better styling
         enhanceDependencyArrows();
 
-        // Add manual click handlers to all bars for better compatibility
+        // Add manual click handlers to all bars for better compatibility.
+        // NOTE: cloneNode(true) replaces every barWrapper – diamond drawing MUST come after.
         document.querySelectorAll('.bar-wrapper').forEach(barWrapper => {
             barWrapper.style.cursor = 'pointer';
             // Remove old listeners by cloning the node
@@ -2077,6 +2072,43 @@
                     }
                 }
             });
+        });
+
+        // PASS 2 – draw diamond markers on the now-final barWrapper nodes (post-cloneNode).
+        // Always remove any stale diamond first so re-renders stay clean.
+        ganttMilestones.forEach(milestone => {
+            const barWrapper = document.querySelector(`.bar-wrapper[data-id="${milestone.id}"]`);
+            if (!barWrapper) return;
+
+            // Remove any old diamond that may have been cloned from a previous pass
+            barWrapper.querySelectorAll('.milestone-diamond-shape').forEach(el => el.remove());
+
+            const barElement = barWrapper.querySelector('.bar');
+            if (!barElement) return;
+
+            // Read bar geometry directly from SVG attributes (reliable; unaffected by CSS).
+            // frappe-gantt stores absolute SVG x/y on the rect; bar-wrapper has no transform.
+            const bx = parseFloat(barElement.getAttribute('x') || '0');
+            const by = parseFloat(barElement.getAttribute('y') || '0');
+            const bh = parseFloat(barElement.getAttribute('height') || '0');
+
+            if (bh <= 0) return;
+
+            const isCompleted = milestone.milestoneStatus === 'completed';
+            const cx = bx;              // left edge of bar = due-date column
+            const cy = by + bh / 2;    // vertical centre of the row
+            const halfSide = 10;       // 10 px gives a prominent 20×20 diamond
+
+            const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            diamond.setAttribute('points',
+                `${cx},${cy - halfSide} ${cx + halfSide},${cy} ${cx},${cy + halfSide} ${cx - halfSide},${cy}`
+            );
+            diamond.setAttribute('fill',   isCompleted ? '#10b981' : '#7c3aed');
+            diamond.setAttribute('stroke', isCompleted ? '#064e3b' : '#5b21b6');
+            diamond.setAttribute('stroke-width', '1.5');
+            diamond.classList.add('milestone-diamond-shape');
+            if (isCompleted) diamond.classList.add('completed');
+            barWrapper.appendChild(diamond);
         });
 
         // Enhance bars with additional info
@@ -2130,10 +2162,12 @@
             // Keep polygons that are:
             // 1. Inside defs (our custom markers)
             // 2. Our custom arrowhead class
+            // 3. Milestone diamond shapes (Asana-style diamond markers)
             const isInDefs = polygon.closest('defs');
             const isCustomArrow = polygon.classList.contains('custom-arrowhead');
+            const isMilestoneDiamond = polygon.classList.contains('milestone-diamond-shape');
             
-            if (!isInDefs && !isCustomArrow) {
+            if (!isInDefs && !isCustomArrow && !isMilestoneDiamond) {
                 // First try to remove it
                 try {
                     polygon.remove();
@@ -2562,7 +2596,8 @@
                             if (node.nodeName === 'polygon' || node.tagName === 'polygon') {
                                 const isInDefs = node.closest && node.closest('defs');
                                 const isCustom = node.classList && node.classList.contains('custom-arrowhead');
-                                if (!isInDefs && !isCustom) {
+                                const isMilestoneDiamond = node.classList && node.classList.contains('milestone-diamond-shape');
+                                if (!isInDefs && !isCustom && !isMilestoneDiamond) {
                                     node.remove();
                                 }
                             }
@@ -2571,7 +2606,8 @@
                                 node.querySelectorAll('polygon').forEach(function(p) {
                                     const isInDefs = p.closest('defs');
                                     const isCustom = p.classList.contains('custom-arrowhead');
-                                    if (!isInDefs && !isCustom) {
+                                    const isMilestoneDiamond = p.classList.contains('milestone-diamond-shape');
+                                    if (!isInDefs && !isCustom && !isMilestoneDiamond) {
                                         p.remove();
                                     }
                                 });
