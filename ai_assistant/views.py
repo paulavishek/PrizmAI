@@ -7,7 +7,10 @@ from django.utils import timezone
 from django.db.models import Count, Sum, Q, Avg
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 import json
+import logging
 from datetime import timedelta
+
+logger = logging.getLogger(__name__)
 
 from kanban.models import Board, Task
 from .models import (
@@ -393,7 +396,7 @@ def send_message(request):
 
             analytics.save()
         except Exception as e:
-            print(f"Error updating analytics: {e}")
+            logger.warning("Error updating analytics: %s", e)
         
         # Track AI usage (wrap in try-except to not fail the response if tracking fails)
         try:
@@ -408,7 +411,7 @@ def send_message(request):
                 response_time_ms=response_time_ms
             )
         except Exception as e:
-            print(f"Error tracking AI request: {e}")
+            logger.warning("Error tracking AI request: %s", e)
         
         # Get updated remaining count
         _, _, remaining = check_ai_quota(request.user)
@@ -450,7 +453,7 @@ def send_message(request):
                 response_time_ms=response_time_ms
             )
         except Exception as track_error:
-            print(f"Error tracking failed AI request: {track_error}")
+            logger.warning("Error tracking failed AI request: %s", track_error)
         return JsonResponse({'error': str(e)}, status=500)
 
 
@@ -517,8 +520,7 @@ def upload_attachment(request):
             attachment.extracted_text = text
             attachment.save(update_fields=['extracted_text'])
     except Exception as exc:
-        import logging
-        logging.getLogger(__name__).warning(
+        logger.warning(
             'Could not extract text from Spectra attachment %s: %s', attachment.id, exc
         )
         # Don't fail the upload — text extraction failure is non-fatal;
@@ -638,7 +640,7 @@ def rename_session(request, session_id):
         data = json.loads(request.body)
         new_title = data.get('title', '').strip()
         
-        print(f"[DEBUG] Renaming session {session_id}: '{session.title}' -> '{new_title}'")
+        logger.debug("Renaming session %s: '%s' -> '%s'", session_id, session.title, new_title)
         
         if not new_title:
             return JsonResponse({'success': False, 'error': 'Title cannot be empty'}, status=400)
@@ -646,15 +648,15 @@ def rename_session(request, session_id):
         session.title = new_title
         session.save()
         
-        print(f"[DEBUG] Session saved successfully. New title: '{session.title}'")
+        logger.debug("Session saved successfully. New title: '%s'", session.title)
         
         return JsonResponse({'success': True, 'title': session.title})
     
     except json.JSONDecodeError:
-        print(f"[DEBUG] JSON decode error in rename_session")
+        logger.debug("JSON decode error in rename_session")
         return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
     except Exception as e:
-        print(f"[DEBUG] Error in rename_session: {str(e)}")
+        logger.error("Error in rename_session: %s", e)
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 

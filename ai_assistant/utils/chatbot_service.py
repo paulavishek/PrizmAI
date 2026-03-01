@@ -315,7 +315,7 @@ class TaskFlowChatbotService:
                                 skills = [s.get('name', '') for s in m.profile.skills[:3]]
                                 if skills:
                                     member_info += f" (Skills: {', '.join(skills)})"
-                        except:
+                        except Exception:
                             pass
                         context += f"  - {member_info}\n"
             
@@ -336,95 +336,6 @@ class TaskFlowChatbotService:
         except Exception as e:
             logger.error(f"Error getting PrizmAI context: {e}")
             return "Project context unavailable."
-    
-    def get_risk_analysis_context(self, prompt):
-        """
-        Get risk analysis data for risk-related queries
-        
-        Args:
-            prompt (str): User query
-            
-        Returns:
-            str: Formatted risk analysis context
-        """
-        try:
-            # Check if this is a risk-related query
-            risk_keywords = ['risk', 'critical', 'blocker', 'issue', 'problem', 'delay', 'dependent']
-            if not any(kw in prompt.lower() for kw in risk_keywords):
-                return ""
-            
-            # Get boards based on context
-            if self.board:
-                board_tasks = Task.objects.filter(column__board=self.board)
-            elif self.user:
-                try:
-                    organization = self.user.profile.organization
-                    boards = Board.objects.filter(
-                        Q(organization=organization) & 
-                        (Q(created_by=self.user) | Q(members=self.user))
-                    ).distinct()
-                except:
-                    boards = Board.objects.filter(
-                        Q(created_by=self.user) | Q(members=self.user)
-                    ).distinct()
-                board_tasks = Task.objects.filter(column__board__in=boards)
-            else:
-                return ""
-            
-            # Get high-risk tasks (exclude completed tasks)
-            high_risk_tasks = board_tasks.filter(
-                risk_level__in=['high', 'critical']
-            ).exclude(
-                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
-            ).select_related('assigned_to', 'column').order_by('-risk_score')[:10]
-            
-            if not high_risk_tasks.exists():
-                # Try alternative: tasks with AI risk score
-                high_risk_tasks = board_tasks.filter(
-                    ai_risk_score__gte=70
-                ).exclude(
-                    Q(column__name__icontains='done') | Q(column__name__icontains='closed')
-                ).select_related('assigned_to', 'column').order_by('-ai_risk_score')[:10]
-            
-            if not high_risk_tasks.exists():
-                return ""
-            
-            context = "**Risk Analysis Data:**\n\n"
-            context += f"High-Risk Tasks Found: {len(high_risk_tasks)}\n\n"
-            
-            for task in high_risk_tasks:
-                context += f"**Task: {task.title}**\n"
-                context += f"  Status: {task.column.name if task.column else 'Unknown'}\n"
-                assigned_name = (task.assigned_to.get_full_name() or task.assigned_to.username) if task.assigned_to else 'Unassigned'
-                context += f"  Assigned: {assigned_name}\n"
-                
-                # Risk level
-                if task.risk_level:
-                    context += f"  Risk Level: {task.risk_level.upper()}\n"
-                if task.risk_score:
-                    context += f"  Risk Score: {task.risk_score}/9\n"
-                if task.ai_risk_score:
-                    context += f"  AI Risk Score: {task.ai_risk_score}/100\n"
-                
-                # Risk indicators
-                if task.risk_indicators:
-                    context += f"  Risk Indicators: {', '.join(task.risk_indicators[:3])}\n"
-                
-                # Mitigation suggestions
-                if task.mitigation_suggestions:
-                    context += f"  Mitigation: {task.mitigation_suggestions[0] if task.mitigation_suggestions else 'N/A'}\n"
-                
-                # Dependencies
-                if task.parent_task:
-                    context += f"  Depends On: {task.parent_task.title}\n"
-                
-                context += "\n"
-            
-            return context
-        
-        except Exception as e:
-            logger.error(f"Error getting risk analysis context: {e}")
-            return ""
     
     def get_knowledge_base_context(self, query, max_results=3):
         """
@@ -537,7 +448,7 @@ class TaskFlowChatbotService:
             # Get user's organization
             try:
                 organization = self.user.profile.organization
-            except:
+            except Exception:
                 # Fallback if profile doesn't exist
                 organization = None
             
@@ -936,7 +847,7 @@ class TaskFlowChatbotService:
         """Detect if query is about critical or high-priority tasks"""
         critical_keywords = [
             'critical', 'urgent', 'blocker', 'blocked', 'high risk',
-            'high priority', 'emergency', 'ASAP', 'high-risk',
+            'high priority', 'emergency', 'asap', 'high-risk',
             'must do', 'must have'
         ]
         return any(kw in prompt.lower() for kw in critical_keywords)
@@ -1022,29 +933,6 @@ class TaskFlowChatbotService:
             'due soon', 'upcoming deadline', 'deadline', 'due date'
         ]
         return any(kw in prompt.lower() for kw in overdue_keywords)
-    
-    def _is_strategic_query(self, prompt):
-        """
-        Detect if query is asking for strategic advice, best practices, or how-to guidance.
-        Only triggers for genuinely strategic/methodology questions, not project-specific ones.
-        """
-        # Skip if this is clearly about the user's own project data
-        project_data_indicators = [
-            'my task', 'assigned to me', 'our board', 'my board',
-            'workload', 'who should', 'who has', 'overdue', 'what should i work on',
-            'work on today', 'task assigned', 'blockers', 'risks in my',
-        ]
-        prompt_lower = prompt.lower()
-        if any(indicator in prompt_lower for indicator in project_data_indicators):
-            return False
-        
-        strategic_keywords = [
-            'best practice', 'best practices', 'industry standard',
-            'methodology', 'approach for complex', 'proven method',
-            'expert advice on', 'strategy for scaling', 'how to implement agile',
-            'optimize process', 'improve team productivity framework',
-        ]
-        return any(kw in prompt_lower for kw in strategic_keywords)
     
     def _get_user_tasks_context(self, prompt):
         """
@@ -1574,7 +1462,7 @@ class TaskFlowChatbotService:
         try:
             if not organization:
                 organization = self.user.profile.organization
-        except:
+        except Exception:
             organization = None
         
         if organization:
@@ -1618,7 +1506,7 @@ class TaskFlowChatbotService:
             try:
                 if hasattr(self.user, 'profile') and self.user.profile.organization:
                     user_org = self.user.profile.organization
-            except:
+            except Exception:
                 pass
             
             # Query organizations: user created OR user's profile belongs to
@@ -1855,7 +1743,7 @@ class TaskFlowChatbotService:
                     column__board=specific_board,
                     mitigation_suggestions__isnull=False
                 ).exclude(
-                    mitigation_suggestions__exact='[]'
+                    mitigation_suggestions=[]
                 ).filter(
                     Q(risk_level__in=['high', 'critical']) |
                     Q(ai_risk_score__gte=70) |
@@ -1867,7 +1755,7 @@ class TaskFlowChatbotService:
                     column__board__in=user_boards,
                     mitigation_suggestions__isnull=False
                 ).exclude(
-                    mitigation_suggestions__exact='[]'
+                    mitigation_suggestions=[]
                 ).filter(
                     Q(risk_level__in=['high', 'critical']) |
                     Q(ai_risk_score__gte=70) |
@@ -1998,7 +1886,7 @@ class TaskFlowChatbotService:
                         ).count()
                         if involvement > 0:
                             context += f"  - Tasks Involved: {involvement}\n"
-                    except:
+                    except Exception:
                         pass
                 
                 context += "\n"
@@ -2041,7 +1929,7 @@ class TaskFlowChatbotService:
                         context += f"  - {alert.team_member.get_full_name() if hasattr(alert, 'team_member') else 'Team'}: "
                         context += f"{alert.alert_message if hasattr(alert, 'alert_message') else 'Capacity alert'}\n"
                     context += "\n"
-            except:
+            except Exception:
                 pass
             
             # Get demand forecasts
@@ -2059,7 +1947,7 @@ class TaskFlowChatbotService:
                         if hasattr(forecast, 'confidence_level'):
                             context += f"    Confidence: {forecast.confidence_level}%\n"
                     context += "\n"
-            except:
+            except Exception:
                 pass
             
             # Get workload recommendations
@@ -2075,7 +1963,7 @@ class TaskFlowChatbotService:
                             context += f"  - {rec.recommendation_text}\n"
                         if hasattr(rec, 'expected_impact'):
                             context += f"    Impact: {rec.expected_impact}\n"
-            except:
+            except Exception:
                 pass
             
             return context if "**Resource" in context else None
@@ -3306,25 +3194,3 @@ Format responses clearly with:
                 'search_sources': [],
                 'context': {}
             }
-    
-    def generate_project_report(self, board_id):
-        """Generate AI-powered project report"""
-        try:
-            board = Board.objects.get(id=board_id)
-            tasks = Task.objects.filter(column__board=board)
-            
-            report_prompt = f"""Generate a comprehensive project status report for "{board.name}" based on:
-            - Total tasks: {tasks.count()}
-            - Completed: {tasks.filter(column__name__icontains='done').count()}
-            - In Progress: {tasks.filter(column__name__icontains='progress').count()}
-            - Not Started: {tasks.filter(column__name__icontains='todo').count()}
-            
-            Provide: 1. Overall status, 2. Key achievements, 3. Risks/Blockers, 4. Recommendations
-            """
-            
-            response = self.gemini_client.get_response(report_prompt)
-            return response['content']
-        
-        except Exception as e:
-            logger.error(f"Error generating report: {e}")
-            return f"Unable to generate report: {str(e)}"
