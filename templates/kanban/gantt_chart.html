@@ -214,6 +214,17 @@
         animation: milestoneCompletedPulse 3s ease-in-out infinite;
     }
 
+    /* Milestone label - dark text positioned to the right of the diamond */
+    .gantt .bar-wrapper[data-is-milestone="true"] .bar-label,
+    .gantt .bar-wrapper[data-is-milestone="true"] .bar-label.big {
+        fill: #1e293b !important;
+        text-anchor: start !important;
+        font-size: 11px !important;
+        font-weight: 700 !important;
+        text-shadow: none !important;
+        letter-spacing: 0.02em;
+    }
+
     /* ============================================
        CRITICAL PATH STYLING - HIGH SPECIFICITY
        ============================================ */
@@ -2109,6 +2120,16 @@
             diamond.classList.add('milestone-diamond-shape');
             if (isCompleted) diamond.classList.add('completed');
             barWrapper.appendChild(diamond);
+
+            // Reposition the frappe-gantt label to sit right of the diamond
+            const barLabel = barWrapper.querySelector('.bar-label');
+            if (barLabel) {
+                barLabel.setAttribute('x', cx + halfSide + 6); // 6px gap after diamond
+                barLabel.setAttribute('y', cy);                // same vertical centre
+                barLabel.textContent = milestone.fullName;      // restore full name
+                barLabel.style.fontSize = '11px';
+                barLabel.classList.add('big');                   // keep it outside the bar
+            }
         });
 
         // Enhance bars with additional info
@@ -2400,8 +2421,8 @@
 
     // Enhance bars with task names only (no progress, no assignments)
     function enhanceBarsWithInfo() {
-        // Process both regular tasks and milestones
-        const allItems = [...tasks, ...ganttMilestones];
+        // Process regular tasks only — milestone labels are handled separately in PASS 2
+        const allItems = [...tasks];
         allItems.forEach(task => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
             if (!barWrapper) return;
