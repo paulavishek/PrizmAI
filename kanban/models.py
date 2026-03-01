@@ -777,7 +777,64 @@ class Task(models.Model):
     
     def __str__(self):
         return self.title
-    
+
+    @property
+    def progress_status(self):
+        """
+        Computed schedule status badge for the task.
+
+        Returns one of:
+          'late'      — due date has passed and task is not complete
+          'at_risk'   — task is falling behind its expected pace
+          'on_track'  — task is progressing as expected
+          None        — no due date set, cannot determine status
+
+        Logic
+        -----
+        1. If no due_date → None
+        2. If due_date is in the past and progress < 100 → 'late'
+        3. If start_date is available:
+             expected_pct = elapsed / total_duration * 100
+             if (expected_pct - progress) > 15 → 'at_risk'
+        4. If no start_date but due in ≤ 3 days and progress < 80 → 'at_risk'
+        5. Otherwise → 'on_track'
+        """
+        if not self.due_date:
+            return None
+        if self.progress >= 100:
+            return 'on_track'
+
+        now = timezone.now()
+        # Normalise due_date to an aware datetime
+        due = self.due_date
+        if timezone.is_naive(due):
+            due = timezone.make_aware(due)
+
+        if due < now:
+            return 'late'
+
+        # At-risk calculation
+        if self.start_date:
+            # Convert start_date (date) to aware datetime at midnight
+            import datetime as _dt
+            start_dt = timezone.make_aware(
+                _dt.datetime.combine(self.start_date, _dt.time.min)
+            )
+            total_seconds = (due - start_dt).total_seconds()
+            if total_seconds > 0:
+                elapsed_seconds = (now - start_dt).total_seconds()
+                if elapsed_seconds > 0:
+                    expected_pct = min((elapsed_seconds / total_seconds) * 100, 100)
+                    if (expected_pct - self.progress) > 15:
+                        return 'at_risk'
+        else:
+            # Fallback: warn if due within 3 days and progress is below 80 %
+            days_remaining = (due - now).total_seconds() / 86400
+            if days_remaining <= 3 and self.progress < 80:
+                return 'at_risk'
+
+        return 'on_track'
+
     def duration_days(self):
         """Calculate task duration in days"""
         if self.start_date and self.due_date:

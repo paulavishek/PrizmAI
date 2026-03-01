@@ -742,7 +742,28 @@
                             {% endif %}
                         </div>
                     </div>
-                    
+
+                    <!-- Progress Status Badge (On Track / At Risk / Late) -->
+                    {% with status=task.progress_status %}
+                    {% if status %}
+                    <div class="mt-1">
+                        {% if status == 'on_track' %}
+                        <span class="task-status-badge on-track" title="Task is progressing on schedule">
+                            <i class="fas fa-check-circle"></i> On Track
+                        </span>
+                        {% elif status == 'at_risk' %}
+                        <span class="task-status-badge at-risk" title="Task is falling behind schedule">
+                            <i class="fas fa-exclamation-triangle"></i> At Risk
+                        </span>
+                        {% elif status == 'late' %}
+                        <span class="task-status-badge late" title="Task is past its due date">
+                            <i class="fas fa-times-circle"></i> Late
+                        </span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                    {% endwith %}
+
                     {% if task.assigned_to %}
                     <div class="task-assignee mt-2">
                         {% if task.assigned_to.profile.profile_picture %}

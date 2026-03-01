@@ -74,7 +74,8 @@ class TaskSerializer(serializers.ModelSerializer):
     )
     column_name = serializers.CharField(source='column.name', read_only=True)
     board_id = serializers.IntegerField(source='column.board.id', read_only=True)
-    
+    progress_status = serializers.SerializerMethodField()
+
     class Meta:
         model = Task
         fields = [
@@ -82,9 +83,12 @@ class TaskSerializer(serializers.ModelSerializer):
             'position', 'created_at', 'updated_at', 'start_date', 'due_date',
             'assigned_to', 'assigned_to_user', 'created_by', 'created_by_user',
             'labels', 'label_ids', 'priority', 'progress', 'ai_risk_score',
-            'required_skills', 'skill_match_score'
+            'required_skills', 'skill_match_score', 'progress_status'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at', 'created_by']
+
+    def get_progress_status(self, obj):
+        return obj.progress_status
     
     def create(self, validated_data):
         # Set created_by from request user
@@ -97,17 +101,21 @@ class TaskListSerializer(serializers.ModelSerializer):
     assigned_to_username = serializers.CharField(source='assigned_to.username', read_only=True)
     column_name = serializers.CharField(source='column.name', read_only=True)
     label_count = serializers.SerializerMethodField()
-    
+    progress_status = serializers.SerializerMethodField()
+
     class Meta:
         model = Task
         fields = [
             'id', 'title', 'column', 'column_name', 'priority', 'progress',
             'assigned_to', 'assigned_to_username', 'due_date', 'label_count',
-            'created_at', 'updated_at'
+            'created_at', 'updated_at', 'progress_status'
         ]
-    
+
     def get_label_count(self, obj):
         return obj.labels.count()
+
+    def get_progress_status(self, obj):
+        return obj.progress_status
 
 
 class BoardSerializer(serializers.ModelSerializer):

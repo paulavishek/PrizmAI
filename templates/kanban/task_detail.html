@@ -753,6 +753,30 @@
                 </div>
                 {% endif %}
 
+                <!-- Progress Status Badge (On Track / At Risk / Late) -->
+                {% with status=task.progress_status %}
+                {% if status %}
+                <div class="mb-3">
+                    <label class="text-muted">Schedule Status</label>
+                    <div class="mt-1">
+                        {% if status == 'on_track' %}
+                        <span class="task-status-badge task-status-badge-lg on-track" title="Task is progressing on schedule">
+                            <i class="fas fa-check-circle"></i> On Track
+                        </span>
+                        {% elif status == 'at_risk' %}
+                        <span class="task-status-badge task-status-badge-lg at-risk" title="Task is falling behind its expected pace">
+                            <i class="fas fa-exclamation-triangle"></i> At Risk
+                        </span>
+                        {% elif status == 'late' %}
+                        <span class="task-status-badge task-status-badge-lg late" title="Task is past its due date">
+                            <i class="fas fa-times-circle"></i> Late
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                {% endwith %}
+
                 <!-- 🔮 AI Predicted Completion Date -->
                 {% if task.progress < 100 %}
                 <div class="mb-3">

@@ -533,6 +533,44 @@ body {
     color: #dc3545;
 }
 
+/* ── Progress Status Badges (On Track / At Risk / Late) ──────────────── */
+.task-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.task-status-badge.on-track {
+    background-color: #d1fae5;
+    color: #065f46;
+    border: 1px solid #6ee7b7;
+}
+
+.task-status-badge.at-risk {
+    background-color: #fff3cd;
+    color: #7c4700;
+    border: 1px solid #ffc107;
+}
+
+.task-status-badge.late {
+    background-color: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+}
+
+/* Slightly larger variant used in task detail view */
+.task-status-badge-lg {
+    font-size: 0.8rem;
+    padding: 4px 12px;
+}
+
 .task-priority {
     font-size: 0.7rem;
     padding: 2px 8px;
