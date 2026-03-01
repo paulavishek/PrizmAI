@@ -1,0 +1,159 @@
+{% extends "kanban/onboarding/base_onboarding.html" %}
+
+{% block title %}Define Your Goal — PrizmAI{% endblock %}
+
+{% block progress %}
+<div class="onboarding-progress text-center">
+    <span class="step done"><i class="bi bi-check-circle-fill"></i> Welcome</span>
+    <span class="step-divider">›</span>
+    <span class="step active"><i class="bi bi-bullseye"></i> Goal</span>
+    <span class="step-divider">›</span>
+    <span class="step">Review</span>
+    <span class="step-divider">›</span>
+    <span class="step">Done</span>
+</div>
+{% endblock %}
+
+{% block body %}
+<div class="onboarding-card">
+    <h2 class="mb-1" style="font-weight: 700; font-size: 1.5rem;">What is your organization's goal?</h2>
+    <p class="mb-4" style="color: #64748b;">
+        Describe the high-level objective your team is working toward. AI will
+        build your entire workspace from this — missions, strategies, boards
+        and starter tasks.
+    </p>
+
+    <!-- Example cards -->
+    <div class="mb-4">
+        <small class="text-muted fw-semibold d-block mb-2">
+            <i class="bi bi-lightbulb me-1"></i>Click an example to use it as a starting point
+        </small>
+        <div class="row g-2">
+            <div class="col-md-6">
+                <div class="example-card border rounded-3 p-2 px-3" role="button" style="cursor:pointer; font-size:0.85rem; transition: border-color .15s;" onclick="useExample(this)">
+                    <span class="badge bg-info bg-opacity-10 text-info mb-1">Tech</span><br>
+                    Launch a B2B SaaS platform for HR automation by Q4 2026
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="example-card border rounded-3 p-2 px-3" role="button" style="cursor:pointer; font-size:0.85rem; transition: border-color .15s;" onclick="useExample(this)">
+                    <span class="badge bg-success bg-opacity-10 text-success mb-1">Healthcare</span><br>
+                    Reduce patient wait times by 30% across 5 clinics within 12 months
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="example-card border rounded-3 p-2 px-3" role="button" style="cursor:pointer; font-size:0.85rem; transition: border-color .15s;" onclick="useExample(this)">
+                    <span class="badge bg-warning bg-opacity-10 text-warning mb-1">Nonprofit</span><br>
+                    Expand youth education programs to 3 new regions serving 10,000 students
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="example-card border rounded-3 p-2 px-3" role="button" style="cursor:pointer; font-size:0.85rem; transition: border-color .15s;" onclick="useExample(this)">
+                    <span class="badge bg-danger bg-opacity-10 text-danger mb-1">Retail</span><br>
+                    Increase online sales revenue by 40% through omnichannel digital transformation
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" action="{% url 'onboarding_goal' %}" id="goalForm">
+        {% csrf_token %}
+        {% if error %}
+        <div class="alert alert-danger py-2 small">
+            <i class="bi bi-exclamation-triangle me-1"></i>{{ error }}
+        </div>
+        {% endif %}
+        <div class="mb-3">
+            <textarea
+                name="goal_text"
+                id="goalText"
+                class="form-control"
+                rows="4"
+                placeholder="e.g. Increase market share in Asia by 15% within the next fiscal year..."
+                maxlength="1000"
+                required
+            >{{ prefill_goal|default:"" }}</textarea>
+            <div class="d-flex justify-content-between mt-1">
+                <small id="charHint" class="text-muted">Minimum 30 characters</small>
+                <small id="charCount" class="text-muted">0 / 1000</small>
+            </div>
+        </div>
+
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <button type="submit" class="btn btn-prizm" id="submitBtn" disabled>
+                <i class="bi bi-stars me-1"></i>Generate my workspace
+            </button>
+            <div class="d-flex gap-3">
+                <form method="post" action="{% url 'onboarding_explore_demo' %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="link-subtle" style="background:none; border:none; cursor:pointer;">
+                        Show me a demo first
+                    </button>
+                </form>
+                <form method="post" action="{% url 'onboarding_skip' %}" class="d-inline">
+                    {% csrf_token %}
+                    <button type="submit" class="link-subtle" style="background:none; border:none; cursor:pointer;">
+                        Skip setup
+                    </button>
+                </form>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .example-card:hover {
+        border-color: var(--prizm-primary) !important;
+        background: #f8faff;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const textarea = document.getElementById('goalText');
+    const submitBtn = document.getElementById('submitBtn');
+    const charCount = document.getElementById('charCount');
+    const charHint = document.getElementById('charHint');
+    const MIN_CHARS = 30;
+
+    function updateState() {
+        const len = textarea.value.trim().length;
+        charCount.textContent = len + ' / 1000';
+        if (len >= MIN_CHARS) {
+            submitBtn.disabled = false;
+            charHint.textContent = '✓ Looks good';
+            charHint.classList.remove('text-danger');
+            charHint.classList.add('text-success');
+        } else {
+            submitBtn.disabled = true;
+            charHint.textContent = 'Minimum 30 characters (' + (MIN_CHARS - len) + ' more)';
+            charHint.classList.remove('text-success');
+            if (len > 0) {
+                charHint.classList.add('text-danger');
+            } else {
+                charHint.classList.remove('text-danger');
+            }
+        }
+    }
+
+    textarea.addEventListener('input', updateState);
+
+    function useExample(el) {
+        // Extract text, stripping the badge
+        const badge = el.querySelector('.badge');
+        let text = el.textContent.trim();
+        if (badge) {
+            text = text.replace(badge.textContent.trim(), '').trim();
+        }
+        textarea.value = text;
+        textarea.focus();
+        updateState();
+    }
+
+    // Init on page load (for prefilled text)
+    updateState();
+</script>
+{% endblock %}

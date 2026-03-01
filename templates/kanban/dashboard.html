@@ -256,6 +256,13 @@
         box-shadow: 0 4px 12px rgba(2, 136, 209, 0.3);
     }
 
+    /* Demo mode banner pulse */
+    #demo-banner { animation: demoPulse 3s ease-in-out 1; }
+    @keyframes demoPulse {
+        0%,100% { box-shadow: 0 2px 8px rgba(255,193,7,.2); }
+        50%     { box-shadow: 0 4px 20px rgba(255,193,7,.5); }
+    }
+
     /* Demo Boards Section */
     .demo-boards-section {
         padding-top: 1rem;
@@ -925,8 +932,8 @@
 {% endblock %}
 
 {% block content %}
-<!-- Welcome Modal for First-time Users -->
-{% if show_welcome_modal %}
+<!-- Welcome Modal for First-time Users (v1 legacy only) -->
+{% if show_welcome_modal and onboarding_profile.onboarding_version == 1 %}
 <div class="modal fade welcome-modal" id="welcomeModal" tabindex="-1" aria-labelledby="welcomeModalLabel" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
@@ -1006,14 +1013,54 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 {% endif %}
 
+{% if demo_mode %}
+<!-- ============================================================ -->
+<!-- DEMO MODE BANNER — full-width, unmissable                   -->
+<!-- ============================================================ -->
+<div id="demo-banner" class="alert alert-warning mb-0 rounded-0 border-0 shadow-sm"
+     style="position:sticky;top:0;z-index:1050;background:linear-gradient(135deg,#fff3cd 0%,#ffe69c 100%);">
+    <div class="container-fluid d-flex flex-wrap align-items-center justify-content-between gap-2 py-1">
+        <div class="d-flex align-items-center gap-2">
+            <i class="fas fa-eye fa-lg text-warning"></i>
+            <span class="fw-bold text-dark">You're viewing the demo workspace</span>
+            <span class="text-muted d-none d-md-inline">
+                — Meet the team: <strong>Alex Admin</strong>, <strong>Sam Developer</strong>, <strong>Jordan Analyst</strong>
+            </span>
+        </div>
+        <div class="d-flex gap-2 flex-shrink-0">
+            <a href="{% url 'onboarding_welcome' %}" class="btn btn-sm btn-primary">
+                <i class="fas fa-rocket me-1"></i>Set up my workspace
+            </a>
+            <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-dark">
+                    <i class="fas fa-times me-1"></i>Exit demo
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <div class="row mb-4">
     <div class="col-md-12">
         <div class="d-sm-flex align-items-center justify-content-between mb-4">
             <h1 class="h3 mb-0 text-gray-800" id="dashboard-heading">
                 Dashboard
+                {% if demo_mode %}<span class="badge bg-warning text-dark ms-2" style="font-size:.55em;vertical-align:middle;">DEMO</span>{% endif %}
                 <span class="text-muted fw-normal">— {{ request.user.get_full_name|default:request.user.username }}</span>
             </h1>
-            <div>
+            <div class="d-flex align-items-center gap-2">
+                {% if onboarding_profile.onboarding_version == 2 %}
+                <!-- Demo / Real toggle -->
+                <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline" title="{% if demo_mode %}Switch to your real workspace{% else %}Switch to the demo workspace{% endif %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm {% if demo_mode %}btn-outline-warning{% else %}btn-outline-secondary{% endif %}">
+                        <i class="fas {% if demo_mode %}fa-briefcase{% else %}fa-eye{% endif %} me-1"></i>
+                        {% if demo_mode %}My Workspace{% else %}View Demo{% endif %}
+                    </button>
+                </form>
+                {% endif %}
                 <a href="{% url 'board_list' %}" class="d-none d-sm-inline-block btn btn-primary shadow-sm">
                     <i class="fas fa-plus fa-sm text-white-50 me-2"></i> View All Boards
                 </a>
@@ -1753,6 +1800,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 {% else %}
                 <!-- Empty state: no goals or missions yet -->
                 <div class="text-center py-5">
+                    {% if onboarding_profile.onboarding_version == 2 and not demo_mode %}
+                    {# V2 empty state — point to AI setup #}
+                    <i class="fas fa-wand-magic-sparkles fa-4x mb-3" style="opacity:0.35;color:#6366f1;"></i>
+                    <p class="mb-2 fw-semibold">Your workspace is empty</p>
+                    <p class="text-muted small mb-4">
+                        Let AI build a complete workspace from your organization's goal,
+                        or create things manually.
+                    </p>
+                    <a href="{% url 'onboarding_welcome' %}" class="btn btn-primary">
+                        <i class="fas fa-rocket fa-sm me-1"></i> Set up with AI
+                    </a>
+                    <a href="{% url 'create_goal' %}" class="btn btn-outline-secondary ms-2">
+                        <i class="fas fa-trophy fa-sm me-1"></i> Create Goal manually
+                    </a>
+                    <a href="{% url 'create_board' %}" class="btn btn-outline-secondary ms-2">
+                        <i class="fas fa-plus fa-sm me-1"></i> New Board
+                    </a>
+                    {% else %}
+                    {# V1 / legacy empty state #}
                     <i class="fas fa-trophy fa-4x text-warning mb-3" style="opacity:0.3;"></i>
                     <p class="mb-2 fw-semibold">No Organization Goals or Missions yet</p>
                     <p class="text-muted small mb-4">
@@ -1768,6 +1834,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     <a href="{% url 'create_board' %}" class="btn btn-outline-secondary ms-2">
                         <i class="fas fa-plus fa-sm me-1"></i> New Board
                     </a>
+                    {% endif %}
                 </div>
                 {% endif %}
             </div>

@@ -14,6 +14,7 @@ from . import mission_views
 from . import mission_views
 from . import calendar_views
 from . import prizmbrief_views
+from . import onboarding_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -270,4 +271,18 @@ urlpatterns = [
     path('board/membership/<int:membership_id>/remove/', permission_views.remove_board_member_role, name='remove_board_member_role'),
     path('permissions/audit/', permission_views.view_permission_audit, name='view_permission_audit_org'),
     path('board/<int:board_id>/permissions/audit/', permission_views.view_permission_audit, name='view_permission_audit'),
+
+    # Onboarding v2 — AI-powered workspace setup
+    path('onboarding/', onboarding_views.onboarding_welcome, name='onboarding_welcome'),
+    path('onboarding/goal/', onboarding_views.onboarding_goal_input, name='onboarding_goal'),
+    path('onboarding/generating/', onboarding_views.onboarding_generating, name='onboarding_generating'),
+    path('onboarding/status/', onboarding_views.onboarding_status, name='onboarding_status'),
+    path('onboarding/review/', onboarding_views.onboarding_review, name='onboarding_review'),
+    path('onboarding/commit/', onboarding_views.onboarding_commit, name='onboarding_commit'),
+    path('onboarding/start-over/', onboarding_views.onboarding_start_over, name='onboarding_start_over'),
+    path('onboarding/skip/', onboarding_views.onboarding_skip, name='onboarding_skip'),
+    path('onboarding/demo/', onboarding_views.onboarding_explore_demo, name='onboarding_explore_demo'),
+
+    # Demo mode toggle (v2)
+    path('toggle-demo-mode/', views.toggle_demo_mode, name='toggle_demo_mode'),
 ]

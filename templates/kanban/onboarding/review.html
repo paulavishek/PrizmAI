@@ -1,0 +1,240 @@
+{% extends "kanban/onboarding/base_onboarding.html" %}
+{% load static %}
+
+{% block title %}Review Your Workspace — PrizmAI{% endblock %}
+
+{% block progress %}
+<div class="onboarding-progress text-center">
+    <span class="step done"><i class="bi bi-check-circle-fill"></i> Welcome</span>
+    <span class="step-divider">›</span>
+    <span class="step done"><i class="bi bi-check-circle-fill"></i> Goal</span>
+    <span class="step-divider">›</span>
+    <span class="step active"><i class="bi bi-pencil-square"></i> Review</span>
+    <span class="step-divider">›</span>
+    <span class="step">Done</span>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .hierarchy-card {
+        border-left: 3px solid;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        border-radius: 0 0.5rem 0.5rem 0;
+        background: #fff;
+    }
+    .hierarchy-card.goal-card   { border-color: #667eea; background: #f5f3ff; }
+    .hierarchy-card.mission-card { border-color: #22c55e; }
+    .hierarchy-card.strategy-card { border-color: #f59e0b; }
+    .hierarchy-card.board-card  { border-color: #3b82f6; }
+    .hierarchy-card.task-card   { border-color: #94a3b8; background: #f8fafc; }
+
+    .editable-name {
+        border: 1px solid transparent;
+        border-radius: 0.25rem;
+        padding: 0.15rem 0.35rem;
+        transition: border-color .15s;
+        font-weight: 600;
+        background: transparent;
+        width: 100%;
+    }
+    .editable-name:hover { border-color: #cbd5e1; }
+    .editable-name:focus { border-color: var(--prizm-primary); outline: none; background: #fff; }
+
+    .indent-1 { margin-left: 1.5rem; }
+    .indent-2 { margin-left: 3rem; }
+    .indent-3 { margin-left: 4.5rem; }
+    .indent-4 { margin-left: 6rem; }
+
+    .badge-col { font-size: 0.75rem; }
+    .task-list { list-style: none; padding: 0; margin: 0; }
+    .task-list li { font-size: 0.85rem; color: #475569; padding: 0.2rem 0; }
+    .task-list li::before { content: "•"; color: #94a3b8; margin-right: 0.4rem; }
+
+    .collapse-toggle {
+        cursor: pointer;
+        user-select: none;
+    }
+    .collapse-toggle .bi-chevron-down { transition: transform 0.2s; }
+    .collapse-toggle.collapsed .bi-chevron-down { transform: rotate(-90deg); }
+
+    @media (max-width: 576px) {
+        .indent-1, .indent-2, .indent-3, .indent-4 {
+            margin-left: 0.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block body %}
+<div style="max-width: 800px; width: 100%;">
+    <div class="text-center mb-4">
+        <h2 style="font-weight: 700; font-size: 1.5rem;">Here's your AI-generated workspace</h2>
+        <p class="text-muted" style="font-size: 0.925rem;">
+            Edit any name by clicking on it. You can always change details later inside your workspace.
+        </p>
+        {% if preview.error_message %}
+        <div class="alert alert-info alert-dismissible fade show py-2" style="font-size: 0.85rem;">
+            <i class="bi bi-info-circle me-1"></i>{{ preview.error_message }}
+            <button type="button" class="btn-close btn-sm" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Hierarchy tree -->
+    <div id="hierarchyTree">
+        <!-- Goal -->
+        <div class="hierarchy-card goal-card">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-bullseye text-primary"></i>
+                <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Goal</span>
+            </div>
+            <input class="editable-name" data-path="goal.name" value="{{ data.goal.name }}" aria-label="Goal name">
+            <small class="text-muted d-block mt-1">{{ data.goal.description }}</small>
+        </div>
+
+        {% for mission in data.missions %}
+        <!-- Mission {{ forloop.counter }} -->
+        <div class="indent-1">
+            <div class="hierarchy-card mission-card">
+                <div class="d-flex align-items-center gap-2 collapse-toggle" data-bs-toggle="collapse" data-bs-target="#mission-{{ forloop.counter0 }}">
+                    <i class="bi bi-flag text-success"></i>
+                    <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase;">Mission {{ forloop.counter }}</span>
+                    <i class="bi bi-chevron-down ms-auto" style="font-size: 0.75rem;"></i>
+                </div>
+                <input class="editable-name" data-path="missions.{{ forloop.counter0 }}.name" value="{{ mission.name }}" aria-label="Mission name">
+            </div>
+
+            <div class="collapse show" id="mission-{{ forloop.counter0 }}">
+                {% for strategy in mission.strategies %}
+                <!-- Strategy -->
+                <div class="indent-2">
+                    <div class="hierarchy-card strategy-card">
+                        <div class="d-flex align-items-center gap-2 collapse-toggle" data-bs-toggle="collapse" data-bs-target="#strategy-{{ forloop.parentloop.counter0 }}-{{ forloop.counter0 }}">
+                            <i class="bi bi-diagram-3 text-warning"></i>
+                            <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase;">Strategy</span>
+                            <i class="bi bi-chevron-down ms-auto" style="font-size: 0.75rem;"></i>
+                        </div>
+                        <input class="editable-name" data-path="missions.{{ forloop.parentloop.counter0 }}.strategies.{{ forloop.counter0 }}.name" value="{{ strategy.name }}" aria-label="Strategy name">
+                    </div>
+
+                    <div class="collapse show" id="strategy-{{ forloop.parentloop.counter0 }}-{{ forloop.counter0 }}">
+                        {% for board in strategy.boards %}
+                        <!-- Board -->
+                        <div class="indent-3">
+                            <div class="hierarchy-card board-card">
+                                <div class="d-flex align-items-center gap-2">
+                                    <i class="bi bi-kanban text-primary"></i>
+                                    <span class="text-muted" style="font-size: 0.75rem; text-transform: uppercase;">Board</span>
+                                </div>
+                                <input class="editable-name" data-path="missions.{{ forloop.parentloop.parentloop.counter0 }}.strategies.{{ forloop.parentloop.counter0 }}.boards.{{ forloop.counter0 }}.name" value="{{ board.name }}" aria-label="Board name">
+                                <div class="mt-1">
+                                    {% for col in board.columns %}
+                                    <span class="badge bg-light text-dark border badge-col me-1">{{ col }}</span>
+                                    {% endfor %}
+                                </div>
+
+                                <!-- Tasks (collapsible) -->
+                                <div class="mt-1">
+                                    <span class="collapse-toggle text-muted" style="font-size: 0.8rem; cursor: pointer;"
+                                          data-bs-toggle="collapse" data-bs-target="#tasks-{{ forloop.parentloop.parentloop.parentloop.counter0 }}-{{ forloop.parentloop.parentloop.counter0 }}-{{ forloop.parentloop.counter0 }}-{{ forloop.counter0 }}">
+                                        <i class="bi bi-chevron-down"></i> {{ board.tasks|length }} starter task{{ board.tasks|length|pluralize }}
+                                    </span>
+                                    <div class="collapse show" id="tasks-{{ forloop.parentloop.parentloop.parentloop.counter0 }}-{{ forloop.parentloop.parentloop.counter0 }}-{{ forloop.parentloop.counter0 }}-{{ forloop.counter0 }}">
+                                        <ul class="task-list mt-1">
+                                            {% for task in board.tasks %}
+                                            <li>
+                                                {{ task.title }}
+                                                {% if task.priority %}
+                                                <span class="badge {% if task.priority == 'Critical' or task.priority == 'High' %}bg-danger{% elif task.priority == 'Medium' %}bg-warning{% else %}bg-secondary{% endif %} bg-opacity-10 {% if task.priority == 'Critical' or task.priority == 'High' %}text-danger{% elif task.priority == 'Medium' %}text-warning{% else %}text-secondary{% endif %}" style="font-size:0.7rem;">{{ task.priority }}</span>
+                                                {% endif %}
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Actions -->
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mt-4">
+        <form method="post" action="{% url 'onboarding_commit' %}" id="commitForm">
+            {% csrf_token %}
+            <input type="hidden" name="edited_data" id="editedDataField" value="">
+            <button type="submit" class="btn btn-prizm btn-lg" id="commitBtn">
+                <i class="bi bi-check-circle me-1"></i>Looks good — create my workspace
+            </button>
+        </form>
+
+        <div class="d-flex gap-3 align-items-center">
+            <form method="post" action="{% url 'onboarding_start_over' %}">
+                {% csrf_token %}
+                <button type="submit" class="link-subtle" style="background:none; border:none; cursor:pointer;">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Start over with a different goal
+                </button>
+            </form>
+            <form method="post" action="{% url 'onboarding_skip' %}">
+                {% csrf_token %}
+                <button type="submit" class="link-subtle" style="background:none; border:none; cursor:pointer;">
+                    Skip setup
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Collect edits from inline inputs and submit as JSON
+    const commitForm = document.getElementById('commitForm');
+    const editedDataField = document.getElementById('editedDataField');
+
+    // Deep-clone the original data from Django context
+    const originalData = JSON.parse('{{ data_json|escapejs }}');
+
+    commitForm.addEventListener('submit', function(e) {
+        // Walk all editable inputs and apply changes to data copy
+        const edited = JSON.parse(JSON.stringify(originalData));
+        document.querySelectorAll('.editable-name').forEach(input => {
+            const path = input.dataset.path;
+            const val = input.value.trim();
+            if (path && val) {
+                setNestedValue(edited, path, val);
+            }
+        });
+        editedDataField.value = JSON.stringify(edited);
+    });
+
+    function setNestedValue(obj, path, value) {
+        const keys = path.split('.');
+        let curr = obj;
+        for (let i = 0; i < keys.length - 1; i++) {
+            const key = isNaN(keys[i]) ? keys[i] : parseInt(keys[i]);
+            curr = curr[key];
+            if (!curr) return;
+        }
+        const lastKey = isNaN(keys[keys.length - 1]) ? keys[keys.length - 1] : parseInt(keys[keys.length - 1]);
+        curr[lastKey] = value;
+    }
+
+    // Toggle chevron direction on collapse
+    document.querySelectorAll('.collapse-toggle').forEach(toggle => {
+        const target = toggle.getAttribute('data-bs-target');
+        if (!target) return;
+        const el = document.querySelector(target);
+        if (!el) return;
+        el.addEventListener('hidden.bs.collapse', () => toggle.classList.add('collapsed'));
+        el.addEventListener('shown.bs.collapse', () => toggle.classList.remove('collapsed'));
+    });
+</script>
+{% endblock %}

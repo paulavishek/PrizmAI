@@ -36,6 +36,17 @@ def dashboard(request):
             completed_wizard=True
         )
     
+    # ── Onboarding v2 redirect guard ────────────────────────────────
+    # Covers: pending, goal_submitted, workspace_generated, demo_exploring
+    if profile.onboarding_version >= 2:
+        if profile.onboarding_status == 'pending':
+            return redirect('onboarding_welcome')
+        if profile.onboarding_status == 'goal_submitted':
+            return redirect('onboarding_generating')
+        if profile.onboarding_status == 'workspace_generated':
+            return redirect('onboarding_review')
+        # demo_exploring, completed, skipped → continue to dashboard
+    
     # MVP Mode: Organization is optional (can be None)
     organization = profile.organization
     
@@ -54,14 +65,25 @@ def dashboard(request):
     from kanban.utils.demo_settings import SIMPLIFIED_MODE
     
     # MVP Mode: Get all boards the user has access to
-    # Include: 1) Official demo boards, 2) Boards user created, 3) Boards user is member of
-    demo_boards = Board.objects.filter(is_official_demo_board=True)
-    user_boards = Board.objects.filter(
-        Q(created_by=request.user) | Q(members=request.user)
-    )
+    # v2 demo mode: separate demo boards from real boards via toggle
+    demo_mode = getattr(profile, 'is_viewing_demo', False)
     
-    # Combine and deduplicate
-    boards = (demo_boards | user_boards).distinct()
+    if demo_mode:
+        # Demo mode: show only official demo boards
+        boards = Board.objects.filter(is_official_demo_board=True).distinct()
+    elif profile.onboarding_version >= 2:
+        # v2 real mode: only the user's own boards (no demo boards)
+        boards = Board.objects.filter(
+            Q(created_by=request.user) | Q(members=request.user),
+            is_official_demo_board=False
+        ).distinct()
+    else:
+        # v1 legacy: demo + user boards mixed
+        demo_boards = Board.objects.filter(is_official_demo_board=True)
+        user_boards = Board.objects.filter(
+            Q(created_by=request.user) | Q(members=request.user)
+        )
+        boards = (demo_boards | user_boards).distinct()
     
     # Get analytics data — all 4 stats in one DB aggregate call (avoids 4 separate queries)
     _now = timezone.now()
@@ -241,13 +263,30 @@ def dashboard(request):
     user_board_ids = list(boards.values_list('id', flat=True))
 
     # Missions the user has direct ownership of or demo missions
-    missions_qs = Mission.objects.filter(
-        Q(created_by=request.user) |
-        Q(is_demo=True) |
-        Q(strategies__boards__id__in=user_board_ids)
-    ).distinct().select_related('organization_goal').prefetch_related(
-        'strategies__boards'
-    ).order_by('-created_at')
+    if demo_mode:
+        missions_qs = Mission.objects.filter(
+            Q(is_demo=True) | Q(is_seed_demo_data=True) |
+            Q(strategies__boards__id__in=user_board_ids)
+        ).distinct().select_related('organization_goal').prefetch_related(
+            'strategies__boards'
+        ).order_by('-created_at')
+    elif profile.onboarding_version >= 2:
+        # v2 real mode: only user's own missions (exclude demo)
+        missions_qs = Mission.objects.filter(
+            Q(created_by=request.user) |
+            Q(strategies__boards__id__in=user_board_ids)
+        ).filter(is_demo=False, is_seed_demo_data=False
+        ).distinct().select_related('organization_goal').prefetch_related(
+            'strategies__boards'
+        ).order_by('-created_at')
+    else:
+        missions_qs = Mission.objects.filter(
+            Q(created_by=request.user) |
+            Q(is_demo=True) |
+            Q(strategies__boards__id__in=user_board_ids)
+        ).distinct().select_related('organization_goal').prefetch_related(
+            'strategies__boards'
+        ).order_by('-created_at')
 
     # Build mission tree as a plain list (for easy template iteration)
     # Each mission dict holds: mission obj + list of strategy dicts
@@ -701,6 +740,9 @@ def dashboard(request):
             'my_tasks_sort_by': sort_by,  # Current sort preference
             'now': timezone.now(),  # For comparing dates in the template
             'show_welcome_modal': show_welcome_modal,  # Show welcome modal for first-time users
+        # Demo mode / onboarding v2
+        'demo_mode': demo_mode,
+        'onboarding_profile': profile,
         # Mission tree  
         'mission_tree': mission_tree,
         'goal_tree': goal_tree,
@@ -718,6 +760,18 @@ def dashboard(request):
         'scope_creep_data':  scope_creep_data,
         'daily_briefing':    daily_briefing,
         })
+
+
+@login_required
+def toggle_demo_mode(request):
+    """POST /toggle-demo-mode/ — flip the demo viewing mode and redirect to dashboard."""
+    if request.method != 'POST':
+        return redirect('dashboard')
+    profile = request.user.profile
+    profile.is_viewing_demo = not profile.is_viewing_demo
+    profile.save(update_fields=['is_viewing_demo'])
+    return redirect('dashboard')
+
 
 @login_required
 def board_list(request):

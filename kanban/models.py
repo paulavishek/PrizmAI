@@ -29,6 +29,9 @@ from kanban.conflict_models import (
 # Import automation models
 from kanban.automation_models import BoardAutomation
 
+# Import onboarding models
+from kanban.onboarding_models import OnboardingWorkspacePreview
+
 
 # ---------------------------------------------------------------------------
 # ORGANIZATION GOAL — apex strategic layer

@@ -48,7 +48,8 @@ COMPLEX_TASKS = [
     'priority_suggestion',
     'board_analytics_summary',
     'task_breakdown',
-    'column_recommendations'
+    'column_recommendations',
+    'workspace_generation',
 ]
 
 SIMPLE_TASKS = [
@@ -67,6 +68,7 @@ TASK_TEMPERATURE_MAP = {
     'board_setup': 0.2,                  # Phase count, team size should be consistent
     'task_breakdown': 0.3,               # Subtask structure should be predictable
     'resource_optimization': 0.3,        # Workload calculations need consistency
+    'workspace_generation': 0.4,          # Goal-to-workspace: structured yet thoughtful
     
     # Analytical tasks (0.4) - Data-driven with professional narrative
     'risk_assessment': 0.4,              # Risk identification should be thorough & consistent
@@ -137,6 +139,7 @@ TASK_TOKEN_LIMITS = {
     'column_recommendations': 6144,      # Complex structure with full explainability (4-7 columns)
     'board_setup': 4096,                 # Full board configuration with explainability
     'task_summary': 8192,                # Comprehensive task summary with all aspects analyzed - needs high limit
+    'workspace_generation': 8192,        # Full workspace hierarchy: goal → missions → strategies → boards → tasks
     
     # Default
     'default': 3072,                     # Default for unspecified tasks - increased to prevent truncation
@@ -4294,3 +4297,209 @@ for each slide indicating the best chart or graphic type.
     except Exception as e:
         logger.error(f"Error generating PrizmBrief: {e}")
         return None
+
+
+# ---------------------------------------------------------------------------
+# WORKSPACE GENERATION — AI-powered onboarding
+# Takes an organization goal and produces a full hierarchy:
+#   Goal → Missions → Strategies → Boards (with columns) → Tasks
+# ---------------------------------------------------------------------------
+
+def generate_workspace_from_goal(goal_text: str) -> Optional[Dict]:
+    """
+    Generate a complete workspace hierarchy from an organization goal.
+
+    Calls Gemini with a structured prompt and returns a JSON dict:
+    {
+      "goal": { "name", "description", "target_metric", "target_date" },
+      "missions": [
+        { "name", "description", "strategies": [
+          { "name", "description", "boards": [
+            { "name", "description", "columns": [...], "tasks": [...] }
+          ]}
+        ]}
+      ]
+    }
+
+    Returns None on failure (caller should invoke the template fallback).
+    """
+    today = datetime.now().strftime('%Y-%m-%d')
+
+    prompt = f"""
+You are an expert project management consultant.  A user just signed up for
+PrizmAI — an AI-powered project management tool.  They provided their
+**organization goal** and you need to design a complete workspace hierarchy
+that will get them operational immediately.
+
+## The user's organization goal
+\"\"\"{goal_text}\"\"\"
+
+## PrizmAI hierarchy (you must produce every level)
+
+1. **Organization Goal** — the apex strategic objective.
+2. **Missions** (2-3 per goal) — major focus areas that serve the goal.
+3. **Strategies** (1-2 per mission) — concrete approaches to fulfil each mission.
+4. **Boards** (1 per strategy) — Kanban boards where the work happens.
+   Each board has 4-7 **columns** (the first column MUST be "To Do").
+5. **Tasks** (3-5 per board) — actionable starter items placed in the
+   first column ("To Do").  Each task needs a priority and item_type.
+
+## Rules
+- Missions, strategies and boards must feel **surprisingly specific and
+  useful** — avoid generic corporate buzzwords.
+- Task titles should be concrete actions a team member could start today.
+- Priorities: Critical, High, Medium, Low.
+- Item types: task, bug, feature, story.
+- target_date must be a date string in YYYY-MM-DD format, at least 3 months
+  from today ({today}).
+- Keep descriptions concise — 1-3 sentences max.
+
+## Output format — strict JSON, no markdown, no commentary
+Return ONLY the JSON object below — no surrounding text, no ```json fences.
+
+{{
+  "goal": {{
+    "name": "Short goal name (max 200 chars)",
+    "description": "1-3 sentences of context and success criteria",
+    "target_metric": "Measurable target (e.g. '15% market share increase')",
+    "target_date": "YYYY-MM-DD"
+  }},
+  "missions": [
+    {{
+      "name": "Mission name",
+      "description": "1-2 sentences",
+      "strategies": [
+        {{
+          "name": "Strategy name",
+          "description": "1-2 sentences",
+          "boards": [
+            {{
+              "name": "Board name",
+              "description": "1-2 sentences about this board's purpose",
+              "columns": ["To Do", "In Progress", "Review", "Done"],
+              "tasks": [
+                {{
+                  "title": "Concrete task title",
+                  "description": "1-2 sentences",
+                  "priority": "High",
+                  "item_type": "task"
+                }}
+              ]
+            }}
+          ]
+        }}
+      ]
+    }}
+  ]
+}}
+"""
+
+    try:
+        response_text = generate_ai_content(
+            prompt,
+            task_type='workspace_generation',
+            use_cache=False,   # Each user's goal is unique
+        )
+        if not response_text:
+            logger.error("Empty response from Gemini for workspace generation")
+            return None
+
+        # Strip code-block fences if present
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].strip()
+
+        response_text = response_text.strip()
+
+        # Isolate JSON object
+        if not response_text.startswith('{'):
+            start_idx = response_text.find('{')
+            end_idx = response_text.rfind('}')
+            if start_idx != -1 and end_idx != -1:
+                response_text = response_text[start_idx:end_idx + 1]
+
+        data = json.loads(response_text)
+
+        # Basic structural validation
+        if 'goal' not in data or 'missions' not in data:
+            logger.error("Workspace generation JSON missing top-level keys")
+            return None
+        if not isinstance(data['missions'], list) or len(data['missions']) == 0:
+            logger.error("Workspace generation returned no missions")
+            return None
+
+        return data
+
+    except json.JSONDecodeError as e:
+        logger.error(f"JSON parse error in workspace generation: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"Error in generate_workspace_from_goal: {e}")
+        return None
+
+
+def get_fallback_workspace(goal_text: str) -> Dict:
+    """
+    Template-based fallback workspace when Gemini is unavailable.
+
+    Returns a sensible default hierarchy so the user is never stuck.
+    """
+    today = datetime.now()
+    target = (today + timedelta(days=180)).strftime('%Y-%m-%d')
+
+    return {
+        "goal": {
+            "name": goal_text[:200],
+            "description": f"Organization goal: {goal_text}",
+            "target_metric": "To be defined",
+            "target_date": target,
+        },
+        "missions": [
+            {
+                "name": "Planning & Foundation",
+                "description": "Establish the groundwork, define scope, and align stakeholders.",
+                "strategies": [
+                    {
+                        "name": "Project Kickoff & Requirements",
+                        "description": "Define clear requirements, milestones, and team responsibilities.",
+                        "boards": [
+                            {
+                                "name": "Project Setup",
+                                "description": "Initial planning, requirements gathering, and team onboarding.",
+                                "columns": ["To Do", "In Progress", "Review", "Done"],
+                                "tasks": [
+                                    {"title": "Define project scope and objectives", "description": "Document the high-level scope, deliverables, and success criteria.", "priority": "High", "item_type": "task"},
+                                    {"title": "Identify key stakeholders", "description": "List all stakeholders and their roles in the project.", "priority": "High", "item_type": "task"},
+                                    {"title": "Create initial project timeline", "description": "Draft a high-level timeline with major milestones.", "priority": "Medium", "item_type": "task"},
+                                    {"title": "Set up team communication channels", "description": "Establish Slack/Teams channels, meetings cadence, and reporting structure.", "priority": "Medium", "item_type": "task"},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            },
+            {
+                "name": "Execution & Delivery",
+                "description": "Execute the core work, track progress, and deliver results.",
+                "strategies": [
+                    {
+                        "name": "Core Delivery Pipeline",
+                        "description": "Manage the primary workstream to deliver key outcomes.",
+                        "boards": [
+                            {
+                                "name": "Delivery Tracker",
+                                "description": "Track day-to-day execution of core deliverables.",
+                                "columns": ["To Do", "In Progress", "Testing", "Done"],
+                                "tasks": [
+                                    {"title": "Break down first deliverable into subtasks", "description": "Decompose the first major deliverable into actionable work items.", "priority": "High", "item_type": "task"},
+                                    {"title": "Assign team responsibilities", "description": "Map each work item to a team member based on skills and capacity.", "priority": "Medium", "item_type": "task"},
+                                    {"title": "Establish progress reporting cadence", "description": "Set up weekly status updates and review checkpoints.", "priority": "Medium", "item_type": "task"},
+                                ],
+                            }
+                        ],
+                    }
+                ],
+            },
+        ],
+    }

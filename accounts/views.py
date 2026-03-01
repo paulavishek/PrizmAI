@@ -113,21 +113,21 @@ def register_view(request, org_id=None):
         if form.is_valid():
             user = form.save()
             
-            # Create user profile without organization
+            # Create user profile — v2 onboarding (AI-powered setup)
             UserProfile.objects.get_or_create(
                 user=user,
                 defaults={
                     'organization': None,
                     'is_admin': False,
-                    'completed_wizard': True
+                    'completed_wizard': True,
+                    'has_seen_welcome': True,        # v2 uses new welcome screen
+                    'onboarding_version': 2,
+                    'onboarding_status': 'pending',  # will redirect to /onboarding/
                 }
             )
             
-            # Auto-add user to all official demo boards
-            from kanban.models import Board
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            for board in demo_boards:
-                board.members.add(user)
+            # v2 users access demo boards via the demo-mode toggle,
+            # NOT via board membership — keeps their "My Boards" clean.
             
             messages.success(request, 'Registration successful! Please log in.')
             # If an invite token is waiting in the session, carry it forward
@@ -268,12 +268,15 @@ def social_signup_complete(request):
         profile = request.user.profile
         return redirect('dashboard')  # User already has profile
     except UserProfile.DoesNotExist:
-        # MVP Mode: Auto-create profile without organization
+        # v2 onboarding: auto-create profile with new onboarding flow
         UserProfile.objects.create(
             user=request.user,
             organization=None,
             is_admin=False,
-            completed_wizard=True
+            completed_wizard=True,
+            has_seen_welcome=True,       # v2 uses new welcome screen
+            onboarding_version=2,
+            onboarding_status='pending', # will redirect to /onboarding/
         )
         messages.success(request, 'Welcome! Your account is ready to use.')
         return redirect('dashboard')

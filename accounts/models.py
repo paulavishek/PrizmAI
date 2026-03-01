@@ -125,6 +125,35 @@ class UserProfile(models.Model):
         help_text="When user completed the getting started wizard"
     )
     
+    # Onboarding v2 — AI-powered workspace setup
+    ONBOARDING_STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('demo_exploring', 'Exploring Demo'),
+        ('goal_submitted', 'Goal Submitted'),
+        ('workspace_generated', 'Workspace Generated'),
+        ('completed', 'Completed'),
+        ('skipped', 'Skipped'),
+    ]
+    onboarding_version = models.IntegerField(
+        default=1,
+        help_text="1 = legacy (old welcome modal), 2 = new AI onboarding flow"
+    )
+    onboarding_status = models.CharField(
+        max_length=25,
+        choices=ONBOARDING_STATUS_CHOICES,
+        default='completed',
+        help_text="Current position in the v2 onboarding flow"
+    )
+    onboarding_goal_text = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Raw organization goal text entered during onboarding"
+    )
+    is_viewing_demo = models.BooleanField(
+        default=False,
+        help_text="Whether user is currently viewing the demo workspace"
+    )
+    
     def __str__(self):
         return f"{self.user.username}'s Profile"
     

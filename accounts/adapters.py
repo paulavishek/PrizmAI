@@ -120,13 +120,16 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
                 )
                 
             except Organization.DoesNotExist:
-                # Create profile without organization - will be handled in post-signup flow
+                # Create profile without organization — v2 onboarding
                 UserProfile.objects.get_or_create(
                     user=user,
                     defaults={
                         'organization': None,
                         'is_admin': False,
-                        'completed_wizard': True
+                        'completed_wizard': True,
+                        'has_seen_welcome': True,
+                        'onboarding_version': 2,
+                        'onboarding_status': 'pending',
                     }
                 )
             except Organization.MultipleObjectsReturned:
@@ -140,11 +143,8 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
                     }
                 )
             
-            # Auto-add user to all official demo boards (same as regular registration)
-            from kanban.models import Board
-            demo_boards = Board.objects.filter(is_official_demo_board=True)
-            for board in demo_boards:
-                board.members.add(user)
+            # v2 users access demo boards via demo-mode toggle,
+            # NOT via board membership — keeps their "My Boards" clean.
         
         return user
     

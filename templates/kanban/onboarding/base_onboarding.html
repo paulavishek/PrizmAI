@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}PrizmAI — Set Up Your Workspace{% endblock %}</title>
+    {% load static %}
+    <link rel="icon" type="image/x-icon" href="{% static 'img/favicon.ico' %}">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --prizm-primary: #667eea;
+            --prizm-secondary: #764ba2;
+            --prizm-accent: #4facfe;
+            --prizm-bg: #f8f9fc;
+        }
+        body {
+            font-family: 'Inter', 'Segoe UI', -apple-system, sans-serif;
+            background: var(--prizm-bg);
+            min-height: 100vh;
+        }
+        /* Progress bar at the top */
+        .onboarding-progress {
+            background: #fff;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 0.75rem 0;
+        }
+        .onboarding-progress .step {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.85rem;
+            color: #94a3b8;
+            font-weight: 500;
+        }
+        .onboarding-progress .step.active {
+            color: var(--prizm-primary);
+            font-weight: 600;
+        }
+        .onboarding-progress .step.done {
+            color: #22c55e;
+        }
+        .onboarding-progress .step-divider {
+            color: #cbd5e1;
+            margin: 0 0.5rem;
+        }
+        .onboarding-card {
+            background: #fff;
+            border-radius: 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            padding: 2.5rem;
+            max-width: 720px;
+            margin: 0 auto;
+        }
+        .btn-prizm {
+            background: linear-gradient(135deg, var(--prizm-primary) 0%, var(--prizm-secondary) 100%);
+            color: #fff;
+            border: none;
+            padding: 0.65rem 1.75rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: opacity 0.2s, transform 0.15s;
+        }
+        .btn-prizm:hover {
+            opacity: 0.92;
+            color: #fff;
+            transform: translateY(-1px);
+        }
+        .btn-prizm:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .link-subtle {
+            color: #64748b;
+            text-decoration: none;
+            font-size: 0.875rem;
+        }
+        .link-subtle:hover {
+            color: var(--prizm-primary);
+            text-decoration: underline;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% block progress %}{% endblock %}
+
+    <main class="d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 50px); padding: 2rem 1rem;">
+        {% block body %}{% endblock %}
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

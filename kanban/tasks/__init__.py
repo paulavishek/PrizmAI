@@ -31,6 +31,10 @@ from kanban.tasks.ai_summary_tasks import (
     generate_daily_executive_briefing,
 )
 
+from kanban.tasks.onboarding_tasks import (
+    generate_workspace_from_goal_task,
+)
+
 __all__ = [
     # Conflict tasks
     'detect_conflicts_task',
@@ -51,4 +55,6 @@ __all__ = [
     'generate_strategy_summary_task',
     'generate_mission_summary_task',
     'generate_daily_executive_briefing',
+    # Onboarding tasks
+    'generate_workspace_from_goal_task',
 ]
