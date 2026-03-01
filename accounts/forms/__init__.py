@@ -146,11 +146,15 @@ class RegistrationForm(UserCreationForm):
         if commit:
             user.save()
             # MVP Mode: Create profile without organization
+            # v2 onboarding — AI-powered setup flow
             UserProfile.objects.create(
                 user=user,
                 organization=None,
                 is_admin=False,
-                completed_wizard=True
+                completed_wizard=True,
+                has_seen_welcome=True,
+                onboarding_version=2,
+                onboarding_status='pending',
             )
         
         return user

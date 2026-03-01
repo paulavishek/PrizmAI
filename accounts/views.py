@@ -157,12 +157,15 @@ def organization_choice(request):
         # Organization is now optional - don't force assignment
         return redirect('dashboard')
     except UserProfile.DoesNotExist:
-        # Auto-create profile without organization
+        # Auto-create profile without organization — v2 onboarding
         UserProfile.objects.create(
             user=request.user,
             organization=None,
             is_admin=False,
-            completed_wizard=True
+            completed_wizard=True,
+            has_seen_welcome=True,
+            onboarding_version=2,
+            onboarding_status='pending',
         )
         messages.success(request, 'Welcome! Your profile has been created.')
         return redirect('dashboard')
@@ -188,12 +191,15 @@ def profile_view(request):
     try:
         profile = request.user.profile
     except UserProfile.DoesNotExist:
-        # MVP Mode: Auto-create profile without organization
+        # MVP Mode: Auto-create profile without organization (v2 onboarding)
         profile = UserProfile.objects.create(
             user=request.user,
             organization=None,
             is_admin=False,
-            completed_wizard=True
+            completed_wizard=True,
+            has_seen_welcome=True,
+            onboarding_version=2,
+            onboarding_status='pending',
         )
     
     if request.method == 'POST':
@@ -219,7 +225,10 @@ def organization_members(request):
             user=request.user,
             organization=None,
             is_admin=False,
-            completed_wizard=True
+            completed_wizard=True,
+            has_seen_welcome=True,
+            onboarding_version=2,
+            onboarding_status='pending',
         )
     
     # MVP Mode: Show all users (including demo users)
