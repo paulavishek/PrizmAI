@@ -10,6 +10,7 @@ from . import permission_views
 from . import invitation_views
 from . import triple_constraint_views
 from . import automation_views
+from . import scheduled_automation_views
 from . import mission_views
 from . import mission_views
 from . import calendar_views
@@ -188,7 +189,11 @@ urlpatterns = [
     path('boards/<int:board_id>/automations/<int:automation_id>/toggle/', automation_views.automation_toggle, name='automation_toggle'),
     path('boards/<int:board_id>/automations/templates/<str:template_id>/activate/', automation_views.automation_activate_template, name='automation_activate_template'),
 
-    
+    # Scheduled Automations
+    path('boards/<int:board_id>/scheduled-automations/create/', scheduled_automation_views.scheduled_automation_create, name='scheduled_automation_create'),
+    path('boards/<int:board_id>/scheduled-automations/<int:automation_id>/toggle/', scheduled_automation_views.scheduled_automation_toggle, name='scheduled_automation_toggle'),
+    path('boards/<int:board_id>/scheduled-automations/<int:automation_id>/delete/', scheduled_automation_views.scheduled_automation_delete, name='scheduled_automation_delete'),
+
     # Task Dependency Management API Endpoints
     path('api/task/<int:task_id>/dependencies/', api_views.get_task_dependencies_api, name='get_task_dependencies_api'),
     path('api/task/<int:task_id>/set-parent/', api_views.set_parent_task_api, name='set_parent_task_api'),

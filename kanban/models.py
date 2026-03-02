@@ -27,7 +27,7 @@ from kanban.conflict_models import (
 )
 
 # Import automation models
-from kanban.automation_models import BoardAutomation
+from kanban.automation_models import BoardAutomation, ScheduledAutomation
 
 # Import onboarding models
 from kanban.onboarding_models import OnboardingWorkspacePreview

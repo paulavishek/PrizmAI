@@ -6,7 +6,7 @@ from .models import (
     ScopeChangeSnapshot, ScopeCreepAlert, BoardInvitation,
     CalendarEvent,
 )
-from .automation_models import BoardAutomation
+from .automation_models import BoardAutomation, ScheduledAutomation
 from .priority_models import PriorityDecision, PriorityModel, PrioritySuggestionLog
 from .burndown_models import (
     TeamVelocitySnapshot, BurndownPrediction, BurndownAlert, SprintMilestone
@@ -32,6 +32,14 @@ class BoardAutomationAdmin(admin.ModelAdmin):
     list_display = ('name', 'board', 'trigger_type', 'action_type', 'is_active', 'run_count', 'last_run_at')
     list_filter = ('is_active', 'trigger_type', 'action_type')
     search_fields = ('name', 'board__name')
+
+
+@admin.register(ScheduledAutomation)
+class ScheduledAutomationAdmin(admin.ModelAdmin):
+    list_display = ('name', 'board', 'schedule_type', 'action', 'is_active', 'run_count', 'failure_count', 'last_run_at')
+    list_filter = ('is_active', 'schedule_type', 'action', 'task_filter')
+    search_fields = ('name', 'board__name')
+    readonly_fields = ('periodic_task', 'run_count', 'failure_count', 'last_run_at', 'created_at')
 
 
 class MissionInline(admin.TabularInline):

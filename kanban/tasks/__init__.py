@@ -16,6 +16,7 @@ from kanban.tasks.demo_tasks import (
 
 from kanban.tasks.automation_tasks import (
     run_due_date_approaching_automations,
+    run_scheduled_automation,
 )
 
 from kanban.tasks.time_tracking_tasks import (

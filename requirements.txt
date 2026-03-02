@@ -90,6 +90,7 @@ zope.interface==8.0.1
 
 # Asynchronous Task Processing
 celery==5.3.4
+django-celery-beat==2.6.0
 redis==5.0.1
 django-redis==5.4.0
 amqp==5.3.1

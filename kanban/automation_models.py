@@ -77,3 +77,131 @@ class BoardAutomation(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.board.name})"
+
+
+class ScheduledAutomation(models.Model):
+    """
+    Time-based automation rules that fire on a recurring schedule
+    (daily / weekly / monthly) rather than being triggered by task events.
+
+    Each instance is linked to a django-celery-beat PeriodicTask that
+    tells Celery Beat exactly when to fire.
+    """
+
+    SCHEDULE_TYPE_CHOICES = [
+        ('daily', 'Daily'),
+        ('weekly', 'Weekly'),
+        ('monthly', 'Monthly'),
+    ]
+
+    ACTION_CHOICES = [
+        ('send_notification', 'Send Notification'),
+        ('set_priority', 'Set Priority'),
+    ]
+
+    NOTIFY_TARGET_CHOICES = [
+        ('assignee', 'Task Assignee'),
+        ('board_members', 'All Board Members'),
+        ('creator', 'Task Creator'),
+    ]
+
+    TASK_FILTER_CHOICES = [
+        ('all', 'All Tasks'),
+        ('overdue', 'Overdue Tasks'),
+        ('incomplete', 'Incomplete Tasks'),
+        ('high_priority', 'High Priority Tasks'),
+    ]
+
+    board = models.ForeignKey(
+        'kanban.Board',
+        on_delete=models.CASCADE,
+        related_name='scheduled_automations',
+    )
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_scheduled_automations',
+    )
+    name = models.CharField(max_length=200)
+    is_active = models.BooleanField(default=True)
+
+    # Schedule definition
+    schedule_type = models.CharField(max_length=20, choices=SCHEDULE_TYPE_CHOICES)
+    scheduled_time = models.TimeField(help_text='Time of day to run (HH:MM)')
+    scheduled_day = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            'For weekly: 0=Monday … 6=Sunday. '
+            'For monthly: 1–28 (day of month). '
+            'Leave null for daily.'
+        ),
+    )
+
+    # Action definition
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    action_value = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text=(
+            "For set_priority: 'urgent', 'high', 'medium', 'low'. "
+            "For send_notification: custom notification message text (optional)."
+        ),
+    )
+    notify_target = models.CharField(
+        max_length=50,
+        choices=NOTIFY_TARGET_CHOICES,
+        default='board_members',
+        help_text='Who receives the notification (only used for send_notification action).',
+    )
+
+    # Task filter – which tasks does this apply to
+    task_filter = models.CharField(
+        max_length=50,
+        choices=TASK_FILTER_CHOICES,
+        default='all',
+    )
+
+    # Celery Beat link
+    periodic_task = models.OneToOneField(
+        'django_celery_beat.PeriodicTask',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+
+    # Tracking
+    run_count = models.IntegerField(default=0)
+    failure_count = models.IntegerField(default=0)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.name} ({self.board.name})"
+
+    def get_schedule_description(self):
+        """Return a plain-English schedule description, e.g. 'Every Monday at 9:00 AM'."""
+        time_str = self.scheduled_time.strftime('%I:%M %p').lstrip('0')
+        if self.schedule_type == 'daily':
+            return f"Every day at {time_str}"
+        elif self.schedule_type == 'weekly':
+            day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            day_name = day_names[self.scheduled_day] if self.scheduled_day is not None else '?'
+            return f"Every {day_name} at {time_str}"
+        elif self.schedule_type == 'monthly':
+            day = self.scheduled_day or '?'
+            # ordinal suffix
+            if day in (1, 21):
+                suffix = 'st'
+            elif day in (2, 22):
+                suffix = 'nd'
+            elif day in (3, 23):
+                suffix = 'rd'
+            else:
+                suffix = 'th'
+            return f"Every month on the {day}{suffix} at {time_str}"
+        return str(self.schedule_type)

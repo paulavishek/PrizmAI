@@ -28,6 +28,17 @@
   }
   .tpl-card:hover { border-color:#0d6efd33; box-shadow:0 2px 10px rgba(13,110,253,.07); }
   .tpl-card.activated { opacity:.6; }
+  /* Scheduled Automations */
+  .sched-badge   { background:#f0e8ff; color:#7c3aed; font-size:.78rem;
+                   padding:3px 10px; border-radius:20px; white-space:nowrap; }
+  .sched-info-section {
+    background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px;
+    padding:12px; margin-bottom:16px;
+  }
+  .sched-preview {
+    background:#f8f9fa; border:1px solid #dee2e6; border-radius:8px;
+    padding:10px 14px; font-weight:600; color:#495057;
+  }
 </style>
 {% endblock %}
 
@@ -167,6 +178,98 @@
         </div>
       </div>
       {% endfor %}
+
+      <!-- ============================================================= -->
+      <!-- SCHEDULED AUTOMATIONS LIST                                      -->
+      <!-- ============================================================= -->
+      <div class="mt-5">
+        <h5 class="mb-3">
+          <i class="fas fa-clock me-2 text-purple" style="color:#7c3aed;"></i>Scheduled Rules ({{ scheduled_automations.count }})
+        </h5>
+
+        <div class="sched-info-section">
+          <i class="fas fa-info-circle me-1 text-primary"></i>
+          <span class="small">
+            Scheduled rules fire on a recurring clock-based schedule (daily, weekly, monthly)
+            and are <strong>not</strong> triggered by task events.
+            <br>
+            <strong>Note:</strong> Scheduled automations require the Celery Beat worker to be running.
+          </span>
+        </div>
+
+        {% if not scheduled_automations %}
+        <div class="text-center text-muted py-4 border rounded bg-white">
+          <i class="fas fa-clock fa-2x mb-2 text-light"></i>
+          <p class="mb-0 small">No scheduled rules yet. Create one using the form on the right &rarr;</p>
+        </div>
+        {% endif %}
+
+        {% for sa in scheduled_automations %}
+        <div class="rule-card mb-3 {% if not sa.is_active %}inactive{% endif %}">
+          <div class="d-flex justify-content-between align-items-start">
+            <div class="flex-grow-1">
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <strong>{{ sa.name }}</strong>
+                {% if sa.is_active %}
+                  <span class="badge bg-success">Active</span>
+                {% else %}
+                  <span class="badge bg-secondary">Paused</span>
+                {% endif %}
+                {% if sa.failure_count >= 3 %}
+                  <span class="badge bg-danger" title="Auto-disabled after 3 failures">
+                    <i class="fas fa-exclamation-triangle me-1"></i>Failed
+                  </span>
+                {% elif sa.failure_count > 0 %}
+                  <span class="badge bg-warning text-dark" title="{{ sa.failure_count }} failure(s)">
+                    <i class="fas fa-exclamation-circle me-1"></i>{{ sa.failure_count }} fail{{ sa.failure_count|pluralize }}
+                  </span>
+                {% endif %}
+              </div>
+
+              <div class="d-flex align-items-center gap-2 flex-wrap">
+                <span class="sched-badge">
+                  <i class="fas fa-clock me-1"></i>{{ sa.get_schedule_description }}
+                </span>
+                <span class="arrow-icon">&rarr;</span>
+                <span class="action-badge">
+                  <i class="fas fa-cogs me-1"></i>
+                  {% if sa.action == 'send_notification' %}Notify {{ sa.get_notify_target_display|lower }}
+                  {% elif sa.action == 'set_priority' %}Set priority &rarr; {{ sa.action_value|title }}
+                  {% else %}{{ sa.get_action_display }}{% endif %}
+                </span>
+                <span class="trigger-badge" title="Task filter">
+                  <i class="fas fa-filter me-1"></i>{{ sa.get_task_filter_display }}
+                </span>
+              </div>
+
+              <div class="text-muted small mt-2">
+                Fired {{ sa.run_count }} time{{ sa.run_count|pluralize }}
+                {% if sa.last_run_at %}&middot; last run {{ sa.last_run_at|date:"M d, Y H:i" }}{% endif %}
+                &middot; Created by {{ sa.created_by.username|default:"&mdash;" }}
+              </div>
+            </div>
+
+            <div class="d-flex gap-2 ms-3 flex-shrink-0">
+              <form method="post" action="{% url 'scheduled_automation_toggle' board.id sa.id %}">
+                {% csrf_token %}
+                <button class="btn btn-sm {% if sa.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}"
+                        title="{% if sa.is_active %}Pause{% else %}Enable{% endif %}">
+                  <i class="fas {% if sa.is_active %}fa-pause{% else %}fa-play{% endif %}"></i>
+                </button>
+              </form>
+              <form method="post" action="{% url 'scheduled_automation_delete' board.id sa.id %}"
+                    onsubmit="return confirm('Delete scheduled rule \'{{ sa.name|escapejs }}\'?');">
+                {% csrf_token %}
+                <button class="btn btn-sm btn-outline-danger" title="Delete">
+                  <i class="fas fa-trash-alt"></i>
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
     </div>
 
     <!-- RIGHT: Create Rule Form -->
@@ -277,12 +380,134 @@
           </button>
         </form>
       </div>
+
+      <!-- ============================================================= -->
+      <!-- CREATE SCHEDULED RULE FORM                                      -->
+      <!-- ============================================================= -->
+      <div class="create-card mt-4">
+        <h5 class="mb-3"><i class="fas fa-clock me-2" style="color:#7c3aed;"></i>Create Scheduled Rule</h5>
+
+        <form id="createSchedForm" method="post" action="{% url 'scheduled_automation_create' board.id %}" novalidate>
+          {% csrf_token %}
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Rule Name <span class="text-danger">*</span></label>
+            <input type="text" name="sched_name" id="schedName" class="form-control"
+                   placeholder="e.g. Daily overdue summary" required maxlength="200">
+          </div>
+
+          <!-- SCHEDULE TYPE -->
+          <div class="mb-2">
+            <label class="form-label fw-semibold">Frequency</label>
+            <select name="schedule_type" id="schedType" class="form-select" onchange="onSchedTypeChange()">
+              {% for val, label in sched_schedule_types %}
+              <option value="{{ val }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Time</label>
+            <input type="time" name="scheduled_time" id="schedTime" class="form-control" value="09:00" required>
+          </div>
+
+          <div class="mb-3" id="schedDayWeekly" style="display:none;">
+            <label class="form-label text-muted small">Day of week</label>
+            <select name="scheduled_day" id="schedDayOfWeek" class="form-select form-select-sm">
+              <option value="0">Monday</option>
+              <option value="1">Tuesday</option>
+              <option value="2">Wednesday</option>
+              <option value="3">Thursday</option>
+              <option value="4">Friday</option>
+              <option value="5">Saturday</option>
+              <option value="6">Sunday</option>
+            </select>
+          </div>
+
+          <div class="mb-3" id="schedDayMonthly" style="display:none;">
+            <label class="form-label text-muted small">Day of month (1–28)</label>
+            <select name="scheduled_day" id="schedDayOfMonth" class="form-select form-select-sm">
+              <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+              <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+              <option value="7">7</option><option value="8">8</option><option value="9">9</option>
+              <option value="10">10</option><option value="11">11</option><option value="12">12</option>
+              <option value="13">13</option><option value="14">14</option><option value="15">15</option>
+              <option value="16">16</option><option value="17">17</option><option value="18">18</option>
+              <option value="19">19</option><option value="20">20</option><option value="21">21</option>
+              <option value="22">22</option><option value="23">23</option><option value="24">24</option>
+              <option value="25">25</option><option value="26">26</option><option value="27">27</option>
+              <option value="28">28</option>
+            </select>
+          </div>
+
+          <!-- ACTION -->
+          <div class="mb-2">
+            <label class="form-label fw-semibold">Action</label>
+            <select name="sched_action" id="schedAction" class="form-select" onchange="onSchedActionChange()">
+              {% for val, label in sched_action_choices %}
+              <option value="{{ val }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- send_notification sub-fields -->
+          <div id="schedNotifyFields">
+            <div class="mb-3">
+              <label class="form-label text-muted small">Notify</label>
+              <select name="notify_target" id="schedNotifyTarget" class="form-select form-select-sm">
+                {% for val, label in sched_notify_targets %}
+                <option value="{{ val }}">{{ label }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label text-muted small">Custom message (optional)</label>
+              <input type="text" name="sched_action_value" id="schedNotifyMessage"
+                     class="form-control form-control-sm" placeholder="Leave blank for auto-generated">
+            </div>
+          </div>
+
+          <!-- set_priority sub-field -->
+          <div id="schedPriorityField" style="display:none;">
+            <div class="mb-3">
+              <label class="form-label text-muted small">Priority</label>
+              <select name="sched_action_value" id="schedPrioritySelect" class="form-select form-select-sm">
+                <option value="urgent">Urgent</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Task filter -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Apply to tasks</label>
+            <select name="task_filter" id="schedTaskFilter" class="form-select">
+              {% for val, label in sched_task_filters %}
+              <option value="{{ val }}">{{ label }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <!-- Live preview -->
+          <div class="sched-preview mb-3" id="schedPreview">
+            <i class="fas fa-clock me-1" style="color:#7c3aed;"></i>
+            This rule will run: <span id="schedPreviewText">Every day at 9:00 AM</span>
+          </div>
+
+          <button type="button" class="btn w-100 mt-1 text-white" style="background:#7c3aed;"
+                  onclick="openSchedConfirmModal()">
+            <i class="fas fa-eye me-2"></i>Review &amp; Create Scheduled Rule
+          </button>
+        </form>
+      </div>
     </div>
 
   </div>
 </div>
 
-<!-- CONFIRMATION MODAL -->
+<!-- CONFIRMATION MODAL (trigger-based rules) -->
 <div class="modal fade" id="confirmRuleModal" tabindex="-1">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -306,6 +531,36 @@
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary" onclick="submitRuleForm()">
           <i class="fas fa-plus me-1"></i>Create Rule
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SCHEDULED AUTOMATION CONFIRMATION MODAL -->
+<div class="modal fade" id="confirmSchedModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-clock me-2" style="color:#7c3aed;"></i>Confirm Scheduled Rule</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-3">
+          Review the scheduled rule below. Once saved it will start running on
+          <strong>{{ board.name }}</strong> according to the schedule.
+        </p>
+        <div class="bg-light rounded p-3 border" id="confirmSchedSummary"></div>
+        <p class="text-muted small mt-3 mb-0">
+          <i class="fas fa-info-circle me-1"></i>
+          This rule fires on a recurring schedule and applies to tasks matching the filter.
+          You can pause or delete it at any time.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn text-white" style="background:#7c3aed;" onclick="submitSchedForm()">
+          <i class="fas fa-plus me-1"></i>Create Scheduled Rule
         </button>
       </div>
     </div>
@@ -408,6 +663,98 @@ function esc(s) {
                   .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
 }
 
-document.addEventListener('DOMContentLoaded', function() { onTriggerChange(); onActionChange(); });
+document.addEventListener('DOMContentLoaded', function() { onTriggerChange(); onActionChange(); onSchedTypeChange(); onSchedActionChange(); updateSchedPreview(); });
+
+/* ------------------------------------------------------------------ */
+/* SCHEDULED AUTOMATION JS                                             */
+/* ------------------------------------------------------------------ */
+const DAY_NAMES = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
+function onSchedTypeChange() {
+  const st = document.getElementById('schedType').value;
+  document.getElementById('schedDayWeekly').style.display  = st === 'weekly'  ? 'block' : 'none';
+  document.getElementById('schedDayMonthly').style.display = st === 'monthly' ? 'block' : 'none';
+  // Disable the unused select so its name='scheduled_day' isn't submitted
+  document.getElementById('schedDayOfWeek').disabled  = st !== 'weekly';
+  document.getElementById('schedDayOfMonth').disabled = st !== 'monthly';
+  updateSchedPreview();
+}
+
+function onSchedActionChange() {
+  const a = document.getElementById('schedAction').value;
+  document.getElementById('schedNotifyFields').style.display  = a === 'send_notification' ? 'block' : 'none';
+  document.getElementById('schedPriorityField').style.display = a === 'set_priority'       ? 'block' : 'none';
+  // Disable hidden fields so they aren't submitted
+  document.getElementById('schedNotifyMessage').disabled  = a !== 'send_notification';
+  document.getElementById('schedNotifyTarget').disabled   = a !== 'send_notification';
+  document.getElementById('schedPrioritySelect').disabled = a !== 'set_priority';
+}
+
+function getSchedPreviewText() {
+  const st   = document.getElementById('schedType').value;
+  const time = document.getElementById('schedTime').value || '09:00';
+
+  // Format time to 12-hour
+  const [hh, mm] = time.split(':').map(Number);
+  const ampm = hh >= 12 ? 'PM' : 'AM';
+  const h12  = hh % 12 || 12;
+  const nice = h12 + ':' + String(mm).padStart(2,'0') + ' ' + ampm;
+
+  if (st === 'daily')  return 'Every day at ' + nice;
+  if (st === 'weekly') {
+    const day = DAY_NAMES[document.getElementById('schedDayOfWeek').value] || '?';
+    return 'Every ' + day + ' at ' + nice;
+  }
+  if (st === 'monthly') {
+    const d = document.getElementById('schedDayOfMonth').value || '?';
+    const suffix = (d==1||d==21)?'st':(d==2||d==22)?'nd':(d==3||d==23)?'rd':'th';
+    return 'Every month on the ' + d + suffix + ' at ' + nice;
+  }
+  return st;
+}
+
+function updateSchedPreview() {
+  document.getElementById('schedPreviewText').textContent = getSchedPreviewText();
+}
+
+// Attach listeners for live preview
+['schedType','schedTime','schedDayOfWeek','schedDayOfMonth'].forEach(function(id){
+  var el = document.getElementById(id);
+  if (el) el.addEventListener('change', updateSchedPreview);
+});
+
+function openSchedConfirmModal() {
+  const form = document.getElementById('createSchedForm');
+  if (!form.checkValidity()) { form.classList.add('was-validated'); return; }
+  const name = document.getElementById('schedName').value.trim();
+  if (!name) { alert('Please enter a rule name.'); return; }
+
+  const schedText = getSchedPreviewText();
+  const action    = document.getElementById('schedAction').value;
+  let actionText = '';
+  if (action === 'send_notification') {
+    const t = {assignee:'task assignee', board_members:'all board members', creator:'task creator'};
+    actionText = 'Notify ' + (t[document.getElementById('schedNotifyTarget').value] || 'recipients');
+  } else if (action === 'set_priority') {
+    actionText = 'Set priority to "' + document.getElementById('schedPrioritySelect').value + '"';
+  }
+
+  const filterLabel = document.getElementById('schedTaskFilter').selectedOptions[0].text;
+
+  document.getElementById('confirmSchedSummary').innerHTML =
+    '<div class="fw-semibold mb-2">' + esc(name) + '</div>' +
+    '<div class="d-flex align-items-center gap-2 flex-wrap mb-2">' +
+    '<span class="sched-badge"><i class="fas fa-clock me-1"></i>' + esc(schedText) + '</span>' +
+    '<span class="arrow-icon">\u2192</span>' +
+    '<span class="action-badge"><i class="fas fa-cogs me-1"></i>' + esc(actionText) + '</span></div>' +
+    '<div class="small text-muted"><i class="fas fa-filter me-1"></i>Applies to: ' + esc(filterLabel) + '</div>';
+
+  new bootstrap.Modal(document.getElementById('confirmSchedModal')).show();
+}
+
+function submitSchedForm() {
+  bootstrap.Modal.getInstance(document.getElementById('confirmSchedModal')).hide();
+  document.getElementById('createSchedForm').submit();
+}
 </script>
 {% endblock %}

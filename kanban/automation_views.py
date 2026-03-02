@@ -9,7 +9,7 @@ from django.contrib import messages
 from django.views.decorators.http import require_http_methods
 
 from kanban.models import Board, TaskLabel, Column
-from kanban.automation_models import BoardAutomation
+from kanban.automation_models import BoardAutomation, ScheduledAutomation
 
 # ---------------------------------------------------------------------------
 # Pre-built template rules that users can activate with one click
@@ -141,6 +141,9 @@ def automations_list(request, board_id):
         for t in TEMPLATE_RULES
     ]
 
+    # Scheduled automations
+    scheduled_automations = ScheduledAutomation.objects.filter(board=board).order_by('-created_at')
+
     context = {
         'board': board,
         'automations': automations,
@@ -150,6 +153,12 @@ def automations_list(request, board_id):
         'trigger_choices': BoardAutomation.TRIGGER_CHOICES,
         'action_choices': BoardAutomation.ACTION_CHOICES,
         'templates': templates,
+        # Scheduled automation context
+        'scheduled_automations': scheduled_automations,
+        'sched_schedule_types': ScheduledAutomation.SCHEDULE_TYPE_CHOICES,
+        'sched_action_choices': ScheduledAutomation.ACTION_CHOICES,
+        'sched_notify_targets': ScheduledAutomation.NOTIFY_TARGET_CHOICES,
+        'sched_task_filters': ScheduledAutomation.TASK_FILTER_CHOICES,
     }
     return render(request, 'kanban/automations.html', context)
 

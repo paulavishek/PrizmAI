@@ -86,6 +86,7 @@ INSTALLED_APPS = [
     'corsheaders',  # Django CORS headers for mobile/PWA support
     'axes',  # django-axes for brute force protection
     'csp',  # django-csp for Content Security Policy
+    'django_celery_beat',  # Database-backed periodic task scheduler
     
     # Django Allauth
     'allauth',
@@ -572,6 +573,11 @@ CELERY_TIMEZONE = 'Asia/Kolkata'  # Indian Standard Time (IST)
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True  # Fix Celery 6.0 deprecation warning
+
+# Use DatabaseScheduler so user-created ScheduledAutomation rules are picked
+# up at runtime.  The existing hardcoded beat_schedule entries in celery.py
+# are automatically synced into the DB on Celery Beat startup (hybrid mode).
+CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 # Redis optimization for better messaging performance
 CELERY_BROKER_TRANSPORT_OPTIONS = {
