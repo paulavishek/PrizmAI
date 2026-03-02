@@ -61,7 +61,8 @@ def _get_ai_cache():
 @require_http_methods(["POST"])
 def generate_task_description_api(request):
     """
-    API endpoint to generate a task description using AI
+    API endpoint to generate a task description using AI.
+    Accepts optional task_id for context-enriched generation on existing tasks.
     """
     start_time = time.time()
     try:
@@ -75,12 +76,33 @@ def generate_task_description_api(request):
         
         data = json.loads(request.body)
         title = data.get('title', '')
+        task_id = data.get('task_id')
         
         if not title:
             return JsonResponse({'error': 'Title is required'}, status=400)
+        
+        # Build optional context from existing task for richer description generation
+        context = None
+        if task_id:
+            try:
+                task = Task.objects.select_related('column__board', 'assigned_to').get(id=task_id)
+                context = {
+                    'board_name': task.column.board.name if task.column else '',
+                    'current_description': task.description or '',
+                    'priority': task.priority or '',
+                    'assigned_to': str(task.assigned_to) if task.assigned_to else '',
+                    'lss_classification': task.lss_classification or '',
+                    'complexity_score': task.complexity_score,
+                }
+                # Include comments for additional context
+                comments = task.comments.order_by('-created_at')[:5].values_list('content', flat=True)
+                if comments:
+                    context['recent_comments'] = list(comments)
+            except Task.DoesNotExist:
+                pass  # Proceed without context
             
         # Call AI util function to generate description
-        description = generate_task_description(title)
+        description = generate_task_description(title, context=context)
         
         if not description:
             # Track failed request

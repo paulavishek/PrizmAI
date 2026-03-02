@@ -1209,6 +1209,16 @@ def task_detail(request, task_id):
     if request.method == 'POST':
         form = TaskForm(request.POST, instance=task, board=board)
         if form.is_valid():
+            # --- Snapshot AI-relevant fields before save for stale detection ---
+            ai_relevant_fields = ['description', 'priority', 'due_date', 'assigned_to',
+                                  'complexity_score', 'risk_level', 'start_date',
+                                  'workload_impact', 'lss_classification']
+            old_values = {}
+            # Re-fetch the clean task from DB for accurate comparison
+            original_task = Task.objects.get(pk=task.pk)
+            for field_name in ai_relevant_fields:
+                old_values[field_name] = getattr(original_task, field_name, None)
+
             # Track changes automatically
             with AuditLogContext(task, request.user, request, 'task.updated'):
                 task = form.save(commit=False)
@@ -1217,6 +1227,24 @@ def task_detail(request, task_id):
                 task.save()
                 # Save many-to-many relationships (dependencies, labels, related_tasks)
                 form.save_m2m()
+            
+            # --- Detect which AI-relevant fields changed ---
+            ai_field_labels = {
+                'description': 'description',
+                'priority': 'priority',
+                'due_date': 'due date',
+                'assigned_to': 'assignee',
+                'complexity_score': 'complexity score',
+                'risk_level': 'risk level',
+                'start_date': 'start date',
+                'workload_impact': 'workload impact',
+                'lss_classification': 'LSS classification',
+            }
+            changed_ai_fields = []
+            for field_name in ai_relevant_fields:
+                new_val = getattr(task, field_name, None)
+                if old_values[field_name] != new_val:
+                    changed_ai_fields.append(ai_field_labels.get(field_name, field_name))
             
             # Record activity
             TaskActivity.objects.create(
@@ -1232,6 +1260,15 @@ def task_detail(request, task_id):
             next_url = request.POST.get('next') or request.GET.get('next')
             if next_url:
                 return redirect(next_url)
+            
+            # If AI-relevant fields changed, redirect with stale flag so banner appears
+            if changed_ai_fields:
+                from urllib.parse import urlencode
+                params = urlencode({
+                    'ai_stale': '1',
+                    'changed': ','.join(changed_ai_fields)
+                })
+                return redirect(f"{reverse('task_detail', args=[task.id])}?{params}")
             return redirect('task_detail', task_id=task.id)
     else:
         form = TaskForm(instance=task, board=board)

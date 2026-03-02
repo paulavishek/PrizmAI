@@ -56,6 +56,13 @@ function initAITaskDescription() {
             aiSpinner.classList.remove('d-none');
             generateButton.disabled = true;
             
+            // Build request body — include task_id for context-enriched generation on existing tasks
+            const requestBody = { title: title };
+            const taskId = generateButton.getAttribute('data-task-id');
+            if (taskId) {
+                requestBody.task_id = taskId;
+            }
+            
             // Make API call to our backend endpoint
             fetch('/api/generate-task-description/', {
                 method: 'POST',
@@ -63,7 +70,7 @@ function initAITaskDescription() {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
                 },
-                body: JSON.stringify({ title: title })
+                body: JSON.stringify(requestBody)
             })
             .then(response => {
                 if (!response.ok) {

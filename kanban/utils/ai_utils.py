@@ -329,7 +329,22 @@ def generate_task_description(title: str, context: Optional[Dict] = None) -> Opt
     try:
         context_info = ""
         if context:
-            context_info = f"Project: {context.get('board_name', 'General')}"
+            context_parts = []
+            if context.get('board_name'):
+                context_parts.append(f"Project: {context['board_name']}")
+            if context.get('current_description'):
+                context_parts.append(f"Current description (improve upon this): {context['current_description'][:500]}")
+            if context.get('priority'):
+                context_parts.append(f"Priority: {context['priority']}")
+            if context.get('assigned_to'):
+                context_parts.append(f"Assigned to: {context['assigned_to']}")
+            if context.get('lss_classification'):
+                context_parts.append(f"LSS Classification: {context['lss_classification']}")
+            if context.get('complexity_score'):
+                context_parts.append(f"Complexity Score: {context['complexity_score']}/10")
+            if context.get('recent_comments'):
+                context_parts.append(f"Recent discussion: {'; '.join(context['recent_comments'][:3])[:300]}")
+            context_info = "\n".join(context_parts)
         
         prompt = f"""Generate a task description for: "{title}"
 {context_info}

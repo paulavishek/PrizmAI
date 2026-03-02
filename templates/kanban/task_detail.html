@@ -25,6 +25,24 @@
 </nav>
 {% endif %}
 {% endwith %}
+<!-- AI Insights Stale Banner — shown after saving changes to AI-relevant fields -->
+<div id="ai-stale-banner" class="alert alert-warning alert-dismissible fade show d-none mb-3" role="alert">
+    <div class="d-flex align-items-start">
+        <i class="fas fa-exclamation-triangle text-warning me-2 mt-1" style="font-size: 1.1rem;"></i>
+        <div class="flex-grow-1">
+            <strong>AI insights may be outdated.</strong>
+            <span id="ai-stale-details"></span>
+            <div class="mt-2">
+                <button type="button" id="refresh-ai-analysis-btn" class="btn btn-sm btn-warning" title="Refresh all AI analyses">
+                    <span id="refresh-ai-spinner" class="spinner-border spinner-border-sm d-none me-1" role="status"></span>
+                    <i class="fas fa-sync-alt me-1"></i> Refresh AI Analysis
+                </button>
+            </div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+</div>
+
 <div class="row">
     <div class="col-md-8">
         <!-- AI Task Summary Card -->
@@ -106,10 +124,22 @@
                             {% endif %}
                         </div>
                         
-                        <!-- Description -->
+                        <!-- Description with AI Generation -->
                         <div class="mb-3">
-                            <label for="{{ form.description.id_for_label }}" class="form-label">Description</label>
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label for="{{ form.description.id_for_label }}" class="form-label mb-0">Description</label>
+                                <button type="button" id="generate-ai-description" class="btn btn-sm btn-outline-primary"
+                                        data-task-id="{{ task.id }}">
+                                    <i class="fas fa-robot me-1"></i> Generate with AI
+                                </button>
+                            </div>
                             {{ form.description }}
+                            <div id="ai-spinner" class="d-none text-center mt-2">
+                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                    <span class="visually-hidden">Loading...</span>
+                                </div>
+                                <span class="ms-2 text-muted">Generating description with AI...</span>
+                            </div>
                             {% if form.description.errors %}
                                 <div class="invalid-feedback d-block">{{ form.description.errors }}</div>
                             {% endif %}
@@ -230,6 +260,29 @@
                                                 <small class="text-muted">Complex (10)</small>
                                             </div>
                                             <small class="form-text text-muted">Rate the task complexity from 1 (simple) to 10 (very complex).</small>
+                                        </div>
+                                        
+                                        <!-- AI Task Complexity Analysis & Breakdown -->
+                                        <div class="card border-success mt-2">
+                                            <div class="card-body">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <h6 class="mb-1"><i class="fas fa-sitemap text-success me-1"></i> AI Complexity Analysis</h6>
+                                                        <small class="text-muted">Get AI suggestions for breaking complex tasks into manageable subtasks</small>
+                                                    </div>
+                                                    <button type="button" id="suggest-breakdown-btn" class="btn btn-sm btn-outline-success"
+                                                            data-task-id="{{ task.id }}" title="AI-powered task breakdown suggestion">
+                                                        <i class="fas fa-sitemap me-1"></i> Analyze & Break Down
+                                                    </button>
+                                                </div>
+                                                <div id="breakdown-ai-spinner" class="d-none text-center mt-2">
+                                                    <div class="spinner-border spinner-border-sm text-success" role="status">
+                                                        <span class="visually-hidden">Loading...</span>
+                                                    </div>
+                                                    <span class="ms-2 text-muted">Analyzing task complexity...</span>
+                                                </div>
+                                                <div id="task-breakdown-result" class="d-none mt-2"></div>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -401,10 +454,27 @@
                             <div class="col-md-4 mb-3">
                                 <div class="card border-info h-100">
                                     <div class="card-body">
-                                        <label for="{{ form.due_date.id_for_label }}" class="form-label">
-                                            <i class="fas fa-calendar-alt text-info me-1"></i> Due Date
-                                        </label>
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <label for="{{ form.due_date.id_for_label }}" class="form-label mb-0">
+                                                <i class="fas fa-calendar-alt text-info me-1"></i> Due Date
+                                            </label>
+                                            <button type="button" id="predict-deadline-btn" class="btn btn-sm btn-outline-info"
+                                                    data-board-id="{{ board.id }}" data-task-id="{{ task.id }}" title="AI-powered deadline prediction">
+                                                <i class="fas fa-brain me-1"></i> Predict
+                                            </button>
+                                        </div>
                                         {{ form.due_date }}
+                                        <!-- Helper text for prediction requirements -->
+                                        <small id="predict-assignee-hint" class="form-text text-warning d-none">
+                                            <i class="fas fa-exclamation-circle me-1"></i>Please select an assignee above to enable AI prediction.
+                                        </small>
+                                        <div id="deadline-ai-spinner" class="d-none text-center mt-1">
+                                            <div class="spinner-border spinner-border-sm text-info" role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                            <span class="ms-2 text-muted small">Predicting optimal deadline...</span>
+                                        </div>
+                                        <div id="deadline-prediction-result" class="d-none mt-2"></div>
                                         {% if form.due_date.errors %}
                                             <div class="invalid-feedback d-block">{{ form.due_date.errors }}</div>
                                         {% endif %}
@@ -414,10 +484,23 @@
                             <div class="col-md-4 mb-3">
                                 <div class="card border-warning h-100">
                                     <div class="card-body">
-                                        <label for="{{ form.priority.id_for_label }}" class="form-label">
-                                            <i class="fas fa-flag text-warning me-1"></i> Priority
-                                        </label>
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <label for="{{ form.priority.id_for_label }}" class="form-label mb-0">
+                                                <i class="fas fa-flag text-warning me-1"></i> Priority
+                                            </label>
+                                            <button type="button" id="suggest-priority-btn" class="btn btn-sm btn-outline-warning"
+                                                    data-board-id="{{ board.id }}" data-task-id="{{ task.id }}" title="AI-powered priority suggestion">
+                                                <i class="fas fa-magic me-1"></i> Suggest
+                                            </button>
+                                        </div>
+                                        <div id="priority-suggestion-container" class="mb-2"></div>
                                         {{ form.priority }}
+                                        <div id="priority-ai-spinner" class="d-none text-center mt-1">
+                                            <div class="spinner-border spinner-border-sm text-warning" role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                            <span class="ms-2 text-muted small">Analyzing optimal priority...</span>
+                                        </div>
                                         {% if form.priority.errors %}
                                             <div class="invalid-feedback d-block">{{ form.priority.errors }}</div>
                                         {% endif %}
@@ -427,7 +510,7 @@
                         </div>
                         
                         <!-- Lean Six Sigma Classification -->
-                        <div class="card border-primary">
+                        <div class="card border-primary mb-3">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <label class="form-label mb-0">
@@ -436,6 +519,10 @@
                                             <i class="fas fa-info-circle text-primary" title="Learn about Lean Six Sigma categories"></i>
                                         </button>
                                     </label>
+                                    <button type="button" id="suggest-lss-classification" class="btn btn-sm btn-outline-primary"
+                                            data-task-id="{{ task.id }}">
+                                        <i class="fas fa-robot me-1"></i> Suggest LSS
+                                    </button>
                                 </div>
                                 
                                 <div class="lss-radio-group">
@@ -461,9 +548,25 @@
                                     {% endif %}
                                     {% endfor %}
                                 </div>
+                                
+                                <div id="classify-spinner" class="d-none text-center mt-2">
+                                    <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <span class="ms-2 text-muted">Analyzing with AI...</span>
+                                </div>
                                 {% if form.lss_classification.errors %}
                                     <div class="invalid-feedback d-block">{{ form.lss_classification.errors }}</div>
                                 {% endif %}
+                            </div>
+                        </div>
+                        
+                        <!-- AI LSS Classification Suggestion -->
+                        <div id="lss-suggestion-container" class="alert alert-info mb-3 d-none">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-robot mt-1 me-2"></i>
+                                <div class="flex-grow-1" id="lss-suggestion-text">
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1363,26 +1466,6 @@
                                 <i class="fas fa-info-circle text-primary" title="Learn about Lean Six Sigma labels"></i>
                             </button>
                         </label>
-                        <button type="button" id="suggest-lss-classification" class="btn btn-sm btn-outline-primary" data-task-id="{{ task.id }}">
-                            <i class="fas fa-robot me-1"></i> Suggest LSS
-                        </button>
-                    </div>
-                    
-                    <!-- AI LSS Classification Suggestion -->
-                    <div id="lss-suggestion-container" class="alert alert-info my-2 d-none">
-                        <div class="d-flex align-items-start">
-                            <i class="fas fa-robot mt-1 me-2"></i>
-                            <div>
-                                <strong>AI Suggestion:</strong>
-                                <p id="lss-suggestion-text" class="mb-0"></p>
-                            </div>
-                        </div>
-                    </div>
-                    <div id="classify-spinner" class="d-none text-center my-2">
-                        <div class="spinner-border spinner-border-sm text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <span class="ms-2 text-muted">Analyzing with AI...</span>
                     </div>
                     
                     <div class="p-2 bg-light rounded">{% for label in task.labels.all %}
@@ -1651,6 +1734,134 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // ═══════════════════════════════════════════════════════════
+        // AI INSIGHTS STALE BANNER — detect URL params and show banner
+        // ═══════════════════════════════════════════════════════════
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('ai_stale') === '1') {
+            const banner = document.getElementById('ai-stale-banner');
+            const details = document.getElementById('ai-stale-details');
+            if (banner) {
+                const changedFields = urlParams.get('changed');
+                if (changedFields && details) {
+                    details.textContent = 'You changed the ' + changedFields.replace(/,/g, ', ') + '. AI prediction, risk assessment, and summary may need updating.';
+                } else if (details) {
+                    details.textContent = 'Task properties were changed. AI prediction, risk assessment, and summary may need updating.';
+                }
+                banner.classList.remove('d-none');
+                // Clean URL without reloading
+                const cleanUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, cleanUrl);
+            }
+        }
+
+        // "Refresh AI Analysis" button handler
+        const refreshBtn = document.getElementById('refresh-ai-analysis-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', async function() {
+                const spinner = document.getElementById('refresh-ai-spinner');
+                const icon = this.querySelector('.fa-sync-alt');
+                if (spinner) spinner.classList.remove('d-none');
+                if (icon) icon.classList.add('d-none');
+                this.disabled = true;
+                this.querySelector('span:last-child') || null;
+
+                const taskId = {{ task.id }};
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+                                  document.cookie.split(';').find(c => c.trim().startsWith('csrftoken='))?.split('=')[1] || '';
+                let refreshed = [];
+                let errors = [];
+
+                // 1. Refresh completion prediction
+                try {
+                    const predResp = await fetch(`/api/task/${taskId}/prediction/`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+                    });
+                    if (predResp.ok) {
+                        refreshed.push('prediction');
+                        // Trigger the existing refresh-prediction handler UI update
+                        const refreshPredBtn = document.getElementById('refresh-prediction');
+                        if (refreshPredBtn) refreshPredBtn.click();
+                    } else {
+                        errors.push('prediction');
+                    }
+                } catch(e) { errors.push('prediction'); }
+
+                // 2. Refresh risk assessment
+                try {
+                    const title = document.getElementById('id_title')?.value || '';
+                    const desc = document.getElementById('id_description')?.value || '';
+                    const priority = document.getElementById('id_priority')?.value || '';
+                    const riskResp = await fetch('/api/kanban/calculate-task-risk/', {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            task_id: taskId,
+                            title: title,
+                            description: desc,
+                            priority: priority,
+                            board_id: {{ board.id }}
+                        })
+                    });
+                    if (riskResp.ok) {
+                        refreshed.push('risk assessment');
+                    } else {
+                        errors.push('risk assessment');
+                    }
+                } catch(e) { errors.push('risk assessment'); }
+
+                // 3. Refresh task summary
+                try {
+                    const summResp = await fetch(`/api/summarize-task-details/${taskId}/`);
+                    if (summResp.ok) {
+                        const summData = await summResp.json();
+                        const summContainer = document.getElementById('task-summary-container');
+                        const summText = document.getElementById('task-summary-text');
+                        const summPlaceholder = document.getElementById('task-summary-placeholder');
+                        if (summData.summary && summText) {
+                            summText.innerHTML = summData.summary;
+                            if (summContainer) summContainer.classList.remove('d-none');
+                            if (summPlaceholder) summPlaceholder.classList.add('d-none');
+                        }
+                        refreshed.push('summary');
+                    } else {
+                        errors.push('summary');
+                    }
+                } catch(e) { errors.push('summary'); }
+
+                // Update UI
+                if (spinner) spinner.classList.add('d-none');
+                if (icon) icon.classList.remove('d-none');
+                this.disabled = false;
+
+                if (refreshed.length > 0) {
+                    const banner = document.getElementById('ai-stale-banner');
+                    const details = document.getElementById('ai-stale-details');
+                    if (banner) {
+                        banner.classList.remove('alert-warning');
+                        banner.classList.add('alert-success');
+                        const warnIcon = banner.querySelector('.fa-exclamation-triangle');
+                        if (warnIcon) {
+                            warnIcon.classList.remove('fa-exclamation-triangle', 'text-warning');
+                            warnIcon.classList.add('fa-check-circle', 'text-success');
+                        }
+                    }
+                    if (details) {
+                        let msg = 'Refreshed: ' + refreshed.join(', ') + '.';
+                        if (errors.length > 0) {
+                            msg += ' Could not refresh: ' + errors.join(', ') + '.';
+                        }
+                        details.textContent = msg;
+                    }
+                    // Auto-dismiss after 5 seconds
+                    setTimeout(() => {
+                        if (banner) banner.classList.add('d-none');
+                    }, 5000);
+                }
+            });
+        }
+
         // Budget/Cost calculation preview
         function updateLaborCostPreview() {
             const hoursInput = document.getElementById('id_estimated_hours');
@@ -3499,4 +3710,18 @@
 
 {% load static %}
 <script src="{% static 'js/ai_features.js' %}?v={{ STATIC_VERSION|default:'2' }}"></script>
+<script src="{% static 'js/priority_suggestion.js' %}?v={{ STATIC_VERSION|default:'6' }}"></script>
+<script>
+    // Initialize Priority Suggestion Widget for task detail page
+    document.addEventListener('DOMContentLoaded', function() {
+        const boardId = {{ board.id }};
+        const taskId = {{ task.id }};
+        try {
+            const prioritySuggestion = new PrioritySuggestionWidget({ boardId: boardId, taskId: taskId });
+            prioritySuggestion.init();
+        } catch(e) {
+            console.error('PrioritySuggestionWidget init error:', e);
+        }
+    });
+</script>
 {% endblock %}
