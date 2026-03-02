@@ -134,6 +134,35 @@ class BurndownPredictor:
                 'velocity_window_weeks': self.VELOCITY_WINDOW_WEEKS,
                 'min_samples': self.MIN_VELOCITY_SAMPLES,
                 'z_score': self.Z_SCORES.get(confidence_level, 1.645),
+                'explainability': {
+                    'calculation_method': (
+                        f"Predicted completion = remaining work / average velocity ± "
+                        f"(z-score × std-dev margin). Using {len(velocity_history)} weekly "
+                        f"velocity samples over the last {self.VELOCITY_WINDOW_WEEKS} weeks."
+                    ),
+                    'confidence_breakdown': {
+                        'data_points': len(velocity_history),
+                        'min_required': self.MIN_VELOCITY_SAMPLES,
+                        'data_sufficiency': 'high' if len(velocity_history) >= 6 else 'moderate' if len(velocity_history) >= self.MIN_VELOCITY_SAMPLES else 'low',
+                        'velocity_stability': (
+                            'stable' if velocity_stats['std_dev'] < velocity_stats['average_velocity'] * 0.3
+                            else 'moderate' if velocity_stats['std_dev'] < velocity_stats['average_velocity'] * 0.6
+                            else 'volatile'
+                        ) if velocity_stats['average_velocity'] > 0 else 'unknown',
+                        'trend_direction': velocity_stats.get('trend', 'stable'),
+                    },
+                    'assumptions': [
+                        f"Team velocity will continue near the historical average of {velocity_stats['average_velocity']:.1f} tasks/week.",
+                        f"No major scope changes will occur (currently {scope_metrics['remaining_tasks']} tasks remaining).",
+                        "Team composition and allocation remain constant.",
+                        f"Standard deviation of {velocity_stats['std_dev']:.2f} accurately reflects future variability.",
+                    ],
+                    'limitations': [
+                        "Prediction is based on historical velocity and may not account for upcoming holidays or resource changes.",
+                        "Scope creep is not factored into the projection.",
+                        f"Confidence interval uses a normal distribution assumption (z={self.Z_SCORES.get(confidence_level, 1.645)}).",
+                    ],
+                },
             }
         )
         

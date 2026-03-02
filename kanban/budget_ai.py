@@ -610,16 +610,16 @@ Format as JSON: {{"optimizations": array of {{area, suggestion, impact, effort}}
             model = genai.GenerativeModel(model_name)
             logger.debug(f"Using {model_name} for budget AI analysis")
             
-            # Token limits for budget operations to prevent JSON truncation
+            # Token limits for budget operations - generous to ensure complete responses with explainability
             budget_token_limits = {
-                'budget_analysis': 4096,      # Comprehensive health analysis with recommendations
-                'budget_recommendations': 4096,  # Multiple detailed recommendations
-                'budget_prediction': 3072,    # Prediction with scenarios
-                'budget_patterns': 3072,      # Pattern analysis
-                'budget_optimization': 3072,  # Resource optimization suggestions
+                'budget_analysis': 6144,      # Comprehensive health analysis with recommendations + explainability
+                'budget_recommendations': 6144,  # Multiple detailed recommendations with reasoning
+                'budget_prediction': 4096,    # Prediction with scenarios + confidence explanation
+                'budget_patterns': 4096,      # Pattern analysis with evidence
+                'budget_optimization': 4096,  # Resource optimization suggestions with reasoning
             }
             
-            max_tokens = budget_token_limits.get(cache_operation, 3072)
+            max_tokens = budget_token_limits.get(cache_operation, 4096)
             
             # Generation config optimized for financial analysis
             generation_config = {

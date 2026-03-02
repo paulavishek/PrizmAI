@@ -106,43 +106,46 @@ TASK_TEMPERATURE_MAP = {
 # Lower limits = faster responses, Higher limits = more detailed outputs
 # Optimized for latency while maintaining quality - increased to prevent JSON truncation
 TASK_TOKEN_LIMITS = {
-    # Short responses (1536-2048 tokens) - increased to prevent truncation of explainability fields
-    'lean_classification': 2048,          # Classification + detailed explanation + confidence + alternatives
-    'comment_summary': 2560,              # Summary with sentiment analysis, action items, and participant analysis
-    'mitigation_suggestions': 2048,       # Mitigation strategies with action steps
+    # Short responses (2048-2560 tokens) - generous limits to ensure complete responses with explainability
+    'lean_classification': 2560,          # Classification + detailed explanation + confidence + alternatives
+    'comment_summary': 3072,              # Summary with sentiment analysis, action items, and participant analysis
+    'mitigation_suggestions': 3072,       # Mitigation strategies with action steps + per-strategy reasoning
     
-    # Medium responses (2048-3072 tokens)
-    'task_description': 1536,            # Concise description + simple checklist (simplified prompt)
+    # Medium responses (2560-3072 tokens)
+    'task_description': 2560,            # Description + checklist + confidence + reasoning + assumptions
     'priority_suggestion': 3072,         # Priority with full comparison and recommendations
-    'dashboard_insights': 2048,          # Quick insights with reasoning
-    'velocity_forecast': 2048,           # Forecast data with explanations
-    'simple': 2048,                      # Default for simple tasks - increased for explainability
+    'dashboard_insights': 2560,          # Quick insights with reasoning
+    'velocity_forecast': 2560,           # Forecast data with explanations
+    'simple': 2560,                      # Default for simple tasks - generous for explainability
     
     # Standard responses (3072-4096 tokens)
-    'task_enhancement': 3072,            # Enhanced description + checklist + acceptance criteria + reasoning
-    'board_analytics_summary': 3072,     # Comprehensive analytics with health factors
-    'risk_assessment': 3072,             # Risk analysis with mitigation and explainability
-    'retrospective': 3072,               # Retrospective summary with patterns and recommendations
-    'skill_gap_analysis': 3072,          # Skill analysis with recommendations
+    'task_enhancement': 4096,            # Enhanced description + checklist + acceptance criteria + reasoning
+    'board_analytics_summary': 4096,     # Comprehensive analytics with health factors + explainability
+    'risk_assessment': 4096,             # Risk analysis with mitigation and explainability
+    'retrospective': 4096,               # Retrospective summary with patterns and recommendations
+    'skill_gap_analysis': 4096,          # Skill analysis with recommendations
     'budget_analysis': 4096,             # Budget insights with trends and recommendations
-    'dependency_analysis': 3072,         # Dependency and cascading risk analysis
-    'deadline_prediction': 1536,         # Simplified timeline prediction (reduced from complex explainability)
+    'dependency_analysis': 4096,         # Dependency and cascading risk analysis
+    'deadline_prediction': 2560,         # Timeline prediction with confidence and reasoning
     
-    # Extended responses (4096-6144 tokens) - complex nested JSON structures
-    'workflow_optimization': 4096,       # Workflow analysis with bottlenecks and recommendations
-    'task_breakdown': 2048,              # Simplified subtask list (reduced from verbose explainability)
-    'critical_path': 6144,               # Critical path with task analysis and scheduling
-    'complex': 6144,                     # General complex analysis tasks - increased for comprehensive JSON
-    'timeline_generation': 4096,         # Timeline details with milestones
+    # Extended responses (4096-8192 tokens) - complex nested JSON structures
+    'workflow_optimization': 6144,       # Workflow analysis with bottlenecks and recommendations
+    'task_breakdown': 3072,              # Subtask list with per-subtask reasoning
+    'critical_path': 8192,               # Critical path with task analysis and scheduling
+    'complex': 8192,                     # General complex analysis tasks - comprehensive JSON
+    'timeline_generation': 6144,         # Timeline details with milestones + explainability
     
-    # Large responses (6144-8192 tokens) - extensive board-wide analysis
-    'column_recommendations': 6144,      # Complex structure with full explainability (4-7 columns)
-    'board_setup': 4096,                 # Full board configuration with explainability
-    'task_summary': 8192,                # Comprehensive task summary with all aspects analyzed - needs high limit
+    # Large responses (8192+ tokens) - extensive board-wide analysis
+    'column_recommendations': 8192,      # Complex structure with full explainability (4-7 columns)
+    'board_setup': 6144,                 # Full board configuration with explainability
+    'task_summary': 8192,                # Comprehensive task summary with all aspects analyzed
     'workspace_generation': 8192,        # Full workspace hierarchy: goal → missions → strategies → boards → tasks
+    'status_report': 4096,               # Status report with RAG reasoning + explainability metadata
+    'board_summary': 4096,               # Board summary with confidence + data completeness
+    'prizmbrief': 6144,                  # PrizmBrief slides (8-10 slides) + data sources slide
     
     # Default
-    'default': 3072,                     # Default for unspecified tasks - increased to prevent truncation
+    'default': 4096,                     # Default for unspecified tasks - generous to prevent truncation
 }
 
 def get_token_limit_for_task(task_type: str) -> int:
@@ -335,6 +338,7 @@ RULES:
 - DO NOT include time estimates, effort predictions, or deadlines
 - DO NOT suggest priority levels
 - Keep each section brief and actionable
+- Include explainability fields so the user understands how this description was generated
 
 Return JSON only:
 {{
@@ -342,7 +346,10 @@ Return JSON only:
     "key_deliverables": ["Deliverable 1", "Deliverable 2", "Deliverable 3"],
     "action_steps": ["Step 1", "Step 2", "Step 3", "Step 4"],
     "potential_obstacles": ["Risk/obstacle 1", "Risk/obstacle 2"],
-    "success_criteria": "How to know this task is complete"
+    "success_criteria": "How to know this task is complete",
+    "confidence_score": 0.0 to 1.0 representing how confident you are in this description given the available context,
+    "reasoning": "One sentence explaining the basis for this description, e.g. what the title implied",
+    "assumptions": ["Assumption 1 you made since only a title was provided", "Assumption 2"]
 }}"""
         
         response_text = generate_ai_content(prompt, task_type='task_description')
@@ -379,7 +386,17 @@ Return JSON only:
                 if result.get('success_criteria'):
                     md_parts.append(f"\n**Success Criteria:** {result['success_criteria']}")
                 
+                # Add explainability note to the markdown
+                if result.get('assumptions'):
+                    md_parts.append("\n**AI Assumptions:**")
+                    for assumption in result['assumptions'][:4]:
+                        md_parts.append(f"- _{assumption}_")
+                
                 result['markdown_description'] = "\n".join(md_parts)
+                # Ensure explainability fields are present in the returned dict
+                result.setdefault('confidence_score', 0.5)
+                result.setdefault('reasoning', 'Generated based on the task title.')
+                result.setdefault('assumptions', [])
                 return result
                 
             except json.JSONDecodeError:
@@ -3335,23 +3352,37 @@ def generate_risk_mitigation_suggestions(task_title: str, task_description: str,
         For each strategy, provide:
         1. Specific action steps (what to do)
         2. Implementation timeline (when/how long)
-        3. Estimated effectiveness (%)
+        3. Estimated effectiveness (%) — explain what this number is based on
         4. Required resources
         5. Responsible parties
+        6. confidence (0.0-1.0): How confident you are in this strategy's viability
+        7. reasoning: A 1-2 sentence explanation of WHY you chose this approach for this specific task
+        8. data_basis: What data or project context this recommendation draws upon
         
-        FORMAT YOUR RESPONSE AS JSON:
-        [
-          {{
-            "strategy_type": "Avoid|Mitigate|Transfer|Accept",
-            "title": "Strategy name",
-            "description": "What this strategy accomplishes",
-            "action_steps": ["step1", "step2", "step3"],
-            "timeline": "Timeframe for implementation",
-            "estimated_effectiveness": 75,
-            "resources_required": "What's needed",
-            "priority": "high|medium|low"
+        FORMAT YOUR RESPONSE AS JSON (object, NOT bare array):
+        {{
+          "strategies": [
+            {{
+              "strategy_type": "Avoid|Mitigate|Transfer|Accept",
+              "title": "Strategy name",
+              "description": "What this strategy accomplishes",
+              "action_steps": ["step1", "step2", "step3"],
+              "timeline": "Timeframe for implementation",
+              "estimated_effectiveness": 75,
+              "resources_required": "What's needed",
+              "priority": "high|medium|low",
+              "confidence": 0.85,
+              "reasoning": "Why this strategy fits this specific task",
+              "data_basis": "What information or indicators drove this recommendation"
+            }}
+          ],
+          "explainability": {{
+            "overall_confidence": 0.80,
+            "analysis_reasoning": "Brief explanation of the overall mitigation approach",
+            "assumptions": ["assumption1", "assumption2"],
+            "limitations": "Any caveats about the recommendations"
           }}
-        ]
+        }}
         """
         
         response_text = generate_ai_content(prompt, task_type='mitigation_suggestions')
@@ -3362,18 +3393,55 @@ def generate_risk_mitigation_suggestions(task_title: str, task_description: str,
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].split("```")[0].strip()
             
-            # Try to find JSON array in the response
+            # Try to parse as new dict format first
+            try:
+                parsed = json.loads(response_text)
+                if isinstance(parsed, dict) and 'strategies' in parsed:
+                    # New format with explainability wrapper
+                    strategies = parsed.get('strategies', [])
+                    explainability = parsed.get('explainability', {})
+                    # Ensure per-strategy defaults
+                    for s in strategies:
+                        s.setdefault('confidence', 0.7)
+                        s.setdefault('reasoning', '')
+                        s.setdefault('data_basis', '')
+                    return {
+                        'strategies': strategies,
+                        'explainability': explainability,
+                    }
+                elif isinstance(parsed, list):
+                    # Legacy bare-array fallback
+                    return {
+                        'strategies': parsed,
+                        'explainability': {
+                            'overall_confidence': 0.65,
+                            'analysis_reasoning': 'Mitigation strategies generated (legacy format).',
+                            'assumptions': [],
+                            'limitations': 'Explainability data not available for this response.',
+                        },
+                    }
+            except json.JSONDecodeError:
+                pass
+            
+            # Fallback: try to find JSON array in the response
             json_start = response_text.find('[')
             json_end = response_text.rfind(']')
             
             if json_start != -1 and json_end != -1 and json_end > json_start:
-                response_text = response_text[json_start:json_end + 1]
-            
-            try:
-                return json.loads(response_text)
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON parsing error in mitigation suggestions: {e}")
-                return None
+                try:
+                    strategies = json.loads(response_text[json_start:json_end + 1])
+                    return {
+                        'strategies': strategies,
+                        'explainability': {
+                            'overall_confidence': 0.60,
+                            'analysis_reasoning': 'Strategies extracted from AI response (array fallback).',
+                            'assumptions': [],
+                            'limitations': 'Response did not include structured explainability.',
+                        },
+                    }
+                except json.JSONDecodeError as e:
+                    logger.error(f"JSON parsing error in mitigation suggestions: {e}")
+                    return None
         return None
     except Exception as e:
         logger.error(f"Error generating mitigation suggestions: {str(e)}")
@@ -3789,16 +3857,18 @@ def summarize_task_details(task_data: Dict) -> Optional[Dict]:
         return None
 
 
-def generate_status_report(report_data: Dict) -> Optional[str]:
+def generate_status_report(report_data: Dict) -> Optional[Dict]:
     """
-    Generate a concise, stakeholder-ready status report for a board.
+    Generate a concise, stakeholder-ready status report for a board
+    with explainability metadata.
 
     Args:
         report_data: Dictionary containing board metrics (tasks, completion,
                      velocity, overdue, budget, blockers, etc.)
 
     Returns:
-        A formatted plain-text/markdown status report string, or None on failure.
+        A dictionary with 'report' (formatted text), 'rag_status', 'rag_reasoning',
+        'confidence_score', 'data_completeness', and 'key_data_drivers', or None on failure.
     """
     try:
         board_name = report_data.get('board_name', 'Project')
@@ -3817,7 +3887,19 @@ def generate_status_report(report_data: Dict) -> Optional[str]:
             [f"{col['name']}: {col['count']}" for col in tasks_by_column]
         ) or 'N/A'
 
-        prompt = f"""You are an experienced project manager writing a weekly status report.
+        # Calculate data completeness for explainability
+        available_metrics = 0
+        total_metrics = 7  # total, completed, overdue, velocity, risk, budget, columns
+        if total_tasks > 0: available_metrics += 1
+        if completed > 0 or total_tasks > 0: available_metrics += 1
+        if overdue is not None: available_metrics += 1
+        if velocity != 'N/A': available_metrics += 1
+        if high_risk_count is not None: available_metrics += 1
+        if budget_status != 'Not tracked' and budget_status != 'N/A': available_metrics += 1
+        if tasks_by_column: available_metrics += 1
+        data_completeness = round(available_metrics / total_metrics, 2)
+
+        prompt = f"""You are an experienced project manager writing a weekly status report with Explainable AI.
 Write a concise, professional stakeholder update for the project "{board_name}" using the metrics below.
 
 ## Project Metrics ({report_date})
@@ -3829,17 +3911,47 @@ Write a concise, professional stakeholder update for the project "{board_name}" 
 - Column breakdown: {column_summary}
 
 ## Instructions
-Write in 4 short sections using markdown headings:
-1. **Overall Status** — One sentence with RAG status (🟢 On Track / 🟡 At Risk / 🔴 Off Track) and headline.
-2. **Progress This Week** — 2-3 bullet points on what's been accomplished.
-3. **Key Risks & Blockers** — 2-3 bullets on issues needing attention (be specific to the numbers).
-4. **Next Steps** — 2-3 action items for the upcoming period.
+Return your response as a JSON object with these keys:
 
-Keep it concise, factual, and actionable. Write for a non-technical stakeholder audience.
-Do not invent data not listed above."""
+{{
+    "report": "The full status report as a markdown string with 4 sections: **Overall Status** (RAG 🟢/🟡/🔴 + headline), **Progress This Week** (2-3 bullets), **Key Risks & Blockers** (2-3 bullets), **Next Steps** (2-3 action items)",
+    "rag_status": "green" or "amber" or "red",
+    "rag_reasoning": "1-2 sentences explaining WHY you chose this RAG status based on the specific metrics above",
+    "confidence_score": 0.0 to 1.0 (how confident you are in this assessment given available data),
+    "key_data_drivers": ["The top 2-3 metrics that most influenced your assessment"]
+}}
 
-        result = generate_ai_content(prompt, task_type='board_analytics_summary', use_cache=False)
-        return result
+Keep the report concise, factual, and actionable. Write for a non-technical stakeholder audience.
+Do not invent data not listed above.
+Return ONLY the JSON object — no markdown fences, no extra prose."""
+
+        result_text = generate_ai_content(prompt, task_type='status_report', use_cache=False)
+        if result_text:
+            # Parse JSON response
+            clean = result_text.strip()
+            if clean.startswith('```'):
+                clean = clean.split('```json')[-1].split('```')[0].strip() if '```json' in clean else clean.split('```')[1].split('```')[0].strip()
+            
+            try:
+                result = json.loads(clean)
+                # Ensure all explainability fields are present
+                result.setdefault('rag_status', 'amber')
+                result.setdefault('rag_reasoning', 'Assessment based on available project metrics.')
+                result.setdefault('confidence_score', round(data_completeness * 0.9, 2))
+                result.setdefault('key_data_drivers', [])
+                result['data_completeness'] = data_completeness
+                return result
+            except json.JSONDecodeError:
+                logger.warning("Status report JSON parse failed, falling back to plain text")
+                return {
+                    'report': result_text,
+                    'rag_status': 'amber',
+                    'rag_reasoning': 'Could not parse structured response; showing raw report text.',
+                    'confidence_score': round(data_completeness * 0.7, 2),
+                    'data_completeness': data_completeness,
+                    'key_data_drivers': [],
+                }
+        return None
     except Exception as e:
         logger.error(f"Error generating status report: {str(e)}")
         return None
@@ -3920,10 +4032,33 @@ def generate_and_save_task_summary(task) -> Optional[str]:
         if not summary_text:
             summary_text = result.get('markdown_summary') or str(result)
 
+        # Build rich metadata from the full AI response
+        metadata = {
+            'confidence_score': result.get('confidence_score'),
+            'analysis_completeness': result.get('analysis_completeness'),
+            'task_health': result.get('task_health'),
+            'risk_analysis': result.get('risk_analysis'),
+            'resource_assessment': result.get('resource_assessment'),
+            'stakeholder_insights': result.get('stakeholder_insights'),
+            'timeline_assessment': result.get('timeline_assessment'),
+            'lean_efficiency': result.get('lean_efficiency'),
+            'prioritized_actions': result.get('prioritized_actions'),
+            'assumptions': result.get('assumptions', []),
+            'limitations': result.get('limitations', []),
+        }
+        # Remove None values so we only store meaningful data
+        metadata = {k: v for k, v in metadata.items() if v is not None}
+
+        if result.get('truncation_note'):
+            metadata['truncation_note'] = result['truncation_note']
+        if result.get('parsing_note'):
+            metadata['parsing_note'] = result['parsing_note']
+
         # Persist
         task.ai_summary = summary_text
         task.ai_summary_generated_at = tz.now()
-        task.save(update_fields=['ai_summary', 'ai_summary_generated_at'])
+        task.ai_summary_metadata = metadata
+        task.save(update_fields=['ai_summary', 'ai_summary_generated_at', 'ai_summary_metadata'])
         return summary_text
 
     except Exception as e:
@@ -3962,30 +4097,65 @@ def generate_and_save_board_summary(board) -> Optional[str]:
 
         if not task_snippets:
             summary_text = f"No tasks available yet on board '{board.name}'."
+            metadata = {'confidence_score': 0.0, 'data_completeness': 0.0, 'tasks_analyzed': 0, 'tasks_with_ai_summary': 0}
         else:
             snippets_block = "\n".join(task_snippets[:40])  # cap to keep prompt manageable
             total = tasks.count()
             completed = tasks.filter(progress=100).count()
-            prompt = f"""You are a senior project manager. Synthesise the following individual task summaries
-for the project board "{board.name}" into one concise board-level summary (3-5 sentences).
-Focus on: overall progress, key risks, critical next steps, and team health.
-Be factual and actionable. Do NOT invent data not listed below.
+            tasks_with_summary = sum(1 for t in tasks if t.ai_summary)
+            data_completeness = round(tasks_with_summary / total, 2) if total else 0.0
+
+            prompt = f"""You are a senior project manager with Explainable AI capabilities.
+Synthesise the following individual task summaries for the project board "{board.name}" into a structured JSON response.
 
 Board stats: {total} total tasks, {completed} completed ({round(completed/total*100) if total else 0}% done).
+{tasks_with_summary} of {total} tasks have AI-generated summaries (rest use fallback data).
 
 Task summaries:
 {snippets_block}
 
-Write ONLY the summary paragraph — no headings, no bullet points, no JSON."""
+Return a JSON object with these keys:
+{{
+    "summary": "A concise board-level summary paragraph (3-5 sentences). Focus on: overall progress, key risks, critical next steps, and team health. Be factual and actionable. Do NOT invent data.",
+    "confidence_score": 0.0 to 1.0 (how confident you are given the data quality),
+    "key_risk_drivers": ["Top 2-3 risk factors or themes identified across tasks"],
+    "data_freshness_note": "Brief note on data quality, e.g. how many tasks had full AI summaries vs fallback"
+}}
 
-            summary_text = generate_ai_content(prompt, task_type='board_analytics_summary', use_cache=False)
+Return ONLY the JSON object — no markdown fences, no extra prose."""
+
+            raw = generate_ai_content(prompt, task_type='board_summary', use_cache=False)
+            summary_text = None
+            metadata = {
+                'confidence_score': round(0.5 + data_completeness * 0.4, 2),
+                'data_completeness': data_completeness,
+                'tasks_analyzed': total,
+                'tasks_with_ai_summary': tasks_with_summary,
+                'key_risk_drivers': [],
+                'data_freshness_note': f"{tasks_with_summary}/{total} tasks had AI summaries.",
+            }
+
+            if raw:
+                clean = raw.strip()
+                if clean.startswith('```'):
+                    clean = clean.split('```json')[-1].split('```')[0].strip() if '```json' in clean else clean.split('```')[1].split('```')[0].strip()
+                try:
+                    parsed = json.loads(clean)
+                    summary_text = parsed.get('summary', clean)
+                    metadata['confidence_score'] = min(1.0, max(0.0, float(parsed.get('confidence_score', metadata['confidence_score']))))
+                    metadata['key_risk_drivers'] = parsed.get('key_risk_drivers', [])
+                    if parsed.get('data_freshness_note'):
+                        metadata['data_freshness_note'] = parsed['data_freshness_note']
+                except (json.JSONDecodeError, ValueError):
+                    summary_text = raw  # fallback to raw text
 
         if not summary_text:
             return None
 
         board.ai_summary = summary_text
         board.ai_summary_generated_at = tz.now()
-        board.save(update_fields=['ai_summary', 'ai_summary_generated_at'])
+        board.ai_summary_metadata = metadata
+        board.save(update_fields=['ai_summary', 'ai_summary_generated_at', 'ai_summary_metadata'])
         return summary_text
 
     except Exception as e:
@@ -4285,11 +4455,17 @@ for each slide indicating the best chart or graphic type.
 4. Do NOT add any preamble, preamble headings, or closing remarks outside the slide blocks.
 5. Be factual — only use numbers from the data above. Do not invent data.
 6. If a data point is "Not available", acknowledge it briefly rather than fabricating a number.
+7. IMPORTANT: Always include a FINAL slide titled "Data Sources & Confidence" that covers:
+   - A bullet list of which data metrics were available and used (tasks, velocity, budget, milestones, etc.)
+   - Which data was missing or limited (e.g., "No budget data", "No milestones set")
+   - An overall confidence note: how reliable is this brief given the available data (High / Medium / Low)
+   - A brief note on data freshness (when metrics were captured)
+   This transparency slide helps stakeholders understand the basis of this AI-generated content.
 """
 
         result = generate_ai_content(
             prompt,
-            task_type='board_analytics_summary',
+            task_type='prizmbrief',
             use_cache=False,
         )
         return result
@@ -4368,6 +4544,7 @@ Return ONLY the JSON object below — no surrounding text, no ```json fences.
     {{
       "name": "Mission name",
       "description": "1-2 sentences",
+      "why": "1 sentence explaining why this mission is critical for the goal",
       "strategies": [
         {{
           "name": "Strategy name",
@@ -4390,7 +4567,13 @@ Return ONLY the JSON object below — no surrounding text, no ```json fences.
         }}
       ]
     }}
-  ]
+  ],
+  "explainability": {{
+    "reasoning": "2-3 sentences explaining why you structured the workspace this way — what about the goal drove these specific missions and strategies",
+    "assumptions": ["Assumption 1 you made about the organization or goal", "Assumption 2"],
+    "customization_hints": ["Suggestion 1 for what the user might want to adjust", "Suggestion 2"],
+    "confidence_score": 0.0 to 1.0 (how confident you are that this structure is useful for the stated goal)
+  }}
 }}
 """
 

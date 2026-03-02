@@ -355,7 +355,9 @@
             </div>
             <div class="meta-item">
                 <span class="meta-label">Confidence</span>
-                <span class="meta-value">{{ recommendation.confidence_score|floatformat:2 }}</span>
+                <span class="meta-value">
+                    <span class="rec-detail-conf-badge" data-confidence="{{ recommendation.confidence_score }}"></span>
+                </span>
             </div>
             <div class="meta-item">
                 <span class="meta-label">Created</span>
@@ -400,6 +402,39 @@
                 <div class="impact-number">{{ recommendation.affected_users.count }}</div>
                 <div class="impact-label">Team Members</div>
             </div>
+        </div>
+    </div>
+
+    <!-- AI Transparency -->
+    <div class="detail-section">
+        <div class="section-title"><i class="fas fa-brain me-2"></i>AI Transparency</div>
+        <div class="info-box">
+            <div class="d-flex align-items-center mb-2">
+                <strong class="me-2">Confidence Level:</strong>
+                <span class="rec-detail-conf-meter" data-confidence="{{ recommendation.confidence_score }}"></span>
+            </div>
+            <div class="mt-2">
+                <div class="progress" style="height: 8px;">
+                    <div class="progress-bar rec-detail-conf-bar" role="progressbar" data-confidence="{{ recommendation.confidence_score }}" style="width: 0%;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="info-box success mt-3">
+            <p class="mb-1"><strong><i class="fas fa-check-circle me-1"></i>What this recommendation is based on:</strong></p>
+            <ul class="mb-0 small">
+                <li>Current workload distribution across {{ recommendation.affected_users.count }} team member{{ recommendation.affected_users.count|pluralize }}</li>
+                <li>Analysis of {{ recommendation.affected_tasks.count }} affected task{{ recommendation.affected_tasks.count|pluralize }} and their priorities</li>
+                <li>Estimated capacity savings of {{ recommendation.expected_capacity_savings_hours|floatformat:1 }} hours</li>
+                <li>Board-level resource demand patterns and historical data</li>
+            </ul>
+        </div>
+        <div class="info-box warning mt-3">
+            <p class="mb-1"><strong><i class="fas fa-exclamation-triangle me-1"></i>Assumptions & Limitations:</strong></p>
+            <ul class="mb-0 small">
+                <li>Savings estimates assume standard working hours and team availability</li>
+                <li>Recommendations do not account for external dependencies or organizational constraints</li>
+                <li>Confidence score reflects data completeness; lower scores may indicate insufficient historical data</li>
+            </ul>
         </div>
     </div>
 
@@ -460,4 +495,44 @@
     </div>
 
 </div>
+
+<script>
+function goBack() {
+    window.history.back();
+}
+
+// Render confidence badges and meters
+function initConfidenceUI() {
+    function getConfColor(pct) {
+        if (pct >= 75) return 'success';
+        if (pct >= 50) return 'warning';
+        return 'danger';
+    }
+
+    document.querySelectorAll('.rec-detail-conf-badge').forEach(el => {
+        const raw = parseFloat(el.dataset.confidence) || 0;
+        const pct = raw <= 1 ? Math.round(raw * 100) : Math.round(raw);
+        const color = getConfColor(pct);
+        el.className = 'badge bg-' + color + ' bg-opacity-10 text-' + color;
+        el.textContent = pct + '% confidence';
+    });
+
+    document.querySelectorAll('.rec-detail-conf-meter').forEach(el => {
+        const raw = parseFloat(el.dataset.confidence) || 0;
+        const pct = raw <= 1 ? Math.round(raw * 100) : Math.round(raw);
+        const color = getConfColor(pct);
+        el.className = 'badge bg-' + color;
+        el.textContent = pct + '%';
+    });
+
+    document.querySelectorAll('.rec-detail-conf-bar').forEach(el => {
+        const raw = parseFloat(el.dataset.confidence) || 0;
+        const pct = raw <= 1 ? Math.round(raw * 100) : Math.round(raw);
+        const color = getConfColor(pct);
+        el.style.width = pct + '%';
+        el.className = 'progress-bar bg-' + color;
+    });
+}
+initConfidenceUI();
+</script>
 {% endblock %}

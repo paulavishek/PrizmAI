@@ -1753,6 +1753,17 @@ document.addEventListener('DOMContentLoaded', function() {
                                                 <div class="ai-summary-text small mt-1" id="board-summary-text-{{ board.id }}">
                                                     {{ board.ai_summary|render_bullets }}
                                                 </div>
+                                                {% if board.ai_summary_metadata.confidence_score %}
+                                                <div class="d-flex align-items-center mt-1 gap-1 board-ai-confidence" 
+                                                     data-confidence="{{ board.ai_summary_metadata.confidence_score }}">
+                                                    <i class="fas fa-brain" style="font-size:0.6rem;color:#6f42c1;"></i>
+                                                    <small style="font-size:0.65rem;color:#6f42c1;">Confidence:</small>
+                                                    <div style="width:50px;height:4px;background:#e9ecef;border-radius:2px;overflow:hidden;">
+                                                        <div class="conf-bar" style="height:100%;border-radius:2px;"></div>
+                                                    </div>
+                                                    <small class="conf-label" style="font-size:0.65rem;font-weight:600;"></small>
+                                                </div>
+                                                {% endif %}
                                                 <small class="text-muted summary-ts" id="board-ts-{{ board.id }}"
                                                       {% if board.ai_summary_generated_at %}data-ts="{{ board.ai_summary_generated_at|date:'c' }}"{% endif %}
                                                       style="font-size:0.68rem;">
@@ -3626,7 +3637,20 @@ document.addEventListener('DOMContentLoaded', function() {
     }  // end initMetricsCharts
 
     // Charts are now in permanent visible card containers — initialize on DOMContentLoaded
-    document.addEventListener('DOMContentLoaded', function() { initMetricsCharts(); });
+    document.addEventListener('DOMContentLoaded', function() {
+        initMetricsCharts();
+
+        // Render board AI summary confidence bars
+        document.querySelectorAll('.board-ai-confidence').forEach(function(el) {
+            var conf = parseFloat(el.dataset.confidence) || 0;
+            var pct = Math.round(conf * 100);
+            var color = pct >= 75 ? '#28a745' : pct >= 50 ? '#ffc107' : '#dc3545';
+            var bar = el.querySelector('.conf-bar');
+            var label = el.querySelector('.conf-label');
+            if (bar) { bar.style.width = pct + '%'; bar.style.background = color; }
+            if (label) { label.textContent = pct + '%'; label.style.color = color; }
+        });
+    });
     // Fallback if DOMContentLoaded already fired (script loaded late)
     if (document.readyState !== 'loading') { initMetricsCharts(); }
 </script>

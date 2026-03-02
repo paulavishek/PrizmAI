@@ -68,14 +68,14 @@ class AICoachService:
         try:
             model = self.genai.GenerativeModel('gemini-2.5-flash')
             
-            # Token limits for coaching operations to prevent JSON truncation
+            # Token limits for coaching operations - generous to prevent JSON truncation
             coaching_token_limits = {
-                'coaching_suggestion': 2048,  # Suggestion enhancement with actions
-                'coaching_advice': 3072,      # Detailed coaching response
-                'coaching_question': 2048,    # PM question response
+                'coaching_suggestion': 3072,  # Suggestion enhancement with actions + explainability
+                'coaching_advice': 4096,      # Detailed coaching response with full reasoning
+                'coaching_question': 3072,    # PM question response with context
             }
             
-            max_tokens = coaching_token_limits.get(operation, 2048)
+            max_tokens = coaching_token_limits.get(operation, 3072)
             
             # Generation config for coaching - balanced for helpful advice
             generation_config = {
@@ -278,7 +278,7 @@ Generate a response following this exact structure. Be specific, actionable, and
             logger.error(f"Failed to parse AI enhancement: {e}")
             return {}
     
-    def generate_coaching_advice(self, board, pm_user, question: str) -> Optional[str]:
+    def generate_coaching_advice(self, board, pm_user, question: str) -> Optional[Dict]:
         """
         Generate coaching advice for a specific PM question (with caching)
         
@@ -288,7 +288,7 @@ Generate a response following this exact structure. Be specific, actionable, and
             question: PM's question
             
         Returns:
-            AI-generated coaching advice
+            Dict with 'advice' text and 'explainability' metadata, or plain str on fallback
         """
         if not self.gemini_available:
             return "AI coaching is not available. Please configure GEMINI_API_KEY."
@@ -307,6 +307,9 @@ Generate a response following this exact structure. Be specific, actionable, and
                 board=board
             ).order_by('-period_end').first()
             
+            team_size = board.members.count()
+            velocity_text = f"{latest_velocity.tasks_completed} tasks/week" if latest_velocity else 'N/A'
+            
             # Build context prompt
             prompt = f"""You are an experienced project management coach helping a PM with their project.
 
@@ -316,28 +319,75 @@ Generate a response following this exact structure. Be specific, actionable, and
 ## Project Context:
 - Board: {board.name}
 - Description: {board.description or 'N/A'}
-- Team Size: {board.members.count()} members
+- Team Size: {team_size} members
 - Active Tasks: {active_tasks}
-- Current Velocity: {latest_velocity.tasks_completed if latest_velocity else 'N/A'} tasks/week
+- Current Velocity: {velocity_text}
 
 ## Your Role:
 Provide practical, actionable coaching advice to help this PM address their question.
 Draw on project management best practices, agile methodologies, and leadership principles.
 
-Keep your response:
+## Response Format:
+Return your response as a JSON object with this structure:
+{{
+  "advice": "Your full coaching response in markdown format (3-4 paragraphs, practical, empathetic, evidence-based)",
+  "explainability": {{
+    "confidence": 0.85,
+    "data_sources_used": ["List of project data points you drew upon for this advice"],
+    "assumptions": ["Key assumptions underlying this advice"],
+    "applicable_frameworks": ["PM frameworks / methodologies this advice draws from"]
+  }}
+}}
+
+Keep the advice:
 - **Practical**: Give concrete steps they can take
 - **Empathetic**: Acknowledge the challenge
 - **Evidence-based**: Reference best practices when relevant
 - **Concise**: 3-4 paragraphs maximum
 
-Respond directly to their question with helpful guidance.
+Return ONLY the JSON object.
 """
             
             # Use cached response or generate new
-            context_id = f"board_{board.id}:user_{pm_user.id}"
+            context_id = f"board_{{board.id}}:user_{{pm_user.id}}"
             result = self._get_cached_or_generate(prompt, 'coaching_advice', context_id)
             
-            return result
+            if not result:
+                return None
+            
+            # Try to parse as JSON
+            import json
+            try:
+                text = result.strip()
+                if text.startswith('```json'):
+                    text = text.split('```json')[1].split('```')[0].strip()
+                elif text.startswith('```'):
+                    text = text.split('```')[1].split('```')[0].strip()
+                
+                parsed = json.loads(text)
+                if isinstance(parsed, dict) and 'advice' in parsed:
+                    return parsed
+            except (json.JSONDecodeError, IndexError):
+                pass
+            
+            # Fallback: return as plain advice with generated explainability
+            data_sources = [f"Board: {board.name}"]
+            if active_tasks > 0:
+                data_sources.append(f"{active_tasks} active tasks")
+            if latest_velocity:
+                data_sources.append(f"Velocity: {velocity_text}")
+            if team_size > 0:
+                data_sources.append(f"Team size: {team_size}")
+            
+            return {
+                'advice': result,
+                'explainability': {
+                    'confidence': 0.70,
+                    'data_sources_used': data_sources,
+                    'assumptions': ['AI response did not include structured explainability.'],
+                    'applicable_frameworks': [],
+                },
+            }
             
         except Exception as e:
             logger.error(f"Failed to generate coaching advice: {e}")

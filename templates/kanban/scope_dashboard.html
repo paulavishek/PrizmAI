@@ -410,9 +410,10 @@
                         <p class="mb-2">{{ alert.ai_summary }}</p>
                         {% endif %}
                         {% if alert.predicted_delay_days %}
-                        <p class="mb-2">
+                        <div class="mb-2 p-2 rounded" style="background: rgba(108, 117, 125, 0.05); border-left: 3px solid #6c757d;">
                             <strong>Predicted Impact:</strong> {{ alert.predicted_delay_days }} day{{ alert.predicted_delay_days|pluralize }} delay
-                        </p>
+                            <br><small class="text-muted"><i class="fas fa-info-circle me-1"></i>Estimate based on scope increase ({{ alert.scope_increase_percentage|floatformat:1 }}%) and complexity change ({{ alert.complexity_increase_percentage|floatformat:1 }}%). Actual delay depends on team velocity and resource availability.</small>
+                        </div>
                         {% endif %}
                         {% if alert.recommendations %}
                         <div class="mt-2">
@@ -915,6 +916,14 @@ function updateManualPreview() {
                             <li>Risk level assessment</li>
                             <li>Estimated timeline impact</li>
                             <li>Actionable recommendations</li>
+                        </ul>
+                    </div>
+                    <div class="border rounded p-3 mb-3" style="border-color: #17a2b8 !important; background: rgba(23, 162, 184, 0.05);">
+                        <h6 class="text-info mb-2"><i class="fas fa-shield-alt me-1"></i>AI Transparency</h6>
+                        <ul class="mb-0 small text-muted">
+                            <li><strong>Data sources:</strong> Baseline snapshot, current task count, complexity points, priority distribution</li>
+                            <li><strong>Method:</strong> AI compares current metrics vs baseline to calculate scope drift and predict delay</li>
+                            <li><strong>Limitations:</strong> Delay predictions assume linear velocity; actual results may vary with team changes or external factors</li>
                         </ul>
                     </div>
                     <p class="text-muted small">

@@ -134,7 +134,7 @@ def extract_tasks_from_message(request, message_id):
         return JsonResponse({"error": "You are not a member of this room."}, status=403)
 
     author = message.author.get_full_name() or message.author.username
-    prompt = f"""You are a project management assistant.
+    prompt = f"""You are a project management assistant with Explainable AI capabilities.
 Analyse the following chat message and extract any actionable tasks, action items, or work to be done.
 
 MESSAGE (from {author}):
@@ -142,18 +142,21 @@ MESSAGE (from {author}):
 
 Return a raw JSON array of task objects — NO markdown, NO prose, ONLY the JSON.
 Each object must have exactly these keys:
-  "title"       : short task title (max 80 chars)
-  "description" : brief explanation of what needs to be done (1-2 sentences)
-  "priority"    : one of "low", "medium", "high", or "urgent"
+  "title"             : short task title (max 80 chars)
+  "description"       : brief explanation of what needs to be done (1-2 sentences)
+  "priority"          : one of "low", "medium", "high", or "urgent"
+  "confidence"        : confidence score 0.0-1.0 that this is truly an actionable task
+  "source_quote"      : the exact phrase or sentence from the message that triggered this task extraction
+  "priority_reasoning": one sentence explaining WHY you assigned this priority level
 
 If there are no actionable tasks in the message, return an empty array: []
 
 Example format:
-[{{"title": "Fix login bug", "description": "Resolve the authentication error reported by users.", "priority": "high"}}]"""
+[{{"title": "Fix login bug", "description": "Resolve the authentication error reported by users.", "priority": "high", "confidence": 0.92, "source_quote": "we need to fix the login bug ASAP", "priority_reasoning": "Marked high because the message explicitly indicates urgency with ASAP."}}]"""
 
     try:
         from kanban.utils.ai_utils import generate_ai_content
-        raw = generate_ai_content(prompt, task_type="simple")
+        raw = generate_ai_content(prompt, task_type="priority_suggestion")
     except Exception as exc:
         logger.exception("AI extract_tasks_from_message failed for message %s: %s", message_id, exc)
         return JsonResponse({"error": "AI service unavailable. Please try again."}, status=503)
@@ -164,7 +167,7 @@ Example format:
         logger.warning("Could not parse task JSON from AI response for message %s: %r", message_id, raw)
         return JsonResponse({"tasks": [], "note": "No actionable tasks could be identified."})
 
-    # Sanitize: keep only expected keys, enforce priority values
+    # Sanitize: keep expected keys + explainability fields, enforce priority values
     valid_priorities = {"low", "medium", "high", "urgent"}
     clean_tasks = []
     for t in tasks:
@@ -173,9 +176,12 @@ Example format:
                 "title": str(t.get("title", ""))[:80].strip(),
                 "description": str(t.get("description", "")).strip(),
                 "priority": t.get("priority", "medium") if t.get("priority") in valid_priorities else "medium",
+                "confidence": min(1.0, max(0.0, float(t.get("confidence", 0.5)))) if t.get("confidence") is not None else 0.5,
+                "source_quote": str(t.get("source_quote", "")).strip(),
+                "priority_reasoning": str(t.get("priority_reasoning", "")).strip(),
             })
 
-    return JsonResponse({"tasks": clean_tasks})
+    return JsonResponse({"tasks": clean_tasks, "extraction_method": "ai", "source": "single_message"})
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +212,7 @@ def extract_tasks_from_thread(request, room_id):
 
     transcript = _build_message_transcript(messages)
 
-    prompt = f"""You are a project management assistant.
+    prompt = f"""You are a project management assistant with Explainable AI capabilities.
 Analyse the following chat transcript from the "{room.name}" channel and extract ALL actionable tasks, action items, or work to be done.
 
 TRANSCRIPT:
@@ -214,16 +220,20 @@ TRANSCRIPT:
 
 Return a raw JSON array of task objects — NO markdown, NO prose, ONLY the JSON.
 Each object must have exactly these keys:
-  "title"       : short task title (max 80 chars)
-  "description" : brief explanation of what needs to be done (1-2 sentences)
-  "priority"    : one of "low", "medium", "high", or "urgent"
+  "title"             : short task title (max 80 chars)
+  "description"       : brief explanation of what needs to be done (1-2 sentences)
+  "priority"          : one of "low", "medium", "high", or "urgent"
+  "confidence"        : confidence score 0.0-1.0 that this is truly an actionable task
+  "source_quote"      : the exact phrase or excerpt from the transcript that triggered this task extraction
+  "priority_reasoning": one sentence explaining WHY you assigned this priority level
+  "mentioned_by"      : the name of the person who mentioned or requested this task
 
 Consolidate duplicate or similar items into one task. Do not invent tasks not mentioned in the conversation.
 If there are no actionable tasks, return an empty array: []"""
 
     try:
         from kanban.utils.ai_utils import generate_ai_content
-        raw = generate_ai_content(prompt, task_type="simple")
+        raw = generate_ai_content(prompt, task_type="priority_suggestion")
     except Exception as exc:
         logger.exception("AI extract_tasks_from_thread failed for room %s: %s", room_id, exc)
         return JsonResponse({"error": "AI service unavailable. Please try again."}, status=503)
@@ -241,9 +251,13 @@ If there are no actionable tasks, return an empty array: []"""
                 "title": str(t.get("title", ""))[:80].strip(),
                 "description": str(t.get("description", "")).strip(),
                 "priority": t.get("priority", "medium") if t.get("priority") in valid_priorities else "medium",
+                "confidence": min(1.0, max(0.0, float(t.get("confidence", 0.5)))) if t.get("confidence") is not None else 0.5,
+                "source_quote": str(t.get("source_quote", "")).strip(),
+                "priority_reasoning": str(t.get("priority_reasoning", "")).strip(),
+                "mentioned_by": str(t.get("mentioned_by", "")).strip(),
             })
 
-    return JsonResponse({"tasks": clean_tasks})
+    return JsonResponse({"tasks": clean_tasks, "extraction_method": "ai", "source": "thread"})
 
 
 # ---------------------------------------------------------------------------

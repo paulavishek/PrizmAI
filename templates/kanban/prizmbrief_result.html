@@ -193,7 +193,19 @@
     </ul>
   </div>
   {% endif %}
-
+  <!-- ── Explainable AI banner ──────────────────────────────────────────── -->
+  <div style="background:linear-gradient(135deg,#f0f7ff,#f8f0ff);border:1px solid #d0e3ff;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:0.85rem;">
+    <div class="d-flex align-items-center gap-2">
+      <i class="fas fa-brain text-primary"></i>
+      <strong>Explainable AI</strong>
+      <span class="text-muted">| This presentation brief includes a "Data Sources & Confidence" slide (the last slide) that explains what data was used and how reliable the assessment is.</span>
+    </div>
+    {% if data_warnings %}
+    <div class="mt-1 small text-muted">
+      <i class="fas fa-info-circle me-1"></i>{{ data_warnings|length }} data limitation{{ data_warnings|length|pluralize }} detected — the confidence slide will reflect this.
+    </div>
+    {% endif %}
+  </div>
   <!-- ── Zone 2: Slide cards ───────────────────────────────────── -->
   {% for slide in slides %}
   <div class="pb-slide-card" id="slide-{{ slide.number }}">

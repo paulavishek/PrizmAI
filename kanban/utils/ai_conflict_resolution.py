@@ -25,7 +25,7 @@ class AIConflictResolutionEngine:
             'temperature': 0.4,  # Lower for consistent analytical output
             'top_p': 0.8,
             'top_k': 40,
-            'max_output_tokens': 3072,  # Adequate for resolution suggestions with reasoning
+            'max_output_tokens': 4096,  # Generous for resolution suggestions + deep analysis with full explainability
         }
     
     def generate_advanced_resolutions(self, conflict, user=None):

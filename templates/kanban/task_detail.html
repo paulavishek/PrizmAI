@@ -1003,7 +1003,30 @@
                         <div class="small">
                             {% for suggestion in task.mitigation_suggestions %}
                             <div class="mb-2 p-2 bg-white rounded border">
-                                {% if suggestion.action %}
+                                {% if suggestion.title %}
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <strong class="text-dark">
+                                            {% if suggestion.strategy_type %}<span class="badge bg-info bg-opacity-10 text-info me-1" style="font-size:0.7rem;">{{ suggestion.strategy_type }}</span>{% endif %}
+                                            {{ suggestion.title }}
+                                        </strong>
+                                        {% if suggestion.confidence %}
+                                        <span class="badge {% if suggestion.confidence >= 0.75 %}bg-success{% elif suggestion.confidence >= 0.5 %}bg-warning{% else %}bg-danger{% endif %} bg-opacity-10 {% if suggestion.confidence >= 0.75 %}text-success{% elif suggestion.confidence >= 0.5 %}text-warning{% else %}text-danger{% endif %}" style="font-size:0.7rem;" title="AI confidence in this strategy">{{ suggestion.confidence|floatformat:0 }}% conf.</span>
+                                        {% endif %}
+                                    </div>
+                                    {% if suggestion.description %}<div class="text-muted mt-1">{{ suggestion.description }}</div>{% endif %}
+                                    {% if suggestion.reasoning %}
+                                    <div class="mt-1" style="font-size:0.78rem; color: #64748b;">
+                                        <i class="bi bi-lightbulb text-warning me-1"></i><em>{{ suggestion.reasoning }}</em>
+                                    </div>
+                                    {% endif %}
+                                    {% if suggestion.data_basis %}
+                                    <div class="mt-1" style="font-size:0.75rem; color: #94a3b8;">
+                                        <i class="bi bi-database me-1"></i>Based on: {{ suggestion.data_basis }}
+                                    </div>
+                                    {% endif %}
+                                    {% if suggestion.timeline %}<span class="text-muted">({{ suggestion.timeline }})</span>{% endif %}
+                                    {% if suggestion.priority %}<span class="badge {% if suggestion.priority|lower == 'high' %}bg-danger{% elif suggestion.priority|lower == 'medium' %}bg-warning{% else %}bg-secondary{% endif %} ms-1" style="font-size: 0.7rem;">{{ suggestion.priority|upper }}</span>{% endif %}
+                                {% elif suggestion.action %}
                                     <strong class="text-dark">{{ suggestion.action }}</strong>
                                     {% if suggestion.expected_impact %}<div class="text-muted fst-italic mt-1">{{ suggestion.expected_impact }}</div>{% endif %}
                                     {% if suggestion.timeline %}<span class="text-muted">({{ suggestion.timeline }})</span>{% endif %}

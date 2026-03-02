@@ -407,7 +407,15 @@ def ask_coach(request, board_id):
             
             # Get AI coaching advice
             ai_coach = AICoachService()
-            advice = ai_coach.generate_coaching_advice(board, request.user, question)
+            advice_result = ai_coach.generate_coaching_advice(board, request.user, question)
+            
+            # Extract advice text and explainability from dict or plain string
+            if isinstance(advice_result, dict):
+                advice_text = advice_result.get('advice', '')
+                advice_explainability = advice_result.get('explainability', {})
+            else:
+                advice_text = advice_result or ''
+                advice_explainability = {}
             
             # Track successful AI request
             response_time_ms = int((time.time() - start_time) * 1000)
@@ -425,7 +433,8 @@ def ask_coach(request, board_id):
             
             return JsonResponse({
                 'success': True,
-                'advice': advice,
+                'advice': advice_text,
+                'explainability': advice_explainability,
                 'question': question,
                 'ai_usage': {
                     'remaining': remaining,

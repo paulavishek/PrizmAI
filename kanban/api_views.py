@@ -2160,7 +2160,7 @@ def get_mitigation_suggestions_api(request):
         pass  # Original: board membership check removed
         
         # Get mitigation suggestions
-        mitigation_suggestions = generate_risk_mitigation_suggestions(
+        mitigation_result = generate_risk_mitigation_suggestions(
             title, 
             description,
             risk_likelihood,
@@ -2168,7 +2168,7 @@ def get_mitigation_suggestions_api(request):
             risk_indicators
         )
         
-        if not mitigation_suggestions:
+        if not mitigation_result:
             response_time_ms = int((time.time() - start_time) * 1000)
             track_ai_request(
                 user=request.user,
@@ -2180,6 +2180,10 @@ def get_mitigation_suggestions_api(request):
                 response_time_ms=response_time_ms
             )
             return JsonResponse({'error': 'Failed to generate mitigation suggestions'}, status=500)
+        
+        # Extract strategies and explainability from the new dict format
+        strategies = mitigation_result.get('strategies', [])
+        explainability = mitigation_result.get('explainability', {})
         
         # Increment demo AI generation count on success
         increment_ai_generation_count(request)
@@ -2195,15 +2199,16 @@ def get_mitigation_suggestions_api(request):
             response_time_ms=response_time_ms
         )
         
-        # If task_id provided, update the task
+        # If task_id provided, update the task (save strategies list for backward compat)
         if task_id:
-            task.mitigation_suggestions = mitigation_suggestions
+            task.mitigation_suggestions = strategies
             task.save()
         
         return JsonResponse({
             'success': True,
-            'mitigation_suggestions': mitigation_suggestions,
-            'count': len(mitigation_suggestions)
+            'mitigation_suggestions': strategies,
+            'explainability': explainability,
+            'count': len(strategies)
         })
     except Exception as e:
         response_time_ms = int((time.time() - start_time) * 1000)

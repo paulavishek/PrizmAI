@@ -43,17 +43,28 @@
                         <p class="card-text text-muted small">{{ rec.description|truncatewords:30 }}</p>
                         
                         <div class="mb-3">
-                            <small class="d-block">
+                            <small class="d-block mb-1">
                                 <strong>Impact:</strong>
                                 <span class="badge bg-{{ rec.potential_impact|lower }}">
                                     {{ rec.get_potential_impact_display }}
                                 </span>
                             </small>
-                            <small class="d-block">
+                            <small class="d-block mb-1">
                                 <strong>Confidence:</strong>
-                                <span class="badge bg-secondary">{{ rec.confidence_score|floatformat:0 }}%</span>
+                                <span class="badge ai-rec-conf-badge" data-confidence="{{ rec.confidence_score }}"></span>
                             </small>
                         </div>
+                        
+                        {% if rec.suggested_action %}
+                        <div class="mb-2">
+                            <small class="text-muted"><i class="fas fa-arrow-right me-1 text-success"></i><strong>Action:</strong> {{ rec.suggested_action|truncatewords:15 }}</small>
+                        </div>
+                        {% endif %}
+                        {% if rec.expected_benefit %}
+                        <div class="mb-2">
+                            <small class="text-muted"><i class="fas fa-chart-line me-1 text-info"></i><strong>Benefit:</strong> {{ rec.expected_benefit|truncatewords:15 }}</small>
+                        </div>
+                        {% endif %}
                         
                         {% if rec.status == 'pending' %}
                         <div class="btn-group btn-group-sm w-100" role="group">
@@ -102,5 +113,19 @@
             }
         }).then(() => location.reload());
     }
+
+    // Color-code confidence badges
+    document.querySelectorAll('.ai-rec-conf-badge').forEach(badge => {
+        const raw = parseFloat(badge.dataset.confidence) || 0;
+        const pct = raw <= 1 ? Math.round(raw * 100) : Math.round(raw);
+        if (pct >= 75) {
+            badge.className = 'badge bg-success bg-opacity-10 text-success';
+        } else if (pct >= 50) {
+            badge.className = 'badge bg-warning bg-opacity-10 text-warning';
+        } else {
+            badge.className = 'badge bg-danger bg-opacity-10 text-danger';
+        }
+        badge.textContent = pct + '% confidence';
+    });
 </script>
 {% endblock %}

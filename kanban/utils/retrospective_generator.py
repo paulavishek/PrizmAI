@@ -362,7 +362,9 @@ Insights:
        "description": "Detailed description",
        "category": "process|technical|communication|planning|quality|teamwork|tools|risk_management",
        "priority": "low|medium|high|critical",
-       "recommended_action": "Specific action to take"
+       "recommended_action": "Specific action to take",
+       "evidence": "Specific data or metrics that support this lesson",
+       "confidence": 0.85
      }}
    ]
 4. **KEY ACHIEVEMENTS** (JSON array of notable achievements)
@@ -374,7 +376,9 @@ Insights:
        "description": "Detailed description",
        "expected_impact": "Expected benefit",
        "priority": "low|medium|high|critical",
-       "action_type": "process_change|tool_adoption|training|documentation|technical_improvement"
+       "action_type": "process_change|tool_adoption|training|documentation|technical_improvement",
+       "evidence": "Data or observations supporting this recommendation",
+       "confidence": 0.80
      }}
    ]
 7. **OVERALL SENTIMENT SCORE** (0.0 to 1.0 where 0=negative, 1=positive)
@@ -576,6 +580,74 @@ Format the response with clear sections using the headers above.
             'tokens_used': 0
         }
     
+    def _calculate_retrospective_confidence(self, metrics, patterns, insights):
+        """
+        Calculate a data-driven confidence score for the retrospective analysis
+        instead of using a hardcoded value. The score reflects how much data
+        was available for the AI to base its analysis on.
+        
+        Returns:
+            float: Confidence score between 0.30 and 0.95
+        """
+        score = 0.35  # baseline — we always have at least period and board name
+        
+        # Task volume (more tasks = more reliable patterns)
+        total_tasks = metrics.get('total_tasks', 0)
+        if total_tasks >= 20:
+            score += 0.12
+        elif total_tasks >= 10:
+            score += 0.08
+        elif total_tasks >= 5:
+            score += 0.04
+        
+        # Completion rate data present
+        if metrics.get('completed_tasks', 0) > 0:
+            score += 0.06
+        
+        # Velocity data present (indicates snapshot history)
+        if metrics.get('avg_velocity') and metrics['avg_velocity'] != 'N/A':
+            score += 0.08
+        
+        # Velocity trend available
+        if metrics.get('velocity_trend') and metrics['velocity_trend'] != 'unknown':
+            score += 0.04
+        
+        # Active team members known
+        if metrics.get('active_team_members', 0) > 0:
+            score += 0.04
+        
+        # Patterns detected
+        pattern_count = (
+            len(patterns.get('successes', []))
+            + len(patterns.get('challenges', []))
+            + len(patterns.get('insights', []))
+        )
+        if pattern_count >= 6:
+            score += 0.10
+        elif pattern_count >= 3:
+            score += 0.06
+        elif pattern_count >= 1:
+            score += 0.03
+        
+        # Risk data present
+        if metrics.get('high_risk_tasks', 0) > 0:
+            score += 0.03
+        
+        # Scope change data
+        if metrics.get('scope_change_percentage', 0) != 0:
+            score += 0.02
+        
+        # AI insights quality (not fallback)
+        if insights.get('ai_model_used') and insights['ai_model_used'] != 'fallback':
+            score += 0.06
+            # AI provided lessons and recommendations
+            if insights.get('lessons_learned'):
+                score += 0.03
+            if insights.get('improvement_recommendations'):
+                score += 0.03
+        
+        return min(score, 0.95)
+    
     def create_retrospective(self, created_by, retrospective_type='sprint'):
         """
         Create complete retrospective with AI analysis
@@ -600,6 +672,9 @@ Format the response with clear sections using the headers above.
         # Generate AI insights
         insights = self.generate_ai_insights(metrics, patterns)
         
+        # Calculate data-driven confidence score based on data richness
+        confidence = self._calculate_retrospective_confidence(metrics, patterns, insights)
+        
         # Create retrospective
         retrospective = ProjectRetrospective.objects.create(
             board=self.board,
@@ -619,7 +694,7 @@ Format the response with clear sections using the headers above.
             team_morale_indicator=insights.get('team_morale_indicator', 'moderate'),
             performance_trend=insights.get('performance_trend', 'stable'),
             ai_generated_at=timezone.now(),
-            ai_confidence_score=Decimal('0.80'),
+            ai_confidence_score=Decimal(str(round(confidence, 2))),
             ai_model_used=insights.get('ai_model_used', 'gemini-2.0-flash-exp'),
             created_by=created_by
         )
@@ -644,6 +719,13 @@ Format the response with clear sections using the headers above.
         
         for lesson in lessons_data:
             try:
+                # Use AI-provided confidence if available, else default to 0.75
+                lesson_confidence = lesson.get('confidence', 0.75)
+                if isinstance(lesson_confidence, (int, float)):
+                    lesson_confidence = max(0.0, min(1.0, float(lesson_confidence)))
+                else:
+                    lesson_confidence = 0.75
+                
                 LessonLearned.objects.create(
                     retrospective=retrospective,
                     board=self.board,
@@ -653,7 +735,7 @@ Format the response with clear sections using the headers above.
                     priority=lesson.get('priority', 'medium'),
                     recommended_action=lesson.get('recommended_action', 'Review and implement'),
                     ai_suggested=True,
-                    ai_confidence=Decimal('0.75')
+                    ai_confidence=Decimal(str(round(lesson_confidence, 2)))
                 )
             except Exception as e:
                 logger.error(f"Error creating lesson learned: {e}")

@@ -1399,6 +1399,42 @@ function _showTaskSuggestionsModal(tasks) {
             const descHtml = t.description
                 ? `<p class="text-muted small mb-0 mt-1">${_escapeHtml(t.description)}</p>`
                 : '';
+            // Explainability: confidence meter
+            const confidence = t.confidence !== undefined ? t.confidence : null;
+            let confidenceHtml = '';
+            if (confidence !== null) {
+                const pct = Math.round(confidence * 100);
+                const confColor = pct >= 80 ? '#28a745' : pct >= 60 ? '#ffc107' : '#dc3545';
+                confidenceHtml = `
+                <div class="d-flex align-items-center mt-1" title="AI Confidence: ${pct}%">
+                    <small class="text-muted me-1" style="font-size:0.72rem;">Confidence:</small>
+                    <div style="flex:1;max-width:100px;height:6px;background:#e9ecef;border-radius:3px;overflow:hidden;">
+                        <div style="width:${pct}%;height:100%;background:${confColor};border-radius:3px;"></div>
+                    </div>
+                    <small class="ms-1 fw-semibold" style="font-size:0.72rem;color:${confColor};">${pct}%</small>
+                </div>`;
+            }
+            // Explainability: why section (collapsible)
+            let whyHtml = '';
+            const hasExplainability = t.priority_reasoning || t.source_quote || t.mentioned_by;
+            if (hasExplainability) {
+                const reasonHtml = t.priority_reasoning
+                    ? `<div class="mb-1"><strong style="font-size:0.75rem;">Why this priority:</strong> <span style="font-size:0.75rem;">${_escapeHtml(t.priority_reasoning)}</span></div>` : '';
+                const quoteHtml = t.source_quote
+                    ? `<div class="mb-1"><strong style="font-size:0.75rem;">Source:</strong> <em style="font-size:0.75rem;">"${_escapeHtml(t.source_quote)}"</em></div>` : '';
+                const mentionedHtml = t.mentioned_by
+                    ? `<div class="mb-1"><strong style="font-size:0.75rem;">Mentioned by:</strong> <span style="font-size:0.75rem;">${_escapeHtml(t.mentioned_by)}</span></div>` : '';
+                whyHtml = `
+                <div class="mt-1">
+                    <a class="text-decoration-none" style="font-size:0.75rem;cursor:pointer;color:#0d6efd;" 
+                       data-bs-toggle="collapse" href="#ai-task-why-${i}" role="button" aria-expanded="false">
+                        <i class="fas fa-lightbulb text-warning"></i> Why this task?
+                    </a>
+                    <div class="collapse mt-1 p-2 rounded" id="ai-task-why-${i}" style="background:#f0f7ff;border:1px solid #d0e3ff;">
+                        ${reasonHtml}${quoteHtml}${mentionedHtml}
+                    </div>
+                </div>`;
+            }
             return `
             <div class="form-check border rounded p-3 mb-2" style="background:#fafafa;">
                 <input class="form-check-input ai-task-checkbox" type="checkbox"
@@ -1409,6 +1445,8 @@ function _showTaskSuggestionsModal(tasks) {
                         <span class="badge ${badgeClass} ms-2 flex-shrink-0">${_escapeHtml(t.priority)}</span>
                     </div>
                     ${descHtml}
+                    ${confidenceHtml}
+                    ${whyHtml}
                 </label>
             </div>`;
         }).join('');

@@ -308,6 +308,11 @@ class Board(models.Model):
         null=True,
         help_text="When the AI summary was last generated."
     )
+    ai_summary_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Explainability metadata for the AI summary (confidence, data completeness, key drivers)."
+    )
 
     def __str__(self):
         return self.name
@@ -533,6 +538,11 @@ class Task(models.Model):
         blank=True,
         null=True,
         help_text="When the AI task summary was last generated."
+    )
+    ai_summary_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Rich explainability data from the AI task summary (confidence, health, risks, etc.)."
     )
     
     # Smart Resource Analysis Fields
@@ -1054,6 +1064,11 @@ class ResourceDemandForecast(models.Model):
                                                   help_text="Available hours in period")
     confidence_score = models.DecimalField(max_digits=3, decimal_places=2, default=0.5,
                                          help_text="Confidence score (0.00-1.00)")
+    forecast_explainability = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Explainability data: confidence breakdown, assumptions, calculation details."
+    )
     
     created_at = models.DateTimeField(auto_now_add=True)
     

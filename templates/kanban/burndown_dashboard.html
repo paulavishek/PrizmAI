@@ -511,6 +511,84 @@
     </div>
     {% endif %}
 
+    <!-- Explainable AI — How This Prediction Was Calculated -->
+    {% if prediction.model_parameters.explainability %}
+    <div class="prediction-card">
+        <h4 class="mb-3"><i class="fas fa-brain text-primary"></i> How This Prediction Works</h4>
+
+        {% with explain=prediction.model_parameters.explainability %}
+        <!-- Calculation Method -->
+        {% if explain.calculation_method %}
+        <div class="mb-3 p-3 bg-light rounded">
+            <strong><i class="fas fa-calculator me-2 text-info"></i>Calculation Method</strong>
+            <p class="mb-0 mt-1 text-muted">{{ explain.calculation_method }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Confidence Breakdown -->
+        {% if explain.confidence_breakdown %}
+        <div class="mb-3">
+            <strong><i class="fas fa-chart-pie me-2 text-success"></i>Confidence Breakdown</strong>
+            <div class="row mt-2 g-2">
+                <div class="col-sm-6 col-lg-3">
+                    <div class="p-2 bg-light rounded text-center">
+                        <small class="text-muted d-block">Data Points</small>
+                        <strong>{{ explain.confidence_breakdown.data_points }} / {{ explain.confidence_breakdown.min_required }} min</strong>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <div class="p-2 bg-light rounded text-center">
+                        <small class="text-muted d-block">Data Sufficiency</small>
+                        <strong class="{% if explain.confidence_breakdown.data_sufficiency == 'high' %}text-success{% elif explain.confidence_breakdown.data_sufficiency == 'moderate' %}text-warning{% else %}text-danger{% endif %}">
+                            {{ explain.confidence_breakdown.data_sufficiency|title }}
+                        </strong>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <div class="p-2 bg-light rounded text-center">
+                        <small class="text-muted d-block">Velocity Stability</small>
+                        <strong class="{% if explain.confidence_breakdown.velocity_stability == 'stable' %}text-success{% elif explain.confidence_breakdown.velocity_stability == 'moderate' %}text-warning{% else %}text-danger{% endif %}">
+                            {{ explain.confidence_breakdown.velocity_stability|title }}
+                        </strong>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-lg-3">
+                    <div class="p-2 bg-light rounded text-center">
+                        <small class="text-muted d-block">Trend</small>
+                        <strong>{{ explain.confidence_breakdown.trend_direction|title }}</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Assumptions -->
+        {% if explain.assumptions %}
+        <div class="mb-3">
+            <strong><i class="fas fa-exclamation-circle me-2 text-warning"></i>Assumptions</strong>
+            <ul class="mt-1 mb-0 text-muted" style="font-size: 0.9rem;">
+                {% for assumption in explain.assumptions %}
+                <li>{{ assumption }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <!-- Limitations -->
+        {% if explain.limitations %}
+        <div class="mb-0">
+            <strong><i class="fas fa-info-circle me-2 text-secondary"></i>Limitations</strong>
+            <ul class="mt-1 mb-0 text-muted" style="font-size: 0.9rem;">
+                {% for limitation in explain.limitations %}
+                <li>{{ limitation }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        {% endwith %}
+    </div>
+    {% endif %}
+
     <!-- Velocity History -->
     <div class="prediction-card">
         <h4 class="mb-3"><i class="fas fa-history text-secondary"></i> Velocity History</h4>

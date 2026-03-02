@@ -4016,6 +4016,7 @@ def board_status_report(request, board_id):
 
     # Only generate on POST so users explicitly trigger the AI call
     report_text = None
+    report_explainability = None
     error = None
 
     if request.method == 'POST':
@@ -4072,7 +4073,7 @@ def board_status_report(request, board_id):
                 'report_date': today.strftime('%B %d, %Y'),
             }
 
-            report_text = generate_status_report(report_data)
+            report_result = generate_status_report(report_data)
 
             elapsed_ms = int((_time.time() - start) * 1000)
             track_ai_request(
@@ -4080,16 +4081,32 @@ def board_status_report(request, board_id):
                 feature='status_report',
                 request_type='generate',
                 board_id=board.id,
-                success=bool(report_text),
+                success=bool(report_result),
                 response_time_ms=elapsed_ms,
             )
 
-            if not report_text:
+            if report_result:
+                # generate_status_report now returns a dict with explainability
+                if isinstance(report_result, dict):
+                    report_text = report_result.get('report', '')
+                    report_explainability = {
+                        'rag_status': report_result.get('rag_status', 'amber'),
+                        'rag_reasoning': report_result.get('rag_reasoning', ''),
+                        'confidence_score': report_result.get('confidence_score', 0.5),
+                        'data_completeness': report_result.get('data_completeness', 0.5),
+                        'key_data_drivers': report_result.get('key_data_drivers', []),
+                    }
+                else:
+                    # Backward compatibility if somehow a string is returned
+                    report_text = report_result
+                    report_explainability = None
+            else:
                 error = 'AI could not generate the report at this time. Please try again shortly.'
 
     context = {
         'board': board,
         'report_text': report_text,
+        'report_explainability': report_explainability if report_text else None,
         'error': error,
     }
     return render(request, 'kanban/status_report.html', context)

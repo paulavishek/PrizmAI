@@ -148,6 +148,33 @@
             <h4><i class="fas fa-lightbulb me-2"></i>AI Coach's Advice</h4>
             <div class="advice-content" id="adviceContent"></div>
         </div>
+        <!-- Explainability panel -->
+        <div id="adviceExplainability" style="display: none; margin-top: 15px;">
+            <div class="card border-0 shadow-sm" style="border-radius: 0.75rem; overflow: hidden;">
+                <div class="card-header d-flex align-items-center gap-2 bg-white border-bottom py-2 px-3" style="cursor:pointer;" data-bs-toggle="collapse" data-bs-target="#adviceExplainBody">
+                    <i class="bi bi-robot text-primary"></i>
+                    <span style="font-weight: 600; font-size: 0.9rem;">AI Reasoning & Confidence</span>
+                    <span id="adviceConfBadge" class="badge ms-2" style="font-size:0.75rem;"></span>
+                    <i class="bi bi-chevron-down ms-auto" style="font-size: 0.75rem;"></i>
+                </div>
+                <div class="collapse" id="adviceExplainBody">
+                    <div class="card-body py-3 px-3" style="font-size: 0.875rem;">
+                        <div id="adviceDataSources" style="display:none;" class="mb-2">
+                            <strong style="font-size:0.8rem;"><i class="bi bi-database me-1 text-info"></i>Data Sources Used</strong>
+                            <ul id="adviceDataSourcesList" class="mt-1 mb-0 ps-3" style="color:#64748b; font-size:0.825rem;"></ul>
+                        </div>
+                        <div id="adviceAssumptions" style="display:none;" class="mb-2">
+                            <strong style="font-size:0.8rem;"><i class="bi bi-exclamation-triangle me-1 text-warning"></i>Assumptions</strong>
+                            <ul id="adviceAssumptionsList" class="mt-1 mb-0 ps-3" style="color:#64748b; font-size:0.825rem;"></ul>
+                        </div>
+                        <div id="adviceFrameworks" style="display:none;">
+                            <strong style="font-size:0.8rem;"><i class="bi bi-book me-1 text-success"></i>Applicable Frameworks</strong>
+                            <ul id="adviceFrameworksList" class="mt-1 mb-0 ps-3" style="color:#64748b; font-size:0.825rem;"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="example-questions">
@@ -264,6 +291,9 @@ function askCoach() {
             document.getElementById('adviceContent').innerHTML = parseMarkdownSimple(data.advice);
             document.getElementById('adviceContainer').style.display = 'block';
             
+            // Render explainability panel
+            renderAdviceExplainability(data.explainability || {});
+            
             // Scroll to advice
             document.getElementById('adviceContainer').scrollIntoView({ 
                 behavior: 'smooth', 
@@ -290,5 +320,60 @@ document.getElementById('question').addEventListener('keydown', function(e) {
         askCoach();
     }
 });
+
+function renderAdviceExplainability(explain) {
+    const panel = document.getElementById('adviceExplainability');
+    if (!explain || Object.keys(explain).length === 0) {
+        panel.style.display = 'none';
+        return;
+    }
+    panel.style.display = '';
+
+    // Confidence badge
+    const conf = parseFloat(explain.confidence) || 0;
+    const pct = Math.round(conf * 100);
+    const badge = document.getElementById('adviceConfBadge');
+    if (pct >= 75) {
+        badge.className = 'badge ms-2 bg-success bg-opacity-10 text-success';
+    } else if (pct >= 50) {
+        badge.className = 'badge ms-2 bg-warning bg-opacity-10 text-warning';
+    } else {
+        badge.className = 'badge ms-2 bg-danger bg-opacity-10 text-danger';
+    }
+    badge.textContent = pct + '% confidence';
+
+    // Data sources
+    const sources = explain.data_sources_used || [];
+    if (sources.length) {
+        document.getElementById('adviceDataSources').style.display = '';
+        const ul = document.getElementById('adviceDataSourcesList');
+        ul.innerHTML = '';
+        sources.forEach(s => { const li = document.createElement('li'); li.textContent = s; ul.appendChild(li); });
+    } else {
+        document.getElementById('adviceDataSources').style.display = 'none';
+    }
+
+    // Assumptions
+    const assumptions = explain.assumptions || [];
+    if (assumptions.length) {
+        document.getElementById('adviceAssumptions').style.display = '';
+        const ul = document.getElementById('adviceAssumptionsList');
+        ul.innerHTML = '';
+        assumptions.forEach(a => { const li = document.createElement('li'); li.textContent = a; ul.appendChild(li); });
+    } else {
+        document.getElementById('adviceAssumptions').style.display = 'none';
+    }
+
+    // Frameworks
+    const frameworks = explain.applicable_frameworks || [];
+    if (frameworks.length) {
+        document.getElementById('adviceFrameworks').style.display = '';
+        const ul = document.getElementById('adviceFrameworksList');
+        ul.innerHTML = '';
+        frameworks.forEach(f => { const li = document.createElement('li'); li.textContent = f; ul.appendChild(li); });
+    } else {
+        document.getElementById('adviceFrameworks').style.display = 'none';
+    }
+}
 </script>
 {% endblock %}

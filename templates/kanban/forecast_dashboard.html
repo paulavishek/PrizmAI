@@ -471,6 +471,7 @@
                     <th>Capacity</th>
                     <th>Predicted Workload</th>
                     <th>Utilization</th>
+                    <th>Confidence</th>
                     <th>Status</th>
                 </tr>
             </thead>
@@ -491,6 +492,12 @@
                         </div>
                     </td>
                     <td>
+                        <span class="forecast-conf-badge" data-conf="{{ forecast.confidence_score }}" style="font-weight:600; font-size:0.85rem; cursor:help;"
+                              title="Click for details" data-bs-toggle="collapse" data-bs-target="#forecast-explain-{{ forecast.id }}">
+                            —
+                        </span>
+                    </td>
+                    <td>
                         {% if forecast.is_overloaded %}
                         <span class="utilization-badge high">🔴 Overloaded</span>
                         {% elif forecast.utilization_percentage >= 80 %}
@@ -500,6 +507,37 @@
                         {% endif %}
                     </td>
                 </tr>
+                {% if forecast.forecast_explainability %}
+                <tr class="collapse" id="forecast-explain-{{ forecast.id }}">
+                    <td colspan="6" style="background: #f8f9fa; padding: 10px 15px; font-size: 0.85rem;">
+                        <div class="d-flex flex-wrap gap-3">
+                            {% if forecast.forecast_explainability.calculation_method %}
+                            <div><strong><i class="bi bi-calculator me-1 text-info"></i>Method:</strong> {{ forecast.forecast_explainability.calculation_method }}</div>
+                            {% endif %}
+                            {% if forecast.forecast_explainability.confidence_factors %}
+                            <div style="width:100%;">
+                                <strong><i class="bi bi-bar-chart me-1 text-primary"></i>Confidence Factors:</strong>
+                                <ul class="mb-0 mt-1 ps-3" style="color:#64748b;">
+                                {% for factor in forecast.forecast_explainability.confidence_factors %}
+                                    <li>{{ factor.factor }}: <strong>{{ factor.status }}</strong> — {{ factor.detail }}</li>
+                                {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                            {% if forecast.forecast_explainability.assumptions %}
+                            <div style="width:100%;">
+                                <strong><i class="bi bi-exclamation-triangle me-1 text-warning"></i>Assumptions:</strong>
+                                <ul class="mb-0 mt-1 ps-3" style="color:#64748b;">
+                                {% for assumption in forecast.forecast_explainability.assumptions %}
+                                    <li>{{ assumption }}</li>
+                                {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
                 {% endfor %}
             </tbody>
         </table>
@@ -560,5 +598,19 @@ function goBack() {
         {% endif %}
     }
 }
+
+// Render forecast confidence badges
+document.querySelectorAll('.forecast-conf-badge').forEach(badge => {
+    const conf = parseFloat(badge.dataset.conf) || 0;
+    const pct = Math.round(conf * 100);
+    badge.textContent = pct + '%';
+    if (pct >= 75) {
+        badge.style.color = '#16a34a';
+    } else if (pct >= 50) {
+        badge.style.color = '#d97706';
+    } else {
+        badge.style.color = '#dc2626';
+    }
+});
 </script>
 {% endblock %}

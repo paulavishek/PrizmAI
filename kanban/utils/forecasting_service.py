@@ -56,7 +56,7 @@ class DemandForecastingService:
             predicted_workload = self._predict_future_workload(member, board, period_start, period_end)
             
             # Generate forecast
-            confidence = self._calculate_confidence_score(member, board)
+            confidence, explainability = self._calculate_confidence_score(member, board)
             
             forecast = ResourceDemandForecast.objects.create(
                 board=board,
@@ -66,7 +66,8 @@ class DemandForecastingService:
                 period_end=period_end,
                 predicted_workload_hours=predicted_workload,
                 available_capacity_hours=available_capacity,
-                confidence_score=confidence
+                confidence_score=confidence,
+                forecast_explainability=explainability
             )
             forecasts.append(forecast)
             
@@ -285,8 +286,13 @@ class DemandForecastingService:
         return predicted
     
     def _calculate_confidence_score(self, user, board):
-        """Calculate confidence score based on historical data quality"""
+        """
+        Calculate confidence score based on historical data quality.
+        Returns a tuple of (confidence: Decimal, explainability: dict).
+        """
         from kanban.models import Task
+        
+        factors = []
         
         # More tasks = higher confidence
         task_count = Task.objects.filter(
@@ -294,15 +300,51 @@ class DemandForecastingService:
             column__board=board
         ).count()
         
+        completed_count = Task.objects.filter(
+            assigned_to=user,
+            column__board=board,
+            completed_at__isnull=False
+        ).count()
+        
         # Base confidence increases with task history
         if task_count < 5:
-            confidence = Decimal('0.50')  # Low confidence
+            confidence = Decimal('0.50')
+            factors.append({'factor': 'Task history', 'status': 'limited', 'detail': f'{task_count} tasks (< 5)', 'impact': 'low_confidence'})
         elif task_count < 15:
-            confidence = Decimal('0.65')  # Medium confidence
+            confidence = Decimal('0.65')
+            factors.append({'factor': 'Task history', 'status': 'moderate', 'detail': f'{task_count} tasks', 'impact': 'medium_confidence'})
         else:
-            confidence = Decimal('0.85')  # High confidence
+            confidence = Decimal('0.85')
+            factors.append({'factor': 'Task history', 'status': 'strong', 'detail': f'{task_count} tasks (15+)', 'impact': 'high_confidence'})
         
-        return confidence
+        # Completion history bonus
+        if completed_count > 0:
+            completion_ratio = completed_count / max(task_count, 1)
+            if completion_ratio >= 0.5:
+                confidence += Decimal('0.05')
+                factors.append({'factor': 'Completion track record', 'status': 'positive', 'detail': f'{completed_count}/{task_count} completed ({completion_ratio:.0%})', 'impact': '+5%'})
+            else:
+                factors.append({'factor': 'Completion track record', 'status': 'neutral', 'detail': f'{completed_count}/{task_count} completed', 'impact': 'none'})
+        
+        confidence = min(confidence, Decimal('0.95'))
+        
+        explainability = {
+            'confidence_factors': factors,
+            'calculation_method': 'Historical task count and completion ratio analysis',
+            'assumptions': [
+                'Past workload patterns will continue into the forecast period.',
+                'Available capacity is based on standard working hours (8h/day, 5 days/week).',
+                'Task complexity is evenly distributed across the forecast period.',
+            ],
+            'limitations': [
+                'Does not account for planned time off or holidays.',
+                'Does not factor in cross-board assignments.',
+            ] if task_count < 15 else [
+                'Does not account for planned time off or holidays.',
+            ],
+        }
+        
+        return confidence, explainability
     
     def _get_user_role(self, user):
         """Get user's role/title"""

@@ -42,13 +42,13 @@ class GeminiClient:
                 'max_output_tokens': 6144,  # Increased from 3072 for comprehensive JSON responses
             }
             
-            # Task-specific token limits - use higher limits for complex analysis
+            # Task-specific token limits - generous limits to ensure complete responses
             self.task_token_limits = {
-                'simple': 3072,  # Increased for explainability JSON fields
+                'simple': 4096,  # Generous for explainability JSON fields
                 'complex': 8192,  # Complex tasks need more tokens for detailed JSON
-                'retrospective': 6144,  # Retrospectives generate comprehensive reports
-                'chat_response': 3072,  # Chat responses with context
-                'analysis': 6144,  # Analysis reports with recommendations
+                'retrospective': 8192,  # Retrospectives generate comprehensive reports with evidence
+                'chat_response': 6144,  # Chat responses with full context and explanations
+                'analysis': 8192,  # Analysis reports with recommendations + explainability
             }
             
             # For backward compatibility
