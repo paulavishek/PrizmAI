@@ -103,18 +103,18 @@ class Command(BaseCommand):
                     'conflict_type': 'resource',
                     'severity': 'high',
                     'title': 'Sam Rivera has excessive workload',
-                    'description': 'Sam has 8 tasks assigned with overlapping deadlines in the next 2 weeks. This exceeds the recommended workload of 5 tasks per developer and may cause delays or quality issues.',
+                    'description': 'Sam has 11 tasks assigned with overlapping deadlines in the next 2 weeks. This exceeds the recommended workload of 8 tasks per developer and may cause delays or quality issues.',
                     'conflict_data': {
                         'affected_user': 'sam_rivera_demo',
-                        'current_tasks': 8,
-                        'recommended_max': 5,
+                        'current_tasks': 11,
+                        'recommended_max': 8,
                         'overdue_risk': 3,
                         'affected_task_titles': [
-                            'Build dashboard UI',
-                            'Implement file upload system',
-                            'Create notification system',
-                            'Build user management API',
-                            'Implement search functionality'
+                            'Dashboard UI Development',
+                            'User Management API',
+                            'Search & Indexing Engine',
+                            'API Rate Limiting',
+                            'Performance Optimization'
                         ]
                     },
                     'ai_confidence_score': 92,
@@ -138,11 +138,11 @@ class Command(BaseCommand):
                     'conflict_type': 'dependency',
                     'severity': 'medium',
                     'title': 'API integration blocked by incomplete authentication',
-                    'description': 'The "Implement file upload system" task depends on "Build user management API" which is still in progress. Current progress on the blocking task is only 40%.',
+                    'description': 'The "File Upload System" task depends on "User Management API" which is still in progress. Current progress on the blocking task is only 60%.',
                     'conflict_data': {
-                        'blocked_task': 'Implement file upload system',
-                        'blocking_task': 'Build user management API',
-                        'blocking_progress': 40,
+                        'blocked_task': 'File Upload System',
+                        'blocking_task': 'User Management API',
+                        'blocking_progress': 60,
                         'days_blocked': 3,
                         'estimated_delay': 2
                     },
@@ -169,8 +169,8 @@ class Command(BaseCommand):
                     'title': 'Performance optimization overlaps with security audit',
                     'description': 'Both tasks are scheduled for the same sprint and require focused attention. Running them simultaneously may reduce effectiveness.',
                     'conflict_data': {
-                        'task_1': 'Performance optimization',
-                        'task_2': 'Security audit fixes',
+                        'task_1': 'Performance Optimization',
+                        'task_2': 'Security Audit & Fixes',
                         'overlap_days': 5,
                         'shared_resource': 'Sam Rivera'
                     },

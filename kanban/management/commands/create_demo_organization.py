@@ -1,10 +1,10 @@
 """
-Management command to create demo organization with boards and personas.
+Management command to create demo organization with board and personas.
 
 Structure:
 - 1 Organization: "Demo - Acme Corporation"
-- 3 Boards: Software Development, Marketing Campaign, Bug Tracking
-- 3 Personas: Alex Chen (Admin), Sam Rivera (Member), Jordan Taylor (Viewer)
+- 1 Board: Software Development (3 columns: To Do, In Progress, Done)
+- 3 Personas: Alex Chen (Admin/PM), Sam Rivera (Member/Lead Dev), Jordan Taylor (Member/Architect-QA)
 
 Usage:
     python manage.py create_demo_organization
@@ -179,10 +179,12 @@ class Command(BaseCommand):
                 'email': 'jordan.taylor@demo.prizmai.local',
                 'first_name': 'Jordan',
                 'last_name': 'Taylor',
-                'org_role': 'viewer',
+                'org_role': 'member',
                 'skills': [
-                    {'name': 'Strategic Planning', 'level': 'Expert'},
-                    {'name': 'Business Analysis', 'level': 'Advanced'},
+                    {'name': 'System Architecture', 'level': 'Advanced'},
+                    {'name': 'Business Analysis', 'level': 'Expert'},
+                    {'name': 'Quality Assurance', 'level': 'Advanced'},
+                    {'name': 'Technical Writing', 'level': 'Expert'},
                 ],
                 'weekly_capacity': 40,
             }
@@ -300,9 +302,9 @@ class Command(BaseCommand):
         
         # Role mapping based on persona
         role_map = {
-            'alex_chen_demo': 'Admin',      # Alex Chen - Admin
-            'sam_rivera_demo': 'Editor',    # Sam Rivera - Member/Editor
-            'jordan_taylor_demo': 'Viewer', # Jordan Taylor - Viewer
+            'alex_chen_demo': 'Admin',      # Alex Chen - Project Manager
+            'sam_rivera_demo': 'Editor',    # Sam Rivera - Lead Developer
+            'jordan_taylor_demo': 'Editor', # Jordan Taylor - Architect/QA
         }
         
         total_assigned = 0

@@ -612,12 +612,12 @@ class Command(BaseCommand):
             {'title': 'Development Environment Setup', 'desc': 'Configure Docker, CI/CD pipelines, and development tools', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 4},
             {'title': 'System Architecture Design', 'desc': 'Design microservices architecture and define API contracts', 'priority': 'high', 'complexity': 8, 'assignee': jordan, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 10},
             {'title': 'Security Architecture Patterns', 'desc': 'Define security patterns, encryption standards, and access control', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': 2, 'duration': 8},
-            {'title': 'Base API Structure', 'desc': 'Set up REST API framework with versioning and documentation', 'priority': 'medium', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done, 'start_offset': 5, 'duration': 6},
-            {'title': 'Authentication System', 'desc': 'Build secure login with JWT tokens and session management', 'priority': 'high', 'complexity': 4, 'assignee': jordan, 'progress': 80, 'column': review, 'start_offset': 10, 'duration': 3},
+            {'title': 'Base API Structure', 'desc': 'Set up REST API framework with versioning and documentation', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': 5, 'duration': 6},
+            {'title': 'Authentication System', 'desc': 'Build secure login with JWT tokens and session management', 'priority': 'high', 'complexity': 4, 'assignee': sam, 'progress': 80, 'column': review, 'start_offset': 10, 'duration': 3},
             {'title': 'User Registration Flow', 'desc': 'Build signup with email verification and onboarding', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 60, 'column': in_progress, 'start_offset': 13, 'duration': 4},
             {'title': 'Database Schema & Migrations', 'desc': 'Create ERD and define core database models with migrations', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 40, 'column': in_progress, 'start_offset': 11, 'duration': 7},
-            {'title': 'Authentication Testing Suite', 'desc': 'Comprehensive test coverage for auth system with security tests', 'priority': 'urgent', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': 13, 'duration': 10},
-            {'title': 'Project Documentation Setup', 'desc': 'Set up documentation site with API reference and dev guides', 'priority': 'urgent', 'complexity': 7, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': 23, 'duration': 5},
+            {'title': 'Authentication Testing Suite', 'desc': 'Comprehensive test coverage for auth system with security tests', 'priority': 'high', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': 13, 'duration': 10},
+            {'title': 'Project Documentation Setup', 'desc': 'Set up documentation site with API reference and dev guides', 'priority': 'medium', 'complexity': 7, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': 23, 'duration': 5},
         ]
 
         for i, t in enumerate(phase1_data):
@@ -660,11 +660,11 @@ class Command(BaseCommand):
             # [3] Parallel starter (d=8), one day shorter than [0]'s effective gate → 1 day slack
             {'title': 'User Management API', 'desc': 'CRUD operations for users with role-based access control', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 60, 'column': in_progress, 'start_offset': phase_start, 'duration': 8},
             # [4] Waits for [0] and [1]; driven by [0] (d=10+7=17). Critical.
-            {'title': 'Search & Indexing Engine', 'desc': 'Full-text search with Elasticsearch and filters', 'priority': 'urgent', 'complexity': 7, 'assignee': alex, 'progress': 30, 'column': in_progress, 'start_offset': phase_start + 10, 'duration': 7},
+            {'title': 'Search & Indexing Engine', 'desc': 'Full-text search with Elasticsearch and filters', 'priority': 'medium', 'complexity': 7, 'assignee': sam, 'progress': 30, 'column': in_progress, 'start_offset': phase_start + 10, 'duration': 7},
             # [5] Waits for [2] and [3]; driven by [3] (d=8+9=17). 1 day slack vs critical path.
             {'title': 'Real-time Collaboration', 'desc': 'WebSocket-based real-time editing and presence features', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 8, 'duration': 9},
             # [6] After [5] (EF=17+4=21 vs project end 24) → 3 days slack
-            {'title': 'Data Caching Layer', 'desc': 'Redis-based caching for improved performance', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 17, 'duration': 4},
+            {'title': 'Data Caching Layer', 'desc': 'Redis-based caching for improved performance', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 17, 'duration': 4},
             # [7] After [4] (EF=17+5=22, then +2=24). Critical.
             {'title': 'API Rate Limiting', 'desc': 'Implement rate limiting and throttling for API endpoints', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 17, 'duration': 5},
             # [8] After [5] (EF=17+4=21 vs 22) → 1 day slack
@@ -691,11 +691,11 @@ class Command(BaseCommand):
         # =====================================================================
         phase_start = 66
         phase3_data = [
-            {'title': 'Performance Optimization', 'desc': 'Database query optimization and caching improvements', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start, 'duration': 8},
+            {'title': 'Performance Optimization', 'desc': 'Database query optimization and caching improvements', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start, 'duration': 8},
             {'title': 'Security Audit & Fixes', 'desc': 'Address findings from penetration testing', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start, 'duration': 4},
-            {'title': 'UI/UX Polish', 'desc': 'Final UI polish and mobile responsive improvements', 'priority': 'high', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 8, 'duration': 6},
-            {'title': 'Load Testing & Optimization', 'desc': 'Conduct load tests and fix performance bottlenecks', 'priority': 'medium', 'complexity': 5, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 5},
-            {'title': 'User Onboarding Flow', 'desc': 'Interactive tutorial and onboarding experience', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 19, 'duration': 6},
+            {'title': 'UI/UX Polish', 'desc': 'Final UI polish and mobile responsive improvements', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 8, 'duration': 6},
+            {'title': 'Load Testing & Optimization', 'desc': 'Conduct load tests and fix performance bottlenecks', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 5},
+            {'title': 'User Onboarding Flow', 'desc': 'Interactive tutorial and onboarding experience', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 19, 'duration': 6},
             {'title': 'Error Tracking & Monitoring', 'desc': 'Configure Sentry, APM and alerting systems', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 3},
             {'title': 'Accessibility Compliance', 'desc': 'WCAG 2.1 AA compliance updates and testing', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 4},
             {'title': 'Final Documentation', 'desc': 'Complete user guides and API documentation', 'priority': 'low', 'complexity': 2, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 2},
@@ -831,10 +831,16 @@ class Command(BaseCommand):
 
         self.stdout.write('   ✅ Gantt milestones created (2 per phase, placed between key tasks)')
 
-    def create_marketing_tasks(self, board, alex, sam, jordan):
+    # =========================================================================
+    # DEPRECATED: Marketing and Bug board tasks are no longer created.
+    # The demo now uses a single "Software Development" board.
+    # These methods are retained for reference but are never called.
+    # =========================================================================
+
+    def create_marketing_tasks(self, board, alex, sam, jordan):  # pragma: no cover
         """
+        DEPRECATED — Not called. Retained for reference only.
         Create 30 tasks for Marketing Campaign board (3 phases)
-        Uses same structure as construction demo with parallel paths and merge points.
         """
         columns = {col.name: col for col in Column.objects.filter(board=board)}
         todo = columns.get('To Do') or columns.get('Backlog') or list(columns.values())[0]
@@ -936,10 +942,10 @@ class Command(BaseCommand):
 
         return items
 
-    def create_bug_tasks(self, board, alex, sam, jordan):
+    def create_bug_tasks(self, board, alex, sam, jordan):  # pragma: no cover
         """
+        DEPRECATED — Not called. Retained for reference only.
         Create 30 tasks for Bug Tracking board (3 phases)
-        Uses same structure as construction demo with parallel paths and merge points.
         """
         columns = {col.name: col for col in Column.objects.filter(board=board)}
         todo = columns.get('To Do') or columns.get('Backlog') or list(columns.values())[0]
@@ -1105,12 +1111,12 @@ class Command(BaseCommand):
         
         # Additional Lean Six Sigma methodology labels
         lean_labels = [
-            {'name': 'Muda', 'color': '#dc3545'},
-            {'name': 'Mura', 'color': '#fd7e14'},
-            {'name': 'Muri', 'color': '#ffc107'},
-            {'name': 'Kaizen', 'color': '#28a745'},
-            {'name': '5S', 'color': '#17a2b8'},
-            {'name': 'Poka-yoke', 'color': '#6f42c1'},
+            {'name': 'Muda (Waste)', 'color': '#dc3545'},
+            {'name': 'Mura (Unevenness)', 'color': '#fd7e14'},
+            {'name': 'Muri (Overburden)', 'color': '#ffc107'},
+            {'name': 'Kaizen (Improvement)', 'color': '#28a745'},
+            {'name': '5S (Organization)', 'color': '#17a2b8'},
+            {'name': 'Poka-yoke (Error-Proofing)', 'color': '#6f42c1'},
         ]
 
         for board in [b for b in [software_board, marketing_board, bug_board] if b]:
@@ -1168,19 +1174,33 @@ class Command(BaseCommand):
                     task.labels.add(waste)
 
             # Assign additional methodology labels based on task characteristics
-            if task.complexity_score and task.complexity_score >= 7:
-                kaizen_label = next((l for l in labels if l.name == 'Kaizen'), None)
+            # Kaizen = continuous improvement tasks (optimization, reviews, compliance)
+            improvement_keywords = ['optimization', 'review', 'compliance', 'polish', 'testing', 'audit']
+            if any(kw in task.title.lower() for kw in improvement_keywords):
+                kaizen_label = next((l for l in labels if 'Kaizen' in l.name), None)
                 if kaizen_label:
                     task.labels.add(kaizen_label)
 
-            if task.priority in ['urgent', 'high'] and random.random() < 0.3:
-                muri_label = next((l for l in labels if l.name == 'Muri'), None)
-                if muri_label:
-                    task.labels.add(muri_label)
+            # Muri = overburden — flag tasks whose assignee has too many tasks
+            if task.assigned_to:
+                assignee_task_count = task.assigned_to.assigned_tasks.filter(
+                    column__board=board
+                ).count()
+                if assignee_task_count > 8:
+                    muri_label = next((l for l in labels if 'Muri' in l.name), None)
+                    if muri_label:
+                        task.labels.add(muri_label)
+
+            # Poka-yoke for error-proofing tasks (testing, security, error handling)
+            error_keywords = ['testing', 'security', 'error', 'audit', 'monitoring']
+            if any(kw in task.title.lower() for kw in error_keywords):
+                pokayoke_label = next((l for l in labels if 'Poka-yoke' in l.name), None)
+                if pokayoke_label:
+                    task.labels.add(pokayoke_label)
 
             # Random chance for other methodology labels
             if random.random() < 0.15:
-                methodology_labels = [l for l in labels if l.name in ['Muda', 'Mura', '5S', 'Poka-yoke']]
+                methodology_labels = [l for l in labels if l.name in ['Muda (Waste)', 'Mura (Unevenness)', '5S (Organization)']]
                 if methodology_labels:
                     random_label = random.choice(methodology_labels)
                     task.labels.add(random_label)
@@ -1684,9 +1704,24 @@ class Command(BaseCommand):
             if created:
                 # Add lessons learned
                 lessons = [
-                    {'category': 'process', 'title': 'Daily standups improve coordination'},
-                    {'category': 'technical', 'title': 'Code reviews catch bugs early'},
-                    {'category': 'communication', 'title': 'Clear requirements reduce rework'},
+                    {
+                        'category': 'process',
+                        'title': 'Daily standups improve coordination',
+                        'description': 'Short 15-minute daily syncs helped the team surface blockers within hours instead of days. When stand-ups were skipped, tasks stalled for an average of 1.5 extra days.',
+                        'action': 'Schedule 15-minute daily stand-ups at 9:30 AM and ensure all team members attend consistently.',
+                    },
+                    {
+                        'category': 'technical',
+                        'title': 'Code reviews catch bugs early',
+                        'description': 'Mandatory peer reviews on the Auth and API modules reduced post-merge defects by roughly 40%. Reviews also spread knowledge across the team, reducing single-point-of-failure risk.',
+                        'action': 'Require at least one peer review before merging any PR, and rotate reviewers to build cross-module expertise.',
+                    },
+                    {
+                        'category': 'communication',
+                        'title': 'Clear requirements reduce rework',
+                        'description': 'Tasks with detailed acceptance criteria had a 25% lower rework rate. Ambiguity in the File Upload and Search specs caused two rounds of revision that could have been avoided.',
+                        'action': 'Add measurable acceptance criteria to every task before moving it to In Progress.',
+                    },
                 ]
 
                 for lesson in lessons:
@@ -1695,8 +1730,8 @@ class Command(BaseCommand):
                         board=board,
                         category=lesson['category'],
                         title=lesson['title'],
-                        description=f'Detailed insight about {lesson["title"].lower()}',
-                        recommended_action=f'Apply {lesson["title"].lower()} in next sprint',
+                        description=lesson['description'],
+                        recommended_action=lesson['action'],
                         priority='high' if random.random() > 0.5 else 'medium',
                         status='identified',
                     )
@@ -1708,13 +1743,15 @@ class Command(BaseCommand):
                             'title': 'Implement automated code review checklist',
                             'description': 'Create and integrate automated checklist for code reviews to ensure consistent quality standards',
                             'action_type': 'process_change',
-                            'priority': 'high'
+                            'priority': 'high',
+                            'expected_impact': 'Reduce post-merge defects by 30% and cut average review turnaround from 4 days to 2 days',
                         },
                         {
                             'title': 'Reduce technical debt in authentication module',
                             'description': 'Allocate 20% of sprint capacity to refactor and document authentication code',
                             'action_type': 'technical_improvement',
-                            'priority': 'medium'
+                            'priority': 'medium',
+                            'expected_impact': 'Lower auth-related bug rate by 40% and improve onboarding speed for new developers',
                         }
                     ],
                     'Marketing Campaign Review': [
@@ -1722,13 +1759,15 @@ class Command(BaseCommand):
                             'title': 'Improve campaign performance tracking',
                             'description': 'Set up automated dashboards for real-time campaign metrics and ROI tracking',
                             'action_type': 'tool_adoption',
-                            'priority': 'high'
+                            'priority': 'high',
+                            'expected_impact': 'Enable real-time ROI visibility, reducing reporting lag from 1 week to same-day',
                         },
                         {
                             'title': 'Enhance team collaboration on content creation',
                             'description': 'Schedule weekly brainstorming sessions and implement shared content calendar',
                             'action_type': 'team_building',
-                            'priority': 'medium'
+                            'priority': 'medium',
+                            'expected_impact': 'Increase content output by 25% and improve cross-functional alignment on messaging',
                         }
                     ],
                     'Bug Fix Retrospective': [
@@ -1736,13 +1775,15 @@ class Command(BaseCommand):
                             'title': 'Establish bug triage process',
                             'description': 'Create priority matrix and daily triage meetings to handle critical bugs faster',
                             'action_type': 'process_change',
-                            'priority': 'high'
+                            'priority': 'high',
+                            'expected_impact': 'Cut mean time to resolution for critical bugs from 3 days to under 1 day',
                         },
                         {
                             'title': 'Improve bug documentation standards',
                             'description': 'Create bug report template with reproduction steps and impact assessment',
                             'action_type': 'documentation',
-                            'priority': 'medium'
+                            'priority': 'medium',
+                            'expected_impact': 'Reduce average investigation time by 35% with consistent, detailed bug reports',
                         }
                     ]
                 }
@@ -1753,7 +1794,8 @@ class Command(BaseCommand):
                         'title': 'Implement process improvements',
                         'description': 'Follow up on retrospective discussion and implement agreed changes',
                         'action_type': 'process_change',
-                        'priority': 'high'
+                        'priority': 'high',
+                        'expected_impact': 'Measurable improvement in team velocity and delivery predictability within 2 sprints',
                     }
                 ])
                 
@@ -1778,7 +1820,7 @@ class Command(BaseCommand):
                             target_completion_date=(timezone.now() + timedelta(days=days_offset)).date(),
                             priority=action_data['priority'],
                             status='in_progress' if idx == 0 else 'pending',
-                            expected_impact=f'Improve team efficiency and {board.name.lower()} outcomes'
+                            expected_impact=action_data.get('expected_impact', 'Measurable improvement in team velocity and delivery predictability within 2 sprints')
                         )
 
         self.stdout.write('   ✅ Retrospective data created')
@@ -1928,7 +1970,7 @@ class Command(BaseCommand):
                     expected_impact=suggestion['expected_impact'],
                     confidence_score=suggestion['confidence_score'],
                     metrics_snapshot=suggestion['metrics_snapshot'],
-                    ai_model_used='gemini-2.0-flash-exp',
+                    ai_model_used='gemini-2.0-flash',
                     generation_method='hybrid',  # Indicates AI-enhanced format
                 )
                 created_count += 1
@@ -1946,7 +1988,7 @@ class Command(BaseCommand):
                 expected_impact=specific_suggestion['expected_impact'],
                 confidence_score=specific_suggestion['confidence_score'],
                 metrics_snapshot=specific_suggestion['metrics_snapshot'],
-                ai_model_used='gemini-2.0-flash-exp',
+                ai_model_used='gemini-2.0-flash',
                 generation_method='hybrid',
             )
             created_count += 1
@@ -1967,7 +2009,7 @@ class Command(BaseCommand):
         
         # Get demo users
         demo_admin = User.objects.filter(
-            username__in=['demo_pm', 'alex_demo', 'admin']
+            username__in=['alex_chen_demo', 'sam_rivera_demo', 'jordan_taylor_demo']
         ).first()
         
         if not demo_admin:
@@ -2107,7 +2149,7 @@ class Command(BaseCommand):
         """Create realistic comments for tasks"""
         users = [alex, sam, jordan]
         comments_created = 0
-        now = timezone.now().date()
+        now = timezone.now()
 
         for task in tasks:
             # Create 0-4 comments per task
@@ -2142,7 +2184,7 @@ class Command(BaseCommand):
         """Create activity logs for tasks"""
         users = [alex, sam, jordan]
         activities_created = 0
-        now = timezone.now().date()
+        now = timezone.now()
 
         for task in tasks:
             # Always create a 'created' activity
@@ -2186,11 +2228,11 @@ class Command(BaseCommand):
     def create_stakeholders(self, software_board, marketing_board, bug_board, tasks, alex, sam, jordan):
         """Create stakeholders and link them to tasks"""
         stakeholder_data = [
-            {'name': 'Sarah Johnson', 'role': 'Product Owner', 'email': 'sarah.j@example.com', 'influence': 'high'},
-            {'name': 'Mike Chen', 'role': 'Engineering Director', 'email': 'mike.c@example.com', 'influence': 'high'},
-            {'name': 'Lisa Park', 'role': 'QA Lead', 'email': 'lisa.p@example.com', 'influence': 'medium'},
-            {'name': 'David Wilson', 'role': 'UX Designer', 'email': 'david.w@example.com', 'influence': 'medium'},
-            {'name': 'Emma Davis', 'role': 'Marketing Manager', 'email': 'emma.d@example.com', 'influence': 'medium'},
+            {'name': 'Sarah Johnson', 'role': 'Product Owner', 'email': 'sarah.johnson@acme.com', 'influence': 'high'},
+            {'name': 'Mike Chen', 'role': 'Engineering Director', 'email': 'mike.chen@acme.com', 'influence': 'high'},
+            {'name': 'Lisa Park', 'role': 'QA Lead', 'email': 'lisa.park@acme.com', 'influence': 'medium'},
+            {'name': 'David Wilson', 'role': 'UX Designer', 'email': 'david.wilson@acme.com', 'influence': 'medium'},
+            {'name': 'Emma Davis', 'role': 'Marketing Manager', 'email': 'emma.davis@acme.com', 'influence': 'medium'},
         ]
 
         for board in [b for b in [software_board, marketing_board, bug_board] if b]:
@@ -2220,7 +2262,7 @@ class Command(BaseCommand):
                 defaults={
                     'involvement_type': random.choice(['reviewer', 'observer', 'contributor']),
                     'engagement_status': random.choice(['informed', 'consulted', 'involved']),
-                    'feedback': f'Involved in {task.title[:30]}',
+                    'feedback': f'Reviewed progress and provided input on this task',
                 }
             )
 
@@ -2292,9 +2334,9 @@ class Command(BaseCommand):
                     'AWS': {'expert': 0, 'advanced': 0, 'intermediate': 1, 'beginner': 1},
                 },
                 'gaps': [
-                    {'skill': 'Kubernetes', 'level': 'intermediate', 'required': 2, 'available': 0, 'severity': 'high'},
-                    {'skill': 'Security', 'level': 'advanced', 'required': 1, 'available': 0, 'severity': 'critical'},
-                    {'skill': 'Machine Learning', 'level': 'intermediate', 'required': 1, 'available': 0, 'severity': 'medium'},
+                    {'skill': 'CI/CD', 'level': 'advanced', 'required': 2, 'available': 0, 'severity': 'high'},
+                    {'skill': 'Security', 'level': 'advanced', 'required': 2, 'available': 0, 'severity': 'critical'},
+                    {'skill': 'System Design', 'level': 'expert', 'required': 1, 'available': 0, 'severity': 'medium'},
                 ],
                 'capacity': Decimal('120.0'),
                 'utilized': Decimal('95.0'),

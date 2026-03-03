@@ -21,7 +21,7 @@ from django.core.management.base import BaseCommand
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.db import transaction
-from datetime import timedelta
+from datetime import timedelta, date
 from decimal import Decimal
 import random
 import json
@@ -52,6 +52,15 @@ from ai_assistant.models import (
 
 class Command(BaseCommand):
     help = 'Populate ALL demo data in a single command (tasks, wiki, messaging, conflicts, AI assistant)'
+
+    @staticmethod
+    def _next_quarter_label():
+        """Return a label like 'Q2 2025' for the next calendar quarter."""
+        today = date.today()
+        quarter = (today.month - 1) // 3 + 1  # current quarter (1-4)
+        next_q = quarter % 4 + 1
+        year = today.year if next_q > quarter else today.year + 1
+        return f'Q{next_q} {year}'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -676,6 +685,7 @@ Welcome to the team! This knowledge hub contains everything you need to get star
 
 ## Quick Start
 ```bash
+# Example repository (fictional — replace with your project URL)
 git clone git@github.com:acme-corp/main-project.git
 cd main-project
 python -m venv venv
@@ -769,28 +779,28 @@ POST /api/auth/token/
 | In Progress | Being worked on | 3/person |
 | Done | Completed | No limit |"""
             },
-            # Project Resources
+            # Project Resources - dynamic quarter calculation
             {
                 'category': 'project-resources',
-                'title': 'Q1 2026 Product Roadmap',
-                'slug': 'q1-2026-roadmap',
+                'title': f'{self._next_quarter_label()} Product Roadmap',
+                'slug': f'{self._next_quarter_label().lower().replace(" ", "-")}-roadmap',
                 'is_pinned': True,
                 'tags': ['roadmap', 'planning'],
-                'content': f"""# Q1 2026 Product Roadmap
+                'content': f"""# {self._next_quarter_label()} Product Roadmap
 
 ## Vision
 "Enable teams to work smarter with AI-powered project management"
 
-## January: Foundation
+## Month 1: Foundation
 - AI Task Suggestions v2
 - Dashboard Redesign
 - Performance Optimization
 
-## February: Enhancement
+## Month 2: Enhancement
 - Advanced Analytics
 - Enterprise SSO
 
-## March: Growth
+## Month 3: Growth
 - AI Meeting Assistant
 - Integration Marketplace"""
             },
@@ -896,18 +906,32 @@ POST /api/auth/token/
                     'name': 'General Discussion',
                     'description': 'Team updates and announcements',
                     'messages': [
-                        {'author': 'alex', 'content': 'Good morning team! 🌅 Ready for sprint planning?', 'minutes_ago': 180},
-                        {'author': 'sam', 'content': 'Morning! Yes, I finished reviewing the backlog.', 'minutes_ago': 175},
-                        {'author': 'demo_admin', 'content': 'Great work everyone! The API integration looks solid. 👏', 'minutes_ago': 120},
+                        {'author': 'alex', 'content': 'Good morning team! 🌅 Ready for sprint planning?', 'minutes_ago': 360},
+                        {'author': 'sam', 'content': 'Morning! Yes, I finished reviewing the backlog.', 'minutes_ago': 355},
+                        {'author': 'jordan', 'content': 'Good morning! I have the architecture notes ready for the planning session.', 'minutes_ago': 350},
+                        {'author': 'alex', 'content': 'Perfect. Let\'s prioritize the Auth System and API tasks first — those are blocking everything else.', 'minutes_ago': 340},
+                        {'author': 'sam', 'content': 'Agreed. The Base API Framework is nearly done. We can start integration with Auth by tomorrow.', 'minutes_ago': 335},
+                        {'author': 'jordan', 'content': 'I\'ll review the Auth design doc and flag any concerns before end of day.', 'minutes_ago': 330},
+                        {'author': 'alex', 'content': 'Just updated the sprint board — 12 tasks assigned, 18 remaining. Looks manageable.', 'minutes_ago': 240},
+                        {'author': 'sam', 'content': 'The Dashboard UI is coming together nicely. Should be ready for review by Thursday. 🎨', 'minutes_ago': 180},
+                        {'author': 'jordan', 'content': 'Great work everyone! The API integration looks solid. 👏', 'minutes_ago': 120},
+                        {'author': 'alex', 'content': 'Quick reminder: stakeholder demo is next Friday. Let\'s make sure the critical path tasks are green. 🟢', 'minutes_ago': 60},
                     ]
                 },
                 {
                     'name': 'Technical Support',
                     'description': 'Technical questions and debugging help',
                     'messages': [
-                        {'author': 'sam', 'content': 'Has anyone encountered issues with PostgreSQL 15 migration?', 'minutes_ago': 240},
-                        {'author': 'demo_admin', 'content': 'Try `python manage.py migrate --fake-initial` first.', 'minutes_ago': 235},
-                        {'author': 'sam', 'content': 'That worked! Thanks 🙏', 'minutes_ago': 230},
+                        {'author': 'sam', 'content': 'Has anyone encountered issues with PostgreSQL 15 migration?', 'minutes_ago': 480},
+                        {'author': 'alex', 'content': 'Try `python manage.py migrate --fake-initial` first.', 'minutes_ago': 475},
+                        {'author': 'sam', 'content': 'That worked! Thanks 🙏', 'minutes_ago': 470},
+                        {'author': 'jordan', 'content': 'FYI — I updated the setup guide on the wiki with that fix. Check the Team Setup Guide page.', 'minutes_ago': 460},
+                        {'author': 'sam', 'content': 'Quick question: are we using Redis for caching or just the default DB cache?', 'minutes_ago': 300},
+                        {'author': 'alex', 'content': 'Redis in production, DB cache for local dev. Config is in settings/base.py.', 'minutes_ago': 295},
+                        {'author': 'jordan', 'content': 'The Search & Indexing Engine task requires Elasticsearch. I\'ve added setup steps to the wiki.', 'minutes_ago': 200},
+                        {'author': 'sam', 'content': 'Running into a rate-limiting edge case on the API. The tests pass but manual testing shows 429s under burst load.', 'minutes_ago': 120},
+                        {'author': 'jordan', 'content': 'I\'ll take a look — might need to adjust the token bucket window. Can you share the test payload?', 'minutes_ago': 115},
+                        {'author': 'sam', 'content': 'Pushed a repro script to the branch. Check `tests/test_rate_limit_burst.py`.', 'minutes_ago': 110},
                     ]
                 },
             ],
@@ -1009,7 +1033,7 @@ POST /api/auth/token/
                     'type': 'resource',
                     'severity': 'high',
                     'title': 'Resource Overload: Sam Rivera',
-                    'description': 'Sam Rivera is assigned to 8 concurrent high-priority tasks, exceeding recommended capacity.',
+                    'description': 'Sam Rivera is assigned to 11 concurrent tasks, exceeding recommended capacity.',
                     'task1_idx': 0, 'task2_idx': 1,
                     'affected_user': 'sam',
                     'confidence': 0.92,
@@ -1212,7 +1236,7 @@ POST /api/auth/token/
                 'board': self.software_board,
                 'content_type': 'project_overview',
                 'title': 'Software Development Sprint Goals',
-                'content': 'Focus on user authentication, API development, and dashboard improvements. Team includes 4 developers working on 2-week sprints.',
+                'content': 'Focus on user authentication, API development, and dashboard improvements. Team includes 3 members working on 2-week sprints.',
             },
             {
                 'board': self.software_board,
@@ -1353,20 +1377,20 @@ This assumes one developer working full-time. Should I create subtasks?""", 'tok
 
 | Team Member | Tasks | Hours | Utilization |
 |-------------|-------|-------|-------------|
-| Sam Rivera | 8 | 45h | ⚠️ 112% |
-| Alex Chen | 5 | 32h | ✅ 80% |
-| Jordan Taylor | 3 | 18h | ✅ 45% |
+| Sam Rivera | 11 | 44h | ⚠️ 110% |
+| Jordan Taylor | 12 | 38h | ✅ 95% |
+| Alex Chen | 7 | 28h | ✅ 70% |
 
-**⚠️ Alert:** Sam Rivera is overloaded.
+**⚠️ Alert:** Sam Rivera is overloaded with implementation tasks.
 
-**Recommendation:** Reassign 1-2 tasks from Sam to Jordan.""", 'tokens': 245, 'kb_used': True},
-                    {'role': 'user', 'content': 'Which tasks should I reassign to Jordan?', 'tokens': 70},
-                    {'role': 'assistant', 'content': """I recommend reassigning these tasks to Jordan Taylor:
+**Recommendation:** Reassign 1-2 implementation tasks from Sam to balance the workload.""", 'tokens': 245, 'kb_used': True},
+                    {'role': 'user', 'content': 'Which tasks should I reassign?', 'tokens': 70},
+                    {'role': 'assistant', 'content': """I recommend reassigning these tasks:
 
-1. **Create API Documentation** - Low complexity, matches Jordan's skills
-2. **Update User Guide** - Independent task, no blockers
+1. **Error Tracking & Monitoring** → Jordan Taylor - Configuration task, matches Jordan's QA skills
+2. **Security Audit & Fixes** → Jordan Taylor - Testing-adjacent, complements Jordan's QA role
 
-Both tasks are well-defined and don't require deep system knowledge. This will bring Sam down to 85% utilization while keeping Jordan at 65%.""", 'tokens': 180, 'kb_used': True},
+Both tasks are well-defined and don't require deep system knowledge. This will bring Sam down to 90% utilization while Jordan stays at a healthy 95%.""", 'tokens': 180, 'kb_used': True},
                 ]
             },
             {
@@ -1684,12 +1708,12 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
 
         # --- Mission ---
         mission, _ = Mission.objects.get_or_create(
-            name='Prevent AI Security Threats',
+            name='Build Enterprise Security Platform',
             defaults=dict(
                 description=(
-                    'Cyber security threats are growing rapidly due to the increasing adoption '
-                    'of AI tools. This Mission focuses on identifying those threats and eliminating '
-                    'them before they impact our customers.'
+                    'Enterprise security threats are growing rapidly, especially with the increasing adoption '
+                    'of AI tools. This Mission focuses on building a robust platform that helps organizations '
+                    'identify, monitor, and eliminate security vulnerabilities across their infrastructure.'
                 ),
                 status='active',
                 created_by=creator,
@@ -1700,13 +1724,13 @@ Priority should be: Schema first, then Auth immediately.""", 'tokens': 290, 'kb_
 
         # --- Strategy ---
         strategy, _ = Strategy.objects.get_or_create(
-            name='Develop Security Software',
+            name='Develop Security Software Platform',
             mission=mission,
             defaults=dict(
                 description=(
-                    'Build a comprehensive security software suite that monitors AI-related '
-                    'vulnerabilities, provides real-time threat detection, and automates '
-                    'incident response workflows.'
+                    'Build a comprehensive enterprise software platform with built-in security features '
+                    'including real-time threat detection, automated vulnerability scanning, '
+                    'and secure user management with role-based access controls.'
                 ),
                 status='active',
                 created_by=creator,

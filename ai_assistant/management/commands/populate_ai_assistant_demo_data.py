@@ -598,20 +598,20 @@ Would you like me to create subtasks for this parallel approach?""",
 
 | Team Member | Assigned Tasks | Est. Hours | Utilization |
 |-------------|----------------|------------|-------------|
-| Sam Rivera | 8 tasks | 45 hours | ⚠️ 112% |
-| Alex Chen | 5 tasks | 32 hours | ✅ 80% |
-| Jordan Taylor | 3 tasks | 18 hours | ✅ 45% |
+| Sam Rivera | 11 tasks | 44 hours | ⚠️ 110% |
+| Jordan Taylor | 12 tasks | 38 hours | ✅ 95% |
+| Alex Chen | 7 tasks | 28 hours | ✅ 70% |
 
 **⚠️ Alert: Sam Rivera is overloaded**
 
-Sam has 8 active tasks with an estimated 45 hours of work, which exceeds their 40-hour weekly capacity.
+Sam has 11 active implementation tasks with an estimated 44 hours of work, which exceeds their 40-hour weekly capacity.
 
 **Recommended Actions:**
 
-1. **Immediate:** Reassign 1-2 tasks from Sam to Jordan (who has capacity)
+1. **Immediate:** Reassign 1-2 tasks from Sam to Jordan or Alex (who have capacity)
 2. **Tasks to consider moving:**
-   - "Update documentation" (Low priority, 4 hours)
-   - "Write unit tests for auth" (Medium priority, 6 hours)
+   - "Error Tracking & Monitoring" (Medium priority, 3 hours) → Jordan
+   - "Security Audit & Fixes" (Medium priority, 4 hours) → Jordan
 
 3. **Long-term:** 
    - Review task estimation accuracy
@@ -630,30 +630,30 @@ Would you like me to suggest specific task reassignments?""",
 
 **Recommended Reassignments:**
 
-**1. "Update API documentation" → Jordan**
+**1. "Error Tracking & Monitoring" → Jordan**
 - **Current Owner:** Sam Rivera
-- **Estimated Hours:** 4 hours
-- **Priority:** Low
+- **Estimated Hours:** 3 hours
+- **Priority:** Medium
 - **Why Jordan:** 
-  - Jordan has strong documentation skills
+  - Monitoring setup aligns with Jordan's QA skills
   - Task is well-defined with clear scope
   - No technical blockers
 
-**2. "Create data validation utilities" → Jordan**
+**2. "Security Audit & Fixes" → Jordan**
 - **Current Owner:** Sam Rivera  
-- **Estimated Hours:** 5 hours
+- **Estimated Hours:** 4 hours
 - **Priority:** Medium
 - **Why Jordan:**
-  - Jordan has intermediate Python skills
-  - Good learning opportunity
-  - Sam can provide quick code review
+  - Jordan has strong Quality Assurance skills
+  - Testing-adjacent task, natural fit
+  - Sam can provide context on security patterns
 
 **After Reassignment:**
 
 | Team Member | Tasks | Hours | Utilization |
 |-------------|-------|-------|-------------|
-| Sam Rivera | 6 | 36h | ✅ 90% |
-| Jordan Taylor | 5 | 27h | ✅ 68% |
+| Sam Rivera | 9 | 37h | ✅ 92% |
+| Jordan Taylor | 14 | 45h | ✅ 95% (shared across test/doc tasks) |
 
 **New Team Balance:** ✅ Healthy distribution
 
@@ -915,243 +915,240 @@ Would you like a template for your next retrospective?""",
                 ]
             },
             
-            # Session 7: Marketing Board Questions
+            # Session 7: Release Planning
             {
-                'title': 'Campaign Timeline Planning',
-                'description': 'Planning marketing campaign timeline',
+                'title': 'Release Planning Strategy',
+                'description': 'Planning the software release timeline',
                 'is_active': False,
                 'days_ago': 3,
-                'board': 'marketing',
+                'board': 'software',
                 'user': 'secondary',
                 'messages': [
                     {
                         'role': 'user',
-                        'content': 'Help me plan the timeline for our Q1 marketing campaign',
+                        'content': 'Help me plan the release timeline for our software project',
                     },
                     {
                         'role': 'assistant',
-                        'content': """I'll help you create a timeline for your Q1 marketing campaign. Based on your board data and typical campaign phases:
+                        'content': """Based on your current board progress and remaining tasks, here's a recommended release timeline:
 
-**📅 Q1 2026 Campaign Timeline**
+**📅 Software Release Timeline**
 
-**Phase 1: Planning (Jan 1-15)**
-Week 1-2:
-- [ ] Define campaign objectives and KPIs
-- [ ] Identify target audience segments
-- [ ] Set budget allocation
-- [ ] Competitive analysis
+**Phase 1: Complete Core Features (Weeks 1-2)**
+- [ ] Finish Authentication System (currently 80%)
+- [ ] Complete User Registration Flow (currently 60%)
+- [ ] Finalize Database Schema & Migrations (currently 40%)
+- [ ] Resolve all In Progress tasks
 
-**Phase 2: Content Creation (Jan 15 - Feb 5)**
-Week 3-4:
-- [ ] Develop creative brief
-- [ ] Create content calendar
-- [ ] Design visual assets
-- [ ] Write copy for all channels
+**Phase 2: Integration & Testing (Weeks 3-4)**
+- [ ] Authentication Testing Suite
+- [ ] Integration Testing Suite
+- [ ] Core Features Code Review
+- [ ] API Rate Limiting implementation
 
-Week 5:
-- [ ] Review and approval process
-- [ ] Final revisions
+**Phase 3: Polish & Hardening (Weeks 5-6)**
+- [ ] Performance Optimization
+- [ ] Security Audit & Fixes
+- [ ] UI/UX Polish
+- [ ] Load Testing & Optimization
 
-**Phase 3: Pre-Launch (Feb 5-15)**
-Week 6-7:
-- [ ] Set up tracking and analytics
-- [ ] Configure ad platforms
-- [ ] A/B test setup
-- [ ] Landing page optimization
+**Phase 4: Launch Preparation (Weeks 7-8)**
+- [ ] User Onboarding Flow
+- [ ] Error Tracking & Monitoring setup
+- [ ] Accessibility Compliance
+- [ ] Final Documentation
+- [ ] Deployment Automation
 
-**Phase 4: Launch & Execution (Feb 15 - Mar 15)**
-Week 8-12:
-- [ ] Campaign launch
-- [ ] Daily monitoring
-- [ ] Optimization based on data
-- [ ] Content adjustments
-
-**Phase 5: Analysis (Mar 15-31)**
-Week 13-14:
-- [ ] Compile results
-- [ ] ROI analysis
-- [ ] Lessons learned
-- [ ] Recommendations for Q2
+**Phase 5: Go-Live (Week 9)**
+- [ ] Final launch checklist
+- [ ] DNS cutover
+- [ ] Production deployment
+- [ ] Post-launch monitoring
 
 **Key Milestones:**
-🎯 Jan 15: Strategy approved
-🎯 Feb 5: All content ready
-🎯 Feb 15: Campaign launch
-🎯 Mar 31: Final report
+🎯 Week 2: Core Authentication Ready
+🎯 Week 4: API Layer Complete
+🎯 Week 6: Beta Release Checkpoint
+🎯 Week 9: Go-Live Authorization
 
-Would you like me to create tasks for each phase on your board?""",
+**Risk Assessment:**
+- Authentication tasks are critical path — any delay impacts everything downstream
+- Sam's workload needs redistribution before Phase 2
+- Security audit should not be skipped for timeline pressure
+
+Would you like me to create a detailed task breakdown for any of these phases?""",
                         'is_helpful': True,
                     },
                 ]
             },
             
-            # Session 8: Bug Tracking - Defect Prioritization
+            # Session 8: Stakeholder Communication
             {
-                'title': 'Bug Prioritization Strategy',
-                'description': 'Help prioritizing bugs for the current sprint',
+                'title': 'Stakeholder Update Strategy',
+                'description': 'Help communicating project status to stakeholders',
                 'is_active': True,
                 'days_ago': 1,
-                'board': 'bug',
+                'board': 'software',
                 'user': 'primary',
                 'messages': [
                     {
                         'role': 'user',
-                        'content': 'How should I prioritize the bugs in our backlog?',
+                        'content': 'How should I communicate our project status to stakeholders?',
                     },
                     {
                         'role': 'assistant',
-                        'content': """I've analyzed your bug backlog and here's a prioritization framework based on severity, impact, and effort:
+                        'content': """Based on your current project metrics, here's a stakeholder communication strategy:
 
-**🔴 Critical Priority (Fix Immediately)**
+**📊 Current Project Status Summary**
 
-1. **Login Authentication Failure** - P1
-   - Users cannot access the system
-   - Impact: 100% of users blocked
-   - Est. Fix Time: 4 hours
-   
-2. **Data Loss on Form Submit** - P1
-   - User data not being saved
-   - Impact: All form submissions affected
-   - Est. Fix Time: 6 hours
+| Metric | Value | Status |
+|--------|-------|--------|
+| Tasks Completed | 7/30 | 🟡 23% |
+| In Progress | 5/30 | ✅ On Track |
+| Budget Spent | ~35% | ✅ On Track |
+| Timeline | Phase 1 closing | 🟡 Minor delays |
 
-**🟠 High Priority (This Sprint)**
+**🎯 Recommended Communication Framework**
 
-3. **Dashboard Performance Issue** - P2
-   - Page load > 10 seconds
-   - Impact: User experience degradation
-   - Est. Fix Time: 8 hours
+**1. Executive Summary (for Sarah Johnson, Product Owner)**
+- Lead with outcomes, not activity
+- Highlight: 7 foundation tasks complete, architecture approved
+- Flag: Authentication system at 80%, needs 3 more days
+- Next milestone: Core Authentication Ready
 
-4. **Email Notifications Not Sending** - P2
-   - Critical alerts not delivered
-   - Impact: Communication breakdown
-   - Est. Fix Time: 4 hours
+**2. Technical Update (for Mike Chen, Engineering Director)**
+- Architecture design finalized and approved
+- CI/CD pipeline operational
+- Security architecture patterns defined
+- Key risk: Database migrations blocking downstream tasks
 
-**🟡 Medium Priority (Next Sprint)**
+**3. Quality Report (for Lisa Park, QA Lead)**
+- Testing strategy defined for all phases
+- Auth testing suite pending (blocked by auth completion)
+- Integration testing framework selected
 
-5. **UI Alignment Issues** - P3
-   - Visual inconsistencies on mobile
-   - Impact: Minor UX issues
-   - Est. Fix Time: 3 hours
+**Communication Cadence:**
+- 📧 Weekly status email to all stakeholders
+- 🗓️ Bi-weekly detailed review with Product Owner
+- 🚨 Immediate escalation for blockers or scope changes
 
-**Prioritization Matrix:**
+**Template for This Week's Update:**
 
-| Bug | Severity | User Impact | Effort | Priority Score |
-|-----|----------|-------------|--------|----------------|
-| Login Failure | Critical | High | Low | 95/100 |
-| Data Loss | Critical | High | Medium | 90/100 |
-| Dashboard Perf | High | Medium | High | 70/100 |
-| Email Issues | High | Medium | Low | 75/100 |
-| UI Alignment | Low | Low | Low | 40/100 |
+> **Subject: Software Development - Week Update**
+>
+> **Progress:** 7 of 30 tasks complete (Phase 1: 70% done)
+> **On Track:** ✅ Budget, Architecture, Environment
+> **Attention Needed:** Authentication System (80% → targeting completion this week)
+> **Next Week:** Complete auth, begin Phase 2 core features
+> **Risks:** Sam's workload at 112% — redistribution planned
 
-Would you like me to help create a bug fix sprint plan?""",
+Would you like me to draft the full stakeholder email?""",
                         'is_helpful': True,
                     },
                 ]
             },
             
-            # Session 9: Bug Tracking - Root Cause Analysis
+            # Session 9: Technical Debt Analysis
             {
-                'title': 'Bug Root Cause Analysis',
-                'description': 'Investigating recurring issues',
+                'title': 'Technical Debt Assessment',
+                'description': 'Analyzing and planning technical debt reduction',
                 'is_active': False,
                 'days_ago': 4,
-                'board': 'bug',
+                'board': 'software',
                 'user': 'primary',
                 'messages': [
                     {
                         'role': 'user',
-                        'content': 'We keep seeing similar bugs. Can you help identify patterns?',
+                        'content': 'We have growing technical debt. Can you help assess and prioritize it?',
                     },
                     {
                         'role': 'assistant',
-                        'content': """I've analyzed your bug history and found several recurring patterns:
+                        'content': """I've analyzed your codebase activity and task history to assess technical debt:
 
-**📊 Bug Pattern Analysis (Last 30 Days)**
+**📊 Technical Debt Assessment**
 
-**Pattern 1: Input Validation Issues (35% of bugs)**
-- **Symptoms:** Invalid data accepted, crashes on edge cases
-- **Affected Areas:** User forms, API endpoints
-- **Root Cause:** Missing or incomplete input validation
-- **Fix Strategy:** Implement comprehensive validation layer
+**Debt Category 1: Authentication Module (High Priority)**
+- **Severity:** 🔴 High
+- **Impact:** Security vulnerabilities, difficult to extend
+- **Current State:** JWT implementation needs refactoring
+- **Effort to Fix:** 8-12 hours
+- **Business Risk:** Security audit will flag these issues
 
-**Pattern 2: Null Reference Errors (25% of bugs)**
-- **Symptoms:** Crashes when data is missing
-- **Affected Areas:** Data display, calculations
-- **Root Cause:** Not handling optional/nullable fields
-- **Fix Strategy:** Add null checks, use optional chaining
+**Debt Category 2: Database Query Performance (Medium Priority)**
+- **Severity:** 🟠 Medium
+- **Impact:** Slow dashboard loading, poor user experience
+- **Current State:** N+1 queries in task listing
+- **Effort to Fix:** 6-8 hours
+- **Business Risk:** Will worsen as data grows
 
-**Pattern 3: Race Conditions (20% of bugs)**
-- **Symptoms:** Intermittent failures, data inconsistency
-- **Affected Areas:** Concurrent operations, async processes
-- **Root Cause:** Improper synchronization
-- **Fix Strategy:** Review async patterns, add locks
+**Debt Category 3: API Endpoint Consistency (Medium Priority)**
+- **Severity:** 🟡 Medium
+- **Impact:** Developer confusion, integration issues
+- **Current State:** Mixed response formats across endpoints
+- **Effort to Fix:** 4-6 hours
+- **Business Risk:** Slows down new feature development
 
-**Pattern 4: UI State Management (20% of bugs)**
-- **Symptoms:** Stale data, wrong UI state
-- **Affected Areas:** Interactive components
-- **Root Cause:** Complex state dependencies
-- **Fix Strategy:** Simplify state, add state validation
+**Debt Category 4: Test Coverage Gaps (Low Priority)**
+- **Severity:** 🟡 Low
+- **Impact:** Regression risk on changes
+- **Current State:** ~45% coverage, no integration tests
+- **Effort to Fix:** 15-20 hours
+- **Business Risk:** Increases bug rate over time
 
-**Recommendations:**
+**Technical Debt Score: 6.5/10**
 
-1. **Short-term:**
-   - Add validation library for all inputs
-   - Code review checklist for null handling
-
-2. **Medium-term:**
-   - Implement automated testing for edge cases
-   - Add monitoring for race conditions
-
-3. **Long-term:**
-   - Refactor state management
-   - Create reusable validated components
-
-Would you like a detailed action plan for addressing these patterns?""",
+Would you like a detailed action plan for reducing this debt?""",
                         'is_helpful': True,
                     },
                     {
                         'role': 'user',
-                        'content': 'Yes, give me an action plan for the input validation issues',
+                        'content': 'Yes, give me an action plan to tackle the authentication debt first',
                     },
                     {
                         'role': 'assistant',
-                        'content': """Here's a comprehensive action plan for addressing input validation issues:
+                        'content': """Here's a comprehensive plan for addressing the authentication technical debt:
 
-**🎯 Input Validation Improvement Plan**
+**🎯 Authentication Module Refactoring Plan**
 
-**Phase 1: Assessment (Week 1)**
-- [ ] Audit all user input points
-- [ ] Document current validation coverage
-- [ ] Identify high-risk endpoints
-- [ ] Review recent validation-related bugs
+**Phase 1: Assessment & Planning (Day 1)**
+- [ ] Document current auth flow and pain points
+- [ ] Identify all endpoints using authentication
+- [ ] Review security best practices for JWT
+- [ ] Create test cases for current behavior
 
-**Phase 2: Framework Setup (Week 2)**
-- [ ] Choose/implement validation library
-- [ ] Define validation rules schema
-- [ ] Create reusable validators
-- [ ] Set up validation error handling
+**Phase 2: Refactoring (Days 2-3)**
+- [ ] Implement token refresh mechanism
+- [ ] Standardize error responses for auth failures
+- [ ] Add proper session management
+- [ ] Implement rate limiting on auth endpoints
 
-**Phase 3: Implementation (Weeks 3-4)**
-- [ ] Apply validation to critical forms
-- [ ] Add API request validation
-- [ ] Implement frontend validation
-- [ ] Add validation logging
+**Phase 3: Security Hardening (Day 4)**
+- [ ] Add CSRF protection where missing
+- [ ] Implement proper password hashing
+- [ ] Add audit logging for auth events
+- [ ] Review and fix token expiration policies
 
-**Phase 4: Testing (Week 5)**
-- [ ] Write validation unit tests
-- [ ] Create edge case test suite
-- [ ] Perform security testing
-- [ ] User acceptance testing
+**Phase 4: Testing & Validation (Day 5)**
+- [ ] Run the Authentication Testing Suite
+- [ ] Perform security scanning
+- [ ] Load test auth endpoints
+- [ ] Update API documentation
+
+**Assignment Recommendation:**
+- **Lead:** Sam Rivera (Django/Python expert)
+- **Review:** Alex Chen (project oversight)
+- **Testing:** Jordan Taylor (business validation)
 
 **Success Metrics:**
-- ✅ 0 new validation bugs in next sprint
-- ✅ 100% critical endpoint coverage
-- ✅ < 2s validation response time
+- ✅ Zero security vulnerabilities in auth module
+- ✅ Token refresh working without user disruption
+- ✅ 95%+ test coverage on auth code
+- ✅ Response time < 200ms for auth endpoints
 
-**Estimated Effort:** 3 developer-weeks
-**Expected Bug Reduction:** 35% fewer defects
+**Estimated Total Effort:** 5 developer-days
+**Expected Impact:** 40% reduction in auth-related issues
 
-Would you like me to create tasks for this plan on your board?""",
+Shall I create these as subtasks on your board?""",
                         'is_helpful': True,
                     },
                 ]
