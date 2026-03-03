@@ -262,28 +262,6 @@
                                             <small class="form-text text-muted">Rate the task complexity from 1 (simple) to 10 (very complex).</small>
                                         </div>
                                         
-                                        <!-- AI Task Complexity Analysis & Breakdown -->
-                                        <div class="card border-success mt-2">
-                                            <div class="card-body">
-                                                <div class="d-flex justify-content-between align-items-center">
-                                                    <div>
-                                                        <h6 class="mb-1"><i class="fas fa-sitemap text-success me-1"></i> AI Complexity Analysis</h6>
-                                                        <small class="text-muted">Get AI suggestions for breaking complex tasks into manageable subtasks</small>
-                                                    </div>
-                                                    <button type="button" id="suggest-breakdown-btn" class="btn btn-sm btn-outline-success"
-                                                            data-task-id="{{ task.id }}" title="AI-powered task breakdown suggestion">
-                                                        <i class="fas fa-sitemap me-1"></i> Analyze & Break Down
-                                                    </button>
-                                                </div>
-                                                <div id="breakdown-ai-spinner" class="d-none text-center mt-2">
-                                                    <div class="spinner-border spinner-border-sm text-success" role="status">
-                                                        <span class="visually-hidden">Loading...</span>
-                                                    </div>
-                                                    <span class="ms-2 text-muted">Analyzing task complexity...</span>
-                                                </div>
-                                                <div id="task-breakdown-result" class="d-none mt-2"></div>
-                                            </div>
-                                        </div>
                                     </div>
 
                                     <hr>
@@ -572,7 +550,41 @@
                     </div>
                     
                     <!-- ═══════════════════════════════════════════════════════════════════ -->
-                    <!-- SECTION 4: SAVE / DELETE                                            -->
+                    <!-- SECTION 4: AI ANALYSIS                                              -->
+                    <!-- ═══════════════════════════════════════════════════════════════════ -->
+                    <div class="mb-4">
+                        <h5 class="border-bottom pb-2 mb-3">
+                            <span class="badge bg-success me-2">4</span>
+                            <i class="fas fa-brain text-success me-1"></i> AI Analysis
+                            <small class="text-muted fw-normal fs-6 ms-1">(Uses all context above)</small>
+                        </h5>
+
+                        <!-- AI Task Complexity Analysis & Breakdown -->
+                        <div class="card border-success mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h6 class="mb-1"><i class="fas fa-sitemap text-success me-1"></i> AI Complexity Analysis</h6>
+                                        <small class="text-muted">Get AI suggestions for breaking complex tasks into manageable subtasks</small>
+                                    </div>
+                                    <button type="button" id="suggest-breakdown-btn" class="btn btn-sm btn-outline-success"
+                                            data-task-id="{{ task.id }}" title="AI-powered task breakdown suggestion">
+                                        <i class="fas fa-sitemap me-1"></i> Analyze & Break Down
+                                    </button>
+                                </div>
+                                <div id="breakdown-ai-spinner" class="d-none text-center mt-2">
+                                    <div class="spinner-border spinner-border-sm text-success" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <span class="ms-2 text-muted">Analyzing task complexity...</span>
+                                </div>
+                                <div id="task-breakdown-result" class="d-none mt-2"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════════════════════════════════════════════════════════════════ -->
+                    <!-- SECTION 5: SAVE / DELETE                                            -->
                     <!-- ═══════════════════════════════════════════════════════════════════ -->
                     <div class="border-top pt-4 mt-4">
                         <div class="d-flex justify-content-between align-items-center">

@@ -1210,9 +1210,10 @@ def task_detail(request, task_id):
         form = TaskForm(request.POST, instance=task, board=board)
         if form.is_valid():
             # --- Snapshot AI-relevant fields before save for stale detection ---
-            ai_relevant_fields = ['description', 'priority', 'due_date', 'assigned_to',
+            ai_relevant_fields = ['title', 'description', 'priority', 'due_date', 'assigned_to',
                                   'complexity_score', 'risk_level', 'start_date',
-                                  'workload_impact', 'lss_classification']
+                                  'workload_impact', 'lss_classification',
+                                  'skill_match_score', 'collaboration_required']
             old_values = {}
             # Re-fetch the clean task from DB for accurate comparison
             original_task = Task.objects.get(pk=task.pk)
@@ -1230,6 +1231,7 @@ def task_detail(request, task_id):
             
             # --- Detect which AI-relevant fields changed ---
             ai_field_labels = {
+                'title': 'title',
                 'description': 'description',
                 'priority': 'priority',
                 'due_date': 'due date',
@@ -1239,6 +1241,8 @@ def task_detail(request, task_id):
                 'start_date': 'start date',
                 'workload_impact': 'workload impact',
                 'lss_classification': 'LSS classification',
+                'skill_match_score': 'skill match score',
+                'collaboration_required': 'collaboration required',
             }
             changed_ai_fields = []
             for field_name in ai_relevant_fields:
