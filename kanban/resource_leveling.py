@@ -55,7 +55,7 @@ class ResourceLevelingService:
         
         return profile
     
-    def analyze_task_assignment(self, task, potential_assignees=None, requesting_user=None, temp_workload_adjustments=None):
+    def analyze_task_assignment(self, task, potential_assignees=None, requesting_user=None, temp_workload_adjustments=None, board=None):
         """
         Analyze a task and suggest optimal assignment
         
@@ -65,6 +65,8 @@ class ResourceLevelingService:
                                 If None, considers all board members
             requesting_user: User requesting the analysis (unused, kept for API compatibility)
             temp_workload_adjustments: Dict of {user_id: additional_task_count} for tracking pending suggestions
+            board: Optional Board object. If provided, used instead of task.column.board
+                   (allows analysis of unsaved/proxy tasks during task creation)
         
         Returns:
             Dict with suggestions and impact analysis
@@ -73,7 +75,8 @@ class ResourceLevelingService:
         
         # Get potential assignees - all board members are eligible
         if potential_assignees is None:
-            board = task.column.board if task.column else None
+            if board is None:
+                board = task.column.board if hasattr(task, 'column') and task.column else None
             if not board:
                 return {'error': 'Task must be in a column on a board'}
             # Show ALL board members as potential assignees
@@ -97,8 +100,9 @@ class ResourceLevelingService:
         # Build task context
         task_text = f"{task.title} {task.description or ''}"
         
-        # Get the board for context
-        board = task.column.board if task.column else None
+        # Get the board for context (use provided board or derive from task)
+        if board is None:
+            board = task.column.board if hasattr(task, 'column') and task.column else None
         
         # Analyze each candidate
         candidates = []
@@ -114,7 +118,7 @@ class ResourceLevelingService:
         current_assignee = task.assigned_to
         
         result = {
-            'task_id': task.id,
+            'task_id': getattr(task, 'id', None),
             'task_title': task.title,
             'current_assignee': current_assignee.username if current_assignee else None,
             'top_recommendation': top_candidate,

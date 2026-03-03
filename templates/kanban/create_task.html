@@ -161,10 +161,29 @@
                                 <label for="{{ form.assigned_to.id_for_label }}" class="form-label">
                                     <i class="fas fa-user-check me-1"></i> Assigned To
                                 </label>
-                                {{ form.assigned_to }}
+                                <div class="d-flex align-items-center gap-2">
+                                    <div class="flex-grow-1">
+                                        {{ form.assigned_to }}
+                                    </div>
+                                    <button type="button" id="suggest-assignee-btn" 
+                                            class="btn btn-sm btn-outline-info" 
+                                            data-board-id="{{ board.id }}"
+                                            title="AI-powered assignee suggestion based on skills, workload & performance">
+                                        <i class="fas fa-user-cog me-1"></i> AI Suggest
+                                    </button>
+                                </div>
                                 <small class="form-text text-muted">
-                                    <i class="fas fa-info-circle me-1"></i>Select an assignee to enable AI deadline prediction.
+                                    <i class="fas fa-info-circle me-1"></i>Select an assignee or use <strong>AI Suggest</strong> to find the best match based on skills, workload & performance.
                                 </small>
+                                <!-- AI Assignee Suggestion Spinner -->
+                                <div id="assignee-ai-spinner" class="d-none text-center mt-2">
+                                    <div class="spinner-border spinner-border-sm text-info" role="status">
+                                        <span class="visually-hidden">Analyzing team members...</span>
+                                    </div>
+                                    <span class="ms-2 text-muted"><i class="fas fa-brain me-1"></i>Analyzing team skills, workload & performance...</span>
+                                </div>
+                                <!-- AI Assignee Suggestion Result -->
+                                <div id="assignee-suggestion-result" class="d-none mt-2"></div>
                                 {% if form.assigned_to.errors %}
                                     <div class="invalid-feedback d-block">{{ form.assigned_to.errors }}</div>
                                 {% endif %}

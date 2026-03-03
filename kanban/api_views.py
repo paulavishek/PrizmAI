@@ -42,6 +42,7 @@ from kanban.utils.ai_utils import (
     generate_and_save_board_summary,
     generate_and_save_strategy_summary,
     generate_and_save_mission_summary,
+    suggest_optimal_assignee,
 )
 from api.ai_usage_utils import track_ai_request, check_ai_quota
 from kanban.utils.demo_limits import check_ai_generation_limit, record_limitation_hit, increment_ai_generation_count
@@ -4471,3 +4472,222 @@ def summary_status_api(request, level, obj_id):
     except Exception as e:
         logger.error(f"summary_status_api error: {e}")
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def suggest_assignee_api(request):
+    """
+    API endpoint to suggest the optimal assignee for a task using AI.
+    
+    Combines algorithmic multi-factor scoring (skill match, availability, velocity,
+    reliability, quality) with Gemini AI reasoning and explainability.
+    
+    Works for both new tasks (no task_id) and existing tasks (with task_id).
+    
+    Request body:
+    {
+        "board_id": 1,              # Required
+        "task_id": 123,             # Optional - if provided, uses existing task data
+        "title": "...",             # Required if no task_id
+        "description": "...",       # Optional
+        "complexity_score": 5,      # Optional (1-10)
+        "required_skills": [...],   # Optional
+        "workload_impact": "medium" # Optional
+    }
+    
+    Returns:
+    {
+        "success": true,
+        "recommendation": {
+            "recommended_user_id": 1,
+            "recommended_username": "alice",
+            "recommended_display_name": "Alice Smith",
+            "confidence": 0.85,
+            "reasoning": "...",
+            "factors": [...],
+            "alternatives": [...],
+            "warnings": [...],
+            "explainability": {...}
+        },
+        "all_candidates": [...],
+        "should_reassign": false,
+        "algorithmic_reasoning": "..."
+    }
+    """
+    try:
+        # Check demo AI generation limit
+        limit_response = check_ai_generation_limit(request)
+        if limit_response:
+            return limit_response
+        
+        # Check AI quota
+        has_quota, quota, remaining = check_ai_quota(request.user)
+        if not has_quota:
+            return JsonResponse({
+                'error': 'AI usage quota exceeded. Please try again later.',
+                'quota_exceeded': True,
+                'quota': quota,
+                'remaining': remaining
+            }, status=429)
+        
+        data = json.loads(request.body)
+        board_id = data.get('board_id')
+        task_id = data.get('task_id')
+        title = data.get('title', '').strip()
+        
+        if not board_id:
+            return JsonResponse({'error': 'board_id is required.'}, status=400)
+        
+        board = get_object_or_404(Board, id=board_id)
+        
+        # Verify user has access to this board
+        if request.user != board.created_by and request.user not in board.members.all():
+            return JsonResponse({'error': 'You do not have access to this board.'}, status=403)
+        
+        # Check board has members
+        members = list(board.members.all())
+        if not members:
+            return JsonResponse({
+                'error': 'No board members available for assignment suggestion. Add members to the board first.',
+                'no_members': True
+            }, status=400)
+        
+        # Build or load the task
+        task = None
+        if task_id:
+            # Existing task — load from DB
+            task = get_object_or_404(Task, id=task_id)
+            # Verify task belongs to this board
+            if task.column and task.column.board_id != board.id:
+                return JsonResponse({'error': 'Task does not belong to this board.'}, status=400)
+        else:
+            # New task (task creation flow) — build a proxy object
+            if not title:
+                return JsonResponse({
+                    'error': 'Task title is required for AI assignee suggestion.',
+                    'title_required': True
+                }, status=400)
+            
+            # Create a lightweight proxy Task (not saved to DB)
+            task = Task(
+                title=title,
+                description=data.get('description', ''),
+                complexity_score=data.get('complexity_score') or None,
+                workload_impact=data.get('workload_impact', 'medium'),
+                assigned_to=None,
+            )
+            # Set required_skills if provided
+            required_skills = data.get('required_skills')
+            if required_skills:
+                if isinstance(required_skills, str):
+                    try:
+                        required_skills = json.loads(required_skills)
+                    except (json.JSONDecodeError, TypeError):
+                        required_skills = []
+                task.required_skills = required_skills
+        
+        # Run algorithmic multi-factor analysis via ResourceLevelingService
+        from kanban.resource_leveling import ResourceLevelingService
+        service = ResourceLevelingService()
+        analysis = service.analyze_task_assignment(task, board=board)
+        
+        if 'error' in analysis:
+            return JsonResponse({'error': analysis['error']}, status=400)
+        
+        candidates = analysis.get('all_candidates', [])
+        if not candidates:
+            return JsonResponse({
+                'error': 'No candidates could be analyzed. Board members may not have performance profiles yet.',
+                'no_candidates': True
+            }, status=400)
+        
+        # Build context for the AI
+        board_context = {
+            'board_name': board.name,
+            'team_size': len(members),
+            'total_tasks': Task.objects.filter(
+                column__board=board,
+                completed_at__isnull=True
+            ).count(),
+        }
+        
+        task_data_for_ai = {
+            'title': task.title,
+            'description': task.description or '',
+            'required_skills': getattr(task, 'required_skills', []) or [],
+            'complexity_score': task.complexity_score or 5,
+            'workload_impact': task.workload_impact or 'medium',
+            'current_assignee': (
+                task.assigned_to.get_full_name() or task.assigned_to.username
+            ) if task.assigned_to else 'None (unassigned)',
+        }
+        
+        # Call AI for enhanced reasoning and explainability
+        ai_suggestion = suggest_optimal_assignee(
+            task_data_for_ai, candidates, board_context
+        )
+        
+        if not ai_suggestion:
+            # Pure algorithmic fallback — still useful
+            from kanban.utils.ai_utils import _build_algorithmic_fallback
+            ai_suggestion = _build_algorithmic_fallback(candidates, task_data_for_ai)
+        
+        # For existing tasks, persist the suggestion to the model
+        if task_id and task.pk:
+            try:
+                task.optimal_assignee_suggestions = [{
+                    'user_id': ai_suggestion.get('recommended_user_id'),
+                    'username': ai_suggestion.get('recommended_username', ''),
+                    'display_name': ai_suggestion.get('recommended_display_name', ''),
+                    'match_score': ai_suggestion.get('confidence', 0),
+                    'reasoning': ai_suggestion.get('reasoning', ''),
+                    'factors': ai_suggestion.get('factors', []),
+                    'alternatives': ai_suggestion.get('alternatives', []),
+                    'generated_at': timezone.now().isoformat(),
+                }]
+                task.save(update_fields=['optimal_assignee_suggestions'])
+            except Exception as save_err:
+                logger.warning(f"Failed to save assignee suggestions to task {task_id}: {save_err}")
+        
+        # Track AI usage
+        try:
+            track_ai_request(
+                user=request.user,
+                feature='assignee_suggestion',
+                input_data={'title': title or task.title, 'board_id': board_id, 'task_id': task_id},
+                output_data={'recommended_user_id': ai_suggestion.get('recommended_user_id')},
+                success=True
+            )
+        except Exception as track_err:
+            logger.warning(f"Failed to track AI usage: {track_err}")
+        
+        # Increment demo AI generation count
+        try:
+            increment_ai_generation_count(request)
+        except Exception:
+            pass
+        
+        return JsonResponse({
+            'success': True,
+            'recommendation': ai_suggestion,
+            'all_candidates': candidates,
+            'should_reassign': analysis.get('should_reassign', False),
+            'algorithmic_reasoning': analysis.get('reasoning', ''),
+        })
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON in request body.'}, status=400)
+    except Exception as e:
+        logger.error(f"Error in suggest_assignee_api: {str(e)}")
+        try:
+            track_ai_request(
+                user=request.user,
+                feature='assignee_suggestion',
+                input_data={'error': str(e)},
+                output_data={},
+                success=False
+            )
+        except Exception:
+            pass
+        return JsonResponse({'error': f'An error occurred: {str(e)}'}, status=500)

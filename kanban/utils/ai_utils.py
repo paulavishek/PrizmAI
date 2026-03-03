@@ -50,6 +50,7 @@ COMPLEX_TASKS = [
     'task_breakdown',
     'column_recommendations',
     'workspace_generation',
+    'assignee_suggestion',
 ]
 
 SIMPLE_TASKS = [
@@ -81,6 +82,7 @@ TASK_TEMPERATURE_MAP = {
     'dependency_analysis': 0.4,          # Dependency analysis should be reliable
     'critical_path': 0.4,                # Critical path needs accuracy
     'workflow_optimization': 0.4,        # Workflow suggestions should be consistent
+    'assignee_suggestion': 0.3,          # Assignee matching should be highly consistent & factual
     
     # Dashboard/Insights (0.5) - Analytical with slight variation for freshness
     'dashboard_insights': 0.5,           # Insights can have slight variation
@@ -124,6 +126,7 @@ TASK_TOKEN_LIMITS = {
     'risk_assessment': 4096,             # Risk analysis with mitigation and explainability
     'retrospective': 4096,               # Retrospective summary with patterns and recommendations
     'skill_gap_analysis': 4096,          # Skill analysis with recommendations
+    'assignee_suggestion': 4096,         # Assignee analysis with multi-factor scoring + explainability
     'budget_analysis': 4096,             # Budget insights with trends and recommendations
     'dependency_analysis': 4096,         # Dependency and cascading risk analysis
     'deadline_prediction': 2560,         # Timeline prediction with confidence and reasoning
@@ -1414,6 +1417,266 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
     except Exception as e:
         logger.error(f"Error predicting deadline: {str(e)}")
         return None
+
+
+def suggest_optimal_assignee(task_data: Dict, candidates_with_scores: List[Dict], board_context: Dict) -> Optional[Dict]:
+    """
+    Use AI to analyze scored candidates and suggest the optimal assignee with full explainability.
+    
+    Combines algorithmic multi-factor scoring from ResourceLevelingService with AI reasoning
+    to provide natural language explanations of why a particular person is the best fit.
+    
+    Args:
+        task_data: Dict with title, description, required_skills, complexity_score, workload_impact
+        candidates_with_scores: List of candidate dicts from ResourceLevelingService._analyze_candidate
+        board_context: Dict with board_name, total_tasks, team_size, etc.
+        
+    Returns:
+        Dict with recommended_user_id, confidence, reasoning, factors, alternatives, warnings
+    """
+    try:
+        if not candidates_with_scores:
+            return None
+        
+        # Build candidate profiles text
+        candidates_text = ""
+        for i, c in enumerate(candidates_with_scores, 1):
+            candidates_text += f"""
+Candidate {i}: {c.get('display_name', c.get('username', 'Unknown'))} (ID: {c.get('user_id')})
+  - Overall Score: {c.get('overall_score', 0):.1f}/100
+  - Skill Match: {c.get('skill_match', 0):.1f}/100
+  - Availability: {c.get('availability', 0):.1f}/100 (Utilization: {c.get('utilization', 0):.1f}%, Active Tasks: {c.get('current_workload', 0)})
+  - Velocity: {c.get('velocity', 0):.1f}/100
+  - Reliability (On-time %): {c.get('reliability', 0):.1f}/100
+  - Quality Score: {c.get('quality', 0):.1f}/100
+  - Estimated Completion: {c.get('estimated_hours', 0):.1f} hours (by {c.get('estimated_completion', 'N/A')})
+"""
+        
+        # Build required skills text
+        required_skills = task_data.get('required_skills', [])
+        if isinstance(required_skills, list) and required_skills:
+            skills_text = ", ".join([
+                f"{s.get('name', 'Unknown')} ({s.get('level', 'Any')})"
+                for s in required_skills if isinstance(s, dict)
+            ]) or "Not specified"
+        else:
+            skills_text = "Not specified"
+        
+        current_assignee = task_data.get('current_assignee', 'None')
+        
+        prompt = f"""You are an AI assistant for a project management tool. Analyze the following task and team member data to recommend the best assignee.
+
+## Task Details
+- **Title**: {task_data.get('title', 'Untitled')}
+- **Description**: {task_data.get('description', 'No description provided')}
+- **Required Skills**: {skills_text}
+- **Complexity Score**: {task_data.get('complexity_score', 5)}/10
+- **Workload Impact**: {task_data.get('workload_impact', 'medium')}
+- **Current Assignee**: {current_assignee}
+
+## Board Context
+- **Board**: {board_context.get('board_name', 'Unknown')}
+- **Team Size**: {board_context.get('team_size', 0)} members
+- **Total Active Tasks**: {board_context.get('total_tasks', 0)}
+
+## Candidate Analysis (Pre-scored by algorithmic engine)
+Each candidate has been scored on 5 factors (0-100 scale) using historical performance data:
+- **Skill Match**: How well their skills match the task requirements (keyword analysis of past completed tasks)
+- **Availability**: 100 minus their current utilization percentage (higher = more available)
+- **Velocity**: How fast they complete tasks compared to team average
+- **Reliability**: Their on-time task completion rate
+- **Quality**: Their quality score based on past work
+
+{candidates_text}
+
+## Your Task
+Analyze all candidates holistically. Consider:
+1. The algorithmic scores as strong signals, but also think about practical factors
+2. Whether the task requires collaboration or specialized skills
+3. Workload balance — avoid overloading team members even if they score highest
+4. If a current assignee exists, whether reassignment is justified (>15 point improvement)
+5. Risk factors: burnout risk for high-utilization members, skill gaps, timeline pressure
+
+Respond with ONLY valid JSON in this exact format:
+{{
+    "recommended_user_id": <integer - the user ID of the best candidate>,
+    "recommended_username": "<string - their username>",
+    "recommended_display_name": "<string - their display name>",
+    "confidence": <float 0.0-1.0 - how confident you are in this recommendation>,
+    "reasoning": "<string - 2-4 sentences explaining why this person is the best fit. Be specific about their strengths relative to the task. If reassigning, explain why the change is warranted.>",
+    "factors": [
+        {{
+            "name": "<factor name e.g. 'Skill Match', 'Availability', 'Velocity', 'Reliability', 'Quality', 'Workload Balance'>",
+            "contribution": <integer 1-100 - how much this factor influenced your decision>,
+            "description": "<string - 1 sentence explaining this factor's role in the decision>"
+        }}
+    ],
+    "alternatives": [
+        {{
+            "user_id": <integer>,
+            "username": "<string>",
+            "display_name": "<string>",
+            "score": <float - their overall score>,
+            "brief_reason": "<string - 1 sentence on why they're a viable alternative>"
+        }}
+    ],
+    "warnings": ["<string - any concerns about the recommendation, e.g. 'High utilization risk', 'Limited skill match data'. Empty array if none.>"],
+    "reassignment_justified": <boolean - true if changing from current assignee is recommended, false or null if no current assignee>,
+    "explainability": {{
+        "confidence_score": <float 0.0-1.0 - same as confidence above>,
+        "reasoning": "<string - brief summary of the decision logic>",
+        "data_quality": "<string - 'high', 'medium', or 'low' based on how much historical data was available>",
+        "assumptions": ["<string - any assumptions the AI made, e.g. 'Assumed skill keywords from task titles reflect actual expertise'>"]
+    }}
+}}
+
+IMPORTANT: Include 3-5 factors in the factors array. Include up to 3 alternatives (fewer if less than 4 candidates). Provide at least 1 assumption in explainability."""
+
+        ai_response_text = generate_ai_content(prompt, task_type='assignee_suggestion')
+        
+        if not ai_response_text:
+            logger.warning("AI returned empty response for assignee suggestion, using algorithmic fallback")
+            return _build_algorithmic_fallback(candidates_with_scores, task_data)
+        
+        # Parse the AI response - strip markdown code fences if present
+        cleaned = ai_response_text.strip()
+        if cleaned.startswith('```'):
+            cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)
+            cleaned = re.sub(r'\s*```$', '', cleaned)
+        
+        try:
+            ai_response = json.loads(cleaned)
+        except json.JSONDecodeError:
+            logger.warning(f"Failed to parse AI assignee suggestion JSON, attempting regex extraction")
+            ai_response = _extract_assignee_suggestion_fields(cleaned, candidates_with_scores)
+        
+        if not ai_response:
+            return _build_algorithmic_fallback(candidates_with_scores, task_data)
+        
+        # Validate recommended_user_id is one of the candidates
+        valid_ids = {c['user_id'] for c in candidates_with_scores}
+        rec_id = ai_response.get('recommended_user_id')
+        if rec_id not in valid_ids and candidates_with_scores:
+            # Fall back to algorithmic top pick but keep AI reasoning
+            top = candidates_with_scores[0]
+            ai_response['recommended_user_id'] = top['user_id']
+            ai_response['recommended_username'] = top.get('username', '')
+            ai_response['recommended_display_name'] = top.get('display_name', '')
+            ai_response.setdefault('warnings', []).append(
+                'AI recommended an invalid user; fell back to highest-scored candidate.'
+            )
+        
+        # Ensure explainability block exists
+        if 'explainability' not in ai_response:
+            ai_response['explainability'] = {
+                'confidence_score': ai_response.get('confidence', 0.7),
+                'reasoning': ai_response.get('reasoning', 'Based on multi-factor analysis.'),
+                'data_quality': 'medium',
+                'assumptions': ['Used algorithmic scoring as primary signal.']
+            }
+        
+        return ai_response
+        
+    except Exception as e:
+        logger.error(f"Error in suggest_optimal_assignee: {str(e)}")
+        if candidates_with_scores:
+            return _build_algorithmic_fallback(candidates_with_scores, task_data)
+        return None
+
+
+def _build_algorithmic_fallback(candidates: List[Dict], task_data: Dict) -> Dict:
+    """Build a structured response from algorithmic scores when AI is unavailable."""
+    if not candidates:
+        return None
+    
+    top = candidates[0]
+    alternatives = []
+    for c in candidates[1:4]:
+        alternatives.append({
+            'user_id': c['user_id'],
+            'username': c.get('username', ''),
+            'display_name': c.get('display_name', ''),
+            'score': c.get('overall_score', 0),
+            'brief_reason': f"Score: {c.get('overall_score', 0):.1f}/100 — Skill: {c.get('skill_match', 0):.0f}, Avail: {c.get('availability', 0):.0f}"
+        })
+    
+    return {
+        'recommended_user_id': top['user_id'],
+        'recommended_username': top.get('username', ''),
+        'recommended_display_name': top.get('display_name', ''),
+        'confidence': min(top.get('overall_score', 50) / 100, 0.95),
+        'reasoning': (
+            f"{top.get('display_name', top.get('username', 'This candidate'))} is recommended based on "
+            f"algorithmic multi-factor scoring: Skill Match {top.get('skill_match', 0):.0f}/100, "
+            f"Availability {top.get('availability', 0):.0f}/100, Velocity {top.get('velocity', 0):.0f}/100, "
+            f"Reliability {top.get('reliability', 0):.0f}/100, Quality {top.get('quality', 0):.0f}/100."
+        ),
+        'factors': [
+            {'name': 'Skill Match', 'contribution': 30, 'description': f"Score: {top.get('skill_match', 0):.0f}/100 based on keyword analysis of past tasks."},
+            {'name': 'Availability', 'contribution': 25, 'description': f"Score: {top.get('availability', 0):.0f}/100 — currently at {top.get('utilization', 0):.0f}% utilization."},
+            {'name': 'Velocity', 'contribution': 20, 'description': f"Score: {top.get('velocity', 0):.0f}/100 relative to team average."},
+            {'name': 'Reliability', 'contribution': 15, 'description': f"Score: {top.get('reliability', 0):.0f}/100 on-time completion rate."},
+            {'name': 'Quality', 'contribution': 10, 'description': f"Score: {top.get('quality', 0):.0f}/100 based on work quality metrics."},
+        ],
+        'alternatives': alternatives,
+        'warnings': ['AI analysis unavailable — showing algorithmic scoring only.'],
+        'reassignment_justified': None,
+        'explainability': {
+            'confidence_score': min(top.get('overall_score', 50) / 100, 0.95),
+            'reasoning': 'Recommendation based on algorithmic multi-factor scoring (AI reasoning unavailable).',
+            'data_quality': 'medium',
+            'assumptions': ['Used historical performance data and current workload metrics.']
+        }
+    }
+
+
+def _extract_assignee_suggestion_fields(text: str, candidates: List[Dict]) -> Optional[Dict]:
+    """Attempt to extract assignee suggestion fields from malformed AI response via regex."""
+    try:
+        result = {}
+        
+        # Extract recommended_user_id
+        id_match = re.search(r'"recommended_user_id"\s*:\s*(\d+)', text)
+        if id_match:
+            result['recommended_user_id'] = int(id_match.group(1))
+        elif candidates:
+            result['recommended_user_id'] = candidates[0]['user_id']
+        
+        # Extract username and display name
+        username_match = re.search(r'"recommended_username"\s*:\s*"([^"]+)"', text)
+        if username_match:
+            result['recommended_username'] = username_match.group(1)
+        
+        display_match = re.search(r'"recommended_display_name"\s*:\s*"([^"]+)"', text)
+        if display_match:
+            result['recommended_display_name'] = display_match.group(1)
+        
+        # Extract confidence
+        conf_match = re.search(r'"confidence"\s*:\s*([\d.]+)', text)
+        result['confidence'] = float(conf_match.group(1)) if conf_match else 0.7
+        
+        # Extract reasoning
+        reason_match = re.search(r'"reasoning"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+        result['reasoning'] = reason_match.group(1) if reason_match else 'Based on multi-factor analysis.'
+        
+        # Default fields
+        result.setdefault('factors', [])
+        result.setdefault('alternatives', [])
+        result.setdefault('warnings', ['AI response partially parsed.'])
+        result.setdefault('reassignment_justified', None)
+        result.setdefault('explainability', {
+            'confidence_score': result.get('confidence', 0.7),
+            'reasoning': result.get('reasoning', ''),
+            'data_quality': 'low',
+            'assumptions': ['Response was partially parsed from AI output.']
+        })
+        
+        return result if 'recommended_user_id' in result else None
+        
+    except Exception as e:
+        logger.error(f"Error extracting assignee suggestion fields: {str(e)}")
+        return None
+
 
 def recommend_board_columns(board_data: Dict) -> Optional[Dict]:
     """

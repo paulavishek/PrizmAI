@@ -144,6 +144,7 @@ urlpatterns = [
       # New AI Enhancement API Endpoints
     path('api/suggest-task-priority/', api_views.suggest_task_priority_api, name='suggest_task_priority_api'),
     path('api/predict-deadline/', api_views.predict_deadline_api, name='predict_deadline_api'),
+    path('api/suggest-assignee/', api_views.suggest_assignee_api, name='suggest_assignee_api'),
     path('api/recommend-columns/', api_views.recommend_columns_api, name='recommend_columns_api'),
     path('api/generate-board-setup/', api_views.generate_board_setup_api, name='generate_board_setup_api'),
     path('api/suggest-task-breakdown/', api_views.suggest_task_breakdown_api, name='suggest_task_breakdown_api'),
