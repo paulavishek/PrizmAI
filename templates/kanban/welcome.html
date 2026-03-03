@@ -463,6 +463,41 @@
             border: none;
         }
 
+        .feature-category.strategy {
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+            border: none;
+        }
+
+        .feature-category.strategy .category-title,
+        .feature-category.strategy .category-desc,
+        .feature-category.strategy .mini-content h4,
+        .feature-category.strategy .mini-content p {
+            color: white;
+        }
+
+        .feature-category.strategy .mini-feature {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .feature-category.strategy .category-icon-wrap {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .feature-category.strategy .mini-icon {
+            background: rgba(255, 255, 255, 0.25);
+        }
+
+        .feature-category.strategy .category-features {
+            grid-template-columns: repeat(4, 1fr);
+        }
+
+        @media (max-width: 992px) {
+            .feature-category.strategy .category-features {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
         .feature-category.highlight .category-title,
         .feature-category.highlight .category-desc,
         .feature-category.highlight .mini-content h4,
@@ -714,9 +749,15 @@
 
         .ai-capabilities-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 1.5rem;
             margin-bottom: 4rem;
+        }
+
+        @media (max-width: 1200px) {
+            .ai-capabilities-grid {
+                grid-template-columns: repeat(4, 1fr);
+            }
         }
 
         @media (max-width: 992px) {
@@ -1798,8 +1839,7 @@
             <div class="row align-items-center">
                 <div class="col-lg-6 hero-content">
                     <h1 class="hero-title">Transform Your Projects with AI-Powered Intelligence</h1>
-                    <p class="hero-subtitle">The ultimate platform that combines Kanban boards, Gantt charts, real-time
-                        collaboration, and AI-driven insights—all in one seamless experience.</p>
+                    <p class="hero-subtitle">From organizational goal to individual task — PrizmAI connects your strategy to execution with AI that explains its reasoning, predicts risks before they escalate, and keeps your team focused on what matters most.</p>
                     <div class="hero-buttons">
                         <a href="{% url 'register' %}" class="btn-hero btn-primary-hero">
                             Create Account <i class="fas fa-rocket ms-2"></i>
@@ -2078,14 +2118,14 @@
                             <div class="mini-icon ai"><i class="fas fa-magic"></i></div>
                             <div class="mini-content">
                                 <h4>Smart Task Generation</h4>
-                                <p>Auto-generate tasks from meeting transcripts and descriptions</p>
+                                <p>Extract tasks from meeting transcripts, file uploads, and plain descriptions automatically</p>
                             </div>
                         </div>
                         <div class="mini-feature">
-                            <div class="mini-icon ai"><i class="fas fa-balance-scale"></i></div>
+                            <div class="mini-icon ai"><i class="fas fa-chalkboard"></i></div>
                             <div class="mini-content">
-                                <h4>Resource Optimization</h4>
-                                <p>Intelligent workload balancing and assignment suggestions</p>
+                                <h4>PrizmBrief</h4>
+                                <p>Generate audience-aware presentations from live board data — for clients, execs, or internal teams</p>
                             </div>
                         </div>
                     </div>
@@ -2177,6 +2217,50 @@
                     </div>
                 </div>
 
+                <!-- Category 5: Strategic Alignment -->
+                <div class="feature-category strategy" style="grid-column: 1 / -1;">
+                    <div class="category-header">
+                        <div class="category-icon-wrap">
+                            <i class="fas fa-sitemap"></i>
+                        </div>
+                        <div class="category-info">
+                            <h3 class="category-title">Strategic Alignment</h3>
+                            <p class="category-desc">Connect individual tasks to organizational goals through a structured hierarchy — from vision to execution</p>
+                        </div>
+                        <div class="ai-badge">Core Differentiator</div>
+                    </div>
+                    <div class="category-features">
+                        <div class="mini-feature">
+                            <div class="mini-icon"><i class="fas fa-layer-group"></i></div>
+                            <div class="mini-content">
+                                <h4>Goal → Task Hierarchy</h4>
+                                <p>Goal → Mission → Strategy → Board → Task chain that keeps every work item tied to org-level outcomes</p>
+                            </div>
+                        </div>
+                        <div class="mini-feature">
+                            <div class="mini-icon"><i class="fas fa-magic"></i></div>
+                            <div class="mini-content">
+                                <h4>AI Onboarding</h4>
+                                <p>Describe your organization's goal and AI generates a complete workspace — missions, strategies, boards, and starter tasks</p>
+                            </div>
+                        </div>
+                        <div class="mini-feature">
+                            <div class="mini-icon"><i class="fas fa-balance-scale"></i></div>
+                            <div class="mini-content">
+                                <h4>Triple Constraint Dashboard</h4>
+                                <p>AI-powered Scope–Cost–Time analysis with trade-off visualization and actionable recommendations</p>
+                            </div>
+                        </div>
+                        <div class="mini-feature">
+                            <div class="mini-icon"><i class="fas fa-level-up-alt"></i></div>
+                            <div class="mini-content">
+                                <h4>AI Bubble-up Summaries</h4>
+                                <p>On-demand AI summaries that propagate from task level up through board, strategy, and mission automatically</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
         </div>
     </section>
@@ -2191,8 +2275,7 @@
                         <span>Powered by Google Gemini</span>
                     </div>
                     <h2 class="ai-showcase-title">AI That Actually Understands Your Projects</h2>
-                    <p class="ai-showcase-subtitle">Not just another chatbot — a true AI partner that learns your
-                        workflow, anticipates challenges, and provides actionable insights with full transparency.</p>
+                    <p class="ai-showcase-subtitle">Not just another chatbot — a true AI partner that explains every decision with confidence scores and reasoning, predicts risks before they escalate, generates board-ready presentations, and continuously learns from your team's unique patterns.</p>
                 </div>
 
                 <div class="ai-capabilities-grid">
@@ -2273,6 +2356,30 @@
                             <span class="example-text">"Your team prefers code reviews over pairing"</span>
                         </div>
                     </div>
+
+                    <div class="ai-capability-card">
+                        <div class="capability-icon">
+                            <i class="fas fa-chalkboard"></i>
+                        </div>
+                        <h3>PrizmBrief</h3>
+                        <p>Generate structured, audience-aware presentation content directly from live board data — tailored for clients, executives, or internal team reviews.</p>
+                        <div class="capability-example">
+                            <span class="example-label">Generates:</span>
+                            <span class="example-text">"Executive summary with risk highlights and delivery forecast"</span>
+                        </div>
+                    </div>
+
+                    <div class="ai-capability-card">
+                        <div class="capability-icon">
+                            <i class="fas fa-magnifying-glass"></i>
+                        </div>
+                        <h3>Semantic Task Search</h3>
+                        <p>Find tasks by meaning and intent — not just keywords. Ask in plain language and get precise results across all boards.</p>
+                        <div class="capability-example">
+                            <span class="example-label">Try searching:</span>
+                            <span class="example-text">"Tasks at risk this week with no assignee yet"</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="ai-cta-section">
@@ -2310,8 +2417,7 @@
     <section class="cta-section">
         <div class="container">
             <h2 class="cta-title">Ready to Transform Your Project Management?</h2>
-            <p class="cta-subtitle">Join Pri<span class="stylish-z">z</span>mAI today and experience the power of
-                AI-driven project intelligence</p>
+            <p class="cta-subtitle">Join Pri<span class="stylish-z">z</span>mAI today — where every project is aligned to strategy, every AI decision is explained, and your team always knows what matters next</p>
             <div class="hero-buttons" style="justify-content: center;">
                 <a href="{% url 'register' %}" class="btn-hero btn-primary-hero">
                     Create Account <i class="fas fa-rocket ms-2"></i>
