@@ -149,7 +149,7 @@ class PriorityDecision(models.Model):
         if suggested_priority:
             was_correct = (suggested_priority == priority)
         
-        return cls.objects.create(
+        decision = cls.objects.create(
             task=task,
             board=task.column.board,
             suggested_priority=suggested_priority,
@@ -162,6 +162,56 @@ class PriorityDecision(models.Model):
             reasoning=reasoning or {},
             was_correct=was_correct
         )
+        
+        # Check if we've accumulated enough data for auto-retraining
+        cls.check_retrain_threshold(task.column.board)
+        
+        return decision
+    
+    @classmethod
+    def check_retrain_threshold(cls, board, threshold=50):
+        """
+        Check if enough new decisions have accumulated to warrant model retraining.
+        If threshold is met, queue an async retraining task.
+        
+        Args:
+            board: Board to check
+            threshold: Number of new decisions needed before retraining
+        """
+        try:
+            from kanban.priority_models import PriorityModel
+            
+            active_model = PriorityModel.get_active_model(board)
+            if active_model:
+                new_decisions = cls.objects.filter(
+                    board=board,
+                    decided_at__gt=active_model.trained_at
+                ).count()
+            else:
+                # No model yet — check total decisions
+                new_decisions = cls.objects.filter(board=board).count()
+            
+            if new_decisions >= threshold:
+                try:
+                    from kanban.tasks.ai_learning_tasks import _train_board_priority_model
+                    # Import Celery task for async execution if available
+                    from kanban.tasks.ai_learning_tasks import train_priority_models_task
+                    # Use delay to run asynchronously via Celery if broker is available
+                    # Fall back to synchronous training if Celery is not running
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info(
+                        f"Auto-retrain threshold reached for {board.name}: "
+                        f"{new_decisions} new decisions (threshold={threshold})"
+                    )
+                    _train_board_priority_model(board)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        f"Auto-retrain failed for {board.name}: {e}"
+                    )
+        except Exception:
+            pass  # Non-critical — periodic task will catch up
     
     @staticmethod
     def _capture_task_context(task):

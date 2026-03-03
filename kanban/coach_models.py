@@ -436,3 +436,220 @@ class CoachingInsight(models.Model):
     
     def __str__(self):
         return f"{self.title} (confidence: {self.confidence_score})"
+
+
+class OrganizationLearningProfile(models.Model):
+    """
+    Organization-level aggregated learning profile.
+    Aggregates coaching insights across all boards in an organization
+    to enable cross-board collective intelligence and cold-start bootstrapping.
+    """
+    
+    organization = models.ForeignKey(
+        'accounts.Organization',
+        on_delete=models.CASCADE,
+        related_name='learning_profiles'
+    )
+    
+    # Per suggestion type aggregate effectiveness
+    suggestion_type = models.CharField(
+        max_length=30,
+        help_text="Suggestion type this profile covers"
+    )
+    
+    # Aggregated metrics across all boards in org
+    total_suggestions = models.IntegerField(default=0)
+    total_feedback = models.IntegerField(default=0)
+    helpful_rate = models.DecimalField(
+        max_digits=5, decimal_places=4, default=0,
+        help_text="Aggregated helpful rate across all boards (0-1)"
+    )
+    action_rate = models.DecimalField(
+        max_digits=5, decimal_places=4, default=0,
+        help_text="Aggregated action rate across all boards (0-1)"
+    )
+    avg_confidence = models.DecimalField(
+        max_digits=5, decimal_places=4, default=0,
+        help_text="Average confidence score across boards"
+    )
+    
+    # Board coverage
+    boards_with_data = models.IntegerField(
+        default=0,
+        help_text="Number of boards contributing to this profile"
+    )
+    
+    # Learned recommendations
+    recommended_confidence = models.DecimalField(
+        max_digits=5, decimal_places=4, default=0.75,
+        help_text="Recommended confidence for new boards without their own data"
+    )
+    should_suppress = models.BooleanField(
+        default=False,
+        help_text="Whether this type should be suppressed org-wide"
+    )
+    
+    # Per-severity effectiveness (JSON: {"high": 0.8, "medium": 0.6, ...})
+    severity_effectiveness = models.JSONField(
+        default=dict, blank=True,
+        help_text="Effectiveness rates by severity level"
+    )
+    
+    # Metadata
+    last_aggregated = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        unique_together = ['organization', 'suggestion_type']
+        ordering = ['-helpful_rate', '-total_feedback']
+        verbose_name = 'Organization Learning Profile'
+        verbose_name_plural = 'Organization Learning Profiles'
+    
+    def __str__(self):
+        return (
+            f"{self.organization.name} - {self.suggestion_type}: "
+            f"{self.helpful_rate*100:.0f}% helpful ({self.total_feedback} feedback)"
+        )
+
+
+class AIExperimentResult(models.Model):
+    """
+    A/B testing framework for comparing AI enhancement strategies.
+    Tracks effectiveness of rule-based vs AI-enhanced vs hybrid suggestions,
+    enabling data-driven decisions about when AI enhancement adds value.
+    """
+    
+    # Experiment scope
+    board = models.ForeignKey(
+        'Board', on_delete=models.CASCADE,
+        related_name='experiment_results',
+        null=True, blank=True,
+        help_text="Board scope (null = org-wide)"
+    )
+    organization = models.ForeignKey(
+        'accounts.Organization', on_delete=models.CASCADE,
+        related_name='experiment_results',
+        null=True, blank=True,
+    )
+    suggestion_type = models.CharField(max_length=30)
+    
+    # Comparison groups
+    generation_method = models.CharField(
+        max_length=20,
+        choices=[
+            ('rule', 'Rule-Based'),
+            ('ai', 'AI-Generated'),
+            ('hybrid', 'Hybrid (Rule + AI Enhanced)'),
+        ]
+    )
+    
+    # Effectiveness metrics
+    total_suggestions = models.IntegerField(default=0)
+    total_feedback = models.IntegerField(default=0)
+    helpful_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0)
+    action_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0)
+    avg_relevance = models.DecimalField(max_digits=3, decimal_places=2, default=0)
+    outcome_success_rate = models.DecimalField(
+        max_digits=5, decimal_places=4, default=0,
+        help_text="Rate of suggestions that actually improved the situation"
+    )
+    
+    # Metadata
+    period_start = models.DateField()
+    period_end = models.DateField()
+    calculated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['board', 'suggestion_type', 'generation_method', 'period_start']
+        ordering = ['-period_end', '-helpful_rate']
+        verbose_name = 'AI Experiment Result'
+        verbose_name_plural = 'AI Experiment Results'
+    
+    def __str__(self):
+        scope = self.board.name if self.board else (self.organization.name if self.organization else 'Global')
+        return (
+            f"{scope} - {self.suggestion_type} ({self.generation_method}): "
+            f"{self.helpful_rate*100:.0f}% helpful"
+        )
+    
+    @classmethod
+    def calculate_experiment_results(cls, board=None, organization=None, days=30):
+        """
+        Calculate A/B experiment results comparing generation methods.
+        
+        Args:
+            board: Optional board to scope results
+            organization: Optional organization to scope results
+            days: Analysis period in days
+            
+        Returns:
+            List of created/updated AIExperimentResult objects
+        """
+        from django.db.models import Count, Q, Avg
+        from datetime import timedelta
+        from decimal import Decimal
+        
+        period_end = timezone.now().date()
+        period_start = period_end - timedelta(days=days)
+        
+        # Build queryset
+        qs = CoachingSuggestion.objects.filter(
+            created_at__gte=timezone.now() - timedelta(days=days),
+            was_helpful__isnull=False,
+        )
+        
+        if board:
+            qs = qs.filter(board=board)
+        elif organization:
+            qs = qs.filter(board__organization=organization)
+        
+        # Group by suggestion_type + generation_method
+        stats = qs.values('suggestion_type', 'generation_method').annotate(
+            total=Count('id'),
+            helpful=Count('id', filter=Q(was_helpful=True)),
+            acted=Count('id', filter=Q(
+                action_taken__in=['accepted', 'partially', 'modified']
+            )),
+            avg_rel=Avg('feedback_entries__relevance_score'),
+        )
+        
+        results = []
+        for stat in stats:
+            if stat['total'] < 3:
+                continue  # Not enough data
+            
+            helpful_rate = stat['helpful'] / stat['total']
+            action_rate = stat['acted'] / stat['total']
+            
+            # Calculate outcome success rate
+            outcome_qs = qs.filter(
+                suggestion_type=stat['suggestion_type'],
+                generation_method=stat['generation_method'],
+                feedback_entries__improved_situation=True,
+            ).distinct()
+            outcome_total = qs.filter(
+                suggestion_type=stat['suggestion_type'],
+                generation_method=stat['generation_method'],
+                feedback_entries__improved_situation__isnull=False,
+            ).distinct().count()
+            outcome_rate = outcome_qs.count() / outcome_total if outcome_total > 0 else 0
+            
+            result, _ = cls.objects.update_or_create(
+                board=board,
+                suggestion_type=stat['suggestion_type'],
+                generation_method=stat['generation_method'],
+                period_start=period_start,
+                defaults={
+                    'organization': organization,
+                    'total_suggestions': stat['total'],
+                    'total_feedback': stat['total'],
+                    'helpful_rate': Decimal(str(round(helpful_rate, 4))),
+                    'action_rate': Decimal(str(round(action_rate, 4))),
+                    'avg_relevance': Decimal(str(round(float(stat['avg_rel'] or 0), 2))),
+                    'outcome_success_rate': Decimal(str(round(outcome_rate, 4))),
+                    'period_end': period_end,
+                }
+            )
+            results.append(result)
+        
+        return results

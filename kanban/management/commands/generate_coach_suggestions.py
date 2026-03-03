@@ -124,11 +124,13 @@ class Command(BaseCommand):
                         board_skipped += 1
                         continue
                     
-                    # Adjust confidence based on learning
+                    # Adjust confidence based on learning (context-aware)
                     adjusted_confidence = learning_system.get_adjusted_confidence(
                         suggestion_data['suggestion_type'],
                         float(suggestion_data['confidence_score']),
-                        board
+                        board,
+                        severity=suggestion_data.get('severity'),
+                        generation_method=suggestion_data.get('generation_method'),
                     )
                     suggestion_data['confidence_score'] = adjusted_confidence
                     

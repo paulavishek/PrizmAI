@@ -328,7 +328,7 @@ def send_message(request):
         
         # Get response from chatbot service
         # Note: Using stateless mode - no history passed to prevent session persistence
-        chatbot = TaskFlowChatbotService(user=request.user, board=board)
+        chatbot = TaskFlowChatbotService(user=request.user, board=board, session_id=session.id)
         response = chatbot.get_response(
             message_text,
             use_cache=not refresh_data,
@@ -820,7 +820,7 @@ def toggle_star_message(request, message_id):
 @login_required
 @require_POST
 def submit_feedback(request, message_id):
-    """Submit feedback on a message"""
+    """Submit feedback on a message and update analytics for AI learning loop"""
     try:
         message = get_object_or_404(AIAssistantMessage, id=message_id, session__user=request.user)
         
@@ -828,9 +828,47 @@ def submit_feedback(request, message_id):
         is_helpful = data.get('is_helpful', None)
         feedback_text = data.get('feedback', '')
         
+        # Track previous state to avoid double-counting on re-votes
+        previous_helpful = message.is_helpful
+        
         message.is_helpful = is_helpful
         message.feedback = feedback_text
         message.save()
+        
+        # Update AIAssistantAnalytics counters (closes the feedback learning loop)
+        try:
+            board = message.session.board
+            today = timezone.now().date()
+            analytics, _ = AIAssistantAnalytics.objects.get_or_create(
+                user=request.user,
+                board=board,
+                date=today,
+                defaults={
+                    'sessions_created': 0,
+                    'messages_sent': 0,
+                    'gemini_requests': 0,
+                    'web_searches_performed': 0,
+                    'knowledge_base_queries': 0,
+                    'total_tokens_used': 0,
+                    'avg_response_time_ms': 0,
+                }
+            )
+            
+            # Undo previous vote if re-voting
+            if previous_helpful is True:
+                analytics.helpful_responses = max(0, analytics.helpful_responses - 1)
+            elif previous_helpful is False:
+                analytics.unhelpful_responses = max(0, analytics.unhelpful_responses - 1)
+            
+            # Apply new vote
+            if is_helpful is True:
+                analytics.helpful_responses += 1
+            elif is_helpful is False:
+                analytics.unhelpful_responses += 1
+            
+            analytics.save()
+        except Exception as e:
+            logger.warning(f"Error updating feedback analytics: {e}")
         
         return JsonResponse({'status': 'success'})
     

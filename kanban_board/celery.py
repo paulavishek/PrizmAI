@@ -58,6 +58,36 @@ app.conf.beat_schedule = {
         'task': 'kanban.ai_summary.generate_daily_executive_briefing',
         'schedule': crontab(hour=8, minute=0),
     },
+    # --- AI Learning Loop Tasks ---
+    # Refresh PM performance metrics daily at 6:30 AM (before coaching)
+    'refresh-pm-metrics-daily': {
+        'task': 'kanban.refresh_pm_metrics',
+        'schedule': crontab(hour=6, minute=30),
+    },
+    # Generate coaching suggestions daily at 7:00 AM (before briefing)
+    'generate-coaching-suggestions-daily': {
+        'task': 'kanban.generate_coaching_suggestions',
+        'schedule': crontab(hour=7, minute=0),
+    },
+    # Train priority models weekly on Sunday at 2:00 AM
+    'train-priority-models-weekly': {
+        'task': 'kanban.train_priority_models_periodic',
+        'schedule': crontab(hour=2, minute=0, day_of_week='0'),  # Sunday 2 AM
+    },
+    # Analyze feedback text weekly on Wednesday at 3:00 AM
+    'analyze-feedback-text-weekly': {
+        'task': 'kanban.analyze_feedback_text',
+        'schedule': crontab(hour=3, minute=0, day_of_week='3'),  # Wednesday 3 AM
+    },
+    # Aggregate org-level learning daily at 6:00 AM (before PM metrics)
+    'aggregate-org-learning-daily': {
+        'task': 'kanban.aggregate_org_learning',
+        'schedule': crontab(hour=6, minute=0),  # Daily 6 AM
+    },
+    'run-ab-experiments-weekly': {
+        'task': 'kanban.run_ab_experiments',
+        'schedule': crontab(hour=4, minute=0, day_of_week=0),  # Sunday 4 AM
+    },
 }
 
 # Route all AI summary tasks to a dedicated 'summaries' queue so they never

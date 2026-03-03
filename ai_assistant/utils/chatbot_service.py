@@ -183,9 +183,10 @@ class TaskFlowChatbotService:
     Adapted from Nexus 360 for PrizmAI's project management data
     """
     
-    def __init__(self, user=None, board=None):
+    def __init__(self, user=None, board=None, session_id=None):
         self.user = user
         self.board = board
+        self.session_id = session_id
         
         # Initialize clients with error handling
         try:
@@ -369,6 +370,211 @@ class TaskFlowChatbotService:
         
         except Exception as e:
             logger.error(f"Error getting KB context: {e}")
+            return ""
+    
+    def get_user_feedback_learning_context(self):
+        """
+        Build a learning context block from this user's feedback history.
+        Summarizes what response types the user finds helpful/unhelpful
+        so Spectra can adapt its style and content focus.
+        
+        Returns:
+            str: Formatted feedback learning context, or empty string if insufficient data
+        """
+        try:
+            from ai_assistant.models import AIAssistantMessage, AIAssistantAnalytics
+            from django.db.models import Count, Q, Avg
+            
+            if not self.user:
+                return ""
+            
+            # Get messages with feedback from the last 90 days
+            from datetime import timedelta
+            cutoff = timezone.now() - timedelta(days=90)
+            
+            feedback_messages = AIAssistantMessage.objects.filter(
+                session__user=self.user,
+                role='assistant',
+                is_helpful__isnull=False,
+                created_at__gte=cutoff,
+            ).select_related('session')
+            
+            if self.board:
+                feedback_messages = feedback_messages.filter(session__board=self.board)
+            
+            total_feedback = feedback_messages.count()
+            if total_feedback < 3:
+                return ""  # Not enough data to be meaningful
+            
+            helpful_count = feedback_messages.filter(is_helpful=True).count()
+            unhelpful_count = feedback_messages.filter(is_helpful=False).count()
+            helpful_rate = round(helpful_count / total_feedback * 100) if total_feedback > 0 else 0
+            
+            # Analyze what query types get positive/negative feedback
+            helpful_msgs = feedback_messages.filter(is_helpful=True)
+            unhelpful_msgs = feedback_messages.filter(is_helpful=False)
+            
+            # Extract topics from helpful messages' context_data
+            helpful_topics = []
+            unhelpful_topics = []
+            
+            for msg in helpful_msgs[:30]:
+                ctx = msg.context_data or {}
+                for key, val in ctx.items():
+                    if key.startswith('is_') and val is True:
+                        topic = key.replace('is_', '').replace('_query', '').replace('_', ' ')
+                        helpful_topics.append(topic)
+            
+            for msg in unhelpful_msgs[:30]:
+                ctx = msg.context_data or {}
+                for key, val in ctx.items():
+                    if key.startswith('is_') and val is True:
+                        topic = key.replace('is_', '').replace('_query', '').replace('_', ' ')
+                        unhelpful_topics.append(topic)
+            
+            # Count topic frequencies
+            from collections import Counter
+            helpful_topic_counts = Counter(helpful_topics).most_common(5)
+            unhelpful_topic_counts = Counter(unhelpful_topics).most_common(3)
+            
+            # Collect explicit feedback text for insights
+            feedback_texts = feedback_messages.filter(
+                feedback__isnull=False,
+            ).exclude(feedback='').values_list('feedback', flat=True)[:10]
+            
+            # Build context block
+            context = "\n**User AI Interaction Learning Profile:**\n"
+            context += f"- Satisfaction rate: {helpful_rate}% ({helpful_count} helpful / {total_feedback} rated)\n"
+            
+            if helpful_topic_counts:
+                liked = ', '.join([f"{t[0]} ({t[1]}x)" for t in helpful_topic_counts])
+                context += f"- Topics user finds most helpful: {liked}\n"
+            
+            if unhelpful_topic_counts:
+                disliked = ', '.join([f"{t[0]} ({t[1]}x)" for t in unhelpful_topic_counts])
+                context += f"- Topics user finds less helpful: {disliked}\n"
+            
+            if feedback_texts:
+                context += "- User feedback snippets:\n"
+                for ft in list(feedback_texts)[:5]:
+                    # Truncate long feedback
+                    snippet = ft[:150] + '...' if len(ft) > 150 else ft
+                    context += f"  • \"{snippet}\"\n"
+            
+            context += (
+                "- INSTRUCTION: Use this profile to tailor response depth and focus. "
+                "Emphasize topics the user finds helpful. "
+                "For topics they find less helpful, try a different approach or be more specific.\n"
+            )
+            
+            return context
+            
+        except Exception as e:
+            logger.error(f"Error building feedback learning context: {e}")
+            return ""
+    
+    def get_user_preference_context(self):
+        """
+        Build context from UserPreference settings so Spectra respects
+        user's feature toggles and preferences.
+        
+        Returns:
+            str: Formatted preference context, or empty string
+        """
+        try:
+            from ai_assistant.models import UserPreference
+            
+            if not self.user:
+                return ""
+            
+            try:
+                pref = UserPreference.objects.get(user=self.user)
+            except UserPreference.DoesNotExist:
+                return ""
+            
+            # Build preference instructions for the AI
+            pref_parts = []
+            
+            if not pref.enable_risk_alerts:
+                pref_parts.append(
+                    "User has DISABLED risk alerts — do NOT proactively warn about risks "
+                    "unless directly asked about risks."
+                )
+            
+            if not pref.enable_task_insights:
+                pref_parts.append(
+                    "User has disabled task insights — keep task analysis brief unless asked."
+                )
+            
+            if not pref.enable_resource_recommendations:
+                pref_parts.append(
+                    "User has disabled resource recommendations — do not suggest resource "
+                    "reallocation unless directly asked."
+                )
+            
+            if not pref.enable_web_search:
+                pref_parts.append(
+                    "User prefers no web search results — focus on internal project data."
+                )
+            
+            if not pref_parts:
+                return ""
+            
+            context = "\n**User Preferences:**\n"
+            for part in pref_parts:
+                context += f"- {part}\n"
+            
+            return context
+            
+        except Exception as e:
+            logger.error(f"Error building user preference context: {e}")
+            return ""
+    
+    def get_session_memory_context(self, session_id, max_turns=5):
+        """
+        Build a lightweight conversation memory from recent messages in the current session.
+        Passes last N user/assistant message pairs so Spectra has conversational continuity
+        without the full token cost of unlimited history.
+        
+        Args:
+            session_id: Current session ID
+            max_turns: Maximum conversation turns to include (default 5)
+            
+        Returns:
+            str: Formatted conversation history context, or empty string
+        """
+        try:
+            from ai_assistant.models import AIAssistantMessage
+            
+            if not session_id:
+                return ""
+            
+            # Get recent messages from this session (both user and assistant)
+            recent_messages = AIAssistantMessage.objects.filter(
+                session_id=session_id,
+            ).order_by('-created_at')[:max_turns * 2]  # Get pairs
+            
+            if recent_messages.count() < 2:
+                return ""  # No history to provide
+            
+            # Reverse to chronological order
+            messages = list(reversed(recent_messages))
+            
+            context = "\n**Recent Conversation Context (this session):**\n"
+            context += "(Use this to maintain conversational continuity — do not repeat information already given)\n"
+            
+            for msg in messages:
+                role_label = "User" if msg.role == 'user' else "Spectra"
+                # Truncate long messages to save tokens but keep enough for context
+                content = msg.content
+                if len(content) > 300:
+                    content = content[:297] + '...'
+                context += f"[{role_label}]: {content}\n"
+            
+            return context
+            
+        except Exception as e:
+            logger.error(f"Error building session memory context: {e}")
             return ""
     
     def _is_search_query(self, prompt):
@@ -2949,6 +3155,12 @@ Format responses clearly with:
                 context_parts.append(file_context)
                 logger.debug('Added attached file context')
             
+            # 0b. Session memory — recent conversation for multi-turn continuity
+            session_memory = self.get_session_memory_context(self.session_id)
+            if session_memory:
+                context_parts.append(session_memory)
+                logger.debug('Added session memory context')
+            
             # 1. Wiki context (documentation, guides, best practices)
             if is_wiki_query:
                 wiki_context = self._get_wiki_context(prompt)
@@ -3096,6 +3308,18 @@ Format responses clearly with:
             if kb_context:
                 context_parts.append(kb_context)
                 logger.debug("Added KB context")
+            
+            # 17b. User feedback learning context (AI learning loop)
+            feedback_learning_context = self.get_user_feedback_learning_context()
+            if feedback_learning_context:
+                context_parts.append(feedback_learning_context)
+                logger.debug("Added user feedback learning context")
+            
+            # 17c. User preference context (respects user's feature toggles)
+            pref_context = self.get_user_preference_context()
+            if pref_context:
+                context_parts.append(pref_context)
+                logger.debug("Added user preference context")
             
             # 18. Web search context for research and strategic queries
             # SKIP web search if we already have strong internal context or wiki context

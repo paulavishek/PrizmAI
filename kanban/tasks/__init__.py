@@ -36,6 +36,15 @@ from kanban.tasks.onboarding_tasks import (
     generate_workspace_from_goal_task,
 )
 
+from kanban.tasks.ai_learning_tasks import (
+    refresh_pm_metrics_task,
+    generate_coaching_suggestions_task,
+    train_priority_models_task,
+    analyze_feedback_text_task,
+    aggregate_org_learning_task,
+    run_ab_experiments_task,
+)
+
 __all__ = [
     # Conflict tasks
     'detect_conflicts_task',
@@ -58,4 +67,11 @@ __all__ = [
     'generate_daily_executive_briefing',
     # Onboarding tasks
     'generate_workspace_from_goal_task',
+    # AI learning tasks
+    'refresh_pm_metrics_task',
+    'generate_coaching_suggestions_task',
+    'train_priority_models_task',
+    'analyze_feedback_text_task',
+    'aggregate_org_learning_task',
+    'run_ab_experiments_task',
 ]
