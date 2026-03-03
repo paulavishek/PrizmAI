@@ -786,15 +786,25 @@ def board_list(request):
             completed_wizard=True
         )
     
-    # MVP Mode: Get all boards the user has access to
-    # Include: 1) Official demo boards, 2) Boards user created, 3) Boards user is member of
-    demo_boards = Board.objects.filter(is_official_demo_board=True)
-    user_boards = Board.objects.filter(
-        Q(created_by=request.user) | Q(members=request.user)
-    )
-    
-    # Combine and deduplicate
-    boards = (demo_boards | user_boards).distinct()
+    # Get boards respecting the user's onboarding choice (mirrors dashboard logic)
+    demo_mode = getattr(profile, 'is_viewing_demo', False)
+
+    if demo_mode:
+        # User explicitly toggled into demo mode — show only official demo boards
+        boards = Board.objects.filter(is_official_demo_board=True).distinct()
+    elif profile.onboarding_version >= 2:
+        # v2 onboarding (AI-generated or scratch) — never show demo boards
+        boards = Board.objects.filter(
+            Q(created_by=request.user) | Q(members=request.user),
+            is_official_demo_board=False
+        ).distinct()
+    else:
+        # v1 legacy — demo + user boards mixed
+        demo_boards = Board.objects.filter(is_official_demo_board=True)
+        user_boards = Board.objects.filter(
+            Q(created_by=request.user) | Q(members=request.user)
+        )
+        boards = (demo_boards | user_boards).distinct()
 
     # Compute summary metrics across all accessible boards
     task_count = Task.objects.filter(column__board__in=boards, item_type='task').count()
