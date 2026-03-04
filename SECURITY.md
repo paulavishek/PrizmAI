@@ -16,7 +16,7 @@ If you discover a security vulnerability in PrizmAI, please report it responsibl
 ### How to Report
 
 1. **DO NOT** create a public GitHub issue for security vulnerabilities
-2. Send an email to: [your-email@domain.com] with:
+2. Send an email to: avishek-paul@outlook.com with:
    - A clear description of the vulnerability
    - Steps to reproduce the issue
    - The potential impact

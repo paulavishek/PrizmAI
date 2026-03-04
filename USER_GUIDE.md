@@ -187,7 +187,7 @@ Every recommendation includes **why** the AI thinks that, so you can verify it m
 **Scenario:** Planning a product launch campaign
 
 **What You Do:**
-1. Create board: "Product Launch Campaign - March 2025"
+1. Create board: "Product Launch Campaign - Q2 2026"
 2. AI suggests columns: Ideation → Content Creation → Review → Scheduling → Measurement
 3. Add tasks for each campaign element
 4. Upload meeting notes from planning session
@@ -247,7 +247,7 @@ Yes. We use enterprise-grade security:
 - Brute force protection (auto-lockout after 5 failed login attempts)
 - XSS/CSRF protection (prevents hacking)
 - Option to self-host (you control everything)
-- Full GDPR compliance
+- Designed with privacy best practices in mind
 
 ### "Can I export my data later?"
 

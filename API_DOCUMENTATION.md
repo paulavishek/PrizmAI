@@ -50,8 +50,8 @@ Content-Type: application/json
     "name": "My Integration",
     "token": "VeryLongSecureTokenString123456789...",
     "scopes": ["boards.read", "tasks.write", "tasks.read"],
-    "created_at": "2025-11-08T10:30:00Z",
-    "expires_at": "2026-02-06T10:30:00Z",
+    "created_at": "2026-03-01T10:30:00Z",
+    "expires_at": "2026-05-30T10:30:00Z",
     "rate_limit_per_hour": 1000
 }
 ```
@@ -101,7 +101,7 @@ GET /api/v1/status/
         "scopes": ["boards.read", "tasks.write"],
         "rate_limit_per_hour": 1000,
         "requests_remaining": 987,
-        "rate_limit_reset_at": "2025-11-08T11:00:00Z"
+        "rate_limit_reset_at": "2026-03-01T11:00:00Z"
     }
 }
 ```
@@ -131,7 +131,7 @@ GET /api/v1/boards/
             "name": "Product Development",
             "description": "Main product board",
             "organization_name": "Acme Corp",
-            "created_at": "2025-11-01T10:00:00Z",
+            "created_at": "2026-02-15T10:00:00Z",
             "task_count": 24
         }
     ]
@@ -151,7 +151,7 @@ GET /api/v1/boards/{id}/
     "description": "Main product board",
     "organization": 1,
     "organization_name": "Acme Corp",
-    "created_at": "2025-11-01T10:00:00Z",
+    "created_at": "2026-02-15T10:00:00Z",
     "created_by": 2,
     "created_by_user": {
         "id": 2,
@@ -197,7 +197,7 @@ Content-Type: application/json
 
 {
     "name": "Marketing Campaign",
-    "description": "Q4 2025 marketing initiatives",
+    "description": "Q1 2026 marketing initiatives",
     "members": [2, 3, 4]
 }
 ```
@@ -273,10 +273,10 @@ GET /api/v1/tasks/?board_id=1&priority=high&assigned_to=2
             "progress": 60,
             "assigned_to": 2,
             "assigned_to_username": "john_doe",
-            "due_date": "2025-11-15T17:00:00Z",
+            "due_date": "2026-03-15T17:00:00Z",
             "label_count": 2,
-            "created_at": "2025-11-08T09:00:00Z",
-            "updated_at": "2025-11-08T14:30:00Z"
+            "created_at": "2026-03-01T09:00:00Z",
+            "updated_at": "2026-03-01T14:30:00Z"
         }
     ]
 }
@@ -297,10 +297,10 @@ GET /api/v1/tasks/{id}/
     "column_name": "In Progress",
     "board_id": 1,
     "position": 1,
-    "created_at": "2025-11-08T09:00:00Z",
-    "updated_at": "2025-11-08T14:30:00Z",
-    "start_date": "2025-11-08",
-    "due_date": "2025-11-15T17:00:00Z",
+    "created_at": "2026-03-01T09:00:00Z",
+    "updated_at": "2026-03-01T14:30:00Z",
+    "start_date": "2026-03-01",
+    "due_date": "2026-03-15T17:00:00Z",
     "assigned_to": 2,
     "assigned_to_user": {
         "id": 2,
@@ -363,7 +363,7 @@ Content-Type: application/json
     "column": 1,
     "priority": "medium",
     "assigned_to": 4,
-    "due_date": "2025-11-20T17:00:00Z",
+    "due_date": "2026-03-20T17:00:00Z",
     "label_ids": [2, 5],
     "progress": 0
 }
@@ -440,7 +440,7 @@ GET /api/v1/comments/?task_id={task_id}
                 "last_name": "Doe"
             },
             "content": "I've identified the issue in the OAuth callback handler.",
-            "created_at": "2025-11-08T14:30:00Z"
+            "created_at": "2026-03-01T14:30:00Z"
         }
     ]
 }
@@ -672,8 +672,8 @@ Revoke an API token immediately.
 1. ✅ **Create your first token** using the management command
 2. ✅ **Test with curl** or Postman
 3. ✅ **Build your integration** using the examples above
-4. ✅ **Set up webhooks** (coming soon) for real-time notifications
-5. ✅ **Explore Slack connector** (coming soon) for seamless integration
+4. ✅ **Set up webhooks** for real-time notifications
+5. ✅ **Explore Slack connector** for seamless integration
 
 ---
 
@@ -685,5 +685,5 @@ Revoke an API token immediately.
 
 ---
 
-**Last Updated:** November 8, 2025  
+**Last Updated:** March 4, 2026  
 **API Version:** v1.0.0

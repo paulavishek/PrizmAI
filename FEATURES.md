@@ -74,7 +74,7 @@ Why?
 
 ```
 Task: "Implement User Dashboard"
-Predicted Completion: Nov 25, 2025
+Predicted Completion: Mar 25, 2026
 Confidence: 78%
 
 Click "Why?" to see:
@@ -326,10 +326,10 @@ Current Progress:
 ```
 Project Status: Mobile App Release
 
-Predicted Completion: Nov 22, 2025 ±2 days (90% confidence)
-Optimistic Case: Nov 20 (if everything goes smoothly)
-Realistic Case: Nov 22 (most likely)
-Pessimistic Case: Nov 25 (if blockers emerge)
+Predicted Completion: Mar 22, 2026 ±2 days (90% confidence)
+Optimistic Case: Mar 20 (if everything goes smoothly)
+Realistic Case: Mar 22 (most likely)
+Pessimistic Case: Mar 25 (if blockers emerge)
 
 Current Progress:
 ├─ 96.4% complete (85/88 tasks done)
@@ -399,7 +399,7 @@ When scope changes exceed configured thresholds, alerts are created:
 Scope Creep Alert
 ├─ Type: Task Addition Spike
 ├─ Severity: HIGH
-├─ Detected: Nov 20, 2025 at 2:30 PM
+├─ Detected: Mar 3, 2026 at 2:30 PM
 ├─ Change: +8 new tasks added today
 ├─ Impact: +20 hours of work
 └─ Recommendation: Review and prioritize new tasks

@@ -124,19 +124,29 @@ Open [http://localhost:8000](http://localhost:8000) and sign up to get started.
 
 ## Demo Data & Test Accounts
 
-After signing up, you immediately have access to three pre-populated demo boards — a software development sprint, a bug-tracking workflow, and a marketing campaign — each populated with realistic tasks, milestones, budgets, and dependencies. All demo dates are calculated relative to today so the boards always appear current.
+PrizmAI ships with a demo-mode toggle that gives you access to pre-populated demo boards — a software development sprint, a bug-tracking workflow, and a marketing campaign — each populated with realistic tasks, milestones, budgets, and dependencies. All demo dates are calculated relative to today so the boards always appear current.
+
+To populate the demo data, run the setup command first:
+
+```bash
+python manage.py populate_test_data
+```
+
+After signing up, activate **demo mode** from the UI to explore the sample boards.
 
 ### Demo Test Accounts
 
-To explore different user perspectives without creating an account:
+To explore without creating an account:
 
-| Username | Password | Role |
-|---|---|---|
-| `alex_chen_demo` | `demo123` | Admin / PM — full access |
-| `sam_rivera_demo` | `demo123` | Developer — standard contributor |
-| `jordan_taylor_demo` | `demo123` | Analyst / Viewer — read-focused |
+| Username | Password |
+|---|---|
+| `alex_chen_demo` | `demo123` |
+| `sam_rivera_demo` | `demo123` |
+| `jordan_taylor_demo` | `demo123` |
 
-> Demo accounts have AI features disabled. Create your own account to use the full AI toolkit.
+All users have equal access — PrizmAI uses an open access model where every authenticated user can access all boards and features.
+
+> Demo accounts have rate-limited AI features (5 calls per 10 minutes). Create your own account for unrestricted AI access.
 
 ### Keeping Demo Data Fresh
 
@@ -294,7 +304,7 @@ python manage.py cache_management --action=test
 - **SQL Injection Prevention** — Django ORM with parameterized queries
 - **Content Security Policy** — Enforced via django-csp headers
 - **Secure File Uploads** — MIME type validation and malicious content detection
-- **Data Isolation** — Board-level access control enforced throughout
+- **Authentication Enforcement** — All routes require login via `@login_required`
 - **Audit Logging** — Complete audit trail of sensitive operations with IP tracking
 - **HTTPS Enforcement** — HSTS support for encrypted data in transit
 
@@ -304,7 +314,7 @@ python manage.py cache_management --action=test
 
 ## Mobile PWA
 
-PrizmAI ships with Progressive Web App support for mobile devices.
+A companion Progressive Web App is available in a separate repository, consuming the Django REST API.
 
 - Mobile-first, thumb-friendly navigation
 - Offline support with background sync
@@ -314,7 +324,7 @@ PrizmAI ships with Progressive Web App support for mobile devices.
 **Mobile PWA repository:** [github.com/paulavishek/PrizmAI_mobile_PWA](https://github.com/paulavishek/PrizmAI_mobile_PWA)
 
 ```bash
-# The Django backend is already configured for PWA — just run the server.
+# Start the Django backend (provides the REST API for the PWA):
 python manage.py runserver
 
 # Serve the PWA (from the separate PWA repo):

@@ -39,7 +39,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 ### Prerequisites
 
-- Python 3.9 or higher
+- Python 3.10 or higher
 - pip (Python package installer)
 - Git
 
@@ -47,8 +47,8 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 ```bash
 # Clone your forked repository
-git clone https://github.com/your-username/Digital_Kanban_Board.git
-cd Digital_Kanban_Board
+git clone https://github.com/your-username/PrizmAI.git
+cd PrizmAI
 
 # Create a virtual environment
 python -m venv venv

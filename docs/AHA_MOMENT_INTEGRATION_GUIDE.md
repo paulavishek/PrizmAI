@@ -38,11 +38,11 @@ def board_analytics(request, board_id):
 **Detection:** Client-side timer
 **Auto-tracked:** Yes, on analytics pages
 
-### 3. RBAC Workflow
-**Trigger:** User switches roles or explores permissions
-**Detection:** Client-side, watches role switching buttons
+### 3. Collaboration Explored
+**Trigger:** User explores team features or board sharing
+**Detection:** Client-side, watches collaboration-related buttons
 **Auto-tracked:** Yes
-**Server-side option:** Call when accessing permission-related pages
+**Server-side option:** Call when accessing collaboration-related pages
 
 ### 4. Time Tracking Used
 **Trigger:** User starts/stops timer or logs time manually

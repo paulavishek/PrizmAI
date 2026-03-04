@@ -4,7 +4,7 @@ This guide will help you set up PrizmAI locally for development or deployment.
 
 ## Prerequisites
 
-- Python 3.8+
+- Python 3.10+
 - Git
 - pip (Python package manager)
 - Virtual environment (recommended)
@@ -14,7 +14,7 @@ This guide will help you set up PrizmAI locally for development or deployment.
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/avishekpaul1310/PrizmAI.git
+git clone https://github.com/paulavishek/PrizmAI.git
 cd PrizmAI
 ```
 
@@ -92,7 +92,7 @@ Visit `http://127.0.0.1:8000` in your browser!
 #### Google OAuth Setup (Optional)
 1. Go to [Google Cloud Console](https://console.cloud.google.com/)
 2. Create a new project or select existing
-3. Enable Google+ API
+3. Enable the Google Identity Services API
 4. Create OAuth 2.0 credentials
 5. Add authorized redirect URIs:
    - `http://localhost:8000/accounts/google/login/callback/`
@@ -144,7 +144,7 @@ This command will:
   - **Backlog tasks**: Further future (15-60 days)
 - Automatically refresh all dates to be current
 
-**Note:** The demo includes users across different roles. See login credentials in the command output.
+**Note:** PrizmAI uses an open access model — all authenticated users have equal access to all boards and features. Demo accounts are created for convenience; see login credentials in the command output.
 
 #### Refreshing Demo Data Dates
 
@@ -176,22 +176,7 @@ This command will:
 
 **Tip:** Run this command periodically (e.g., monthly) to ensure demo data always appears current and prevents most tasks from appearing overdue.
 
-### AI Features Testing
-Test AI features with demo scripts:
-```bash
-python demo_ai_features.py
-python demo_ai_analytics.py
-```
-
 ## Production Deployment
-
-### Google App Engine
-The project includes `app.yaml` for Google App Engine deployment:
-
-```bash
-# Deploy to Google App Engine
-gcloud app deploy
-```
 
 ### Environment Variables for Production
 ```bash
@@ -206,14 +191,22 @@ GEMINI_API_KEY=your-production-gemini-key
 ```
 PrizmAI/
 ├── accounts/           # User authentication and profiles
-├── kanban/             # Main Kanban board functionality
+├── ai_assistant/       # AI assistant app
+├── analytics/          # Analytics, abuse detection, demo tracking
+├── api/                # REST API (v1) and AI usage tracking
+├── docs/               # Developer guides
+├── kanban/             # Core Kanban board, AI, budgets, coaching, etc.
 ├── kanban_board/       # Django project settings
+├── messaging/          # Real-time WebSocket messaging
 ├── static/             # CSS, JS, and image files
 ├── templates/          # HTML templates
+├── tests/              # Test suite (accounts, kanban, API, etc.)
+├── webhooks/           # Webhook integration
+├── wiki/               # Knowledge base and wiki
 ├── requirements.txt    # Python dependencies
-├── manage.py          # Django management script
-├── .env.example       # Environment variables template
-└── README.md          # Project documentation
+├── manage.py           # Django management script
+├── .env.example        # Environment variables template
+└── README.md           # Project documentation
 ```
 
 ## Key Features
@@ -236,7 +229,7 @@ PrizmAI/
 
 ### Getting Help
 
-- Check the [GitHub Issues](https://github.com/avishekpaul1310/PrizmAI/issues)
+- Check the [GitHub Issues](https://github.com/paulavishek/PrizmAI/issues)
 - Review the [README.md](README.md) for more details
 - Check Django logs for detailed error messages
 
