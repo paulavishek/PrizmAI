@@ -178,7 +178,7 @@ python manage.py cleanup_duplicate_demo_boards --auto-fix
 - Django REST Framework
 - Django Channels 4 (WebSockets)
 - Celery + django-celery-beat (async and scheduled tasks)
-- Google Gemini API (AI features)
+- Google Gemini API — `gemini-2.5-flash` (complex reasoning & analysis) and `gemini-2.5-flash-lite` (standard tasks, default)
 - scikit-learn, numpy, scipy (ML pipeline for priority and deadline models)
 
 **Frontend**
