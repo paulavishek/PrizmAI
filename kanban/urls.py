@@ -255,6 +255,9 @@ urlpatterns = [
     # Pre-Mortem AI Analysis URLs
     path('', include('kanban.premortem_urls')),
     
+    # Scope Creep Autopsy URLs
+    path('', include('kanban.scope_autopsy_urls')),
+    
     # Resource Leveling URLs
     path('api/resource-leveling/', include('kanban.resource_leveling_urls')),
     

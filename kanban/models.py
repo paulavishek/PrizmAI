@@ -1706,6 +1706,9 @@ class ScopeCreepAlert(models.Model):
         return self.status in ['active', 'acknowledged']
 
 
+# Import scope autopsy models
+from .scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
+
 # Import security and permission models to register them with Django
 from .audit_models import SystemAuditLog, SecurityEvent, DataAccessLog
 from .permission_models import Role, BoardMembership, PermissionOverride, ColumnPermission

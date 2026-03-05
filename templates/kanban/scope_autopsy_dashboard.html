@@ -1,0 +1,455 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Scope Autopsy — {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-microscope text-warning"></i> Scope Autopsy — {{ board.name }}</h2>
+            <p class="text-muted">Forensic reconstruction of how your project's scope grew — every expansion traced to its cause, person, date, and cost.</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Back to Board
+            </a>
+        </div>
+    </div>
+
+    {% if state == 'locked' %}
+    {# ============================================================ #}
+    {# STATE A — Locked (no scope changes detected)                  #}
+    {# ============================================================ #}
+    <div class="card border-secondary">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-microscope fa-3x text-muted mb-3"></i>
+            <h4>Scope Autopsy</h4>
+            <p class="text-muted mb-4">
+                No scope changes detected yet.<br>
+                Autopsy becomes available when scope grows beyond your project baseline.
+            </p>
+            <div class="d-flex justify-content-center gap-4 mb-3">
+                <div>
+                    <span class="text-muted">Current tasks</span><br>
+                    <strong class="fs-4">{{ current_task_count }}</strong>
+                </div>
+                <div>
+                    <span class="text-muted">Baseline tasks</span><br>
+                    <strong class="fs-4">{{ baseline.task_count }}</strong>
+                </div>
+            </div>
+            <span class="badge bg-success fs-6"><i class="fas fa-check me-1"></i> On baseline</span>
+        </div>
+    </div>
+
+    {% elif state == 'ready' %}
+    {# ============================================================ #}
+    {# STATE B — Ready (scope changes exist, no report)              #}
+    {# ============================================================ #}
+    <div class="card border-warning">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-microscope fa-3x text-warning mb-3"></i>
+            <h4>Scope Autopsy</h4>
+            <p class="mb-2">
+                Scope has grown <strong class="text-warning">{{ growth_pct }}%</strong> beyond baseline.
+            </p>
+            <p class="text-muted mb-4">
+                Run a forensic analysis to understand exactly when, how,
+                and why your project scope expanded — and what it cost.
+            </p>
+
+            {% if has_quota %}
+            <button id="btn-run-autopsy" class="btn btn-warning btn-lg text-white" onclick="runAutopsy()">
+                <i class="fas fa-microscope me-2"></i> Run Scope Autopsy
+            </button>
+            <p class="text-muted mt-2"><small>Estimated analysis time: 15–20 seconds</small></p>
+            {% else %}
+            <button class="btn btn-secondary btn-lg" disabled>
+                <i class="fas fa-lock me-2"></i> AI Quota Exceeded
+            </button>
+            <p class="text-muted mt-2"><small>Your AI usage quota has been reached. Try again later.</small></p>
+            {% endif %}
+        </div>
+    </div>
+
+    {# Loading spinner (shown after click) #}
+    <div id="autopsy-loading" class="text-center py-5" style="display:none;">
+        <div class="spinner-border text-warning" role="status" style="width:3rem;height:3rem;">
+            <span class="visually-hidden">Analyzing…</span>
+        </div>
+        <div class="mt-3">
+            <div class="progress mx-auto" style="max-width:400px;height:8px;">
+                <div id="autopsy-progress" class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width:10%"></div>
+            </div>
+            <p class="mt-2 text-muted" id="autopsy-status-text">Collecting scope events…</p>
+        </div>
+    </div>
+
+    {% elif state == 'generating' %}
+    {# ============================================================ #}
+    {# STATE C — Generating (poll until complete)                    #}
+    {# ============================================================ #}
+    <div class="text-center py-5">
+        <div class="spinner-border text-warning" role="status" style="width:3rem;height:3rem;">
+            <span class="visually-hidden">Analyzing…</span>
+        </div>
+        <div class="mt-3">
+            <div class="progress mx-auto" style="max-width:400px;height:8px;">
+                <div id="autopsy-progress" class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width:40%"></div>
+            </div>
+            <p class="mt-2 text-muted" id="autopsy-status-text">Analyzing scope history…</p>
+        </div>
+    </div>
+
+    {% elif state == 'results' %}
+    {# ============================================================ #}
+    {# STATE D — Results                                             #}
+    {# ============================================================ #}
+
+    {# ── Summary bar ─────────────────────────────────────────────── #}
+    <div class="card mb-4">
+        <div class="card-body d-flex flex-wrap align-items-center justify-content-between">
+            <div>
+                <span class="text-muted me-3">
+                    Analyzed: {{ latest_report.created_at|date:"M d, Y H:i" }}
+                </span>
+                <span class="text-muted">
+                    Run by: {{ latest_report.created_by.get_full_name|default:latest_report.created_by.username }}
+                </span>
+            </div>
+            <div>
+                {% if has_quota %}
+                <button class="btn btn-sm btn-outline-warning me-2" onclick="runAutopsy()">
+                    <i class="fas fa-redo me-1"></i> Re-run
+                </button>
+                {% endif %}
+                <a href="{% url 'scope_autopsy_export' latest_report.id %}" class="btn btn-sm btn-outline-secondary">
+                    <i class="fas fa-file-pdf me-1"></i> Export PDF
+                </a>
+            </div>
+        </div>
+    </div>
+
+    {# ── Key metrics cards ───────────────────────────────────────── #}
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <small class="text-muted">Baseline</small>
+                    <h3>{{ latest_report.baseline_task_count }}</h3>
+                    <small class="text-muted">tasks</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <small class="text-muted">Final Scope</small>
+                    <h3>{{ latest_report.final_task_count }}</h3>
+                    <small class="text-muted">tasks</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <small class="text-muted">Growth</small>
+                    <h3 class="{% if latest_report.total_scope_growth_percentage > 30 %}text-danger{% elif latest_report.total_scope_growth_percentage > 15 %}text-warning{% else %}text-info{% endif %}">
+                        +{{ latest_report.total_scope_growth_percentage|floatformat:1 }}%
+                    </h3>
+                    <small class="text-muted">scope increase</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <small class="text-muted">Est. Cost</small>
+                    <h3 class="text-danger">+${{ latest_report.total_budget_impact|floatformat:0 }}</h3>
+                    <small class="text-muted">+{{ latest_report.total_delay_days }} days delay</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# ── AI Summary ──────────────────────────────────────────────── #}
+    {% if latest_report.ai_summary %}
+    <div class="card mb-4">
+        <div class="card-header"><i class="fas fa-brain me-2"></i> AI Summary</div>
+        <div class="card-body">
+            <p>{{ latest_report.ai_summary }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    {# ── Scope Growth Timeline ───────────────────────────────────── #}
+    {% if enriched_events %}
+    <div class="card mb-4">
+        <div class="card-header"><i class="fas fa-project-diagram me-2"></i> Scope Growth Timeline</div>
+        <div class="card-body p-0">
+            {# Horizontal scrollable timeline #}
+            <div class="timeline-scroll-container" style="overflow-x:auto;padding:30px 20px 20px;">
+                <div class="d-flex align-items-start position-relative" style="min-width:max-content;">
+                    {# Baseline dot #}
+                    <div class="timeline-node text-center me-4" style="min-width:140px;">
+                        <div class="mx-auto rounded-circle d-flex align-items-center justify-content-center"
+                             style="width:42px;height:42px;background:#28a745;color:#fff;font-size:14px;cursor:default;">
+                            <i class="fas fa-flag"></i>
+                        </div>
+                        <div class="mt-2 small"><strong>Baseline</strong></div>
+                        <div class="small text-muted">{{ latest_report.baseline_task_count }} tasks</div>
+                        {% if latest_report.baseline_date %}
+                        <div class="small text-muted">{{ latest_report.baseline_date|date:"M d" }}</div>
+                        {% endif %}
+                    </div>
+
+                    {# Connector line #}
+                    <div class="align-self-center" style="flex:0 0 40px;height:2px;background:#dee2e6;margin-top:-30px;"></div>
+
+                    {% for event in enriched_events %}
+                    <div class="timeline-node text-center me-2" style="min-width:160px;cursor:pointer;"
+                         onclick="toggleEventDetail({{ forloop.counter0 }})">
+                        {# Dot #}
+                        <div class="mx-auto rounded-circle d-flex align-items-center justify-content-center"
+                             style="width:42px;height:42px;
+                                    background:{% if event.is_major_event %}#dc3545{% else %}#ffc107{% endif %};
+                                    color:#fff;font-size:13px;">
+                            +{{ event.net_task_change }}
+                        </div>
+                        <div class="mt-2 small"><strong>{{ event.title|truncatewords:5 }}</strong></div>
+                        <div class="small text-muted">{{ event.date|date:"M d, Y" }}</div>
+                        <div class="small">
+                            {% if event.is_major_event %}
+                            <span class="badge bg-danger">Major</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Minor</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {# Connector line #}
+                    {% if not forloop.last %}
+                    <div class="align-self-center" style="flex:0 0 30px;height:2px;background:#dee2e6;margin-top:-30px;"></div>
+                    {% endif %}
+                    {% endfor %}
+
+                    {# Now dot #}
+                    <div class="align-self-center" style="flex:0 0 40px;height:2px;background:#dee2e6;margin-top:-30px;"></div>
+                    <div class="timeline-node text-center" style="min-width:140px;">
+                        <div class="mx-auto rounded-circle d-flex align-items-center justify-content-center"
+                             style="width:42px;height:42px;background:#6c757d;color:#fff;font-size:14px;cursor:default;">
+                            <i class="fas fa-map-marker-alt"></i>
+                        </div>
+                        <div class="mt-2 small"><strong>Now</strong></div>
+                        <div class="small text-muted">{{ latest_report.final_task_count }} tasks</div>
+                    </div>
+                </div>
+            </div>
+
+            {# Expandable detail cards for each event #}
+            {% for event in enriched_events %}
+            <div id="event-detail-{{ forloop.counter0 }}" class="border-top p-3" style="display:none;background:#f8f9fa;">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>{{ event.title }}</h6>
+                        <p class="text-muted small mb-1">{{ event.description }}</p>
+                        <span class="badge bg-secondary">{{ event.get_source_type_display }}</span>
+                        {% if event.added_by_name %}
+                        <span class="badge bg-info text-dark">By: {{ event.added_by_name }}</span>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6 text-md-end">
+                        <div class="small">
+                            <strong>Tasks added:</strong> +{{ event.tasks_added }} &nbsp;
+                            <strong>Est. delay:</strong> +{{ event.estimated_delay_days }} days &nbsp;
+                            <strong>Est. cost:</strong> +${{ event.estimated_budget_impact|floatformat:0 }}
+                        </div>
+                        <div class="small text-muted mt-1">
+                            Running total: {{ event.cumulative_task_count }} tasks
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {# ── Pattern Analysis ────────────────────────────────────────── #}
+    {% if latest_report.pattern_analysis %}
+    <div class="card mb-4">
+        <div class="card-header"><i class="fas fa-sync-alt me-2"></i> Pattern Analysis</div>
+        <div class="card-body">
+            {{ latest_report.pattern_analysis|linebreaksbr }}
+        </div>
+    </div>
+    {% endif %}
+
+    {# ── Recommendations ─────────────────────────────────────────── #}
+    {% if latest_report.recommendations %}
+    <div class="card mb-4">
+        <div class="card-header"><i class="fas fa-lightbulb me-2"></i> Recommendations ({{ latest_report.recommendations|length }})</div>
+        <div class="card-body">
+            <div class="row">
+                {% for rec in latest_report.recommendations %}
+                <div class="col-md-6 mb-3">
+                    <div class="card h-100 border-start border-warning border-3">
+                        <div class="card-body">
+                            {% if rec.title %}
+                            <h6 class="card-title">{{ rec.title }}</h6>
+                            <p class="card-text small">{{ rec.description }}</p>
+                            <span class="badge
+                                {% if rec.applies_to == 'planning' %}bg-primary
+                                {% elif rec.applies_to == 'execution' %}bg-success
+                                {% elif rec.applies_to == 'stakeholder_management' %}bg-info
+                                {% elif rec.applies_to == 'technical' %}bg-secondary
+                                {% else %}bg-light text-dark{% endif %}">
+                                {{ rec.applies_to|default:"general" }}
+                            </span>
+                            {% else %}
+                            <p class="card-text">{{ rec }}</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# ── Final Autopsy banner for archived boards ────────────────── #}
+    {% if is_archived %}
+    <div class="alert alert-secondary text-center">
+        <i class="fas fa-archive me-2"></i>
+        <strong>Final Autopsy</strong> — This board is archived. This report represents the complete post-project scope analysis.
+        <a href="{% url 'scope_autopsy_export' latest_report.id %}" class="btn btn-sm btn-outline-secondary ms-2">
+            <i class="fas fa-download me-1"></i> Download Final Report
+        </a>
+    </div>
+    {% endif %}
+
+    {% endif %}{# end state checks #}
+</div>
+
+
+{# ================================================================ #}
+{# JavaScript                                                        #}
+{# ================================================================ #}
+<script>
+const BOARD_ID = {{ board.id }};
+const CSRF_TOKEN = '{{ csrf_token }}';
+
+// ── Toggle event detail card ────────────────────────────────────────
+function toggleEventDetail(idx) {
+    const el = document.getElementById('event-detail-' + idx);
+    if (!el) return;
+    // Close all others
+    document.querySelectorAll('[id^="event-detail-"]').forEach(function(d) {
+        if (d.id !== 'event-detail-' + idx) d.style.display = 'none';
+    });
+    el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+}
+
+// ── Run Scope Autopsy ───────────────────────────────────────────────
+function runAutopsy() {
+    const btn = document.getElementById('btn-run-autopsy');
+    const loader = document.getElementById('autopsy-loading');
+    if (btn) btn.style.display = 'none';
+    if (btn) btn.closest('.card').style.display = 'none';
+    if (loader) loader.style.display = 'block';
+
+    updateProgress(15, 'Collecting scope events…');
+
+    fetch(`/boards/${BOARD_ID}/scope-autopsy/run/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': CSRF_TOKEN,
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            updateProgress(30, 'Analyzing scope history…');
+            pollStatus();
+        } else {
+            alert(data.error || 'Failed to start autopsy.');
+            window.location.reload();
+        }
+    })
+    .catch(() => {
+        alert('Network error. Please try again.');
+        window.location.reload();
+    });
+}
+
+// ── Poll for completion ─────────────────────────────────────────────
+let pollAttempts = 0;
+function pollStatus() {
+    // Find the latest generating report by refreshing
+    fetch(`/boards/${BOARD_ID}/scope-autopsy/`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .catch(() => {});
+
+    // Simple approach: reload the page after a delay to pick up results
+    pollAttempts++;
+    const stages = [
+        [35, 'Calculating cost impact…'],
+        [50, 'Estimating delays…'],
+        [65, 'Querying organizational memory…'],
+        [80, 'Running AI forensic analysis…'],
+        [90, 'Finalizing report…'],
+        [95, 'Almost done…'],
+    ];
+    if (pollAttempts <= stages.length) {
+        const [pct, msg] = stages[pollAttempts - 1];
+        updateProgress(pct, msg);
+    }
+
+    if (pollAttempts > 20) {
+        // Give up polling, reload
+        window.location.reload();
+        return;
+    }
+
+    setTimeout(function() {
+        // Check by reloading — status endpoint requires report_id which we don't have client-side.
+        // Instead, just reload: if the state is 'results', the page will render results.
+        fetch(`/boards/${BOARD_ID}/scope-autopsy/`, {
+            method: 'GET',
+            redirect: 'follow',
+        })
+        .then(r => r.text())
+        .then(html => {
+            // If the response contains 'state-results' marker, reload
+            if (html.includes('AI Summary') || html.includes('Scope Growth Timeline')) {
+                window.location.reload();
+            } else if (html.includes('Analysis failed')) {
+                window.location.reload();
+            } else {
+                pollStatus();
+            }
+        })
+        .catch(() => {
+            pollStatus();
+        });
+    }, 3000);
+}
+
+function updateProgress(pct, msg) {
+    const bar = document.getElementById('autopsy-progress');
+    const txt = document.getElementById('autopsy-status-text');
+    if (bar) bar.style.width = pct + '%';
+    if (txt) txt.textContent = msg;
+}
+
+{% if state == 'generating' and latest_report %}
+// Auto-start polling if page loaded in generating state
+document.addEventListener('DOMContentLoaded', function() {
+    pollStatus();
+});
+{% endif %}
+</script>
+{% endblock %}

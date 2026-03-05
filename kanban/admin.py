@@ -20,6 +20,7 @@ from .budget_models import (
     BudgetRecommendation, CostPattern
 )
 from .premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
+from .scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
 
 # Import resource leveling admin
 from .resource_leveling_admin import (
@@ -994,3 +995,28 @@ class PreMortemScenarioAcknowledgmentAdmin(admin.ModelAdmin):
     list_display = ('pre_mortem', 'scenario_index', 'acknowledged_by', 'acknowledged_at')
     list_filter = ('acknowledged_at',)
     readonly_fields = ('acknowledged_at',)
+
+
+# ── Scope Autopsy ─────────────────────────────────────────────────────
+
+class ScopeTimelineEventInline(admin.TabularInline):
+    model = ScopeTimelineEvent
+    extra = 0
+    readonly_fields = ('event_date', 'title', 'source_type', 'net_task_change')
+
+
+@admin.register(ScopeAutopsyReport)
+class ScopeAutopsyReportAdmin(admin.ModelAdmin):
+    list_display = ('board', 'status', 'total_scope_growth_percentage', 'total_delay_days', 'created_by', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('board__name', 'created_by__username', 'ai_summary')
+    readonly_fields = ('created_at',)
+    inlines = [ScopeTimelineEventInline]
+
+
+@admin.register(ScopeTimelineEvent)
+class ScopeTimelineEventAdmin(admin.ModelAdmin):
+    list_display = ('report', 'event_date', 'title', 'source_type', 'net_task_change', 'is_major_event')
+    list_filter = ('source_type', 'is_major_event')
+    search_fields = ('title', 'description')
+    readonly_fields = ('event_date',)

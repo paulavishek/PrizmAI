@@ -315,6 +315,9 @@
         <a href="{% url 'board_knowledge' board.id %}" class="btn btn-outline-info" title="Project Knowledge — Decisions, Lessons & Organizational Memory">
             <i class="fas fa-brain me-1"></i> Knowledge
         </a>
+        <a href="{% url 'scope_autopsy_dashboard' board.id %}" class="btn btn-outline-warning" title="Scope Autopsy — Forensic analysis of scope creep causes & cost">
+            <i class="fas fa-microscope me-1"></i> Scope Autopsy
+        </a>
         <div class="btn-group">
             <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="fas fa-file-export me-1"></i> Export
@@ -408,6 +411,10 @@
                 <a href="{% url 'scope_dashboard' board.id %}" 
                    class="btn btn-sm btn-outline-primary">
                     <i class="fas fa-chart-line me-1"></i>View Scope Dashboard
+                </a>
+                <a href="{% url 'scope_autopsy_dashboard' board.id %}" 
+                   class="btn btn-sm btn-outline-warning">
+                    <i class="fas fa-microscope me-1"></i>Run Scope Autopsy
                 </a>
                 {% if active_scope_alerts|length > 1 %}
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#allScopeAlertsModal">

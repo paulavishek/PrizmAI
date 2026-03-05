@@ -45,6 +45,10 @@ from kanban.tasks.ai_learning_tasks import (
     run_ab_experiments_task,
 )
 
+from kanban.tasks.scope_autopsy_tasks import (
+    generate_scope_autopsy,
+)
+
 __all__ = [
     # Conflict tasks
     'detect_conflicts_task',
@@ -74,4 +78,6 @@ __all__ = [
     'analyze_feedback_text_task',
     'aggregate_org_learning_task',
     'run_ab_experiments_task',
+    # Scope autopsy tasks
+    'generate_scope_autopsy',
 ]
