@@ -1592,6 +1592,7 @@
         .distinguished-card.card-guardian::before { background: linear-gradient(135deg, #34d399 0%, #059669 100%); }
         .distinguished-card.card-premortem::before { background: linear-gradient(135deg, #f87171 0%, #dc2626 100%); }
         .distinguished-card.card-autopsy::before   { background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); }
+        .distinguished-card.card-whatif::before    { background: linear-gradient(135deg, #22d3ee 0%, #0891b2 100%); }
 
         .distinguished-card:hover {
             background: rgba(255, 255, 255, 0.08);
@@ -1626,6 +1627,7 @@
         .icon-guardian  { background: linear-gradient(135deg, rgba(52, 211, 153, 0.25) 0%, rgba(5, 150, 105, 0.2) 100%);  color: #34d399; }
         .icon-premortem { background: linear-gradient(135deg, rgba(248, 113, 113, 0.25) 0%, rgba(220, 38, 38, 0.2) 100%);  color: #f87171; }
         .icon-autopsy   { background: linear-gradient(135deg, rgba(251, 191, 36, 0.25) 0%, rgba(245, 158, 11, 0.2) 100%);  color: #fbbf24; }
+        .icon-whatif    { background: linear-gradient(135deg, rgba(34, 211, 238, 0.25) 0%, rgba(8, 145, 178, 0.2) 100%);   color: #22d3ee; }
 
         .distinguished-card-title-wrap {
             flex: 1;
@@ -1646,6 +1648,7 @@
         .badge-guardian  { background: rgba(52, 211, 153, 0.2);  color: #34d399;  border: 1px solid rgba(52, 211, 153, 0.3); }
         .badge-premortem { background: rgba(248, 113, 113, 0.2);  color: #f87171;  border: 1px solid rgba(248, 113, 113, 0.3); }
         .badge-autopsy   { background: rgba(251, 191, 36, 0.2);   color: #fbbf24;  border: 1px solid rgba(251, 191, 36, 0.3); }
+        .badge-whatif    { background: rgba(34, 211, 238, 0.2);    color: #22d3ee;   border: 1px solid rgba(34, 211, 238, 0.3); }
 
         .distinguished-card-title {
             font-size: 1.2rem;
@@ -2596,6 +2599,18 @@
                             <span class="example-text">"Tasks at risk this week with no assignee yet"</span>
                         </div>
                     </div>
+
+                    <div class="ai-capability-card">
+                        <div class="capability-icon">
+                            <i class="fas fa-sliders-h"></i>
+                        </div>
+                        <h3>What-If Scenario Analyzer</h3>
+                        <p>Simulate scope, team, and deadline changes before committing. Get a feasibility score, conflict detection, and Gemini-powered strategic recommendation in seconds.</p>
+                        <div class="capability-example">
+                            <span class="example-label">AI reveals:</span>
+                            <span class="example-text">"Adding 5 tasks drops feasibility to 42% — deadline at risk"</span>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="ai-cta-section">
@@ -2639,7 +2654,7 @@
                         <span>Signature Innovations</span>
                     </div>
                     <h2 class="distinguished-title">Features That <span>Set PrizmAI Apart</span></h2>
-                    <p class="distinguished-subtitle">Four deeply original capabilities that tackle the project intelligence problems no other platform addresses — from persistent organizational memory to forensic scope analysis.</p>
+                    <p class="distinguished-subtitle">Five deeply original capabilities that tackle the project intelligence problems no other platform addresses — from persistent organizational memory to forensic scope analysis and real-time what-if simulation.</p>
                 </div>
 
                 <div class="distinguished-grid">
@@ -2729,6 +2744,28 @@
                             <span class="feature-pill"><i class="fas fa-dollar-sign"></i> Cost &amp; delay impact</span>
                             <span class="feature-pill"><i class="fas fa-user-tag"></i> Contributor attribution</span>
                             <span class="feature-pill"><i class="fas fa-file-pdf"></i> PDF export</span>
+                        </div>
+                    </div>
+
+                    <!-- What-If Scenario Analyzer -->
+                    <div class="distinguished-card card-whatif">
+                        <div class="distinguished-card-header">
+                            <div class="distinguished-icon icon-whatif">
+                                <i class="fas fa-sliders-h"></i>
+                            </div>
+                            <div class="distinguished-card-title-wrap">
+                                <span class="distinguished-card-badge badge-whatif">Decision AI</span>
+                                <h3 class="distinguished-card-title">What-If Scenario Analyzer</h3>
+                            </div>
+                        </div>
+                        <p class="distinguished-card-desc">
+                            A real-time decision-support engine that lets PMs simulate the cascading impact of scope, team, and deadline changes <em>before</em> any commitments are made. Adjust three levers — scope by up to ±20 tasks, team size using Brooks's Law scaling, deadline by ±8 weeks — and instantly see a feasibility score, detected conflicts like resource overload or budget overrun, a before/after comparison, and a Gemini-powered strategic recommendation. Scenarios can be saved and compared side-by-side to anchor every project decision in data.
+                        </p>
+                        <div class="distinguished-feature-pills">
+                            <span class="feature-pill"><i class="fas fa-sliders-h"></i> 3-lever simulation</span>
+                            <span class="feature-pill"><i class="fas fa-tachometer-alt"></i> Feasibility scoring</span>
+                            <span class="feature-pill"><i class="fas fa-exclamation-triangle"></i> Conflict detection</span>
+                            <span class="feature-pill"><i class="fas fa-robot"></i> Gemini strategy brief</span>
                         </div>
                     </div>
 
