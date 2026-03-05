@@ -136,6 +136,14 @@
                             </a>
                         </li>
                         <li class="nav-item">
+                            <a class="nav-link position-relative px-3" href="{% url 'decision_center:decision_center' %}" title="Decision Center">
+                                <i class="fas fa-bolt"></i><span class="d-none d-xl-inline ms-1">Decisions</span>
+                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" id="dc-nav-badge" style="display: none; font-size: 0.65rem;">
+                                    <span id="dc-nav-count">0</span>
+                                </span>
+                            </a>
+                        </li>
+                        <li class="nav-item">
                             <a class="nav-link position-relative px-3" href="{% url 'messaging:go_to_first_unread_room' %}" onclick="addBoardIdToLink(event)">
                                 <i class="fas fa-comments"></i><span class="d-none d-lg-inline ms-1">Messages</span>
                                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="unread-message-badge" style="display: none; font-size: 0.65rem;">
@@ -143,13 +151,29 @@
                                 </span>
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link position-relative px-3" href="{% url 'messaging:notifications' %}">
+                        <li class="nav-item dropdown">
+                            <a class="nav-link position-relative px-3 dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" id="notifBellToggle">
                                 <i class="fas fa-bell"></i><span class="d-none d-lg-inline ms-1">Notifications</span>
                                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="unread-notification-badge" style="display: none; font-size: 0.65rem;">
                                     <span id="notification-count">0</span>
                                 </span>
                             </a>
+                            <ul class="dropdown-menu dropdown-menu-end" style="z-index: 1050; min-width: 300px;">
+                                <!-- Decision Center entry (hidden when 0 action items) -->
+                                <li id="dc-notif-entry" style="display:none;">
+                                    <a class="dropdown-item py-2" href="{% url 'decision_center:decision_center' %}">
+                                        <i class="fas fa-bolt text-warning me-2"></i>
+                                        <strong>Decision Center</strong>
+                                        <br><small class="text-muted" id="dc-notif-text"></small>
+                                    </a>
+                                </li>
+                                <li id="dc-notif-divider" style="display:none;"><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item py-2" href="{% url 'messaging:notifications' %}">
+                                        <i class="fas fa-list me-2"></i> View all notifications
+                                    </a>
+                                </li>
+                            </ul>
                         </li>
                         <li class="nav-item">
                             <a class="nav-link position-relative px-3" href="{% url 'conflict_dashboard' %}">
@@ -505,6 +529,34 @@
     {% endif %}
     
     <!-- Custom JS -->
+    {% if user.is_authenticated %}
+    <script>
+    /* Decision Center — navbar badge + notification bell entry */
+    (function() {
+        fetch("{% url 'decision_center:decision_center_widget' %}")
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d.action_required_count > 0) {
+                    var badge = document.getElementById('dc-nav-badge');
+                    var cnt   = document.getElementById('dc-nav-count');
+                    if (badge && cnt) {
+                        cnt.textContent = d.action_required_count;
+                        badge.style.display = '';
+                    }
+                    var entry = document.getElementById('dc-notif-entry');
+                    var divider = document.getElementById('dc-notif-divider');
+                    var txt   = document.getElementById('dc-notif-text');
+                    if (entry) {
+                        entry.style.display = '';
+                        if (divider) divider.style.display = '';
+                        if (txt) txt.textContent = d.action_required_count + ' item' + (d.action_required_count !== 1 ? 's' : '') + ' need your attention';
+                    }
+                }
+            })
+            .catch(function() {});
+    })();
+    </script>
+    {% endif %}
     {% block extra_js %}{% endblock %}
 {% if is_demo_account %}
 <script>

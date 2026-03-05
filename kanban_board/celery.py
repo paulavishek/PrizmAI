@@ -104,6 +104,17 @@ app.conf.beat_schedule = {
         'task': 'knowledge_graph.check_budget_thresholds',
         'schedule': crontab(hour=1, minute=30),  # Daily 1:30 AM
     },
+    # --- Decision Center Tasks ---
+    # Collect decision items daily at 7:00 AM (after coaching suggestions)
+    'dc-collect-decision-items-daily': {
+        'task': 'decision_center.collect_decision_items',
+        'schedule': crontab(hour=7, minute=15),  # Daily 7:15 AM
+    },
+    # Generate AI briefing daily at 7:30 AM (after collection completes)
+    'dc-generate-briefing-daily': {
+        'task': 'decision_center.generate_decision_briefing',
+        'schedule': crontab(hour=7, minute=30),  # Daily 7:30 AM
+    },
 }
 
 # Route all AI summary tasks to a dedicated 'summaries' queue so they never

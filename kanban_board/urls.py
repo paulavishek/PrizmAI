@@ -33,6 +33,7 @@ urlpatterns = [
     path('api/ai-usage/', include('api.ai_usage_urls')),  # AI Usage tracking
     path('webhooks/', include('webhooks.urls')),  # Webhook management
     path('', include('knowledge_graph.urls')),  # Knowledge Graph Project Memory
+    path('', include('decision_center.urls')),  # Decision Center — batch decision dashboard
 ]
 
 if settings.DEBUG:

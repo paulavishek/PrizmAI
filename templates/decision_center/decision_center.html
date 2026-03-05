@@ -1,0 +1,394 @@
+{% extends 'base.html' %}
+
+{% block title %}Decision Center - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dc-section { border-left: 4px solid #dee2e6; border-radius: 0.5rem; }
+    .dc-section-action   { border-left-color: #dc3545; }
+    .dc-section-awareness{ border-left-color: #0dcaf0; }
+    .dc-section-quickwin { border-left-color: #198754; }
+    .dc-card { background: #fff; border: 1px solid #e9ecef; border-radius: 0.5rem; transition: box-shadow .15s; }
+    .dc-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    .dc-badge-action   { background: rgba(220,53,69,.1); color: #dc3545; }
+    .dc-badge-awareness{ background: rgba(13,202,240,.1); color: #0dcaf0; }
+    .dc-badge-quickwin { background: rgba(25,135,84,.1);  color: #198754; }
+    .dc-briefing {
+        background: linear-gradient(135deg, #f8f9ff 0%, #eef1ff 100%);
+        border: 1px solid #d4d9ff;
+        border-radius: 0.75rem;
+    }
+    .dc-collapse-toggle { cursor: pointer; user-select: none; }
+    .dc-collapse-toggle .fa-chevron-down { transition: transform .2s; }
+    .dc-collapse-toggle.collapsed .fa-chevron-down { transform: rotate(-90deg); }
+    .snooze-dropdown .dropdown-menu { min-width: 8rem; }
+    .dc-settings-panel { max-width: 480px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- ── Header ────────────────────────────────────────────── -->
+    <div class="d-flex align-items-center justify-content-between mb-4">
+        <div>
+            <h2 class="mb-1">
+                <i class="fas fa-bolt text-warning me-2"></i>Decision Center
+            </h2>
+            <p class="text-muted mb-0">Review everything that needs your attention — in one place.</p>
+        </div>
+        <button class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#dcSettingsModal">
+            <i class="fas fa-cog me-1"></i> Settings
+        </button>
+    </div>
+
+    <!-- ── AI Morning Briefing ───────────────────────────────── -->
+    {% if briefing %}
+    <div class="dc-briefing p-4 mb-4">
+        <div class="d-flex align-items-start justify-content-between">
+            <div>
+                <h6 class="fw-bold text-primary mb-1">
+                    <i class="fas fa-brain me-1"></i> AI Morning Briefing
+                    <small class="text-muted fw-normal ms-2">{{ briefing.generated_at|date:"N j, Y" }}</small>
+                </h6>
+                <p class="fs-5 fw-semibold mb-1">{{ briefing.headline }}</p>
+                <p class="text-muted mb-0">{{ briefing.briefing }}</p>
+            </div>
+            <div class="text-end text-nowrap ms-4">
+                {% if briefing.top_priority_board %}
+                <div class="small text-muted">Top priority: <strong>{{ briefing.top_priority_board }}</strong></div>
+                {% endif %}
+                <div class="small text-muted">Est. time: <strong>{{ total_est }} min</strong></div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- ── Section 1: Action Required ────────────────────────── -->
+    <div class="dc-section dc-section-action p-3 mb-4">
+        <div class="dc-collapse-toggle d-flex align-items-center justify-content-between"
+             data-bs-toggle="collapse" data-bs-target="#dc-action-body" aria-expanded="true">
+            <h5 class="mb-0">
+                <span class="badge dc-badge-action me-2">{{ action_required|length }}</span>
+                <i class="fas fa-circle-exclamation text-danger me-1"></i> Action Required
+            </h5>
+            <i class="fas fa-chevron-down text-muted"></i>
+        </div>
+        <div class="collapse show mt-3" id="dc-action-body">
+            {% for item in action_required %}
+            <div class="dc-card p-3 mb-2" id="dc-item-{{ item.id }}">
+                <div class="d-flex align-items-start justify-content-between">
+                    <div class="flex-fill">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="badge bg-danger bg-opacity-10 text-danger">{{ item.get_item_type_display }}</span>
+                            <strong>{{ item.title }}</strong>
+                            <small class="text-muted ms-auto">~{{ item.estimated_minutes }} min</small>
+                        </div>
+                        {% if item.board %}
+                        <div class="small text-muted mb-1">Board: {{ item.board.name }}</div>
+                        {% endif %}
+                        {% if item.description %}
+                        <div class="small mb-1">{{ item.description }}</div>
+                        {% endif %}
+                        {% if item.suggested_action %}
+                        <div class="small text-primary"><i class="fas fa-lightbulb me-1"></i> {{ item.suggested_action }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mt-2">
+                    {% if item.board %}
+                    <a href="{% url 'board_detail' item.board.id %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-external-link-alt me-1"></i> Go to Board
+                    </a>
+                    {% endif %}
+                    <button class="btn btn-sm btn-success dc-resolve-btn" data-item-id="{{ item.id }}">
+                        <i class="fas fa-check me-1"></i> Resolved
+                    </button>
+                    <div class="dropdown snooze-dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                            <i class="fas fa-clock me-1"></i> Snooze
+                        </button>
+                        <ul class="dropdown-menu">
+                            {% for hours, label in snooze_options %}
+                            <li><a class="dropdown-item dc-snooze-btn" href="#" data-item-id="{{ item.id }}" data-hours="{{ hours }}">{{ label }}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger dc-dismiss-btn" data-item-id="{{ item.id }}">
+                        <i class="fas fa-times me-1"></i> Dismiss
+                    </button>
+                </div>
+            </div>
+            {% empty %}
+            <p class="text-muted mb-0"><i class="fas fa-check-circle text-success me-1"></i> No actions required right now.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- ── Section 2: Awareness ──────────────────────────────── -->
+    <div class="dc-section dc-section-awareness p-3 mb-4">
+        <div class="dc-collapse-toggle collapsed d-flex align-items-center justify-content-between"
+             data-bs-toggle="collapse" data-bs-target="#dc-awareness-body" aria-expanded="false">
+            <h5 class="mb-0">
+                <span class="badge dc-badge-awareness me-2">{{ awareness|length }}</span>
+                <i class="fas fa-info-circle text-info me-1"></i> Awareness
+            </h5>
+            <i class="fas fa-chevron-down text-muted"></i>
+        </div>
+        <div class="collapse mt-3" id="dc-awareness-body">
+            {% for item in awareness %}
+            <div class="dc-card p-3 mb-2" id="dc-item-{{ item.id }}">
+                <div class="d-flex align-items-start justify-content-between">
+                    <div class="flex-fill">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="badge bg-info bg-opacity-10 text-info">{{ item.get_item_type_display }}</span>
+                            <strong>{{ item.title }}</strong>
+                        </div>
+                        {% if item.board %}
+                        <div class="small text-muted mb-1">Board: {{ item.board.name }}</div>
+                        {% endif %}
+                        {% if item.description %}
+                        <div class="small mb-1">{{ item.description }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mt-2">
+                    <button class="btn btn-sm btn-success dc-resolve-btn" data-item-id="{{ item.id }}">
+                        <i class="fas fa-check me-1"></i> Acknowledged
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger dc-dismiss-btn" data-item-id="{{ item.id }}">
+                        <i class="fas fa-times me-1"></i> Dismiss
+                    </button>
+                </div>
+            </div>
+            {% empty %}
+            <p class="text-muted mb-0">No awareness items.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- ── Section 3: Quick Wins ─────────────────────────────── -->
+    <div class="dc-section dc-section-quickwin p-3 mb-4">
+        <div class="dc-collapse-toggle collapsed d-flex align-items-center justify-content-between"
+             data-bs-toggle="collapse" data-bs-target="#dc-quickwin-body" aria-expanded="false">
+            <h5 class="mb-0">
+                <span class="badge dc-badge-quickwin me-2">{{ quick_wins|length }}</span>
+                <i class="fas fa-bolt text-success me-1"></i> Quick Wins
+            </h5>
+            <i class="fas fa-chevron-down text-muted"></i>
+        </div>
+        <div class="collapse mt-3" id="dc-quickwin-body">
+            {% if quick_wins %}
+            <div class="mb-3">
+                <button class="btn btn-sm btn-success" id="dc-clear-all-qw">
+                    <i class="fas fa-check-double me-1"></i> Clear All Quick Wins
+                </button>
+            </div>
+            {% endif %}
+            {% for item in quick_wins %}
+            <div class="dc-card p-3 mb-2" id="dc-item-{{ item.id }}">
+                <div class="d-flex align-items-start justify-content-between">
+                    <div class="flex-fill">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="badge bg-success bg-opacity-10 text-success">{{ item.get_item_type_display }}</span>
+                            <strong>{{ item.title }}</strong>
+                            <small class="text-muted ms-auto">~{{ item.estimated_minutes }} min</small>
+                        </div>
+                        {% if item.board %}
+                        <div class="small text-muted mb-1">Board: {{ item.board.name }}</div>
+                        {% endif %}
+                        {% if item.description %}
+                        <div class="small mb-1">{{ item.description }}</div>
+                        {% endif %}
+                        {% if item.suggested_action %}
+                        <div class="small text-primary"><i class="fas fa-lightbulb me-1"></i> {{ item.suggested_action }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mt-2">
+                    {% if item.board %}
+                    <a href="{% url 'board_detail' item.board.id %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-external-link-alt me-1"></i> Go to Board
+                    </a>
+                    {% endif %}
+                    <button class="btn btn-sm btn-success dc-resolve-btn" data-item-id="{{ item.id }}">
+                        <i class="fas fa-check me-1"></i> Done
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger dc-dismiss-btn" data-item-id="{{ item.id }}">
+                        <i class="fas fa-times me-1"></i> Dismiss
+                    </button>
+                </div>
+            </div>
+            {% empty %}
+            <p class="text-muted mb-0">No quick wins right now.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if not action_required and not awareness and not quick_wins %}
+    <div class="text-center py-5">
+        <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+        <h4 class="text-success">All clear!</h4>
+        <p class="text-muted">No decisions pending. You're all caught up.</p>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- ── Settings Modal ────────────────────────────────────────── -->
+<div class="modal fade" id="dcSettingsModal" tabindex="-1" aria-labelledby="dcSettingsLabel" aria-hidden="true">
+    <div class="modal-dialog dc-settings-panel">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="dcSettingsLabel"><i class="fas fa-cog me-2"></i>Decision Center Settings</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="dc-settings-form">
+                    <div class="mb-3 form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="dc-set-digest" {% if settings_obj.daily_digest_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="dc-set-digest">Daily digest email</label>
+                    </div>
+                    <div class="mb-3">
+                        <label for="dc-set-digest-time" class="form-label">Digest send time</label>
+                        <input type="time" class="form-control" id="dc-set-digest-time" value="{{ settings_obj.digest_time|time:'H:i' }}">
+                    </div>
+                    <div class="mb-3 form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="dc-set-awareness" {% if settings_obj.show_awareness_items %}checked{% endif %}>
+                        <label class="form-check-label" for="dc-set-awareness">Show awareness items</label>
+                    </div>
+                    <div class="mb-3 form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="dc-set-quickwins" {% if settings_obj.show_quick_wins %}checked{% endif %}>
+                        <label class="form-check-label" for="dc-set-quickwins">Show quick wins</label>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-6 mb-3">
+                            <label for="dc-set-overdue" class="form-label">Mark task overdue after (days)</label>
+                            <input type="number" min="1" max="30" class="form-control" id="dc-set-overdue" value="{{ settings_obj.min_overdue_days }}">
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label for="dc-set-stale" class="form-label">Mark task stale after (days)</label>
+                            <input type="number" min="1" max="90" class="form-control" id="dc-set-stale" value="{{ settings_obj.min_stale_days }}">
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label for="dc-set-budget" class="form-label">Budget alert threshold (%)</label>
+                            <input type="number" min="50" max="100" class="form-control" id="dc-set-budget" value="{{ settings_obj.budget_alert_threshold }}">
+                        </div>
+                        <div class="col-6 mb-3">
+                            <label for="dc-set-deadline" class="form-label">Deadline warning (days)</label>
+                            <input type="number" min="1" max="30" class="form-control" id="dc-set-deadline" value="{{ settings_obj.deadline_warning_days }}">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="dc-save-settings">
+                    <i class="fas fa-save me-1"></i> Save Settings
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
+        || '{{ csrf_token }}';
+
+    function postAction(url, body) {
+        return fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken,
+            },
+            body: body ? JSON.stringify(body) : '{}',
+        }).then(r => r.json());
+    }
+
+    function fadeOutItem(itemId) {
+        var el = document.getElementById('dc-item-' + itemId);
+        if (el) {
+            el.style.transition = 'opacity .3s';
+            el.style.opacity = '0';
+            setTimeout(function() { el.remove(); }, 300);
+        }
+    }
+
+    // Resolve buttons
+    document.querySelectorAll('.dc-resolve-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var id = this.dataset.itemId;
+            postAction("{% url 'decision_center:resolve_decision_item' item_id=0 %}".replace('/0/', '/' + id + '/')).then(function(data) {
+                if (data.success) fadeOutItem(id);
+            });
+        });
+    });
+
+    // Snooze buttons
+    document.querySelectorAll('.dc-snooze-btn').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.preventDefault();
+            var id = this.dataset.itemId;
+            var hours = parseInt(this.dataset.hours);
+            postAction(
+                "{% url 'decision_center:snooze_decision_item' item_id=0 %}".replace('/0/', '/' + id + '/'),
+                {snooze_hours: hours}
+            ).then(function(data) {
+                if (data.success) fadeOutItem(id);
+            });
+        });
+    });
+
+    // Dismiss buttons
+    document.querySelectorAll('.dc-dismiss-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var id = this.dataset.itemId;
+            postAction("{% url 'decision_center:dismiss_decision_item' item_id=0 %}".replace('/0/', '/' + id + '/')).then(function(data) {
+                if (data.success) fadeOutItem(id);
+            });
+        });
+    });
+
+    // Clear All Quick Wins
+    var clearAllBtn = document.getElementById('dc-clear-all-qw');
+    if (clearAllBtn) {
+        clearAllBtn.addEventListener('click', function() {
+            postAction("{% url 'decision_center:resolve_all_quick_wins' %}").then(function(data) {
+                if (data.success) {
+                    document.querySelectorAll('#dc-quickwin-body .dc-card').forEach(function(el) {
+                        el.style.transition = 'opacity .3s';
+                        el.style.opacity = '0';
+                        setTimeout(function() { el.remove(); }, 300);
+                    });
+                    setTimeout(function() { clearAllBtn.remove(); }, 350);
+                }
+            });
+        });
+    }
+
+    // Save Settings
+    document.getElementById('dc-save-settings').addEventListener('click', function() {
+        var payload = {
+            daily_digest_enabled: document.getElementById('dc-set-digest').checked,
+            digest_time: document.getElementById('dc-set-digest-time').value,
+            show_awareness_items: document.getElementById('dc-set-awareness').checked,
+            show_quick_wins: document.getElementById('dc-set-quickwins').checked,
+            min_overdue_days: parseInt(document.getElementById('dc-set-overdue').value),
+            min_stale_days: parseInt(document.getElementById('dc-set-stale').value),
+            budget_alert_threshold: parseInt(document.getElementById('dc-set-budget').value),
+            deadline_warning_days: parseInt(document.getElementById('dc-set-deadline').value),
+        };
+        postAction("{% url 'decision_center:decision_center_settings' %}", payload).then(function(data) {
+            if (data.success) {
+                var modal = bootstrap.Modal.getInstance(document.getElementById('dcSettingsModal'));
+                if (modal) modal.hide();
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

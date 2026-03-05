@@ -104,6 +104,7 @@ INSTALLED_APPS = [
     'webhooks',  # Webhook system for event-driven integrations
     'analytics',  # Analytics and user feedback system
     'knowledge_graph',  # Knowledge Graph Project Memory system
+    'decision_center',  # Decision Batch Dashboard — unified decision queue
 ]
 
 MIDDLEWARE = [
