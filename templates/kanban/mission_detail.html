@@ -137,6 +137,61 @@
     </div>
 </div>
 
+<!-- Pre-Mortem Board Risk Overview -->
+{% if premortem_boards %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header d-flex align-items-center gap-2 py-2">
+        <i class="fas fa-shield-alt text-danger"></i>
+        <span class="fw-semibold">Board Risk Overview</span>
+        <small class="text-muted">(Pre-Mortem Summary)</small>
+    </div>
+    <div class="card-body py-2">
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th>Board Name</th>
+                        <th>Risk Level</th>
+                        <th>Last Analyzed</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in premortem_boards %}
+                    <tr>
+                        <td><a href="{% url 'board_detail' item.board.id %}">{{ item.board.name }}</a></td>
+                        <td>
+                            {% if item.risk_level == 'high' %}
+                                <span class="badge bg-danger">High</span>
+                            {% elif item.risk_level == 'medium' %}
+                                <span class="badge bg-warning text-dark">Medium</span>
+                            {% elif item.risk_level == 'low' %}
+                                <span class="badge bg-success">Low</span>
+                            {% else %}
+                                <span class="text-muted">— Not run</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.created_at %}
+                                {{ item.created_at|timesince }} ago
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% if premortem_high_risk_count > 0 %}
+        <div class="alert alert-warning py-2 mt-2 mb-0 small">
+            <i class="fas fa-exclamation-triangle me-1"></i>
+            {{ premortem_high_risk_count }} of {{ premortem_total_boards }} board{{ premortem_total_boards|pluralize }} {{ premortem_high_risk_count|pluralize:"is,are" }} High Risk. Consider reviewing before proceeding.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
 <!-- Strategies -->
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h5 class="mb-0">

@@ -1,0 +1,267 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Pre-Mortem Analysis - {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-shield-alt text-danger"></i> Pre-Mortem Analysis — {{ board.name }}</h2>
+            <p class="text-muted">Simulate failure before it happens. Identify your project's biggest risks before work begins.</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-1"></i> Back to Board
+            </a>
+        </div>
+    </div>
+
+    {% if not readiness.ready %}
+    <!-- ============================================================ -->
+    <!-- STATE A — Feature Locked                                      -->
+    <!-- ============================================================ -->
+    <div class="card border-secondary">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-shield-alt fa-3x text-muted mb-3"></i>
+            <h4>Pre-Mortem Analysis</h4>
+            <p class="text-muted mb-4">Complete these steps to unlock:</p>
+            <ul class="list-unstyled">
+                <li class="mb-2">
+                    {% if readiness.has_enough_tasks %}
+                        <i class="fas fa-check-circle text-success me-2"></i>
+                    {% else %}
+                        <i class="fas fa-times-circle text-danger me-2"></i>
+                    {% endif %}
+                    At least 5 tasks on this board
+                    <small class="text-muted">(currently {{ readiness.task_count }})</small>
+                </li>
+                <li class="mb-2">
+                    {% if readiness.has_deadline %}
+                        <i class="fas fa-check-circle text-success me-2"></i>
+                    {% else %}
+                        <i class="fas fa-times-circle text-danger me-2"></i>
+                    {% endif %}
+                    At least one deadline set
+                </li>
+                <li class="mb-2">
+                    {% if readiness.has_assignee %}
+                        <i class="fas fa-check-circle text-success me-2"></i>
+                    {% else %}
+                        <i class="fas fa-times-circle text-danger me-2"></i>
+                    {% endif %}
+                    At least one team member assigned
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    {% elif not latest %}
+    <!-- ============================================================ -->
+    <!-- STATE B — Feature Unlocked, no analysis yet                   -->
+    <!-- ============================================================ -->
+    <div class="card border-primary">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-shield-alt fa-3x text-primary mb-3"></i>
+            <h4>Pre-Mortem Analysis</h4>
+            <p class="text-muted mb-4">
+                Simulate failure before it happens. Identify your project's biggest risks
+                before work begins.
+            </p>
+            {% if has_quota %}
+            <button id="btn-run-premortem" class="btn btn-danger btn-lg" onclick="runPreMortem()">
+                <i class="fas fa-bolt me-2"></i> Run Pre-Mortem Analysis
+            </button>
+            <p class="text-muted mt-2"><small>Analysis takes 10-15 seconds</small></p>
+            {% else %}
+            <button class="btn btn-secondary btn-lg" disabled>
+                <i class="fas fa-lock me-2"></i> AI Quota Exceeded
+            </button>
+            <p class="text-muted mt-2"><small>Your AI usage quota has been reached. Try again later.</small></p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Loading spinner (hidden by default) -->
+    <div id="premortem-loading" class="text-center py-5" style="display:none;">
+        <div class="spinner-border text-danger" role="status" style="width:3rem;height:3rem;">
+            <span class="visually-hidden">Analyzing…</span>
+        </div>
+        <p class="mt-3 text-muted">AI is simulating failure scenarios… this takes 10-15 seconds.</p>
+    </div>
+
+    <!-- Results container (populated by JS after run) -->
+    <div id="premortem-results" style="display:none;"></div>
+
+    {% else %}
+    <!-- ============================================================ -->
+    <!-- STATE C — Analysis Results                                    -->
+    <!-- ============================================================ -->
+    <div class="card mb-4">
+        <div class="card-body d-flex flex-wrap align-items-center justify-content-between">
+            <div>
+                <span class="me-3">
+                    <strong>Overall Risk Level:</strong>
+                    {% if latest.overall_risk_level == 'high' %}
+                        <span class="badge bg-danger fs-6">HIGH</span>
+                    {% elif latest.overall_risk_level == 'medium' %}
+                        <span class="badge bg-warning text-dark fs-6">MEDIUM</span>
+                    {% else %}
+                        <span class="badge bg-success fs-6">LOW</span>
+                    {% endif %}
+                </span>
+                <span class="text-muted me-3">
+                    Analyzed on: {{ latest.created_at|date:"M d, Y H:i" }}
+                </span>
+                <span class="text-muted">
+                    Run by: {{ latest.created_by.get_full_name|default:latest.created_by.username }}
+                </span>
+            </div>
+            <div>
+                {% if has_quota %}
+                <button class="btn btn-outline-danger btn-sm" onclick="runPreMortem()">
+                    <i class="fas fa-redo me-1"></i> Re-run Analysis
+                </button>
+                <small class="text-muted d-block mt-1">Re-running uses updated board data</small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if latest.analysis_json.confidence_note %}
+    <div class="alert alert-info mb-4">
+        <i class="fas fa-info-circle me-2"></i>
+        {{ latest.analysis_json.confidence_note }}
+    </div>
+    {% endif %}
+
+    <!-- Loading spinner for re-runs (hidden by default) -->
+    <div id="premortem-loading" class="text-center py-5" style="display:none;">
+        <div class="spinner-border text-danger" role="status" style="width:3rem;height:3rem;">
+            <span class="visually-hidden">Analyzing…</span>
+        </div>
+        <p class="mt-3 text-muted">AI is simulating failure scenarios… this takes 10-15 seconds.</p>
+    </div>
+
+    <!-- Scenario Cards -->
+    <div id="premortem-results">
+    {% for scenario in enriched_scenarios %}
+    <div class="card mb-3 border-start border-4
+        {% if scenario.probability == 'High' %}border-danger
+        {% elif scenario.probability == 'Medium' %}border-warning
+        {% else %}border-success{% endif %}">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+                <h5 class="card-title mb-0">Scenario {{ scenario.number }}: {{ scenario.title }}</h5>
+                {% if scenario.probability == 'High' %}
+                    <span class="badge bg-danger">HIGH RISK</span>
+                {% elif scenario.probability == 'Medium' %}
+                    <span class="badge bg-warning text-dark">MEDIUM RISK</span>
+                {% else %}
+                    <span class="badge bg-success">LOW RISK</span>
+                {% endif %}
+            </div>
+            <p class="card-text">{{ scenario.description }}</p>
+
+            <div class="mt-3 p-3 bg-light rounded">
+                <p class="mb-2">
+                    <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                    <strong>Early Warning Sign:</strong> {{ scenario.early_warning_sign }}
+                </p>
+                <p class="mb-0">
+                    <i class="fas fa-check-circle text-success me-2"></i>
+                    <strong>Prevention Action:</strong> {{ scenario.prevention_action }}
+                </p>
+            </div>
+
+            <!-- Acknowledgment -->
+            <div class="mt-3" id="ack-area-{{ scenario.index }}">
+                {% if scenario.acknowledged %}
+                <span class="text-success">
+                    <i class="fas fa-check-circle me-1"></i> Addressed by {{ scenario.acknowledged_by }}
+                </span>
+                {% else %}
+                <button class="btn btn-outline-success btn-sm"
+                        onclick="acknowledgeScenario({{ latest.id }}, {{ scenario.index }}, this)">
+                    <i class="fas fa-check me-1"></i> Mark as Addressed
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+const CSRF_TOKEN = '{{ csrf_token }}';
+const BOARD_ID = {{ board.id }};
+
+function runPreMortem() {
+    const loadingEl = document.getElementById('premortem-loading');
+    const resultsEl = document.getElementById('premortem-results');
+    const runBtn = document.getElementById('btn-run-premortem');
+
+    // Show loading, hide current content
+    if (loadingEl) loadingEl.style.display = 'block';
+    if (resultsEl) resultsEl.style.display = 'none';
+    if (runBtn) runBtn.disabled = true;
+
+    fetch(`{% url 'run_premortem' board.id %}`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': CSRF_TOKEN,
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        if (loadingEl) loadingEl.style.display = 'none';
+        if (data.success) {
+            // Re-render the page to show new results cleanly
+            window.location.reload();
+        } else {
+            alert(data.error || 'Analysis failed. Please try again.');
+            if (runBtn) runBtn.disabled = false;
+        }
+    })
+    .catch(err => {
+        if (loadingEl) loadingEl.style.display = 'none';
+        alert('Network error. Please try again.');
+        if (runBtn) runBtn.disabled = false;
+    });
+}
+
+function acknowledgeScenario(premortemId, scenarioIndex, btnEl) {
+    btnEl.disabled = true;
+
+    fetch(`/premortem/${premortemId}/acknowledge/${scenarioIndex}/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': CSRF_TOKEN,
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ notes: '' }),
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        if (data.success) {
+            const area = document.getElementById(`ack-area-${scenarioIndex}`);
+            area.innerHTML = `<span class="text-success">
+                <i class="fas fa-check-circle me-1"></i>
+                Addressed by ${data.acknowledged_by} on ${new Date(data.acknowledged_at).toLocaleDateString()}
+            </span>`;
+        } else {
+            alert(data.error || 'Could not acknowledge scenario.');
+            btnEl.disabled = false;
+        }
+    })
+    .catch(() => {
+        alert('Network error.');
+        btnEl.disabled = false;
+    });
+}
+</script>
+{% endblock %}

@@ -19,6 +19,7 @@ from .budget_models import (
     ProjectBudget, TaskCost, TimeEntry, ProjectROI,
     BudgetRecommendation, CostPattern
 )
+from .premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
 
 # Import resource leveling admin
 from .resource_leveling_admin import (
@@ -969,3 +970,27 @@ class ConflictNotificationAdmin(admin.ModelAdmin):
         }),
     )
 
+
+# -----------------------------------------------------------------------
+# Pre-Mortem AI Analysis
+# -----------------------------------------------------------------------
+class PreMortemScenarioAcknowledgmentInline(admin.TabularInline):
+    model = PreMortemScenarioAcknowledgment
+    extra = 0
+    readonly_fields = ('acknowledged_at',)
+
+
+@admin.register(PreMortemAnalysis)
+class PreMortemAnalysisAdmin(admin.ModelAdmin):
+    list_display = ('board', 'overall_risk_level', 'created_by', 'created_at')
+    list_filter = ('overall_risk_level', 'created_at')
+    search_fields = ('board__name', 'created_by__username')
+    readonly_fields = ('created_at',)
+    inlines = [PreMortemScenarioAcknowledgmentInline]
+
+
+@admin.register(PreMortemScenarioAcknowledgment)
+class PreMortemScenarioAcknowledgmentAdmin(admin.ModelAdmin):
+    list_display = ('pre_mortem', 'scenario_index', 'acknowledged_by', 'acknowledged_at')
+    list_filter = ('acknowledged_at',)
+    readonly_fields = ('acknowledged_at',)

@@ -1726,6 +1726,17 @@ document.addEventListener('DOMContentLoaded', function() {
                                                     {% if board.is_official_demo_board %}
                                                     <span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;">DEMO</span>
                                                     {% endif %}
+                                                    {% with pm_risk=premortem_risk_map|default_if_none:"" %}
+                                                    {% if pm_risk %}
+                                                        {% for bid, level in premortem_risk_map.items %}
+                                                        {% if bid == board.id %}
+                                                            <span class="badge ms-1 {% if level == 'high' %}bg-danger{% elif level == 'medium' %}bg-warning text-dark{% else %}bg-success{% endif %}" style="font-size:0.6rem;" title="Pre-Mortem Risk: {{ level|title }}">
+                                                                <i class="fas fa-shield-alt"></i> {{ level|upper }}
+                                                            </span>
+                                                        {% endif %}
+                                                        {% endfor %}
+                                                    {% endif %}
+                                                    {% endwith %}
                                                 </div>
                                                 <div class="d-flex align-items-center gap-1 flex-shrink-0">
                                                     <small class="text-muted">{{ board_item.done_tasks }}/{{ board_item.total_tasks }} tasks</small>
@@ -2237,11 +2248,20 @@ document.addEventListener('DOMContentLoaded', function() {
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start mb-2">
                                     <h6 class="card-title mb-0">{{ board.name }}</h6>
+                                    <div class="d-flex gap-1">
                                     {% if board.is_official_demo_board %}
                                         <span class="badge bg-warning text-dark" title="Demo board">
                                             <i class="fas fa-graduation-cap"></i> DEMO
                                         </span>
                                     {% endif %}
+                                    {% for bid, level in premortem_risk_map.items %}
+                                    {% if bid == board.id %}
+                                        <span class="badge {% if level == 'high' %}bg-danger{% elif level == 'medium' %}bg-warning text-dark{% else %}bg-success{% endif %}" title="Pre-Mortem Risk: {{ level|title }} — click board to view analysis">
+                                            <i class="fas fa-shield-alt"></i> {{ level|upper }}
+                                        </span>
+                                    {% endif %}
+                                    {% endfor %}
+                                    </div>
                                 </div>
                                 <p class="card-text text-muted small">
                                     {{ board.description|default:"No description."|truncatechars:90 }}

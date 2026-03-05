@@ -198,9 +198,48 @@ def mission_detail(request, mission_id):
         board_count=Count('boards', distinct=True)
     ).order_by('-created_at')
 
+    # Pre-Mortem rollup: gather latest analysis per board under this mission
+    from kanban.premortem_models import PreMortemAnalysis
+    from kanban.models import Board
+    board_ids = Board.objects.filter(
+        strategy__mission=mission
+    ).values_list('id', flat=True)
+    pm_analyses = (
+        PreMortemAnalysis.objects
+        .filter(board_id__in=board_ids)
+        .select_related('board')
+        .order_by('board_id', '-created_at')
+    )
+    # Deduplicate to latest per board
+    premortem_boards = []
+    seen_boards = set()
+    all_board_ids = set(board_ids)
+    for pm in pm_analyses:
+        if pm.board_id not in seen_boards:
+            seen_boards.add(pm.board_id)
+            premortem_boards.append({
+                'board': pm.board,
+                'risk_level': pm.overall_risk_level,
+                'created_at': pm.created_at,
+            })
+    # Add boards with no analysis
+    unanalyzed_boards = Board.objects.filter(
+        id__in=all_board_ids - seen_boards
+    )
+    for b in unanalyzed_boards:
+        premortem_boards.append({
+            'board': b,
+            'risk_level': None,
+            'created_at': None,
+        })
+    high_risk_count = sum(1 for b in premortem_boards if b['risk_level'] == 'high')
+
     return render(request, 'kanban/mission_detail.html', {
         'mission': mission,
         'strategies': strategies,
+        'premortem_boards': premortem_boards,
+        'premortem_high_risk_count': high_risk_count,
+        'premortem_total_boards': len(premortem_boards),
     })
 
 

@@ -1,0 +1,13 @@
+python : INFO 2026-03-05 09:15:03,735 apps 14556 24768 AXES: BEGIN version 
+8.0.0, blocking by username or ip_address
+At line:1 char:70
++ ... ivate.ps1"; python manage.py test --no-input -v 0 *> "c:\Users\Avishe ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (INFO 2026-03-05...e or ip_address 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+C:\Users\Avishek Paul\PrizmAI\venv\Lib\site-packages\pydantic\__init__.py:137: 
+UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 
+or greater.
+  warnings.warn(

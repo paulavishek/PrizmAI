@@ -720,6 +720,30 @@ def dashboard(request):
         'risk_heatmap': risk_heatmap_data,
     }
 
+    # Pre-Mortem risk levels: latest analysis per board (single query)
+    from kanban.premortem_models import PreMortemAnalysis
+    _pm_qs = (
+        PreMortemAnalysis.objects
+        .filter(board__in=boards)
+        .order_by('board_id', '-created_at')
+        .distinct('board_id')
+        .values_list('board_id', 'overall_risk_level')
+    )
+    try:
+        premortem_risk_map = dict(_pm_qs)
+    except Exception:
+        # SQLite doesn't support distinct('board_id'). Fallback.
+        _all_pm = (
+            PreMortemAnalysis.objects
+            .filter(board__in=boards)
+            .order_by('board_id', '-created_at')
+            .values_list('board_id', 'overall_risk_level')
+        )
+        premortem_risk_map = {}
+        for bid, level in _all_pm:
+            if bid not in premortem_risk_map:
+                premortem_risk_map[bid] = level
+
     # Standalone boards: user-accessible boards not linked to any strategy
     standalone_boards = boards.filter(strategy__isnull=True).order_by('name')
 
@@ -759,6 +783,7 @@ def dashboard(request):
         'risk_heatmap_data': risk_heatmap_data,
         'scope_creep_data':  scope_creep_data,
         'daily_briefing':    daily_briefing,
+        'premortem_risk_map': premortem_risk_map,
         })
 
 
