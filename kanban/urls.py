@@ -16,6 +16,7 @@ from . import mission_views
 from . import calendar_views
 from . import prizmbrief_views
 from . import onboarding_views
+from . import whatif_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -257,6 +258,13 @@ urlpatterns = [
     
     # Scope Creep Autopsy URLs
     path('', include('kanban.scope_autopsy_urls')),
+
+    # What-If Scenario Analyzer
+    path('boards/<int:board_id>/what-if/', whatif_views.whatif_dashboard, name='whatif_dashboard'),
+    path('boards/<int:board_id>/what-if/simulate/', whatif_views.whatif_simulate, name='whatif_simulate'),
+    path('boards/<int:board_id>/what-if/save/', whatif_views.whatif_save, name='whatif_save'),
+    path('boards/<int:board_id>/what-if/history/', whatif_views.whatif_history, name='whatif_history'),
+    path('boards/<int:board_id>/what-if/<int:scenario_id>/delete/', whatif_views.whatif_delete, name='whatif_delete'),
     
     # Resource Leveling URLs
     path('api/resource-leveling/', include('kanban.resource_leveling_urls')),

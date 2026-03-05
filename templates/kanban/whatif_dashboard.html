@@ -1,0 +1,376 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}What-If Scenario Analyzer - {{ board.name }} - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ─── Stat cards ──────────────────────────────────────────── */
+    .wi-stat-card {
+        border-left: 4px solid #007bff;
+        transition: transform 0.2s;
+    }
+    .wi-stat-card:hover { transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,.1); }
+    .wi-stat-card.success { border-left-color: #28a745; }
+    .wi-stat-card.info    { border-left-color: #17a2b8; }
+    .wi-stat-card.warning { border-left-color: #ffc107; }
+    .wi-stat-card.danger  { border-left-color: #dc3545; }
+
+    /* ─── Slider section ──────────────────────────────────────── */
+    .slider-group { background: #f8f9fa; border-radius: .5rem; padding: 1rem 1.25rem; margin-bottom: .75rem; }
+    .slider-group label { font-weight: 600; }
+    .slider-group .form-range { width: 100%; }
+    .slider-value { font-size: 1.3rem; font-weight: 700; min-width: 60px; text-align: right; }
+
+    /* ─── Impact panel ────────────────────────────────────────── */
+    #impact-panel { display: none; }
+    #impact-panel.show { display: block; animation: fadeSlide .4s ease; }
+    @keyframes fadeSlide {
+        from { opacity: 0; transform: translateY(12px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .impact-table th { width: 28%; }
+    .delta-positive { color: #dc3545; font-weight: 600; }
+    .delta-negative { color: #28a745; font-weight: 600; }
+    .delta-neutral  { color: #6c757d; }
+
+    /* ─── Feasibility gauge ───────────────────────────────────── */
+    .feasibility-bar { height: 28px; border-radius: 14px; background: #e9ecef; overflow: hidden; }
+    .feasibility-fill {
+        height: 100%; border-radius: 14px; transition: width .6s ease;
+        background: linear-gradient(90deg, #dc3545 0%, #ffc107 50%, #28a745 100%);
+    }
+
+    /* ─── Conflict badges ─────────────────────────────────────── */
+    .conflict-item { padding: .5rem .75rem; border-left: 3px solid; border-radius: .25rem; margin-bottom: .5rem; background: #fff; }
+    .conflict-item.critical { border-left-color: #dc3545; background: #fff5f5; }
+    .conflict-item.high     { border-left-color: #fd7e14; background: #fff8f0; }
+    .conflict-item.medium   { border-left-color: #ffc107; background: #fffbea; }
+
+    /* ─── AI analysis card ────────────────────────────────────── */
+    .ai-card { border: 1px solid #d1d5db; border-radius: .5rem; }
+    .ai-card .card-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; }
+    .mitigation-list { counter-reset: mitigation; list-style: none; padding-left: 0; }
+    .mitigation-list li { counter-increment: mitigation; padding: .35rem 0; }
+    .mitigation-list li::before {
+        content: counter(mitigation); display: inline-flex; align-items: center; justify-content: center;
+        width: 22px; height: 22px; border-radius: 50%; background: #667eea; color: #fff;
+        font-size: .75rem; font-weight: 700; margin-right: .5rem;
+    }
+
+    /* ─── Saved scenarios ─────────────────────────────────────── */
+    .scenario-item { border-left: 3px solid #0d6efd; padding: .75rem 1rem; background: #f8f9fa; border-radius: .25rem; margin-bottom: .5rem; }
+    .scenario-item:hover { background: #e9ecef; }
+
+    /* ─── Warnings ────────────────────────────────────────────── */
+    .warning-list li { font-size: .9rem; color: #856404; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+
+    <!-- ── Breadcrumb & header ─────────────────────────────────── -->
+    <nav aria-label="breadcrumb" class="mb-2">
+        <ol class="breadcrumb small">
+            <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{% url 'board_detail' board.id %}">{{ board.name }}</a></li>
+            <li class="breadcrumb-item active">What-If Scenario Analyzer</li>
+        </ol>
+    </nav>
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="mb-0"><i class="fas fa-flask text-info me-2"></i>What-If Scenario Analyzer</h3>
+        <div>
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary btn-sm">
+                <i class="fas fa-arrow-left me-1"></i> Back to Board
+            </a>
+            <a href="{% url 'triple_constraint_dashboard' board.id %}" class="btn btn-outline-primary btn-sm ms-1">
+                <i class="fas fa-balance-scale me-1"></i> Triple Constraint
+            </a>
+        </div>
+    </div>
+
+    <!-- ── Warnings ────────────────────────────────────────────── -->
+    <div id="warnings-area"></div>
+
+    <!-- ── Section 1: Current Board State ──────────────────────── -->
+    <div class="row mb-4" id="baseline-cards">
+        <div class="col-md-3">
+            <div class="card wi-stat-card info">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1"><i class="fas fa-tasks me-1"></i> Scope</h6>
+                    <h3 class="mb-0" id="bl-tasks">{{ baseline.total_tasks }}</h3>
+                    <small class="text-muted"><span id="bl-remaining">{{ baseline.remaining_tasks }}</span> remaining</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card wi-stat-card {% if baseline.budget_utilization_pct > 95 %}danger{% elif baseline.budget_utilization_pct > 80 %}warning{% else %}success{% endif %}">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1"><i class="fas fa-dollar-sign me-1"></i> Budget</h6>
+                    <h3 class="mb-0" id="bl-budget">{{ baseline.budget_utilization_pct }}%</h3>
+                    <small class="text-muted">{{ baseline.budget_currency }} <span id="bl-spent">{{ baseline.budget_spent|floatformat:0 }}</span> / <span id="bl-allocated">{{ baseline.budget_allocated|floatformat:0 }}</span></small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card wi-stat-card {% if baseline.delay_probability > 60 %}danger{% elif baseline.delay_probability > 30 %}warning{% else %}success{% endif %}">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1"><i class="fas fa-calendar-alt me-1"></i> Timeline</h6>
+                    <h3 class="mb-0" id="bl-date">{% if baseline.predicted_date %}{{ baseline.predicted_date }}{% else %}N/A{% endif %}</h3>
+                    <small class="text-muted">Delay prob: <span id="bl-delay">{{ baseline.delay_probability }}</span>%</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card wi-stat-card {% if baseline.risk_level == 'critical' %}danger{% elif baseline.risk_level == 'high' %}warning{% elif baseline.risk_level == 'medium' %}info{% else %}success{% endif %}">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1"><i class="fas fa-exclamation-triangle me-1"></i> Risk</h6>
+                    <h3 class="mb-0 text-capitalize" id="bl-risk">{{ baseline.risk_level }}</h3>
+                    <small class="text-muted">Utilization: <span id="bl-util">{{ baseline.utilization_pct }}</span>%</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Section 2: Scenario Builder ─────────────────────────── -->
+    <div class="card mb-4">
+        <div class="card-header bg-light py-3">
+            <h5 class="mb-0"><i class="fas fa-sliders-h text-info me-2"></i>What if we&hellip;</h5>
+        </div>
+        <div class="card-body">
+            <!-- Scope slider -->
+            <div class="slider-group">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label><i class="fas fa-layer-group text-primary me-1"></i> Add / Remove Tasks</label>
+                    <div class="slider-value text-primary" id="scope-val">0</div>
+                </div>
+                <input type="range" class="form-range" id="scope-slider" min="-20" max="20" value="0" step="1">
+                <div class="d-flex justify-content-between">
+                    <small class="text-muted">-20 tasks</small>
+                    <small class="text-muted fw-bold" id="scope-abs">{{ baseline.total_tasks }} tasks → {{ baseline.total_tasks }} tasks</small>
+                    <small class="text-muted">+20 tasks</small>
+                </div>
+            </div>
+
+            <!-- Team slider -->
+            <div class="slider-group">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label><i class="fas fa-users text-success me-1"></i> Change Team Size</label>
+                    <div class="slider-value text-success" id="team-val">0</div>
+                </div>
+                <input type="range" class="form-range" id="team-slider" min="-5" max="5" value="0" step="1">
+                <div class="d-flex justify-content-between">
+                    <small class="text-muted">-5 members</small>
+                    <small class="text-muted fw-bold" id="team-abs">{{ baseline.team_size }} → {{ baseline.team_size }} members</small>
+                    <small class="text-muted">+5 members</small>
+                </div>
+            </div>
+
+            <!-- Deadline slider -->
+            <div class="slider-group">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label><i class="fas fa-calendar-check text-danger me-1"></i> Shift Deadline</label>
+                    <div class="slider-value text-danger" id="deadline-val">0 days</div>
+                </div>
+                <input type="range" class="form-range" id="deadline-slider" min="-56" max="56" value="0" step="7">
+                <div class="d-flex justify-content-between">
+                    <small class="text-muted">-8 weeks</small>
+                    <small class="text-muted fw-bold" id="deadline-abs">No shift</small>
+                    <small class="text-muted">+8 weeks</small>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-center mt-3 gap-2">
+                <button class="btn btn-info btn-lg px-4" id="btn-analyze" type="button">
+                    <i class="fas fa-flask me-2"></i> Analyze Impact
+                </button>
+                <button class="btn btn-outline-secondary" id="btn-reset" type="button">
+                    <i class="fas fa-undo me-1"></i> Reset
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Section 3: Impact Analysis (hidden until Analyze) ──── -->
+    <div id="impact-panel">
+
+        <!-- Loading -->
+        <div id="impact-loading" class="text-center py-5" style="display:none;">
+            <div class="spinner-border text-info" role="status"></div>
+            <p class="mt-2 text-muted">Running scenario simulation&hellip;</p>
+        </div>
+
+        <!-- Results -->
+        <div id="impact-results" style="display:none;">
+
+            <!-- Before/After comparison -->
+            <div class="card mb-4">
+                <div class="card-header bg-light py-3">
+                    <h5 class="mb-0"><i class="fas fa-columns text-primary me-2"></i>Before vs. After</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 impact-table">
+                            <thead class="table-light">
+                                <tr><th>Metric</th><th class="text-center">Current</th><th class="text-center">Projected</th><th class="text-center">Delta</th></tr>
+                            </thead>
+                            <tbody id="impact-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Feasibility gauge -->
+            <div class="card mb-4">
+                <div class="card-header bg-light py-3">
+                    <h5 class="mb-0"><i class="fas fa-tachometer-alt text-info me-2"></i>Feasibility Score</h5>
+                </div>
+                <div class="card-body">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="feasibility-bar flex-grow-1">
+                            <div class="feasibility-fill" id="feasibility-fill" style="width:0%"></div>
+                        </div>
+                        <span class="fs-4 fw-bold" id="feasibility-label">—</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Conflicts -->
+            <div class="card mb-4" id="conflicts-card" style="display:none;">
+                <div class="card-header bg-light py-3">
+                    <h5 class="mb-0"><i class="fas fa-exclamation-circle text-warning me-2"></i>New Conflicts Introduced</h5>
+                </div>
+                <div class="card-body" id="conflicts-body"></div>
+            </div>
+
+            <!-- Chart -->
+            <div class="card mb-4">
+                <div class="card-header bg-light py-3">
+                    <h5 class="mb-0"><i class="fas fa-chart-bar text-primary me-2"></i>Visual Comparison</h5>
+                </div>
+                <div class="card-body">
+                    <div style="position:relative; height:300px;">
+                        <canvas id="comparison-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Analysis (loaded separately) -->
+            <div id="ai-section">
+                <div class="text-center mb-4" id="ai-trigger">
+                    <button class="btn btn-outline-primary btn-lg" id="btn-ai" type="button">
+                        <i class="fas fa-robot me-2"></i> Enhance with AI Analysis
+                    </button>
+                </div>
+                <div id="ai-loading" class="text-center py-4" style="display:none;">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="mt-2 text-muted">Running AI analysis&hellip;</p>
+                </div>
+                <div id="ai-result-card" class="card ai-card mb-4" style="display:none;">
+                    <div class="card-header py-3">
+                        <h5 class="mb-0"><i class="fas fa-robot me-2"></i>AI Strategic Analysis</h5>
+                    </div>
+                    <div class="card-body" id="ai-result-body"></div>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="d-flex justify-content-center gap-2 mb-4">
+                <button class="btn btn-success" id="btn-save" type="button">
+                    <i class="fas fa-save me-1"></i> Save Scenario
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Section 4: Saved Scenarios ──────────────────────────── -->
+    <div class="card mb-4">
+        <div class="card-header bg-light py-3 d-flex justify-content-between align-items-center" data-bs-toggle="collapse" data-bs-target="#saved-panel" role="button">
+            <h5 class="mb-0"><i class="fas fa-history text-secondary me-2"></i>Saved Scenarios</h5>
+            <span class="badge bg-secondary" id="saved-count">{{ saved_scenarios|length }}</span>
+        </div>
+        <div class="collapse {% if saved_scenarios %}show{% endif %}" id="saved-panel">
+            <div class="card-body" id="saved-body">
+                {% if saved_scenarios %}
+                    {% for s in saved_scenarios %}
+                    <div class="scenario-item d-flex justify-content-between align-items-center" data-id="{{ s.id }}">
+                        <div>
+                            <strong>{% if s.is_starred %}<i class="fas fa-star text-warning me-1"></i>{% endif %}{{ s.name }}</strong>
+                            <small class="text-muted ms-2">{{ s.created_at|date:"M d, Y H:i" }}</small>
+                            <br>
+                            <small class="text-muted">
+                                {% with p=s.input_parameters %}
+                                    {% if p.tasks_added %}Tasks: {{ p.tasks_added|stringformat:"+d" }}{% endif %}
+                                    {% if p.team_size_delta %} Team: {{ p.team_size_delta|stringformat:"+d" }}{% endif %}
+                                    {% if p.deadline_shift_days %} Deadline: {{ p.deadline_shift_days|stringformat:"+d" }}d{% endif %}
+                                {% endwith %}
+                                {% with r=s.impact_results %}
+                                    {% if r.feasibility_score %} → Feasibility: {{ r.feasibility_score|floatformat:0 }}%{% endif %}
+                                {% endwith %}
+                            </small>
+                        </div>
+                        <div>
+                            <button class="btn btn-sm btn-outline-primary btn-load-scenario" data-params='{{ s.input_parameters|safe }}'>
+                                <i class="fas fa-upload me-1"></i> Load
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger btn-delete-scenario" data-id="{{ s.id }}">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted text-center mb-0">No saved scenarios yet. Run an analysis and click "Save Scenario" to keep it.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Save Scenario Modal -->
+<div class="modal fade" id="saveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-save me-2"></i>Save Scenario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="scenario-name" class="form-label">Scenario Name <span class="text-danger">*</span></label>
+                    <input type="text" class="form-control" id="scenario-name" maxlength="200" placeholder="e.g., Aggressive Q4 push">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="btn-confirm-save">
+                    <i class="fas fa-check me-1"></i> Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/chart.umd.min.js' %}"></script>
+<script src="{% static 'js/whatif_analyzer.js' %}"></script>
+<script>
+    // Pass data from Django to JS
+    window.WHATIF_CONFIG = {
+        boardId: {{ board.id }},
+        baseline: {{ baseline_json|safe }},
+        urls: {
+            simulate: '{% url "whatif_simulate" board.id %}',
+            save: '{% url "whatif_save" board.id %}',
+            history: '{% url "whatif_history" board.id %}',
+            deleteTpl: '{% url "whatif_delete" board.id 0 %}'.replace('/0/', '/{id}/'),
+        },
+        csrfToken: '{{ csrf_token }}',
+    };
+</script>
+{% endblock %}

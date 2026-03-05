@@ -21,6 +21,7 @@ from .budget_models import (
 )
 from .premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
 from .scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
+from .whatif_models import WhatIfScenario
 
 # Import resource leveling admin
 from .resource_leveling_admin import (
@@ -1020,3 +1021,11 @@ class ScopeTimelineEventAdmin(admin.ModelAdmin):
     list_filter = ('source_type', 'is_major_event')
     search_fields = ('title', 'description')
     readonly_fields = ('event_date',)
+
+
+@admin.register(WhatIfScenario)
+class WhatIfScenarioAdmin(admin.ModelAdmin):
+    list_display = ('name', 'board', 'scenario_type', 'is_starred', 'created_by', 'created_at')
+    list_filter = ('scenario_type', 'is_starred', 'created_at')
+    search_fields = ('name', 'board__name', 'created_by__username')
+    readonly_fields = ('created_at',)

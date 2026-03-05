@@ -670,7 +670,9 @@ class PrioritySuggestionService:
         if keyword_matches:
             explanation += f"Contains critical keywords suggesting high impact. "
         if days_until_due is not None:
-            if days_until_due > 60:
+            if days_until_due < 0:
+                explanation += f"Task is overdue by {abs(int(days_until_due))} day(s). "
+            elif days_until_due > 60:
                 explanation += f"Due date is {int(days_until_due)} days away (long-term). "
             elif days_until_due > 7:
                 explanation += f"Due date is {int(days_until_due)} days away. "

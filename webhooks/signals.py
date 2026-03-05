@@ -2,12 +2,16 @@
 Django Signals for Webhook Event Triggers
 Automatically fires webhooks when specific events occur
 """
-from django.db.models.signals import post_save, post_delete, pre_save
+from django.db.models.signals import post_save, post_delete, pre_save, pre_delete
 from django.dispatch import receiver
 from django.contrib.auth.models import User
 from kanban.models import Task, Comment, Board
 from webhooks.models import Webhook, WebhookDelivery, WebhookEvent
 from webhooks.tasks import deliver_webhook
+import threading
+
+# Thread-local storage to track boards being cascade-deleted
+_cascade_state = threading.local()
 
 
 def trigger_webhooks(event_type, board, object_id, data, triggered_by=None):
@@ -246,13 +250,35 @@ def task_assigned(sender, instance, created, **kwargs):
         delattr(instance, '_old_assigned_to')
 
 
+@receiver(pre_delete, sender=Board)
+def board_pre_delete(sender, instance, **kwargs):
+    """Track boards being deleted to prevent orphaned webhook events during CASCADE."""
+    if not hasattr(_cascade_state, 'deleting_board_ids'):
+        _cascade_state.deleting_board_ids = set()
+    _cascade_state.deleting_board_ids.add(instance.pk)
+
+
+@receiver(post_delete, sender=Board)
+def board_post_delete(sender, instance, **kwargs):
+    """Clean up cascade tracking after board deletion."""
+    if hasattr(_cascade_state, 'deleting_board_ids'):
+        _cascade_state.deleting_board_ids.discard(instance.pk)
+
+
 @receiver(post_delete, sender=Task)
 def task_deleted(sender, instance, **kwargs):
     """
     Triggered when a task is deleted
     """
     task = instance
-    board = task.column.board
+    try:
+        board = task.column.board
+    except Exception:
+        return
+
+    # Skip if the board itself is being cascade-deleted
+    if hasattr(_cascade_state, 'deleting_board_ids') and board.pk in _cascade_state.deleting_board_ids:
+        return
     
     task_data = {
         'id': task.id,
