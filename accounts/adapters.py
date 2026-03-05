@@ -110,12 +110,16 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
             try:
                 organization = Organization.objects.get(domain=domain)
                 
-                # Create user profile and assign to organization
+                # Create user profile and assign to organization — v2 onboarding
                 UserProfile.objects.get_or_create(
                     user=user,
                     defaults={
                         'organization': organization,
-                        'is_admin': False  # New Google users are not admins by default
+                        'is_admin': False,
+                        'completed_wizard': True,
+                        'has_seen_welcome': True,
+                        'onboarding_version': 2,
+                        'onboarding_status': 'pending',
                     }
                 )
                 
@@ -139,7 +143,11 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
                     user=user,
                     defaults={
                         'organization': organization,
-                        'is_admin': False
+                        'is_admin': False,
+                        'completed_wizard': True,
+                        'has_seen_welcome': True,
+                        'onboarding_version': 2,
+                        'onboarding_status': 'pending',
                     }
                 )
             
@@ -150,13 +158,20 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
     
     def get_login_redirect_url(self, request):
         """
-        Custom redirect after social login based on user's organization status
+        Custom redirect after social login — route to the correct
+        onboarding step for new users, or dashboard for returning users.
         """
         try:
-            # Check if user has a profile/organization
             profile = request.user.profile
-            # User has organization, redirect to dashboard
+            # Route v2 users to the correct onboarding step
+            if profile.onboarding_version >= 2:
+                if profile.onboarding_status == 'pending':
+                    return '/onboarding/'
+                if profile.onboarding_status == 'goal_submitted':
+                    return '/onboarding/generating/'
+                if profile.onboarding_status == 'workspace_generated':
+                    return '/onboarding/review/'
+            # completed, skipped, demo_exploring, or v1 → dashboard
             return '/dashboard/'
         except (AttributeError, UserProfile.DoesNotExist):
-            # User doesn't have organization, redirect to organization choice
             return '/accounts/social-signup-complete/'

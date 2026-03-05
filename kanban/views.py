@@ -33,7 +33,10 @@ def dashboard(request):
             user=request.user,
             organization=None,
             is_admin=False,
-            completed_wizard=True
+            completed_wizard=True,
+            has_seen_welcome=True,
+            onboarding_version=2,
+            onboarding_status='pending',
         )
     
     # ── Onboarding v2 redirect guard ────────────────────────────────
@@ -53,12 +56,6 @@ def dashboard(request):
     # Mark wizard as completed for new users (we skip the wizard now)
     if not profile.completed_wizard:
         profile.completed_wizard = True
-        profile.save()
-    
-    # Track if this is first visit for welcome modal
-    show_welcome_modal = not profile.has_seen_welcome
-    if show_welcome_modal:
-        profile.has_seen_welcome = True
         profile.save()
     
     # Import simplified mode setting
@@ -763,7 +760,6 @@ def dashboard(request):
             'my_tasks_count': my_tasks_count,
             'my_tasks_sort_by': sort_by,  # Current sort preference
             'now': timezone.now(),  # For comparing dates in the template
-            'show_welcome_modal': show_welcome_modal,  # Show welcome modal for first-time users
         # Demo mode / onboarding v2
         'demo_mode': demo_mode,
         'onboarding_profile': profile,

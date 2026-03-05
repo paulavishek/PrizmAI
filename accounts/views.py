@@ -272,10 +272,14 @@ def delete_organization(request):
 def social_signup_complete(request):
     """
     Handle post-social signup flow - auto-create profile in MVP mode.
+    Safety net: normally save_user() already creates the profile.
     """
     try:
         profile = request.user.profile
-        return redirect('dashboard')  # User already has profile
+        # Route v2 users to the correct onboarding step
+        if profile.onboarding_version >= 2 and profile.onboarding_status == 'pending':
+            return redirect('onboarding_welcome')
+        return redirect('dashboard')
     except UserProfile.DoesNotExist:
         # v2 onboarding: auto-create profile with new onboarding flow
         UserProfile.objects.create(
@@ -283,9 +287,9 @@ def social_signup_complete(request):
             organization=None,
             is_admin=False,
             completed_wizard=True,
-            has_seen_welcome=True,       # v2 uses new welcome screen
+            has_seen_welcome=True,
             onboarding_version=2,
-            onboarding_status='pending', # will redirect to /onboarding/
+            onboarding_status='pending',
         )
         messages.success(request, 'Welcome! Your account is ready to use.')
-        return redirect('dashboard')
+        return redirect('onboarding_welcome')
