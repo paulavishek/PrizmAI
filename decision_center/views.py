@@ -8,6 +8,7 @@ from datetime import timedelta
 
 from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
+from django.db.models import Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
@@ -147,7 +148,7 @@ def decision_center_widget_data(request):
         'headline': briefing or '',
         'estimated_minutes': (
             pending.aggregate(
-                total=models.Sum('estimated_minutes'),
+                total=Sum('estimated_minutes'),
             )['total'] or 0
         ),
         'last_cleared_at': (
