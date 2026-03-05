@@ -103,6 +103,37 @@
         </div>
     </div>
 
+    {% elif state == 'failed' %}
+    {# ============================================================ #}
+    {# STATE — Failed                                                #}
+    {# ============================================================ #}
+    <div class="card border-danger">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+            <h4>Autopsy Failed</h4>
+            <p class="text-muted mb-3">
+                {{ latest_report.ai_summary|default:"The analysis could not be completed. Please try again." }}
+            </p>
+            {% if has_quota %}
+            <button id="btn-run-autopsy" class="btn btn-warning btn-lg text-white" onclick="runAutopsy()">
+                <i class="fas fa-redo me-2"></i> Retry Scope Autopsy
+            </button>
+            {% endif %}
+        </div>
+    </div>
+    {# Loading spinner (shown after click) #}
+    <div id="autopsy-loading" class="text-center py-5" style="display:none;">
+        <div class="spinner-border text-warning" role="status" style="width:3rem;height:3rem;">
+            <span class="visually-hidden">Analyzing…</span>
+        </div>
+        <div class="mt-3">
+            <div class="progress mx-auto" style="max-width:400px;height:8px;">
+                <div id="autopsy-progress" class="progress-bar bg-warning progress-bar-striped progress-bar-animated" style="width:10%"></div>
+            </div>
+            <p class="mt-2 text-muted" id="autopsy-status-text">Collecting scope events…</p>
+        </div>
+    </div>
+
     {% elif state == 'results' %}
     {# ============================================================ #}
     {# STATE D — Results                                             #}
@@ -341,6 +372,7 @@
 <script>
 const BOARD_ID = {{ board.id }};
 const CSRF_TOKEN = '{{ csrf_token }}';
+let REPORT_ID = {% if latest_report %}{{ latest_report.id }}{% else %}null{% endif %};
 
 // ── Toggle event detail card ────────────────────────────────────────
 function toggleEventDetail(idx) {
@@ -358,7 +390,7 @@ function runAutopsy() {
     const btn = document.getElementById('btn-run-autopsy');
     const loader = document.getElementById('autopsy-loading');
     if (btn) btn.style.display = 'none';
-    if (btn) btn.closest('.card').style.display = 'none';
+    if (btn && btn.closest('.card')) btn.closest('.card').style.display = 'none';
     if (loader) loader.style.display = 'block';
 
     updateProgress(15, 'Collecting scope events…');
@@ -372,7 +404,8 @@ function runAutopsy() {
     })
     .then(r => r.json())
     .then(data => {
-        if (data.success) {
+        if (data.success && data.report_id) {
+            REPORT_ID = data.report_id;
             updateProgress(30, 'Analyzing scope history…');
             pollStatus();
         } else {
@@ -386,14 +419,15 @@ function runAutopsy() {
     });
 }
 
-// ── Poll for completion ─────────────────────────────────────────────
+// ── Poll for completion via lightweight JSON endpoint ────────────────
 let pollAttempts = 0;
+const MAX_POLL_ATTEMPTS = 60;  // ~3 minutes at 3s intervals
 function pollStatus() {
-    // Find the latest generating report by refreshing
-    fetch(`/boards/${BOARD_ID}/scope-autopsy/`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-        .catch(() => {});
+    if (!REPORT_ID) {
+        window.location.reload();
+        return;
+    }
 
-    // Simple approach: reload the page after a delay to pick up results
     pollAttempts++;
     const stages = [
         [35, 'Calculating cost impact…'],
@@ -408,31 +442,27 @@ function pollStatus() {
         updateProgress(pct, msg);
     }
 
-    if (pollAttempts > 20) {
-        // Give up polling, reload
+    if (pollAttempts > MAX_POLL_ATTEMPTS) {
+        updateProgress(100, 'Taking longer than expected…');
         window.location.reload();
         return;
     }
 
     setTimeout(function() {
-        // Check by reloading — status endpoint requires report_id which we don't have client-side.
-        // Instead, just reload: if the state is 'results', the page will render results.
-        fetch(`/boards/${BOARD_ID}/scope-autopsy/`, {
-            method: 'GET',
-            redirect: 'follow',
-        })
-        .then(r => r.text())
-        .then(html => {
-            // If the response contains 'state-results' marker, reload
-            if (html.includes('AI Summary') || html.includes('Scope Growth Timeline')) {
+        fetch(`/scope-autopsy/${REPORT_ID}/status/`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'complete') {
+                updateProgress(100, 'Done!');
                 window.location.reload();
-            } else if (html.includes('Analysis failed')) {
+            } else if (data.status === 'failed') {
                 window.location.reload();
             } else {
                 pollStatus();
             }
         })
         .catch(() => {
+            // Network hiccup — retry
             pollStatus();
         });
     }, 3000);

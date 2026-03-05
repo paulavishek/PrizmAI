@@ -16,16 +16,16 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True, name='kanban.generate_scope_autopsy', max_retries=2)
-def generate_scope_autopsy(self, board_id, user_id):
+def generate_scope_autopsy(self, report_id):
     """
     Asynchronously generate a full Scope Creep Autopsy report.
 
-    1. Creates ScopeAutopsyReport with status='generating'
-    2. Collects baseline + scope history
-    3. Estimates cost/delay per event
-    4. Sends to Gemini for pattern analysis
-    5. Saves structured results and timeline events
-    6. Creates a MemoryNode in the Knowledge Graph
+    Expects a pre-created ScopeAutopsyReport (status='generating').
+    1. Collects baseline + scope history
+    2. Estimates cost/delay per event
+    3. Sends to Gemini for pattern analysis
+    4. Saves structured results and timeline events
+    5. Creates a MemoryNode in the Knowledge Graph
     """
     from kanban.models import Board, Task
     from kanban.scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
@@ -34,24 +34,17 @@ def generate_scope_autopsy(self, board_id, user_id):
         collect_scope_history,
         estimate_cost_impact,
     )
-    from django.contrib.auth.models import User
 
     start_time = time.time()
 
     try:
-        board = Board.objects.get(pk=board_id)
-    except Board.DoesNotExist:
-        logger.error("Board %s not found for scope autopsy", board_id)
-        return {'status': 'error', 'message': 'Board not found'}
+        report = ScopeAutopsyReport.objects.select_related('board', 'created_by').get(pk=report_id)
+    except ScopeAutopsyReport.DoesNotExist:
+        logger.error("ScopeAutopsyReport %s not found", report_id)
+        return {'status': 'error', 'message': 'Report not found'}
 
-    user = User.objects.filter(pk=user_id).first()
-
-    # 1. Create the report shell
-    report = ScopeAutopsyReport.objects.create(
-        board=board,
-        created_by=user,
-        status='generating',
-    )
+    board = report.board
+    user = report.created_by
 
     try:
         # 2. Collect baseline
@@ -198,8 +191,8 @@ def generate_scope_autopsy(self, board_id, user_id):
     except Exception as exc:
         report.status = 'failed'
         report.ai_summary = f"Analysis failed: {str(exc)[:500]}"
-        report.save()
-        logger.error("Scope autopsy failed for board %s: %s", board_id, exc, exc_info=True)
+        report.save(update_fields=['status', 'ai_summary'])
+        logger.error("Scope autopsy failed for report %s (board %s): %s", report_id, board.id, exc, exc_info=True)
 
         try:
             from api.ai_usage_utils import track_ai_request
@@ -207,7 +200,7 @@ def generate_scope_autopsy(self, board_id, user_id):
                 user=user,
                 feature='scope_autopsy',
                 request_type='scope_autopsy_generation',
-                board_id=board_id,
+                board_id=board.id,
                 success=False,
                 error_message=str(exc)[:500],
             )
@@ -352,20 +345,95 @@ def _call_gemini_for_autopsy(board_snapshot, events, past_scope_notes, project_c
         'top_p': 0.8,
         'top_k': 40,
         'max_output_tokens': 4096,
+        'response_mime_type': 'application/json',
     }
 
     response = model.generate_content(user_prompt, generation_config=generation_config)
     raw = response.text.strip()
 
     # Strip markdown fences if accidentally returned
-    if raw.startswith('```'):
+    if '```json' in raw:
+        raw = raw.split('```json')[1].split('```')[0].strip()
+    elif raw.startswith('```'):
         raw = raw.split('\n', 1)[1] if '\n' in raw else raw[3:]
-    if raw.endswith('```'):
-        raw = raw[:-3].strip()
-    if raw.startswith('json'):
-        raw = raw[4:].strip()
+        if raw.endswith('```'):
+            raw = raw[:-3].strip()
 
-    return json.loads(raw)
+    # Fix unescaped control characters inside JSON string values
+    def _fix_unescaped(text):
+        result = []
+        in_string = False
+        escape_next = False
+        for ch in text:
+            if escape_next:
+                result.append(ch)
+                escape_next = False
+            elif ch == '\\' and in_string:
+                result.append(ch)
+                escape_next = True
+            elif ch == '"':
+                in_string = not in_string
+                result.append(ch)
+            elif in_string and ch == '\n':
+                result.append('\\n')
+            elif in_string and ch == '\r':
+                result.append('\\r')
+            elif in_string and ch == '\t':
+                result.append('\\t')
+            else:
+                result.append(ch)
+        return ''.join(result)
+
+    # Fix Python-style booleans/None and trailing commas
+    import re
+    raw = _fix_unescaped(raw)
+    raw = raw.replace('True', 'true').replace('False', 'false').replace('None', 'null')
+    raw = re.sub(r',\s*([}\]])', r'\1', raw)
+
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        # Attempt repair: close any unclosed strings/brackets
+        text = raw.rstrip()
+        in_str = False
+        esc = False
+        stack = []
+        for ch in text:
+            if esc:
+                esc = False
+                continue
+            if ch == '\\' and in_str:
+                esc = True
+                continue
+            if ch == '"':
+                in_str = not in_str
+            elif not in_str:
+                if ch in ('{', '['):
+                    stack.append(ch)
+                elif ch == '}' and stack and stack[-1] == '{':
+                    stack.pop()
+                elif ch == ']' and stack and stack[-1] == '[':
+                    stack.pop()
+        suffix = ''
+        if in_str:
+            suffix += '"'
+        for opener in reversed(stack):
+            suffix += ']' if opener == '[' else '}'
+        repaired = text + suffix
+        # Strip control characters and retry
+        repaired = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', repaired)
+        try:
+            return json.loads(repaired)
+        except json.JSONDecodeError:
+            logger.error("Failed to parse Gemini JSON even after repair. Raw (500 chars): %s", raw[:500])
+            # Return a minimal valid response so the report completes
+            return {
+                'ai_summary': 'AI analysis completed but response could not be fully parsed. The scope data below is still accurate.',
+                'pattern_analysis': '',
+                'recommendations': [],
+                'primary_scope_driver': 'Unknown (parsing error)',
+                'confidence_note': 'AI response parsing failed; numeric data is accurate but text analysis may be incomplete.',
+            }
 
 
 def _create_autopsy_memory_node(report, ai_result, user):

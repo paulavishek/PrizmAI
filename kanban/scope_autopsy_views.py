@@ -60,11 +60,24 @@ def scope_autopsy_dashboard(request, board_id):
         .first()
     )
 
+    # Auto-expire reports stuck in 'generating' for over 5 minutes
+    from datetime import timedelta
+    if (
+        latest_report
+        and latest_report.status == 'generating'
+        and latest_report.created_at < timezone.now() - timedelta(minutes=5)
+    ):
+        latest_report.status = 'failed'
+        latest_report.ai_summary = 'Analysis timed out. The task may not have been processed by the worker. Please try again.'
+        latest_report.save(update_fields=['status', 'ai_summary'])
+
     # Determine state
     if latest_report and latest_report.status == 'generating':
         state = 'generating'
     elif latest_report and latest_report.status == 'complete':
         state = 'results'
+    elif latest_report and latest_report.status == 'failed':
+        state = 'failed'
     elif has_changes and growth_pct > 0:
         state = 'ready'
     else:
@@ -137,12 +150,20 @@ def run_scope_autopsy(request, board_id):
             'error': 'An autopsy is already generating for this board.',
         }, status=409)
 
+    # Create report in the view so we can return report_id immediately
+    report = ScopeAutopsyReport.objects.create(
+        board=board,
+        created_by=request.user,
+        status='generating',
+    )
+
     from kanban.tasks.scope_autopsy_tasks import generate_scope_autopsy
-    generate_scope_autopsy.delay(board.id, request.user.id)
+    generate_scope_autopsy.delay(report.id)
 
     return JsonResponse({
         'success': True,
         'message': 'Scope autopsy generation started.',
+        'report_id': report.id,
     })
 
 
