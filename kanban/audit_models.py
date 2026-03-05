@@ -99,6 +99,11 @@ class SystemAuditLog(models.Model):
         # System Events
         ('system.error', 'System Error'),
         ('system.warning', 'System Warning'),
+        
+        # Knowledge Graph / Organizational Memory
+        ('memory.search', 'Organizational Memory Search'),
+        ('memory.created', 'Memory Node Created'),
+        ('memory.feedback', 'Memory Feedback Submitted'),
     ]
     
     SEVERITY_LEVELS = [

@@ -260,6 +260,14 @@
             <p class="text-muted mb-0">{{ board.description }}</p>
         {% endif %}
     </div>    <div class="btn-group">
+
+<!-- Déjà Vu Banner (Knowledge Graph) -->
+<div id="dejaVuBanner" class="alert alert-warning alert-dismissible fade show mb-3" role="alert" style="display:none;">
+    <strong><i class="fas fa-lightbulb me-1"></i>Déjà Vu!</strong> Similar past projects found:
+    <span id="dejaVuSummary"></span>
+    <a href="{% url 'board_knowledge' board.id %}" class="alert-link ms-2">View full knowledge page &rarr;</a>
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>
         <a href="{% if is_demo_board and not simplified_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}" class="btn btn-outline-secondary">
             <i class="fas fa-arrow-left me-1"></i> Back
         </a>
@@ -303,6 +311,9 @@
         </a>
         <a href="{% url 'automations_list' board.id %}" class="btn btn-outline-warning" title="Automation rules for this board">
             <i class="fas fa-bolt me-1"></i> Automations
+        </a>
+        <a href="{% url 'board_knowledge' board.id %}" class="btn btn-outline-info" title="Project Knowledge — Decisions, Lessons & Organizational Memory">
+            <i class="fas fa-brain me-1"></i> Knowledge
         </a>
         <div class="btn-group">
             <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
@@ -1224,6 +1235,22 @@
     </script>
 
 <script src="{% static 'js/command_palette.js' %}?v={{ STATIC_VERSION|default:'9' }}"></script>
+
+<!-- Déjà Vu Banner Script -->
+<script>
+(function() {
+    fetch("{% url 'deja_vu_check' board.id %}")
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.results && data.results.length > 0) {
+                var summary = data.results.map(function(r) { return r.title; }).join(', ');
+                document.getElementById('dejaVuSummary').textContent = summary;
+                document.getElementById('dejaVuBanner').style.display = 'block';
+            }
+        })
+        .catch(function() {});
+})();
+</script>
 {% endblock %}
 
 {% endblock content %}

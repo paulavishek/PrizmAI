@@ -1,0 +1,223 @@
+{% extends 'base.html' %}
+{% block title %}Organizational Memory — PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+.org-mem-hero { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border-radius: 0.5rem; }
+.org-mem-stat { font-size: 2rem; font-weight: 700; line-height: 1; }
+.search-result-card { border-left: 4px solid #667eea; transition: box-shadow 0.2s; }
+.search-result-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+.confidence-high { color: #198754; }
+.confidence-medium { color: #ffc107; }
+.confidence-low { color: #dc3545; }
+.source-chip { font-size: 0.8rem; cursor: default; }
+.feedback-btn { cursor: pointer; opacity: 0.5; transition: opacity 0.2s; }
+.feedback-btn:hover, .feedback-btn.active { opacity: 1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-4">
+    <!-- Hero -->
+    <div class="org-mem-hero p-4 mb-4">
+        <div class="row align-items-center">
+            <div class="col-md-7">
+                <h2 class="mb-1"><i class="fas fa-brain me-2"></i>Organizational Memory</h2>
+                <p class="mb-0 opacity-75">Ask anything about your organization's project history — decisions, lessons, outcomes, and risks.</p>
+            </div>
+            <div class="col-md-5">
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="org-mem-stat">{{ total_nodes }}</div>
+                        <small class="opacity-75">Memories</small>
+                    </div>
+                    <div class="col-4">
+                        <div class="org-mem-stat">{{ boards_count }}</div>
+                        <small class="opacity-75">Projects</small>
+                    </div>
+                    <div class="col-4">
+                        {% if oldest_memory_date %}
+                        <div class="org-mem-stat" style="font-size:1.1rem;">{{ oldest_memory_date|date:"M Y" }}</div>
+                        <small class="opacity-75">Earliest</small>
+                        {% else %}
+                        <div class="org-mem-stat">—</div>
+                        <small class="opacity-75">Earliest</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search Bar -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="input-group input-group-lg">
+                <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                <input type="text" id="orgMemoryQuery" class="form-control border-start-0"
+                       placeholder="e.g. Have we ever migrated databases before? What went wrong?"
+                       maxlength="500" autofocus>
+                <button class="btn btn-primary" id="orgMemorySearchBtn">
+                    <i class="fas fa-paper-plane me-1"></i> Ask
+                </button>
+            </div>
+            <small class="text-muted mt-1 d-block">Powered by Gemini AI. Your question is matched against all project memories you have access to.</small>
+        </div>
+    </div>
+
+    <!-- Loading -->
+    <div id="orgMemoryLoading" class="text-center py-5" style="display:none;">
+        <div class="spinner-border text-primary" role="status"></div>
+        <p class="text-muted mt-2">Searching organizational memory…</p>
+    </div>
+
+    <!-- Result -->
+    <div id="orgMemoryResult" style="display:none;">
+        <div class="card search-result-card mb-3">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <h5 class="mb-0"><i class="fas fa-lightbulb me-2 text-warning"></i>Answer</h5>
+                    <span id="confidenceBadge" class="badge"></span>
+                </div>
+                <p id="answerText" class="mb-3"></p>
+                <div id="sourcesContainer" class="mb-3"></div>
+                <div class="d-flex align-items-center gap-3">
+                    <small class="text-muted">Was this helpful?</small>
+                    <i class="fas fa-thumbs-up feedback-btn" id="feedbackUp" title="Helpful"></i>
+                    <i class="fas fa-thumbs-down feedback-btn" id="feedbackDown" title="Not helpful"></i>
+                    <small id="feedbackMsg" class="text-success d-none">Thanks for your feedback!</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error -->
+    <div id="orgMemoryError" class="alert alert-danger d-none"></div>
+
+    <!-- Recent Queries -->
+    {% if recent_queries %}
+    <div class="mt-4">
+        <h6 class="text-muted"><i class="fas fa-history me-1"></i>Recent Queries</h6>
+        <div class="list-group list-group-flush">
+            {% for q in recent_queries %}
+            <button type="button" class="list-group-item list-group-item-action recent-query-btn small py-2">
+                {{ q.query_text|truncatewords:20 }}
+                <span class="text-muted float-end">{{ q.asked_at|date:"M d" }}</span>
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const queryInput = document.getElementById('orgMemoryQuery');
+    const searchBtn = document.getElementById('orgMemorySearchBtn');
+    const loadingDiv = document.getElementById('orgMemoryLoading');
+    const resultDiv = document.getElementById('orgMemoryResult');
+    const errorDiv = document.getElementById('orgMemoryError');
+    const answerText = document.getElementById('answerText');
+    const confidenceBadge = document.getElementById('confidenceBadge');
+    const sourcesContainer = document.getElementById('sourcesContainer');
+    const feedbackUp = document.getElementById('feedbackUp');
+    const feedbackDown = document.getElementById('feedbackDown');
+    const feedbackMsg = document.getElementById('feedbackMsg');
+
+    let currentQueryId = null;
+
+    function doSearch() {
+        const query = queryInput.value.trim();
+        if (!query) return;
+
+        loadingDiv.style.display = 'block';
+        resultDiv.style.display = 'none';
+        errorDiv.classList.add('d-none');
+        feedbackUp.classList.remove('active');
+        feedbackDown.classList.remove('active');
+        feedbackMsg.classList.add('d-none');
+        searchBtn.disabled = true;
+
+        fetch("{% url 'organizational_memory_search' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ query })
+        })
+        .then(r => r.json())
+        .then(data => {
+            loadingDiv.style.display = 'none';
+            if (data.error) {
+                errorDiv.textContent = data.error;
+                errorDiv.classList.remove('d-none');
+                return;
+            }
+
+            currentQueryId = data.query_id;
+            answerText.textContent = data.answer || 'No answer generated.';
+
+            const conf = (data.confidence || 'Low');
+            confidenceBadge.textContent = conf + ' confidence';
+            confidenceBadge.className = 'badge bg-' + (conf === 'High' ? 'success' : conf === 'Medium' ? 'warning text-dark' : 'danger');
+
+            let srcHtml = '';
+            if (data.source_details && data.source_details.length > 0) {
+                srcHtml = '<small class="text-muted d-block mb-1">Sources:</small>';
+                data.source_details.forEach(s => {
+                    srcHtml += `<span class="badge bg-light text-dark source-chip me-1 mb-1">
+                        <i class="fas fa-link me-1"></i>${s.title} (${s.board_name}, ${s.date})
+                    </span>`;
+                });
+            }
+            sourcesContainer.innerHTML = srcHtml;
+            resultDiv.style.display = 'block';
+        })
+        .catch(() => {
+            loadingDiv.style.display = 'none';
+            errorDiv.textContent = 'Network error. Please try again.';
+            errorDiv.classList.remove('d-none');
+        })
+        .finally(() => {
+            searchBtn.disabled = false;
+        });
+    }
+
+    searchBtn.addEventListener('click', doSearch);
+    queryInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') doSearch();
+    });
+
+    // Feedback
+    function sendFeedback(wasHelpful) {
+        if (!currentQueryId) return;
+        feedbackUp.classList.toggle('active', wasHelpful);
+        feedbackDown.classList.toggle('active', !wasHelpful);
+        feedbackMsg.classList.remove('d-none');
+
+        fetch(`/memory/feedback/${currentQueryId}/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ was_helpful: wasHelpful })
+        }).catch(() => {});
+    }
+
+    feedbackUp.addEventListener('click', () => sendFeedback(true));
+    feedbackDown.addEventListener('click', () => sendFeedback(false));
+
+    // Recent query click
+    document.querySelectorAll('.recent-query-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            queryInput.value = this.textContent.trim().replace(/\s+\w+ \d+$/, '');
+            doSearch();
+        });
+    });
+});
+</script>
+{% endblock %}

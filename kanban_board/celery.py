@@ -88,6 +88,22 @@ app.conf.beat_schedule = {
         'task': 'kanban.run_ab_experiments',
         'schedule': crontab(hour=4, minute=0, day_of_week=0),  # Sunday 4 AM
     },
+    # --- Knowledge Graph Tasks ---
+    # Generate memory connections weekly on Sunday at 5:00 AM
+    'kg-generate-connections-weekly': {
+        'task': 'knowledge_graph.generate_memory_connections',
+        'schedule': crontab(hour=5, minute=0, day_of_week=0),  # Sunday 5 AM
+    },
+    # Check missed deadlines daily at 1:00 AM
+    'kg-check-missed-deadlines-daily': {
+        'task': 'knowledge_graph.check_missed_deadlines',
+        'schedule': crontab(hour=1, minute=0),  # Daily 1 AM
+    },
+    # Check budget thresholds daily at 1:30 AM
+    'kg-check-budget-thresholds-daily': {
+        'task': 'knowledge_graph.check_budget_thresholds',
+        'schedule': crontab(hour=1, minute=30),  # Daily 1:30 AM
+    },
 }
 
 # Route all AI summary tasks to a dedicated 'summaries' queue so they never

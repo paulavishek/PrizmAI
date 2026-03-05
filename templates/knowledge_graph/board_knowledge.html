@@ -1,0 +1,231 @@
+{% extends 'base.html' %}
+{% block title %}Knowledge — {{ board.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+.kg-node-card { border-left: 4px solid #6c757d; transition: box-shadow 0.2s; }
+.kg-node-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+.kg-node-card.decision { border-left-color: #0d6efd; }
+.kg-node-card.lesson { border-left-color: #198754; }
+.kg-node-card.risk_event { border-left-color: #dc3545; }
+.kg-node-card.outcome { border-left-color: #ffc107; }
+.kg-node-card.milestone { border-left-color: #0dcaf0; }
+.kg-node-card.conflict_resolution { border-left-color: #6f42c1; }
+.kg-node-card.scope_change { border-left-color: #fd7e14; }
+.kg-node-card.ai_recommendation { border-left-color: #667eea; }
+.kg-node-card.manual_log { border-left-color: #20c997; }
+.kg-tag { font-size: 0.75rem; }
+.kg-section-title { border-bottom: 2px solid #dee2e6; padding-bottom: 0.5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1"><i class="fas fa-brain me-2 text-primary"></i>Project Knowledge</h2>
+            <p class="text-muted mb-0">{{ board.name }} &mdash; {{ total_count }} memor{{ total_count|pluralize:"y,ies" }} captured</p>
+        </div>
+        <div>
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-arrow-left me-1"></i> Back to Board
+            </a>
+            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMemoryModal">
+                <i class="fas fa-plus me-1"></i> Add Decision / Lesson
+            </button>
+        </div>
+    </div>
+
+    <!-- Déjà Vu Panel -->
+    <div id="deja-vu-panel" class="mb-4" style="display:none;">
+        <div class="card border-warning">
+            <div class="card-body">
+                <h5 class="card-title text-warning"><i class="fas fa-lightbulb me-2"></i>Déjà Vu — Similar Past Projects</h5>
+                <div id="deja-vu-results"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Section A: Manual Decisions & Lessons -->
+        <div class="col-lg-6 mb-4">
+            <h5 class="kg-section-title"><i class="fas fa-gavel me-2 text-primary"></i>Decision Log & Lessons</h5>
+            {% if manual_nodes %}
+            {% for node in manual_nodes %}
+            <div class="card kg-node-card {{ node.node_type }} mb-3">
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <h6 class="mb-1">{{ node.title }}</h6>
+                        <small class="text-muted text-nowrap ms-2">{{ node.created_at|date:"M d, Y" }}</small>
+                    </div>
+                    <p class="mb-1 small">{{ node.content|truncatewords:50 }}</p>
+                    <div>
+                        <span class="badge bg-secondary kg-tag">{{ node.get_node_type_display }}</span>
+                        {% for tag in node.tags %}
+                        <span class="badge bg-light text-dark kg-tag">{{ tag }}</span>
+                        {% endfor %}
+                        {% if node.connection_count %}
+                        <span class="badge bg-info kg-tag"><i class="fas fa-link me-1"></i>{{ node.connection_count }} connection{{ node.connection_count|pluralize }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="text-center text-muted py-5">
+                <i class="fas fa-book-open fa-2x mb-3 d-block"></i>
+                No manual entries yet. Click <strong>"Add Decision / Lesson"</strong> to start recording.
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Section B: Auto-Captured Memories -->
+        <div class="col-lg-6 mb-4">
+            <h5 class="kg-section-title"><i class="fas fa-robot me-2 text-success"></i>Auto-Captured Memories <span class="badge bg-success">{{ auto_count }}</span></h5>
+            {% if auto_nodes %}
+            {% for node in auto_nodes %}
+            <div class="card kg-node-card {{ node.node_type }} mb-3">
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <h6 class="mb-1">{{ node.title }}</h6>
+                        <small class="text-muted text-nowrap ms-2">{{ node.created_at|date:"M d, Y" }}</small>
+                    </div>
+                    <p class="mb-1 small">{{ node.content|truncatewords:50 }}</p>
+                    <div>
+                        <span class="badge bg-secondary kg-tag">{{ node.get_node_type_display }}</span>
+                        {% for tag in node.tags %}
+                        <span class="badge bg-light text-dark kg-tag">{{ tag }}</span>
+                        {% endfor %}
+                        {% if node.connection_count %}
+                        <span class="badge bg-info kg-tag"><i class="fas fa-link me-1"></i>{{ node.connection_count }} connection{{ node.connection_count|pluralize }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="text-center text-muted py-5">
+                <i class="fas fa-robot fa-2x mb-3 d-block"></i>
+                No auto-captured memories yet. Complete tasks, resolve conflicts, and archive projects to build your knowledge base.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Add Memory Modal -->
+<div class="modal fade" id="addMemoryModal" tabindex="-1" aria-labelledby="addMemoryModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addMemoryModalLabel"><i class="fas fa-plus-circle me-2"></i>Add Decision / Lesson</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="memoryNodeType" class="form-label">Type</label>
+                    <select id="memoryNodeType" class="form-select">
+                        <option value="decision">Decision</option>
+                        <option value="manual_log">Lesson / General Note</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="memoryTitle" class="form-label">Title <span class="text-danger">*</span></label>
+                    <input type="text" id="memoryTitle" class="form-control" maxlength="200" placeholder="e.g. Switched from REST to GraphQL">
+                </div>
+                <div class="mb-3">
+                    <label for="memoryContent" class="form-label">Details <span class="text-danger">*</span></label>
+                    <textarea id="memoryContent" class="form-control" rows="4" placeholder="Why was this decision made? What was the context?"></textarea>
+                </div>
+                <div class="mb-3">
+                    <label for="memoryTags" class="form-label">Tags (comma-separated)</label>
+                    <input type="text" id="memoryTags" class="form-control" placeholder="e.g. architecture, frontend">
+                </div>
+                <div id="addMemoryError" class="alert alert-danger d-none"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveMemoryBtn">
+                    <i class="fas fa-save me-1"></i> Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // --- Add Manual Memory ---
+    const saveBtn = document.getElementById('saveMemoryBtn');
+    const errDiv = document.getElementById('addMemoryError');
+
+    saveBtn.addEventListener('click', function() {
+        const title = document.getElementById('memoryTitle').value.trim();
+        const content = document.getElementById('memoryContent').value.trim();
+        const nodeType = document.getElementById('memoryNodeType').value;
+        const tags = document.getElementById('memoryTags').value.trim();
+
+        errDiv.classList.add('d-none');
+        if (!title || !content) {
+            errDiv.textContent = 'Title and details are required.';
+            errDiv.classList.remove('d-none');
+            return;
+        }
+
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i> Saving…';
+
+        fetch("{% url 'add_manual_memory' board.id %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ title, content, node_type: nodeType, tags })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                errDiv.textContent = data.error;
+                errDiv.classList.remove('d-none');
+            } else {
+                location.reload();
+            }
+        })
+        .catch(() => {
+            errDiv.textContent = 'Network error. Please try again.';
+            errDiv.classList.remove('d-none');
+        })
+        .finally(() => {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save me-1"></i> Save';
+        });
+    });
+
+    // --- Déjà Vu Check ---
+    fetch("{% url 'deja_vu_check' board.id %}")
+        .then(r => r.json())
+        .then(data => {
+            if (data.results && data.results.length > 0) {
+                const panel = document.getElementById('deja-vu-panel');
+                const container = document.getElementById('deja-vu-results');
+                let html = '';
+                data.results.forEach(item => {
+                    html += `<div class="border rounded p-2 mb-2">
+                        <strong>${item.title}</strong>
+                        <span class="badge bg-secondary ms-1">${item.node_type}</span>
+                        <span class="text-muted small ms-2">${item.board_name} — ${item.date}</span>
+                        <p class="mb-0 small mt-1">${item.relevance_reason}</p>
+                    </div>`;
+                });
+                container.innerHTML = html;
+                panel.style.display = 'block';
+            }
+        })
+        .catch(() => {});
+});
+</script>
+{% endblock %}

@@ -314,6 +314,16 @@ class Board(models.Model):
         help_text="Explainability metadata for the AI summary (confidence, data completeness, key drivers)."
     )
 
+    # Archival status
+    is_archived = models.BooleanField(
+        default=False,
+        help_text="Whether this board has been archived/completed."
+    )
+    archived_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text="When the board was archived."
+    )
+
     def __str__(self):
         return self.name
     

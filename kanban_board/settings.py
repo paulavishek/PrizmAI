@@ -103,6 +103,7 @@ INSTALLED_APPS = [
     'api',  # RESTful API for external integrations
     'webhooks',  # Webhook system for event-driven integrations
     'analytics',  # Analytics and user feedback system
+    'knowledge_graph',  # Knowledge Graph Project Memory system
 ]
 
 MIDDLEWARE = [
