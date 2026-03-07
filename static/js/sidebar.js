@@ -1,10 +1,29 @@
 /**
  * PrizmAI Sidebar — Toggle, collapse, mobile drawer logic
+ * Uses direct inline styles for layout to avoid CSS caching / specificity issues.
  */
 (function () {
     'use strict';
 
     var STORAGE_KEY = 'prizmSidebarCollapsed';
+    var EXPANDED_W = '220px';
+    var COLLAPSED_W = '60px';
+
+    function applyLayout(collapsed) {
+        var w = collapsed ? COLLAPSED_W : EXPANDED_W;
+        var appShell = document.getElementById('appShell');
+        var sidebar = document.getElementById('prizmSidebar');
+        var topbar = document.querySelector('.prizm-topbar');
+
+        // Single padding-left on the shell pushes all normal-flow children
+        if (appShell) appShell.style.setProperty('padding-left', w, 'important');
+        if (sidebar) sidebar.style.setProperty('width', w, 'important');
+        if (topbar) topbar.style.setProperty('left', w, 'important');
+
+        // Remove the init style tag injected by pre-paint script
+        var initStyle = document.getElementById('sidebar-layout-init');
+        if (initStyle) initStyle.remove();
+    }
 
     function init() {
         var sidebar = document.getElementById('prizmSidebar');
@@ -22,7 +41,14 @@
         if (isCollapsed) {
             sidebar.classList.add('collapsed');
             appShell.classList.add('sidebar-collapsed');
+        } else {
+            sidebar.classList.remove('collapsed');
+            appShell.classList.remove('sidebar-collapsed');
         }
+
+        // Apply layout with direct inline styles
+        applyLayout(isCollapsed);
+
         // Remove the pre-paint class now that JS has hydrated
         document.documentElement.classList.remove('sidebar-pre-collapsed');
 
@@ -34,6 +60,7 @@
                 appShell.classList.toggle('sidebar-collapsed', collapsed);
                 localStorage.setItem(STORAGE_KEY, collapsed);
                 toggleBtn.title = collapsed ? 'Expand sidebar' : 'Collapse sidebar';
+                applyLayout(collapsed);
             });
         }
 
