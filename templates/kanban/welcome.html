@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 
@@ -104,7 +105,7 @@
             align-items: center;
             position: relative;
             padding: 100px 0;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
+            background: linear-gradient(135deg, #0f0c29 0%, #1e1b4b 50%, #312e81 100%);
             overflow: hidden;
         }
 
@@ -190,15 +191,17 @@
 
         .btn-outline-hero {
             background: transparent;
-            color: var(--text-light);
-            border: 2px solid rgba(255, 255, 255, 0.6);
+            color: rgba(255, 255, 255, 0.85);
+            border: none;
+            box-shadow: none;
+            padding: 0.75rem 1.5rem;
+            font-weight: 500;
         }
 
         .btn-outline-hero:hover {
-            background: rgba(255, 255, 255, 0.2);
-            border-color: var(--text-light);
-            transform: translateY(-5px);
-            box-shadow: 0 15px 40px rgba(255, 255, 255, 0.2);
+            color: var(--text-light);
+            transform: translateY(-2px);
+            box-shadow: none;
         }
 
         /* Hero Illustration */
@@ -224,149 +227,6 @@
             max-width: 550px;
             height: auto;
             filter: drop-shadow(0 20px 60px rgba(0, 0, 0, 0.4));
-        }
-
-        /* Hero Brain Visualization */
-        .hero-brain-circle {
-            width: 500px;
-            height: 500px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(168, 85, 247, 0.2) 100%);
-            backdrop-filter: blur(30px);
-            border: 3px solid rgba(168, 85, 247, 0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            animation: heroPulse 4s ease-in-out infinite;
-            box-shadow: 0 0 80px rgba(168, 85, 247, 0.5), inset 0 0 80px rgba(168, 85, 247, 0.2);
-            margin: 0 auto;
-        }
-
-        @keyframes heroPulse {
-
-            0%,
-            100% {
-                transform: scale(1);
-                box-shadow: 0 0 80px rgba(168, 85, 247, 0.5), inset 0 0 80px rgba(168, 85, 247, 0.2);
-            }
-
-            50% {
-                transform: scale(1.05);
-                box-shadow: 0 0 100px rgba(168, 85, 247, 0.7), inset 0 0 100px rgba(168, 85, 247, 0.3);
-            }
-        }
-
-        /* Tech Brain - Brain with Circuit Overlay */
-        .tech-brain-container {
-            position: relative;
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .hero-brain-circle .tech-brain-icon {
-            font-size: 200px;
-            background: linear-gradient(135deg, #00f5ff 0%, #0099ff 50%, #0066ff 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            filter: drop-shadow(0 0 40px rgba(0, 245, 255, 0.8));
-            position: relative;
-            z-index: 2;
-        }
-
-        /* Circuit board pattern overlay */
-        .circuit-overlay {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            top: 0;
-            left: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1;
-        }
-
-        .circuit-icon {
-            position: absolute;
-            color: #f97316;
-            opacity: 0.4;
-            animation: circuitPulse 3s ease-in-out infinite;
-        }
-
-        .circuit-icon:nth-child(1) {
-            font-size: 50px;
-            top: 10%;
-            left: 15%;
-            animation-delay: 0s;
-        }
-
-        .circuit-icon:nth-child(2) {
-            font-size: 40px;
-            top: 15%;
-            right: 20%;
-            animation-delay: 0.5s;
-        }
-
-        .circuit-icon:nth-child(3) {
-            font-size: 45px;
-            bottom: 20%;
-            left: 18%;
-            animation-delay: 1s;
-        }
-
-        .circuit-icon:nth-child(4) {
-            font-size: 38px;
-            bottom: 15%;
-            right: 22%;
-            animation-delay: 1.5s;
-        }
-
-        .circuit-icon:nth-child(5) {
-            font-size: 35px;
-            top: 50%;
-            left: 8%;
-            animation-delay: 0.8s;
-        }
-
-        .circuit-icon:nth-child(6) {
-            font-size: 42px;
-            top: 50%;
-            right: 10%;
-            animation-delay: 1.2s;
-        }
-
-        @keyframes circuitPulse {
-
-            0%,
-            100% {
-                opacity: 0.2;
-                transform: scale(0.95);
-            }
-
-            50% {
-                opacity: 0.6;
-                transform: scale(1.05);
-            }
-        }
-
-        /* Digital grid lines */
-        .hero-brain-circle::after {
-            content: '';
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            background-image:
-                linear-gradient(0deg, transparent 24%, rgba(249, 115, 22, 0.1) 25%, rgba(249, 115, 22, 0.1) 26%, transparent 27%, transparent 74%, rgba(249, 115, 22, 0.1) 75%, rgba(249, 115, 22, 0.1) 76%, transparent 77%, transparent),
-                linear-gradient(90deg, transparent 24%, rgba(249, 115, 22, 0.1) 25%, rgba(249, 115, 22, 0.1) 26%, transparent 27%, transparent 74%, rgba(249, 115, 22, 0.1) 75%, rgba(249, 115, 22, 0.1) 76%, transparent 77%, transparent);
-            background-size: 50px 50px;
-            border-radius: 50%;
-            pointer-events: none;
-            z-index: 0;
         }
 
         /* Features Section - Redesigned */
@@ -444,48 +304,32 @@
         }
 
         .feature-category.highlight {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            border: none;
+            border-left: 4px solid #667eea;
         }
 
         .feature-category.core-pm {
-            background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-            border: none;
+            border-left: 4px solid #0ea5e9;
         }
 
         .feature-category.enterprise {
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            border: none;
+            border-left: 4px solid #10b981;
         }
 
         .feature-category.collaboration {
-            background: linear-gradient(135deg, #dc2626 0%, #be123c 100%);
-            border: none;
+            border-left: 4px solid #dc2626;
         }
 
         .feature-category.strategy {
-            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-            border: none;
-        }
-
-        .feature-category.strategy .category-title,
-        .feature-category.strategy .category-desc,
-        .feature-category.strategy .mini-content h4,
-        .feature-category.strategy .mini-content p {
-            color: white;
-        }
-
-        .feature-category.strategy .mini-feature {
-            background: rgba(255, 255, 255, 0.15);
-            border-color: rgba(255, 255, 255, 0.2);
+            border-left: 4px solid #4f46e5;
         }
 
         .feature-category.strategy .category-icon-wrap {
-            background: rgba(255, 255, 255, 0.2);
+            background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
         }
 
         .feature-category.strategy .mini-icon {
-            background: rgba(255, 255, 255, 0.25);
+            background: rgba(79, 70, 229, 0.1);
+            color: #4f46e5;
         }
 
         .feature-category.strategy .category-features {
@@ -496,36 +340,6 @@
             .feature-category.strategy .category-features {
                 grid-template-columns: repeat(2, 1fr);
             }
-        }
-
-        .feature-category.highlight .category-title,
-        .feature-category.highlight .category-desc,
-        .feature-category.highlight .mini-content h4,
-        .feature-category.highlight .mini-content p {
-            color: white;
-        }
-
-        .feature-category.core-pm .category-title,
-        .feature-category.core-pm .category-desc,
-        .feature-category.core-pm .mini-content h4,
-        .feature-category.core-pm .mini-content p,
-        .feature-category.enterprise .category-title,
-        .feature-category.enterprise .category-desc,
-        .feature-category.enterprise .mini-content h4,
-        .feature-category.enterprise .mini-content p,
-        .feature-category.collaboration .category-title,
-        .feature-category.collaboration .category-desc,
-        .feature-category.collaboration .mini-content h4,
-        .feature-category.collaboration .mini-content p {
-            color: white;
-        }
-
-        .feature-category.highlight .mini-feature,
-        .feature-category.core-pm .mini-feature,
-        .feature-category.enterprise .mini-feature,
-        .feature-category.collaboration .mini-feature {
-            background: rgba(255, 255, 255, 0.15);
-            border-color: rgba(255, 255, 255, 0.2);
         }
 
         .category-header {
@@ -549,11 +363,16 @@
             flex-shrink: 0;
         }
 
-        .feature-category.highlight .category-icon-wrap,
-        .feature-category.core-pm .category-icon-wrap,
-        .feature-category.enterprise .category-icon-wrap,
+        .feature-category.core-pm .category-icon-wrap {
+            background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+        }
+
+        .feature-category.enterprise .category-icon-wrap {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
         .feature-category.collaboration .category-icon-wrap {
-            background: rgba(255, 255, 255, 0.2);
+            background: linear-gradient(135deg, #dc2626 0%, #be123c 100%);
         }
 
         .category-icon-wrap.ai-glow {
@@ -650,11 +469,19 @@
             color: #000;
         }
 
-        .feature-category.highlight .mini-icon,
-        .feature-category.core-pm .mini-icon,
-        .feature-category.enterprise .mini-icon,
+        .feature-category.core-pm .mini-icon {
+            background: rgba(14, 165, 233, 0.1);
+            color: #0ea5e9;
+        }
+
+        .feature-category.enterprise .mini-icon {
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+        }
+
         .feature-category.collaboration .mini-icon {
-            background: rgba(255, 255, 255, 0.25);
+            background: rgba(220, 38, 38, 0.1);
+            color: #dc2626;
         }
 
         .mini-content h4 {
@@ -1347,7 +1174,7 @@
         /* CTA Section */
         .cta-section {
             padding: 100px 0;
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             text-align: center;
         }
@@ -1437,19 +1264,6 @@
 
             .feature-grid {
                 grid-template-columns: 1fr;
-            }
-
-            .hero-brain-circle {
-                width: 350px;
-                height: 350px;
-            }
-
-            .hero-brain-circle .tech-brain-icon {
-                font-size: 150px;
-            }
-
-            .circuit-icon {
-                font-size: 25px !important;
             }
 
             .ai-brain-circle {
@@ -1635,10 +1449,10 @@
 
         .distinguished-card-badge {
             display: inline-block;
-            font-size: 0.65rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: none;
+            letter-spacing: 0;
             padding: 0.2rem 0.65rem;
             border-radius: 50px;
             margin-bottom: 0.4rem;
@@ -2014,6 +1828,75 @@
             color: #6b7280;
             line-height: 1.4;
         }
+        /* Product Showcase Section */
+        .product-showcase-section {
+            padding: 80px 0;
+            background: #ffffff;
+        }
+
+        .product-showcase-section .section-header {
+            margin-bottom: 3rem;
+        }
+
+        .showcase-item {
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .showcase-item:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 48px rgba(102, 126, 234, 0.18);
+        }
+
+        .showcase-screenshot {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .showcase-item.screenshot-missing .showcase-screenshot {
+            display: none;
+        }
+
+        .showcase-caption {
+            padding: 1.25rem 1.5rem;
+            background: #f8fafc;
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .showcase-caption-title {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #1f2937;
+            margin-bottom: 0.35rem;
+        }
+
+        .showcase-caption-title i {
+            color: #667eea;
+        }
+
+        .showcase-caption-text {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin: 0;
+            line-height: 1.5;
+        }
+
+        .showcase-item-wide .showcase-screenshot {
+            max-height: 500px;
+            width: 100%;
+            object-fit: cover;
+            object-position: top;
+        }
+
+        .showcase-caption-center {
+            text-align: center;
+            max-width: 600px;
+            margin: 0 auto;
+        }
     </style>
 </head>
 
@@ -2037,7 +1920,7 @@
                         <a class="nav-link" href="#ai-intelligence">AI Intelligence</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="#distinguished">Distinguished</a>
+                        <a class="nav-link" href="#distinguished">Why PrizmAI</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'login' %}">Sign In</a>
@@ -2069,23 +1952,7 @@
                     </div>
                 </div>
                 <div class="col-lg-6 hero-illustration d-none d-lg-block">
-                    <div class="hero-brain-container">
-                        <div class="hero-brain-circle">
-                            <div class="tech-brain-container">
-                                <i class="fas fa-brain tech-brain-icon"></i>
-                                <div class="circuit-overlay">
-                                    <i class="fas fa-lightbulb circuit-icon" style="color: #fbbf24;"></i>
-                                    <i class="fas fa-chart-line circuit-icon" style="color: #f97316;"></i>
-                                    <i class="fas fa-shield-alt circuit-icon" style="color: #f9fafb;"></i>
-                                    <i class="fas fa-users circuit-icon" style="color: #fb923c;"></i>
-                                    <i class="fas fa-cog circuit-icon" style="color: #f3f4f6;"></i>
-                                    <i class="fas fa-rocket circuit-icon" style="color: #fed7aa;"></i>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg" class="hero-graphic"
-                        style="position: absolute; top: 60%; left: 50%; transform: translateX(-50%); width: 90%; z-index: 1;">
+                    <svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg" class="hero-graphic">
                         <defs>
                             <linearGradient id="boardGradient" x1="0%" y1="0%" x2="0%" y2="100%">
                                 <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.95" />
@@ -2484,6 +2351,65 @@
         </div>
     </section>
 
+    <!-- Product Showcase Section -->
+    <section class="product-showcase-section">
+        <div class="container">
+            <div class="section-header">
+                <span class="section-tag">See It In Action</span>
+                <h2 class="section-title">Built for Real Projects</h2>
+                <p class="section-subtitle">A fully integrated platform — from Kanban boards and AI chat to Triple Constraint dashboards and decision analytics</p>
+            </div>
+            <div class="row align-items-stretch g-4">
+                <!-- Screenshot 1: Kanban Board -->
+                <div class="col-lg-6">
+                    <div class="showcase-item h-100">
+                        <img src="{% static 'images/welcome/kanban-hero.png' %}"
+                             alt="PrizmAI Kanban Board — drag-and-drop task management"
+                             class="showcase-screenshot"
+                             loading="lazy"
+                             onerror="this.closest('.showcase-item').classList.add('screenshot-missing')">
+                        <div class="showcase-caption">
+                            <h3 class="showcase-caption-title"><i class="fas fa-columns me-2"></i>Intuitive Kanban Boards</h3>
+                            <p class="showcase-caption-text">Drag-and-drop task cards with AI priority labels, risk badges, WIP limits, and real-time team assignment</p>
+                        </div>
+                    </div>
+                </div>
+                <!-- Screenshot 2: AI Assistant -->
+                <div class="col-lg-6">
+                    <div class="showcase-item h-100">
+                        <img src="{% static 'images/welcome/ai-assistant.png' %}"
+                             alt="PrizmAI AI Project Assistant chat panel"
+                             class="showcase-screenshot"
+                             loading="lazy"
+                             onerror="this.closest('.showcase-item').classList.add('screenshot-missing')">
+                        <div class="showcase-caption">
+                            <h3 class="showcase-caption-title"><i class="fas fa-robot me-2"></i>AI Project Assistant</h3>
+                            <p class="showcase-caption-text">Ask anything in plain English — sprint priorities, blockers, dependency chains, team workload — and get reasoned, context-aware answers</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Triple Constraint Screenshot - Full Width -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="showcase-item showcase-item-wide">
+                        <img src="{% static 'images/welcome/triple-constraint.png' %}"
+                             alt="PrizmAI Triple Constraint Dashboard — Scope, Cost, Time analysis"
+                             class="showcase-screenshot"
+                             loading="lazy"
+                             onerror="this.closest('.showcase-item').classList.add('screenshot-missing')">
+                        <div class="showcase-caption">
+                            <div class="showcase-caption-center">
+                                <h3 class="showcase-caption-title"><i class="fas fa-balance-scale me-2"></i>Triple Constraint Intelligence</h3>
+                                <p class="showcase-caption-text">Instantly see how scope, cost, and time interact. The What-If Simulator lets you model trade-offs before any commitments are made</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <!-- AI Showcase Section - Redesigned -->
     <section class="ai-section" id="ai-intelligence">
         <div class="container">
@@ -2802,7 +2728,7 @@
                     <div class="footer-links">
                         <a href="#features"><i class="fas fa-star me-2"></i>Features</a>
                         <a href="#ai-intelligence"><i class="fas fa-brain me-2"></i>AI Intelligence</a>
-                        <a href="#distinguished"><i class="fas fa-trophy me-2"></i>Distinguished Features</a>
+                        <a href="#distinguished"><i class="fas fa-trophy me-2"></i>Why PrizmAI</a>
                         <a href="{% url 'login' %}"><i class="fas fa-sign-in-alt me-2"></i>Sign In</a>
                         <a href="{% url 'register' %}"><i class="fas fa-user-plus me-2"></i>Register</a>
                     </div>
