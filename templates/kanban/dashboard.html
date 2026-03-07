@@ -1263,6 +1263,7 @@
 <!-- /AI Recommended Actions Modal -->
 
 <!-- Demo Credentials — compact pill -->
+{% if demo_mode %}
 <div class="demo-credentials-banner" id="demoCredentialsBanner">
     <div class="demo-banner-header" onclick="toggleDemoBanner()">
         <i class="fas fa-user-shield demo-banner-icon"></i>
@@ -1387,6 +1388,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 {{ chart_data|json_script:"dashboardChartData" }}
 
@@ -1421,7 +1423,7 @@
                         <a href="{% url 'board_detail' board.id %}" class="text-decoration-none">
                             <div class="board-card-grid">
                                 <div class="d-flex align-items-start justify-content-between mb-2">
-                                    <h6 class="board-card-title mb-0">{{ board.name|truncatechars:30 }}</h6>
+                                    <h6 class="board-card-title mb-0">{{ board.name }}</h6>
                                     {% with status=board.get_current_scope_status %}
                                     {% if status.scope_change_pct is not None %}
                                         {% if status.scope_change_pct > 30 %}
