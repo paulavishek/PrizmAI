@@ -1,196 +1,328 @@
 {% extends 'base.html' %}
-{% load crispy_forms_tags %}
 {% load socialaccount %}
 
-{% block title %}Register - Pri<span class="stylish-z">z</span>mAI{% endblock %}
+{% block title %}Register - PrizmAI{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Override base container for full-bleed auth background */
+    main.container {
+        max-width: 100% !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .auth-bg {
+        min-height: calc(100vh - 62px);
+        background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 50%, #ede9fe 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1rem;
+    }
+    .auth-card {
+        width: 100%;
+        max-width: 460px;
+        background: #ffffff;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(79, 70, 229, 0.12), 0 2px 8px rgba(0,0,0,0.06);
+        padding: 2.75rem 2.75rem 2.25rem;
+    }
+    .auth-brand {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .auth-brand-logo {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #4338ca;
+        letter-spacing: -0.5px;
+        text-decoration: none;
+    }
+    .auth-brand-logo .z-accent {
+        color: #ef4444;
+        font-style: italic;
+    }
+    .auth-heading {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: #111827;
+        text-align: center;
+        margin-bottom: 0.35rem;
+    }
+    .auth-subheading {
+        text-align: center;
+        color: #6b7280;
+        font-size: 0.9rem;
+        margin-bottom: 1.75rem;
+    }
+    /* Google button — white with border, Google style */
+    .btn-google {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.65rem;
+        width: 100%;
+        padding: 0.65rem 1rem;
+        border: 1.5px solid #d1d5db;
+        border-radius: 10px;
+        background: #fff;
+        color: #374151;
+        font-weight: 600;
+        font-size: 0.95rem;
+        text-decoration: none;
+        transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+        margin-bottom: 1.5rem;
+    }
+    .btn-google:hover {
+        background: #f9fafb;
+        border-color: #9ca3af;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+        color: #111827;
+    }
+    .auth-divider {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: #9ca3af;
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 1.5rem;
+    }
+    .auth-divider::before,
+    .auth-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: #e5e7eb;
+    }
+    .auth-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 0.35rem;
+        display: block;
+    }
+    .auth-input {
+        width: 100%;
+        border: 1.5px solid #d1d5db;
+        border-radius: 10px;
+        padding: 0.6rem 0.85rem;
+        font-size: 0.95rem;
+        color: #111827;
+        background: #fff;
+        transition: border-color 0.15s, box-shadow 0.15s;
+        outline: none;
+    }
+    .auth-input:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+    .auth-input-group {
+        display: flex;
+        border: 1.5px solid #d1d5db;
+        border-radius: 10px;
+        overflow: hidden;
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .auth-input-group:focus-within {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+    .auth-input-group .auth-input {
+        border: none;
+        border-radius: 0;
+        flex: 1;
+        box-shadow: none;
+    }
+    .auth-input-group .auth-input:focus {
+        border: none;
+        box-shadow: none;
+    }
+    .pw-toggle-btn {
+        background: transparent;
+        border: none;
+        padding: 0 0.75rem;
+        color: #9ca3af;
+        cursor: pointer;
+        transition: color 0.15s;
+        display: flex;
+        align-items: center;
+    }
+    .pw-toggle-btn:hover {
+        color: #6366f1;
+    }
+    .field-error {
+        font-size: 0.8rem;
+        color: #dc2626;
+        margin-top: 0.3rem;
+    }
+    .auth-submit-btn {
+        width: 100%;
+        padding: 0.72rem;
+        border-radius: 10px;
+        border: none;
+        background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+        color: #fff;
+        font-weight: 700;
+        font-size: 1rem;
+        letter-spacing: 0.01em;
+        margin-top: 0.75rem;
+        cursor: pointer;
+        transition: opacity 0.15s, box-shadow 0.15s;
+        box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+    }
+    .auth-submit-btn:hover {
+        opacity: 0.92;
+        box-shadow: 0 6px 18px rgba(99, 102, 241, 0.45);
+    }
+    .auth-footer {
+        text-align: center;
+        margin-top: 1.4rem;
+        font-size: 0.9rem;
+        color: #6b7280;
+    }
+    .auth-footer a {
+        color: #4f46e5;
+        font-weight: 600;
+        text-decoration: none;
+    }
+    .auth-footer a:hover {
+        text-decoration: underline;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-8">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white">
-                <h4 class="mb-0">
-                    {% if organization %}
-                    Register for {{ organization.name }}
-                    {% else %}
-                    Register
-                    {% endif %}
-                </h4>
-            </div>
-            <div class="card-body">
-                {% if organization %}
-                <div class="alert alert-info">
-                    <p><strong>Note:</strong> You are registering for the organization "{{ organization.name }}". 
-                    Your email must end with <strong>@{{ organization.domain }}</strong> to complete registration.</p>
-                </div>
-                {% endif %}
-                
-                <!-- Google OAuth Signup -->
-                {% if not organization %}
-                <div class="d-grid gap-2 mb-4">
-                    {% get_providers as socialaccount_providers %}
-                    {% if socialaccount_providers %}
-                        {% for provider in socialaccount_providers %}
-                            {% if provider.id == "google" %}
-                                <a href="{% provider_login_url provider.id %}" class="btn btn-danger btn-lg">
-                                    <i class="fab fa-google me-2"></i>
-                                    Sign up with Google
-                                </a>
-                            {% endif %}
-                        {% endfor %}
-                    {% endif %}
-                </div>
-                
-                <div class="row">
-                    <div class="col">
-                        <hr>
-                    </div>
-                    <div class="col-auto">
-                        <span class="text-muted">or</span>
-                    </div>
-                    <div class="col">
-                        <hr>
-                    </div>
-                </div>
-                {% endif %}
-                  <!-- Traditional Registration Form -->
-                
-                <form method="post">
-                    {% csrf_token %}
-                    
-                    <!-- Username Field -->
-                    <div class="mb-3">
-                        <label for="id_username" class="form-label">Username</label>
-                        {{ form.username }}
-                        {% if form.username.errors %}
-                            <div class="text-danger">
-                                {% for error in form.username.errors %}
-                                    {{ error }}
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </div>
-                    
-                    <!-- Email Field -->
-                    <div class="mb-3">
-                        <label for="id_email" class="form-label">Email</label>
-                        {{ form.email }}
-                        {% if form.email.errors %}
-                            <div class="text-danger">
-                                {% for error in form.email.errors %}
-                                    {{ error }}
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </div>
-                    
-                    <!-- Password1 Field with Toggle -->
-                    <div class="mb-3">
-                        <label for="password1-field" class="form-label">Password</label>
-                        <div class="input-group">
-                            <input type="password" 
-                                   class="form-control" 
-                                   name="password1" 
-                                   id="password1-field" 
-                                   placeholder="Password" 
-                                   required>
-                            <button class="btn btn-outline-secondary" 
-                                    type="button" 
-                                    id="toggle-password1"
-                                    title="Show/Hide Password">
-                                <i class="fas fa-eye" id="password1-toggle-icon"></i>
-                            </button>
-                        </div>
-                        {% if form.password1.errors %}
-                            <div class="text-danger">
-                                {% for error in form.password1.errors %}
-                                    {{ error }}
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </div>
-                    
-                    <!-- Password2 Field with Toggle -->
-                    <div class="mb-3">
-                        <label for="password2-field" class="form-label">Password Confirmation</label>
-                        <div class="input-group">
-                            <input type="password" 
-                                   class="form-control" 
-                                   name="password2" 
-                                   id="password2-field" 
-                                   placeholder="Confirm Password" 
-                                   required>
-                            <button class="btn btn-outline-secondary" 
-                                    type="button" 
-                                    id="toggle-password2"
-                                    title="Show/Hide Password">
-                                <i class="fas fa-eye" id="password2-toggle-icon"></i>
-                            </button>
-                        </div>
-                        {% if form.password2.errors %}
-                            <div class="text-danger">
-                                {% for error in form.password2.errors %}
-                                    {{ error }}
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                    </div>
-                    
-                    <!-- Non-field errors -->
-                    {% if form.non_field_errors %}
-                        <div class="alert alert-danger">
-                            {% for error in form.non_field_errors %}
-                                {{ error }}
-                            {% endfor %}
-                        </div>
-                    {% endif %}
-                    
-                    <div class="d-grid gap-2 mt-4">
-                        <button type="submit" class="btn btn-primary">Register</button>
-                    </div>
-                </form>
-                <hr>
-                <div class="text-center">
-                    <p>Already have an account? <a href="{% url 'login' %}">Login here</a></p>
-                </div>            </div>
+<div class="auth-bg">
+    <div class="auth-card">
+
+        <!-- Brand -->
+        <div class="auth-brand">
+            <a href="{% url 'dashboard' %}" class="auth-brand-logo">
+                <i class="fas fa-brain me-1"></i>Pri<span class="z-accent">z</span>mAI
+            </a>
         </div>
+
+        <h1 class="auth-heading">
+            {% if organization %}Register for {{ organization.name }}{% else %}Create your account{% endif %}
+        </h1>
+        <p class="auth-subheading">
+            {% if organization %}Your email must end with @{{ organization.domain }}{% else %}Join PrizmAI and manage projects intelligently{% endif %}
+        </p>
+
+        {% if organization %}
+        <div class="alert alert-info" style="font-size:0.875rem; border-radius:10px;">
+            <strong>Note:</strong> You are registering for "{{ organization.name }}".
+            Your email must end with <strong>@{{ organization.domain }}</strong>.
+        </div>
+        {% endif %}
+
+        <!-- Google OAuth Signup -->
+        {% if not organization %}
+        {% get_providers as socialaccount_providers %}
+        {% for provider in socialaccount_providers %}
+            {% if provider.id == "google" %}
+            <a href="{% provider_login_url provider.id %}" class="btn-google">
+                <svg width="20" height="20" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                    <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.8 2.5 30.2 0 24 0 14.7 0 6.8 5.4 2.9 13.3l7.9 6.1C12.6 13.2 17.8 9.5 24 9.5z"/>
+                    <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.4-4.8 7.1l7.5 5.8c4.4-4.1 6.9-10.1 6.9-16.9z"/>
+                    <path fill="#FBBC05" d="M10.8 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.6L2.4 13.3A24 24 0 0 0 0 24c0 3.9.9 7.5 2.5 10.8l8.3-6.2z"/>
+                    <path fill="#34A853" d="M24 48c6.3 0 11.5-2 15.4-5.5l-7.5-5.8c-2.1 1.4-4.8 2.3-7.9 2.3-6.2 0-11.4-4.2-13.3-9.8l-8.2 6.3C6.8 42.7 14.8 48 24 48z"/>
+                </svg>
+                Sign up with Google
+            </a>
+            {% endif %}
+        {% endfor %}
+        <div class="auth-divider">or</div>
+        {% endif %}
+
+        <!-- Registration Form -->
+        <form method="post" novalidate>
+            {% csrf_token %}
+
+            <div class="mb-3">
+                <label for="id_username" class="auth-label">Username</label>
+                {{ form.username }}
+                {% for error in form.username.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+
+            <div class="mb-3">
+                <label for="id_email" class="auth-label">Email</label>
+                {{ form.email }}
+                {% for error in form.email.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+
+            <div class="mb-3">
+                <label for="password1-field" class="auth-label">Password</label>
+                <div class="auth-input-group">
+                    <input type="password" class="auth-input" name="password1" id="password1-field" placeholder="Create a password" required>
+                    <button class="pw-toggle-btn" type="button" id="toggle-password1" title="Show/Hide Password">
+                        <i class="fas fa-eye" id="password1-toggle-icon"></i>
+                    </button>
+                </div>
+                {% for error in form.password1.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+
+            <div class="mb-3">
+                <label for="password2-field" class="auth-label">Confirm Password</label>
+                <div class="auth-input-group">
+                    <input type="password" class="auth-input" name="password2" id="password2-field" placeholder="Confirm your password" required>
+                    <button class="pw-toggle-btn" type="button" id="toggle-password2" title="Show/Hide Password">
+                        <i class="fas fa-eye" id="password2-toggle-icon"></i>
+                    </button>
+                </div>
+                {% for error in form.password2.errors %}
+                    <div class="field-error">{{ error }}</div>
+                {% endfor %}
+            </div>
+
+            {% if form.non_field_errors %}
+            <div class="alert alert-danger py-2" style="font-size:0.875rem; border-radius:10px;">
+                {% for error in form.non_field_errors %}{{ error }}{% endfor %}
+            </div>
+            {% endif %}
+
+            <button type="submit" class="auth-submit-btn">Register</button>
+        </form>
+
+        <div class="auth-footer">
+            Already have an account? <a href="{% url 'login' %}">Login here</a>
+        </div>
+
     </div>
 </div>
 
-<!-- Password Toggle JavaScript -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Function to set up password toggle for a field
+document.addEventListener('DOMContentLoaded', function () {
     function setupPasswordToggle(toggleId, fieldId, iconId) {
-        const toggleButton = document.getElementById(toggleId);
-        const passwordField = document.getElementById(fieldId);
-        const toggleIcon = document.getElementById(iconId);
-        
-        if (toggleButton && passwordField && toggleIcon) {
-            toggleButton.addEventListener('click', function(e) {
+        const btn = document.getElementById(toggleId);
+        const field = document.getElementById(fieldId);
+        const icon = document.getElementById(iconId);
+        if (btn && field && icon) {
+            btn.addEventListener('click', function (e) {
                 e.preventDefault();
-                
-                // Toggle password visibility
-                const type = passwordField.getAttribute('type') === 'password' ? 'text' : 'password';
-                passwordField.setAttribute('type', type);
-                
-                // Toggle icon
-                if (type === 'text') {
-                    toggleIcon.classList.remove('fa-eye');
-                    toggleIcon.classList.add('fa-eye-slash');
-                    toggleButton.setAttribute('title', 'Hide Password');
-                } else {
-                    toggleIcon.classList.remove('fa-eye-slash');
-                    toggleIcon.classList.add('fa-eye');
-                    toggleButton.setAttribute('title', 'Show Password');
-                }
+                const isPassword = field.getAttribute('type') === 'password';
+                field.setAttribute('type', isPassword ? 'text' : 'password');
+                icon.classList.toggle('fa-eye', !isPassword);
+                icon.classList.toggle('fa-eye-slash', isPassword);
             });
         }
     }
-    
-    // Set up toggles for both password fields
     setupPasswordToggle('toggle-password1', 'password1-field', 'password1-toggle-icon');
     setupPasswordToggle('toggle-password2', 'password2-field', 'password2-toggle-icon');
+
+    // Apply auth-input class to Django-rendered form fields
+    document.querySelectorAll('#id_username, #id_email').forEach(function(el) {
+        el.classList.add('auth-input');
+    });
 });
 </script>
 {% endblock %}
