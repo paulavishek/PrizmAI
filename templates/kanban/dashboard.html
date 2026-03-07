@@ -2023,7 +2023,12 @@
                 </div>
                 {% endfor %}
                 {% else %}
-                <div class="d-flex align-items-center justify-content-center h-100 text-muted small"><i class="fas fa-info-circle me-1"></i>No board data yet.</div>
+                <div class="d-flex flex-column align-items-center justify-content-center h-100 text-center text-muted">
+                    <i class="fas fa-clipboard-list fa-2x mb-2" style="opacity:0.15;color:#3b82f6;"></i>
+                    <p class="small mb-1 fw-semibold">No board data yet</p>
+                    <p class="text-muted" style="font-size:0.72rem;">Create boards and add tasks to see completion progress here.</p>
+                    <a href="{% url 'create_board' %}" class="btn btn-sm btn-outline-primary" style="font-size:0.72rem;"><i class="fas fa-plus me-1"></i>New Board</a>
+                </div>
                 {% endif %}
             </div>
         </div>
@@ -2110,8 +2115,13 @@
             </div>
             <div class="card-body p-2" style="height:220px; position:relative;">
                 <canvas id="velocityChart"></canvas>
-                <div id="velocity-empty" class="d-none d-flex align-items-center justify-content-center h-100 text-muted small">
-                    <div class="text-center"><i class="fas fa-tachometer-alt fa-2x mb-2 d-block" style="opacity:0.2;"></i>No velocity data yet.<br><small>Complete tasks across sprints to see trends.</small></div>
+                <div id="velocity-empty" class="d-none d-flex flex-column align-items-center justify-content-center h-100 text-center text-muted small">
+                    <div>
+                        <i class="fas fa-tachometer-alt fa-2x mb-2 d-block" style="opacity:0.15;color:#f59e0b;"></i>
+                        <p class="small mb-1 fw-semibold">No velocity data yet</p>
+                        <p style="font-size:0.7rem;" class="mb-2">Complete tasks across weeks to see team throughput trends.</p>
+                        <a href="{% url 'board_list' %}" class="btn btn-sm btn-outline-warning" style="font-size:0.72rem;"><i class="fas fa-columns me-1"></i>Open Boards</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2130,8 +2140,14 @@
             <div class="card-body p-2" style="height:160px; position:relative;">
                 <canvas id="spiGauge"></canvas>
                 <div class="gauge-label">
-                    <div class="gauge-value" id="spi-gauge-val">—</div>
+                    <div class="gauge-value" id="spi-gauge-val">&mdash;</div>
                     <div class="gauge-sub" id="spi-gauge-sub">Avg across boards</div>
+                </div>
+                <div id="spi-empty-state" class="d-flex flex-column align-items-center justify-content-center text-center text-muted" style="position:absolute;inset:0;padding:12px;">
+                    <i class="fas fa-calendar-check fa-2x mb-2" style="opacity:0.15;color:#3b82f6;"></i>
+                    <p class="small mb-1 fw-semibold">No schedule data yet</p>
+                    <p style="font-size:0.7rem;" class="mb-2">SPI tracks if tasks are being completed on schedule. Set start &amp; due dates on your tasks.</p>
+                    <a href="{% url 'board_list' %}" class="btn btn-sm btn-outline-primary" style="font-size:0.72rem;"><i class="fas fa-columns me-1"></i>Open Boards</a>
                 </div>
             </div>
         </div>
@@ -2146,8 +2162,14 @@
             <div class="card-body p-2" style="height:160px; position:relative;">
                 <canvas id="cpiGauge"></canvas>
                 <div class="gauge-label">
-                    <div class="gauge-value" id="cpi-gauge-val">—</div>
+                    <div class="gauge-value" id="cpi-gauge-val">&mdash;</div>
                     <div class="gauge-sub" id="cpi-gauge-sub">Avg across boards</div>
+                </div>
+                <div id="cpi-empty-state" class="d-flex flex-column align-items-center justify-content-center text-center text-muted" style="position:absolute;inset:0;padding:12px;">
+                    <i class="fas fa-coins fa-2x mb-2" style="opacity:0.15;color:#16a34a;"></i>
+                    <p class="small mb-1 fw-semibold">No cost data yet</p>
+                    <p style="font-size:0.7rem;" class="mb-2">CPI measures cost efficiency. Enable time tracking on tasks to generate this metric.</p>
+                    <a href="{% url 'time_tracking_dashboard' %}" class="btn btn-sm btn-outline-success" style="font-size:0.72rem;"><i class="fas fa-clock me-1"></i>Time Tracking</a>
                 </div>
             </div>
         </div>
@@ -3691,8 +3713,34 @@
             var avgCpi  = cpiVals.length ? cpiVals.reduce(function(a,b){ return a+b; }, 0) / cpiVals.length : 0;
             var spiLabel = avgSpi >= 1.0 ? 'On Schedule' : avgSpi >= 0.8 ? 'Slight Delay' : avgSpi >= 0.5 ? 'Behind Schedule' : 'Severely Behind';
             var cpiLabel = avgCpi >= 1.0 ? 'On Budget'   : avgCpi >= 0.8 ? 'Slight Overrun' : avgCpi >= 0.5 ? 'Over Budget' : 'Severely Over Budget';
-            if (avgSpi > 0) buildGauge('spiGauge', 'spi-gauge-val', 'spi-gauge-sub', avgSpi, spiLabel);
-            if (avgCpi > 0) buildGauge('cpiGauge', 'cpi-gauge-val', 'cpi-gauge-sub', avgCpi, cpiLabel);
+            if (avgSpi > 0) {
+                buildGauge('spiGauge', 'spi-gauge-val', 'spi-gauge-sub', avgSpi, spiLabel);
+                var spiEmpty = document.getElementById('spi-empty-state');
+                if (spiEmpty) spiEmpty.style.display = 'none';
+            } else {
+                var spiCanvas = document.getElementById('spiGauge');
+                if (spiCanvas) spiCanvas.style.display = 'none';
+                var spiLabels = spiCanvas && spiCanvas.parentElement.querySelector('.gauge-label');
+                if (spiLabels) spiLabels.style.display = 'none';
+            }
+            if (avgCpi > 0) {
+                buildGauge('cpiGauge', 'cpi-gauge-val', 'cpi-gauge-sub', avgCpi, cpiLabel);
+                var cpiEmpty = document.getElementById('cpi-empty-state');
+                if (cpiEmpty) cpiEmpty.style.display = 'none';
+            } else {
+                var cpiCanvas = document.getElementById('cpiGauge');
+                if (cpiCanvas) cpiCanvas.style.display = 'none';
+                var cpiLabels = cpiCanvas && cpiCanvas.parentElement.querySelector('.gauge-label');
+                if (cpiLabels) cpiLabels.style.display = 'none';
+            }
+        } else {
+            // No SPI/CPI data at all — hide canvases, show empty states
+            ['spi', 'cpi'].forEach(function(prefix) {
+                var canvas = document.getElementById(prefix + 'Gauge');
+                if (canvas) canvas.style.display = 'none';
+                var labels = canvas && canvas.parentElement.querySelector('.gauge-label');
+                if (labels) labels.style.display = 'none';
+            });
         }
 
     }  // end initMetricsCharts

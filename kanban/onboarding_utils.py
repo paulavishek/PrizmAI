@@ -6,9 +6,10 @@ OnboardingWorkspacePreview and materialises the full Goal → Mission →
 Strategy → Board → Column → Task hierarchy inside a single transaction.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.db import transaction
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,15 @@ _ITEM_TYPE_MAP = {
     'feature': 'task',   # Fallback: features → tasks
     'story': 'task',     # Fallback: stories → tasks
     'milestone': 'milestone',
+}
+
+
+# Due-date offsets (weeks) based on priority
+_DUE_WEEKS_BY_PRIORITY = {
+    'urgent': 1,    # Critical → 1 week
+    'high': 2,      # High → 2 weeks
+    'medium': 3,    # Medium → 3 weeks
+    'low': 4,       # Low → 4 weeks
 }
 
 
@@ -137,6 +147,13 @@ def commit_onboarding_workspace(user, preview):
                         raw_type = (t_data.get('item_type', 'task') or 'task').lower()
                         item_type = _ITEM_TYPE_MAP.get(raw_type, 'task')
 
+                        # Auto-set start_date and due_date based on priority
+                        today = timezone.now().date()
+                        weeks_out = _DUE_WEEKS_BY_PRIORITY.get(priority, 3)
+                        due_dt = timezone.make_aware(
+                            datetime.combine(today + timedelta(weeks=weeks_out), datetime.min.time())
+                        )
+
                         Task.objects.create(
                             title=t_data.get('title', 'New Task')[:200],
                             description=t_data.get('description', ''),
@@ -144,6 +161,8 @@ def commit_onboarding_workspace(user, preview):
                             position=t_idx,
                             priority=priority,
                             item_type=item_type,
+                            start_date=today,
+                            due_date=due_dt,
                             created_by=user,
                         )
 
