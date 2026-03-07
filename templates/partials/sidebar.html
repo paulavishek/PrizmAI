@@ -1,0 +1,174 @@
+{% load static %}
+<!-- PrizmAI Left Sidebar — Monday.com-style persistent navigation -->
+<aside id="prizmSidebar" class="prizm-sidebar" aria-label="Main navigation">
+    <!-- Sidebar Header: Logo + Collapse Toggle -->
+    <div class="sidebar-header">
+        <a href="{% url 'dashboard' %}" class="sidebar-brand" title="PrizmAI Dashboard">
+            <i class="fas fa-brain sidebar-brand-icon"></i>
+            <span class="sidebar-label">Pri<span class="stylish-z">z</span>mAI</span>
+        </a>
+        <button id="sidebarToggleBtn" class="sidebar-toggle-btn" type="button" title="Collapse sidebar" aria-label="Toggle sidebar">
+            <i class="fas fa-chevron-left"></i>
+        </button>
+    </div>
+
+    <!-- Primary Navigation -->
+    <nav class="sidebar-nav">
+        <ul class="sidebar-nav-list">
+            <li class="sidebar-nav-item">
+                <a href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}" 
+                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'dashboard' or request.resolver_match.url_name == 'demo_dashboard' %}active{% endif %}"
+                   title="Dashboard">
+                    <i class="fas fa-th-large sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Dashboard</span>
+                </a>
+            </li>
+            <li class="sidebar-nav-item">
+                <a href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'board_list' %}{% endif %}" 
+                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'board_list' %}active{% endif %}"
+                   title="Boards">
+                    <i class="fas fa-columns sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Boards</span>
+                </a>
+            </li>
+            <li class="sidebar-nav-item">
+                <a href="{% url 'goal_list' %}" 
+                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'goal_list' %}active{% endif %}"
+                   title="Goals">
+                    <i class="fas fa-trophy sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Goals</span>
+                </a>
+            </li>
+            <li class="sidebar-nav-item">
+                <a href="{% url 'mission_list' %}" 
+                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'mission_list' %}active{% endif %}"
+                   title="Missions">
+                    <i class="fas fa-bullseye sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Missions</span>
+                </a>
+            </li>
+            {% if not request.session.is_demo_mode %}
+            <li class="sidebar-nav-item">
+                <a href="{% url 'unified_calendar' %}" 
+                   class="sidebar-nav-link {% if request.resolver_match.url_name == 'unified_calendar' %}active{% endif %}"
+                   title="Calendar">
+                    <i class="fas fa-calendar-alt sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Calendar</span>
+                </a>
+            </li>
+            {% endif %}
+            <li class="sidebar-nav-item">
+                <a href="{% url 'wiki:knowledge_hub_home' %}" 
+                   class="sidebar-nav-link {% if 'wiki' in request.path %}active{% endif %}"
+                   title="Wiki">
+                    <i class="fas fa-book-open sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Wiki</span>
+                </a>
+            </li>
+            <li class="sidebar-nav-item">
+                <a href="{% url 'messaging:go_to_first_unread_room' %}" onclick="addBoardIdToLink(event)"
+                   class="sidebar-nav-link {% if 'messaging' in request.path %}active{% endif %}"
+                   title="Messages">
+                    <i class="fas fa-comments sidebar-nav-icon"></i>
+                    <span class="sidebar-label">Messages</span>
+                    <span class="sidebar-badge" id="sidebar-unread-badge" style="display:none;">
+                        <span id="sidebar-unread-count">0</span>
+                    </span>
+                </a>
+            </li>
+        </ul>
+
+        <!-- More section (collapsible) -->
+        <div class="sidebar-more-section">
+            <button class="sidebar-more-toggle" type="button" id="sidebarMoreToggle" title="More" aria-expanded="false">
+                <i class="fas fa-ellipsis-h sidebar-nav-icon"></i>
+                <span class="sidebar-label">More</span>
+                <i class="fas fa-chevron-down sidebar-more-arrow"></i>
+            </button>
+            <ul class="sidebar-more-list" id="sidebarMoreList">
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'time_tracking_dashboard' %}" class="sidebar-nav-link" title="Time Tracking">
+                        <i class="fas fa-clock sidebar-nav-icon"></i>
+                        <span class="sidebar-label">Time</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'decision_center:decision_center' %}" class="sidebar-nav-link" title="Decision Center">
+                        <i class="fas fa-bolt sidebar-nav-icon"></i>
+                        <span class="sidebar-label">Decisions</span>
+                        <span class="sidebar-badge sidebar-badge-warning" id="sidebar-dc-badge" style="display:none;">
+                            <span id="sidebar-dc-count">0</span>
+                        </span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'organizational_memory' %}" class="sidebar-nav-link" title="Organizational Memory">
+                        <i class="fas fa-brain sidebar-nav-icon"></i>
+                        <span class="sidebar-label">Memory</span>
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'conflict_dashboard' %}" class="sidebar-nav-link" title="Conflicts">
+                        <i class="fas fa-exclamation-triangle sidebar-nav-icon"></i>
+                        <span class="sidebar-label">Conflicts</span>
+                        {% if active_conflict_count > 0 %}
+                        <span class="sidebar-badge sidebar-badge-danger">{{ active_conflict_count }}</span>
+                        {% endif %}
+                    </a>
+                </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'messaging:notifications' %}" class="sidebar-nav-link" title="Notifications">
+                        <i class="fas fa-bell sidebar-nav-icon"></i>
+                        <span class="sidebar-label">Notifications</span>
+                        <span class="sidebar-badge" id="sidebar-notif-badge" style="display:none;">
+                            <span id="sidebar-notif-count">0</span>
+                        </span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Sidebar Bottom: Ask Spectra + User -->
+    <div class="sidebar-bottom">
+        <!-- Ask Spectra — key differentiator, prominent -->
+        <a href="{% url 'ai_assistant:welcome' %}" class="sidebar-spectra-btn" title="Ask Spectra — AI Assistant">
+            <i class="fas fa-robot sidebar-nav-icon"></i>
+            <span class="sidebar-label">Ask Spectra</span>
+        </a>
+
+        <!-- User profile -->
+        <div class="sidebar-user" id="sidebarUserDropdown">
+            <button class="sidebar-user-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="{{ user.username }}">
+                <span class="sidebar-user-avatar">
+                    {% if user.profile.profile_picture %}
+                        <img src="{{ user.profile.profile_picture.url }}" alt="{{ user.username }}">
+                    {% else %}
+                        {{ user.username|first|upper }}
+                    {% endif %}
+                </span>
+                <span class="sidebar-label sidebar-user-name">{{ user.username }}</span>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-up sidebar-user-menu">
+                <li><a class="dropdown-item" href="{% url 'profile' %}"><i class="fas fa-user me-2"></i>Profile</a></li>
+                {% if not is_demo_account %}
+                    {% if user.profile.is_admin %}
+                    <li><a class="dropdown-item" href="{% url 'organization_members' %}"><i class="fas fa-building me-2"></i>Organization</a></li>
+                    <li><a class="dropdown-item" href="{% url 'manage_roles' %}"><i class="fas fa-user-shield me-2"></i>Manage Roles</a></li>
+                    {% endif %}
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="{% url 'ai_usage:dashboard' %}"><i class="fas fa-robot me-2"></i>AI Usage</a></li>
+                {% endif %}
+                {% if is_demo_account %}
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item text-warning" href="#" onclick="demoResetFromNav(event); return false;"><i class="fas fa-redo me-2"></i>Reset Demo</a></li>
+                {% endif %}
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="{% url 'logout' %}"><i class="fas fa-sign-out-alt me-2"></i>Logout</a></li>
+            </ul>
+        </div>
+    </div>
+</aside>
+
+<!-- Mobile sidebar overlay -->
+<div id="sidebarOverlay" class="sidebar-overlay"></div>

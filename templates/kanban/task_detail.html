@@ -2,6 +2,7 @@
 {% load crispy_forms_tags %}
 
 {% block title %}{{ task.title }} - Task Details{% endblock %}
+{% block page_title %}Task Details{% endblock %}
 
 {% block content %}
 <!-- Hierarchy breadcrumb — full traceability: Mission → Strategy → Board → Task -->
@@ -45,75 +46,61 @@
 
 <div class="row">
     <div class="col-md-8">
-        <!-- AI Task Summary Card -->
-        <div class="card shadow mb-4 border-left-info">
-            <div class="card-header py-3 d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%); border-bottom: 3px solid #0a58ca;">
-                <h6 class="m-0 font-weight-bold text-white d-flex align-items-center">
-                    <i class="fas fa-brain me-2" style="font-size: 1.2rem;"></i><span style="font-size: 1.1rem;">AI Task Analysis & Summary</span>
-                </h6>
-                <button id="generate-task-summary" class="btn btn-sm btn-light" data-task-id="{{ task.id }}">
-                    <span id="task-summary-spinner" class="spinner-border spinner-border-sm d-none me-1" role="status"></span>
-                    <i class="fas fa-brain me-1"></i> Generate Comprehensive Summary
+        <!-- ═══════ TASK HEADER (compact) ═══════ -->
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div class="d-flex align-items-center gap-2">
+                <button onclick="goBack()" class="btn btn-sm btn-outline-secondary" title="Back">
+                    <i class="fas fa-arrow-left"></i>
                 </button>
+                {% if is_demo_mode %}
+                <a href="{% url 'demo_board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-primary" title="View Board">
+                    <i class="fas fa-columns"></i>
+                </a>
+                {% else %}
+                <a href="{% url 'board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-primary" title="View Board">
+                    <i class="fas fa-columns"></i>
+                </a>
+                {% endif %}
             </div>
-            <div class="card-body">
-                <div id="task-summary-container" class="d-none">
-                    <div class="task-summary-content">
-                        <div id="task-summary-text"></div>
-                    </div>
-                </div>
-                <div id="task-summary-placeholder" class="text-center py-4">
-                    <i class="fas fa-brain fa-3x text-info mb-3"></i>
-                    <p class="text-muted mb-0"><strong>Get AI-Powered Task Insights</strong></p>
-                    <small class="text-muted">Comprehensive analysis covering risk, stakeholders, resources, dependencies, and more</small>
-                </div>
+            <!-- 3-dot menu (Delete, Export) -->
+            <div class="dropdown">
+                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-ellipsis-v"></i>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="{% url 'wiki:quick_link' content_type='task' object_id=task.id %}"><i class="fas fa-book me-2"></i>Link Wiki Pages</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><button type="button" class="dropdown-item text-danger" onclick="deleteTask()"><i class="fas fa-trash-alt me-2"></i>Delete Task</button></li>
+                </ul>
             </div>
         </div>
 
-        <!-- Task Detail Card -->
-        <div class="card shadow mb-4">
-            <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                <h6 class="m-0 font-weight-bold text-primary">Task Details</h6>
-                <div>
-                    <button onclick="goBack()" class="btn btn-sm btn-outline-secondary">
-                        <i class="fas fa-arrow-left me-1"></i> Back
-                    </button>
-                    {% if is_demo_mode %}
-                    <a href="{% url 'demo_board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-primary">
-                        <i class="fas fa-columns me-1"></i> View Board
-                    </a>
-                    {% else %}
-                    <a href="{% url 'board_detail' task.column.board.id %}" class="btn btn-sm btn-outline-primary">
-                        <i class="fas fa-columns me-1"></i> View Board
-                    </a>
-                    {% endif %}
-                </div>
+        <!-- ═══════ TAB NAVIGATION ═══════ -->
+        <ul class="nav nav-tabs mb-3" id="taskDetailTabs" role="tablist" style="font-size:.9rem;">
+            <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-overview" role="tab"><i class="fas fa-edit me-1"></i>Overview</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-ai" role="tab"><i class="fas fa-brain me-1"></i>AI Insights</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-details" role="tab"><i class="fas fa-sliders-h me-1"></i>Details</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-relationships" role="tab"><i class="fas fa-project-diagram me-1"></i>Relationships</a></li>
+            <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-activity" role="tab"><i class="fas fa-comments me-1"></i>Activity</a></li>
+        </ul>
+
+        <!-- Single form wrapping all tabs (so Save always works) -->
+        <form method="post" class="task-form" id="taskDetailForm">
+            {% csrf_token %}
+            <input type="hidden" name="next" id="next-url" value="">
+
+            {% if form.errors %}
+            <div class="alert alert-danger mb-3">
+                <h6 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Please fix the following errors:</h6>
+                {% for field, errors in form.errors.items %}
+                    <p class="mb-1"><strong>{{ field }}:</strong> {{ errors|join:", " }}</p>
+                {% endfor %}
             </div>
-            <div class="card-body">
-                <form method="post" class="task-form">
-                    {% csrf_token %}
-                    
-                    <!-- Hidden field to track where to redirect after save -->
-                    <input type="hidden" name="next" id="next-url" value="">
-                    
-                    <!-- Display all form errors at the top -->
-                    {% if form.errors %}
-                    <div class="alert alert-danger mb-4">
-                        <h6 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>Please fix the following errors:</h6>
-                        {% for field, errors in form.errors.items %}
-                            <p class="mb-1"><strong>{{ field }}:</strong> {{ errors|join:", " }}</p>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                    
-                    <!-- ═══════════════════════════════════════════════════════════════════ -->
-                    <!-- SECTION 1: THE BASICS                                               -->
-                    <!-- ═══════════════════════════════════════════════════════════════════ -->
-                    <div class="mb-4">
-                        <h5 class="border-bottom pb-2 mb-3">
-                            <span class="badge bg-primary me-2">1</span>
-                            <i class="fas fa-edit text-primary me-1"></i> The Basics
-                        </h5>
+            {% endif %}
+
+            <div class="tab-content">
+                <!-- ═══════ TAB 1: OVERVIEW ═══════ -->
+                <div class="tab-pane fade show active" id="tab-overview" role="tabpanel">
                         
                         <!-- Title -->
                         <div class="mb-3">
@@ -156,18 +143,8 @@
                                 <div class="invalid-feedback d-block">{{ form.progress.errors }}</div>
                             {% endif %}
                         </div>
-                    </div>
-                    
-                    <!-- ═══════════════════════════════════════════════════════════════════ -->
-                    <!-- SECTION 2: CONSTRAINTS & CONTEXT                                    -->
-                    <!-- ═══════════════════════════════════════════════════════════════════ -->
-                    <div class="mb-4">
-                        <h5 class="border-bottom pb-2 mb-3">
-                            <span class="badge bg-secondary me-2">2</span>
-                            <i class="fas fa-sliders-h text-secondary me-1"></i> Constraints & Context
-                        </h5>
-                        
-                        <!-- Assignee -->
+
+                        <!-- Assignee (moved from Section 2 into Overview for quick access) -->
                         <div class="mb-3">
                             <label for="{{ form.assigned_to.id_for_label }}" class="form-label">
                                 <i class="fas fa-user-check me-1"></i> Assigned To
@@ -213,22 +190,147 @@
                             {% endif %}
                         </div>
                         {% endif %}
-                        
-                        <!-- Collapsible Advanced Constraints & Context -->
-                        <div class="card border-secondary">
-                            <div class="card-header bg-light cursor-pointer d-flex justify-content-between align-items-center" 
-                                 data-bs-toggle="collapse" data-bs-target="#advancedConstraintsSection" 
-                                 aria-expanded="false" aria-controls="advancedConstraintsSection">
-                                <h6 class="mb-0">
-                                    <i class="fas fa-chevron-down me-2 collapse-icon"></i>
-                                    <i class="fas fa-cog text-secondary"></i> Edit Constraints & Context
-                                </h6>
-                                <span class="badge bg-info">
-                                    <i class="fas fa-lightbulb me-1"></i>Affects AI predictions
-                                </span>
+
+                        <!-- Scheduling -->
+                        <div class="row mt-3">
+                            <div class="col-md-4 mb-3">
+                                <div class="card border-success h-100">
+                                    <div class="card-body">
+                                        <label for="{{ form.start_date.id_for_label }}" class="form-label">
+                                            <i class="fas fa-play text-success me-1"></i> Start Date
+                                        </label>
+                                        {{ form.start_date }}
+                                        <small class="form-text text-muted">When this task should start (for Gantt chart)</small>
+                                        {% if form.start_date.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.start_date.errors }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
                             </div>
-                            <div id="advancedConstraintsSection" class="collapse">
-                                <div class="card-body">
+                            <div class="col-md-4 mb-3">
+                                <div class="card border-info h-100">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <label for="{{ form.due_date.id_for_label }}" class="form-label mb-0">
+                                                <i class="fas fa-calendar-alt text-info me-1"></i> Due Date
+                                            </label>
+                                            <button type="button" id="predict-deadline-btn" class="btn btn-sm btn-outline-info"
+                                                    data-board-id="{{ board.id }}" data-task-id="{{ task.id }}" title="AI-powered deadline prediction">
+                                                <i class="fas fa-brain me-1"></i> Predict
+                                            </button>
+                                        </div>
+                                        {{ form.due_date }}
+                                        <small id="predict-assignee-hint" class="form-text text-warning d-none">
+                                            <i class="fas fa-exclamation-circle me-1"></i>Please select an assignee above to enable AI prediction.
+                                        </small>
+                                        <div id="deadline-ai-spinner" class="d-none text-center mt-1">
+                                            <div class="spinner-border spinner-border-sm text-info" role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                            <span class="ms-2 text-muted small">Predicting optimal deadline...</span>
+                                        </div>
+                                        <div id="deadline-prediction-result" class="d-none mt-2"></div>
+                                        {% if form.due_date.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.due_date.errors }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="card border-warning h-100">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <label for="{{ form.priority.id_for_label }}" class="form-label mb-0">
+                                                <i class="fas fa-flag text-warning me-1"></i> Priority
+                                            </label>
+                                            <button type="button" id="suggest-priority-btn" class="btn btn-sm btn-outline-warning"
+                                                    data-board-id="{{ board.id }}" data-task-id="{{ task.id }}" title="AI-powered priority suggestion">
+                                                <i class="fas fa-magic me-1"></i> Suggest
+                                            </button>
+                                        </div>
+                                        <div id="priority-suggestion-container" class="mb-2"></div>
+                                        {{ form.priority }}
+                                        <div id="priority-ai-spinner" class="d-none text-center mt-1">
+                                            <div class="spinner-border spinner-border-sm text-warning" role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                            </div>
+                                            <span class="ms-2 text-muted small">Analyzing optimal priority...</span>
+                                        </div>
+                                        {% if form.priority.errors %}
+                                            <div class="invalid-feedback d-block">{{ form.priority.errors }}</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Lean Six Sigma Classification -->
+                        <div class="card border-primary mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="form-label mb-0">
+                                        <i class="fas fa-chart-line text-primary me-1"></i> Lean Six Sigma Classification
+                                        <button type="button" class="btn btn-sm p-0 ms-1" data-bs-toggle="modal" data-bs-target="#leanLabelsInfoModal">
+                                            <i class="fas fa-info-circle text-primary" title="Learn about Lean Six Sigma categories"></i>
+                                        </button>
+                                    </label>
+                                    <button type="button" id="suggest-lss-classification" class="btn btn-sm btn-outline-primary"
+                                            data-task-id="{{ task.id }}">
+                                        <i class="fas fa-robot me-1"></i> Suggest LSS
+                                    </button>
+                                </div>
+                                <div class="lss-radio-group">
+                                    {% for value, label in form.lss_classification.field.choices %}
+                                    {% if value %}
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="radio" name="lss_classification"
+                                               id="lss_{{ value }}" value="{{ value }}"
+                                               {% if form.lss_classification.value == value or task.lss_classification == value %}checked{% endif %}>
+                                        <label class="form-check-label" for="lss_{{ value }}">
+                                            {% if value == 'value_added' %}
+                                                <span class="badge bg-success">{{ label }}</span>
+                                                <small class="text-muted">- Directly adds customer value</small>
+                                            {% elif value == 'necessary_nva' %}
+                                                <span class="badge bg-warning text-dark">{{ label }}</span>
+                                                <small class="text-muted">- Required but doesn't add direct value</small>
+                                            {% elif value == 'waste' %}
+                                                <span class="badge bg-danger">{{ label }}</span>
+                                                <small class="text-muted">- Should be eliminated or minimized</small>
+                                            {% endif %}
+                                        </label>
+                                    </div>
+                                    {% endif %}
+                                    {% endfor %}
+                                </div>
+                                <div id="classify-spinner" class="d-none text-center mt-2">
+                                    <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <span class="ms-2 text-muted">Analyzing with AI...</span>
+                                </div>
+                                {% if form.lss_classification.errors %}
+                                    <div class="invalid-feedback d-block">{{ form.lss_classification.errors }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div id="lss-suggestion-container" class="alert alert-info mb-3 d-none">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-robot mt-1 me-2"></i>
+                                <div class="flex-grow-1" id="lss-suggestion-text"></div>
+                            </div>
+                        </div>
+                    </div><!-- /tab-overview -->
+
+                    <!-- ═══════ TAB 3: DETAILS (Constraints) ═══════ -->
+                    <div class="tab-pane fade" id="tab-details" role="tabpanel">
+                        <div class="card border-secondary">
+                            <div class="card-header bg-light">
+                                <h6 class="mb-0">
+                                    <i class="fas fa-cog text-secondary me-2"></i>Constraints & Context
+                                    <span class="badge bg-info ms-2"><i class="fas fa-lightbulb me-1"></i>Affects AI predictions</span>
+                                </h6>
+                            </div>
+                            <div class="card-body">
                                     
                                     <!-- 🛡️ Risk Assessment Section -->
                                     <div class="mb-4">
@@ -377,53 +479,48 @@
 
                                     <hr>
 
-                                    <!-- �🔗 Task Relationships -->
-                                    <div class="mb-4">
-                                        <h6><i class="fas fa-project-diagram text-info"></i> Task Relationships</h6>
-                                        <div class="mb-3">
-                                            <label for="{{ form.parent_task.id_for_label }}" class="form-label">Parent Task</label>
-                                            {{ form.parent_task }}
-                                            <small class="form-text text-muted">Make this a subtask of another task</small>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label for="{{ form.dependencies.id_for_label }}" class="form-label">
-                                                Timeline Dependencies (Gantt Chart)
-                                            </label>
-                                            {{ form.dependencies }}
-                                            <small class="form-text text-muted">{{ form.dependencies.help_text }}</small>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label for="{{ form.related_tasks.id_for_label }}" class="form-label">Related Tasks</label>
-                                            {{ form.related_tasks }}
-                                            <small class="form-text text-muted">Tasks that are related but not dependencies</small>
-                                        </div>
-                                    </div>
-                                    
-                                    <hr>
-                                    
-                                    <!-- Required Skills (JSON) -->
-                                    <div class="mb-3">
-                                        <label for="{{ form.required_skills.id_for_label }}" class="form-label">
-                                            <i class="fas fa-tools me-1"></i> Required Skills (Advanced)
-                                        </label>
-                                        {{ form.required_skills }}
-                                        <small class="form-text text-muted">{{ form.required_skills.help_text }}</small>
-                                    </div>
+                                    <!-- Task Relationships → moved to Relationships tab -->
                                 </div>
                             </div>
                         </div>
-                    </div>
-                    
-                    <!-- ═══════════════════════════════════════════════════════════════════ -->
-                    <!-- SECTION 3: SCHEDULING & PRIORITY                                    -->
-                    <!-- ═══════════════════════════════════════════════════════════════════ -->
-                    <div class="mb-4">
-                        <h5 class="border-bottom pb-2 mb-3">
-                            <span class="badge bg-info me-2">3</span>
-                            <i class="fas fa-calendar-alt text-info me-1"></i> Scheduling & Priority
-                        </h5>
+                    </div><!-- /tab-details -->
+
+                    <!-- ═══════ TAB 4: RELATIONSHIPS ═══════ -->
+                    <div class="tab-pane fade" id="tab-relationships" role="tabpanel">
+                        <!-- Task Relationships -->
+                        <div class="mb-4">
+                            <h6><i class="fas fa-project-diagram text-info me-1"></i> Task Relationships</h6>
+                            <div class="mb-3">
+                                <label for="{{ form.parent_task.id_for_label }}" class="form-label">Parent Task</label>
+                                {{ form.parent_task }}
+                                <small class="form-text text-muted">Make this a subtask of another task</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="{{ form.dependencies.id_for_label }}" class="form-label">
+                                    Timeline Dependencies (Gantt Chart)
+                                </label>
+                                {{ form.dependencies }}
+                                <small class="form-text text-muted">{{ form.dependencies.help_text }}</small>
+                            </div>
+                            <div class="mb-3">
+                                <label for="{{ form.related_tasks.id_for_label }}" class="form-label">Related Tasks</label>
+                                {{ form.related_tasks }}
+                                <small class="form-text text-muted">Tasks that are related but not dependencies</small>
+                            </div>
+                        </div>
                         
-                        <!-- Phase Selection (for Gantt chart organization) -->
+                        <hr>
+                        
+                        <!-- Required Skills (JSON) -->
+                        <div class="mb-3">
+                            <label for="{{ form.required_skills.id_for_label }}" class="form-label">
+                                <i class="fas fa-tools me-1"></i> Required Skills (Advanced)
+                            </label>
+                            {{ form.required_skills }}
+                            <small class="form-text text-muted">{{ form.required_skills.help_text }}</small>
+                        </div>
+
+                        <!-- Phase Selection -->
                         {% if form.phase %}
                         <div class="mb-3">
                             <label for="{{ form.phase.id_for_label }}" class="form-label">
@@ -436,152 +533,10 @@
                             {% endif %}
                         </div>
                         {% endif %}
-                        
-                        <div class="row">
-                            <div class="col-md-4 mb-3">
-                                <div class="card border-success h-100">
-                                    <div class="card-body">
-                                        <label for="{{ form.start_date.id_for_label }}" class="form-label">
-                                            <i class="fas fa-play text-success me-1"></i> Start Date
-                                        </label>
-                                        {{ form.start_date }}
-                                        <small class="form-text text-muted">When this task should start (for Gantt chart)</small>
-                                        {% if form.start_date.errors %}
-                                            <div class="invalid-feedback d-block">{{ form.start_date.errors }}</div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <div class="card border-info h-100">
-                                    <div class="card-body">
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <label for="{{ form.due_date.id_for_label }}" class="form-label mb-0">
-                                                <i class="fas fa-calendar-alt text-info me-1"></i> Due Date
-                                            </label>
-                                            <button type="button" id="predict-deadline-btn" class="btn btn-sm btn-outline-info"
-                                                    data-board-id="{{ board.id }}" data-task-id="{{ task.id }}" title="AI-powered deadline prediction">
-                                                <i class="fas fa-brain me-1"></i> Predict
-                                            </button>
-                                        </div>
-                                        {{ form.due_date }}
-                                        <!-- Helper text for prediction requirements -->
-                                        <small id="predict-assignee-hint" class="form-text text-warning d-none">
-                                            <i class="fas fa-exclamation-circle me-1"></i>Please select an assignee above to enable AI prediction.
-                                        </small>
-                                        <div id="deadline-ai-spinner" class="d-none text-center mt-1">
-                                            <div class="spinner-border spinner-border-sm text-info" role="status">
-                                                <span class="visually-hidden">Loading...</span>
-                                            </div>
-                                            <span class="ms-2 text-muted small">Predicting optimal deadline...</span>
-                                        </div>
-                                        <div id="deadline-prediction-result" class="d-none mt-2"></div>
-                                        {% if form.due_date.errors %}
-                                            <div class="invalid-feedback d-block">{{ form.due_date.errors }}</div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <div class="card border-warning h-100">
-                                    <div class="card-body">
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                            <label for="{{ form.priority.id_for_label }}" class="form-label mb-0">
-                                                <i class="fas fa-flag text-warning me-1"></i> Priority
-                                            </label>
-                                            <button type="button" id="suggest-priority-btn" class="btn btn-sm btn-outline-warning"
-                                                    data-board-id="{{ board.id }}" data-task-id="{{ task.id }}" title="AI-powered priority suggestion">
-                                                <i class="fas fa-magic me-1"></i> Suggest
-                                            </button>
-                                        </div>
-                                        <div id="priority-suggestion-container" class="mb-2"></div>
-                                        {{ form.priority }}
-                                        <div id="priority-ai-spinner" class="d-none text-center mt-1">
-                                            <div class="spinner-border spinner-border-sm text-warning" role="status">
-                                                <span class="visually-hidden">Loading...</span>
-                                            </div>
-                                            <span class="ms-2 text-muted small">Analyzing optimal priority...</span>
-                                        </div>
-                                        {% if form.priority.errors %}
-                                            <div class="invalid-feedback d-block">{{ form.priority.errors }}</div>
-                                        {% endif %}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Lean Six Sigma Classification -->
-                        <div class="card border-primary mb-3">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <label class="form-label mb-0">
-                                        <i class="fas fa-chart-line text-primary me-1"></i> Lean Six Sigma Classification
-                                        <button type="button" class="btn btn-sm p-0 ms-1" data-bs-toggle="modal" data-bs-target="#leanLabelsInfoModal">
-                                            <i class="fas fa-info-circle text-primary" title="Learn about Lean Six Sigma categories"></i>
-                                        </button>
-                                    </label>
-                                    <button type="button" id="suggest-lss-classification" class="btn btn-sm btn-outline-primary"
-                                            data-task-id="{{ task.id }}">
-                                        <i class="fas fa-robot me-1"></i> Suggest LSS
-                                    </button>
-                                </div>
-                                
-                                <div class="lss-radio-group">
-                                    {% for value, label in form.lss_classification.field.choices %}
-                                    {% if value %}
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="radio" name="lss_classification" 
-                                               id="lss_{{ value }}" value="{{ value }}"
-                                               {% if form.lss_classification.value == value or task.lss_classification == value %}checked{% endif %}>
-                                        <label class="form-check-label" for="lss_{{ value }}">
-                                            {% if value == 'value_added' %}
-                                                <span class="badge bg-success">{{ label }}</span>
-                                                <small class="text-muted">- Directly adds customer value</small>
-                                            {% elif value == 'necessary_nva' %}
-                                                <span class="badge bg-warning text-dark">{{ label }}</span>
-                                                <small class="text-muted">- Required but doesn't add direct value</small>
-                                            {% elif value == 'waste' %}
-                                                <span class="badge bg-danger">{{ label }}</span>
-                                                <small class="text-muted">- Should be eliminated or minimized</small>
-                                            {% endif %}
-                                        </label>
-                                    </div>
-                                    {% endif %}
-                                    {% endfor %}
-                                </div>
-                                
-                                <div id="classify-spinner" class="d-none text-center mt-2">
-                                    <div class="spinner-border spinner-border-sm text-primary" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <span class="ms-2 text-muted">Analyzing with AI...</span>
-                                </div>
-                                {% if form.lss_classification.errors %}
-                                    <div class="invalid-feedback d-block">{{ form.lss_classification.errors }}</div>
-                                {% endif %}
-                            </div>
-                        </div>
-                        
-                        <!-- AI LSS Classification Suggestion -->
-                        <div id="lss-suggestion-container" class="alert alert-info mb-3 d-none">
-                            <div class="d-flex align-items-start">
-                                <i class="fas fa-robot mt-1 me-2"></i>
-                                <div class="flex-grow-1" id="lss-suggestion-text">
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- ═══════════════════════════════════════════════════════════════════ -->
-                    <!-- SECTION 4: AI ANALYSIS                                              -->
-                    <!-- ═══════════════════════════════════════════════════════════════════ -->
-                    <div class="mb-4">
-                        <h5 class="border-bottom pb-2 mb-3">
-                            <span class="badge bg-success me-2">4</span>
-                            <i class="fas fa-brain text-success me-1"></i> AI Analysis
-                            <small class="text-muted fw-normal fs-6 ms-1">(Uses all context above)</small>
-                        </h5>
+                    </div><!-- /tab-relationships -->
 
+                    <!-- ═══════ TAB 2: AI INSIGHTS ═══════ -->
+                    <div class="tab-pane fade" id="tab-ai" role="tabpanel">
                         <!-- AI Task Complexity Analysis & Breakdown -->
                         <div class="card border-success mb-3">
                             <div class="card-body">
@@ -604,237 +559,226 @@
                                 <div id="task-breakdown-result" class="d-none mt-2"></div>
                             </div>
                         </div>
-                    </div>
+                    </div><!-- /tab-ai -->
 
-                    <!-- ═══════════════════════════════════════════════════════════════════ -->
-                    <!-- SECTION 5: SAVE / DELETE                                            -->
-                    <!-- ═══════════════════════════════════════════════════════════════════ -->
-                    <div class="border-top pt-4 mt-4">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <button type="button" class="btn btn-outline-danger" onclick="deleteTask()">
-                                <i class="fas fa-trash me-1"></i> Delete Task
-                            </button>
-                            <button type="submit" class="btn btn-primary btn-lg">
-                                <i class="fas fa-save me-1"></i> Save Changes
-                            </button>
+                    <!-- ═══════ TAB 5: ACTIVITY ═══════ -->
+                    <div class="tab-pane fade" id="tab-activity" role="tabpanel">
+
+                        <!-- Comments -->
+                        <div class="card shadow-sm mb-4">
+                            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                                <h6 class="m-0 font-weight-bold text-primary">Comments</h6>
+                                {% if comments.count > 2 %}
+                                <button id="summarize-comments" class="btn btn-sm btn-outline-primary" data-task-id="{{ task.id }}">
+                                    <i class="fas fa-robot me-1"></i> Summarize with AI
+                                </button>
+                                {% endif %}
+                            </div>
+                            <div class="card-body">
+                                <div id="comment-summary-container" class="alert alert-info mb-4 d-none" style="position: relative; padding-right: 45px;">
+                                    <button type="button" class="btn-close" id="close-summary" aria-label="Close" style="position: absolute; right: 10px; top: 10px;"></button>
+                                    <div class="d-flex align-items-start">
+                                        <i class="fas fa-robot mt-1 me-2"></i>
+                                        <div class="flex-grow-1">
+                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                <strong>Comment Summary:</strong>
+                                                <button id="export-summary-pdf" class="btn btn-sm btn-outline-primary d-none me-4" title="Export summary as PDF">
+                                                    <i class="fas fa-file-pdf me-1"></i> Export PDF
+                                                    <span id="pdf-export-spinner" class="spinner-border spinner-border-sm ms-1 d-none" role="status"></span>
+                                                </button>
+                                            </div>
+                                            <p id="comment-summary-text" class="mb-1"></p>
+                                            <div id="summary-spinner" class="d-none">
+                                                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                                    <span class="visually-hidden">Loading...</span>
+                                                </div>
+                                                <span class="ms-2 text-muted">Generating summary...</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {% if comments %}
+                                    {% for comment in comments %}
+                                    <div class="d-flex mb-4">
+                                        {% if comment.user.profile.profile_picture %}
+                                            <img class="rounded-circle me-3" src="{{ comment.user.profile.profile_picture.url }}" width="50" height="50" alt="{{ comment.user.username }}">
+                                        {% else %}
+                                            <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center me-3" style="width: 50px; height: 50px;">
+                                                {{ comment.user.username|slice:":1" }}
+                                            </div>
+                                        {% endif %}
+                                        <div class="flex-grow-1">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <h6 class="mb-0">{{ comment.user.username }}</h6>
+                                                <small class="text-muted">{{ comment.created_at|date:"M d, Y" }} at {{ comment.created_at|time:"H:i" }}</small>
+                                            </div>
+                                            <p class="mb-0">{{ comment.content }}</p>
+                                        </div>
+                                    </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <p class="text-muted">No comments yet.</p>
+                                {% endif %}
+
+                                <hr>
+                                <form method="post">
+                                    {% csrf_token %}
+                                    {{ comment_form|crispy }}
+                                    <div class="text-end mt-3">
+                                        <button type="submit" class="btn btn-primary">Add Comment</button>
+                                    </div>
+                                </form>
+                            </div>
                         </div>
-                    </div>
-                </form>
-                
-                <!-- Hidden form for task deletion -->
-                <form id="deleteTaskForm" method="post" action="{% url 'delete_task' task.id %}" style="display: none;">
-                    {% csrf_token %}
-                </form>
-            </div>
-        </div>
 
-        <!-- Comments Section -->        <div class="card shadow mb-4">
-            <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                <h6 class="m-0 font-weight-bold text-primary">Comments</h6>
-                {% if comments.count > 2 %}
-                <button id="summarize-comments" class="btn btn-sm btn-outline-primary" data-task-id="{{ task.id }}">
-                    <i class="fas fa-robot me-1"></i> Summarize with AI
-                </button>
-                {% endif %}
-            </div>
-            <div class="card-body">
-                <!-- AI Summary Section -->
-                <div id="comment-summary-container" class="alert alert-info mb-4 d-none" style="position: relative; padding-right: 45px;">
-                    <button type="button" class="btn-close" id="close-summary" aria-label="Close" style="position: absolute; right: 10px; top: 10px;"></button>
-                    <div class="d-flex align-items-start">
-                        <i class="fas fa-robot mt-1 me-2"></i>
-                        <div class="flex-grow-1">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <strong>Comment Summary:</strong>
-                                <button id="export-summary-pdf" class="btn btn-sm btn-outline-primary d-none me-4" title="Export summary as PDF">
-                                    <i class="fas fa-file-pdf me-1"></i> Export PDF
-                                    <span id="pdf-export-spinner" class="spinner-border spinner-border-sm ms-1 d-none" role="status"></span>
+                        <!-- Attachments -->
+                        <div class="card shadow-sm mb-4">
+                            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                                <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-file me-2"></i> Attachments</h6>
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleFileUpload()" title="Upload file">
+                                    <i class="fas fa-upload"></i> Upload
                                 </button>
                             </div>
-                            <p id="comment-summary-text" class="mb-1"></p>
-                            <div id="summary-spinner" class="d-none">
-                                <div class="spinner-border spinner-border-sm text-primary" role="status">
-                                    <span class="visually-hidden">Loading...</span>
-                                </div>
-                                <span class="ms-2 text-muted">Generating summary...</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                {% if comments %}
-                    {% for comment in comments %}
-                    <div class="d-flex mb-4">
-                        {% if comment.user.profile.profile_picture %}
-                            <img class="rounded-circle me-3" src="{{ comment.user.profile.profile_picture.url }}" width="50" height="50" alt="{{ comment.user.username }}">
-                        {% else %}
-                            <div class="rounded-circle bg-secondary text-white d-flex align-items-center justify-content-center me-3" style="width: 50px; height: 50px;">
-                                {{ comment.user.username|slice:":1" }}
-                            </div>
-                        {% endif %}
-                        <div class="flex-grow-1">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <h6 class="mb-0">{{ comment.user.username }}</h6>
-                                <small class="text-muted">{{ comment.created_at|date:"M d, Y" }} at {{ comment.created_at|time:"H:i" }}</small>
-                            </div>
-                            <p class="mb-0">{{ comment.content }}</p>
-                        </div>
-                    </div>
-                    {% endfor %}
-                {% else %}
-                    <p class="text-muted">No comments yet.</p>
-                {% endif %}
-
-                <hr>
-                
-                <!-- Add Comment Form -->
-                <form method="post">
-                    {% csrf_token %}
-                    {{ comment_form|crispy }}
-                    <div class="text-end mt-3">
-                        <button type="submit" class="btn btn-primary">Add Comment</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <!-- Files Section -->
-        <div class="card shadow mb-4">
-            <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-file me-2"></i> Attachments</h6>
-                <button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleFileUpload()" title="Upload file">
-                    <i class="fas fa-upload"></i> Upload
-                </button>
-            </div>
-            <div class="card-body">
-                <!-- File Upload Form -->
-                <form id="taskFileForm" method="post" action="{% url 'upload_task_file' task_id=task.id %}" enctype="multipart/form-data" style="display: none;">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="fileInput" class="form-label">Select File</label>
-                        <input type="file" id="fileInput" name="file" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" required>
-                        <small class="text-muted">Supported: PDF, Word, Excel, PowerPoint, JPG, PNG (Max: 10MB)</small>
-                    </div>
-                    <div class="mb-3">
-                        <label for="fileDescription" class="form-label">Description (Optional)</label>
-                        <textarea id="fileDescription" name="description" class="form-control" rows="2" placeholder="Add a description for this file..." maxlength="500"></textarea>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-check"></i> Upload
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary" onclick="toggleFileUpload()">
-                            Cancel
-                        </button>
-                    </div>
-                </form>
-
-                <!-- Files List -->
-                <div id="filesList">
-                    {% if task.file_attachments.all %}
-                        {% for file in task.file_attachments.all %}
-                            {% if not file.is_deleted %}
-                                <div class="d-flex align-items-start justify-content-between p-3 mb-2 bg-light rounded" id="file-row-{{ file.id }}">
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex align-items-center mb-1 flex-wrap gap-2">
-                                            <i class="fas {{ file.get_file_icon }} text-primary me-2"></i>
-                                            <a href="{% url 'download_task_file' file_id=file.id %}" class="text-decoration-none" target="_blank">
-                                                <strong>{{ file.filename }}</strong>
-                                            </a>
-                                            {% if file.file_type|lower in "pdf,docx,txt,doc" %}
-                                                <button type="button"
-                                                        class="btn btn-xs btn-outline-info ms-1 ai-analyze-btn"
-                                                        onclick="analyzeTaskFile({{ file.id }}, '{{ file.filename|escapejs }}')"
-                                                        title="Summarize and extract tasks using AI">
-                                                    <i class="fas fa-robot me-1"></i> Analyze with AI
-                                                </button>
-                                            {% else %}
-                                                <span class="badge bg-secondary ms-1" title="AI analysis only supports PDF, DOCX and TXT">
-                                                    <i class="fas fa-robot me-1"></i> AI N/A
-                                                </span>
-                                            {% endif %}
-                                        </div>
-                                        <small class="text-muted">
-                                            By {{ file.uploaded_by.username }} • {{ file.file_size|filesizeformat }} • {{ file.uploaded_at|date:"M d, Y" }}
-                                        </small>
-                                        {% if file.description %}
-                                            <p class="mb-0 mt-1 text-muted small">{{ file.description }}</p>
-                                        {% endif %}
-
-                                        <!-- AI Analysis Result Panel (hidden until triggered) -->
-                                        <div id="ai-result-{{ file.id }}" class="ai-file-result mt-2" style="display:none;"></div>
+                            <div class="card-body">
+                                <form id="taskFileForm" method="post" action="{% url 'upload_task_file' task_id=task.id %}" enctype="multipart/form-data" style="display: none;">
+                                    {% csrf_token %}
+                                    <div class="mb-3">
+                                        <label for="fileInput" class="form-label">Select File</label>
+                                        <input type="file" id="fileInput" name="file" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" required>
+                                        <small class="text-muted">Supported: PDF, Word, Excel, PowerPoint, JPG, PNG (Max: 10MB)</small>
                                     </div>
-                                    {% if user == file.uploaded_by or user.is_staff %}
-                                        <button type="button" class="btn btn-sm btn-link text-danger ms-2" onclick="deleteTaskFile({{ file.id }}, '{{ file.filename }}')">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
+                                    <div class="mb-3">
+                                        <label for="fileDescription" class="form-label">Description (Optional)</label>
+                                        <textarea id="fileDescription" name="description" class="form-control" rows="2" placeholder="Add a description for this file..." maxlength="500"></textarea>
+                                    </div>
+                                    <div class="d-flex gap-2">
+                                        <button type="submit" class="btn btn-primary"><i class="fas fa-check"></i> Upload</button>
+                                        <button type="button" class="btn btn-outline-secondary" onclick="toggleFileUpload()">Cancel</button>
+                                    </div>
+                                </form>
+
+                                <div id="filesList">
+                                    {% if task.file_attachments.all %}
+                                        {% for file in task.file_attachments.all %}
+                                            {% if not file.is_deleted %}
+                                                <div class="d-flex align-items-start justify-content-between p-3 mb-2 bg-light rounded" id="file-row-{{ file.id }}">
+                                                    <div class="flex-grow-1">
+                                                        <div class="d-flex align-items-center mb-1 flex-wrap gap-2">
+                                                            <i class="fas {{ file.get_file_icon }} text-primary me-2"></i>
+                                                            <a href="{% url 'download_task_file' file_id=file.id %}" class="text-decoration-none" target="_blank">
+                                                                <strong>{{ file.filename }}</strong>
+                                                            </a>
+                                                            {% if file.file_type|lower in "pdf,docx,txt,doc" %}
+                                                                <button type="button"
+                                                                        class="btn btn-xs btn-outline-info ms-1 ai-analyze-btn"
+                                                                        onclick="analyzeTaskFile({{ file.id }}, '{{ file.filename|escapejs }}')"
+                                                                        title="Summarize and extract tasks using AI">
+                                                                    <i class="fas fa-robot me-1"></i> Analyze with AI
+                                                                </button>
+                                                            {% else %}
+                                                                <span class="badge bg-secondary ms-1" title="AI analysis only supports PDF, DOCX and TXT">
+                                                                    <i class="fas fa-robot me-1"></i> AI N/A
+                                                                </span>
+                                                            {% endif %}
+                                                        </div>
+                                                        <small class="text-muted">
+                                                            By {{ file.uploaded_by.username }} • {{ file.file_size|filesizeformat }} • {{ file.uploaded_at|date:"M d, Y" }}
+                                                        </small>
+                                                        {% if file.description %}
+                                                            <p class="mb-0 mt-1 text-muted small">{{ file.description }}</p>
+                                                        {% endif %}
+                                                        <div id="ai-result-{{ file.id }}" class="ai-file-result mt-2" style="display:none;"></div>
+                                                    </div>
+                                                    {% if user == file.uploaded_by or user.is_staff %}
+                                                        <button type="button" class="btn btn-sm btn-link text-danger ms-2" onclick="deleteTaskFile({{ file.id }}, '{{ file.filename }}')">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    {% endif %}
+                                                </div>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% else %}
+                                        <p class="text-muted text-center py-3">No files attached yet</p>
                                     {% endif %}
                                 </div>
-                            {% endif %}
-                        {% endfor %}
-                    {% else %}
-                        <p class="text-muted text-center py-3">No files attached yet</p>
-                    {% endif %}
-                </div>
 
-                <!-- Hidden: board columns data for task creation column selector -->
-                <div id="boardColumnsData" style="display:none;"
-                     data-columns='[{% for col in board_columns %}{"id":{{ col.id }},"name":"{{ col.name|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]'>
-                </div>
-            </div>
-        </div>
-
-        <!-- Wiki Links Section -->
-        <div class="card shadow mb-4">
-            <div class="card-header py-3 d-flex justify-content-between align-items-center">
-                <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-book me-2"></i> Linked Wiki Pages</h6>
-                <a href="{% url 'wiki:quick_link' content_type='task' object_id=task.id %}" class="btn btn-sm btn-outline-primary" title="Link wiki pages to this task">
-                    <i class="fas fa-link"></i> Link Wiki
-                </a>
-            </div>
-            <div class="card-body">
-                {% if wiki_links %}
-                    <div class="list-group list-group-flush">
-                        {% for link in wiki_links %}
-                            <div class="list-group-item d-flex justify-content-between align-items-start">
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-1">
-                                        <i class="fas fa-book"></i> {{ link.wiki_page.title }}
-                                    </h6>
-                                    {% if link.description %}
-                                        <p class="mb-1 text-muted small">{{ link.description }}</p>
-                                    {% endif %}
-                                    <small class="text-muted">
-                                        Category: <strong>{{ link.wiki_page.category.name }}</strong> • 
-                                        Last updated: {{ link.wiki_page.updated_at|date:"M d, Y" }}
-                                    </small>
-                                </div>
-                                <div class="d-flex gap-2 align-items-center">
-                                    <a href="{% url 'wiki:page_detail' link.wiki_page.slug %}" class="btn btn-sm btn-info" title="View wiki page">
-                                        <i class="fas fa-eye"></i> View Page
-                                    </a>
-                                    <form method="post" action="{% url 'wiki:delete_link' link.id %}" class="d-inline" onsubmit="return confirm('Are you sure you want to remove this wiki link?');">
-                                        {% csrf_token %}
-                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove link">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </form>
+                                <div id="boardColumnsData" style="display:none;"
+                                     data-columns='[{% for col in board_columns %}{"id":{{ col.id }},"name":"{{ col.name|escapejs }}"}{% if not forloop.last %},{% endif %}{% endfor %}]'>
                                 </div>
                             </div>
-                        {% endfor %}
+                        </div>
+
+                        <!-- Linked Wiki Pages -->
+                        <div class="card shadow-sm mb-4">
+                            <div class="card-header py-3 d-flex justify-content-between align-items-center">
+                                <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-book me-2"></i> Linked Wiki Pages</h6>
+                                <a href="{% url 'wiki:quick_link' content_type='task' object_id=task.id %}" class="btn btn-sm btn-outline-primary" title="Link wiki pages to this task">
+                                    <i class="fas fa-link"></i> Link Wiki
+                                </a>
+                            </div>
+                            <div class="card-body">
+                                {% if wiki_links %}
+                                    <div class="list-group list-group-flush">
+                                        {% for link in wiki_links %}
+                                            <div class="list-group-item d-flex justify-content-between align-items-start">
+                                                <div class="flex-grow-1">
+                                                    <h6 class="mb-1">
+                                                        <i class="fas fa-book"></i> {{ link.wiki_page.title }}
+                                                    </h6>
+                                                    {% if link.description %}
+                                                        <p class="mb-1 text-muted small">{{ link.description }}</p>
+                                                    {% endif %}
+                                                    <small class="text-muted">
+                                                        Category: <strong>{{ link.wiki_page.category.name }}</strong> •
+                                                        Last updated: {{ link.wiki_page.updated_at|date:"M d, Y" }}
+                                                    </small>
+                                                </div>
+                                                <div class="d-flex gap-2 align-items-center">
+                                                    <a href="{% url 'wiki:page_detail' link.wiki_page.slug %}" class="btn btn-sm btn-info" title="View wiki page">
+                                                        <i class="fas fa-eye"></i> View Page
+                                                    </a>
+                                                    <form method="post" action="{% url 'wiki:delete_link' link.id %}" class="d-inline" onsubmit="return confirm('Are you sure you want to remove this wiki link?');">
+                                                        {% csrf_token %}
+                                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove link">
+                                                            <i class="fas fa-trash"></i>
+                                                        </button>
+                                                    </form>
+                                                </div>
+                                            </div>
+                                        {% endfor %}
+                                    </div>
+                                {% else %}
+                                    <div class="text-center py-4">
+                                        <i class="fas fa-book-open fa-2x text-muted mb-2"></i>
+                                        <p class="text-muted mb-0">No wiki pages linked to this task</p>
+                                        <small class="text-muted">Click "Link Wiki" above to add relevant documentation</small>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                    </div><!-- /tab-activity -->
+                </div><!-- /tab-content -->
+
+                <!-- Sticky Save button (visible on Overview/Details/Relationships tabs) -->
+                <div class="border-top pt-3 mt-3 sticky-bottom bg-white pb-3" id="stickyFormActions">
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" form="taskDetailForm" class="btn btn-primary btn-lg">
+                            <i class="fas fa-save me-1"></i> Save Changes
+                        </button>
                     </div>
-                {% else %}
-                    <div class="text-center py-4">
-                        <i class="fas fa-book-open fa-2x text-muted mb-2"></i>
-                        <p class="text-muted mb-0">No wiki pages linked to this task</p>
-                        <small class="text-muted">Click "Link Wiki" above to add relevant documentation</small>
-                    </div>
-                {% endif %}
-            </div>
+                </div>
+            </form>
+
+            <!-- Hidden form for task deletion -->
+            <form id="deleteTaskForm" method="post" action="{% url 'delete_task' task.id %}" style="display: none;">
+                {% csrf_token %}
+            </form>
         </div>
     </div>
 
-    <div class="col-md-4">
+    <div class="col-md-4" style="position:sticky;top:60px;align-self:flex-start;">
         <!-- Task Info Card -->
         <div class="card shadow mb-4">
             <div class="card-header py-3">
@@ -1765,10 +1709,24 @@
     .cursor-pointer:hover {
         background-color: rgba(0, 0, 0, 0.03);
     }
+    /* Hide Save button when Activity tab is active */
+    #stickyFormActions { z-index: 10; }
 </style>
 
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // ═══════════════════════════════════════════════════════════
+        // SAVE BUTTON VISIBILITY — hide on Activity tab
+        // ═══════════════════════════════════════════════════════════
+        const stickyActions = document.getElementById('stickyFormActions');
+        document.querySelectorAll('#taskDetailTabs .nav-link').forEach(function(tab) {
+            tab.addEventListener('shown.bs.tab', function(e) {
+                if (stickyActions) {
+                    stickyActions.style.display = e.target.getAttribute('href') === '#tab-activity' ? 'none' : '';
+                }
+            });
+        });
+
         // ═══════════════════════════════════════════════════════════
         // AI INSIGHTS STALE BANNER — detect URL params and show banner
         // ═══════════════════════════════════════════════════════════
