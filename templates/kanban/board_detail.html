@@ -3,6 +3,7 @@
 {% load kanban_filters %}
 
 {% block title %}{{ board.name }} - PrizmAI{% endblock %}
+{% block page_title %}{{ board.name }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -193,6 +194,19 @@
         display: none !important;
     }
     
+    /* Task card hover menu (3-dot) */
+    .kanban-task { position: relative; }
+    .task-hover-menu {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        opacity: 0;
+        transition: opacity .15s;
+        z-index: 2;
+    }
+    .kanban-task:hover .task-hover-menu { opacity: 1; }
+    .task-hover-menu .btn { width: 22px; height: 22px; font-size: .75rem; }
+    
     /* Task Search Bar Styling */
     #taskSearchCard {
         border-left: 4px solid #0d6efd;
@@ -214,288 +228,156 @@
 {% block content %}
 <!-- Hierarchy breadcrumb — shows Mission → Strategy → Board chain when available -->
 {% if board.strategy %}
-<nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb small">
+<nav aria-label="breadcrumb" class="mb-2">
+    <ol class="breadcrumb small mb-0">
         <li class="breadcrumb-item"><a href="{% url 'dashboard' %}">Dashboard</a></li>
-        <li class="breadcrumb-item">
-            <a href="{% url 'mission_list' %}">Missions</a>
-        </li>
-        <li class="breadcrumb-item">
-            <a href="{% url 'mission_detail' board.strategy.mission_id %}">{{ board.strategy.mission.name }}</a>
-        </li>
-        <li class="breadcrumb-item">
-            <a href="{% url 'strategy_detail' board.strategy.mission_id board.strategy_id %}">{{ board.strategy.name }}</a>
-        </li>
+        <li class="breadcrumb-item"><a href="{% url 'mission_list' %}">Missions</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'mission_detail' board.strategy.mission_id %}">{{ board.strategy.mission.name }}</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'strategy_detail' board.strategy.mission_id board.strategy_id %}">{{ board.strategy.name }}</a></li>
         <li class="breadcrumb-item active">{{ board.name }}</li>
     </ol>
 </nav>
 {% endif %}
+
 <!-- Demo Mode Banner - only show in legacy (non-simplified) mode -->
 {% if is_demo_board and not simplified_mode %}
-<div class="alert alert-info border-0 shadow-sm mb-4" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+<div class="alert alert-info border-0 shadow-sm mb-3" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
     <div class="d-flex justify-content-between align-items-center">
         <div>
-            <h5 class="mb-1"><i class="fas fa-hands-helping me-2"></i>Interactive Demo Mode</h5>
-            <p class="mb-0 small">
-                <strong>Go ahead - experiment!</strong> Create tasks, add comments, try all features. This is a shared playground for learning.
-                <a href="{% url 'demo_dashboard' %}" class="text-white text-decoration-underline"><strong>Back to Demo Dashboard</strong></a> | 
-                <a href="{% url 'dashboard' %}" class="text-white text-decoration-underline"><strong>Exit to My Dashboard</strong></a>
-            </p>
-        </div>
-        <div>
-            <span class="badge bg-light text-primary" style="font-size: 1rem; padding: 0.5rem 1rem;">
-                <i class="fas fa-graduation-cap me-1"></i>DEMO
+            <strong><i class="fas fa-hands-helping me-2"></i>Interactive Demo</strong> —
+            <span class="small">Experiment freely!
+                <a href="{% url 'demo_dashboard' %}" class="text-white text-decoration-underline">Demo Dashboard</a> |
+                <a href="{% url 'dashboard' %}" class="text-white text-decoration-underline">Exit</a>
             </span>
         </div>
+        <span class="badge bg-light text-primary"><i class="fas fa-graduation-cap me-1"></i>DEMO</span>
     </div>
 </div>
 {% endif %}
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <div>
-        <h1 class="h3 mb-0 text-gray-800">
-            {{ board.name }}
-        </h1>
-        {% if board.description %}
-            <p class="text-muted mb-0">{{ board.description }}</p>
-        {% endif %}
-    </div>    <div class="btn-group">
-
-<!-- Déjà Vu Banner (Knowledge Graph) -->
-<div id="dejaVuBanner" class="alert alert-warning alert-dismissible fade show mb-3" role="alert" style="display:none;">
-    <strong><i class="fas fa-lightbulb me-1"></i>Déjà Vu!</strong> Similar past projects found:
-    <span id="dejaVuSummary"></span>
-    <a href="{% url 'board_knowledge' board.id %}" class="alert-link ms-2">View full knowledge page &rarr;</a>
-    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+<!-- Déjà Vu Banner (Knowledge Graph) — compact -->
+<div id="dejaVuBanner" class="alert alert-warning alert-dismissible fade show mb-2 py-2" role="alert" style="display:none; font-size:.9rem;">
+    <i class="fas fa-lightbulb me-1"></i><strong>Déjà Vu!</strong> Similar past projects: <span id="dejaVuSummary"></span>
+    <a href="{% url 'board_knowledge' board.id %}" class="alert-link ms-2">View &rarr;</a>
+    <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert" aria-label="Close" style="padding:.5rem;"></button>
 </div>
-        <a href="{% if is_demo_board and not simplified_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}" class="btn btn-outline-secondary">
-            <i class="fas fa-arrow-left me-1"></i> Back
+
+<!-- ═══════ BOARD HEADER ═══════ -->
+<div class="d-flex justify-content-between align-items-center mb-2">
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <h1 class="h4 mb-0">{{ board.name }}</h1>
+        {% if board.description %}
+        <span class="text-muted small d-none d-md-inline" title="{{ board.description }}">{{ board.description|truncatechars:50 }}</span>
+        {% endif %}
+        <!-- Scope badge (inline) -->
+        {% if scope_status %}
+        <a href="{% url 'scope_dashboard' board.id %}" class="badge text-decoration-none
+            {% if scope_status.scope_change_percentage > 30 %}bg-danger
+            {% elif scope_status.scope_change_percentage > 15 %}bg-warning text-dark
+            {% elif scope_status.scope_change_percentage > 5 %}bg-info
+            {% else %}bg-success{% endif %}" title="Scope change since baseline">
+            Scope: {% if scope_status.scope_change_percentage > 0 %}+{% endif %}{{ scope_status.scope_change_percentage|floatformat:1 }}%
         </a>
-        <a href="{% url 'board_analytics' board.id %}" class="btn btn-outline-primary">
-            <i class="fas fa-chart-pie me-1"></i> Analytics
+        {% endif %}
+        {% if active_scope_alerts %}
+        <button type="button" class="badge bg-danger border-0 text-decoration-none" data-bs-toggle="modal" data-bs-target="#allScopeAlertsModal" title="Scope alert">
+            <i class="fas fa-exclamation-triangle me-1"></i>{{ active_scope_alerts|length }} alert{{ active_scope_alerts|length|pluralize }}
+        </button>
+        {% endif %}
+    </div>
+
+    <!-- ── Right: compact toolbar ── -->
+    <div class="d-flex align-items-center gap-1 flex-wrap justify-content-end">
+        <!-- Primary: Add Task (uses first To-Do column) -->
+        {% for col in columns %}{% if col.name|lower == 'to do' or col.name|lower == 'todo' or col.name|lower == 'backlog' or forloop.first %}
+        {% if forloop.first or col.name|lower == 'to do' or col.name|lower == 'todo' %}
+        <a href="{% url 'create_task_in_column' board.id col.id %}" class="btn btn-sm btn-primary">
+            <i class="fas fa-plus me-1"></i><span class="d-none d-md-inline">Add Task</span>
         </a>
-        <a href="{% url 'burndown_dashboard' board.id %}" class="btn btn-outline-success">
-            <i class="fas fa-chart-line me-1"></i> Burndown
-        </a>
-        <a href="{% url 'coach_dashboard' board.id %}" class="btn btn-outline-purple" style="border-color: #667eea; color: #667eea;">
-            <i class="fas fa-user-graduate me-1"></i> AI Coach
-        </a>
-        <a href="{% url 'skill_gap_dashboard' board.id %}" class="btn btn-outline-warning">
-            <i class="fas fa-brain me-1"></i> Skill Gaps
-        </a>
-        <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-info">
-            <i class="fas fa-chart-gantt me-1"></i> Gantt Chart
-        </a>
-        <a href="{% url 'board_calendar' board.id %}" class="btn btn-outline-secondary">
-            <i class="fas fa-calendar-alt me-1"></i> Calendar
-        </a>
-        <a href="{% url 'board_status_report' board.id %}" class="btn btn-outline-dark">
-            <i class="fas fa-file-alt me-1"></i> Status Report
-        </a>
-        <a href="{% url 'prizmbrief_setup' board.id %}"
-           class="btn btn-outline-primary"
-           title="Generate AI Presentation Content for this board">
-            ✨ PrizmBrief
-        </a>
-        <a href="{% url 'budget_dashboard' board.id %}" class="btn btn-outline-success">
-            <i class="fas fa-dollar-sign me-1"></i> Budget & ROI
-        </a>
-        <a href="{% url 'scope_dashboard' board.id %}" class="btn btn-outline-primary" title="Scope Tracking - Part of Triple Constraint (Scope, Time, Cost)">
-            <i class="fas fa-chart-area me-1"></i> Scope
-        </a>
-        <a href="{% url 'whatif_dashboard' board.id %}" class="btn btn-outline-info" title="What-If Scenario Analyzer — Model hypothetical changes and see cascading impacts">
-            <i class="fas fa-flask me-1"></i> What-If
-        </a>
-        <a href="{% url 'premortem_dashboard' board.id %}" class="btn btn-outline-danger" title="Pre-Mortem AI Analysis — Proactive failure simulation">
-            <i class="fas fa-shield-alt me-1"></i> Pre-Mortem
-        </a>
-        <a href="{% url 'retrospective_dashboard' board.id %}" class="btn btn-outline-secondary">
-            <i class="fas fa-history me-1"></i> Retrospectives
-        </a>
-        <a href="{% url 'automations_list' board.id %}" class="btn btn-outline-warning" title="Automation rules for this board">
-            <i class="fas fa-bolt me-1"></i> Automations
-        </a>
-        <a href="{% url 'board_knowledge' board.id %}" class="btn btn-outline-info" title="Project Knowledge — Decisions, Lessons & Organizational Memory">
-            <i class="fas fa-brain me-1"></i> Knowledge
-        </a>
-        <a href="{% url 'scope_autopsy_dashboard' board.id %}" class="btn btn-outline-warning" title="Scope Autopsy — Forensic analysis of scope creep causes & cost">
-            <i class="fas fa-microscope me-1"></i> Scope Autopsy
-        </a>
-        <div class="btn-group">
-            <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-                <i class="fas fa-file-export me-1"></i> Export
+        {% endif %}
+        {% endif %}{% endfor %}
+
+        <!-- Filter toggle -->
+        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#boardToolsPanel" aria-expanded="false" title="Filter & Search">
+            <i class="fas fa-filter"></i><span class="d-none d-lg-inline ms-1">Filter</span>
+        </button>
+
+        <!-- AI Tools dropdown -->
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="AI Tools">
+                <i class="fas fa-bolt me-1"></i><span class="d-none d-lg-inline">AI Tools</span>
             </button>
-            <ul class="dropdown-menu dropdown-menu-end">
-                <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=json">Export as JSON</a></li>
-                <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=csv">Export as CSV</a></li>
+            <ul class="dropdown-menu dropdown-menu-end" style="min-width:260px;">
+                <li><h6 class="dropdown-header"><i class="fas fa-chart-pie me-2"></i>Analyze</h6></li>
+                <li><a class="dropdown-item" href="{% url 'board_analytics' board.id %}"><i class="fas fa-chart-pie me-2 text-primary"></i>Analytics</a></li>
+                <li><a class="dropdown-item" href="{% url 'burndown_dashboard' board.id %}"><i class="fas fa-chart-line me-2 text-success"></i>Burndown</a></li>
+                <li><a class="dropdown-item" href="{% url 'skill_gap_dashboard' board.id %}"><i class="fas fa-brain me-2 text-warning"></i>Skill Gaps</a></li>
+                <li><a class="dropdown-item" href="{% url 'board_status_report' board.id %}"><i class="fas fa-file-alt me-2 text-dark"></i>Status Report</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><h6 class="dropdown-header"><i class="fas fa-calendar-alt me-2"></i>Plan</h6></li>
+                <li><a class="dropdown-item" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-2 text-info"></i>Gantt Chart</a></li>
+                <li><a class="dropdown-item" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-2 text-secondary"></i>Calendar</a></li>
+                <li><a class="dropdown-item" href="{% url 'budget_dashboard' board.id %}"><i class="fas fa-dollar-sign me-2 text-success"></i>Budget & ROI</a></li>
+                <li><a class="dropdown-item" href="{% url 'scope_dashboard' board.id %}"><i class="fas fa-chart-area me-2 text-primary"></i>Scope</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><h6 class="dropdown-header"><i class="fas fa-robot me-2"></i>AI Actions</h6></li>
+                <li><a class="dropdown-item" href="{% url 'coach_dashboard' board.id %}"><i class="fas fa-user-graduate me-2" style="color:#667eea;"></i>AI Coach</a></li>
+                <li><a class="dropdown-item" href="{% url 'prizmbrief_setup' board.id %}"><i class="fas fa-magic me-2 text-primary"></i>PrizmBrief</a></li>
+                <li><a class="dropdown-item" href="{% url 'whatif_dashboard' board.id %}"><i class="fas fa-flask me-2 text-info"></i>What-If</a></li>
+                <li><a class="dropdown-item" href="{% url 'premortem_dashboard' board.id %}"><i class="fas fa-shield-alt me-2 text-danger"></i>Pre-Mortem</a></li>
+                <li><a class="dropdown-item" href="{% url 'retrospective_dashboard' board.id %}"><i class="fas fa-history me-2 text-secondary"></i>Retrospectives</a></li>
+                <li><a class="dropdown-item" href="{% url 'scope_autopsy_dashboard' board.id %}"><i class="fas fa-microscope me-2 text-warning"></i>Scope Autopsy</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><h6 class="dropdown-header"><i class="fas fa-cog me-2"></i>Board Settings</h6></li>
+                <li><a class="dropdown-item" href="{% url 'automations_list' board.id %}"><i class="fas fa-bolt me-2 text-warning"></i>Automations</a></li>
+                <li><a class="dropdown-item" href="{% url 'board_knowledge' board.id %}"><i class="fas fa-brain me-2 text-info"></i>Knowledge</a></li>
+                <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=json"><i class="fas fa-file-export me-2 text-success"></i>Export JSON</a></li>
+                <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=csv"><i class="fas fa-file-csv me-2 text-success"></i>Export CSV</a></li>
             </ul>
         </div>
-        {% if can_manage_invites and not board.is_official_demo_board %}
-        <a href="{% url 'manage_board_members' board.id %}" class="btn btn-outline-info" title="Invite members to this board">
-            <i class="fas fa-user-plus me-1"></i> Invite Members
-        </a>
-        {% endif %}
-        <div class="btn-group">
-            <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                <i class="fas fa-cog"></i>
+
+        <!-- Settings (3-dot) -->
+        <div class="dropdown">
+            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="Board Settings">
+                <i class="fas fa-ellipsis-v"></i>
             </button>
             <ul class="dropdown-menu dropdown-menu-end">
-            <li><a class="dropdown-item" href="{% url 'create_column' board.id %}">Add Column</a></li>
-            <li><a class="dropdown-item" href="{% url 'create_label' board.id %}">Manage Labels</a></li>
-            <li><a class="dropdown-item" href="{% url 'stakeholder:stakeholder_list' board.id %}">
-                <i class="fas fa-users me-2 text-primary"></i>Manage Stakeholders
-            </a></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}">
-                <i class="fas fa-users me-2 text-success"></i>Manage Members
-            </a></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}">Edit Board</a></li>
-            <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}">
-                <i class="fas fa-plug me-2 text-info"></i>Webhooks & Integrations
-            </a></li>
-            <li><hr class="dropdown-divider"></li>
-            {% if board.created_by == request.user or request.user.profile.is_admin or request.user == board.organization.created_by %}
-            <li><a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#deleteBoardModal">Delete Board</a></li>
-            {% endif %}
-        </ul>
-        </div>
-    </div>
-</div>
-
-<!-- Permission banner removed - no restrictions in simplified mode -->
-
-<!-- Scope Creep Alerts -->
-{% if active_scope_alerts %}
-<div class="alert alert-dismissible fade show mb-4" role="alert" 
-     style="border-left: 4px solid 
-     {% if active_scope_alerts.0.severity == 'critical' %}#dc3545{% elif active_scope_alerts.0.severity == 'warning' %}#ffc107{% else %}#17a2b8{% endif %};">
-    <div class="d-flex align-items-start">
-        <div class="me-3">
-            {% if active_scope_alerts.0.severity == 'critical' %}
-                <i class="fas fa-exclamation-triangle fa-2x text-danger"></i>
-            {% elif active_scope_alerts.0.severity == 'warning' %}
-                <i class="fas fa-exclamation-circle fa-2x text-warning"></i>
-            {% else %}
-                <i class="fas fa-info-circle fa-2x text-info"></i>
-            {% endif %}
-        </div>
-        <div class="flex-grow-1">
-            <h5 class="alert-heading mb-2">
-                <i class="fas fa-chart-line me-2"></i>Scope Creep Detected
-            </h5>
-            <p class="mb-2">
-                <strong>{{ active_scope_alerts.0.get_severity_display }}</strong>: 
-                Scope has increased by <strong>{{ active_scope_alerts.0.scope_increase_percentage|floatformat:1 }}%</strong>
-                {% if active_scope_alerts.0.tasks_added %}
-                    ({{ active_scope_alerts.0.tasks_added }} tasks added)
+                <li><a class="dropdown-item" href="{% url 'edit_board' board.id %}"><i class="fas fa-edit me-2"></i>Edit Board</a></li>
+                <li><a class="dropdown-item" href="{% url 'create_column' board.id %}"><i class="fas fa-columns me-2"></i>Add Column</a></li>
+                <li><a class="dropdown-item" href="{% url 'create_label' board.id %}"><i class="fas fa-tags me-2"></i>Manage Labels</a></li>
+                <li><a class="dropdown-item" href="{% url 'stakeholder:stakeholder_list' board.id %}"><i class="fas fa-users me-2 text-primary"></i>Stakeholders</a></li>
+                {% if can_manage_invites and not board.is_official_demo_board %}
+                <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-user-plus me-2 text-success"></i>Invite Members</a></li>
                 {% endif %}
-            </p>
-            {% if active_scope_alerts.0.predicted_delay_days %}
-            <p class="mb-2">
-                <i class="fas fa-clock me-2"></i>
-                <strong>Predicted Impact:</strong> {{ active_scope_alerts.0.predicted_delay_days }} day{{ active_scope_alerts.0.predicted_delay_days|pluralize }} delay
-            </p>
-            {% endif %}
-            {% if active_scope_alerts.0.ai_summary %}
-            <p class="mb-2 text-muted small">{{ active_scope_alerts.0.ai_summary }}</p>
-            {% endif %}
-            {% if active_scope_alerts.0.recommendations %}
-            <div class="mt-2">
-                <strong>Recommendations:</strong>
-                <ul class="mb-2 small">
-                    {% for rec in active_scope_alerts.0.recommendations|slice:":3" %}
-                    <li>{{ rec }}</li>
-                    {% endfor %}
-                </ul>
-            </div>
-            {% endif %}
-            <div class="mt-2">
-                <a href="{% url 'scope_dashboard' board.id %}" 
-                   class="btn btn-sm btn-outline-primary">
-                    <i class="fas fa-chart-line me-1"></i>View Scope Dashboard
-                </a>
-                <a href="{% url 'scope_autopsy_dashboard' board.id %}" 
-                   class="btn btn-sm btn-outline-warning">
-                    <i class="fas fa-microscope me-1"></i>Run Scope Autopsy
-                </a>
-                {% if active_scope_alerts|length > 1 %}
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#allScopeAlertsModal">
-                    <i class="fas fa-list me-1"></i>View All Alerts ({{ active_scope_alerts|length }})
-                </button>
+                <li><a class="dropdown-item" href="{% url 'manage_board_members' board.id %}"><i class="fas fa-users me-2 text-info"></i>Manage Members</a></li>
+                <li><a class="dropdown-item" href="{% url 'webhooks:webhook_list' board.id %}"><i class="fas fa-plug me-2 text-info"></i>Webhooks</a></li>
+                <li><a class="dropdown-item" href="{% url 'wiki:quick_link' content_type='board' object_id=board.id %}"><i class="fas fa-book me-2 text-primary"></i>Link Wiki Pages</a></li>
+                {% if board.created_by == request.user or request.user.profile.is_admin or request.user == board.organization.created_by %}
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item text-danger" href="#" data-bs-toggle="modal" data-bs-target="#deleteBoardModal"><i class="fas fa-trash-alt me-2"></i>Delete Board</a></li>
                 {% endif %}
-            </div>
-        </div>
-    </div>
-    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-</div>
-{% endif %}
-
-<!-- Scope Status Widget (if baseline set) -->
-{% if scope_status %}
-<div class="card mb-4 border-0 shadow-sm">
-    <div class="card-body">
-        <div class="row align-items-center">
-            <div class="col-md-2 text-center">
-                <i class="fas fa-chart-area fa-3x 
-                   {% if scope_status.scope_change_percentage > 30 %}text-danger
-                   {% elif scope_status.scope_change_percentage > 15 %}text-warning
-                   {% elif scope_status.scope_change_percentage > 5 %}text-info
-                   {% else %}text-success{% endif %}"></i>
-            </div>
-            <div class="col-md-10">
-                <div class="row">
-                    <div class="col-md-3">
-                        <h6 class="text-muted mb-1">Baseline</h6>
-                        <h4 class="mb-0">{{ scope_status.baseline_tasks }} tasks</h4>
-                        <small class="text-muted">{{ scope_status.baseline_complexity }} pts</small>
-                    </div>
-                    <div class="col-md-3">
-                        <h6 class="text-muted mb-1">Current</h6>
-                        <h4 class="mb-0">{{ scope_status.current_tasks }} tasks</h4>
-                        <small class="text-muted">{{ scope_status.current_complexity }} pts</small>
-                    </div>
-                    <div class="col-md-3">
-                        <h6 class="text-muted mb-1">Scope Change</h6>
-                        <h4 class="mb-0 
-                           {% if scope_status.scope_change_percentage > 30 %}text-danger
-                           {% elif scope_status.scope_change_percentage > 15 %}text-warning
-                           {% elif scope_status.scope_change_percentage > 5 %}text-info
-                           {% else %}text-success{% endif %}">
-                            {% if scope_status.scope_change_percentage > 0 %}+{% endif %}{{ scope_status.scope_change_percentage|floatformat:1 }}%
-                        </h4>
-                        <small class="text-muted">
-                            {% if scope_status.tasks_added > 0 %}+{% endif %}{{ scope_status.tasks_added }} tasks
-                        </small>
-                    </div>
-                    <div class="col-md-3">
-                        <h6 class="text-muted mb-1">Since Baseline</h6>
-                        <p class="mb-0 small">{{ scope_status.baseline_date|date:"M d, Y" }}</p>
-                        <small class="text-muted">{{ scope_status.baseline_date|timesince }} ago</small>
-                    </div>
-                </div>
-            </div>
+            </ul>
         </div>
     </div>
 </div>
-{% endif %}
 
-<!-- AI Resource Leveling Widget -->
-{% include 'kanban/resource_leveling_widget.html' %}
+<!-- ═══════ VIEW MODE TABS ═══════ -->
+<ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
+    <li class="nav-item"><a class="nav-link active" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
+    <li class="nav-item"><a class="nav-link" href="{% url 'board_analytics' board.id %}"><i class="fas fa-chart-pie me-1"></i>Analytics</a></li>
+</ul>
 
-<!-- Advanced Features Notification -->
-<!-- Removed: Meeting Transcript Analysis has been consolidated to the dedicated Meeting Hub accessible from the main navigation -->
+<!-- ═══════ COLLAPSIBLE BOARD TOOLS (Filter/Search + Column Reorder) ═══════ -->
+<div class="collapse mb-3" id="boardToolsPanel">
+    <!-- AI Resource Leveling (collapsed inline) -->
+    {% include 'kanban/resource_leveling_widget.html' %}
 
-<!-- Search Panel -->
-<div class="search-panel">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="mb-0">Search Tasks</h5>
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#search-form-container" aria-expanded="true" aria-controls="search-form-container">
-            <i class="fas fa-chevron-up" id="toggle-search-icon"></i>
-        </button>
-    </div>
-    
-    <div class="collapse show" id="search-form-container">
+    <!-- Search Panel -->
+    <div class="card card-body mb-2">
+        <h6 class="mb-2"><i class="fas fa-search me-1"></i>Search & Filter Tasks</h6>
+        <div id="search-form-container">
         <form method="get" class="row">            <div class="col-md-4 form-group">
                 <label for="{{ search_form.search_term.id_for_label }}" class="form-label">Search Term</label>
                 {{ search_form.search_term }}
@@ -541,25 +423,21 @@
                 <i class="fas fa-search me-1"></i> "{{ search_form.cleaned_data.search_term }}"
             </span>
             {% endif %}
-            
             {% if search_form.cleaned_data.column %}
             <span class="filter-badge">
                 <i class="fas fa-columns me-1"></i> Column: {{ search_form.cleaned_data.column.name }}
             </span>
             {% endif %}
-            
             {% if search_form.cleaned_data.priority %}
             <span class="filter-badge">
                 <i class="fas fa-flag me-1"></i> Priority: {{ search_form.cleaned_data.priority|title }}
             </span>
             {% endif %}
-            
             {% if search_form.cleaned_data.label_category %}
             <span class="filter-badge">
                 <i class="fas fa-chart-line me-1"></i> Label Type: {{ search_form.cleaned_data.get_label_category_display }}
             </span>
             {% endif %}
-            
             {% if search_form.cleaned_data.assignee %}
             <span class="filter-badge">
                 <i class="fas fa-user me-1"></i> Assignee: {{ search_form.cleaned_data.assignee.username }}
@@ -567,37 +445,13 @@
             {% endif %}
         </div>
         {% endif %}
-    </div>
-</div>
+        </div><!-- /search-form-container -->
+    </div><!-- /card search -->
 
-<!-- Column Ordering Panel -->
-<div class="column-ordering-panel" id="column-ordering-panel">
-    <div class="d-flex justify-content-between align-items-center mb-2">
-        <div>
-            <h5 class="mb-0">
-                <i class="fas fa-sort me-2 text-primary"></i>Quick Column Reorder
-                <small class="text-muted" style="font-size: 0.7em; font-weight: normal;">(for large boards)</small>
-            </h5>
-        </div>
-        <div>
-            <button type="button" class="btn btn-sm btn-outline-secondary me-2" id="toggle-column-panel">
-                <i class="fas fa-chevron-up" id="toggle-column-icon"></i>
-            </button>
-        </div>
-    </div>
-    
-    <div id="column-ordering-content">
-        <div class="alert alert-info alert-dismissible fade show py-2 mb-3" role="alert" style="font-size: 0.9rem;">
-            <i class="fas fa-lightbulb me-1"></i>
-            <strong>Tip:</strong> You can drag column headers to reorder them, or use position numbers below for precise control across many columns.
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close" style="padding: 0.5rem;"></button>
-        </div>
-        
-        <p class="text-muted small mb-2">
-            <i class="fas fa-keyboard me-1"></i> <strong>Keyboard shortcut:</strong> Press <kbd>Alt</kbd> + <kbd>R</kbd> to quickly access this panel
-        </p>
-        
-        <div id="column-ordering-badges" class="mb-3">
+    <!-- Column Reorder (inside tools panel) -->
+    <div class="card card-body mb-2">
+        <h6 class="mb-2"><i class="fas fa-sort me-1 text-primary"></i>Quick Column Reorder</h6>
+        <div id="column-ordering-badges" class="mb-2">
             {% for column in columns %}
             <div class="column-ordering-badge">
                 <input type="number" min="1" max="{{ columns|length }}" value="{{ column.position|add:1 }}" 
@@ -608,7 +462,6 @@
             </div>
             {% endfor %}
         </div>
-        
         <div class="d-flex gap-2">
             <button id="refresh-columns-btn" class="btn btn-primary btn-sm">
                 <i class="fas fa-sync-alt me-1"></i> Apply Reorder
@@ -618,7 +471,7 @@
             </button>
         </div>
     </div>
-</div>
+</div><!-- /boardToolsPanel collapse -->
 
 <!-- Kanban Board -->
 <div class="kanban-board" id="kanban-board">
@@ -675,22 +528,36 @@
         </div>        <div class="kanban-column-tasks" data-column-id="{{ column.id }}">
             {% for task in tasks %}
                 {% if task.column.id == column.id %}
-                <div class="kanban-task" id="task-{{ task.id }}">
+                <div class="kanban-task" id="task-{{ task.id }}" data-task-url="{% url 'task_detail' task.id %}">
+                    <!-- 3-dot hover menu -->
+                    <div class="task-hover-menu">
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-light border-0 p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="line-height:1;">
+                                <i class="fas fa-ellipsis-v text-muted"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end" style="font-size:.85rem;">
+                                <li><a class="dropdown-item" href="{% url 'task_detail' task.id %}"><i class="fas fa-eye me-2"></i>View</a></li>
+                                <li><a class="dropdown-item" href="{% url 'task_detail' task.id %}"><i class="fas fa-edit me-2"></i>Edit</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><button type="button" class="dropdown-item text-danger delete-task-btn"
+                                        data-task-id="{{ task.id }}" data-task-title="{{ task.title }}"
+                                        data-bs-toggle="modal" data-bs-target="#deleteTaskModal">
+                                    <i class="fas fa-trash-alt me-2"></i>Delete
+                                </button></li>
+                            </ul>
+                        </div>
+                    </div>
+
                     <div class="task-title">{{ task.title }}</div>
                     
-                    {% if task.description %}
-                    <div class="task-description">{{ task.description|truncatechars:100 }}</div>
-                    {% endif %}
-                    
-                    <!-- Task Progress Bar -->
-                    <div class="task-progress-container mt-2 mb-2">
+                    <!-- Compact progress bar -->
+                    <div class="task-progress-container mt-2 mb-1">
                         <div class="d-flex justify-content-between align-items-center">
                             <button type="button" class="btn btn-sm btn-outline-secondary progress-btn decrease-progress" 
                                     data-task-id="{{ task.id }}" title="Decrease progress by 10%">
                                 <i class="fas fa-minus"></i>
                             </button>
-                            
-                            <div class="progress flex-grow-1 mx-1" style="height: 12px;">
+                            <div class="progress flex-grow-1 mx-1" style="height: 6px;">
                                 <div class="progress-bar {% if task.progress == 100 %}bg-success{% elif task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
                                      role="progressbar"
                                      style="width: {{ task.progress }}%;"
@@ -700,23 +567,15 @@
                                      aria-valuemax="100">
                                 </div>
                             </div>
-                            
                             <button type="button" class="btn btn-sm btn-outline-secondary progress-btn increase-progress" 
                                     data-task-id="{{ task.id }}" title="Increase progress by 10%">
                                 <i class="fas fa-plus"></i>
                             </button>
                         </div>
-                        <div class="text-center">
-                            <small class="text-muted">
-                                {% if task.progress == 0 %}
-                                    <span class="text-secondary">0% — not yet started</span>
-                                {% else %}
-                                    {{ task.progress }}% complete
-                                {% endif %}
-                            </small>
-                        </div>
+                        <div class="text-center"><small class="text-muted" style="font-size:.75rem;">{{ task.progress }}%</small></div>
                     </div>
-                      {% if task.labels.all %}
+
+                    {% if task.labels.all %}
                     <div class="task-labels">
                         {% for label in task.labels.all %}
                             {% if label.category == 'lean' %}
@@ -731,86 +590,38 @@
                     </div>
                     {% endif %}
                     
-                    <!-- AI Risk Badge -->
-                    {% if task.risk_level %}
-                    <div class="mt-2">
-                        <span class="badge {% if task.risk_level == 'critical' %}bg-danger{% elif task.risk_level == 'high' %}bg-warning text-dark{% elif task.risk_level == 'medium' %}bg-info{% else %}bg-success{% endif %}" 
-                              style="cursor: pointer;" 
-                              onclick="quickRiskView({{ task.id }}, '{{ task.title|escapejs }}')"
-                              title="Click to see why - AI Risk Assessment">
-                            🛡️ Risk: {{ task.risk_level|title }} ({{ task.risk_score }}/9)
-                            <i class="bi bi-lightbulb ms-1" style="font-size: 0.8em;"></i>
-                        </span>
-                    </div>
-                    {% endif %}
-
-                    <!-- WIP Age Badge -->
-                    {% if task.column_entered_at and task.progress < 100 %}
-                    <div class="mt-1">
-                        <span class="badge {% if task.column_entered_at|wip_age_days > 7 %}bg-danger{% elif task.column_entered_at|wip_age_days > 3 %}bg-warning text-dark{% else %}bg-secondary{% endif %} wip-age-badge"
-                              title="Time spent in this column">
-                            <i class="fas fa-hourglass-half me-1"></i>{{ task.column_entered_at|wip_age_days }}d in column
-                        </span>
-                    </div>
-                    {% endif %}
-                    
                     <div class="task-footer">
-                        <div>
+                        <div class="d-flex align-items-center gap-1">
                             <span class="task-priority priority-{{ task.priority }}">{{ task.priority|title }}</span>
+                            {% with status=task.progress_status %}
+                            {% if status == 'at_risk' %}
+                            <span class="badge bg-warning text-dark" style="font-size:.65rem;" title="At Risk"><i class="fas fa-exclamation-triangle"></i></span>
+                            {% elif status == 'late' %}
+                            <span class="badge bg-danger" style="font-size:.65rem;" title="Late"><i class="fas fa-times-circle"></i></span>
+                            {% endif %}
+                            {% endwith %}
                         </div>
                         <div>
                             {% if task.due_date %}
-                            <span class="task-due-date {% if task.due_date < now and task.progress < 100 %}overdue{% endif %}">
-                                <i class="far fa-calendar-alt me-1"></i> {{ task.due_date|date:"M d" }}
+                            <span class="task-due-date {% if task.due_date < now and task.progress < 100 %}overdue{% endif %}" style="font-size:.8rem;">
+                                <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d" }}
                             </span>
                             {% endif %}
                         </div>
                     </div>
 
-                    <!-- Progress Status Badge (On Track / At Risk / Late) -->
-                    {% with status=task.progress_status %}
-                    {% if status %}
-                    <div class="mt-1">
-                        {% if status == 'on_track' %}
-                        <span class="task-status-badge on-track" title="Task is progressing on schedule">
-                            <i class="fas fa-check-circle"></i> On Track
-                        </span>
-                        {% elif status == 'at_risk' %}
-                        <span class="task-status-badge at-risk" title="Task is falling behind schedule">
-                            <i class="fas fa-exclamation-triangle"></i> At Risk
-                        </span>
-                        {% elif status == 'late' %}
-                        <span class="task-status-badge late" title="Task is past its due date">
-                            <i class="fas fa-times-circle"></i> Late
-                        </span>
-                        {% endif %}
-                    </div>
-                    {% endif %}
-                    {% endwith %}
-
                     {% if task.assigned_to %}
-                    <div class="task-assignee mt-2">
+                    <div class="task-assignee mt-1">
                         {% if task.assigned_to.profile.profile_picture %}
                         <img src="{{ task.assigned_to.profile.profile_picture.url }}" alt="{{ task.assigned_to.username }}" class="task-assignee-avatar">
                         {% else %}
-                        <span class="task-assignee-avatar bg-secondary text-white d-flex align-items-center justify-content-center">
+                        <span class="task-assignee-avatar bg-secondary text-white d-flex align-items-center justify-content-center" style="width:20px;height:20px;font-size:.7rem;">
                             {{ task.assigned_to.username|slice:":1" }}
                         </span>
                         {% endif %}
-                        <small>{{ task.assigned_to.username }}</small>
+                        <small style="font-size:.8rem;">{{ task.assigned_to.username }}</small>
                     </div>
                     {% endif %}
-                    
-                    <div class="mt-2 text-end">
-                        <a href="{% url 'task_detail' task.id %}" class="btn btn-sm btn-outline-secondary">
-                            <i class="fas fa-eye"></i>
-                        </a>
-                        <button type="button" class="btn btn-sm btn-outline-danger delete-task-btn" 
-                                data-task-id="{{ task.id }}" data-task-title="{{ task.title }}"
-                                data-bs-toggle="modal" data-bs-target="#deleteTaskModal">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
-                    </div>
                 </div>
                 {% endif %}
             {% endfor %}
@@ -839,53 +650,7 @@
 </div>
 
 <!-- Wiki Links Section -->
-<div class="card shadow mt-4">
-    <div class="card-header py-3 d-flex justify-content-between align-items-center">
-        <h6 class="m-0 font-weight-bold text-primary"><i class="fas fa-book me-2"></i> Linked Wiki Pages</h6>
-        <a href="{% url 'wiki:quick_link' content_type='board' object_id=board.id %}" class="btn btn-sm btn-outline-primary" title="Link wiki pages to this board">
-            <i class="fas fa-link"></i> Link Wiki
-        </a>
-    </div>
-    <div class="card-body">
-        {% if wiki_links %}
-            <div class="list-group list-group-flush">
-                {% for link in wiki_links %}
-                    <div class="list-group-item d-flex justify-content-between align-items-start">
-                        <div class="flex-grow-1">
-                            <h6 class="mb-1">
-                                <i class="fas fa-book"></i> {{ link.wiki_page.title }}
-                            </h6>
-                            {% if link.description %}
-                                <p class="mb-1 text-muted small">{{ link.description }}</p>
-                            {% endif %}
-                            <small class="text-muted">
-                                Category: <strong>{{ link.wiki_page.category.name }}</strong> • 
-                                Last updated: {{ link.wiki_page.updated_at|date:"M d, Y" }}
-                            </small>
-                        </div>
-                        <div class="d-flex gap-2 align-items-center">
-                            <a href="{% url 'wiki:page_detail' link.wiki_page.slug %}" class="btn btn-sm btn-info" title="View wiki page">
-                                <i class="fas fa-eye"></i> View Page
-                            </a>
-                            <form method="post" action="{% url 'wiki:delete_link' link.id %}" class="d-inline" onsubmit="return confirm('Are you sure you want to remove this wiki link?');">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-outline-danger" title="Remove link">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </form>
-                        </div>
-                    </div>
-                {% endfor %}
-            </div>
-        {% else %}
-            <div class="text-center py-4">
-                <i class="fas fa-book-open fa-2x text-muted mb-2"></i>
-                <p class="text-muted mb-0">No wiki pages linked to this board</p>
-                <small class="text-muted">Click "Link Wiki" above to add relevant documentation</small>
-            </div>
-        {% endif %}
-    </div>
-</div>
+<!-- Wiki Links moved to Board Settings → Link Wiki Pages (3-dot menu) -->
 
 <!-- Delete Column Modal -->
 <div class="modal fade" id="deleteColumnModal" tabindex="-1" aria-hidden="true">
@@ -1127,19 +892,16 @@
         });
         
         // Set up search panel toggle icon rotation using Bootstrap events
-        const searchFormContainer = document.getElementById('search-form-container');
-        const toggleSearchIcon = document.getElementById('toggle-search-icon');
+        // (search is now inside boardToolsPanel collapse — no separate toggle needed)
         
-        if (searchFormContainer && toggleSearchIcon) {
-            searchFormContainer.addEventListener('hide.bs.collapse', function() {
-                toggleSearchIcon.classList.remove('fa-chevron-up');
-                toggleSearchIcon.classList.add('fa-chevron-down');
+        // Task card click → navigate to task detail (unless clicking a button/link)
+        document.querySelectorAll('.kanban-task[data-task-url]').forEach(card => {
+            card.style.cursor = 'pointer';
+            card.addEventListener('click', function(e) {
+                if (e.target.closest('button, a, .dropdown-menu, .progress-btn')) return;
+                window.location.href = this.dataset.taskUrl;
             });
-            searchFormContainer.addEventListener('show.bs.collapse', function() {
-                toggleSearchIcon.classList.remove('fa-chevron-down');
-                toggleSearchIcon.classList.add('fa-chevron-up');
-            });
-        }
+        });
         
         // Set up column delete functionality
         const deleteColumnBtns = document.querySelectorAll('.delete-column-btn');

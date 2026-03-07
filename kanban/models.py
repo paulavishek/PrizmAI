@@ -326,7 +326,12 @@ class Board(models.Model):
 
     def __str__(self):
         return self.name
-    
+
+    @property
+    def completed_task_count(self):
+        """Return count of tasks with progress == 100 on this board."""
+        return Task.objects.filter(column__board=self, item_type='task', progress=100).count()
+
     def create_scope_snapshot(self, user=None, snapshot_type='manual', is_baseline=False, notes=None):
         """
         Create a scope snapshot for this board

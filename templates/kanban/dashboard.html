@@ -2,6 +2,7 @@
 {% load summary_filters %}
 
 {% block title %}Dashboard - PrizmAI{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -1042,152 +1043,103 @@
 </div>
 
 <!-- ============================================================ -->
-<!-- ZONE 1: COMMAND STRIP — 4 KPI Cards                        -->
+<!-- ZONE 1: COMPACT KPI STRIP                                   -->
 <!-- ============================================================ -->
-<div class="row g-3 mb-3" id="kpi-strip">
-
-    <!-- Total Tasks -->
-    <div class="col-6 col-md-3">
-        <div class="card shadow-sm h-100 kpi-card metrics-card"
-             data-bs-toggle="modal" data-bs-target="#totalTasksModal"
-             role="button" tabindex="0" aria-label="View all tasks">
-            <div class="card-body d-flex align-items-center gap-3 p-3">
-                <div class="kpi-icon-wrap bg-primary bg-opacity-10">
-                    <i class="fas fa-tasks text-primary fs-4"></i>
-                </div>
-                <div>
-                    <div class="kpi-big-value text-primary">{{ task_count }}</div>
-                    <div class="kpi-big-label">Total Tasks</div>
-                    <div class="kpi-sub">Click to see all</div>
-                </div>
-            </div>
-        </div>
+<div class="d-flex flex-wrap gap-2 mb-3 align-items-center" id="kpi-strip">
+    <div class="kpi-pill" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#totalTasksModal" aria-label="View all tasks">
+        <i class="fas fa-tasks text-primary me-1"></i>
+        <strong class="text-primary">{{ task_count }}</strong> <span class="text-muted">Tasks</span>
     </div>
-
-    <!-- Completed This Sprint -->
-    <div class="col-6 col-md-3">
-        <div class="card shadow-sm h-100 kpi-card metrics-card"
-             data-bs-toggle="modal" data-bs-target="#completedTasksModal"
-             role="button" tabindex="0" aria-label="View completed tasks">
-            <div class="card-body d-flex align-items-center gap-3 p-3">
-                <div class="kpi-icon-wrap bg-success bg-opacity-10">
-                    <i class="fas fa-check-circle text-success fs-4"></i>
-                </div>
-                <div>
-                    <div class="kpi-big-value text-success">{{ completed_count }}</div>
-                    <div class="kpi-big-label">Completed</div>
-                    <div class="kpi-sub">{{ completion_rate }}% done overall</div>
-                </div>
-            </div>
-        </div>
+    <div class="kpi-pill" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#completedTasksModal" aria-label="View completed tasks">
+        <i class="fas fa-check-circle text-success me-1"></i>
+        <strong class="text-success">{{ completed_count }}</strong> <span class="text-muted">Done</span>
+        <span class="kpi-pill-sub">{{ completion_rate }}%</span>
     </div>
-
-    <!-- Overdue -->
-    <div class="col-6 col-md-3">
-        <div class="card shadow-sm h-100 kpi-card metrics-card {% if overdue_count > 0 %}border-danger{% endif %}"
-             data-bs-toggle="modal" data-bs-target="#overdueTasksModal"
-             role="button" tabindex="0" aria-label="View overdue tasks">
-            <div class="card-body d-flex align-items-center gap-3 p-3">
-                <div class="kpi-icon-wrap {% if overdue_count > 0 %}bg-danger{% else %}bg-secondary{% endif %} bg-opacity-10">
-                    <i class="fas fa-exclamation-circle {% if overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %} fs-4"></i>
-                </div>
-                <div>
-                    <div class="kpi-big-value {% if overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %}">{{ overdue_count }}</div>
-                    <div class="kpi-big-label">Overdue</div>
-                    <div class="kpi-sub">{% if overdue_count > 0 %}Needs attention{% else %}All on track{% endif %}</div>
-                </div>
-            </div>
-        </div>
+    <div class="kpi-pill {% if overdue_count > 0 %}kpi-pill-alert{% endif %}" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#overdueTasksModal" aria-label="View overdue tasks">
+        <i class="fas fa-exclamation-circle {% if overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %} me-1"></i>
+        <strong class="{% if overdue_count > 0 %}text-danger{% else %}text-secondary{% endif %}">{{ overdue_count }}</strong> <span class="text-muted">Overdue</span>
     </div>
-
-    <!-- High Risk -->
-    <div class="col-6 col-md-3">
-        <div class="card shadow-sm h-100 kpi-card metrics-card {% if total_high_risk > 0 %}border-warning{% endif %}"
-             data-bs-toggle="modal" data-bs-target="#highRiskModal"
-             role="button" tabindex="0" aria-label="View high risk tasks">
-            <div class="card-body d-flex align-items-center gap-3 p-3">
-                <div class="kpi-icon-wrap {% if total_high_risk > 0 %}bg-warning{% else %}bg-secondary{% endif %} bg-opacity-10">
-                    <i class="fas fa-shield-alt {% if total_high_risk > 0 %}text-warning{% else %}text-secondary{% endif %} fs-4"></i>
-                </div>
-                <div>
-                    <div class="kpi-big-value {% if total_high_risk > 0 %}text-warning{% else %}text-secondary{% endif %}">{{ total_high_risk }}</div>
-                    <div class="kpi-big-label">High Risk</div>
-                    <div class="kpi-sub">{% if total_high_risk > 0 %}Click to view details{% else %}Across all boards{% endif %}</div>
-                </div>
-            </div>
-        </div>
+    <div class="kpi-pill {% if total_high_risk > 0 %}kpi-pill-warn{% endif %}" role="button" tabindex="0" data-bs-toggle="modal" data-bs-target="#highRiskModal" aria-label="View high risk tasks">
+        <i class="fas fa-shield-alt {% if total_high_risk > 0 %}text-warning{% else %}text-secondary{% endif %} me-1"></i>
+        <strong class="{% if total_high_risk > 0 %}text-warning{% else %}text-secondary{% endif %}">{{ total_high_risk }}</strong> <span class="text-muted">High Risk</span>
     </div>
+</div>
 
 </div>
 <!-- /KPI Strip -->
 
-<!-- Daily AI Briefing (shown only when mission AI summaries have been generated) -->
+<!-- Daily AI Briefing — collapsed by default with one-line summary -->
 {% if daily_briefing.has_content %}
 <div class="card shadow-sm mb-3" id="daily-briefing-card">
     <div class="card-body p-3">
-        <div class="d-flex align-items-center justify-content-between mb-2 flex-wrap gap-2">
-            <h6 class="m-0 fw-bold" style="color:#0e9f6e;">
-                <i class="fas fa-robot me-2"></i>Daily AI Briefing
-            </h6>
-            <small class="text-muted">
-                <i class="fas fa-info-circle me-1"></i>Synthesised from your stored mission summaries
-            </small>
-        </div>
-        <div class="row g-2">
-            {% if daily_briefing.pulse %}
-            <div class="col-md-4">
-                <div class="briefing-item">
-                    <span class="briefing-tag briefing-pulse">🟢 Overall Pulse</span>
-                    <p class="mb-0 small mt-2" style="color:#374151;">{{ daily_briefing.pulse }}</p>
-                </div>
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-2" role="button" data-bs-toggle="collapse" data-bs-target="#briefingDetail" 
+                 aria-expanded="false" aria-controls="briefingDetail" style="cursor:pointer;">
+                <i class="fas fa-robot" style="color:#0e9f6e;"></i>
+                <span class="fw-bold" style="font-size:0.88rem; color:#0e9f6e;">AI Briefing</span>
+                <span class="text-muted" style="font-size:0.82rem;">
+                    — {% if daily_briefing.pulse %}{{ daily_briefing.pulse|truncatechars:80 }}{% else %}{{ daily_briefing.action|truncatechars:80 }}{% endif %}
+                </span>
+                <i class="fas fa-chevron-down text-muted ms-1" style="font-size:0.7rem; transition:transform 0.2s;" id="briefingChevron"></i>
             </div>
-            {% endif %}
-            {% if daily_briefing.risk %}
-            <div class="col-md-4">
-                <div class="briefing-item">
-                    <span class="briefing-tag briefing-risk">⚠️ Top Risk Item</span>
-                    {% if daily_briefing.top_risk %}
-                    <div class="mt-2">
-                        <a href="{% url 'task_detail' daily_briefing.top_risk.task.id %}"
-                           class="fw-semibold text-decoration-none"
-                           style="font-size:0.82rem; color:#1e3a8a;"
-                           title="{{ daily_briefing.top_risk.task.title }}">
-                            {{ daily_briefing.top_risk.task.title|truncatechars:52 }}
-                        </a>
-                        <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
-                            {% if daily_briefing.top_risk.risk_level == 'critical' %}
-                                <span class="badge bg-danger" style="font-size:0.65rem;">Critical</span>
-                            {% else %}
-                                <span class="badge bg-warning text-dark" style="font-size:0.65rem;">High Risk</span>
-                            {% endif %}
-                            <small class="text-muted" style="font-size:0.72rem;">
-                                <i class="fas fa-calendar-alt me-1"></i>{{ daily_briefing.top_risk.due_label }}
-                            </small>
-                            {% if daily_briefing.top_risk.board_name %}
-                            <small class="text-muted" style="font-size:0.72rem;">
-                                <i class="fas fa-columns me-1"></i>{{ daily_briefing.top_risk.board_name|truncatechars:20 }}
-                            </small>
-                            {% endif %}
+        </div>
+        <div class="collapse mt-3" id="briefingDetail">
+            <div class="row g-2">
+                {% if daily_briefing.pulse %}
+                <div class="col-md-4">
+                    <div class="briefing-item">
+                        <span class="briefing-tag briefing-pulse">🟢 Overall Pulse</span>
+                        <p class="mb-0 small mt-2" style="color:#374151;">{{ daily_briefing.pulse }}</p>
+                    </div>
+                </div>
+                {% endif %}
+                {% if daily_briefing.risk %}
+                <div class="col-md-4">
+                    <div class="briefing-item">
+                        <span class="briefing-tag briefing-risk">⚠️ Top Risk Item</span>
+                        {% if daily_briefing.top_risk %}
+                        <div class="mt-2">
+                            <a href="{% url 'task_detail' daily_briefing.top_risk.task.id %}"
+                               class="fw-semibold text-decoration-none"
+                               style="font-size:0.82rem; color:#1e3a8a;"
+                               title="{{ daily_briefing.top_risk.task.title }}">
+                                {{ daily_briefing.top_risk.task.title|truncatechars:52 }}
+                            </a>
+                            <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+                                {% if daily_briefing.top_risk.risk_level == 'critical' %}
+                                    <span class="badge bg-danger" style="font-size:0.65rem;">Critical</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark" style="font-size:0.65rem;">High Risk</span>
+                                {% endif %}
+                                <small class="text-muted" style="font-size:0.72rem;">
+                                    <i class="fas fa-calendar-alt me-1"></i>{{ daily_briefing.top_risk.due_label }}
+                                </small>
+                                {% if daily_briefing.top_risk.board_name %}
+                                <small class="text-muted" style="font-size:0.72rem;">
+                                    <i class="fas fa-columns me-1"></i>{{ daily_briefing.top_risk.board_name|truncatechars:20 }}
+                                </small>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if daily_briefing.action %}
+                <div class="col-md-4">
+                    <div class="briefing-item briefing-item-clickable"
+                         data-bs-toggle="modal" data-bs-target="#aiRecommendedActionsModal"
+                         role="button" tabindex="0"
+                         aria-label="View AI recommended actions">
+                        <span class="briefing-tag briefing-action">💡 Recommended Action</span>
+                        <p class="mb-0 small mt-2 fw-semibold" style="color:#1e40af;">{{ daily_briefing.action }}</p>
+                        <div class="briefing-action-footer">
+                            View details <i class="fas fa-arrow-right ms-1"></i>
                         </div>
                     </div>
-                    {% endif %}
                 </div>
+                {% endif %}
             </div>
-            {% endif %}
-            {% if daily_briefing.action %}
-            <div class="col-md-4">
-                <div class="briefing-item briefing-item-clickable"
-                     data-bs-toggle="modal" data-bs-target="#aiRecommendedActionsModal"
-                     role="button" tabindex="0"
-                     aria-label="View AI recommended actions">
-                    <span class="briefing-tag briefing-action">💡 Recommended Action</span>
-                    <p class="mb-0 small mt-2 fw-semibold" style="color:#1e40af;">{{ daily_briefing.action }}</p>
-                    <div class="briefing-action-footer">
-                        View details <i class="fas fa-arrow-right ms-1"></i>
-                    </div>
-                </div>
-            </div>
-            {% endif %}
         </div>
     </div>
 </div>
@@ -1438,38 +1390,115 @@
 
 {{ chart_data|json_script:"dashboardChartData" }}
 
-<!-- Dashboard Main Layout: Mission Overview (left) + My Tasks (right) -->
+<!-- Dashboard Main Layout: Board Cards + My Tasks (top), Mission Overview (below) -->
 <div class="row g-4 mb-4">
 
     <!-- ======================================================== -->
-    <!-- MAIN COLUMN: Mission Overview                            -->
+    <!-- MAIN COLUMN: Board Cards Grid (Monday.com-style)         -->
     <!-- ======================================================== -->
     <div class="col-lg-8 col-md-12">
 
-        <!-- Mission Overview Tree -->
-        <div class="card shadow mb-4" id="mission-overview-card">
-            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+        <!-- Board Cards Grid -->
+        <div class="card shadow-sm mb-4" id="board-cards-section">
+            <div class="card-header py-2 d-flex align-items-center justify-content-between">
+                <h6 class="m-0 fw-bold text-primary">
+                    <i class="fas fa-columns me-2"></i>My Boards
+                </h6>
                 <div class="d-flex align-items-center gap-2">
-                    <h6 class="m-0 font-weight-bold text-primary">
-                        <i class="fas fa-bullseye me-2 text-primary"></i>Mission Overview
-                    </h6>
-                    {% if mission_count %}
-                    <span class="badge bg-primary rounded-pill ms-2">{{ mission_count }}</span>
-                    {% endif %}
-                    <small class="text-muted ms-2">Goal &rarr; Mission &rarr; Strategy &rarr; Board &rarr; Tasks</small>
-                </div>
-                <div class="d-flex align-items-center gap-2">
-                    <a href="{% url 'goal_list' %}" class="btn btn-sm btn-outline-warning text-dark">
-                        <i class="fas fa-trophy fa-sm"></i> All Goals
+                    <a href="{% url 'board_list' %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-list fa-sm me-1"></i>View All
                     </a>
-                    <a href="{% url 'mission_list' %}" class="btn btn-sm btn-outline-primary">
-                        <i class="fas fa-bullseye fa-sm"></i> All Missions
-                    </a>
-                    <a href="{% url 'create_mission' %}" class="btn btn-sm btn-primary">
-                        <i class="fas fa-plus fa-sm"></i> New Mission
+                    <a href="{% url 'create_board' %}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-plus fa-sm me-1"></i>New Board
                     </a>
                 </div>
             </div>
+            <div class="card-body p-3">
+                {% if boards %}
+                <div class="row g-3">
+                    {% for board in boards %}
+                    <div class="col-md-6 col-xl-4">
+                        <a href="{% url 'board_detail' board.id %}" class="text-decoration-none">
+                            <div class="board-card-grid">
+                                <div class="d-flex align-items-start justify-content-between mb-2">
+                                    <h6 class="board-card-title mb-0">{{ board.name|truncatechars:30 }}</h6>
+                                    {% with status=board.get_current_scope_status %}
+                                    {% if status.scope_change_pct is not None %}
+                                        {% if status.scope_change_pct > 30 %}
+                                        <span class="board-health-dot bg-danger" title="At Risk"></span>
+                                        {% elif status.scope_change_pct > 15 %}
+                                        <span class="board-health-dot bg-warning" title="Caution"></span>
+                                        {% else %}
+                                        <span class="board-health-dot bg-success" title="Healthy"></span>
+                                        {% endif %}
+                                    {% else %}
+                                        <span class="board-health-dot bg-success" title="Healthy"></span>
+                                    {% endif %}
+                                    {% endwith %}
+                                </div>
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <small class="text-muted">{{ board.task_set.count }} tasks</small>
+                                    {% if board.strategy %}
+                                    <small class="text-muted"><i class="fas fa-bullseye me-1"></i>{{ board.strategy.mission.name|truncatechars:15 }}</small>
+                                    {% endif %}
+                                </div>
+                                <div class="board-card-progress">
+                                    {% with total=board.task_set.count done=board.completed_task_count %}
+                                    {% if total > 0 %}
+                                    <div class="progress" style="height: 4px;">
+                                        <div class="progress-bar {% if done == total %}bg-success{% elif done > 0 %}bg-primary{% else %}bg-secondary{% endif %}" 
+                                             style="width: {% widthratio done total 100 %}%"></div>
+                                    </div>
+                                    {% else %}
+                                    <div class="progress" style="height: 4px;">
+                                        <div class="progress-bar bg-secondary" style="width: 0%"></div>
+                                    </div>
+                                    {% endif %}
+                                    {% endwith %}
+                                </div>
+                            </div>
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-4">
+                    <i class="fas fa-clipboard-list text-muted mb-2" style="font-size:2rem;"></i>
+                    <p class="text-muted mb-2">No boards yet</p>
+                    <a href="{% url 'create_board' %}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-plus me-1"></i>Create your first board
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Mission Overview Tree (collapsed by default) -->
+        <div class="card shadow mb-4" id="mission-overview-card">
+            <div class="card-header py-2 d-flex align-items-center justify-content-between" 
+                 role="button" data-bs-toggle="collapse" data-bs-target="#missionOverviewBody" aria-expanded="false">
+                <div class="d-flex align-items-center gap-2">
+                    <h6 class="m-0 fw-bold text-primary">
+                        <i class="fas fa-bullseye me-2 text-primary"></i>Mission Overview
+                    </h6>
+                    {% if mission_count %}
+                    <span class="badge bg-primary rounded-pill ms-1">{{ mission_count }}</span>
+                    {% endif %}
+                    <i class="fas fa-chevron-down text-muted ms-1" style="font-size:0.7rem; transition:transform 0.2s;"></i>
+                </div>
+                <div class="d-flex align-items-center gap-2" onclick="event.stopPropagation();">
+                    <a href="{% url 'goal_list' %}" class="btn btn-sm btn-outline-warning text-dark">
+                        <i class="fas fa-trophy fa-sm"></i><span class="d-none d-md-inline ms-1">Goals</span>
+                    </a>
+                    <a href="{% url 'mission_list' %}" class="btn btn-sm btn-outline-primary">
+                        <i class="fas fa-bullseye fa-sm"></i><span class="d-none d-md-inline ms-1">Missions</span>
+                    </a>
+                    <a href="{% url 'create_mission' %}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-plus fa-sm"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="collapse" id="missionOverviewBody">
             <div class="card-body p-3" style="max-height: 600px; overflow-y: auto; scroll-behavior: smooth;">
                 {% if goal_tree %}
                 <div class="mission-tree">
@@ -1832,7 +1861,7 @@
                 </div>
                 {% endif %}
             </div>
-        </div>
+        </div><!-- /collapse missionOverviewBody -->
         <!-- /Mission Overview -->
 
     </div>
@@ -1911,16 +1940,21 @@
 <!-- /Dashboard Main Layout row -->
 
 <!-- ============================================================ -->
-<!-- ZONE 3: PERFORMANCE ANALYTICS                               -->
-<!-- Row 1 — Mission + Strategy charts (enlarged)               -->
-<!-- Row 2 — Board bars, Scope Creep Index, Velocity sparkline   -->
-<!-- Row 3 — SPI/CPI gauges + Risk Heatmap                      -->
+<!-- ZONE 3: PERFORMANCE ANALYTICS (collapsed by default)        -->
 <!-- ============================================================ -->
-<div class="mb-2">
-    <h6 class="text-muted text-uppercase fw-bold" style="font-size:0.72rem; letter-spacing:0.08em; border-bottom: 2px solid #e3e6f0; padding-bottom:6px;">
-        <i class="fas fa-chart-bar me-2"></i>Performance Analytics
-    </h6>
-</div>
+<div class="card shadow-sm mb-4">
+    <div class="card-header py-2 d-flex align-items-center justify-content-between"
+         role="button" data-bs-toggle="collapse" data-bs-target="#analyticsZone3" aria-expanded="false">
+        <h6 class="m-0 text-muted text-uppercase fw-bold" style="font-size:0.72rem; letter-spacing:0.08em;">
+            <i class="fas fa-chart-bar me-2"></i>Performance Analytics
+        </h6>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge bg-light text-muted" style="font-size:0.68rem;">Click to expand</span>
+            <i class="fas fa-chevron-down text-muted" style="font-size:0.7rem; transition:transform 0.2s;"></i>
+        </div>
+    </div>
+    <div class="collapse" id="analyticsZone3">
+    <div class="card-body p-3">
 
 <!-- Row 1: Mission + Strategy charts -->
 <div class="row g-3 mb-3">
@@ -2190,6 +2224,9 @@
     </div>
 </div>
 <!-- /Zone 3 -->
+</div><!-- /card-body -->
+</div><!-- /collapse analyticsZone3 -->
+</div><!-- /card -->
 
 <!-- Standalone Boards (not linked to any strategy) -->
 {% if standalone_boards %}

@@ -21,6 +21,7 @@
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'css/sidebar.css' %}">
     <link rel="stylesheet" href="{% static 'css/theme.css' %}">
     <link rel="stylesheet" href="{% static 'css/accessibility.css' %}">
     <link rel="stylesheet" href="{% static 'css/ai_explainability.css' %}">
@@ -72,226 +73,75 @@
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <!-- End Google Tag Manager (noscript) -->
     
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary" style="padding: 0.5rem 0;">
-        <div class="container-fluid px-3">
-            <a class="navbar-brand" href="{% url 'dashboard' %}" style="font-size: 1.25rem; font-weight: 600;">
-                <i class="fas fa-brain me-2"></i>Pri<span class="stylish-z">z</span>mAI
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav" style="justify-content: flex-end;">
-                <ul class="navbar-nav me-auto ms-lg-4" style="gap: 0.5rem;">
-                    {% if user.is_authenticated %}
-                        <li class="nav-item">
-                            <a class="nav-link px-3" href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'dashboard' %}{% endif %}">Dashboard</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link px-3" href="{% url 'goal_list' %}">
-                                <i class="fas fa-trophy"></i><span class="d-none d-lg-inline ms-1">Goals</span>
+    <!-- ===== SIDEBAR (authenticated users only) ===== -->
+    {% if user.is_authenticated %}
+    <div id="appShell" class="{% if request.session.sidebar_collapsed %}sidebar-collapsed{% endif %}">
+        {% include 'partials/sidebar.html' %}
+
+        <!-- Slim Top Bar -->
+        <header class="prizm-topbar">
+            <div class="topbar-left">
+                <button class="topbar-mobile-toggle" id="mobileMenuToggle" type="button" aria-label="Open menu">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1 class="topbar-page-title">{% block page_title %}Dashboard{% endblock %}</h1>
+                {% if request.session.is_demo_mode %}
+                    <span class="topbar-demo-badge"><i class="fas fa-graduation-cap me-1"></i>DEMO</span>
+                {% endif %}
+            </div>
+            <div class="topbar-right">
+                {% if is_demo_account and request.session.real_user_username %}
+                <a href="{% url 'return_to_real_account' %}" class="btn btn-sm btn-warning fw-semibold topbar-return-btn" title="Switch back to your real account">
+                    <i class="fas fa-arrow-left me-1"></i>Back to {{ request.session.real_user_username }}
+                </a>
+                {% endif %}
+                {% if user.is_authenticated and not is_demo_account %}
+                <button type="button" class="topbar-icon-btn share-nav-btn" data-bs-toggle="modal" data-bs-target="#shareModal" title="Share PrizmAI"
+                        style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff;border-radius:8px;">
+                    <i class="fas fa-share-alt"></i>
+                </button>
+                {% endif %}
+                <button class="topbar-icon-btn" id="accessibility-toggle" type="button" title="Color Blind Mode: OFF" aria-label="Toggle color blind mode" aria-pressed="false">
+                    <i class="fas fa-eye-slash"></i>
+                </button>
+                <div class="dropdown">
+                    <button class="topbar-icon-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" id="topbarNotifBell" title="Notifications">
+                        <i class="fas fa-bell"></i>
+                        <span class="topbar-badge" id="topbar-notif-badge" style="display:none;"><span id="topbar-notif-count">0</span></span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end" style="z-index: 1050; min-width: 300px;">
+                        <li id="dc-notif-entry" style="display:none;">
+                            <a class="dropdown-item py-2" href="{% url 'decision_center:decision_center' %}">
+                                <i class="fas fa-bolt text-warning me-2"></i>
+                                <strong>Decision Center</strong>
+                                <br><small class="text-muted" id="dc-notif-text"></small>
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link px-3" href="{% url 'mission_list' %}">
-                                <i class="fas fa-bullseye"></i><span class="d-none d-lg-inline ms-1">Missions</span>
+                        <li id="dc-notif-divider" style="display:none;"><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item py-2" href="{% url 'messaging:notifications' %}">
+                                <i class="fas fa-list me-2"></i> View all notifications
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link px-3" href="{% if request.session.is_demo_mode %}{% url 'demo_dashboard' %}{% else %}{% url 'board_list' %}{% endif %}">Boards</a>
-                        </li>
-                        {% if not request.session.is_demo_mode %}
-                        <li class="nav-item">
-                            <a class="nav-link px-3" href="{% url 'unified_calendar' %}">
-                                <i class="fas fa-calendar-alt"></i><span class="d-none d-lg-inline ms-1">Calendar</span>
-                            </a>
-                        </li>
-                        {% endif %}
-                        <li class="nav-item">
-                            <a class="nav-link px-3" href="{% url 'wiki:knowledge_hub_home' %}">
-                                <i class="fas fa-book-open"></i><span class="d-none d-lg-inline ms-1">Wiki</span>
-                            </a>
-                        </li>
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle px-3" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="fas fa-clock"></i><span class="d-none d-xl-inline ms-1">Time</span>
-                            </a>
-                            <ul class="dropdown-menu" style="z-index: 1050;">
-                                <li><a class="dropdown-item" href="{% url 'time_tracking_dashboard' %}">
-                                    <i class="fas fa-chart-line me-2"></i> Dashboard
-                                </a></li>
-                                <li><a class="dropdown-item" href="{% url 'my_timesheet' %}">
-                                    <i class="fas fa-calendar-week me-2"></i> My Timesheet
-                                </a></li>
-                            </ul>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link px-3" href="{% url 'ai_assistant:welcome' %}">
-                                <i class="fas fa-robot"></i><span class="d-none d-xl-inline ms-1">Ask Spectra</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link px-3" href="{% url 'organizational_memory' %}" title="Organizational Memory">
-                                <i class="fas fa-brain"></i><span class="d-none d-xl-inline ms-1">Memory</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link position-relative px-3" href="{% url 'decision_center:decision_center' %}" title="Decision Center">
-                                <i class="fas fa-bolt"></i><span class="d-none d-xl-inline ms-1">Decisions</span>
-                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" id="dc-nav-badge" style="display: none; font-size: 0.65rem;">
-                                    <span id="dc-nav-count">0</span>
-                                </span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link position-relative px-3" href="{% url 'messaging:go_to_first_unread_room' %}" onclick="addBoardIdToLink(event)">
-                                <i class="fas fa-comments"></i><span class="d-none d-lg-inline ms-1">Messages</span>
-                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="unread-message-badge" style="display: none; font-size: 0.65rem;">
-                                    <span id="unread-count">0</span>
-                                </span>
-                            </a>
-                        </li>
-                        <li class="nav-item dropdown">
-                            <a class="nav-link position-relative px-3 dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false" id="notifBellToggle">
-                                <i class="fas fa-bell"></i><span class="d-none d-lg-inline ms-1">Notifications</span>
-                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="unread-notification-badge" style="display: none; font-size: 0.65rem;">
-                                    <span id="notification-count">0</span>
-                                </span>
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-end" style="z-index: 1050; min-width: 300px;">
-                                <!-- Decision Center entry (hidden when 0 action items) -->
-                                <li id="dc-notif-entry" style="display:none;">
-                                    <a class="dropdown-item py-2" href="{% url 'decision_center:decision_center' %}">
-                                        <i class="fas fa-bolt text-warning me-2"></i>
-                                        <strong>Decision Center</strong>
-                                        <br><small class="text-muted" id="dc-notif-text"></small>
-                                    </a>
-                                </li>
-                                <li id="dc-notif-divider" style="display:none;"><hr class="dropdown-divider"></li>
-                                <li>
-                                    <a class="dropdown-item py-2" href="{% url 'messaging:notifications' %}">
-                                        <i class="fas fa-list me-2"></i> View all notifications
-                                    </a>
-                                </li>
-                            </ul>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link position-relative px-3" href="{% url 'conflict_dashboard' %}">
-                                <i class="fas fa-exclamation-triangle"></i><span class="d-none d-lg-inline ms-1">Conflicts</span>
-                                {% if active_conflict_count > 0 %}
-                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark" style="font-size: 0.65rem;">
-                                    {{ active_conflict_count }}
-                                </span>
-                                {% endif %}
-                            </a>
-                        </li>
+                    </ul>
+                </div>
+            </div>
+        </header>
+
+        <!-- Messages -->
+        {% if messages %}
+        <div class="prizm-main-wrapper">
+            <div class="container-fluid px-4 pt-3">
+                {% for message in messages %}
+                    {% if 'success' not in message.tags and 'info' not in message.tags %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
                     {% endif %}
-                </ul>
-                <ul class="navbar-nav align-items-center">
-                    <!-- Return to real account button (visible only when browsing as a demo user) -->
-                    {% if is_demo_account and request.session.real_user_username %}
-                        <li class="nav-item me-2">
-                            <a href="{% url 'return_to_real_account' %}"
-                               class="btn btn-sm btn-warning fw-semibold"
-                               title="Switch back to your real account"
-                               style="font-size: 0.78rem; padding: 0.3rem 0.7rem; white-space: nowrap;">
-                                <i class="fas fa-arrow-left me-1"></i>Back to {{ request.session.real_user_username }}
-                            </a>
-                        </li>
-                    {% endif %}
-                    <!-- Demo Mode Badge (visible only in demo mode) -->
-                    {% if request.session.is_demo_mode %}
-                        <li class="nav-item me-1">
-                            <span class="badge bg-warning text-dark" style="font-size: 0.75rem; padding: 0.4rem 0.6rem;" title="Demo Mode Active">
-                                <i class="fas fa-graduation-cap"></i> DEMO
-                            </span>
-                        </li>
-                    {% endif %}
-                    <!-- Share / Refer a Friend Button -->
-                    {% if user.is_authenticated and not is_demo_account %}
-                    <li class="nav-item me-1">
-                        <button type="button"
-                                class="btn btn-sm fw-bold share-nav-btn"
-                                data-bs-toggle="modal"
-                                data-bs-target="#shareModal"
-                                title="Share PrizmAI with a friend"
-                                style="background:linear-gradient(135deg,#f59e0b,#ef4444);color:#fff !important;padding:0.35rem 1rem;border:none;border-radius:20px;font-size:0.82rem;box-shadow:0 2px 8px rgba(239,68,68,0.45);letter-spacing:0.02em;">
-                            <i class="fas fa-share-alt me-1"></i>Share
-                        </button>
-                    </li>
-                    {% endif %}
-                    <!-- Accessibility Toggle Button -->
-                    <li class="nav-item">
-                        <button id="accessibility-toggle" 
-                                type="button" 
-                                class="btn btn-link nav-link p-1" 
-                                title="Color Blind Mode: OFF (Click to enable)" 
-                                aria-label="Toggle color blind mode" 
-                                aria-pressed="false">
-                            <i class="fas fa-eye-slash"></i>
-                        </button>
-                    </li>
-                    {% if user.is_authenticated %}
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                {{ user.username }}
-                            </a>                            <ul class="dropdown-menu dropdown-menu-end" style="z-index: 1050;">
-                                <li><a class="dropdown-item" href="{% url 'profile' %}">Profile</a></li>
-                                {% if not is_demo_account %}
-                                    {% if user.profile.is_admin %}
-                                        <li><a class="dropdown-item" href="{% url 'organization_members' %}">Organization</a></li>
-                                        <li><a class="dropdown-item" href="{% url 'manage_roles' %}">
-                                            <i class="fas fa-user-shield me-1"></i> Manage Roles & Permissions
-                                        </a></li>
-                                        <li><a class="dropdown-item" href="{% url 'view_permission_audit_org' %}">
-                                            <i class="fas fa-history me-1"></i> Permission Audit Log
-                                        </a></li>
-                                    {% endif %}
-                                    <li><hr class="dropdown-divider"></li>
-                                    <li><a class="dropdown-item" href="{% url 'ai_usage:dashboard' %}">
-                                        <i class="fas fa-robot me-1"></i> AI Usage
-                                    </a></li>
-                                    <li><hr class="dropdown-divider"></li>
-                                {% endif %}
-                                {% if is_demo_account %}
-                                <li><hr class="dropdown-divider"></li>
-                                <li>
-                                    <a class="dropdown-item text-warning" href="#" onclick="demoResetFromNav(event); return false;">
-                                        <i class="fas fa-redo me-1"></i> Reset Demo Data
-                                    </a>
-                                </li>
-                                {% endif %}
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="{% url 'logout' %}">Logout</a></li>
-                            </ul>
-                        </li>
-                    {% else %}
-                        <li class="nav-item">
-                            <a class="nav-link" href="{% url 'login' %}">Login</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="{% url 'register' %}">Register</a>
-                        </li>
-                    {% endif %}
-                </ul>
+                {% endfor %}
             </div>
         </div>
-    </nav>
-
-    <!-- Messages -->
-    {% if messages %}
-        <!-- Alert banners for warning/error messages only -->
-        <div class="container mt-3">
-            {% for message in messages %}
-                {% if 'success' not in message.tags and 'info' not in message.tags %}
-                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                </div>
-                {% endif %}
-            {% endfor %}
-        </div>
-
         <!-- Toast notifications (bottom-right) for success/info messages -->
         <div id="django-toast-container" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1100;">
             {% for message in messages %}
@@ -319,16 +169,64 @@
             });
         });
         </script>
+        {% endif %}
+
+        <!-- Demo Limitation Modal (available globally for demo mode) -->
+        {% if request.session.is_demo_mode %}
+            {% include 'demo/partials/limitation_modal.html' %}
+        {% endif %}
+
+        <!-- Main Content -->
+        <div class="prizm-main-wrapper">
+            <main class="prizm-main-content">
+
+    {% else %}
+    <!-- ===== UNAUTHENTICATED: original top navbar ===== -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary" style="padding: 0.5rem 0;">
+        <div class="container-fluid px-3">
+            <a class="navbar-brand" href="{% url 'dashboard' %}" style="font-size: 1.25rem; font-weight: 600;">
+                <i class="fas fa-brain me-2"></i>Pri<span class="stylish-z">z</span>mAI
+            </a>
+            <ul class="navbar-nav ms-auto align-items-center">
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'login' %}">Login</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="{% url 'register' %}">Register</a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Messages for unauthenticated users -->
+    {% if messages %}
+        <div class="container mt-3">
+            {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        </div>
     {% endif %}
 
-    <!-- Demo Limitation Modal (available globally for demo mode) -->
-    {% if request.session.is_demo_mode %}
-        {% include 'demo/partials/limitation_modal.html' %}
-    {% endif %}
-
-    <!-- Main Content -->
     <main class="container my-4">
-        {% block content %}{% endblock %}
+    {% endif %}
+
+    {% block content %}{% endblock %}
+
+    {% if user.is_authenticated %}
+            </main>
+        </div><!-- /prizm-main-wrapper -->
+
+        <!-- Footer -->
+        <footer class="prizm-footer footer bg-light py-3 mt-5">
+            <div class="container text-center">
+                <span class="text-muted">Pri<span class="stylish-z">z</span>mAI - AI-Powered Project Intelligence &copy; {% now "Y" %}</span>
+            </div>
+        </footer>
+    </div><!-- /appShell -->
+    {% else %}
     </main>
 
     <!-- Footer -->
@@ -337,6 +235,7 @@
             <span class="text-muted">Pri<span class="stylish-z">z</span>mAI - AI-Powered Project Intelligence &copy; {% now "Y" %}</span>
         </div>
     </footer>
+    {% endif %}
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
@@ -369,21 +268,21 @@
         // Function to update unread message count
         function updateUnreadMessageCount() {
             {% if user.is_authenticated %}
-            // Always fetch total unread count across ALL boards
-            // The top navigation badge should show global unread count, not board-specific
             let url = '{% url "messaging:get_unread_message_count" %}';
             
             fetch(url)
                 .then(response => response.json())
                 .then(data => {
-                    const badge = document.getElementById('unread-message-badge');
-                    const countSpan = document.getElementById('unread-count');
-                    
-                    if (data.unread_count > 0) {
-                        countSpan.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
-                        badge.style.display = 'inline-block';
-                    } else {
-                        badge.style.display = 'none';
+                    // Update sidebar badge
+                    const sidebarBadge = document.getElementById('sidebar-unread-badge');
+                    const sidebarCount = document.getElementById('sidebar-unread-count');
+                    if (sidebarBadge && sidebarCount) {
+                        if (data.unread_count > 0) {
+                            sidebarCount.textContent = data.unread_count > 99 ? '99+' : data.unread_count;
+                            sidebarBadge.style.display = 'inline-block';
+                        } else {
+                            sidebarBadge.style.display = 'none';
+                        }
                     }
                 })
                 .catch(error => console.error('Error fetching unread count:', error));
@@ -406,13 +305,27 @@
             fetch('{% url "messaging:get_unread_notification_count" %}')
                 .then(response => response.json())
                 .then(data => {
-                    const badge = document.getElementById('unread-notification-badge');
-                    const countSpan = document.getElementById('notification-count');
-                    if (data.count > 0) {
-                        countSpan.textContent = data.count > 99 ? '99+' : data.count;
-                        badge.style.display = 'inline-block';
-                    } else {
-                        badge.style.display = 'none';
+                    // Update topbar notification badge
+                    const topbarBadge = document.getElementById('topbar-notif-badge');
+                    const topbarCount = document.getElementById('topbar-notif-count');
+                    if (topbarBadge && topbarCount) {
+                        if (data.count > 0) {
+                            topbarCount.textContent = data.count > 99 ? '99+' : data.count;
+                            topbarBadge.style.display = 'inline-block';
+                        } else {
+                            topbarBadge.style.display = 'none';
+                        }
+                    }
+                    // Update sidebar notification badge
+                    const sidebarBadge = document.getElementById('sidebar-notif-badge');
+                    const sidebarCount = document.getElementById('sidebar-notif-count');
+                    if (sidebarBadge && sidebarCount) {
+                        if (data.count > 0) {
+                            sidebarCount.textContent = data.count > 99 ? '99+' : data.count;
+                            sidebarBadge.style.display = 'inline-block';
+                        } else {
+                            sidebarBadge.style.display = 'none';
+                        }
                     }
                 })
                 .catch(error => console.error('Error fetching notification count:', error));
@@ -520,6 +433,9 @@
     <!-- Navigation Utilities JS (goBack function) -->
     <script src="{% static 'js/navigation.js' %}"></script>
     
+    <!-- Sidebar JS -->
+    <script src="{% static 'js/sidebar.js' %}"></script>
+    
     <!-- AI Explainability JS -->
     <script src="{% static 'js/ai_explainability.js' %}"></script>
     
@@ -534,14 +450,15 @@
     <!-- Custom JS -->
     {% if user.is_authenticated %}
     <script>
-    /* Decision Center — navbar badge + notification bell entry */
+    /* Decision Center — sidebar badge + notification bell entry */
     (function() {
         fetch("{% url 'decision_center:decision_center_widget' %}")
             .then(function(r) { return r.json(); })
             .then(function(d) {
                 if (d.action_required_count > 0) {
-                    var badge = document.getElementById('dc-nav-badge');
-                    var cnt   = document.getElementById('dc-nav-count');
+                    // Update sidebar DC badge
+                    var badge = document.getElementById('sidebar-dc-badge');
+                    var cnt   = document.getElementById('sidebar-dc-count');
                     if (badge && cnt) {
                         cnt.textContent = d.action_required_count;
                         badge.style.display = '';
