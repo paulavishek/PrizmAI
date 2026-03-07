@@ -23,10 +23,13 @@
             sidebar.classList.add('collapsed');
             appShell.classList.add('sidebar-collapsed');
         }
+        // Remove the pre-paint class now that JS has hydrated
+        document.documentElement.classList.remove('sidebar-pre-collapsed');
 
         // Desktop: toggle collapse
         if (toggleBtn) {
-            toggleBtn.addEventListener('click', function () {
+            toggleBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
                 var collapsed = sidebar.classList.toggle('collapsed');
                 appShell.classList.toggle('sidebar-collapsed', collapsed);
                 localStorage.setItem(STORAGE_KEY, collapsed);

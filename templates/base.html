@@ -73,6 +73,33 @@
     height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
     <!-- End Google Tag Manager (noscript) -->
     
+    <!-- Sync sidebar collapsed state before first paint to prevent flicker -->
+    <script>
+    (function(){
+        var k='prizmSidebarCollapsed';
+        if(localStorage.getItem(k)==='true'){
+            document.documentElement.classList.add('sidebar-pre-collapsed');
+        }
+    })();
+    </script>
+    <style>
+    /* Instant collapsed state before JS hydrates */
+    .sidebar-pre-collapsed #prizmSidebar{width:var(--sidebar-collapsed-width,60px);}
+    .sidebar-pre-collapsed .prizm-topbar{left:var(--sidebar-collapsed-width,60px);}
+    .sidebar-pre-collapsed .prizm-main-wrapper{margin-left:var(--sidebar-collapsed-width,60px);}
+    .sidebar-pre-collapsed .prizm-footer{margin-left:var(--sidebar-collapsed-width,60px);}
+    .sidebar-pre-collapsed #prizmSidebar .sidebar-label{opacity:0;width:0;overflow:hidden;}
+    .sidebar-pre-collapsed #prizmSidebar .sidebar-toggle-btn i{transform:rotate(180deg);}
+    .sidebar-pre-collapsed #prizmSidebar .sidebar-header{justify-content:center;padding:12px 8px;}
+    .sidebar-pre-collapsed #prizmSidebar .sidebar-brand{justify-content:center;}
+    .sidebar-pre-collapsed #prizmSidebar .sidebar-nav-link{justify-content:center;padding:10px 0;}
+    .sidebar-pre-collapsed #prizmSidebar .sidebar-more-toggle{justify-content:center;padding:10px 0;}
+    .sidebar-pre-collapsed #prizmSidebar .sidebar-more-arrow{display:none;}
+    .sidebar-pre-collapsed #prizmSidebar .sidebar-spectra-btn{justify-content:center;padding:10px 0;}
+    .sidebar-pre-collapsed #prizmSidebar .sidebar-user-btn{justify-content:center;padding:6px 0;}
+    .sidebar-pre-collapsed .sidebar-user-menu{left:var(--sidebar-collapsed-width,60px)!important;}
+    </style>
+
     <!-- ===== SIDEBAR (authenticated users only) ===== -->
     {% if user.is_authenticated %}
     <div id="appShell" class="{% if request.session.sidebar_collapsed %}sidebar-collapsed{% endif %}">
