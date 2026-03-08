@@ -527,9 +527,9 @@ def summarize_comments(comments: List[Dict]) -> Optional[Dict]:
         logger.error(f"Error summarizing comments: {str(e)}")
         return None
 
-def suggest_lean_classification(title: str, description: str, estimated_cost: float = None, estimated_hours: float = None, hourly_rate: float = None) -> Optional[Dict]:
+def suggest_lean_classification(title: str, description: str, estimated_cost: float = None, estimated_hours: float = None, hourly_rate: float = None, task_context: dict = None) -> Optional[Dict]:
     """
-    Suggest Lean Six Sigma classification for a task based on its title, description, and budget data.
+    Suggest Lean Six Sigma classification for a task based on its title, description, and context data.
     
     Provides explainable AI output including confidence scores, contributing factors,
     and alternative classifications to support user decision-making.
@@ -540,6 +540,8 @@ def suggest_lean_classification(title: str, description: str, estimated_cost: fl
         estimated_cost: Estimated cost for this task (optional)
         estimated_hours: Estimated hours to complete (optional)
         hourly_rate: Hourly rate for labor cost calculation (optional)
+        task_context: Optional dict with priority, complexity_score, dependencies_count,
+                      collaboration_required, risk_level, risk_score, etc.
         
     Returns:
         A dictionary with suggested classification, justification, confidence,
@@ -560,14 +562,37 @@ def suggest_lean_classification(title: str, description: str, estimated_cost: fl
                     labor_cost = estimated_hours * hourly_rate
                     budget_parts.append(f"Estimated Labor Cost: ${labor_cost:,.2f}")
             if budget_parts:
-                budget_context = "\n\nBudget & Cost Information:\n- " + "\n- ".join(budget_parts)
+                budget_context = "\n\nBudget/Effort context:\n- " + "\n- ".join(budget_parts)
         
-        prompt = f"""Analyze this task for Lean Six Sigma classification. Task: "{title}". Description: "{description or 'None'}".{budget_context}
+        # Build enhanced context from task_context if provided
+        enhanced_context = ""
+        if task_context:
+            context_parts = []
+            if task_context.get('priority'):
+                context_parts.append(f"Priority: {task_context['priority']}")
+            if task_context.get('complexity_score') is not None:
+                score = task_context['complexity_score']
+                label = "Very Complex" if score >= 8 else "Moderate" if score >= 5 else "Simple"
+                context_parts.append(f"Complexity: {score}/10 ({label})")
+            if task_context.get('dependencies_count') is not None and int(task_context.get('dependencies_count', 0)) > 0:
+                context_parts.append(f"Dependencies: {task_context['dependencies_count']} blocking task(s)")
+            if task_context.get('collaboration_required'):
+                context_parts.append("Collaboration Required: Yes")
+            if task_context.get('risk_level'):
+                context_parts.append(f"Risk Level: {task_context['risk_level']}")
+            if task_context.get('risk_score') is not None:
+                context_parts.append(f"Risk Score: {task_context['risk_score']}/9")
+            if task_context.get('due_date'):
+                context_parts.append(f"Due Date: {task_context['due_date']}")
+            if context_parts:
+                enhanced_context = "\n\nTask Context:\n- " + "\n- ".join(context_parts)
+        
+        prompt = f"""Analyze this task for Lean Six Sigma classification. Task: "{title}". Description: "{description or 'None'}".{budget_context}{enhanced_context}
 
 Classifications: Value-Added (transforms product/service for customer), Necessary Non-Value-Added (required but not customer-valued), Waste/Eliminate (no value, should remove).
 
 Return ONLY valid JSON with NO line breaks inside strings:
-{{"classification":"Value-Added|Necessary Non-Value-Added|Waste/Eliminate","justification":"Brief reason in one sentence","confidence_score":0.XX,"confidence_level":"high|medium|low","contributing_factors":[{{"factor":"Factor1","contribution_percentage":XX,"description":"Brief desc"}}],"classification_reasoning":{{"value_added_indicators":["indicator1"],"non_value_indicators":["indicator1"],"primary_driver":"Main reason"}},"alternative_classification":{{"classification":"Alternative","confidence_score":0.XX,"conditions":"When applies"}},"assumptions":["assumption1"],"improvement_suggestions":["suggestion1"],"lean_waste_type":null}}"""
+{{"classification":"Value-Added|Necessary Non-Value-Added|Waste/Eliminate","justification":"Brief reason in one sentence","confidence_score":0.XX,"confidence_level":"high|medium|low","contributing_factors":[{{"factor":"Factor1","contribution_percentage":XX,"description":"Brief desc"}}],"classification_reasoning":{{"value_added_indicators":["indicator1"],"non_value_indicators":["indicator1"],"primary_driver":"Main reason"}},"alternative_classification":{{"classification":"Alternative","confidence_score":0.XX,"conditions":"When applies"}},"assumptions":["assumption1"],"improvement_suggestions":["suggestion1"],"lean_waste_type":null,"data_quality":"high|medium|low"}}"""
         
         response_text = generate_ai_content(prompt, task_type='lean_classification')
         if response_text:
@@ -1035,14 +1060,15 @@ Return JSON only:
         logger.error(f"Error summarizing board analytics: {str(e)}")
         return None
 
+
 def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict]:
     """
     Suggest optimal priority level for a task based on context.
-    
+
     Args:
         task_data: Dictionary containing task information (title, description, due_date, budget fields, etc.)
         board_context: Dictionary containing board context (workload, deadlines, budget summary, etc.)
-        
+
     Returns:
         A dictionary with suggested priority and reasoning or None if suggestion fails
     """
@@ -1052,6 +1078,18 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
         description = task_data.get('description', '')
         due_date = task_data.get('due_date', '')
         current_priority = task_data.get('current_priority', 'medium')
+
+        # Extract enhanced context fields
+        complexity_score = task_data.get('complexity_score')
+        risk_score = task_data.get('risk_score')
+        risk_level = task_data.get('risk_level', '')
+        risk_likelihood = task_data.get('risk_likelihood', '')
+        risk_impact = task_data.get('risk_impact', '')
+        dependencies_count = task_data.get('dependencies_count', 0)
+        collaboration_required = task_data.get('collaboration_required', False)
+        workload_impact = task_data.get('workload_impact', '')
+        skill_match_score = task_data.get('skill_match_score')
+        start_date = task_data.get('start_date', '')
         
         # Extract budget/cost information
         estimated_cost = task_data.get('estimated_cost')
@@ -1073,6 +1111,32 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
                     budget_parts.append(f"Estimated Labor Cost: ${labor_cost:,.2f}")
             if budget_parts:
                 budget_info = "\n        - " + "\n        - ".join(budget_parts)
+        
+        # Build enhanced task context string
+        enhanced_task_info = ""
+        context_parts = []
+        if complexity_score is not None:
+            label = "Very Complex" if int(complexity_score) >= 8 else "Moderate" if int(complexity_score) >= 5 else "Simple"
+            context_parts.append(f"Complexity Score: {complexity_score}/10 ({label})")
+        if risk_level:
+            context_parts.append(f"Risk Level: {risk_level}")
+        if risk_score is not None:
+            context_parts.append(f"Risk Score: {risk_score}/9")
+        elif risk_likelihood and risk_impact:
+            context_parts.append(f"Risk: Likelihood={risk_likelihood}, Impact={risk_impact}")
+        if dependencies_count and int(dependencies_count) > 0:
+            context_parts.append(f"Dependencies: {dependencies_count} blocking task(s) — delays on these block this task")
+        if collaboration_required:
+            context_parts.append("Collaboration Required: Yes (multi-person coordination)")
+        if workload_impact:
+            context_parts.append(f"Workload Impact: {workload_impact}")
+        if skill_match_score is not None:
+            label = "Excellent" if int(skill_match_score) >= 80 else "Good" if int(skill_match_score) >= 60 else "Below Average" if int(skill_match_score) >= 40 else "Poor"
+            context_parts.append(f"Skill Match: {skill_match_score}% ({label})")
+        if start_date:
+            context_parts.append(f"Start Date: {start_date}")
+        if context_parts:
+            enhanced_task_info = "\n        - " + "\n        - ".join(context_parts)
         
         # Extract board context
         total_tasks = board_context.get('total_tasks', 0)
@@ -1115,7 +1179,7 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
         - Title: {title}
         - Description: {description or 'No description provided'}
         - Current Priority: {current_priority}
-        - Due Date: {due_date or 'No due date set'}{budget_info if budget_info else ''}
+        - Due Date: {due_date or 'No due date set'}{budget_info if budget_info else ''}{enhanced_task_info if enhanced_task_info else ''}
         
         ## Board Context:
         - Total Tasks on Board: {total_tasks}
@@ -1132,6 +1196,9 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
         5. Dependencies and blockers that might be indicated
         6. Business value and risk implied by the task
         7. **Budget/Cost considerations**: High-cost tasks may need higher priority for better ROI
+        8. **Task complexity**: Higher complexity tasks may need earlier attention to avoid delays
+        9. **Risk assessment**: Tasks with high risk scores may warrant elevated priority
+        10. **Collaboration & skill gaps**: Poor skill match or multi-person coordination adds urgency
         
         Available priority levels: low, medium, high, urgent
         
@@ -1298,9 +1365,14 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         
         Task: {title}
         Priority: {priority} | Assigned: {assigned_to}
-        Complexity: {complexity_score}/10 | Current workload: {current_workload} active tasks
+        Complexity: {complexity_score}/10 ({complexity_label}) | Current workload: {current_workload} active tasks
         {estimated_hours_note}
         {start_date_note}
+        Skill Match: {skill_match_note}
+        Collaboration Required: {'Yes' if collaboration_required else 'No'}
+        Dependencies: {dependencies_count} blocking task(s)
+        Risk: {risk_level or 'Not assessed'} (score: {risk_score if risk_score is not None else 'N/A'})
+        Performance: {performance_note}
         
         DATA AVAILABILITY: {history_note}
         
@@ -1312,12 +1384,21 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
         
         {{
             "estimated_days_to_complete": number,
+            "confidence_score": float_0_to_1,
             "confidence_level": "high|medium|low",
-            "reasoning": "One honest sentence explaining basis for timeline (mention if no history available)",
-            "risk_factors": ["2-3 brief risks"],
+            "reasoning": "2-3 honest sentences explaining basis for timeline (mention data availability, key drivers)",
+            "risk_factors": ["2-3 brief risks that could delay completion"],
             "optimistic_days": number,
-            "pessimistic_days": number
+            "pessimistic_days": number,
+            "contributing_factors": [
+                {{"name": "factor name", "contribution_percentage": integer_1_to_100, "description": "1 sentence on how this factor affected the estimate"}}
+            ],
+            "assumptions": ["1-3 key assumptions made in this prediction"],
+            "data_quality": "high|medium|low"
         }}
+        
+        Contributing factors should include the top 3-5 drivers (e.g. complexity, assignee velocity, workload, skill match, dependencies).
+        data_quality should be 'high' if assignee has >5 completed tasks, 'medium' if 1-5, 'low' if none.
         """
         
         response_text = generate_ai_content(prompt, task_type='deadline_prediction')
@@ -1361,6 +1442,10 @@ def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[
                 # Default reasoning
                 ai_response['reasoning'] = f"Estimated based on task complexity ({complexity_score}/10)"
                 ai_response['risk_factors'] = ["Timeline based on complexity estimate"]
+                ai_response['confidence_score'] = 0.3
+                ai_response['contributing_factors'] = [{"name": "Task Complexity", "contribution_percentage": 80, "description": f"Primary driver at {complexity_score}/10"}]
+                ai_response['assumptions'] = ["No historical data available; estimate based on complexity alone"]
+                ai_response['data_quality'] = "low"
                 
                 logger.info(f"Deadline prediction extracted via regex fallback: {ai_response['estimated_days_to_complete']} days")
             
@@ -1496,6 +1581,10 @@ Analyze all candidates holistically. Consider:
 3. Workload balance — avoid overloading team members even if they score highest
 4. If a current assignee exists, whether reassignment is justified (>15 point improvement)
 5. Risk factors: burnout risk for high-utilization members, skill gaps, timeline pressure
+6. Task priority and due date urgency — high-priority or near-deadline tasks need reliable, available members
+7. Estimated hours — larger tasks need members with more availability headroom
+8. Dependencies count — tasks with many blockers need members experienced with coordinated delivery
+9. Risk level/score — high-risk tasks should go to the most reliable and skilled members
 
 Respond with ONLY valid JSON in this exact format:
 {{
@@ -2054,6 +2143,8 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
         {{
             "is_breakdown_recommended": true|false,
             "complexity_score": 1-10,
+            "confidence_score": float_0_to_1,
+            "confidence_level": "high|medium|low",
             "reasoning": "Explain score step-by-step: content base score X, then list each factor adjustment",
             "subtasks": [
                 {{
@@ -2070,7 +2161,9 @@ def suggest_task_breakdown(task_data: Dict) -> Optional[Dict]:
             ],
             "factors_missing": [
                 {{"name": "Factor Name", "note": "why it was not available"}}
-            ]
+            ],
+            "assumptions": ["1-3 key assumptions made in this breakdown analysis"],
+            "data_quality": "high|medium|low"
         }}
         """
         
@@ -3269,7 +3362,8 @@ def enhance_task_description(task_data: Dict) -> Optional[Dict]:
 
 def calculate_task_risk_score(task_title: str, task_description: str, 
                                task_priority: str = 'medium', 
-                               board_context: str = '') -> Optional[Dict]:
+                               board_context: str = '',
+                               task_context: dict = None) -> Optional[Dict]:
     """
     Calculate AI-powered likelihood and impact scoring for a task using Gemini.
     
@@ -3280,11 +3374,44 @@ def calculate_task_risk_score(task_title: str, task_description: str,
         task_description: Detailed description of the task
         task_priority: Current priority level (low/medium/high/urgent)
         board_context: Optional context about the board/project
+        task_context: Optional dict with complexity_score, due_date, estimated_hours, 
+                      dependencies_count, collaboration_required, skill_match_score, etc.
         
     Returns:
         Dictionary with risk scores, level, indicators, and analysis or None if calculation fails
     """
     try:
+        # Build enhanced context from task_context if provided
+        enhanced_context = ""
+        if task_context:
+            context_parts = []
+            if task_context.get('complexity_score') is not None:
+                score = task_context['complexity_score']
+                label = "Very Complex" if score >= 8 else "Moderate" if score >= 5 else "Simple"
+                context_parts.append(f"Complexity Score: {score}/10 ({label})")
+            if task_context.get('due_date'):
+                context_parts.append(f"Due Date: {task_context['due_date']}")
+            if task_context.get('start_date'):
+                context_parts.append(f"Start Date: {task_context['start_date']}")
+            if task_context.get('assigned_to'):
+                context_parts.append(f"Assigned To: {task_context['assigned_to']}")
+            if task_context.get('estimated_hours') is not None:
+                context_parts.append(f"Estimated Hours: {task_context['estimated_hours']}")
+            if task_context.get('estimated_cost') is not None:
+                context_parts.append(f"Estimated Cost: ${float(task_context['estimated_cost']):,.2f}")
+            if task_context.get('collaboration_required'):
+                context_parts.append("Collaboration Required: Yes (multi-person coordination needed)")
+            if task_context.get('dependencies_count') and int(task_context['dependencies_count']) > 0:
+                context_parts.append(f"Dependencies: {task_context['dependencies_count']} blocking task(s)")
+            if task_context.get('skill_match_score') is not None:
+                score = task_context['skill_match_score']
+                label = "Excellent" if score >= 80 else "Good" if score >= 60 else "Below Average" if score >= 40 else "Poor"
+                context_parts.append(f"Skill Match: {score}% ({label})")
+            if task_context.get('workload_impact'):
+                context_parts.append(f"Workload Impact: {task_context['workload_impact']}")
+            if context_parts:
+                enhanced_context = "\n\n        TASK CONTEXT (use these to refine risk assessment):\n        " + "\n        ".join(f"- {p}" for p in context_parts)
+        
         prompt = f"""
         As a project risk assessment expert, analyze this task and provide risk scoring using a 
         Likelihood × Impact matrix approach (1-3 scale for each).
@@ -3293,7 +3420,7 @@ def calculate_task_risk_score(task_title: str, task_description: str,
         Title: {task_title}
         Description: {task_description}
         Priority: {task_priority}
-        {f'Board Context: {board_context}' if board_context else ''}
+        {f'Board Context: {board_context}' if board_context else ''}{enhanced_context}
         
         SCORING CRITERIA:
         
@@ -3308,11 +3435,13 @@ def calculate_task_risk_score(task_title: str, task_description: str,
         - 3 (High): Major impact on task/project (>25% effect)
         
         ANALYSIS REQUIREMENTS:
-        1. Assess likelihood of task risks (delays, dependencies, resource issues)
-        2. Assess potential impact if risks occur
-        3. Identify key risk indicators to monitor
-        4. Suggest specific mitigation actions
-        5. Provide confidence level for assessment
+        1. Assess likelihood of task risks (delays, dependencies, resource issues, skill gaps)
+        2. Assess potential impact if risks occur (timeline, resources, quality, stakeholders)
+        3. Factor in task complexity, dependencies, collaboration needs, and skill match if provided
+        4. Consider due date proximity and estimated effort for timeline risk
+        5. Identify key risk indicators to monitor
+        6. Suggest specific mitigation actions
+        7. Provide confidence level for assessment
         
         IMPORTANT FORMATTING RULES:
         - Keep all string values on a single line (no line breaks within strings)
