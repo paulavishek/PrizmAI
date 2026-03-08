@@ -1248,12 +1248,172 @@ def suggest_task_priority(task_data: Dict, board_context: Dict) -> Optional[Dict
                 response_text = response_text.split("```json")[1].split("```")[0].strip()
             elif "```" in response_text:
                 response_text = response_text.split("```")[1].strip()
-                
-            return json.loads(response_text)
+
+            # Standard token fixes
+            response_text = response_text.replace('True', 'true').replace('False', 'false')
+            response_text = response_text.replace('None', 'null')
+            response_text = re.sub(r',\s*([}\]])', r'\1', response_text)
+
+            try:
+                return json.loads(response_text)
+            except json.JSONDecodeError as json_err:
+                logger.warning(f"Priority suggestion JSON parse error: {json_err}. Attempting repair...")
+
+                # Strategy 1: _repair_json (fixes commas, braces, truncated strings)
+                try:
+                    repaired = _repair_json(response_text)
+                    if repaired:
+                        return json.loads(repaired)
+                except (json.JSONDecodeError, Exception) as e:
+                    logger.debug(f"Priority repair strategy 1 (_repair_json) failed: {e}")
+
+                # Strategy 2: regex extraction of key fields
+                try:
+                    priority_match = re.search(
+                        r'["\']suggested_priority["\']\s*:\s*["\']([^"\']+)["\']', response_text
+                    )
+                    confidence_match = re.search(
+                        r'["\']confidence_score["\']\s*:\s*([\d.]+)', response_text
+                    )
+                    reasoning_match = re.search(
+                        r'["\']reasoning["\']\s*:\s*["\']([^"\']{5,})', response_text
+                    )
+                    if priority_match:
+                        extracted_priority = priority_match.group(1).lower()
+                        if extracted_priority in ('low', 'medium', 'high', 'urgent'):
+                            logger.info(f"Priority suggestion recovered via regex: {extracted_priority}")
+                            return {
+                                "suggested_priority": extracted_priority,
+                                "confidence_score": float(confidence_match.group(1)) if confidence_match else 0.5,
+                                "confidence_level": "low",
+                                "reasoning": reasoning_match.group(1) if reasoning_match else "AI response was truncated; priority extracted from partial data.",
+                                "contributing_factors": [],
+                                "priority_comparison": {},
+                                "alternative_priority": None,
+                                "workload_impact": {},
+                                "recommendations": ["Re-run analysis for full explainability"],
+                                "assumptions": ["Partial response — some analysis context was lost"],
+                                "urgency_indicators": [],
+                                "impact_indicators": [],
+                                "truncation_note": "Response was truncated and recovered via regex extraction."
+                            }
+                except Exception as e:
+                    logger.debug(f"Priority repair strategy 2 (regex) failed: {e}")
+
+                # Strategy 3: rule-based fallback using task context
+                logger.warning("All priority JSON repair strategies failed — using rule-based fallback")
+                return _create_fallback_priority_suggestion(
+                    title, description, due_date, current_priority, board_context
+                )
         return None
     except Exception as e:
         logger.error(f"Error suggesting task priority: {str(e)}")
         return None
+
+
+def _create_fallback_priority_suggestion(
+    title: str, description: str, due_date: str,
+    current_priority: str, board_context: Dict
+) -> Dict:
+    """
+    Rule-based fallback when AI JSON parsing fails for priority suggestion.
+    Uses keyword analysis and board context to produce a reasonable suggestion.
+    """
+    text = f"{title} {description}".lower()
+
+    # Keyword-based importance signal
+    high_keywords = [
+        'security', 'critical', 'production', 'outage', 'payment',
+        'compliance', 'migration', 'database', 'deployment', 'hotfix',
+        'vulnerability', 'breach', 'downtime', 'data loss',
+    ]
+    medium_keywords = [
+        'refactor', 'performance', 'integration', 'api', 'testing',
+        'monitoring', 'optimization', 'upgrade',
+    ]
+
+    importance = 'medium'
+    matched_keywords = []
+    for kw in high_keywords:
+        if kw in text:
+            importance = 'high'
+            matched_keywords.append(kw)
+    if importance == 'medium':
+        for kw in medium_keywords:
+            if kw in text:
+                matched_keywords.append(kw)
+
+    # Due-date urgency
+    urgency = 'medium'
+    if due_date:
+        try:
+            from django.utils import timezone as tz
+            from django.utils.dateparse import parse_datetime, parse_date
+            due = parse_datetime(due_date) or parse_date(due_date)
+            if due:
+                if hasattr(due, 'date'):
+                    due = due.date()
+                days_left = (due - tz.now().date()).days
+                if days_left <= 2:
+                    urgency = 'urgent'
+                elif days_left <= 5:
+                    urgency = 'high'
+                elif days_left > 14:
+                    urgency = 'low'
+        except Exception:
+            pass
+
+    # Combine signals
+    priority_rank = {'low': 0, 'medium': 1, 'high': 2, 'urgent': 3}
+    score = max(priority_rank.get(importance, 1), priority_rank.get(urgency, 1))
+
+    # Board overload check: if too many high/urgent already, nudge down
+    high_count = board_context.get('high_priority_count', 0) + board_context.get('urgent_count', 0)
+    total = board_context.get('total_tasks', 1) or 1
+    if high_count / total > 0.4 and score >= 2:
+        score = max(score - 1, 1)
+
+    rank_to_priority = {0: 'low', 1: 'medium', 2: 'high', 3: 'urgent'}
+    suggested = rank_to_priority.get(score, 'medium')
+
+    factors = []
+    if matched_keywords:
+        factors.append({
+            "factor": "Keyword Analysis",
+            "contribution_percentage": 50,
+            "description": f"Keywords detected: {', '.join(matched_keywords[:3])}",
+            "weight": "high" if importance == 'high' else "medium",
+        })
+    if urgency != 'medium':
+        factors.append({
+            "factor": "Due Date Proximity",
+            "contribution_percentage": 40,
+            "description": f"Urgency assessed as {urgency} based on deadline",
+            "weight": urgency,
+        })
+
+    return {
+        "suggested_priority": suggested,
+        "confidence_score": 0.4,
+        "confidence_level": "low",
+        "reasoning": (
+            "AI response could not be parsed. This suggestion is based on "
+            "keyword analysis and deadline proximity (rule-based fallback)."
+        ),
+        "contributing_factors": factors,
+        "priority_comparison": {},
+        "alternative_priority": None,
+        "workload_impact": {
+            "current_distribution": f"{high_count} high/urgent out of {total} tasks",
+            "impact_of_suggestion": "Rule-based estimate — re-run for detailed analysis",
+        },
+        "recommendations": ["Re-run AI analysis for full explainability"],
+        "assumptions": ["Rule-based fallback — limited analysis context"],
+        "urgency_indicators": [urgency] if urgency != 'medium' else [],
+        "impact_indicators": matched_keywords[:3],
+        "fallback_note": "Generated by rule-based fallback due to AI response parsing failure.",
+    }
+
 
 def predict_realistic_deadline(task_data: Dict, team_context: Dict) -> Optional[Dict]:
     """
