@@ -221,6 +221,78 @@
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         border-color: #667eea;
     }
+
+    /* ── AI Tools Slide-Out Panel ── */
+    #aiToolsPanel {
+        width: 280px;
+        background-color: var(--bg-secondary);
+        border-left: 1px solid var(--border-color);
+        box-shadow: -4px 0 16px var(--shadow-color);
+    }
+    #aiToolsPanel .offcanvas-header {
+        border-bottom: 1px solid var(--border-color);
+        padding: 14px 16px;
+    }
+    #aiToolsPanel .offcanvas-title {
+        font-size: .95rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+    #aiToolsPanel .offcanvas-body {
+        padding: 12px 14px;
+    }
+    .ai-panel-section-header {
+        font-size: .65rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--text-muted);
+        padding: 0 4px 6px;
+        margin-top: 14px;
+    }
+    .ai-panel-section:first-child .ai-panel-section-header {
+        margin-top: 0;
+    }
+    .ai-panel-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+    }
+    .ai-panel-tile {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 5px;
+        padding: 12px 6px;
+        border-radius: 8px;
+        background: transparent;
+        color: var(--text-primary);
+        text-decoration: none;
+        transition: background .15s ease;
+        cursor: pointer;
+    }
+    .ai-panel-tile:hover {
+        background: var(--bg-tertiary);
+        color: var(--text-primary);
+        text-decoration: none;
+    }
+    .ai-panel-tile .tile-icon {
+        font-size: 1.15rem;
+        line-height: 1;
+    }
+    .ai-panel-tile .tile-label {
+        font-size: .72rem;
+        font-weight: 500;
+        text-align: center;
+        line-height: 1.2;
+    }
+    /* Active state for the toggle button when panel is open */
+    #aiToolsToggle.active {
+        background-color: var(--link-color);
+        border-color: var(--link-color);
+        color: #fff;
+    }
     
 </style>
 {% endblock %}
@@ -302,39 +374,10 @@
             <i class="fas fa-filter"></i><span class="d-none d-lg-inline ms-1">Filter</span>
         </button>
 
-        <!-- AI Tools dropdown -->
-        <div class="dropdown">
-            <button class="btn btn-sm btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown" title="AI Tools">
-                <i class="fas fa-bolt me-1"></i><span class="d-none d-lg-inline">AI Tools</span>
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end" style="min-width:260px;">
-                <li><h6 class="dropdown-header"><i class="fas fa-chart-pie me-2"></i>Analyze</h6></li>
-                <li><a class="dropdown-item" href="{% url 'board_analytics' board.id %}"><i class="fas fa-chart-pie me-2 text-primary"></i>Analytics</a></li>
-                <li><a class="dropdown-item" href="{% url 'burndown_dashboard' board.id %}"><i class="fas fa-chart-line me-2 text-success"></i>Burndown</a></li>
-                <li><a class="dropdown-item" href="{% url 'skill_gap_dashboard' board.id %}"><i class="fas fa-brain me-2 text-warning"></i>Skill Gaps</a></li>
-                <li><a class="dropdown-item" href="{% url 'board_status_report' board.id %}"><i class="fas fa-file-alt me-2 text-dark"></i>Status Report</a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><h6 class="dropdown-header"><i class="fas fa-calendar-alt me-2"></i>Plan</h6></li>
-                <li><a class="dropdown-item" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-2 text-info"></i>Gantt Chart</a></li>
-                <li><a class="dropdown-item" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-2 text-secondary"></i>Calendar</a></li>
-                <li><a class="dropdown-item" href="{% url 'budget_dashboard' board.id %}"><i class="fas fa-dollar-sign me-2 text-success"></i>Budget & ROI</a></li>
-                <li><a class="dropdown-item" href="{% url 'scope_dashboard' board.id %}"><i class="fas fa-chart-area me-2 text-primary"></i>Scope</a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><h6 class="dropdown-header"><i class="fas fa-robot me-2"></i>AI Actions</h6></li>
-                <li><a class="dropdown-item" href="{% url 'coach_dashboard' board.id %}"><i class="fas fa-user-graduate me-2" style="color:#667eea;"></i>AI Coach</a></li>
-                <li><a class="dropdown-item" href="{% url 'prizmbrief_setup' board.id %}"><i class="fas fa-magic me-2 text-primary"></i>PrizmBrief</a></li>
-                <li><a class="dropdown-item" href="{% url 'whatif_dashboard' board.id %}"><i class="fas fa-flask me-2 text-info"></i>What-If</a></li>
-                <li><a class="dropdown-item" href="{% url 'premortem_dashboard' board.id %}"><i class="fas fa-shield-alt me-2 text-danger"></i>Pre-Mortem</a></li>
-                <li><a class="dropdown-item" href="{% url 'retrospective_dashboard' board.id %}"><i class="fas fa-history me-2 text-secondary"></i>Retrospectives</a></li>
-                <li><a class="dropdown-item" href="{% url 'scope_autopsy_dashboard' board.id %}"><i class="fas fa-microscope me-2 text-warning"></i>Scope Autopsy</a></li>
-                <li><hr class="dropdown-divider"></li>
-                <li><h6 class="dropdown-header"><i class="fas fa-cog me-2"></i>Board Settings</h6></li>
-                <li><a class="dropdown-item" href="{% url 'automations_list' board.id %}"><i class="fas fa-bolt me-2 text-warning"></i>Automations</a></li>
-                <li><a class="dropdown-item" href="{% url 'board_knowledge' board.id %}"><i class="fas fa-brain me-2 text-info"></i>Knowledge</a></li>
-                <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=json"><i class="fas fa-file-export me-2 text-success"></i>Export JSON</a></li>
-                <li><a class="dropdown-item" href="{% url 'export_board' board.id %}?format=csv"><i class="fas fa-file-csv me-2 text-success"></i>Export CSV</a></li>
-            </ul>
-        </div>
+        <!-- AI Tools slide-out panel trigger -->
+        <button class="btn btn-sm btn-outline-primary" type="button" id="aiToolsToggle" data-bs-toggle="offcanvas" data-bs-target="#aiToolsPanel" aria-controls="aiToolsPanel" title="AI Tools">
+            <i class="fas fa-bolt me-1"></i><span class="d-none d-lg-inline">AI Tools</span>
+        </button>
 
         <!-- Settings (3-dot) -->
         <div class="dropdown">
@@ -1024,5 +1067,125 @@
 })();
 </script>
 {% endblock %}
+
+<!-- ── AI Tools Slide-Out Panel ── -->
+<div class="offcanvas offcanvas-end" id="aiToolsPanel" tabindex="-1" aria-labelledby="aiToolsPanelLabel" data-bs-scroll="true" data-bs-backdrop="false">
+    <div class="offcanvas-header">
+        <h5 class="offcanvas-title" id="aiToolsPanelLabel"><i class="fas fa-bolt me-2"></i>AI Tools</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+    </div>
+    <div class="offcanvas-body">
+        <!-- Section 1: Analyze -->
+        <div class="ai-panel-section">
+            <div class="ai-panel-section-header">📊 Analyze</div>
+            <div class="ai-panel-grid">
+                <a class="ai-panel-tile" href="{% url 'board_analytics' board.id %}">
+                    <span class="tile-icon text-primary"><i class="fas fa-chart-pie"></i></span>
+                    <span class="tile-label">Analytics</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'burndown_dashboard' board.id %}">
+                    <span class="tile-icon text-success"><i class="fas fa-chart-line"></i></span>
+                    <span class="tile-label">Burndown</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'skill_gap_dashboard' board.id %}">
+                    <span class="tile-icon text-warning"><i class="fas fa-brain"></i></span>
+                    <span class="tile-label">Skill Gaps</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'board_status_report' board.id %}">
+                    <span class="tile-icon text-dark"><i class="fas fa-file-alt"></i></span>
+                    <span class="tile-label">Status Report</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Section 2: Plan -->
+        <div class="ai-panel-section">
+            <div class="ai-panel-section-header">📅 Plan</div>
+            <div class="ai-panel-grid">
+                <a class="ai-panel-tile" href="{% url 'gantt_chart' board.id %}">
+                    <span class="tile-icon text-info"><i class="fas fa-chart-gantt"></i></span>
+                    <span class="tile-label">Gantt Chart</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'board_calendar' board.id %}">
+                    <span class="tile-icon text-secondary"><i class="fas fa-calendar-alt"></i></span>
+                    <span class="tile-label">Calendar</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'budget_dashboard' board.id %}">
+                    <span class="tile-icon text-success"><i class="fas fa-dollar-sign"></i></span>
+                    <span class="tile-label">Budget & ROI</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'scope_dashboard' board.id %}">
+                    <span class="tile-icon text-primary"><i class="fas fa-chart-area"></i></span>
+                    <span class="tile-label">Scope</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Section 3: AI Actions -->
+        <div class="ai-panel-section">
+            <div class="ai-panel-section-header">🤖 AI Actions</div>
+            <div class="ai-panel-grid">
+                <a class="ai-panel-tile" href="{% url 'coach_dashboard' board.id %}">
+                    <span class="tile-icon" style="color:#667eea;"><i class="fas fa-user-graduate"></i></span>
+                    <span class="tile-label">AI Coach</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'prizmbrief_setup' board.id %}">
+                    <span class="tile-icon text-primary"><i class="fas fa-magic"></i></span>
+                    <span class="tile-label">PrizmBrief</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'whatif_dashboard' board.id %}">
+                    <span class="tile-icon text-info"><i class="fas fa-flask"></i></span>
+                    <span class="tile-label">What-If</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'premortem_dashboard' board.id %}">
+                    <span class="tile-icon text-danger"><i class="fas fa-shield-alt"></i></span>
+                    <span class="tile-label">Pre-Mortem</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'retrospective_dashboard' board.id %}">
+                    <span class="tile-icon text-secondary"><i class="fas fa-history"></i></span>
+                    <span class="tile-label">Retrospectives</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'scope_autopsy_dashboard' board.id %}">
+                    <span class="tile-icon text-warning"><i class="fas fa-microscope"></i></span>
+                    <span class="tile-label">Scope Autopsy</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- Section 4: Board Settings -->
+        <div class="ai-panel-section">
+            <div class="ai-panel-section-header">⚙️ Board Settings</div>
+            <div class="ai-panel-grid">
+                <a class="ai-panel-tile" href="{% url 'automations_list' board.id %}">
+                    <span class="tile-icon text-warning"><i class="fas fa-bolt"></i></span>
+                    <span class="tile-label">Automations</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'board_knowledge' board.id %}">
+                    <span class="tile-icon text-info"><i class="fas fa-brain"></i></span>
+                    <span class="tile-label">Knowledge Base</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'export_board' board.id %}?format=json">
+                    <span class="tile-icon text-success"><i class="fas fa-file-export"></i></span>
+                    <span class="tile-label">Export JSON</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'export_board' board.id %}?format=csv">
+                    <span class="tile-icon text-success"><i class="fas fa-file-csv"></i></span>
+                    <span class="tile-label">Export CSV</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var panel = document.getElementById('aiToolsPanel');
+    var btn = document.getElementById('aiToolsToggle');
+    if (panel && btn) {
+        panel.addEventListener('show.bs.offcanvas', function() { btn.classList.add('active'); });
+        panel.addEventListener('hidden.bs.offcanvas', function() { btn.classList.remove('active'); });
+    }
+})();
+</script>
 
 {% endblock content %}
