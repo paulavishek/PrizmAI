@@ -1133,9 +1133,10 @@ def download_analytics_summary_pdf(request, board_id):
 
 @login_required
 @require_http_methods(["POST"])
-def suggest_task_priority_api(request):
+def _suggest_task_priority_api_legacy(request):
     """
-    API endpoint to suggest optimal priority for a task using AI
+    LEGACY — Superseded by the PrioritySuggestionService-based version below.
+    Kept for reference; not mapped to any URL pattern.
     """
     start_time = time.time()
     try:
@@ -4579,9 +4580,14 @@ def suggest_assignee_api(request):
     """
     try:
         # Check demo AI generation limit
-        limit_response = check_ai_generation_limit(request)
-        if limit_response:
-            return limit_response
+        ai_limit_status = check_ai_generation_limit(request)
+        if ai_limit_status['is_demo'] and not ai_limit_status['can_generate']:
+            record_limitation_hit(request, 'ai_limit')
+            return JsonResponse({
+                'error': ai_limit_status['message'],
+                'quota_exceeded': True,
+                'demo_limit': True
+            }, status=429)
         
         # Check AI quota
         has_quota, quota, remaining = check_ai_quota(request.user)
