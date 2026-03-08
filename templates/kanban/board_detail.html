@@ -411,11 +411,11 @@
     <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
 </ul>
 
-<!-- ═══════ COLLAPSIBLE BOARD TOOLS (Filter/Search + Column Reorder) ═══════ -->
-<div class="collapse mb-3" id="boardToolsPanel">
-    <!-- AI Resource Leveling (collapsed inline) -->
-    {% include 'kanban/resource_leveling_widget.html' %}
+<!-- ═══════ AI RESOURCE OPTIMIZATION (standalone, always in DOM) ═══════ -->
+{% include 'kanban/resource_leveling_widget.html' %}
 
+<!-- ═══════ COLLAPSIBLE BOARD TOOLS (Filter/Search) ═══════ -->
+<div class="collapse mb-3" id="boardToolsPanel">
     <!-- Search Panel -->
     <div class="card card-body mb-2">
         <h6 class="mb-2"><i class="fas fa-search me-1"></i>Search & Filter Tasks</h6>
