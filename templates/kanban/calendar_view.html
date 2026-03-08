@@ -77,25 +77,21 @@
 <div class="container-fluid px-4">
 
     <!-- Header -->
-    <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-2">
+    <div class="d-flex justify-content-between align-items-start mb-1 flex-wrap gap-2">
         <div>
             <h1 class="h3 mb-0 text-gray-800">
                 <i class="fas fa-calendar-alt me-2 text-primary"></i>{{ board.name }}
             </h1>
             <p class="text-muted mb-0">Task Calendar — tasks plotted by due date</p>
         </div>
-        <div class="btn-group">
-            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary btn-sm">
-                <i class="fas fa-columns me-1"></i> Kanban
-            </a>
-            <a href="{% url 'gantt_chart' board.id %}" class="btn btn-outline-info btn-sm">
-                <i class="fas fa-chart-gantt me-1"></i> Gantt
-            </a>
-            <a href="{% url 'unified_calendar' %}" class="btn btn-outline-primary btn-sm">
-                <i class="fas fa-calendar-alt me-1"></i> My Calendar
-            </a>
-        </div>
     </div>
+
+    <!-- View Mode Tabs (consistent with board kanban/gantt views) -->
+    <ul class="nav nav-tabs nav-tabs-sm mb-3" style="font-size:.875rem;">
+        <li class="nav-item"><a class="nav-link" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
+        <li class="nav-item"><a class="nav-link" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
+        <li class="nav-item"><a class="nav-link active" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
+    </ul>
 
     <!-- Stats -->
     <div class="row g-3 mb-4">

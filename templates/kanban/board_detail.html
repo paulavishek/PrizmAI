@@ -409,7 +409,6 @@
     <li class="nav-item"><a class="nav-link active" href="{% url 'board_detail' board.id %}"><i class="fas fa-columns me-1"></i>Kanban</a></li>
     <li class="nav-item"><a class="nav-link" href="{% url 'gantt_chart' board.id %}"><i class="fas fa-chart-gantt me-1"></i>Gantt</a></li>
     <li class="nav-item"><a class="nav-link" href="{% url 'board_calendar' board.id %}"><i class="fas fa-calendar-alt me-1"></i>Calendar</a></li>
-    <li class="nav-item"><a class="nav-link" href="{% url 'board_analytics' board.id %}"><i class="fas fa-chart-pie me-1"></i>Analytics</a></li>
 </ul>
 
 <!-- ═══════ COLLAPSIBLE BOARD TOOLS (Filter/Search + Column Reorder) ═══════ -->
@@ -1181,10 +1180,30 @@
 (function() {
     var panel = document.getElementById('aiToolsPanel');
     var btn = document.getElementById('aiToolsToggle');
-    if (panel && btn) {
-        panel.addEventListener('show.bs.offcanvas', function() { btn.classList.add('active'); });
-        panel.addEventListener('hidden.bs.offcanvas', function() { btn.classList.remove('active'); });
+    if (!panel || !btn) return;
+
+    var bsOffcanvas = null;
+
+    // Lazily get the Bootstrap offcanvas instance once it's initialised
+    function getOffcanvas() {
+        if (!bsOffcanvas) bsOffcanvas = bootstrap.Offcanvas.getOrCreateInstance(panel);
+        return bsOffcanvas;
     }
+
+    // Active button indicator
+    panel.addEventListener('show.bs.offcanvas', function() { btn.classList.add('active'); });
+    panel.addEventListener('hidden.bs.offcanvas', function() { btn.classList.remove('active'); });
+
+    // Close when clicking outside the panel (no backdrop because data-bs-backdrop="false")
+    document.addEventListener('click', function(e) {
+        // Only act when the panel is currently open
+        if (!panel.classList.contains('show')) return;
+        // Ignore clicks on the toggle button itself (Bootstrap handles the toggle)
+        if (btn.contains(e.target)) return;
+        // Ignore clicks inside the panel
+        if (panel.contains(e.target)) return;
+        getOffcanvas().hide();
+    }, true); // capture phase so it fires before Bootstrap stops propagation
 })();
 </script>
 
