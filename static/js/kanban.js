@@ -569,9 +569,10 @@ function updateColumnPositionBadges() {
 function showNotification(message, type = 'info') {
     // Create notification element
     const notification = document.createElement('div');
-    notification.className = `alert alert-${type === 'error' ? 'danger' : 'success'} alert-dismissible fade show position-fixed`;
-    notification.style.top = '80px';
+    notification.className = `alert alert-${type === 'error' ? 'danger' : type === 'info' ? 'info' : 'success'} alert-dismissible fade show position-fixed`;
+    notification.style.bottom = '20px';
     notification.style.right = '20px';
+    notification.style.top = 'auto';
     notification.style.zIndex = '9999';
     notification.style.minWidth = '300px';
     notification.style.maxWidth = '400px';
