@@ -164,6 +164,7 @@ def commit_onboarding_workspace(user, preview):
                             start_date=today,
                             due_date=due_dt,
                             created_by=user,
+                            assigned_to=user,
                         )
 
         # ── Finalise preview + profile ─────────────────────────────────

@@ -44,6 +44,15 @@ def demo_context(request):
         context['is_demo_mode'] = False  # No special demo mode in simplified
         context['show_demo_limitations'] = False  # No limitations for authenticated users
         context['is_authenticated_exploring_demo'] = False
+
+        # V2 onboarding demo toggle (profile-based, not session-based)
+        if request.user.is_authenticated:
+            try:
+                context['is_viewing_demo'] = getattr(request.user.profile, 'is_viewing_demo', False)
+            except Exception:
+                context['is_viewing_demo'] = False
+        else:
+            context['is_viewing_demo'] = False
         
         # User gets their standard quotas (not demo quotas)
         if request.user.is_authenticated:
