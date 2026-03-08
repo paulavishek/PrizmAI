@@ -964,32 +964,15 @@
 </div>
 {% endif %}
 
-<div class="row mb-4">
-    <div class="col-md-12">
-        <div class="d-sm-flex align-items-center justify-content-between mb-4">
-            <h1 class="h3 mb-0 text-gray-800" id="dashboard-heading">
-                Dashboard
-                {% if demo_mode %}<span class="badge bg-warning text-dark ms-2" style="font-size:.55em;vertical-align:middle;">DEMO</span>{% endif %}
-                <span class="text-muted fw-normal">— {{ request.user.get_full_name|default:request.user.username }}</span>
-            </h1>
-            <div class="d-flex align-items-center gap-2">
-                {% if onboarding_profile.onboarding_version == 2 %}
-                <!-- Demo / Real toggle -->
-                <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline" title="{% if demo_mode %}Switch to your real workspace{% else %}Switch to the demo workspace{% endif %}">
-                    {% csrf_token %}
-                    <button type="submit" class="btn btn-sm {% if demo_mode %}btn-outline-warning{% else %}btn-outline-secondary{% endif %}">
-                        <i class="fas {% if demo_mode %}fa-briefcase{% else %}fa-eye{% endif %} me-1"></i>
-                        {% if demo_mode %}My Workspace{% else %}View Demo{% endif %}
-                    </button>
-                </form>
-                {% endif %}
-                <a href="{% url 'board_list' %}" class="d-none d-sm-inline-block btn btn-primary shadow-sm">
-                    <i class="fas fa-plus fa-sm text-white-50 me-2"></i> View All Boards
-                </a>
-            </div>
-        </div>
-    </div>
+{% if demo_mode %}
+<div class="d-flex align-items-center justify-content-end gap-2 mb-2">
+    <span class="badge bg-warning text-dark" style="font-size:0.72rem;"><i class="fas fa-eye me-1"></i>DEMO MODE</span>
+    <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline-warning"><i class="fas fa-briefcase me-1"></i>My Workspace</button>
+    </form>
 </div>
+{% endif %}
 
 <!-- ============================================================ -->
 <!-- DECISION CENTER WIDGET                                      -->
@@ -1064,87 +1047,7 @@
         <strong class="{% if total_high_risk > 0 %}text-warning{% else %}text-secondary{% endif %}">{{ total_high_risk }}</strong> <span class="text-muted">High Risk</span>
     </div>
 </div>
-
-</div>
 <!-- /KPI Strip -->
-
-<!-- Daily AI Briefing — collapsed by default with one-line summary -->
-{% if daily_briefing.has_content %}
-<div class="card shadow-sm mb-3" id="daily-briefing-card">
-    <div class="card-body p-3">
-        <div class="d-flex align-items-center justify-content-between">
-            <div class="d-flex align-items-center gap-2" role="button" data-bs-toggle="collapse" data-bs-target="#briefingDetail" 
-                 aria-expanded="false" aria-controls="briefingDetail" style="cursor:pointer;">
-                <i class="fas fa-robot" style="color:#0e9f6e;"></i>
-                <span class="fw-bold" style="font-size:0.88rem; color:#0e9f6e;">AI Briefing</span>
-                <span class="text-muted" style="font-size:0.82rem;">
-                    — {% if daily_briefing.pulse %}{{ daily_briefing.pulse|truncatechars:80 }}{% else %}{{ daily_briefing.action|truncatechars:80 }}{% endif %}
-                </span>
-                <i class="fas fa-chevron-down text-muted ms-1" style="font-size:0.7rem; transition:transform 0.2s;" id="briefingChevron"></i>
-            </div>
-        </div>
-        <div class="collapse mt-3" id="briefingDetail">
-            <div class="row g-2">
-                {% if daily_briefing.pulse %}
-                <div class="col-md-4">
-                    <div class="briefing-item">
-                        <span class="briefing-tag briefing-pulse">🟢 Overall Pulse</span>
-                        <p class="mb-0 small mt-2" style="color:#374151;">{{ daily_briefing.pulse }}</p>
-                    </div>
-                </div>
-                {% endif %}
-                {% if daily_briefing.risk %}
-                <div class="col-md-4">
-                    <div class="briefing-item">
-                        <span class="briefing-tag briefing-risk">⚠️ Top Risk Item</span>
-                        {% if daily_briefing.top_risk %}
-                        <div class="mt-2">
-                            <a href="{% url 'task_detail' daily_briefing.top_risk.task.id %}"
-                               class="fw-semibold text-decoration-none"
-                               style="font-size:0.82rem; color:#1e3a8a;"
-                               title="{{ daily_briefing.top_risk.task.title }}">
-                                {{ daily_briefing.top_risk.task.title|truncatechars:52 }}
-                            </a>
-                            <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
-                                {% if daily_briefing.top_risk.risk_level == 'critical' %}
-                                    <span class="badge bg-danger" style="font-size:0.65rem;">Critical</span>
-                                {% else %}
-                                    <span class="badge bg-warning text-dark" style="font-size:0.65rem;">High Risk</span>
-                                {% endif %}
-                                <small class="text-muted" style="font-size:0.72rem;">
-                                    <i class="fas fa-calendar-alt me-1"></i>{{ daily_briefing.top_risk.due_label }}
-                                </small>
-                                {% if daily_briefing.top_risk.board_name %}
-                                <small class="text-muted" style="font-size:0.72rem;">
-                                    <i class="fas fa-columns me-1"></i>{{ daily_briefing.top_risk.board_name|truncatechars:20 }}
-                                </small>
-                                {% endif %}
-                            </div>
-                        </div>
-                        {% endif %}
-                    </div>
-                </div>
-                {% endif %}
-                {% if daily_briefing.action %}
-                <div class="col-md-4">
-                    <div class="briefing-item briefing-item-clickable"
-                         data-bs-toggle="modal" data-bs-target="#aiRecommendedActionsModal"
-                         role="button" tabindex="0"
-                         aria-label="View AI recommended actions">
-                        <span class="briefing-tag briefing-action">💡 Recommended Action</span>
-                        <p class="mb-0 small mt-2 fw-semibold" style="color:#1e40af;">{{ daily_briefing.action }}</p>
-                        <div class="briefing-action-footer">
-                            View details <i class="fas fa-arrow-right ms-1"></i>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
-{% endif %}
-<!-- /Daily AI Briefing -->
 
 <!-- AI Recommended Actions Modal -->
 <div class="modal fade" id="aiRecommendedActionsModal" tabindex="-1"
@@ -1392,16 +1295,16 @@
 
 {{ chart_data|json_script:"dashboardChartData" }}
 
-<!-- Dashboard Main Layout: Board Cards + My Tasks (top), Mission Overview (below) -->
-<div class="row g-4 mb-4">
+<!-- Row 2: Board Cards + My Tasks side by side -->
+<div class="row g-3 mb-3">
 
     <!-- ======================================================== -->
-    <!-- MAIN COLUMN: Board Cards Grid (Monday.com-style)         -->
+    <!-- LEFT COLUMN: Board Cards Grid                            -->
     <!-- ======================================================== -->
-    <div class="col-lg-8 col-md-12">
+    <div class="col-lg-7 col-md-12">
 
         <!-- Board Cards Grid -->
-        <div class="card shadow-sm mb-4" id="board-cards-section">
+        <div class="card shadow-sm h-100" id="board-cards-section">
             <div class="card-header py-2 d-flex align-items-center justify-content-between">
                 <h6 class="m-0 fw-bold text-primary">
                     <i class="fas fa-columns me-2"></i>My Boards
@@ -1441,7 +1344,7 @@
                                 <div class="d-flex align-items-center justify-content-between mb-2">
                                     <small class="text-muted">{{ board.task_set.count }} tasks</small>
                                     {% if board.strategy %}
-                                    <small class="text-muted"><i class="fas fa-bullseye me-1"></i>{{ board.strategy.mission.name|truncatechars:15 }}</small>
+                                    <small class="text-muted" style="max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; vertical-align:middle;"><i class="fas fa-bullseye me-1"></i>{{ board.strategy.mission.name }}</small>
                                     {% endif %}
                                 </div>
                                 <div class="board-card-progress">
@@ -1475,6 +1378,164 @@
             </div>
         </div>
 
+    </div>
+    <!-- /col-lg-7 (Board Cards) -->
+
+    <!-- ======================================================== -->
+    <!-- RIGHT COLUMN: My Tasks                                   -->
+    <!-- ======================================================== -->
+    <div class="col-lg-5 col-md-12">
+        <div class="card shadow h-100">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <div class="d-flex align-items-center">
+                    <h6 class="m-0 font-weight-bold text-primary me-2">
+                        <i class="fas fa-user-check me-2"></i>My Tasks
+                    </h6>
+                    <span class="badge bg-secondary rounded-pill">{{ my_tasks_count }}</span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <select id="taskSortSelect" class="form-select form-select-sm" style="width:auto; font-size:0.75rem;"
+                        onchange="changeSortOrder(this.value)">
+                        <option value="urgency" {% if my_tasks_sort_by == 'urgency' %}selected{% endif %}>🚨 Urgency</option>
+                        <option value="due_date" {% if my_tasks_sort_by == 'due_date' %}selected{% endif %}>📅 Due Date</option>
+                        <option value="priority" {% if my_tasks_sort_by == 'priority' %}selected{% endif %}>🔥 Priority</option>
+                        <option value="recent" {% if my_tasks_sort_by == 'recent' %}selected{% endif %}>🕒 Recent</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-body p-0" style="overflow-y:auto; max-height:600px;">
+                {% if my_tasks %}
+                <ul class="list-group list-group-flush">
+                    {% for task in my_tasks %}
+                    <li class="list-group-item px-3 py-2" style="list-style:none;">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <span class="fw-semibold small">{{ task.title|truncatechars:50 }}</span>
+                            <span class="badge priority-{{ task.priority }} ms-1 flex-shrink-0">{{ task.priority|title }}</span>
+                        </div>
+                        <div class="text-muted" style="font-size:0.72rem;">
+                            <i class="fas fa-project-diagram me-1"></i>{{ task.column.board.name }}
+                            <span class="text-muted ms-1">/ {{ task.column.name }}</span>
+                        </div>
+                        {% if task.due_date %}
+                        <div style="font-size:0.72rem;" class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
+                            <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
+                            {% if task.due_date < now and task.progress < 100 %}<span class="badge bg-danger ms-1" style="font-size:0.6rem;">Overdue</span>{% endif %}
+                        </div>
+                        {% endif %}
+                        <div class="d-flex align-items-center gap-2 mt-1">
+                            <div class="progress flex-grow-1" style="height:5px;">
+                                <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                     role="progressbar" style="width:{{ task.progress }}%"></div>
+                            </div>
+                            <span style="font-size:0.68rem;" class="text-muted flex-shrink-0">{{ task.progress }}%</span>
+                            <a href="{% url 'task_detail' task.id %}" class="btn btn-xs btn-primary flex-shrink-0">View</a>
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% else %}
+                <div class="text-center py-4 px-3">
+                    <i class="fas fa-user-check fa-3x text-muted mb-3" style="opacity:0.25;"></i>
+                    <p class="fw-semibold text-muted mb-1" style="font-size:0.9rem;">No tasks assigned to you yet.</p>
+                    <p class="text-muted" style="font-size:0.78rem; line-height:1.5;">
+                        Open any board, click a task, and assign it to yourself — it will appear here.
+                    </p>
+                    <a href="{% url 'board_list' %}" class="btn btn-sm btn-outline-primary mt-1" style="font-size:0.78rem;">
+                        <i class="fas fa-clipboard-list me-1"></i>Browse Boards
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <!-- /col-lg-5 (My Tasks) -->
+
+</div>
+<!-- /Row 2: Board Cards + My Tasks -->
+
+<!-- ============================================================ -->
+<!-- ROW 3: AI BRIEFING (full width, collapsed by default)       -->
+<!-- ============================================================ -->
+{% if daily_briefing.has_content %}
+<div class="card shadow-sm mb-3" id="daily-briefing-card">
+    <div class="card-body p-3">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-2" role="button" data-bs-toggle="collapse" data-bs-target="#briefingDetail" 
+                 aria-expanded="false" aria-controls="briefingDetail" style="cursor:pointer;">
+                <i class="fas fa-robot" style="color:#0e9f6e;"></i>
+                <span class="fw-bold" style="font-size:0.88rem; color:#0e9f6e;">AI Briefing</span>
+                <span class="text-muted" style="font-size:0.82rem;">
+                    — {% if daily_briefing.pulse %}{{ daily_briefing.pulse|truncatechars:80 }}{% else %}{{ daily_briefing.action|truncatechars:80 }}{% endif %}
+                </span>
+                <i class="fas fa-chevron-down text-muted ms-1" style="font-size:0.7rem; transition:transform 0.2s;" id="briefingChevron"></i>
+            </div>
+        </div>
+        <div class="collapse mt-3" id="briefingDetail">
+            <div class="row g-2">
+                {% if daily_briefing.pulse %}
+                <div class="col-md-4">
+                    <div class="briefing-item">
+                        <span class="briefing-tag briefing-pulse">🟢 Overall Pulse</span>
+                        <p class="mb-0 small mt-2" style="color:#374151;">{{ daily_briefing.pulse }}</p>
+                    </div>
+                </div>
+                {% endif %}
+                {% if daily_briefing.risk %}
+                <div class="col-md-4">
+                    <div class="briefing-item">
+                        <span class="briefing-tag briefing-risk">⚠️ Top Risk Item</span>
+                        {% if daily_briefing.top_risk %}
+                        <div class="mt-2">
+                            <a href="{% url 'task_detail' daily_briefing.top_risk.task.id %}"
+                               class="fw-semibold text-decoration-none"
+                               style="font-size:0.82rem; color:#1e3a8a;"
+                               title="{{ daily_briefing.top_risk.task.title }}">
+                                {{ daily_briefing.top_risk.task.title|truncatechars:52 }}
+                            </a>
+                            <div class="d-flex align-items-center gap-2 mt-1 flex-wrap">
+                                {% if daily_briefing.top_risk.risk_level == 'critical' %}
+                                    <span class="badge bg-danger" style="font-size:0.65rem;">Critical</span>
+                                {% else %}
+                                    <span class="badge bg-warning text-dark" style="font-size:0.65rem;">High Risk</span>
+                                {% endif %}
+                                <small class="text-muted" style="font-size:0.72rem;">
+                                    <i class="fas fa-calendar-alt me-1"></i>{{ daily_briefing.top_risk.due_label }}
+                                </small>
+                                {% if daily_briefing.top_risk.board_name %}
+                                <small class="text-muted" style="font-size:0.72rem;">
+                                    <i class="fas fa-columns me-1"></i>{{ daily_briefing.top_risk.board_name|truncatechars:20 }}
+                                </small>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if daily_briefing.action %}
+                <div class="col-md-4">
+                    <div class="briefing-item briefing-item-clickable"
+                         data-bs-toggle="modal" data-bs-target="#aiRecommendedActionsModal"
+                         role="button" tabindex="0"
+                         aria-label="View AI recommended actions">
+                        <span class="briefing-tag briefing-action">💡 Recommended Action</span>
+                        <p class="mb-0 small mt-2 fw-semibold" style="color:#1e40af;">{{ daily_briefing.action }}</p>
+                        <div class="briefing-action-footer">
+                            View details <i class="fas fa-arrow-right ms-1"></i>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+<!-- /AI Briefing -->
+
+<!-- ============================================================ -->
+<!-- ROW 4: MISSION OVERVIEW (full width, collapsible)           -->
+<!-- ============================================================ -->
         <!-- Mission Overview Tree (collapsed by default) -->
         <div class="card shadow mb-4" id="mission-overview-card">
             <div class="card-header py-2 d-flex align-items-center justify-content-between" 
@@ -1866,90 +1927,18 @@
         </div><!-- /collapse missionOverviewBody -->
         <!-- /Mission Overview -->
 
-    </div>
-    <!-- /col-lg-8 -->
-
-    <!-- ======================================================== -->
-    <!-- RIGHT PANEL: My Tasks                                    -->
-    <!-- ======================================================== -->
-    <div class="col-lg-4 col-md-12">
-        <div class="card shadow h-100">
-            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                <div class="d-flex align-items-center">
-                    <h6 class="m-0 font-weight-bold text-primary me-2">
-                        <i class="fas fa-user-check me-2"></i>My Tasks
-                    </h6>
-                    <span class="badge bg-secondary rounded-pill">{{ my_tasks_count }}</span>
-                </div>
-                <div class="d-flex align-items-center gap-2">
-                    <select id="taskSortSelect" class="form-select form-select-sm" style="width:auto; font-size:0.75rem;"
-                        onchange="changeSortOrder(this.value)">
-                        <option value="urgency" {% if my_tasks_sort_by == 'urgency' %}selected{% endif %}>🚨 Urgency</option>
-                        <option value="due_date" {% if my_tasks_sort_by == 'due_date' %}selected{% endif %}>📅 Due Date</option>
-                        <option value="priority" {% if my_tasks_sort_by == 'priority' %}selected{% endif %}>🔥 Priority</option>
-                        <option value="recent" {% if my_tasks_sort_by == 'recent' %}selected{% endif %}>🕒 Recent</option>
-                    </select>
-                </div>
-            </div>
-            <div class="card-body p-0" style="overflow-y:auto; max-height:600px;">
-                {% if my_tasks %}
-                <ul class="list-group list-group-flush">
-                    {% for task in my_tasks %}
-                    <li class="list-group-item px-3 py-2" style="list-style:none;">
-                        <div class="d-flex justify-content-between align-items-start mb-1">
-                            <span class="fw-semibold small">{{ task.title|truncatechars:50 }}</span>
-                            <span class="badge priority-{{ task.priority }} ms-1 flex-shrink-0">{{ task.priority|title }}</span>
-                        </div>
-                        <div class="text-muted" style="font-size:0.72rem;">
-                            <i class="fas fa-project-diagram me-1"></i>{{ task.column.board.name }}
-                            <span class="text-muted ms-1">/ {{ task.column.name }}</span>
-                        </div>
-                        {% if task.due_date %}
-                        <div style="font-size:0.72rem;" class="{% if task.due_date < now and task.progress < 100 %}text-danger{% else %}text-muted{% endif %}">
-                            <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
-                            {% if task.due_date < now and task.progress < 100 %}<span class="badge bg-danger ms-1" style="font-size:0.6rem;">Overdue</span>{% endif %}
-                        </div>
-                        {% endif %}
-                        <div class="d-flex align-items-center gap-2 mt-1">
-                            <div class="progress flex-grow-1" style="height:5px;">
-                                <div class="progress-bar {% if task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
-                                     role="progressbar" style="width:{{ task.progress }}%"></div>
-                            </div>
-                            <span style="font-size:0.68rem;" class="text-muted flex-shrink-0">{{ task.progress }}%</span>
-                            <a href="{% url 'task_detail' task.id %}" class="btn btn-xs btn-primary flex-shrink-0">View</a>
-                        </div>
-                    </li>
-                    {% endfor %}
-                </ul>
-                {% else %}
-                <div class="text-center py-4 px-3">
-                    <i class="fas fa-user-check fa-3x text-muted mb-3" style="opacity:0.25;"></i>
-                    <p class="fw-semibold text-muted mb-1" style="font-size:0.9rem;">No tasks assigned to you yet.</p>
-                    <p class="text-muted" style="font-size:0.78rem; line-height:1.5;">
-                        Open any board, click a task, and assign it to yourself — it will appear here.
-                    </p>
-                    <a href="{% url 'board_list' %}" class="btn btn-sm btn-outline-primary mt-1" style="font-size:0.78rem;">
-                        <i class="fas fa-clipboard-list me-1"></i>Browse Boards
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    <!-- /col-lg-4 -->
-
-</div>
-<!-- /Dashboard Main Layout row -->
-
 <!-- ============================================================ -->
 <!-- ZONE 3: PERFORMANCE ANALYTICS (collapsed by default)        -->
 <!-- ============================================================ -->
 <div class="card shadow-sm mb-4">
     <div class="card-header py-2 d-flex align-items-center justify-content-between"
          role="button" data-bs-toggle="collapse" data-bs-target="#analyticsZone3" aria-expanded="false">
-        <h6 class="m-0 text-muted text-uppercase fw-bold" style="font-size:0.72rem; letter-spacing:0.08em;">
-            <i class="fas fa-chart-bar me-2"></i>Performance Analytics
-        </h6>
+        <div>
+            <h6 class="m-0 text-muted text-uppercase fw-bold" style="font-size:0.72rem; letter-spacing:0.08em;">
+                <i class="fas fa-chart-bar me-2"></i>Performance Analytics
+            </h6>
+            <span class="text-muted d-block" style="font-size:0.65rem; margin-top:2px;">Add dates to tasks and log time to unlock insights</span>
+        </div>
         <div class="d-flex align-items-center gap-2">
             <span class="badge bg-light text-muted" style="font-size:0.68rem;">Click to expand</span>
             <i class="fas fa-chevron-down text-muted" style="font-size:0.7rem; transition:transform 0.2s;"></i>
@@ -1988,7 +1977,7 @@
                 <canvas id="strategyChart"></canvas>
                 {% else %}
                 <div class="d-flex align-items-center justify-content-center h-100 text-muted small">
-                    <div class="text-center"><i class="fas fa-chess-knight fa-2x mb-2 d-block" style="opacity:0.2;"></i>No strategy data yet.</div>
+                    <div class="text-center"><i class="fas fa-chess-knight fa-2x mb-2 d-block" style="opacity:0.2;"></i>No strategy data yet.<br><small>Create strategies under your missions to track progress.</small></div>
                 </div>
                 {% endif %}
             </div>
@@ -3745,9 +3734,18 @@
 
     }  // end initMetricsCharts
 
-    // Charts are now in permanent visible card containers — initialize on DOMContentLoaded
+    // Defer chart init until Performance Analytics is first expanded
+    var _chartsInitialised = false;
     document.addEventListener('DOMContentLoaded', function() {
-        initMetricsCharts();
+        var analyticsEl = document.getElementById('analyticsZone3');
+        if (analyticsEl) {
+            analyticsEl.addEventListener('shown.bs.collapse', function () {
+                if (!_chartsInitialised) {
+                    _chartsInitialised = true;
+                    initMetricsCharts();
+                }
+            });
+        }
 
         // Render board AI summary confidence bars
         document.querySelectorAll('.board-ai-confidence').forEach(function(el) {
@@ -3760,7 +3758,5 @@
             if (label) { label.textContent = pct + '%'; label.style.color = color; }
         });
     });
-    // Fallback if DOMContentLoaded already fired (script loaded late)
-    if (document.readyState !== 'loading') { initMetricsCharts(); }
 </script>
 {% endblock %}
