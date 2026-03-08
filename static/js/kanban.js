@@ -1066,15 +1066,17 @@ function hideDropZoneIndicators() {
 }
 
 function addScrollIndicators() {
-    // Add scroll indicators to the page
+    // Add scroll indicators to the page (hidden by default, shown during drag)
     const topIndicator = document.createElement('div');
     topIndicator.className = 'scroll-indicator top';
     topIndicator.innerHTML = '<i class="fas fa-chevron-up"></i> Scroll up';
+    topIndicator.style.display = 'none';
     document.body.appendChild(topIndicator);
     
     const bottomIndicator = document.createElement('div');
     bottomIndicator.className = 'scroll-indicator bottom';
     bottomIndicator.innerHTML = '<i class="fas fa-chevron-down"></i> Scroll down';
+    bottomIndicator.style.display = 'none';
     document.body.appendChild(bottomIndicator);
 }
 
