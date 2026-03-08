@@ -367,6 +367,24 @@ body {
     border-color: #007bff;
 }
 
+/* Page-level auto-scroll indicators (shown during drag only) */
+.scroll-indicator {
+    display: none;
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 123, 255, 0.9);
+    color: white;
+    padding: 8px 20px;
+    border-radius: 6px;
+    font-size: 13px;
+    z-index: 9999;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+.scroll-indicator.top { top: 10px; }
+.scroll-indicator.bottom { bottom: 10px; }
+
 /* Scroll indicators for columns */
 .scroll-indicator-top, .scroll-indicator-bottom {
     position: absolute;
