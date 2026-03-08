@@ -489,16 +489,28 @@ def suggest_lss_classification_api(request):
         estimated_hours = data.get('estimated_hours')
         hourly_rate = data.get('hourly_rate')
         
+        # Extract enhanced context fields for comprehensive LSS analysis
+        task_context = {
+            'priority': data.get('priority', ''),
+            'complexity_score': data.get('complexity_score'),
+            'dependencies_count': data.get('dependencies_count', 0),
+            'collaboration_required': data.get('collaboration_required', False),
+            'risk_level': data.get('risk_level', ''),
+            'risk_score': data.get('risk_score'),
+            'due_date': data.get('due_date', ''),
+        }
+        
         if not title:
             return JsonResponse({'error': 'Title is required'}, status=400)
             
-        # Call AI util function to suggest classification with budget data
+        # Call AI util function to suggest classification with budget data and context
         suggestion = suggest_lean_classification(
             title, 
             description,
             estimated_cost=estimated_cost,
             estimated_hours=estimated_hours,
-            hourly_rate=hourly_rate
+            hourly_rate=hourly_rate,
+            task_context=task_context
         )
         
         if not suggestion:
@@ -1221,6 +1233,19 @@ def suggest_task_priority_api(request):
                 due_date__gte=timezone.now(),
                 due_date__lte=timezone.now() + timedelta(days=7)
             ).count(),
+            # Enhanced context for comprehensive priority analysis
+            'complexity_score': data.get('complexity_score'),
+            'risk_score': data.get('risk_score'),
+            'risk_level': data.get('risk_level', ''),
+            'risk_likelihood': data.get('risk_likelihood', ''),
+            'risk_impact': data.get('risk_impact', ''),
+            'dependencies_count': data.get('dependencies_count', 0),
+            'has_dependencies': data.get('has_dependencies', False),
+            'collaboration_required': data.get('collaboration_required', False),
+            'workload_impact': data.get('workload_impact', ''),
+            'skill_match_score': data.get('skill_match_score'),
+            'start_date': data.get('start_date', ''),
+            'assigned_to': data.get('assigned_to', ''),
             'avg_task_cost': avg_task_cost,
             'total_board_budget': total_board_budget,
         }
@@ -2047,13 +2072,36 @@ def calculate_task_risk_api(request):
         priority = data.get('priority', 'medium')
         board_id = data.get('board_id')
         
+        # Extract enhanced context fields for comprehensive risk analysis
+        complexity_score = data.get('complexity_score')
+        due_date = data.get('due_date', '')
+        start_date = data.get('start_date', '')
+        assigned_to = data.get('assigned_to', '')
+        estimated_hours = data.get('estimated_hours')
+        estimated_cost = data.get('estimated_cost')
+        collaboration_required = data.get('collaboration_required', False)
+        dependencies_count = data.get('dependencies_count', 0)
+        skill_match_score = data.get('skill_match_score')
+        workload_impact = data.get('workload_impact', '')
+        
         if not title:
             return JsonResponse({'error': 'Title is required'}, status=400)
         
-        # If task_id provided, verify access
+        # If task_id provided, verify access and get richer context from DB
         if task_id:
             task = get_object_or_404(Task, id=task_id)
             board = task.column.board
+            # Use DB values as fallback when request data is missing
+            complexity_score = complexity_score if complexity_score is not None else task.complexity_score
+            if not due_date and task.due_date:
+                due_date = task.due_date.strftime('%Y-%m-%d')
+            if not assigned_to and task.assigned_to:
+                assigned_to = task.assigned_to.username
+            estimated_hours = estimated_hours if estimated_hours is not None else getattr(task, 'estimated_hours', None)
+            collaboration_required = collaboration_required or task.collaboration_required
+            dependencies_count = dependencies_count or task.dependencies.count()
+            skill_match_score = skill_match_score if skill_match_score is not None else task.skill_match_score
+            workload_impact = workload_impact or (task.workload_impact if task.workload_impact else '')
         elif board_id:
             board = get_object_or_404(Board, id=board_id)
         else:
@@ -2067,8 +2115,22 @@ def calculate_task_risk_api(request):
         # Get board context
         board_context = f"Board: {board.name}. Description: {board.description or 'N/A'}"
         
+        # Build enhanced task context for risk analysis
+        task_context = {
+            'complexity_score': complexity_score,
+            'due_date': due_date,
+            'start_date': start_date,
+            'assigned_to': assigned_to,
+            'estimated_hours': estimated_hours,
+            'estimated_cost': estimated_cost,
+            'collaboration_required': collaboration_required,
+            'dependencies_count': dependencies_count,
+            'skill_match_score': skill_match_score,
+            'workload_impact': workload_impact,
+        }
+        
         # Calculate risk score
-        risk_analysis = calculate_task_risk_score(title, description, priority, board_context)
+        risk_analysis = calculate_task_risk_score(title, description, priority, board_context, task_context=task_context)
         
         if not risk_analysis:
             response_time_ms = int((time.time() - start_time) * 1000)
@@ -4621,6 +4683,14 @@ def suggest_assignee_api(request):
             'current_assignee': (
                 task.assigned_to.get_full_name() or task.assigned_to.username
             ) if task.assigned_to else 'None (unassigned)',
+            'priority': getattr(task, 'priority', data.get('priority', 'medium')),
+            'due_date': task.due_date.strftime('%Y-%m-%d') if getattr(task, 'due_date', None) else data.get('due_date', ''),
+            'estimated_hours': getattr(task, 'estimated_hours', data.get('estimated_hours')),
+            'collaboration_required': getattr(task, 'collaboration_required', data.get('collaboration_required', False)),
+            'dependencies_count': task.dependencies.count() if task.pk and task.dependencies.exists() else data.get('dependencies_count', 0),
+            'risk_level': getattr(task, 'risk_level', data.get('risk_level', '')),
+            'risk_score': getattr(task, 'risk_score', data.get('risk_score')),
+            'skill_match_score': getattr(task, 'skill_match_score', data.get('skill_match_score')),
         }
         
         # Call AI for enhanced reasoning and explainability

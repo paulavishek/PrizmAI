@@ -400,6 +400,42 @@ function initAILssClassification() {
             requestData.hourly_rate = parseFloat(hourlyRateField.value);
         }
         
+        // Add enhanced context fields for comprehensive LSS analysis
+        const priorityField = document.getElementById('id_priority');
+        const complexityField = document.getElementById('id_complexity_score');
+        const dependenciesField = document.getElementById('id_dependencies');
+        const collaborationField = document.getElementById('id_collaboration_required');
+        const riskLevelField = document.getElementById('id_risk_level');
+        const riskLikelihoodField = document.getElementById('id_risk_likelihood');
+        const riskImpactField = document.getElementById('id_risk_impact');
+        const dueDateField = document.getElementById('id_due_date');
+        
+        if (priorityField && priorityField.value) {
+            requestData.priority = priorityField.value;
+        }
+        if (complexityField && complexityField.value) {
+            requestData.complexity_score = parseInt(complexityField.value);
+        }
+        if (dependenciesField) {
+            requestData.dependencies_count = Array.from(dependenciesField.selectedOptions).length;
+        }
+        if (collaborationField) {
+            requestData.collaboration_required = collaborationField.checked;
+        }
+        if (riskLevelField && riskLevelField.value) {
+            requestData.risk_level = riskLevelField.value;
+        }
+        if (riskLikelihoodField && riskLikelihoodField.value && riskImpactField && riskImpactField.value) {
+            const likelihoodMap = { low: 1, medium: 2, high: 3 };
+            const impactMap = { low: 1, medium: 2, high: 3 };
+            const lVal = likelihoodMap[riskLikelihoodField.value];
+            const iVal = impactMap[riskImpactField.value];
+            if (lVal && iVal) requestData.risk_score = lVal * iVal;
+        }
+        if (dueDateField && dueDateField.value) {
+            requestData.due_date = dueDateField.value;
+        }
+        
         // Make API call
         fetch('/api/suggest-lss-classification/', {
             method: 'POST',
@@ -3204,6 +3240,27 @@ function initAssigneeSuggestion() {
             }
         }
         
+        // Collect additional context for better AI recommendations
+        const priorityInput = document.getElementById('id_priority');
+        const dueDateInput = document.getElementById('id_due_date');
+        const estimatedHoursInput = document.getElementById('id_estimated_hours');
+        const collaborationInput = document.getElementById('id_collaboration_required');
+        const dependenciesInput = document.getElementById('id_dependencies');
+        const riskLevelInput = document.getElementById('id_risk_level');
+        const riskLikelihoodInput = document.getElementById('id_risk_likelihood');
+        const riskImpactInput = document.getElementById('id_risk_impact');
+        const skillMatchInput = document.getElementById('id_skill_match_score');
+        
+        // Compute risk score from likelihood × impact if available
+        let riskScore = null;
+        if (riskLikelihoodInput && riskImpactInput) {
+            const likelihood = parseInt(riskLikelihoodInput.value) || 0;
+            const impact = parseInt(riskImpactInput.value) || 0;
+            if (likelihood > 0 && impact > 0) {
+                riskScore = likelihood * impact;
+            }
+        }
+        
         const taskData = {
             title: titleInput.value.trim(),
             description: descriptionInput ? descriptionInput.value : '',
@@ -3211,7 +3268,15 @@ function initAssigneeSuggestion() {
             workload_impact: workloadInput ? workloadInput.value : 'medium',
             required_skills: requiredSkills,
             board_id: boardId,
-            task_id: taskId || null
+            task_id: taskId || null,
+            priority: priorityInput ? priorityInput.value : null,
+            due_date: dueDateInput ? dueDateInput.value : null,
+            estimated_hours: estimatedHoursInput ? (parseFloat(estimatedHoursInput.value) || null) : null,
+            collaboration_required: collaborationInput ? collaborationInput.checked : false,
+            dependencies_count: dependenciesInput ? dependenciesInput.selectedOptions.length : 0,
+            risk_level: riskLevelInput ? riskLevelInput.value : null,
+            risk_score: riskScore,
+            skill_match_score: skillMatchInput ? (parseInt(skillMatchInput.value) || null) : null
         };
         
         suggestAssignee(taskData, function(error, data) {

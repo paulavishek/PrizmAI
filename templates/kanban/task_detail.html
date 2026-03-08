@@ -467,147 +467,55 @@
                     <!-- ═══════ TAB 2: AI INSIGHTS ═══════ -->
                     <div class="tab-pane fade" id="tab-ai" role="tabpanel">
 
-                        <!-- AI Task Summary -->
-                        <div class="card border-primary mb-3">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <div>
-                                        <h6 class="mb-1"><i class="fas fa-robot text-primary me-1"></i> AI Task Analysis & Summary</h6>
-                                        <small class="text-muted">AI-generated comprehensive analysis of this task</small>
-                                    </div>
-                                    <button type="button" id="generate-task-summary-btn" class="btn btn-sm btn-outline-primary"
-                                            data-task-id="{{ task.id }}">
-                                        <i class="fas fa-brain me-1"></i> Generate Summary
-                                    </button>
-                                </div>
-                                <div id="task-summary-spinner" class="d-none text-center mt-2">
-                                    <div class="spinner-border spinner-border-sm text-primary" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <span class="ms-2 text-muted">Generating comprehensive summary...</span>
-                                </div>
-                                <div id="task-summary-result" class="mt-2">
-                                    {% if task.ai_summary %}
-                                    <div class="bg-light rounded p-3">
-                                        <div class="text-dark" style="white-space: pre-line;">{{ task.ai_summary }}</div>
-                                        {% if task.ai_summary_generated_at %}
-                                        <small class="text-muted d-block mt-2"><i class="fas fa-clock me-1"></i>Generated {{ task.ai_summary_generated_at|date:"M d, Y H:i" }}</small>
-                                        {% endif %}
-                                    </div>
-                                    {% else %}
-                                    <div class="text-muted text-center py-3">
-                                        <i class="fas fa-file-alt fa-2x mb-2 d-block"></i>
-                                        <small>No summary generated yet. Click "Generate Summary" to analyze this task.</small>
-                                    </div>
-                                    {% endif %}
+                        <!-- AI Insights Verification Note -->
+                        <div class="alert alert-light border-start border-4 border-primary mb-3" role="alert">
+                            <div class="d-flex align-items-start">
+                                <i class="fas fa-info-circle text-primary me-2 mt-1"></i>
+                                <div>
+                                    <strong class="d-block mb-1">Why do these AI insights overlap with your inputs?</strong>
+                                    <small class="text-muted">
+                                        AI Insights aren't just for generating suggestions — they also serve as a <strong>second opinion</strong> to verify your decisions.
+                                        When you assign a team member, set a priority, or choose a deadline, you may not always account for factors like assignee workload,
+                                        task complexity, skill gaps, or hidden dependencies. AI considers all the data you've provided across the Overview, Details, and
+                                        Relationships tabs to surface insights you might have missed — helping you confirm or reconsider your choices with confidence.
+                                    </small>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- AI Assignee Suggestion -->
-                        <div class="card border-info mb-3">
+                        <!-- 1. AI Task Complexity Analysis & Breakdown (first: produces complexity score used by other AI features) -->
+                        <div class="card border-success mb-3">
                             <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                <div class="d-flex justify-content-between align-items-center">
                                     <div>
-                                        <h6 class="mb-1"><i class="fas fa-user-cog text-info me-1"></i> AI Assignee Suggestion</h6>
-                                        <small class="text-muted">Find the best assignee based on skills, workload & performance</small>
+                                        <h6 class="mb-1"><i class="fas fa-sitemap text-success me-1"></i> AI Complexity Analysis</h6>
+                                        <small class="text-muted">Get AI suggestions for breaking complex tasks into manageable subtasks</small>
                                     </div>
-                                    <button type="button" id="suggest-assignee-btn" class="btn btn-sm btn-outline-info"
-                                            data-board-id="{{ board.id }}" data-task-id="{{ task.id }}"
-                                            title="AI-powered assignee suggestion based on skills, workload & performance">
-                                        <i class="fas fa-user-cog me-1"></i> AI Suggest
+                                    <button type="button" id="suggest-breakdown-btn" class="btn btn-sm btn-outline-success"
+                                            data-task-id="{{ task.id }}" title="AI-powered task breakdown suggestion">
+                                        <i class="fas fa-sitemap me-1"></i> Analyze & Break Down
                                     </button>
                                 </div>
-                                <div id="assignee-ai-spinner" class="d-none text-center mt-2">
-                                    <div class="spinner-border spinner-border-sm text-info" role="status">
-                                        <span class="visually-hidden">Analyzing team members...</span>
-                                    </div>
-                                    <span class="ms-2 text-muted"><i class="fas fa-brain me-1"></i>Analyzing team skills, workload & performance...</span>
-                                </div>
-                                <div id="assignee-suggestion-result" class="d-none mt-2"></div>
-                                {% if task.assigned_to %}
-                                <div class="p-2 bg-light rounded mt-2">
-                                    <small class="text-muted">Current Assignee: </small>
-                                    <strong>{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}</strong>
-                                </div>
-                                {% else %}
-                                <div class="text-muted text-center py-3">
-                                    <i class="fas fa-user fa-2x mb-2 d-block"></i>
-                                    <small>No assignee yet. Click "AI Suggest" to find the best match.</small>
+                                {% if task.complexity_score %}
+                                <div class="mt-2 p-2 bg-light rounded">
+                                    <small class="text-muted">Current Complexity: </small>
+                                    <strong>{{ task.complexity_score }}/10</strong>
+                                    <span class="badge ms-1 {% if task.complexity_score >= 8 %}bg-danger{% elif task.complexity_score >= 5 %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                                        {% if task.complexity_score >= 8 %}Very Complex{% elif task.complexity_score >= 5 %}Moderate{% else %}Simple{% endif %}
+                                    </span>
                                 </div>
                                 {% endif %}
-                            </div>
-                        </div>
-
-                        <!-- AI Deadline Prediction -->
-                        <div class="card border-info mb-3">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <div>
-                                        <h6 class="mb-1"><i class="fas fa-calendar-alt text-info me-1"></i> AI Deadline Prediction</h6>
-                                        <small class="text-muted">Predict optimal deadline based on task complexity & team performance</small>
-                                    </div>
-                                    <button type="button" id="predict-deadline-btn" class="btn btn-sm btn-outline-info"
-                                            data-board-id="{{ board.id }}" data-task-id="{{ task.id }}"
-                                            title="AI-powered deadline prediction">
-                                        <i class="fas fa-brain me-1"></i> Predict Deadline
-                                    </button>
-                                </div>
-                                <small id="predict-assignee-hint" class="form-text text-warning d-none">
-                                    <i class="fas fa-exclamation-circle me-1"></i>Please select an assignee on the Overview tab to enable AI prediction.
-                                </small>
-                                <div id="deadline-ai-spinner" class="d-none text-center mt-2">
-                                    <div class="spinner-border spinner-border-sm text-info" role="status">
+                                <div id="breakdown-ai-spinner" class="d-none text-center mt-2">
+                                    <div class="spinner-border spinner-border-sm text-success" role="status">
                                         <span class="visually-hidden">Loading...</span>
                                     </div>
-                                    <span class="ms-2 text-muted">Predicting optimal deadline...</span>
+                                    <span class="ms-2 text-muted">Analyzing task complexity...</span>
                                 </div>
-                                <div id="deadline-prediction-result" class="d-none mt-2"></div>
-                                {% if task.due_date %}
-                                <div class="p-2 bg-light rounded mt-2">
-                                    <small class="text-muted">Current Due Date: </small>
-                                    <strong>{{ task.due_date|date:"M d, Y" }}</strong>
-                                </div>
-                                {% else %}
-                                <div class="text-muted text-center py-3">
-                                    <i class="fas fa-calendar fa-2x mb-2 d-block"></i>
-                                    <small>No due date set. Click "Predict Deadline" for an AI suggestion.</small>
-                                </div>
-                                {% endif %}
+                                <div id="task-breakdown-result" class="d-none mt-2"></div>
                             </div>
                         </div>
 
-                        <!-- AI Priority Suggestion -->
-                        <div class="card border-warning mb-3">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <div>
-                                        <h6 class="mb-1"><i class="fas fa-flag text-warning me-1"></i> AI Priority Suggestion</h6>
-                                        <small class="text-muted">AI-analyzed optimal priority based on task context & board workload</small>
-                                    </div>
-                                    <button type="button" id="suggest-priority-btn" class="btn btn-sm btn-outline-warning"
-                                            data-board-id="{{ board.id }}" data-task-id="{{ task.id }}"
-                                            title="AI-powered priority suggestion">
-                                        <i class="fas fa-magic me-1"></i> Suggest Priority
-                                    </button>
-                                </div>
-                                <div id="priority-suggestion-container" class="mb-2"></div>
-                                <div id="priority-ai-spinner" class="d-none text-center mt-2">
-                                    <div class="spinner-border spinner-border-sm text-warning" role="status">
-                                        <span class="visually-hidden">Loading...</span>
-                                    </div>
-                                    <span class="ms-2 text-muted">Analyzing optimal priority...</span>
-                                </div>
-                                {% if task.priority %}
-                                <div class="p-2 bg-light rounded mt-2">
-                                    <small class="text-muted">Current Priority: </small>
-                                    <strong>{{ task.get_priority_display }}</strong>
-                                </div>
-                                {% endif %}
-                            </div>
-                        </div>
-
-                        <!-- AI Risk Assessment -->
+                        <!-- 2. AI Risk Assessment (second: produces risk score used by deadline & priority) -->
                         <div class="card border-warning mb-3">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -659,7 +567,7 @@
                             </div>
                         </div>
 
-                        <!-- AI LSS Classification -->
+                        <!-- 3. AI LSS Classification (third: classifies task value, informs priority) -->
                         <div class="card border-info mb-3">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -707,35 +615,143 @@
                             </div>
                         </div>
 
-                        <!-- AI Task Complexity Analysis & Breakdown -->
-                        <div class="card border-success mb-3">
+                        <!-- 4. AI Assignee Suggestion (fourth: uses complexity; needed for deadline) -->
+                        <div class="card border-info mb-3">
                             <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-center">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
                                     <div>
-                                        <h6 class="mb-1"><i class="fas fa-sitemap text-success me-1"></i> AI Complexity Analysis</h6>
-                                        <small class="text-muted">Get AI suggestions for breaking complex tasks into manageable subtasks</small>
+                                        <h6 class="mb-1"><i class="fas fa-user-cog text-info me-1"></i> AI Assignee Suggestion</h6>
+                                        <small class="text-muted">Find the best assignee based on skills, workload & performance</small>
                                     </div>
-                                    <button type="button" id="suggest-breakdown-btn" class="btn btn-sm btn-outline-success"
-                                            data-task-id="{{ task.id }}" title="AI-powered task breakdown suggestion">
-                                        <i class="fas fa-sitemap me-1"></i> Analyze & Break Down
+                                    <button type="button" id="suggest-assignee-btn" class="btn btn-sm btn-outline-info"
+                                            data-board-id="{{ board.id }}" data-task-id="{{ task.id }}"
+                                            title="AI-powered assignee suggestion based on skills, workload & performance">
+                                        <i class="fas fa-user-cog me-1"></i> AI Suggest
                                     </button>
                                 </div>
-                                {% if task.complexity_score %}
-                                <div class="mt-2 p-2 bg-light rounded">
-                                    <small class="text-muted">Current Complexity: </small>
-                                    <strong>{{ task.complexity_score }}/10</strong>
-                                    <span class="badge ms-1 {% if task.complexity_score >= 8 %}bg-danger{% elif task.complexity_score >= 5 %}bg-warning text-dark{% else %}bg-success{% endif %}">
-                                        {% if task.complexity_score >= 8 %}Very Complex{% elif task.complexity_score >= 5 %}Moderate{% else %}Simple{% endif %}
-                                    </span>
+                                <div id="assignee-ai-spinner" class="d-none text-center mt-2">
+                                    <div class="spinner-border spinner-border-sm text-info" role="status">
+                                        <span class="visually-hidden">Analyzing team members...</span>
+                                    </div>
+                                    <span class="ms-2 text-muted"><i class="fas fa-brain me-1"></i>Analyzing team skills, workload & performance...</span>
+                                </div>
+                                <div id="assignee-suggestion-result" class="d-none mt-2"></div>
+                                {% if task.assigned_to %}
+                                <div class="p-2 bg-light rounded mt-2">
+                                    <small class="text-muted">Current Assignee: </small>
+                                    <strong>{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}</strong>
+                                </div>
+                                {% else %}
+                                <div class="text-muted text-center py-3">
+                                    <i class="fas fa-user fa-2x mb-2 d-block"></i>
+                                    <small>No assignee yet. Click "AI Suggest" to find the best match.</small>
                                 </div>
                                 {% endif %}
-                                <div id="breakdown-ai-spinner" class="d-none text-center mt-2">
-                                    <div class="spinner-border spinner-border-sm text-success" role="status">
+                            </div>
+                        </div>
+
+                        <!-- 5. AI Priority Suggestion (fifth: uses complexity, risk, budget) -->
+                        <div class="card border-warning mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div>
+                                        <h6 class="mb-1"><i class="fas fa-flag text-warning me-1"></i> AI Priority Suggestion</h6>
+                                        <small class="text-muted">AI-analyzed optimal priority based on task context & board workload</small>
+                                    </div>
+                                    <button type="button" id="suggest-priority-btn" class="btn btn-sm btn-outline-warning"
+                                            data-board-id="{{ board.id }}" data-task-id="{{ task.id }}"
+                                            title="AI-powered priority suggestion">
+                                        <i class="fas fa-magic me-1"></i> Suggest Priority
+                                    </button>
+                                </div>
+                                <div id="priority-suggestion-container" class="mb-2"></div>
+                                <div id="priority-ai-spinner" class="d-none text-center mt-2">
+                                    <div class="spinner-border spinner-border-sm text-warning" role="status">
                                         <span class="visually-hidden">Loading...</span>
                                     </div>
-                                    <span class="ms-2 text-muted">Analyzing task complexity...</span>
+                                    <span class="ms-2 text-muted">Analyzing optimal priority...</span>
                                 </div>
-                                <div id="task-breakdown-result" class="d-none mt-2"></div>
+                                {% if task.priority %}
+                                <div class="p-2 bg-light rounded mt-2">
+                                    <small class="text-muted">Current Priority: </small>
+                                    <strong>{{ task.get_priority_display }}</strong>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- 6. AI Deadline Prediction (sixth: requires assignee + complexity from above) -->
+                        <div class="card border-info mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div>
+                                        <h6 class="mb-1"><i class="fas fa-calendar-alt text-info me-1"></i> AI Deadline Prediction</h6>
+                                        <small class="text-muted">Predict optimal deadline based on task complexity & team performance</small>
+                                    </div>
+                                    <button type="button" id="predict-deadline-btn" class="btn btn-sm btn-outline-info"
+                                            data-board-id="{{ board.id }}" data-task-id="{{ task.id }}"
+                                            title="AI-powered deadline prediction">
+                                        <i class="fas fa-brain me-1"></i> Predict Deadline
+                                    </button>
+                                </div>
+                                <small id="predict-assignee-hint" class="form-text text-warning d-none">
+                                    <i class="fas fa-exclamation-circle me-1"></i>Please select an assignee on the Overview tab to enable AI prediction.
+                                </small>
+                                <div id="deadline-ai-spinner" class="d-none text-center mt-2">
+                                    <div class="spinner-border spinner-border-sm text-info" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <span class="ms-2 text-muted">Predicting optimal deadline...</span>
+                                </div>
+                                <div id="deadline-prediction-result" class="d-none mt-2"></div>
+                                {% if task.due_date %}
+                                <div class="p-2 bg-light rounded mt-2">
+                                    <small class="text-muted">Current Due Date: </small>
+                                    <strong>{{ task.due_date|date:"M d, Y" }}</strong>
+                                </div>
+                                {% else %}
+                                <div class="text-muted text-center py-3">
+                                    <i class="fas fa-calendar fa-2x mb-2 d-block"></i>
+                                    <small>No due date set. Click "Predict Deadline" for an AI suggestion.</small>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <!-- 7. AI Task Summary (last: synthesizes all task data and prior AI insights) -->
+                        <div class="card border-primary mb-3">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div>
+                                        <h6 class="mb-1"><i class="fas fa-robot text-primary me-1"></i> AI Task Analysis & Summary</h6>
+                                        <small class="text-muted">AI-generated comprehensive analysis of this task</small>
+                                    </div>
+                                    <button type="button" id="generate-task-summary-btn" class="btn btn-sm btn-outline-primary"
+                                            data-task-id="{{ task.id }}">
+                                        <i class="fas fa-brain me-1"></i> Generate Summary
+                                    </button>
+                                </div>
+                                <div id="task-summary-spinner" class="d-none text-center mt-2">
+                                    <div class="spinner-border spinner-border-sm text-primary" role="status">
+                                        <span class="visually-hidden">Loading...</span>
+                                    </div>
+                                    <span class="ms-2 text-muted">Generating comprehensive summary...</span>
+                                </div>
+                                <div id="task-summary-result" class="mt-2">
+                                    {% if task.ai_summary %}
+                                    <div class="bg-light rounded p-3">
+                                        <div class="text-dark" style="white-space: pre-line;">{{ task.ai_summary }}</div>
+                                        {% if task.ai_summary_generated_at %}
+                                        <small class="text-muted d-block mt-2"><i class="fas fa-clock me-1"></i>Generated {{ task.ai_summary_generated_at|date:"M d, Y H:i" }}</small>
+                                        {% endif %}
+                                    </div>
+                                    {% else %}
+                                    <div class="text-muted text-center py-3">
+                                        <i class="fas fa-file-alt fa-2x mb-2 d-block"></i>
+                                        <small>No summary generated yet. Click "Generate Summary" to analyze this task.</small>
+                                    </div>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
                     </div><!-- /tab-ai -->
@@ -3009,7 +3025,17 @@
                 title: '{{ task.title|escapejs }}',
                 description: '{{ task.description|escapejs }}',
                 priority: '{{ task.priority }}',
-                board_id: {{ task.column.board.id }}
+                board_id: {{ task.column.board.id }},
+                complexity_score: {{ task.complexity_score|default:"null" }},
+                due_date: '{{ task.due_date|date:"Y-m-d"|default:"" }}',
+                start_date: '{{ task.start_date|date:"Y-m-d"|default:"" }}',
+                assigned_to: '{{ task.assigned_to.username|default:"" }}',
+                estimated_hours: {{ task.estimated_hours|default:"null" }},
+                estimated_cost: {{ task.estimated_cost|default:"null" }},
+                collaboration_required: {{ task.collaboration_required|yesno:"true,false" }},
+                dependencies_count: {{ task.dependencies.count }},
+                skill_match_score: {{ task.skill_match_score|default:"null" }},
+                workload_impact: '{{ task.workload_impact|default:"" }}'
             })
         })
         .then(response => response.json())
@@ -3051,7 +3077,17 @@
                 title: '{{ task.title|escapejs }}',
                 description: '{{ task.description|escapejs }}',
                 priority: '{{ task.priority }}',
-                board_id: {{ task.column.board.id }}
+                board_id: {{ task.column.board.id }},
+                complexity_score: {{ task.complexity_score|default:"null" }},
+                due_date: '{{ task.due_date|date:"Y-m-d"|default:"" }}',
+                start_date: '{{ task.start_date|date:"Y-m-d"|default:"" }}',
+                assigned_to: '{{ task.assigned_to.username|default:"" }}',
+                estimated_hours: {{ task.estimated_hours|default:"null" }},
+                estimated_cost: {{ task.estimated_cost|default:"null" }},
+                collaboration_required: {{ task.collaboration_required|yesno:"true,false" }},
+                dependencies_count: {{ task.dependencies.count }},
+                skill_match_score: {{ task.skill_match_score|default:"null" }},
+                workload_impact: '{{ task.workload_impact|default:"" }}'
             })
         })
         .then(response => response.json())
