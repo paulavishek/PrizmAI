@@ -316,13 +316,11 @@ function initColumnOrdering() {
             }
         });
         
-        // Start collapsed if many columns
-        if (columnCount > 6) {
-            columnOrderingContent.classList.add('d-none');
-            toggleIcon.classList.remove('fa-chevron-up');
-            toggleIcon.classList.add('fa-chevron-down');
-            document.getElementById('column-ordering-panel').classList.add('collapsed');
-        }
+        // Always start collapsed by default
+        columnOrderingContent.classList.add('d-none');
+        toggleIcon.classList.remove('fa-chevron-up');
+        toggleIcon.classList.add('fa-chevron-down');
+        document.getElementById('column-ordering-panel').classList.add('collapsed');
     }
     
     // Keyboard shortcut: Alt+R to focus first input
