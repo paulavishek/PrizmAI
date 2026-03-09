@@ -543,6 +543,37 @@ body {
     font-size: 0.65rem;
 }
 
+/* ── Required-Skills Chip UI ─────────────────────────────────────────── */
+.skill-chip {
+    background-color: #0d6efd;
+    color: #fff;
+    font-size: 0.72rem;
+    padding: 3px 9px 3px 10px;
+    border-radius: 20px;
+    line-height: 1.4;
+    gap: 4px;
+}
+
+.skill-chip .skill-chip-sep {
+    opacity: 0.65;
+    font-size: 0.65rem;
+}
+
+.skill-chip-remove {
+    background: none;
+    border: none;
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 0 0 0 2px;
+    cursor: pointer;
+    transition: color 0.15s;
+}
+
+.skill-chip-remove:hover {
+    color: #fff;
+}
+
 .task-due-date {
     color: #6c757d;
 }
