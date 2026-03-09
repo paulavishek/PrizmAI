@@ -3665,11 +3665,11 @@
         function buildGauge(canvasId, valueTextId, subTextId, value, label) {
             var canvas = document.getElementById(canvasId);
             if (!canvas) return;
-            // Range 0–2.0: midpoint 1.0 fills exactly 50% of arc; <0.5 is severely off
-            var MAX_GAUGE = 2.0;
+            // Scale: 1.0 = 100% arc fill (on schedule / on budget). Values > 1.0 are capped at 100%.
+            var MAX_GAUGE = 1.0;
             var capped = Math.min(Math.max(value, 0), MAX_GAUGE);
             var remaining = Math.max(0, MAX_GAUGE - capped);
-            var color = capped >= 1.0 ? 'rgba(28,200,138,0.85)' : capped >= 0.8 ? 'rgba(245,158,11,0.85)' : 'rgba(231,74,59,0.85)';
+            var color = value >= 1.0 ? 'rgba(28,200,138,0.85)' : value >= 0.8 ? 'rgba(245,158,11,0.85)' : 'rgba(231,74,59,0.85)';
             new Chart(canvas, {
                 type: 'doughnut',
                 data: {
@@ -3705,7 +3705,8 @@
             if (avgSpi > 0) {
                 buildGauge('spiGauge', 'spi-gauge-val', 'spi-gauge-sub', avgSpi, spiLabel);
                 var spiEmpty = document.getElementById('spi-empty-state');
-                if (spiEmpty) spiEmpty.style.display = 'none';
+                // Use classList so Bootstrap's d-flex !important is properly overridden
+                if (spiEmpty) { spiEmpty.classList.remove('d-flex'); spiEmpty.classList.add('d-none'); }
             } else {
                 var spiCanvas = document.getElementById('spiGauge');
                 if (spiCanvas) spiCanvas.style.display = 'none';
@@ -3715,7 +3716,8 @@
             if (avgCpi > 0) {
                 buildGauge('cpiGauge', 'cpi-gauge-val', 'cpi-gauge-sub', avgCpi, cpiLabel);
                 var cpiEmpty = document.getElementById('cpi-empty-state');
-                if (cpiEmpty) cpiEmpty.style.display = 'none';
+                // Use classList so Bootstrap's d-flex !important is properly overridden
+                if (cpiEmpty) { cpiEmpty.classList.remove('d-flex'); cpiEmpty.classList.add('d-none'); }
             } else {
                 var cpiCanvas = document.getElementById('cpiGauge');
                 if (cpiCanvas) cpiCanvas.style.display = 'none';
