@@ -525,6 +525,29 @@ def suggest_lss_classification_api(request):
             )
             return JsonResponse({'error': 'Failed to suggest classification'}, status=500)
         
+        # Keyword-based safety override: tasks involving testing, security, compliance,
+        # documentation, review, or audit must NEVER be classified as Waste/Eliminate.
+        if suggestion.get('classification') == 'Waste/Eliminate':
+            necessary_nva_keywords = [
+                'test', 'testing', 'security', 'compliance', 'documentation', 'review',
+                'audit', 'qa', 'quality assurance', 'quality', 'assurance',
+                'verification', 'validation', 'inspection', 'certification',
+                'legal', 'regulatory', 'regulation', 'policy', 'standard',
+                'accessibility', 'performance', 'monitoring', 'reporting'
+            ]
+            combined_text = (title + ' ' + description).lower()
+            matching_keywords = [kw for kw in necessary_nva_keywords if kw in combined_text]
+            if matching_keywords:
+                suggestion['classification'] = 'Necessary Non-Value-Added'
+                suggestion['justification'] = (
+                    f"This task involves {matching_keywords[0]}-related activities, which are "
+                    f"required quality process steps (Necessary NVA). Only genuinely redundant "
+                    f"or avoidable tasks qualify as Waste/Eliminate."
+                )
+                suggestion['confidence_score'] = 0.88
+                suggestion['confidence_level'] = 'high'
+                suggestion['lean_waste_type'] = None
+
         # Track successful request
         response_time_ms = int((time.time() - start_time) * 1000)
         track_ai_request(

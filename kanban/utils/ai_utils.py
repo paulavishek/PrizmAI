@@ -589,7 +589,9 @@ def suggest_lean_classification(title: str, description: str, estimated_cost: fl
         
         prompt = f"""Analyze this task for Lean Six Sigma classification. Task: "{title}". Description: "{description or 'None'}".{budget_context}{enhanced_context}
 
-Classifications: Value-Added (transforms product/service for customer), Necessary Non-Value-Added (required but not customer-valued), Waste/Eliminate (no value, should remove).
+Classifications: Value-Added (directly transforms the product/service and delivers customer value), Necessary Non-Value-Added (required process step that supports quality or compliance but does not directly deliver customer value), Waste/Eliminate (genuinely redundant, duplicated, or avoidable work that should be removed).
+
+CRITICAL CLASSIFICATION RULE: Tasks that involve testing, security, quality assurance, compliance, documentation, code review, audit, validation, verification, certification, legal/regulatory requirements, or any form of mandatory oversight MUST be classified as "Necessary Non-Value-Added". These are essential process steps. Only classify a task as "Waste/Eliminate" when it is provably redundant, duplicated effort, or a process step that can be eliminated without any loss of quality, value, or compliance.
 
 Return ONLY valid JSON with NO line breaks inside strings:
 {{"classification":"Value-Added|Necessary Non-Value-Added|Waste/Eliminate","justification":"Brief reason in one sentence","confidence_score":0.XX,"confidence_level":"high|medium|low","contributing_factors":[{{"factor":"Factor1","contribution_percentage":XX,"description":"Brief desc"}}],"classification_reasoning":{{"value_added_indicators":["indicator1"],"non_value_indicators":["indicator1"],"primary_driver":"Main reason"}},"alternative_classification":{{"classification":"Alternative","confidence_score":0.XX,"conditions":"When applies"}},"assumptions":["assumption1"],"improvement_suggestions":["suggestion1"],"lean_waste_type":null,"data_quality":"high|medium|low"}}"""

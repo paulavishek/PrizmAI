@@ -1950,7 +1950,9 @@
         }
 
         // Budget/Cost calculation preview
-        function updateLaborCostPreview() {
+        // autoFillCost: when true, overwrites the cost input with hours x rate.
+        // Set to false on initial load so the stored DB value is preserved.
+        function updateLaborCostPreview(autoFillCost) {
             const hoursInput = document.getElementById('id_estimated_hours');
             const rateInput = document.getElementById('id_hourly_rate');
             const costInput = document.getElementById('id_estimated_cost');
@@ -1965,8 +1967,9 @@
                     maximumFractionDigits: 2
                 });
                 
-                // Auto-fill the Estimated Cost field with the calculated labor cost
-                if (costInput && laborCost > 0) {
+                // Only auto-fill the Estimated Cost field when the user actively changes
+                // hours or rate — never overwrite on initial page load (preserves DB value).
+                if (autoFillCost && costInput && laborCost > 0) {
                     costInput.value = laborCost.toFixed(2);
                 }
             }
@@ -1977,14 +1980,14 @@
         const rateInput = document.getElementById('id_hourly_rate');
         
         if (hoursInput) {
-            hoursInput.addEventListener('input', updateLaborCostPreview);
+            hoursInput.addEventListener('input', function() { updateLaborCostPreview(true); });
         }
         if (rateInput) {
-            rateInput.addEventListener('input', updateLaborCostPreview);
+            rateInput.addEventListener('input', function() { updateLaborCostPreview(true); });
         }
         
-        // Initial calculation
-        updateLaborCostPreview();
+        // Initial calculation — preview only, do NOT overwrite the stored estimated cost
+        updateLaborCostPreview(false);
         
         // Set up increase progress buttons
         document.querySelectorAll('.increase-progress').forEach(btn => {
