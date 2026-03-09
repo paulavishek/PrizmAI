@@ -440,13 +440,39 @@
                         
                         <hr>
                         
-                        <!-- Required Skills (JSON) -->
+                        <!-- Required Skills (Chip UI) -->
                         <div class="mb-3">
-                            <label for="{{ form.required_skills.id_for_label }}" class="form-label">
-                                <i class="fas fa-tools me-1"></i> Required Skills (Advanced)
+                            <label class="form-label fw-semibold">
+                                <i class="fas fa-tools me-1"></i> Required Skills
                             </label>
-                            {{ form.required_skills }}
-                            <small class="form-text text-muted">{{ form.required_skills.help_text }}</small>
+                            {# Hidden textarea — keeps JSON value for form submission #}
+                            <div class="d-none">{{ form.required_skills }}</div>
+                            {# Chip display area #}
+                            <div id="skills-chip-container"
+                                 class="d-flex flex-wrap gap-1 p-2 border rounded bg-light mb-2"
+                                 style="min-height: 42px;">
+                            </div>
+                            {# Inline add form #}
+                            <div class="d-flex gap-2 align-items-center flex-wrap">
+                                <input type="text" id="skill-name-input"
+                                       class="form-control form-control-sm"
+                                       placeholder="Skill name"
+                                       style="max-width: 180px;" autocomplete="off">
+                                <select id="skill-level-select" class="form-select form-select-sm" style="max-width: 150px;">
+                                    <option value="">-- Level --</option>
+                                    <option value="Beginner">Beginner</option>
+                                    <option value="Intermediate">Intermediate</option>
+                                    <option value="Advanced">Advanced</option>
+                                    <option value="Expert">Expert</option>
+                                </select>
+                                <button type="button" id="add-skill-btn" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-plus me-1"></i> Add
+                                </button>
+                            </div>
+                            <small class="form-text text-muted mt-1 d-block">Add the skills required for this task. Click &times; on a chip to remove it.</small>
+                            {% if form.required_skills.errors %}
+                                <div class="invalid-feedback d-block">{{ form.required_skills.errors }}</div>
+                            {% endif %}
                         </div>
 
                         <!-- Phase Selection -->
@@ -1418,9 +1444,11 @@
                         <div class="mb-2">
                             <small class="text-muted">Required Skills:</small>
                             {% if task.required_skills %}
-                            <div>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
                                 {% for skill in task.required_skills %}
-                                <span class="badge bg-warning me-1 mt-1">{{ skill.name }} ({{ skill.level }})</span>
+                                <span class="skill-chip badge d-inline-flex align-items-center">
+                                    {{ skill.name }}{% if skill.level %} <span class="skill-chip-sep mx-1">•</span> {{ skill.level }}{% endif %}
+                                </span>
                                 {% endfor %}
                             </div>
                             {% else %}
@@ -3881,5 +3909,108 @@
             console.error('PrioritySuggestionWidget init error:', e);
         }
     });
+</script>
+
+<script>
+// ═══════════════════════════════════════════════════
+// Required Skills — Chip/Tag Input UI
+// ═══════════════════════════════════════════════════
+(function () {
+    'use strict';
+
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = String(text);
+        return div.innerHTML;
+    }
+
+    function getSkills(textarea) {
+        try {
+            var val = textarea.value.trim();
+            if (!val) return [];
+            var parsed = JSON.parse(val);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function saveSkills(textarea, skills) {
+        textarea.value = JSON.stringify(skills);
+    }
+
+    function renderChips(textarea, container) {
+        container.innerHTML = '';
+        var skills = getSkills(textarea);
+        if (skills.length === 0) {
+            container.innerHTML = '<span class="text-muted small fst-italic">No skills added yet.</span>';
+            return;
+        }
+        skills.forEach(function (skill, idx) {
+            var name  = (typeof skill === 'object' && skill !== null) ? (skill.name  || '') : String(skill);
+            var level = (typeof skill === 'object' && skill !== null) ? (skill.level || '') : '';
+            var chip = document.createElement('span');
+            chip.className = 'skill-chip badge d-inline-flex align-items-center gap-1';
+            chip.innerHTML =
+                '<span>' + escapeHtml(name) +
+                (level ? ' <span class="skill-chip-sep">\u2022</span> ' + escapeHtml(level) : '') +
+                '</span>' +
+                '<button type="button" class="skill-chip-remove" data-idx="' + idx + '" ' +
+                        'aria-label="Remove ' + escapeHtml(name) + '">' +
+                    '&times;' +
+                '</button>';
+            container.appendChild(chip);
+        });
+
+        container.querySelectorAll('.skill-chip-remove').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var i = parseInt(this.getAttribute('data-idx'), 10);
+                var skills = getSkills(textarea);
+                skills.splice(i, 1);
+                saveSkills(textarea, skills);
+                renderChips(textarea, container);
+            });
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        var textarea   = document.getElementById('id_required_skills');
+        var container  = document.getElementById('skills-chip-container');
+        var nameInput  = document.getElementById('skill-name-input');
+        var levelSelect = document.getElementById('skill-level-select');
+        var addBtn     = document.getElementById('add-skill-btn');
+
+        if (!textarea || !container) return;
+
+        // Initial render from existing saved JSON
+        renderChips(textarea, container);
+
+        if (!addBtn) return;
+
+        function doAddSkill() {
+            var name  = nameInput.value.trim();
+            var level = levelSelect.value;
+            if (!name) {
+                nameInput.classList.add('is-invalid');
+                nameInput.focus();
+                return;
+            }
+            nameInput.classList.remove('is-invalid');
+            var skills = getSkills(textarea);
+            skills.push({ name: name, level: level || 'Intermediate' });
+            saveSkills(textarea, skills);
+            renderChips(textarea, container);
+            nameInput.value  = '';
+            levelSelect.value = '';
+            nameInput.focus();
+        }
+
+        addBtn.addEventListener('click', doAddSkill);
+
+        nameInput.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); doAddSkill(); }
+        });
+    });
+}());
 </script>
 {% endblock %}
