@@ -950,9 +950,6 @@
             </span>
         </div>
         <div class="d-flex gap-2 flex-shrink-0">
-            <a href="{% url 'onboarding_welcome' %}" class="btn btn-sm btn-primary">
-                <i class="fas fa-rocket me-1"></i>Set up my workspace
-            </a>
             <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-sm btn-outline-dark">
