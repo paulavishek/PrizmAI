@@ -27,12 +27,14 @@ def _get_settings(user):
     return obj
 
 
-def _widget_cache_key(user_id):
-    return f"dc_widget_{user_id}"
+def _widget_cache_key(user_id, demo_mode=False):
+    mode = 'demo' if demo_mode else 'real'
+    return f"dc_widget_{user_id}_{mode}"
 
 
 def _invalidate_widget_cache(user_id):
-    cache.delete(_widget_cache_key(user_id))
+    cache.delete(_widget_cache_key(user_id, demo_mode=False))
+    cache.delete(_widget_cache_key(user_id, demo_mode=True))
 
 
 def _get_item_or_404(user, item_id):
@@ -56,7 +58,25 @@ def decision_center_view(request):
     user = request.user
     settings_obj = _get_settings(user)
 
+    # Respect the user's current viewing mode — only show items relevant to
+    # their active workspace (demo boards vs real boards)
+    try:
+        is_demo_mode = getattr(user.profile, 'is_viewing_demo', False)
+    except Exception:
+        is_demo_mode = False
+    is_demo_account = '_demo' in user.username
+
     pending = DecisionItem.objects.filter(created_for=user, status='pending')
+    if is_demo_mode or is_demo_account:
+        pending = pending.filter(board__is_official_demo_board=True)
+    else:
+        pending = pending.filter(
+            board__is_official_demo_board=False
+        ) | DecisionItem.objects.filter(
+            created_for=user, status='pending', board__isnull=True
+        )
+        pending = pending.distinct()
+
     action_required = list(pending.filter(priority_level='action_required'))
     awareness = list(pending.filter(priority_level='awareness'))
     quick_wins = list(pending.filter(priority_level='quick_win'))
@@ -108,12 +128,28 @@ def decision_center_view(request):
 def decision_center_widget_data(request):
     """Lightweight JSON for the dashboard widget card."""
     user = request.user
-    cache_key = _widget_cache_key(user.id)
+    try:
+        is_demo_mode = getattr(user.profile, 'is_viewing_demo', False)
+    except Exception:
+        is_demo_mode = False
+    is_demo_account = '_demo' in user.username
+    effective_demo = is_demo_mode or is_demo_account
+
+    cache_key = _widget_cache_key(user.id, demo_mode=effective_demo)
     data = cache.get(cache_key)
     if data is not None:
         return JsonResponse(data)
 
     pending = DecisionItem.objects.filter(created_for=user, status='pending')
+    if effective_demo:
+        pending = pending.filter(board__is_official_demo_board=True)
+    else:
+        pending = (
+            pending.filter(board__is_official_demo_board=False)
+            | DecisionItem.objects.filter(
+                created_for=user, status='pending', board__isnull=True
+            )
+        ).distinct()
     counts = {
         'action_required_count': pending.filter(
             priority_level='action_required',

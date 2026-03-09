@@ -36,6 +36,14 @@ def quick_demo_login(request, username):
         # Restore the real username into the new session so we can switch back
         if real_username:
             request.session['real_user_username'] = real_username
+        # Ensure demo user's profile has is_viewing_demo=True so demo boards appear
+        try:
+            profile = user.profile
+            if not profile.is_viewing_demo:
+                profile.is_viewing_demo = True
+                profile.save(update_fields=['is_viewing_demo'])
+        except Exception:
+            pass
         messages.success(request, f'Logged in as {user.get_full_name() or user.username}!')
         logger.info(f"Quick demo login successful for user: {username}")
         return redirect('dashboard')
@@ -69,6 +77,14 @@ def return_to_real_account(request):
     login(request, real_user)
     # Clear the real_user flag now that we're back
     request.session.pop('real_user_username', None)
+    # Restore demo mode view for the real user (they were in demo before switching)
+    try:
+        profile = real_user.profile
+        if not profile.is_viewing_demo:
+            profile.is_viewing_demo = True
+            profile.save(update_fields=['is_viewing_demo'])
+    except Exception:
+        pass
     messages.success(request, f'Welcome back, {real_user.get_full_name() or real_user.username}!')
     logger.info(f"Returned to real account: {real_username}")
     return redirect('dashboard')

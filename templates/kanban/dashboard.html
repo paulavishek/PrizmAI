@@ -965,12 +965,44 @@
 {% endif %}
 
 {% if demo_mode %}
-<div class="d-flex align-items-center justify-content-end gap-2 mb-2">
-    <span class="badge bg-warning text-dark" style="font-size:0.72rem;"><i class="fas fa-eye me-1"></i>DEMO MODE</span>
+<!-- ═══ WORKSPACE MODE SWITCHER (Demo active) ═══ -->
+<div class="d-flex align-items-center gap-2 mb-3 p-2 rounded" style="background:#fffbeb;border:1px solid #fde68a;">
+    <span class="fw-semibold text-warning-emphasis" style="font-size:0.8rem;">
+        <i class="fas fa-map-signs me-1 text-warning"></i>You are in:
+    </span>
+    <span class="btn btn-sm btn-warning fw-bold" style="cursor:default;pointer-events:none;" title="Currently active">
+        <i class="fas fa-eye me-1"></i>Demo&nbsp;Workspace
+    </span>
+    <span class="text-muted" style="font-size:0.75rem;">|</span>
     <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
         {% csrf_token %}
-        <button type="submit" class="btn btn-sm btn-outline-warning"><i class="fas fa-briefcase me-1"></i>My Workspace</button>
+        <button type="submit" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-briefcase me-1"></i>My Workspace
+        </button>
     </form>
+    <a href="{% url 'onboarding_welcome' %}" class="btn btn-sm btn-outline-primary">
+        <i class="fas fa-rocket me-1"></i>Set up my workspace
+    </a>
+</div>
+{% else %}
+<!-- ═══ WORKSPACE MODE SWITCHER (My Workspace active) ═══ -->
+<div class="d-flex align-items-center gap-2 mb-3 p-2 rounded" style="background:#eff6ff;border:1px solid #bfdbfe;">
+    <span class="fw-semibold text-primary-emphasis" style="font-size:0.8rem;">
+        <i class="fas fa-map-signs me-1 text-primary"></i>You are in:
+    </span>
+    <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline-warning">
+            <i class="fas fa-eye me-1"></i>Demo Workspace
+        </button>
+    </form>
+    <span class="text-muted" style="font-size:0.75rem;">|</span>
+    <span class="btn btn-sm btn-primary fw-bold" style="cursor:default;pointer-events:none;" title="Currently active">
+        <i class="fas fa-briefcase me-1"></i>My&nbsp;Workspace
+    </span>
+    <a href="{% url 'onboarding_welcome' %}" class="btn btn-sm btn-outline-primary">
+        <i class="fas fa-rocket me-1"></i>Set up with AI
+    </a>
 </div>
 {% endif %}
 
