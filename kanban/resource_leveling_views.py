@@ -221,6 +221,14 @@ def get_board_suggestions(request, board_id):
         # Initialize service
         service = ResourceLevelingService()
         
+        # Check if there are enough qualified candidates on this board
+        # to produce meaningful suggestions
+        qualified_count = 0
+        for member in board.members.all():
+            profile = service.get_or_create_profile(member)
+            if service._is_qualified_candidate(profile):
+                qualified_count += 1
+        
         # Get suggestions
         suggestions = service.get_board_optimization_suggestions(board, limit=20, requesting_user=request.user)
         
@@ -248,10 +256,14 @@ def get_board_suggestions(request, board_id):
             })
             total_savings += s.time_savings_hours
         
+        # If no suggestions and insufficient qualified members, tell the UI why
+        insufficient_data = (len(suggestion_list) == 0 and qualified_count < 2)
+        
         return JsonResponse({
             'suggestions': suggestion_list,
             'total_suggestions': len(suggestion_list),
-            'total_potential_savings_hours': round(total_savings, 1)
+            'total_potential_savings_hours': round(total_savings, 1),
+            'insufficient_team_data': insufficient_data
         })
         
     except Board.DoesNotExist:
