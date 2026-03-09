@@ -27,6 +27,23 @@ class ResourceLevelingService:
         # Organization is optional - simplified mode doesn't require it
         self.organization = organization
     
+    def _is_qualified_candidate(self, profile):
+        """
+        Check if a user has enough data to be a valid reassignment candidate.
+        
+        A user must have at least ONE of:
+        - 1+ completed tasks (demonstrates velocity/history)
+        - 1+ skill keywords configured (enables skill matching)
+        - 1+ hours logged in current workload (actively working)
+        
+        Users with zero history provide no basis for velocity or skill-match
+        calculations and should not receive AI-generated reassignment suggestions.
+        """
+        has_completed_tasks = profile.total_tasks_completed > 0
+        has_skills = bool(profile.skill_keywords)
+        has_logged_hours = profile.current_workload_hours > 0
+        return has_completed_tasks or has_skills or has_logged_hours
+    
     def get_or_create_profile(self, user):
         """
         Get or create performance profile for user
@@ -53,7 +70,53 @@ class ResourceLevelingService:
         # Always refresh current workload to ensure real-time accuracy
         profile.update_current_workload()
         
+        # Merge user's declared profile skills into AI skill_keywords so the
+        # resource optimizer can use them for skill matching and qualification.
+        # Declared skills get a weight of 5 (moderate confidence) so they
+        # contribute meaningfully but don't overwhelm task-history-derived skills.
+        self._sync_profile_skills(user, profile)
+        
         return profile
+    
+    def _sync_profile_skills(self, user, performance_profile):
+        """
+        Merge user-declared skills from UserProfile into the AI's skill_keywords.
+        This bridges the gap between the profile page skills and the AI engine.
+        """
+        try:
+            user_profile = user.profile  # accounts.UserProfile via OneToOneField
+        except Exception:
+            return  # No UserProfile exists
+        
+        declared_skills = getattr(user_profile, 'skills', None)
+        if not declared_skills:
+            return
+        
+        # Extract skill names and normalize to lowercase keywords
+        skill_names = []
+        for skill in declared_skills:
+            name = skill.get('name', '') if isinstance(skill, dict) else str(skill)
+            if name:
+                # Split multi-word skills into individual keywords too
+                # e.g. "Project Management" -> ["project", "management"]
+                skill_names.extend(name.lower().split())
+        
+        if not skill_names:
+            return
+        
+        # Merge into skill_keywords with a base weight of 5 for declared skills
+        keywords = dict(performance_profile.skill_keywords or {})
+        changed = False
+        for kw in skill_names:
+            if len(kw) < 3:
+                continue  # Skip very short words to match existing filtering
+            if kw not in keywords or keywords[kw] < 5:
+                keywords[kw] = max(keywords.get(kw, 0), 5)
+                changed = True
+        
+        if changed:
+            performance_profile.skill_keywords = keywords
+            performance_profile.save(update_fields=['skill_keywords'])
     
     def analyze_task_assignment(self, task, potential_assignees=None, requesting_user=None, temp_workload_adjustments=None, board=None):
         """
@@ -91,11 +154,20 @@ class ResourceLevelingService:
         if current_assignee and current_assignee not in potential_assignees:
             potential_assignees = [current_assignee] + potential_assignees
         
-        # Get profiles for all candidates
+        # Get profiles for all candidates, filtering out unqualified users
         profiles = []
         for user in potential_assignees:
             profile = self.get_or_create_profile(user)
-            profiles.append(profile)
+            # Always include the current assignee for comparison, even if unqualified
+            is_current = (current_assignee and user.id == current_assignee.id)
+            if is_current or self._is_qualified_candidate(profile):
+                profiles.append(profile)
+        
+        if not profiles:
+            return {
+                'error': 'No reallocation suggestions — insufficient team data for other members',
+                'no_qualified_candidates': True
+            }
         
         # Build task context
         task_text = f"{task.title} {task.description or ''}"
@@ -410,21 +482,27 @@ class ResourceLevelingService:
                 None
             )
         
-        # Check if users have work history for explainability
+        # Check if EACH user individually has work history for accurate explainability
         suggested_profile = self.get_or_create_profile(suggested_user)
         current_profile = self.get_or_create_profile(current_assignee) if current_assignee else None
-        has_history = (suggested_profile.total_tasks_completed > 0) or (current_profile and current_profile.total_tasks_completed > 0)
+        suggested_has_history = suggested_profile.total_tasks_completed > 0
+        current_has_history = current_profile and current_profile.total_tasks_completed > 0
         
         if current_analysis:
             # Direct comparison when task is already assigned
             time_savings = current_analysis['estimated_hours'] - top['estimated_hours']
             time_savings_pct = (time_savings / current_analysis['estimated_hours']) * 100 if current_analysis['estimated_hours'] > 0 else 0
-            # Explainability: Show how time savings is calculated
-            if has_history:
+            # Explainability: Accurately describe what data each estimate is based on
+            if suggested_has_history and current_has_history:
                 # Both users have history - mention velocity, workload, and skill match
                 time_savings_explanation = f" The {time_savings_pct:.0f}% time savings is calculated by comparing estimated completion times: {current_assignee.get_full_name() or current_assignee.username} ({current_analysis['estimated_hours']:.1f}h) vs {top['display_name']} ({top['estimated_hours']:.1f}h) based on their workload, velocity, and skill match."
+            elif current_has_history and not suggested_has_history:
+                # Only current assignee has history - be transparent about suggested user's lack of data
+                time_savings_explanation = f" The {time_savings_pct:.0f}% time savings is calculated by comparing estimated completion times: {current_assignee.get_full_name() or current_assignee.username} ({current_analysis['estimated_hours']:.1f}h, based on historical data) vs {top['display_name']} ({top['estimated_hours']:.1f}h, based on availability and baseline estimate — limited historical data)."
+            elif suggested_has_history and not current_has_history:
+                time_savings_explanation = f" The {time_savings_pct:.0f}% time savings is calculated by comparing estimated completion times: {current_assignee.get_full_name() or current_assignee.username} ({current_analysis['estimated_hours']:.1f}h, baseline estimate) vs {top['display_name']} ({top['estimated_hours']:.1f}h, based on historical data)."
             else:
-                # New users without history - explain baseline calculation
+                # Neither has history
                 time_savings_explanation = f" The {time_savings_pct:.0f}% time savings is calculated by comparing estimated completion times: {current_assignee.get_full_name() or current_assignee.username} ({current_analysis['estimated_hours']:.1f}h) vs {top['display_name']} ({top['estimated_hours']:.1f}h). Since team members are new, estimates use baseline assumptions (8h per task) adjusted by current workload and task complexity."
         else:
             # For unassigned tasks, compare against team average or median
@@ -436,7 +514,7 @@ class ResourceLevelingService:
                 time_savings = median_estimate - top['estimated_hours']
                 time_savings_pct = (time_savings / median_estimate) * 100 if median_estimate > 0 else 0
                 # Explainability: Show calculation for unassigned tasks
-                if has_history:
+                if suggested_has_history:
                     time_savings_explanation = f" The {time_savings_pct:.0f}% time savings is calculated by comparing {top['display_name']}'s estimated time ({top['estimated_hours']:.1f}h) against the team median ({median_estimate:.1f}h), factoring in their workload, velocity, and skill match."
                 else:
                     time_savings_explanation = f" The {time_savings_pct:.0f}% time savings is calculated by comparing {top['display_name']}'s estimated time ({top['estimated_hours']:.1f}h) against the team median ({median_estimate:.1f}h). Since team members are new, estimates use baseline assumptions (8h per task) adjusted by current workload and task complexity."
@@ -485,82 +563,136 @@ class ResourceLevelingService:
         - Good availability data (objective)
         - Clear improvement in multiple dimensions
         """
-        base_confidence = 65.0  # Start lower for more realistic scores
+        base_confidence = 62.0  # Reasonable baseline
         
-        # Factor 1: Workload improvement (most objective)
+        # Factor 1: Data quality — confidence reflects how much real data backs
+        # the recommendation. Both users having history = reliable comparison.
+        recommended_profile = UserPerformanceProfile.objects.filter(user_id=recommended['user_id']).first()
+        current_profile = UserPerformanceProfile.objects.filter(user_id=current['user_id']).first() if current else None
+        
+        recommended_has_history = recommended_profile and recommended_profile.total_tasks_completed > 0
+        current_has_history = current_profile and current_profile.total_tasks_completed > 0
+        
+        if recommended_has_history and current_has_history:
+            # Both users have track records — high-quality comparison
+            base_confidence += 8
+        elif recommended_has_history or current_has_history:
+            # One side has data — moderate quality
+            base_confidence += 3
+        
+        if not recommended_has_history:
+            # Penalty: recommending someone with no track record
+            base_confidence -= 8
+        if current and not current_has_history:
+            # Penalty: baseline comparison is unreliable
+            base_confidence -= 4
+        
+        # Factor 2: Workload improvement (most objective metric)
         if current:
             util_diff = current['utilization'] - recommended['utilization']
             if util_diff > 40:  # Major imbalance
-                base_confidence += 12
+                base_confidence += 10
             elif util_diff > 20:  # Significant imbalance
-                base_confidence += 8
+                base_confidence += 7
             elif util_diff > 10:  # Moderate imbalance
-                base_confidence += 4
+                base_confidence += 5
+            elif util_diff > 0:  # Any positive improvement
+                base_confidence += 2
             elif util_diff < -10:  # Would make things worse
                 base_confidence -= 5
         else:
             # First assignment - moderate confidence
-            base_confidence += 3
+            base_confidence += 4
         
-        # Factor 2: Availability difference (objective data)
+        # Factor 3: Availability difference (objective data)
         if current:
             avail_diff = recommended['availability'] - current['availability']
             if avail_diff > 30:
                 base_confidence += 6
             elif avail_diff > 15:
                 base_confidence += 4
+            elif avail_diff > 0:
+                base_confidence += 1
             elif avail_diff < -15:  # Recommended person is MORE loaded
                 base_confidence -= 3
         
-        # Factor 3: Skill match of recommended person
-        # Higher match = higher confidence, but not linear
-        if recommended['skill_match'] > 70:
-            base_confidence += 5
-        elif recommended['skill_match'] > 50:
-            base_confidence += 3
-        elif recommended['skill_match'] < 30:
-            base_confidence -= 2  # Low skill match reduces confidence
+        # Factor 4: Skill match of recommended person
+        has_real_skills = recommended_profile and bool(recommended_profile.skill_keywords)
+        if has_real_skills:
+            if recommended['skill_match'] > 70:
+                base_confidence += 6
+            elif recommended['skill_match'] > 50:
+                base_confidence += 4
+            elif recommended['skill_match'] > 30:
+                base_confidence += 2
+            elif recommended['skill_match'] < 20:
+                base_confidence -= 2
+        else:
+            # Skill match is based on neutral default (50) — minimal confidence impact
+            base_confidence -= 1
         
-        # Factor 4: Overall suitability score difference
+        # Factor 5: Overall suitability score difference
         if current:
             score_diff = recommended['overall_score'] - current['overall_score']
             if score_diff > 20:
-                base_confidence += 5
+                base_confidence += 6
             elif score_diff > 10:
-                base_confidence += 3
-            elif score_diff < 5:  # Marginal improvement
+                base_confidence += 4
+            elif score_diff > 3:
+                base_confidence += 2
+            elif score_diff < 0:  # Actually worse
                 base_confidence -= 3
         else:
             # For unassigned, use absolute score
             if recommended['overall_score'] > 75:
-                base_confidence += 4
+                base_confidence += 5
             elif recommended['overall_score'] > 60:
-                base_confidence += 2
+                base_confidence += 3
+            elif recommended['overall_score'] > 45:
+                base_confidence += 1
             elif recommended['overall_score'] < 45:
                 base_confidence -= 2
         
-        # Factor 5: Workload impact type
+        # Factor 6: Workload impact type
         if workload_impact == 'reduces_bottleneck':
             base_confidence += 5
         elif workload_impact == 'balances_load':
+            base_confidence += 4
+        elif workload_impact == 'better_skills':
             base_confidence += 3
+        elif workload_impact == 'improves_timeline':
+            base_confidence += 2
         
-        # Factor 6: Recommended person's current workload (availability is objective)
-        # But being completely free isn't always a positive signal
+        # Factor 7: Recommended person's current workload
         if recommended['current_workload'] == 0:
-            base_confidence += 3  # Available, but moderate confidence
+            if recommended_has_history:
+                base_confidence += 5  # Genuinely available and proven
+            else:
+                base_confidence += 1  # Available but unproven
         elif 1 <= recommended['current_workload'] <= 3:
             base_confidence += 4  # Ideal workload range
-        elif recommended['current_workload'] > 8:
+        elif 4 <= recommended['current_workload'] <= 7:
+            base_confidence += 2  # Acceptable range
+        elif recommended['current_workload'] > 10:
             base_confidence -= 4  # Already overloaded
         
-        # Add slight randomness for variety (±2 points)
+        # Factor 8: Task-specific variance — use multiple data points to produce
+        # different confidence scores for different tasks/user combinations
         import random
-        random.seed(recommended['user_id'] + (current['user_id'] if current else 0))  # Deterministic per user pair
-        variance = random.uniform(-2, 2)
+        task_id = recommended.get('user_id', 0)
+        if current:
+            task_id += current.get('user_id', 0) * 7
+        variance_seed = int(abs(
+            task_id * 31 +
+            recommended.get('skill_match', 0) * 17 +
+            recommended.get('estimated_hours', 0) * 13 +
+            (current.get('estimated_hours', 0) if current else 0) * 11
+        ))
+        random.seed(variance_seed)
+        variance = random.uniform(-3, 3)
         base_confidence += variance
         
-        # Cap at 92 (never claim extreme certainty) and floor at 45
+        # Cap at 92 and floor at 45
         return max(45.0, min(round(base_confidence, 1), 92.0))
     
     def _determine_workload_impact(self, recommended, current):

@@ -33,8 +33,8 @@
         
         <!-- Empty State -->
         <div id="no-suggestions" class="text-center py-4 d-none">
-            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
-            <p class="text-muted">No optimization suggestions at this time.<br>Your team workload is well balanced!</p>
+            <i class="fas fa-check-circle fa-3x text-success mb-3" id="no-suggestions-icon"></i>
+            <p class="text-muted" id="no-suggestions-text">No optimization suggestions at this time.<br>Your team workload is well balanced!</p>
         </div>
     </div>
 </div>
@@ -379,7 +379,7 @@ function loadSuggestions() {
         })
         .then(data => {
             console.log('Suggestions data:', data);
-            displaySuggestions(data.suggestions);
+            displaySuggestions(data.suggestions, data.insufficient_team_data);
         })
         .catch(error => {
             console.error('Error loading suggestions:', error);
@@ -390,7 +390,7 @@ function loadSuggestions() {
         });
 }
 
-function displaySuggestions(suggestions) {
+function displaySuggestions(suggestions, insufficientData) {
     const container = document.getElementById('suggestions-container');
     const noSuggestions = document.getElementById('no-suggestions');
     const template = document.getElementById('suggestion-card-template');
@@ -399,6 +399,15 @@ function displaySuggestions(suggestions) {
     
     if (suggestions.length === 0) {
         noSuggestions.classList.remove('d-none');
+        const icon = document.getElementById('no-suggestions-icon');
+        const text = document.getElementById('no-suggestions-text');
+        if (insufficientData) {
+            icon.className = 'fas fa-info-circle fa-3x text-muted mb-3';
+            text.innerHTML = 'No reallocation suggestions &mdash; insufficient team data for other members.<br><small>Team members need at least 1 completed task, 1 skill tag, or 1 hour logged to be considered for reassignment.</small>';
+        } else {
+            icon.className = 'fas fa-check-circle fa-3x text-success mb-3';
+            text.innerHTML = 'No optimization suggestions at this time.<br>Your team workload is well balanced!';
+        }
         return;
     }
     
