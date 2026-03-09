@@ -526,11 +526,27 @@ class TaskForm(forms.ModelForm):
         
         # Process required_skills JSON field - SECURITY: Only use safe JSON parsing, NO eval()
         required_skills_input = self.cleaned_data.get('required_skills', '')
-        
+
+        def _sanitize_skills_list(raw_list):
+            """Sanitize skill items, preserving dicts with name/level keys."""
+            safe_skills = []
+            for skill in raw_list[:50]:
+                if isinstance(skill, dict):
+                    # Only allow known safe keys to prevent data injection
+                    safe_skill = {}
+                    if 'name' in skill:
+                        safe_skill['name'] = str(skill['name'])[:100]
+                    if 'level' in skill:
+                        safe_skill['level'] = str(skill['level'])[:50]
+                    if safe_skill:
+                        safe_skills.append(safe_skill)
+                elif isinstance(skill, (str, int, float)):
+                    safe_skills.append(str(skill)[:100])
+            return safe_skills
+
         # Handle if it's already a list (from form submission)
         if isinstance(required_skills_input, list):
-            # Validate and limit list items
-            instance.required_skills = [str(skill)[:100] for skill in required_skills_input[:50]]
+            instance.required_skills = _sanitize_skills_list(required_skills_input)
         else:
             required_skills_input = required_skills_input.strip() if isinstance(required_skills_input, str) else ''
             if required_skills_input:
@@ -538,14 +554,10 @@ class TaskForm(forms.ModelForm):
                 try:
                     # SECURITY: Only use JSON parsing - NEVER eval() for security
                     parsed_skills = json.loads(required_skills_input)
-                    
+
                     # Validate it's a list
                     if isinstance(parsed_skills, list):
-                        # Validate all items are strings and limit length
-                        instance.required_skills = [
-                            str(skill)[:100] for skill in parsed_skills 
-                            if isinstance(skill, (str, int, float))
-                        ][:50]  # Limit to 50 items
+                        instance.required_skills = _sanitize_skills_list(parsed_skills)
                     else:
                         instance.required_skills = []
                 except (json.JSONDecodeError, ValueError, TypeError):
