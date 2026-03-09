@@ -124,6 +124,80 @@ app.conf.task_routes = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Catch-up: run daily AI tasks if they were missed (celery was not running)
+# ---------------------------------------------------------------------------
+from celery.signals import worker_ready
+
+@worker_ready.connect
+def _catchup_daily_tasks(sender, **kwargs):
+    """
+    On worker startup, check whether today's daily AI tasks have already run.
+    If not, enqueue them so summaries and decision items stay current even when
+    celery was down during the scheduled window.
+    """
+    import threading
+
+    def _run_catchup():
+        import django
+        django.setup()
+
+        import logging
+        _logger = logging.getLogger('celery.catchup')
+        from django.utils import timezone
+
+        today = timezone.localdate()
+        _logger.info("Celery worker ready — checking for missed daily tasks (today=%s)", today)
+
+        # 1. Executive briefing (AI summaries for missions/boards)
+        try:
+            from kanban.models import Mission
+            # Check if any active mission was updated today by the briefing task
+            stale = Mission.objects.filter(
+                status='active',
+            ).exclude(
+                ai_summary_generated_at__date=today,
+            ).exists()
+            if stale:
+                _logger.info("Missed daily executive briefing — enqueueing now")
+                app.send_task('kanban.ai_summary.generate_daily_executive_briefing')
+            else:
+                _logger.info("Daily executive briefing already ran today — skipping")
+        except Exception as exc:
+            _logger.warning("Catchup check for executive briefing failed: %s", exc)
+
+        # 2. Decision Center item collection
+        try:
+            from django.core.cache import cache as _cache
+            cache_key = f'dc_collect_ran_{today.isoformat()}'
+            already_ran = _cache.get(cache_key)
+            if not already_ran:
+                _logger.info("Missed decision item collection — enqueueing now")
+                app.send_task('decision_center.collect_decision_items')
+                _cache.set(cache_key, True, 86400)  # expires in 24h
+            else:
+                _logger.info("Decision item collection already ran today — skipping")
+        except Exception as exc:
+            _logger.warning("Catchup check for decision items failed: %s", exc)
+
+        # 3. Decision Center AI briefing
+        try:
+            from decision_center.models import DecisionCenterBriefing
+            has_today_briefing = DecisionCenterBriefing.objects.filter(
+                generated_at__date=today,
+            ).exists()
+            if not has_today_briefing:
+                _logger.info("Missed decision center briefing — enqueueing now")
+                app.send_task('decision_center.generate_decision_briefing')
+            else:
+                _logger.info("Decision center briefing already ran today — skipping")
+        except Exception as exc:
+            _logger.warning("Catchup check for decision briefing failed: %s", exc)
+
+    # Run in a separate thread to avoid blocking worker startup
+    threading.Thread(target=_run_catchup, daemon=True).start()
+
+
 @app.task(bind=True)
 def debug_task(self):
     print(f'Request: {self.request!r}')

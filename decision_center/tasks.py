@@ -25,8 +25,27 @@ def _get_or_create_settings(user):
 
 
 def _user_boards(user):
-    """Return the queryset of boards a user can access (non-demo)."""
+    """Return the queryset of boards a user can access.
+    
+    Includes demo boards if the user is a demo account or is viewing demo.
+    """
     from kanban.models import Board
+    from accounts.models import UserProfile
+
+    # Check if this is a demo account or user is viewing demo
+    is_demo_user = '_demo' in user.username
+    try:
+        profile = UserProfile.objects.get(user=user)
+        is_viewing_demo = getattr(profile, 'is_viewing_demo', False)
+    except UserProfile.DoesNotExist:
+        is_viewing_demo = False
+
+    if is_demo_user or is_viewing_demo:
+        # Include demo boards
+        return Board.objects.filter(
+            Q(created_by=user) | Q(members=user) | Q(is_official_demo_board=True),
+        ).distinct()
+
     return Board.objects.filter(
         Q(created_by=user) | Q(members=user),
         is_official_demo_board=False,
