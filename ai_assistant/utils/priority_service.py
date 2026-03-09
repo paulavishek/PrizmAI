@@ -160,6 +160,10 @@ class PrioritySuggestionService:
         if task.due_date:
             # Make sure due_date is timezone-aware
             due_date = task.due_date
+            # Normalise date → datetime (date objects lack utcoffset / hour)
+            if not hasattr(due_date, 'hour'):
+                from datetime import datetime
+                due_date = datetime.combine(due_date, datetime.min.time())
             if timezone.is_naive(due_date):
                 due_date = timezone.make_aware(due_date)
             
@@ -432,6 +436,10 @@ class PrioritySuggestionService:
         if task.due_date:
             no_due_date = False
             due_date = task.due_date
+            # Normalise date → datetime (date objects lack utcoffset / hour)
+            if not hasattr(due_date, 'hour'):
+                from datetime import datetime
+                due_date = datetime.combine(due_date, datetime.min.time())
             if timezone.is_naive(due_date):
                 due_date = timezone.make_aware(due_date)
             delta = due_date - timezone.now()
@@ -496,6 +504,11 @@ class PrioritySuggestionService:
         if start_date and task.due_date:
             sd = start_date
             ed = task.due_date
+            from datetime import datetime as _dt
+            if not hasattr(sd, 'hour'):
+                sd = _dt.combine(sd, _dt.min.time())
+            if not hasattr(ed, 'hour'):
+                ed = _dt.combine(ed, _dt.min.time())
             if timezone.is_naive(sd):
                 sd = timezone.make_aware(sd)
             if timezone.is_naive(ed):
