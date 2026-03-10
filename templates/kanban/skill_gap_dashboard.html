@@ -160,7 +160,7 @@
                             Severity is calibrated against actual team coverage.
                         </div>
                         {% for gap in skill_gaps %}
-                        <div class="gap-card {{ gap.severity }} p-3 mb-3 border rounded">
+                        <div class="gap-card {{ gap.severity }} p-3 mb-3 border rounded" data-gap-id="{{ gap.id }}">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <div>
                                     <h6 class="mb-1">
@@ -179,7 +179,18 @@
                                         {% else %}bg-secondary{% endif %}">
                                         {{ gap.get_severity_display }}
                                     </span>
-                                    <span class="badge bg-light text-dark ms-1">{{ gap.get_status_display }}</span>
+                                    <span class="badge gap-status-badge
+                                        {% if gap.status == 'in_progress' %}bg-primary
+                                        {% elif gap.status == 'acknowledged' %}bg-info
+                                        {% elif gap.status == 'resolved' %}bg-success
+                                        {% else %}bg-warning text-dark{% endif %} ms-1">
+                                        {{ gap.get_status_display }}
+                                    </span>
+                                    {% if gap.development_plans.exists %}
+                                    <span class="badge bg-success ms-1">
+                                        <i class="fas fa-clipboard-check me-1"></i>Plan Created
+                                    </span>
+                                    {% endif %}
                                 </div>
                             </div>
                             
@@ -1283,6 +1294,28 @@
             const modal = bootstrap.Modal.getInstance(document.getElementById('createPlanModal'));
             if (modal) {
                 modal.hide();
+            }
+            
+            // Immediately update the gap card badges in the DOM for instant feedback
+            const gapId = document.getElementById('planGapId').value;
+            const gapCard = document.querySelector(`.gap-card[data-gap-id="${gapId}"]`);
+            if (gapCard) {
+                // Update status badge to "In Progress"
+                const statusBadge = gapCard.querySelector('.gap-status-badge');
+                if (statusBadge) {
+                    statusBadge.className = 'badge gap-status-badge bg-primary ms-1';
+                    statusBadge.textContent = 'In Progress';
+                }
+                // Add "Plan Created" badge if not already there
+                if (!gapCard.querySelector('.plan-created-badge')) {
+                    const planBadge = document.createElement('span');
+                    planBadge.className = 'badge bg-success ms-1 plan-created-badge';
+                    planBadge.innerHTML = '<i class="fas fa-clipboard-check me-1"></i>Plan Created';
+                    const badgeContainer = gapCard.querySelector('.text-end');
+                    if (badgeContainer) {
+                        badgeContainer.appendChild(planBadge);
+                    }
+                }
             }
             
             // Show success message and reload

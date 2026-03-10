@@ -104,9 +104,9 @@ JSON array:"""
         if not model:
             return []
 
-        # Generation config for skill extraction - simpler JSON output
+        # Generation config for skill extraction - deterministic for reproducible gap results
         generation_config = {
-            'temperature': 0.3,  # Low for consistent skill identification
+            'temperature': 0.2,  # Very low for consistent, reproducible skill identification
             'top_p': 0.8,
             'top_k': 40,
             'max_output_tokens': 1024,  # Skill list doesn't need many tokens
@@ -273,8 +273,9 @@ def calculate_skill_gaps(board, sprint_period_days: int = 14) -> List[Dict]:
         
         if tasks_needing_skills:
             logger.info(f"Auto-extracting skills for {len(tasks_needing_skills)} tasks without defined skills")
-            # Limit to first 15 to avoid API rate limits (increased from 10)
-            for task in tasks_needing_skills[:15]:
+            # Process up to 50 tasks so a single Run Analysis populates all tasks,
+            # making gap detection fully deterministic on subsequent runs.
+            for task in tasks_needing_skills[:50]:
                 try:
                     extracted_skills = extract_skills_from_task(task.title, task.description or "")
                     if extracted_skills:
@@ -622,9 +623,9 @@ Valid types: "training", "hiring", "contractor", "redistribute", "mentorship", "
 
 JSON array:"""
 
-        # Generation config for recommendations - needs more detail
+        # Generation config for recommendations - low temperature for consistent outputs
         generation_config = {
-            'temperature': 0.5,  # Balanced for creative yet practical recommendations
+            'temperature': 0.2,  # Low for consistent, reproducible recommendations
             'top_p': 0.8,
             'top_k': 40,
             'max_output_tokens': 2048,  # More tokens for detailed recommendations
