@@ -20,17 +20,25 @@
         font-size: 1rem;
         line-height: 1.8;
         border-left: 4px solid #0d6efd;
-        white-space: pre-wrap;
         font-family: 'Segoe UI', sans-serif;
     }
-    /* Render markdown-like formatting for report text */
+    /* Bootstrap-compatible styling for rendered markdown */
     .report-output h2 {
         font-size: 1.1rem;
         font-weight: 700;
-        margin-top: 1.2rem;
+        margin-top: 1.4rem;
+        margin-bottom: 0.4rem;
         color: #212529;
     }
-    .report-output ul { padding-left: 1.5rem; }
+    .report-output h3 {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-top: 1rem;
+        color: #495057;
+    }
+    .report-output ul, .report-output ol { padding-left: 1.5rem; margin-bottom: 0.5rem; }
+    .report-output li { margin-bottom: 0.25rem; }
+    .report-output p { margin-bottom: 0.5rem; }
     .info-banner {
         background: linear-gradient(135deg, #e8f4fd, #f0f9ff);
         border-radius: 10px;
@@ -118,7 +126,7 @@
         <!-- Report Output -->
         {% if report_text %}
         <div class="report-wrapper">
-            <div class="report-output" id="report-output">{{ report_text }}</div>
+            <div class="report-output" id="report-output">{{ report_html|safe }}</div>
             <button class="btn btn-sm btn-outline-secondary copy-btn" onclick="copyReport()" title="Copy to clipboard">
                 <i class="fas fa-copy me-1"></i>Copy
             </button>
