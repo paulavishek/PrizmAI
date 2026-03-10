@@ -420,13 +420,36 @@ def run_scope_analysis(request, board_id):
         messages.error(request, 'No baseline set. Please set a baseline first.')
         return redirect('scope_dashboard', board_id=board.id)
     
-    # Create a new snapshot with AI analysis
-    snapshot = board.create_scope_snapshot(
-        user=request.user,
-        snapshot_type='manual',
+    # Deduplication check: reuse a recent snapshot if it matches current metrics
+    dedupe_cutoff = timezone.now() - timedelta(minutes=30)
+    current_task_count = board.tasks.count()
+    current_complexity = board.tasks.aggregate(
+        total=Sum('complexity_score')
+    )['total'] or 0
+
+    recent_snapshot = ScopeChangeSnapshot.objects.filter(
+        board=board,
+        snapshot_date__gte=dedupe_cutoff,
         is_baseline=False,
-        notes='AI analysis snapshot'
-    )
+        total_tasks=current_task_count,
+        total_complexity_points=current_complexity,
+    ).order_by('-snapshot_date').first()
+
+    if recent_snapshot:
+        logger.info(
+            "Reusing recent snapshot (id=%s) for board %s — same task count (%d) "
+            "and complexity (%d pts), created within the last 30 minutes.",
+            recent_snapshot.id, board.id, current_task_count, current_complexity,
+        )
+        snapshot = recent_snapshot
+    else:
+        # Create a new snapshot with AI analysis
+        snapshot = board.create_scope_snapshot(
+            user=request.user,
+            snapshot_type='manual',
+            is_baseline=False,
+            notes='AI analysis snapshot'
+        )
     
     # Get baseline snapshot
     baseline = ScopeChangeSnapshot.objects.filter(
