@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load kanban_filters %}
 
 {% block title %}Suggestion Detail - {{ suggestion.title }}{% endblock %}
 
@@ -328,7 +329,7 @@
             {% for action in suggestion.recommended_actions %}
             <li class="action-item">
                 <i class="fas fa-arrow-right"></i>
-                <span>{{ action }}</span>
+                <span>{{ action|format_coach_action }}</span>
             </li>
             {% endfor %}
         </ul>

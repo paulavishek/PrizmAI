@@ -304,24 +304,29 @@ Generate a response following this exact structure. Be specific, actionable, and
                 progress__lt=100
             ).count()
 
-            # Use the same velocity calculation as the Burndown Prediction page so
-            # the coach reports the same figure as the burndown dashboard.
+            # Use the same velocity calculation as the Burndown Prediction page.
+            # The burndown dashboard prominently shows `current_velocity` (most
+            # recent period), not `average_velocity`, so we must use that value
+            # here to stay consistent. average_velocity can appear low (e.g. 1.0)
+            # when many older periods had zero completions.
+            velocity_text = 'N/A'
             try:
                 predictor = BurndownPredictor()
                 predictor._ensure_velocity_snapshots(board)
                 velocity_history = predictor._get_velocity_history(board)
                 if velocity_history:
                     velocity_stats = predictor._calculate_velocity_statistics(velocity_history)
-                    avg_vel = float(velocity_stats['average_velocity'])
-                    velocity_text = f"{avg_vel:.1f} tasks/week"
-                else:
-                    velocity_text = 'N/A'
-            except Exception:
-                # Fallback to snapshot query if predictor fails
-                latest_velocity = TeamVelocitySnapshot.objects.filter(
+                    current_vel = float(velocity_stats['current_velocity'])
+                    velocity_text = f"{current_vel:.1f} tasks/week"
+            except Exception as vel_err:
+                logger.warning(f"Velocity calculation failed for board {board.id}, falling back to snapshot: {vel_err}")
+                latest_snapshot = TeamVelocitySnapshot.objects.filter(
                     board=board
                 ).order_by('-period_end').first()
-                velocity_text = f"{latest_velocity.tasks_completed} tasks/week" if latest_velocity else 'N/A'
+                if latest_snapshot:
+                    velocity_text = f"{latest_snapshot.tasks_completed} tasks/week"
+
+            logger.info(f"[AICoach] Board '{board.name}' (id={board.id}) velocity injected into prompt: {velocity_text}")
 
             team_size = board.members.count()
             
@@ -364,7 +369,7 @@ Return ONLY the JSON object.
 """
             
             # Use cached response or generate new
-            context_id = f"board_{{board.id}}:user_{{pm_user.id}}"
+            context_id = f"board_{board.id}:user_{pm_user.id}"
             result = self._get_cached_or_generate(prompt, 'coaching_advice', context_id)
             
             if not result:
@@ -389,7 +394,7 @@ Return ONLY the JSON object.
             data_sources = [f"Board: {board.name}"]
             if active_tasks > 0:
                 data_sources.append(f"{active_tasks} active tasks")
-            if latest_velocity:
+            if velocity_text != 'N/A':
                 data_sources.append(f"Velocity: {velocity_text}")
             if team_size > 0:
                 data_sources.append(f"Team size: {team_size}")
