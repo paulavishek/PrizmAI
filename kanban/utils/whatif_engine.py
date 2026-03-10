@@ -443,7 +443,7 @@ class WhatIfEngine:
             return {
                 'allocated': allocated,
                 'spent': spent,
-                'utilization_pct': budget.get_budget_utilization_percent(),
+                'utilization_pct': round(budget.get_budget_utilization_percent(), 1),
                 'currency': budget.currency,
                 'avg_cost_per_task': round(spent / total_tasks, 2) if total_tasks else 0,
             }

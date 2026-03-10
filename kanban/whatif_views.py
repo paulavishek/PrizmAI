@@ -6,6 +6,7 @@ for the What-If Scenario Analyzer feature.
 """
 import json
 import logging
+from datetime import date as date_type
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -30,11 +31,19 @@ def whatif_dashboard(request, board_id):
         board=board,
     ).order_by('-is_starred', '-created_at')[:10]
 
+    predicted_date_obj = None
+    if baseline.get('predicted_date'):
+        try:
+            predicted_date_obj = date_type.fromisoformat(baseline['predicted_date'])
+        except (ValueError, AttributeError):
+            pass
+
     context = {
         'board': board,
         'baseline': baseline,
         'baseline_json': json.dumps(baseline),
         'saved_scenarios': saved_scenarios,
+        'predicted_date_obj': predicted_date_obj,
     }
     return render(request, 'kanban/whatif_dashboard.html', context)
 
