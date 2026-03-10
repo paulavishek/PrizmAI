@@ -2,6 +2,7 @@
 Budget & ROI Utility Functions
 Provides calculation, analysis, and reporting utilities for budget tracking
 """
+import html
 from decimal import Decimal
 from datetime import datetime, timedelta
 from django.db.models import Sum, Avg, Count, Q, F
@@ -525,6 +526,13 @@ class BudgetAnalyzer:
     """
     
     @staticmethod
+    def get_board_tasks(board):
+        """Return the canonical task queryset for a board — excludes milestones and matches
+        the board_detail view so all budget pages show consistent task counts."""
+        from kanban.models import Task
+        return Task.objects.filter(column__board=board, item_type='task')
+
+    @staticmethod
     def calculate_project_metrics(board) -> Dict:
         """
         Calculate comprehensive project budget metrics
@@ -545,9 +553,8 @@ class BudgetAnalyzer:
                 'has_budget': False
             }
         
-        # Get all tasks for the board
-        from kanban.models import Task
-        tasks = Task.objects.filter(column__board=board)
+        # Get all tasks for the board — consistent with board_detail queryset (item_type='task' only)
+        tasks = BudgetAnalyzer.get_board_tasks(board)
         
         # Calculate spent amounts
         spent_amount = budget.get_spent_amount()
@@ -685,8 +692,8 @@ class BudgetAnalyzer:
         task_costs = TaskCost.objects.filter(task__column__board=board)
         total_cost = sum([tc.get_total_actual_cost() for tc in task_costs]) if task_costs else Decimal('0.00')
         
-        # Task metrics - use progress instead of column name
-        tasks = Task.objects.filter(column__board=board)
+        # Task metrics — consistent with board_detail queryset (item_type='task' only)
+        tasks = BudgetAnalyzer.get_board_tasks(board)
         completed_tasks = tasks.filter(progress=100).count()
         total_tasks = tasks.count()
         
@@ -822,7 +829,7 @@ class BudgetAnalyzer:
             
             breakdown.append({
                 'task_id': tc.task.id,
-                'task_title': tc.task.title,
+                'task_title': html.unescape(tc.task.title),
                 'assignee': tc.task.assigned_to.username if tc.task.assigned_to else None,
                 'estimated_cost': float(tc.estimated_cost),
                 'actual_cost': float(tc.actual_cost),
@@ -844,59 +851,66 @@ class BudgetAnalyzer:
     @staticmethod
     def calculate_burn_rate(board, period_days: int = 7) -> Dict:
         """
-        Calculate budget burn rate
-        
-        Args:
-            board: Board instance
-            period_days: Number of days to calculate rate over
-            
-        Returns:
-            Dictionary with burn rate metrics
+        Calculate budget burn rate.
+
+        Daily burn rate = total_spent / days_since_project_start.
+        Days remaining   = (project_deadline - today).days  — or 'No deadline set'.
         """
         from kanban.budget_models import ProjectBudget, TimeEntry
-        
+
         try:
             budget = ProjectBudget.objects.get(board=board)
         except ProjectBudget.DoesNotExist:
             return {'error': 'No budget configured'}
-        
-        end_date = timezone.now()
-        start_date = end_date - timedelta(days=period_days)
-        
-        # Calculate costs in the period
-        period_entries = TimeEntry.objects.filter(
-            task__column__board=board,
-            work_date__gte=start_date.date(),
-            work_date__lte=end_date.date()
-        )
-        
-        period_hours = period_entries.aggregate(total=Sum('hours_spent'))['total'] or Decimal('0.00')
-        # Simplified cost calculation - in real scenario, would use actual rates
-        estimated_period_cost = period_hours * Decimal('50.00')
-        
-        # Calculate daily burn rate
-        daily_burn_rate = estimated_period_cost / period_days if period_days > 0 else Decimal('0.00')
-        
-        # Calculate remaining budget and days
+
+        today = timezone.now().date()
+
+        # ---------- project start date ----------
+        # Use the earliest time-entry work_date as the project start;
+        # fall back to the budget creation date.
+        first_entry = TimeEntry.objects.filter(
+            task__column__board=board
+        ).order_by('work_date').first()
+
+        project_start = first_entry.work_date if first_entry else budget.created_at.date()
+        # Never go forward — clamp to today
+        if project_start > today:
+            project_start = today
+
+        days_elapsed = max((today - project_start).days, 1)
+
+        # ---------- burn rate ----------
+        total_spent = budget.get_spent_amount()
+        daily_burn_rate = total_spent / Decimal(days_elapsed)
+
+        # ---------- days remaining ----------
         remaining_budget = budget.get_remaining_budget()
-        days_remaining = 0
-        if daily_burn_rate > 0 and remaining_budget > 0:
-            days_remaining = int(remaining_budget / daily_burn_rate)
-        # If remaining budget is negative or zero, days_remaining stays 0
-        
-        # Calculate projected end date
+        has_deadline = bool(board.project_deadline)
+        days_remaining_int = 0
+        days_remaining_display = 'No deadline set'
         projected_end_date = None
-        if days_remaining > 0:
-            projected_end_date = (timezone.now() + timedelta(days=days_remaining)).date()
-        
+
+        if has_deadline:
+            days_remaining_int = max((board.project_deadline - today).days, 0)
+            days_remaining_display = str(days_remaining_int)
+            projected_end_date = board.project_deadline
+
+        # Sustainability: will the remaining budget cover the remaining days at this burn rate?
+        is_sustainable = False
+        if has_deadline and days_remaining_int > 0 and daily_burn_rate > 0:
+            expected_remaining_spend = daily_burn_rate * days_remaining_int
+            is_sustainable = remaining_budget >= expected_remaining_spend
+
         return {
             'period_days': period_days,
-            'period_cost': float(estimated_period_cost),
+            'period_cost': float(total_spent),
             'daily_burn_rate': float(daily_burn_rate),
             'remaining_budget': float(remaining_budget),
-            'days_remaining': days_remaining,
+            'days_remaining': days_remaining_int,
+            'days_remaining_display': days_remaining_display,
             'projected_end_date': projected_end_date.isoformat() if projected_end_date else None,
-            'is_sustainable': days_remaining > 30 if days_remaining > 0 else False,
+            'is_sustainable': is_sustainable,
+            'has_deadline': has_deadline,
         }
     
     @staticmethod
@@ -924,7 +938,7 @@ class BudgetAnalyzer:
                 
                 overruns.append({
                     'task_id': tc.task.id,
-                    'task_title': tc.task.title,
+                    'task_title': html.unescape(tc.task.title),
                     'estimated_cost': float(tc.estimated_cost),
                     'actual_cost': float(tc.get_total_actual_cost()),
                     'overrun_amount': float(variance),

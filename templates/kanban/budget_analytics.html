@@ -74,7 +74,7 @@
             <div class="card metric-card">
                 <div class="card-body">
                     <h6 class="text-muted mb-2">Days Remaining</h6>
-                    <h3>{{ metrics.days_remaining|floatformat:0 }}</h3>
+                    <h3>{{ metrics.days_remaining_display }}</h3>
                     <small class="text-muted">At current burn rate</small>
                 </div>
             </div>
@@ -296,7 +296,7 @@
                                 {% if metrics.projected_final_cost > metrics.budget.allocated %}alert-danger
                                 {% elif metrics.projected_final_cost > metrics.budget.allocated_90_percent %}alert-warning
                                 {% else %}alert-success{% endif %}" role="alert">
-                                <h4 class="mb-0">{{ budget.currency }} {{ metrics.projected_final_cost|floatformat:2 }}</h4>
+                                <h4 class="mb-1">{{ budget.currency }} {{ metrics.projected_final_cost|floatformat:2 }}</h4>
                                 <small>
                                     {% if metrics.projected_final_cost > metrics.budget.allocated %}
                                         Over budget by {{ budget.currency }} {{ metrics.projected_overrun|floatformat:2 }}
@@ -304,6 +304,11 @@
                                         Within budget
                                     {% endif %}
                                 </small>
+                                {% if metrics.projection_method %}
+                                <div class="mt-2 pt-2 border-top border-opacity-25">
+                                    <small class="text-muted fst-italic">{{ metrics.projection_method }}</small>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
