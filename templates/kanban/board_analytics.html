@@ -250,7 +250,7 @@
                             {% endif %}
                         </span>
                     </div>
-                    <div class="progress mt-1" style="height: 6px;">
+                    <div class="progress mt-1" style="height: 6px; position: relative;">
                         <div class="progress-bar {% if value_added_percentage >= 60 %}bg-success{% elif value_added_percentage >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
                              role="progressbar"
                              style="width: {{ value_added_percentage }}%;"
