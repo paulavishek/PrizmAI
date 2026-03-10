@@ -326,10 +326,47 @@
         color: #94a3b8;
         margin-left: 10px;
     }
+
+    /* Toast notifications */
+    #coach-toast-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        pointer-events: none;
+    }
+
+    .coach-toast {
+        min-width: 280px;
+        max-width: 420px;
+        padding: 14px 20px;
+        border-radius: 10px;
+        font-size: 14px;
+        font-weight: 500;
+        color: white;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+        pointer-events: all;
+        opacity: 0;
+        transform: translateX(40px);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .coach-toast.show {
+        opacity: 1;
+        transform: translateX(0);
+    }
+
+    .coach-toast.success { background: #22c55e; }
+    .coach-toast.error   { background: #ef4444; }
+    .coach-toast.info    { background: #667eea; }
 </style>
 {% endblock %}
 
 {% block content %}
+<div id="coach-toast-container"></div>
 <div class="coach-container">
     <!-- Header -->
     <div class="coach-header">
@@ -460,6 +497,21 @@
 </div>
 
 <script>
+function showCoachToast(message, type) {
+    type = type || 'info';
+    const container = document.getElementById('coach-toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'coach-toast ' + type;
+    toast.innerHTML = '<i class="fas fa-' + (type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle') + ' me-2"></i>' + message;
+    container.appendChild(toast);
+    // Trigger animation
+    requestAnimationFrame(() => { requestAnimationFrame(() => { toast.classList.add('show'); }); });
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 350);
+    }, 3500);
+}
+
 function generateSuggestions() {
     const btn = event.target.closest('button');
     const originalHtml = btn.innerHTML;
@@ -476,16 +528,19 @@ function generateSuggestions() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Show only the user-friendly message, no technical details
-            alert(data.message);
-            location.reload();
+            if (data.created === 0) {
+                showCoachToast(data.message || 'No new suggestions at this time.', 'info');
+            } else {
+                showCoachToast(data.message, 'success');
+                setTimeout(() => location.reload(), 1500);
+            }
         } else {
-            alert('Error: ' + data.error);
+            showCoachToast('Error: ' + data.error, 'error');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Failed to generate suggestions');
+        showCoachToast('Failed to generate suggestions. Please try again.', 'error');
     })
     .finally(() => {
         btn.disabled = false;
@@ -506,31 +561,29 @@ function acknowledgeSuggestion(suggestionId) {
         if (data.success) {
             location.reload();
         } else {
-            alert('Error: ' + data.error);
+            showCoachToast('Error: ' + data.error, 'error');
         }
     })
     .catch(error => console.error('Error:', error));
 }
 
 function dismissSuggestion(suggestionId) {
-    if (confirm('Are you sure you want to dismiss this suggestion?')) {
-        fetch(`/coach/suggestion/${suggestionId}/dismiss/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                location.reload();
-            } else {
-                alert('Error: ' + data.error);
-            }
-        })
-        .catch(error => console.error('Error:', error));
-    }
+    fetch(`/coach/suggestion/${suggestionId}/dismiss/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            location.reload();
+        } else {
+            showCoachToast('Error: ' + data.error, 'error');
+        }
+    })
+    .catch(error => console.error('Error:', error));
 }
 
 function provideFeedback(suggestionId) {

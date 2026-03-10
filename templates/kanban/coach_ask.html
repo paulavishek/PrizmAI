@@ -115,10 +115,42 @@
         opacity: 0.6;
         cursor: not-allowed;
     }
+
+    /* Toast notifications */
+    #ask-toast-container {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        pointer-events: none;
+    }
+
+    .ask-toast {
+        min-width: 260px;
+        max-width: 400px;
+        padding: 12px 18px;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        color: white;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+        pointer-events: all;
+        opacity: 0;
+        transform: translateX(40px);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .ask-toast.show { opacity: 1; transform: translateX(0); }
+    .ask-toast.error  { background: #ef4444; }
+    .ask-toast.info   { background: #667eea; }
 </style>
 {% endblock %}
 
 {% block content %}
+<div id="ask-toast-container"></div>
 <div class="ask-coach-container">
     <div class="ask-header">
         <h1><i class="fas fa-comment-dots text-primary"></i> Ask the AI Coach</h1>
@@ -214,6 +246,20 @@
 </div>
 
 <script>
+function showAskToast(message, type) {
+    type = type || 'info';
+    const container = document.getElementById('ask-toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'ask-toast ' + type;
+    toast.innerHTML = '<i class="fas fa-' + (type === 'error' ? 'exclamation-circle' : 'info-circle') + ' me-2"></i>' + message;
+    container.appendChild(toast);
+    requestAnimationFrame(() => { requestAnimationFrame(() => { toast.classList.add('show'); }); });
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 350);
+    }, 3500);
+}
+
 function setQuestion(text) {
     // Remove the icon part
     const cleanText = text.replace(/^\s*[^\w]*\s*/, '').trim();
@@ -264,7 +310,7 @@ function askCoach() {
     const question = document.getElementById('question').value.trim();
     
     if (!question) {
-        alert('Please enter a question');
+        showAskToast('Please enter a question before submitting.', 'info');
         return;
     }
     
@@ -300,12 +346,12 @@ function askCoach() {
                 block: 'start' 
             });
         } else {
-            alert('Error: ' + data.error);
+            showAskToast('Error: ' + data.error, 'error');
         }
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('Failed to get advice. Please try again.');
+        showAskToast('Failed to get advice. Please try again.', 'error');
     })
     .finally(() => {
         btn.disabled = false;

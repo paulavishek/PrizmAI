@@ -297,18 +297,33 @@ Generate a response following this exact structure. Be specific, actionable, and
             # Gather context
             from kanban.models import Task
             from kanban.burndown_models import TeamVelocitySnapshot
-            
+            from kanban.utils.burndown_predictor import BurndownPredictor
+
             active_tasks = Task.objects.filter(
                 column__board=board,
                 progress__lt=100
             ).count()
-            
-            latest_velocity = TeamVelocitySnapshot.objects.filter(
-                board=board
-            ).order_by('-period_end').first()
-            
+
+            # Use the same velocity calculation as the Burndown Prediction page so
+            # the coach reports the same figure as the burndown dashboard.
+            try:
+                predictor = BurndownPredictor()
+                predictor._ensure_velocity_snapshots(board)
+                velocity_history = predictor._get_velocity_history(board)
+                if velocity_history:
+                    velocity_stats = predictor._calculate_velocity_statistics(velocity_history)
+                    avg_vel = float(velocity_stats['average_velocity'])
+                    velocity_text = f"{avg_vel:.1f} tasks/week"
+                else:
+                    velocity_text = 'N/A'
+            except Exception:
+                # Fallback to snapshot query if predictor fails
+                latest_velocity = TeamVelocitySnapshot.objects.filter(
+                    board=board
+                ).order_by('-period_end').first()
+                velocity_text = f"{latest_velocity.tasks_completed} tasks/week" if latest_velocity else 'N/A'
+
             team_size = board.members.count()
-            velocity_text = f"{latest_velocity.tasks_completed} tasks/week" if latest_velocity else 'N/A'
             
             # Build context prompt
             prompt = f"""You are an experienced project management coach helping a PM with their project.

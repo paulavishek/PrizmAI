@@ -183,7 +183,7 @@
                         </div>
                         <div class="col-md-3">
                             <div class="text-center p-3 border rounded">
-                                <h4 class="mb-0 text-info">{{ effectiveness.avg_confidence|floatformat:2 }}</h4>
+                                <h4 class="mb-0 text-info">{% widthratio effectiveness.avg_confidence 1 100 %}%</h4>
                                 <p class="text-muted mb-0 small">Avg Confidence</p>
                                 <small class="text-muted">System confidence</small>
                             </div>
@@ -216,11 +216,10 @@
                             <div class="list-group-item">
                                 <div class="d-flex justify-content-between align-items-start">
                                     <div>
-                                        <h6 class="mb-1 text-capitalize">{{ insight.insight_type|replace:"_, " }}</h6>
+                                        <h6 class="mb-1">{{ insight.insight_type|replace:"_, "|title|replace:"Pm ,PM " }}</h6>
                                         <p class="mb-1">{{ insight.pattern_description }}</p>
                                         <small class="text-muted">
-                                            Observed {{ insight.occurrence_count }} times | 
-                                            Confidence: {{ insight.confidence_score|floatformat:2 }}
+                                            {% if insight.sample_size %}Observed {{ insight.sample_size }} times | {% endif %}Confidence: {{ insight.confidence_score|floatformat:2 }}
                                         </small>
                                     </div>
                                     <span class="badge bg-success">Active</span>
