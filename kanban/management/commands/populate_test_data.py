@@ -79,6 +79,9 @@ class Command(BaseCommand):
         
         # Create conflict scenarios for demo
         self.create_conflict_scenarios()
+
+        # Seed AI Coach demo data (coaching effectiveness metrics)
+        self.create_ai_coach_demo_data()
         
         # Refresh all demo data dates to be relative to current date
         # This ensures that even if demo data creation took time, all dates are current
@@ -3950,6 +3953,181 @@ Carol: Sounds good. Great work this week!
         self.stdout.write(self.style.SUCCESS(f'   Lessons Learned: {total_lessons}'))
         self.stdout.write(self.style.SUCCESS(f'   Improvement Metrics: {total_metrics}'))
         self.stdout.write(self.style.SUCCESS(f'   Action Items: {total_actions}'))
+
+    def create_ai_coach_demo_data(self):
+        """
+        Seed pre-acknowledged and rated AI Coach suggestions for demo boards so
+        that Coaching Effectiveness, Action Rate, and Helpful Rate are non-zero.
+        Safe to run multiple times — uses get_or_create on title+board to avoid
+        duplicate suggestions.
+        """
+        from decimal import Decimal
+        from kanban.coach_models import CoachingSuggestion, CoachingFeedback
+
+        self.stdout.write(self.style.NOTICE('\n🤖 Seeding AI Coach demo data...'))
+
+        demo_boards = Board.objects.filter(is_official_demo_board=True)
+        if not demo_boards.exists():
+            demo_boards = Board.objects.filter(
+                name__in=['Software Project', 'Bug Tracking', 'Marketing Campaign']
+            )
+
+        if not demo_boards.exists():
+            self.stdout.write(self.style.WARNING('  ⚠️  No demo boards found – skipping AI Coach seeding'))
+            return
+
+        now = timezone.now()
+
+        # Seed data spec: each entry produces one resolved suggestion with feedback.
+        seed_suggestions = [
+            {
+                'suggestion_type': 'velocity_drop',
+                'severity': 'high',
+                'title': '[DEMO] Velocity Drop Detected',
+                'message': 'Team velocity has dropped 25% over the last two sprints. Early intervention can prevent schedule slippage.',
+                'reasoning': 'Historical velocity data shows a consistent decline indicating potential blockers or capacity issues.',
+                'recommended_actions': [
+                    'Hold a focused retrospective on the velocity decline • Rationale: Identifies root causes collaboratively • Expected outcome: Actionable list of blockers • How to: 30-minute session using Start/Stop/Continue format',
+                    'Review current sprint backlog for over-commitment • Rationale: Teams often underestimate task complexity • Expected outcome: Realistic sprint scope • How to: Compare story points to historical capacity',
+                ],
+                'expected_impact': 'Restoring velocity to baseline can recover 1-2 weeks of project schedule.',
+                'confidence_score': Decimal('0.82'),
+                'status': 'resolved',
+                'was_helpful': True,
+                'action_taken': 'accepted',
+                'created_offset_days': 25,
+            },
+            {
+                'suggestion_type': 'resource_overload',
+                'severity': 'high',
+                'title': '[DEMO] Team Member Overloaded',
+                'message': 'One team member has 5 concurrent high-priority tasks, risking burnout and quality issues.',
+                'reasoning': 'Task assignment analysis shows an imbalanced workload across team members.',
+                'recommended_actions': [
+                    'Redistribute 2 tasks to other team members • Rationale: Balances workload and reduces burnout risk • Expected outcome: More even task distribution • How to: Review task list in the next standup',
+                ],
+                'expected_impact': 'Balanced workload improves throughput and reduces defect rate by ~15%.',
+                'confidence_score': Decimal('0.88'),
+                'status': 'resolved',
+                'was_helpful': True,
+                'action_taken': 'partially',
+                'created_offset_days': 20,
+            },
+            {
+                'suggestion_type': 'deadline_risk',
+                'severity': 'critical',
+                'title': '[DEMO] Deadline at Risk',
+                'message': 'At the current velocity, project completion is projected 12 days past the target date.',
+                'reasoning': 'Burndown analysis shows the remaining scope cannot be completed by the deadline at the current pace.',
+                'recommended_actions': [
+                    'Negotiate scope reduction with stakeholders • Rationale: Scope is the most flexible constraint • Expected outcome: Achievable deadline • How to: Identify low-priority features that can be deferred',
+                    'Consider adding a team member for the next 3 weeks • Rationale: Temporary capacity boost can close the gap • Expected outcome: On-time delivery • How to: Identify available internal resource or contractor',
+                ],
+                'expected_impact': 'Scope adjustment or capacity addition can bring the project back on track.',
+                'confidence_score': Decimal('0.91'),
+                'status': 'acknowledged',
+                'was_helpful': True,
+                'action_taken': 'accepted',
+                'created_offset_days': 10,
+            },
+            {
+                'suggestion_type': 'scope_creep',
+                'severity': 'medium',
+                'title': '[DEMO] Scope Creep Detected',
+                'message': '8 unplanned tasks were added in the last sprint without adjusting the timeline or removing existing scope.',
+                'reasoning': 'Scope baseline comparison shows 18% task growth without corresponding capacity increase.',
+                'recommended_actions': [
+                    'Review and formally approve all newly added tasks • Rationale: Maintains change control discipline • Expected outcome: Only truly critical additions proceed • How to: Use a change request template',
+                ],
+                'expected_impact': 'Controlling scope creep prevents a 2-3 week schedule overrun.',
+                'confidence_score': Decimal('0.79'),
+                'status': 'resolved',
+                'was_helpful': False,
+                'action_taken': 'not_applicable',
+                'created_offset_days': 15,
+            },
+            {
+                'suggestion_type': 'best_practice',
+                'severity': 'low',
+                'title': '[DEMO] Daily Standup Cadence Opportunity',
+                'message': 'No standups were recorded in the last 5 days. Regular syncs improve team alignment.',
+                'reasoning': 'Communication activity metrics show a gap in team synchronization events.',
+                'recommended_actions': [
+                    'Re-establish 15-minute daily standups • Rationale: Short syncs surface blockers early • Expected outcome: Faster issue resolution • How to: Schedule a recurring calendar invite',
+                ],
+                'expected_impact': 'Consistent standups reduce task blockage duration by an average of 1.5 days.',
+                'confidence_score': Decimal('0.75'),
+                'status': 'resolved',
+                'was_helpful': True,
+                'action_taken': 'accepted',
+                'created_offset_days': 18,
+            },
+            {
+                'suggestion_type': 'team_burnout',
+                'severity': 'medium',
+                'title': '[DEMO] Team Burnout Risk',
+                'message': 'Average task completion time has increased 40% and several tasks have been sitting unresolved for over 10 days.',
+                'reasoning': 'Prolonged high WIP alongside slow cycle times is a leading indicator of team fatigue.',
+                'recommended_actions': [
+                    'Schedule a team wellness check-in • Rationale: Opens a safe channel to surface morale issues • Expected outcome: Identified stressors and corrective actions • How to: Informal 30-minute group conversation',
+                ],
+                'expected_impact': 'Addressing burnout early prevents extended productivity decline.',
+                'confidence_score': Decimal('0.77'),
+                'status': 'acknowledged',
+                'was_helpful': True,
+                'action_taken': 'accepted',
+                'created_offset_days': 5,
+            },
+        ]
+
+        total_created = 0
+        for board in demo_boards:
+            pm_user = board.created_by or User.objects.filter(is_staff=True).first()
+            if not pm_user:
+                continue
+
+            for spec in seed_suggestions:
+                created_at = now - timedelta(days=spec['created_offset_days'])
+                obj, created = CoachingSuggestion.objects.get_or_create(
+                    board=board,
+                    title=spec['title'],
+                    defaults={
+                        'suggestion_type': spec['suggestion_type'],
+                        'severity': spec['severity'],
+                        'message': spec['message'],
+                        'reasoning': spec['reasoning'],
+                        'recommended_actions': spec['recommended_actions'],
+                        'expected_impact': spec['expected_impact'],
+                        'confidence_score': spec['confidence_score'],
+                        'status': spec['status'],
+                        'was_helpful': spec['was_helpful'],
+                        'action_taken': spec['action_taken'],
+                        'generation_method': 'rule',
+                        'resolved_at': created_at + timedelta(days=2) if spec['status'] in ('resolved', 'acknowledged') else None,
+                        'acknowledged_by': pm_user if spec['status'] in ('resolved', 'acknowledged') else None,
+                    }
+                )
+                if created:
+                    total_created += 1
+                    # Backdate created_at using a low-level update (auto_now_add prevents
+                    # setting it in create(), so we bypass it here for realistic demo data).
+                    CoachingSuggestion.objects.filter(pk=obj.pk).update(created_at=created_at)
+                    # Also create a CoachingFeedback entry so the analytics
+                    # page has granular data.
+                    CoachingFeedback.objects.get_or_create(
+                        suggestion=obj,
+                        user=pm_user,
+                        defaults={
+                            'was_helpful': spec['was_helpful'],
+                            'relevance_score': 4 if spec['was_helpful'] else 2,
+                            'action_taken': spec['action_taken'],
+                            'feedback_text': 'Pre-seeded demo feedback.',
+                        }
+                    )
+
+        self.stdout.write(self.style.SUCCESS(
+            f'  ✅ AI Coach demo data seeded: {total_created} suggestions created across {demo_boards.count()} boards'
+        ))
 
 
 

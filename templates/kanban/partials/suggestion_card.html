@@ -1,3 +1,4 @@
+{% load kanban_filters %}
 <div class="suggestion-card {{ suggestion.severity }}" id="suggestion-{{ suggestion.id }}">
     <div class="d-flex justify-content-between align-items-start mb-3">
         <div>
@@ -111,7 +112,7 @@
         <strong><i class="fas fa-tasks me-2"></i>Recommended Actions:</strong>
         <ul class="actions-list">
             {% for action in suggestion.recommended_actions %}
-            <li>{{ action }}</li>
+            <li>{{ action|format_coach_action }}</li>
             {% endfor %}
         </ul>
     </div>

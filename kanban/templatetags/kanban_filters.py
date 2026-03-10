@@ -157,3 +157,48 @@ def wip_age_days(value):
         return max(0, delta.days)
     except (AttributeError, TypeError):
         return 0
+
+
+@register.filter(is_safe=True)
+def format_coach_action(action_text):
+    """
+    Parse a coach action string that uses ' • ' as a sub-label separator and
+    return structured HTML.
+
+    Input format:
+        "Do something • Rationale: why it helps • Expected outcome: measurable result • How to: practical hint"
+
+    Output: An HTML block with the main action bold and each sub-label on its
+    own line as a bold label followed by its value.
+
+    Usage: {{ action|format_coach_action }}
+    """
+    from django.utils.html import escape, mark_safe
+    if not action_text:
+        return mark_safe('')
+
+    parts = [p.strip() for p in str(action_text).split(' • ')]
+    if not parts:
+        return mark_safe(escape(action_text))
+
+    # Known sub-labels (case-insensitive prefix match)
+    sub_labels = ('rationale:', 'expected outcome:', 'how to:', 'implementation hint:')
+
+    html_parts = []
+    for i, part in enumerate(parts):
+        lower = part.lower()
+        is_sub = any(lower.startswith(lbl) for lbl in sub_labels)
+        if i == 0 and not is_sub:
+            # Main action text
+            html_parts.append('<strong>' + escape(part) + '</strong>')
+        else:
+            # Sub-label: split at first ':' to bold just the label
+            colon_idx = part.find(':')
+            if colon_idx != -1:
+                label = escape(part[:colon_idx + 1])
+                content = escape(part[colon_idx + 1:].strip())
+                html_parts.append('<span><strong>' + label + '</strong> ' + content + '</span>')
+            else:
+                html_parts.append('<span>' + escape(part) + '</span>')
+
+    return mark_safe('<br>'.join(html_parts))
