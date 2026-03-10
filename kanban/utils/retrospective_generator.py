@@ -58,12 +58,18 @@ class RetrospectiveGenerator:
             completed_at__lt=period_start_dt
         )
         
-        # Get completed tasks - tasks with progress=100 that were completed (or marked as done) during this period
-        # Include tasks with progress=100 even if completed_at is not set
-        completed_tasks = tasks.filter(progress=100).filter(
-            Q(completed_at__range=(period_start_dt, period_end_dt)) | 
-            Q(completed_at__isnull=True)  # Include tasks marked as 100% even without completed_at
-        )
+        # Detect "done"-type columns by name (case-insensitive) — tasks here count as completed
+        from kanban.models import Column as KanbanColumn
+        done_column_ids = list(KanbanColumn.objects.filter(
+            board=self.board,
+            name__iregex=r'(done|completed?|finished|closed)'
+        ).values_list('id', flat=True))
+
+        # Get completed tasks: progress=100 OR task is in a done-type column
+        completed_tasks = tasks.filter(
+            Q(progress=100) |
+            Q(column_id__in=done_column_ids)
+        ).distinct()
         
         # Calculate metrics
         metrics = {
@@ -85,8 +91,8 @@ class RetrospectiveGenerator:
             'high_priority_tasks': tasks.filter(priority__in=['high', 'urgent']).count(),
             'urgent_tasks': tasks.filter(priority='urgent').count(),
             
-            # Time metrics
-            'avg_completion_time': completed_tasks.aggregate(Avg('actual_duration_days'))['actual_duration_days__avg'] or 0,
+            # Time metrics — use actual_duration_days where set, fallback to created_at → completed_at diff
+            'avg_completion_time': self._calculate_avg_completion_time(completed_tasks),
             'overdue_tasks': tasks.filter(
                 due_date__lt=timezone.now(),
                 progress__lt=100
@@ -152,6 +158,50 @@ class RetrospectiveGenerator:
         
         return metrics
     
+    def _calculate_avg_completion_time(self, completed_tasks):
+        """Calculate average completion time; try actual_duration_days first, fallback to date diff."""
+        avg = completed_tasks.filter(
+            actual_duration_days__isnull=False,
+            actual_duration_days__gt=0
+        ).aggregate(Avg('actual_duration_days'))['actual_duration_days__avg']
+        if avg:
+            return round(float(avg), 2)
+
+        # Fallback: compute from completed_at - created_at
+        task_dates = list(completed_tasks.filter(
+            completed_at__isnull=False
+        ).values_list('created_at', 'completed_at'))
+        if task_dates:
+            durations = [
+                max(0.5, (ct - ca).total_seconds() / 86400)
+                for ca, ct in task_dates
+            ]
+            return round(sum(durations) / len(durations), 2)
+        return 0
+
+    def _get_board_members_with_workload(self):
+        """Return a list of board members with their current open-task count."""
+        from kanban.models import Task
+        members = []
+        board_users = list(self.board.members.all())
+        # Always include the board creator
+        creator = self.board.created_by
+        if not any(u.id == creator.id for u in board_users):
+            board_users.append(creator)
+
+        for member in board_users:
+            open_tasks = Task.objects.filter(
+                column__board=self.board,
+                assigned_to=member,
+                progress__lt=100
+            ).count()
+            members.append({
+                'username': member.username,
+                'full_name': member.get_full_name() or member.username,
+                'open_tasks': open_tasks,
+            })
+        return members
+
     def _calculate_velocity_trend(self, velocity_snapshots):
         """Calculate velocity trend from snapshots"""
         snapshots_list = list(velocity_snapshots.order_by('period_end'))
@@ -277,8 +327,11 @@ class RetrospectiveGenerator:
         Returns:
             dict: AI-generated insights
         """
+        # Collect board members for AI-assisted action item assignment
+        board_members = self._get_board_members_with_workload()
+
         # Build comprehensive prompt
-        prompt = self._build_retrospective_prompt(metrics, patterns)
+        prompt = self._build_retrospective_prompt(metrics, patterns, board_members)
         
         # Create context ID for caching based on board and period
         context_id = f"board_{self.board.id}:{self.period_start.isoformat()}:{self.period_end.isoformat()}"
@@ -317,9 +370,15 @@ class RetrospectiveGenerator:
         
         return insights
     
-    def _build_retrospective_prompt(self, metrics, patterns):
+    def _build_retrospective_prompt(self, metrics, patterns, board_members=None):
         """Build comprehensive prompt for AI retrospective generation"""
-        
+
+        # Pre-build board members text so it can be embedded cleanly in the f-string
+        members_text = self._format_members_for_prompt(board_members or [])
+        total_tasks = metrics.get('total_tasks', 0)
+        in_progress_tasks = metrics.get('in_progress_tasks', 0)
+        total_activities = metrics.get('total_activities', 0)
+
         prompt = f"""
 Generate a comprehensive retrospective analysis for a project sprint/period.
 
@@ -329,6 +388,7 @@ Generate a comprehensive retrospective analysis for a project sprint/period.
 **Metrics Summary:**
 - Total Tasks: {metrics['total_tasks']}
 - Completed Tasks: {metrics['completed_tasks']} ({metrics['completion_rate']:.1f}% completion rate)
+- In-Progress Tasks: {in_progress_tasks}
 - Average Complexity: {metrics['avg_complexity']:.1f}/10
 - Total Complexity Completed: {metrics['completed_complexity']}
 - Average Completion Time: {metrics['avg_completion_time']:.1f} days
@@ -336,9 +396,13 @@ Generate a comprehensive retrospective analysis for a project sprint/period.
 - Overdue Tasks: {metrics['overdue_tasks']}
 - High Risk Tasks: {metrics['high_risk_tasks']}
 - Active Team Members: {metrics['active_team_members']}
+- Total Activities Logged: {total_activities}
 - Team Velocity: {metrics.get('avg_velocity', 'N/A')} tasks/period
 - Velocity Trend: {metrics.get('velocity_trend', 'unknown')}
 - Scope Change: {metrics.get('scope_change_percentage', 0):.1f}%
+
+**Board Team Members & Current Workload:**
+{members_text}
 
 **Observed Patterns:**
 
@@ -353,7 +417,7 @@ Insights:
 
 **Please provide:**
 
-1. **WHAT WENT WELL** (3-5 key positive points with specific examples)
+1. **WHAT WENT WELL** — Provide exactly 2-3 specific positive observations. Each observation MUST reference actual data from the metrics above (e.g., number of tasks completed, team members who contributed, complexity points delivered, dependencies resolved, milestones hit, or activity levels). If the completion rate is 0%, do NOT use generic phrases like "Team made progress" — instead acknowledge concrete effort metrics: {total_tasks} tasks organised on the board, {in_progress_tasks} tasks actively in progress, {total_activities} activities logged showing team engagement. Never produce a single vague sentence for this section.
 2. **WHAT NEEDS IMPROVEMENT** (3-5 areas for improvement with actionable details)
 3. **LESSONS LEARNED** (Format as JSON array):
    [
@@ -369,14 +433,16 @@ Insights:
    ]
 4. **KEY ACHIEVEMENTS** (JSON array of notable achievements)
 5. **CHALLENGES FACED** (JSON array with impact assessment)
-6. **IMPROVEMENT RECOMMENDATIONS** (5-7 specific, actionable recommendations as JSON array):
+6. **IMPROVEMENT RECOMMENDATIONS** (5-7 specific, actionable recommendations as JSON array).
+   For the "suggested_assignee" field, choose the most appropriate team member from the Board Team Members list above based on action type and their current workload. Prefer members with fewer open tasks for high-priority items. Use the exact username from the list, or null if no suitable match:
    [
      {{
        "title": "Recommendation title",
        "description": "Detailed description",
        "expected_impact": "Expected benefit",
        "priority": "low|medium|high|critical",
-       "action_type": "process_change|tool_adoption|training|documentation|technical_improvement",
+       "action_type": "process_change|tool_adoption|training|documentation|technical_improvement|team_building|communication",
+       "suggested_assignee": "username_from_team_list_or_null",
        "evidence": "Data or observations supporting this recommendation",
        "confidence": 0.80
      }}
@@ -390,6 +456,17 @@ Format the response with clear sections using the headers above.
 """
         return prompt
     
+    def _format_members_for_prompt(self, members):
+        """Format board members list for AI prompt injection."""
+        if not members:
+            return '- No team members found (action items will be unassigned)'
+        lines = []
+        for m in members:
+            lines.append(
+                f"- {m['username']} ({m['full_name']}) — {m['open_tasks']} open tasks currently"
+            )
+        return '\n'.join(lines)
+
     def _format_patterns_for_prompt(self, patterns_list):
         """Format patterns for prompt"""
         if not patterns_list:
@@ -521,25 +598,69 @@ Format the response with clear sections using the headers above.
         return items
     
     def _generate_default_positives(self, metrics, patterns):
-        """Generate default positive feedback from metrics"""
+        """Generate default positive feedback from metrics — always 2-3 specific observations."""
         positives = []
-        
-        if metrics['completion_rate'] >= 80:
-            positives.append(f"✓ Excellent completion rate of {metrics['completion_rate']:.1f}%")
-        elif metrics['completion_rate'] >= 60:
-            positives.append(f"✓ Good completion rate of {metrics['completion_rate']:.1f}%")
-        
-        if metrics['completed_tasks'] > 0:
-            positives.append(f"✓ Successfully completed {metrics['completed_tasks']} tasks")
-        
-        if metrics.get('velocity_trend') == 'increasing':
-            positives.append("✓ Team velocity is improving over time")
-        
+
+        total_tasks = metrics.get('total_tasks', 0)
+        completed = metrics.get('completed_tasks', 0)
+        in_progress = metrics.get('in_progress_tasks', 0)
+        activities = metrics.get('total_activities', 0)
+        completion_rate = metrics.get('completion_rate', 0)
+
+        if completion_rate >= 80:
+            positives.append(
+                f"✓ Excellent completion rate of {completion_rate:.1f}% — "
+                f"{completed} out of {total_tasks} tasks were successfully completed this period."
+            )
+        elif completion_rate >= 60:
+            positives.append(
+                f"✓ Good completion rate of {completion_rate:.1f}% — "
+                f"{completed} out of {total_tasks} tasks were delivered."
+            )
+        elif completed > 0:
+            positives.append(
+                f"✓ {completed} task(s) completed out of {total_tasks} total "
+                f"({completion_rate:.1f}% completion rate), demonstrating forward momentum."
+            )
+        else:
+            # 0% completion — acknowledge effort metrics instead
+            positives.append(
+                f"✓ The team actively organised and tracked {total_tasks} task(s) on the board "
+                f"during this period, demonstrating planning effort and board hygiene."
+            )
+
+        # In-progress work
+        if in_progress > 0:
+            positives.append(
+                f"✓ {in_progress} task(s) are actively in progress, indicating ongoing team "
+                f"engagement and continuity of work."
+            )
+
+        # Activity level
+        if activities > 0:
+            positives.append(
+                f"✓ The team logged {activities} task activities during this period, "
+                f"reflecting consistent collaboration and communication."
+            )
+
+        # High-performer data from patterns (avoid duplicates)
         successes = patterns.get('successes', [])
-        for success in successes[:3]:
-            positives.append(f"✓ {success['description']}")
-        
-        return '\n'.join(positives) if positives else "Team made progress during this period."
+        for success in successes[:2]:
+            desc = success.get('description', '')
+            if desc and not any(desc in p for p in positives):
+                positives.append(f"✓ {desc}")
+
+        if metrics.get('velocity_trend') == 'increasing':
+            positives.append("✓ Team velocity is on an upward trend compared to the previous period.")
+
+        # Always guarantee at least 2 observations
+        if len(positives) < 2:
+            positives.append(
+                f"✓ {total_tasks} task(s) are tracked on the board, demonstrating structured "
+                f"project visibility and team awareness."
+            )
+
+        return '\n'.join(positives)
     
     def _generate_default_improvements(self, metrics, patterns):
         """Generate default improvement areas from metrics"""
@@ -749,22 +870,60 @@ Format the response with clear sections using the headers above.
             logger.warning("No recommendations from AI, generating basic action items")
             recommendations_data = self._generate_fallback_actions()
         
+        # Valid action_type choices from the model — normalise AI output to these
+        valid_action_types = {
+            'process_change', 'tool_adoption', 'training', 'documentation',
+            'technical_improvement', 'team_building', 'communication', 'other'
+        }
+        # Mapping for common AI-generated non-standard values
+        action_type_aliases = {
+            'process_improvement': 'process_change',
+            'process': 'process_change',
+            'tool': 'tool_adoption',
+            'teamwork': 'team_building',
+            'collaboration': 'team_building',
+            'planning': 'process_change',
+            'technical': 'technical_improvement',
+            'tech': 'technical_improvement',
+            'docs': 'documentation',
+            'communication_enhancement': 'communication',
+        }
+
         for rec in recommendations_data:
             try:
                 # Calculate target date based on priority
                 priority = rec.get('priority', 'medium')
                 days_offset = {'critical': 7, 'high': 14, 'medium': 30, 'low': 60}
                 target_date = timezone.now().date() + timedelta(days=days_offset.get(priority, 30))
-                
+
+                # Normalise action_type to a valid model choice
+                raw_type = rec.get('action_type', 'other').lower().strip()
+                action_type = action_type_aliases.get(raw_type, raw_type)
+                if action_type not in valid_action_types:
+                    action_type = 'other'
+
+                # Resolve suggested assignee to a User instance
+                assigned_to = None
+                suggested_username = rec.get('suggested_assignee', '')
+                if suggested_username and str(suggested_username).lower() not in ('null', 'none', ''):
+                    try:
+                        from django.contrib.auth.models import User
+                        assigned_to = User.objects.filter(
+                            username__iexact=str(suggested_username).strip()
+                        ).first()
+                    except Exception:
+                        assigned_to = None
+
                 RetrospectiveActionItem.objects.create(
                     retrospective=retrospective,
                     board=self.board,
                     title=rec.get('title', rec.get('description', 'Untitled')[:100]),
                     description=rec.get('description', ''),
-                    action_type=rec.get('action_type', 'other'),
+                    action_type=action_type,
                     priority=priority,
                     expected_impact=rec.get('expected_impact', 'Improve team performance'),
                     target_completion_date=target_date,
+                    assigned_to=assigned_to,
                     ai_suggested=True,
                     ai_confidence=Decimal('0.75')
                 )
@@ -809,9 +968,21 @@ Format the response with clear sections using the headers above.
             },
         ]
         
+        # Map metric_type code → metrics_snapshot key for previous-period comparison
+        snapshot_key_map = {
+            'velocity': 'completed_tasks',
+            'quality': 'completion_rate',
+            'cycle_time': 'avg_completion_time',
+        }
+
         for metric_def in metric_definitions:
             try:
-                previous_value = previous_metrics.get(metric_def['type']) if previous_metrics else None
+                snapshot_key = snapshot_key_map.get(metric_def['type'])
+                previous_value = (
+                    previous_metrics.get(snapshot_key)
+                    if previous_metrics and snapshot_key
+                    else None
+                )
                 
                 ImprovementMetric.objects.create(
                     board=self.board,
