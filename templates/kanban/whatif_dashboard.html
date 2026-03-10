@@ -19,8 +19,46 @@
     /* ─── Slider section ──────────────────────────────────────── */
     .slider-group { background: #f8f9fa; border-radius: .5rem; padding: 1rem 1.25rem; margin-bottom: .75rem; }
     .slider-group label { font-weight: 600; }
-    .slider-group .form-range { width: 100%; }
-    .slider-value { font-size: 1.3rem; font-weight: 700; min-width: 60px; text-align: right; }
+    .slider-value { font-size: 1.3rem; font-weight: 700; min-width: 70px; text-align: right; }
+
+    /* Custom range track — visible filled bar */
+    .wi-range {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 100%;
+        height: 6px;
+        border-radius: 3px;
+        outline: none;
+        cursor: pointer;
+        /* filled-track handled via JS background-image below */
+        background: #dee2e6;
+        margin: 10px 0;
+    }
+    .wi-range::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #0d6efd;
+        border: 2px solid #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,.25);
+        cursor: pointer;
+        transition: transform .15s, box-shadow .15s;
+    }
+    .wi-range::-moz-range-thumb {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #0d6efd;
+        border: 2px solid #fff;
+        box-shadow: 0 1px 4px rgba(0,0,0,.25);
+        cursor: pointer;
+    }
+    .wi-range:hover::-webkit-slider-thumb { transform: scale(1.15); box-shadow: 0 2px 8px rgba(0,0,0,.3); }
+    .wi-range::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; }
+    .wi-range::-moz-range-track { height: 6px; border-radius: 3px; background: #dee2e6; }
+    .wi-range::-moz-range-progress { height: 6px; border-radius: 3px; background: #0d6efd; }
 
     /* ─── Impact panel ────────────────────────────────────────── */
     #impact-panel { display: none; }
@@ -110,7 +148,7 @@
             <div class="card wi-stat-card {% if baseline.budget_utilization_pct > 95 %}danger{% elif baseline.budget_utilization_pct > 80 %}warning{% else %}success{% endif %}">
                 <div class="card-body">
                     <h6 class="text-muted mb-1"><i class="fas fa-dollar-sign me-1"></i> Budget</h6>
-                    <h3 class="mb-0" id="bl-budget">{{ baseline.budget_utilization_pct }}%</h3>
+                    <h3 class="mb-0" id="bl-budget">{{ baseline.budget_utilization_pct|floatformat:1 }}%</h3>
                     <small class="text-muted">{{ baseline.budget_currency }} <span id="bl-spent">{{ baseline.budget_spent|floatformat:0 }}</span> / <span id="bl-allocated">{{ baseline.budget_allocated|floatformat:0 }}</span></small>
                 </div>
             </div>
@@ -119,7 +157,7 @@
             <div class="card wi-stat-card {% if baseline.delay_probability > 60 %}danger{% elif baseline.delay_probability > 30 %}warning{% else %}success{% endif %}">
                 <div class="card-body">
                     <h6 class="text-muted mb-1"><i class="fas fa-calendar-alt me-1"></i> Timeline</h6>
-                    <h3 class="mb-0" id="bl-date">{% if baseline.predicted_date %}{{ baseline.predicted_date }}{% else %}N/A{% endif %}</h3>
+                    <h3 class="mb-0" id="bl-date">{% if predicted_date_obj %}{{ predicted_date_obj|date:"M j, Y" }}{% elif baseline.predicted_date %}{{ baseline.predicted_date }}{% else %}N/A{% endif %}</h3>
                     <small class="text-muted">Delay prob: <span id="bl-delay">{{ baseline.delay_probability }}</span>%</small>
                 </div>
             </div>
@@ -147,7 +185,7 @@
                     <label><i class="fas fa-layer-group text-primary me-1"></i> Add / Remove Tasks</label>
                     <div class="slider-value text-primary" id="scope-val">0</div>
                 </div>
-                <input type="range" class="form-range" id="scope-slider" min="-20" max="20" value="0" step="1">
+                <input type="range" class="wi-range" id="scope-slider" min="-20" max="20" value="0" step="1">
                 <div class="d-flex justify-content-between">
                     <small class="text-muted">-20 tasks</small>
                     <small class="text-muted fw-bold" id="scope-abs">{{ baseline.total_tasks }} tasks → {{ baseline.total_tasks }} tasks</small>
@@ -161,7 +199,7 @@
                     <label><i class="fas fa-users text-success me-1"></i> Change Team Size</label>
                     <div class="slider-value text-success" id="team-val">0</div>
                 </div>
-                <input type="range" class="form-range" id="team-slider" min="-5" max="5" value="0" step="1">
+                <input type="range" class="wi-range" id="team-slider" min="-5" max="5" value="0" step="1">
                 <div class="d-flex justify-content-between">
                     <small class="text-muted">-5 members</small>
                     <small class="text-muted fw-bold" id="team-abs">{{ baseline.team_size }} → {{ baseline.team_size }} members</small>
@@ -173,9 +211,9 @@
             <div class="slider-group">
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <label><i class="fas fa-calendar-check text-danger me-1"></i> Shift Deadline</label>
-                    <div class="slider-value text-danger" id="deadline-val">0 days</div>
+                    <div class="slider-value text-secondary" id="deadline-val">0 days</div>
                 </div>
-                <input type="range" class="form-range" id="deadline-slider" min="-56" max="56" value="0" step="7">
+                <input type="range" class="wi-range" id="deadline-slider" min="-56" max="56" value="0" step="7">
                 <div class="d-flex justify-content-between">
                     <small class="text-muted">-8 weeks</small>
                     <small class="text-muted fw-bold" id="deadline-abs">No shift</small>
@@ -358,9 +396,8 @@
 
 {% block extra_js %}
 <script src="{% static 'js/chart.umd.min.js' %}"></script>
-<script src="{% static 'js/whatif_analyzer.js' %}"></script>
 <script>
-    // Pass data from Django to JS
+    // Pass data from Django to JS — must be defined BEFORE whatif_analyzer.js executes
     window.WHATIF_CONFIG = {
         boardId: {{ board.id }},
         baseline: {{ baseline_json|safe }},
@@ -373,4 +410,5 @@
         csrfToken: '{{ csrf_token }}',
     };
 </script>
+<script src="{% static 'js/whatif_analyzer.js' %}"></script>
 {% endblock %}

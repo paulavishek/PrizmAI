@@ -64,6 +64,18 @@
         return v ? v.pop() : '';
     }
 
+    // ── Slider track fill ──────────────────────────────────────
+    // Paints a left-to-right gradient so the filled portion is clearly visible.
+    function paintSlider(el, fillColor) {
+        fillColor = fillColor || '#0d6efd';
+        const min = parseFloat(el.min);
+        const max = parseFloat(el.max);
+        const val = parseFloat(el.value);
+        const pct = ((val - min) / (max - min)) * 100;
+        el.style.background =
+            'linear-gradient(to right, ' + fillColor + ' 0%, ' + fillColor + ' ' + pct + '%, #dee2e6 ' + pct + '%, #dee2e6 100%)';
+    }
+
     // ── Slider updates ──────────────────────────────────────────
     function updateSliderLabels() {
         const sv = parseInt(scopeSlider.value);
@@ -73,6 +85,21 @@
         scopeVal.textContent = (sv >= 0 ? '+' : '') + sv;
         teamVal.textContent  = (tv >= 0 ? '+' : '') + tv;
         deadlineVal.textContent = (dv >= 0 ? '+' : '') + dv + ' days';
+
+        // Colour-code deadline: red = earlier, grey = no shift, green = later
+        if (dv === 0) {
+            deadlineVal.className = 'slider-value text-secondary';
+        } else if (dv > 0) {
+            deadlineVal.className = 'slider-value text-success';
+        } else {
+            deadlineVal.className = 'slider-value text-danger';
+        }
+
+        // Repaint filled tracks
+        paintSlider(scopeSlider, '#0d6efd');
+        paintSlider(teamSlider, '#198754');
+        var deadlineColor = dv === 0 ? '#6c757d' : dv > 0 ? '#198754' : '#dc3545';
+        paintSlider(deadlineSlider, deadlineColor);
 
         const newTasks = BL.total_tasks + sv;
         scopeAbs.textContent = BL.total_tasks + ' tasks → ' + newTasks + ' tasks';
@@ -98,6 +125,7 @@
         teamSlider.value = 0;
         deadlineSlider.value = 0;
         updateSliderLabels();
+        deadlineVal.className = 'slider-value text-secondary';
         impactPanel.classList.remove('show');
         lastResults = null;
         lastParams = null;
