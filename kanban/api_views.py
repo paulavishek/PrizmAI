@@ -595,13 +595,14 @@ def summarize_board_analytics_api(request, board_id):
         from django.utils import timezone
         from datetime import timedelta
         
-        # Get all tasks for this board
-        all_tasks = Task.objects.filter(column__board=board)
+        # Get all tasks for this board (exclude milestones to match metric cards)
+        all_tasks = Task.objects.filter(column__board=board, item_type='task')
         total_tasks = all_tasks.count()
         
         # Completed tasks (based on progress = 100%)
         completed_count = Task.objects.filter(
-            column__board=board, 
+            column__board=board,
+            item_type='task',
             progress=100
         ).count()
         
@@ -654,11 +655,11 @@ def summarize_board_analytics_api(request, board_id):
         columns = Column.objects.filter(board=board)
         tasks_by_column = []
         for column in columns:
-            count = Task.objects.filter(column=column).count()
+            count = Task.objects.filter(column=column, item_type='task').count()
             tasks_by_column.append({'name': column.name, 'count': count})
         
         # Task distribution by priority
-        priority_queryset = Task.objects.filter(column__board=board).values('priority').annotate(
+        priority_queryset = Task.objects.filter(column__board=board, item_type='task').values('priority').annotate(
             count=Count('id')
         ).order_by('priority')
         
@@ -668,7 +669,7 @@ def summarize_board_analytics_api(request, board_id):
             tasks_by_priority.append({'priority': priority_name, 'count': item['count']})
         
         # Task distribution by user
-        user_queryset = Task.objects.filter(column__board=board).values(
+        user_queryset = Task.objects.filter(column__board=board, item_type='task').values(
             'assigned_to__username'
         ).annotate(count=Count('id')).order_by('-count')
         
@@ -677,8 +678,9 @@ def summarize_board_analytics_api(request, board_id):
             username = item['assigned_to__username'] or 'Unassigned'
             completed_user_tasks = Task.objects.filter(
                 column__board=board,
+                item_type='task',
                 assigned_to__username=item['assigned_to__username'],
-                column__name__icontains='done'
+                progress=100
             ).count()
             
             user_completion_rate = 0

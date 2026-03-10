@@ -4,6 +4,8 @@
 
 {% block title %}{{ board.name }} - Analytics{% endblock %}
 
+{% block page_title %}<a href="{% url 'dashboard' %}" style="color:inherit;text-decoration:none;">Dashboard</a> / <a href="{% url 'board_detail' board.id %}" style="color:inherit;text-decoration:none;">{{ board.name }}</a> / Analytics{% endblock %}
+
 {% block extra_css %}
 <!-- Chart.js CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/chart.js@3.7.1/dist/chart.min.css">
