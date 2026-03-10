@@ -4088,6 +4088,7 @@ def board_status_report(request, board_id):
 
     # Only generate on POST so users explicitly trigger the AI call
     report_text = None
+    report_html = None
     report_explainability = None
     error = None
 
@@ -4119,8 +4120,15 @@ def board_status_report(request, board_id):
             # Budget status (optional)
             try:
                 from kanban.budget_models import ProjectBudget
-                budget = ProjectBudget.objects.filter(board=board).order_by('-created_at').first()
-                budget_status = budget.status.title() if budget else 'Not tracked'
+                budget = ProjectBudget.objects.filter(board=board).first()
+                if budget:
+                    utilization = round(budget.get_budget_utilization_percent(), 1)
+                    raw_status = budget.get_status()  # 'ok', 'warning', 'critical', 'over'
+                    status_labels = {'ok': 'On Track', 'warning': 'Warning', 'critical': 'Critical', 'over': 'Over'}
+                    status_label = status_labels.get(raw_status, raw_status.title())
+                    budget_status = f"{status_label} ({utilization}%)"
+                else:
+                    budget_status = 'Not tracked'
             except Exception:
                 budget_status = 'Not tracked'
 
@@ -4158,6 +4166,7 @@ def board_status_report(request, board_id):
             )
 
             if report_result:
+                import markdown as _md
                 # generate_status_report now returns a dict with explainability
                 if isinstance(report_result, dict):
                     report_text = report_result.get('report', '')
@@ -4172,12 +4181,14 @@ def board_status_report(request, board_id):
                     # Backward compatibility if somehow a string is returned
                     report_text = report_result
                     report_explainability = None
+                report_html = _md.markdown(report_text, extensions=['nl2br'])
             else:
                 error = 'AI could not generate the report at this time. Please try again shortly.'
 
     context = {
         'board': board,
         'report_text': report_text,
+        'report_html': report_html if report_text else None,
         'report_explainability': report_explainability if report_text else None,
         'error': error,
     }
