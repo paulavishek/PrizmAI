@@ -129,10 +129,12 @@ def generate_burndown_prediction(request, board_id):
         })
     
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return JsonResponse({
             'success': False,
             'error': str(e)
-        }, status=400)
+        }, status=500)
 
 
 @login_required

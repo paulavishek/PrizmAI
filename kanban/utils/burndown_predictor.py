@@ -145,8 +145,8 @@ class BurndownPredictor:
                         'min_required': self.MIN_VELOCITY_SAMPLES,
                         'data_sufficiency': 'high' if len(velocity_history) >= 6 else 'moderate' if len(velocity_history) >= self.MIN_VELOCITY_SAMPLES else 'low',
                         'velocity_stability': (
-                            'stable' if velocity_stats['std_dev'] < velocity_stats['average_velocity'] * 0.3
-                            else 'moderate' if velocity_stats['std_dev'] < velocity_stats['average_velocity'] * 0.6
+                            'stable' if float(velocity_stats['std_dev']) < float(velocity_stats['average_velocity']) * 0.3
+                            else 'moderate' if float(velocity_stats['std_dev']) < float(velocity_stats['average_velocity']) * 0.6
                             else 'volatile'
                         ) if velocity_stats['average_velocity'] > 0 else 'unknown',
                         'trend_direction': velocity_stats.get('trend', 'stable'),
