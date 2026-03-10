@@ -232,21 +232,43 @@ def budget_analytics(request, board_id):
     if total_time_logged > 0:
         cost_per_hour = metrics['budget']['spent'] / float(total_time_logged)
     
-    # Calculate projected final cost based on completion rate
-    projected_final_cost = metrics['budget']['spent']
-    if metrics['tasks']['completion_rate'] > 0:
-        projected_final_cost = (metrics['budget']['spent'] / metrics['tasks']['completion_rate']) * 100
-    
+    # Calculate projected final cost based on cost-per-completed-task × remaining tasks.
+    # This avoids the division-by-completion-rate formula that inflates cost when velocity is low.
+    total_tasks = metrics['tasks']['total']
+    completed_tasks = metrics['tasks']['completed']
+    remaining_tasks = total_tasks - completed_tasks
+    spent = metrics['budget']['spent']
+
+    if completed_tasks > 0:
+        cost_per_completed_task = spent / completed_tasks
+        projected_final_cost = spent + (remaining_tasks * cost_per_completed_task)
+        projection_method = (
+            f"Based on current cost-per-task rate "
+            f"({metrics['budget']['currency']} {cost_per_completed_task:,.2f}/task) "
+            f"\u00d7 {remaining_tasks} remaining task{'s' if remaining_tasks != 1 else ''}"
+        )
+    else:
+        # No tasks completed yet; use sum of all task estimates as best guess
+        total_estimated = metrics['costs']['total_estimated']
+        if total_estimated > 0:
+            projected_final_cost = total_estimated
+            projection_method = "No tasks completed yet — based on sum of all task cost estimates"
+        else:
+            projected_final_cost = spent
+            projection_method = "No tasks completed and no cost estimates available"
+
     # Calculate projected overrun
     projected_overrun = max(0, projected_final_cost - metrics['budget']['allocated'])
     
     # Add these to metrics
     metrics['burn_rate'] = burn_rate_data.get('daily_burn_rate', 0)
     metrics['days_remaining'] = burn_rate_data.get('days_remaining', 0)
+    metrics['days_remaining_display'] = burn_rate_data.get('days_remaining_display', 'No deadline set')
     metrics['total_time_logged'] = float(total_time_logged)
     metrics['cost_per_hour'] = float(cost_per_hour)
     metrics['projected_final_cost'] = projected_final_cost
     metrics['projected_overrun'] = projected_overrun
+    metrics['projection_method'] = projection_method
     metrics['budget']['allocated_90_percent'] = metrics['budget']['allocated'] * 0.9
     
     context = {

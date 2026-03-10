@@ -251,7 +251,7 @@
                         </div>
                         <div class="col-md-3">
                             <strong>Days Remaining:</strong><br>
-                            {{ burn_rate.days_remaining }} days
+                            {{ burn_rate.days_remaining_display|default:"No deadline set" }}</div>
                         </div>
                         <div class="col-md-3">
                             <strong>Projected End:</strong><br>
