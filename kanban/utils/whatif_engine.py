@@ -221,11 +221,15 @@ class WhatIfEngine:
         new_velocity = round(max(new_velocity, 0.1), 2)
 
         # --- Timeline ---
-        if new_velocity > 0:
+        # Guard: velocity below threshold → don't extrapolate a date (avoids year-2034 explosions)
+        VELOCITY_THRESHOLD = 0.5
+        low_velocity = new_velocity < VELOCITY_THRESHOLD
+
+        if not low_velocity and new_velocity > 0:
             weeks_for_remaining = new_remaining / new_velocity
             additional_weeks = weeks_for_remaining - (
                 baseline['remaining_tasks'] / baseline['velocity_per_week']
-                if baseline['velocity_per_week'] > 0 else 0
+                if baseline['velocity_per_week'] >= VELOCITY_THRESHOLD else 0
             )
         else:
             additional_weeks = 0
@@ -233,7 +237,7 @@ class WhatIfEngine:
         timeline_shift_days = round(additional_weeks * 7) - deadline_shift
 
         new_predicted_date = None
-        if baseline['predicted_date']:
+        if not low_velocity and baseline['predicted_date']:
             base_date = date.fromisoformat(baseline['predicted_date'])
             new_predicted_date = base_date + timedelta(days=timeline_shift_days)
 
@@ -277,6 +281,7 @@ class WhatIfEngine:
             'budget_utilization_pct': new_budget_util,
             'budget_currency': baseline['budget_currency'],
             'predicted_date': new_predicted_date.isoformat() if new_predicted_date else None,
+            'low_velocity': low_velocity,
             'effective_deadline': new_deadline.isoformat() if new_deadline else None,
             'delay_probability': round(new_delay_prob, 1),
             'risk_level': new_risk,
