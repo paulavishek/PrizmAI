@@ -498,7 +498,17 @@
                                 <span>{{ ai_result.overall_health_score }}</span>
                                 <small style="font-size:.6rem; font-weight:400;">/ 10</small>
                             </div>
-                            <div class="text-center mt-1" style="font-size:.65rem; color:#6c757d; white-space:nowrap;">Health Score</div>
+                            <div class="text-center mt-1" style="font-size:.65rem; color:#6c757d; white-space:nowrap;">
+                                Health Score
+                                <span
+                                    tabindex="0"
+                                    data-bs-toggle="tooltip"
+                                    data-bs-placement="bottom"
+                                    title="Health score out of 10. Below 3 = Critical, 3&#8211;5 = At Risk, 6&#8211;8 = Healthy, 9&#8211;10 = Excellent."
+                                    style="cursor:help; color:#6c757d;"
+                                    aria-label="Health score scale info"
+                                >ⓘ</span>
+                            </div>
                         </div>
                         <div class="col">
                             <h5 class="mb-1">{{ ai_result.overall_health_label }}
