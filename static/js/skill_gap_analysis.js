@@ -364,9 +364,12 @@ class SkillGapAnalyzer {
     renderGapCard(gap) {
         const severityBadge = this.getSeverityBadge(gap.severity);
         const statusBadge = this.getStatusBadge(gap.status);
+        const planBadge = (gap.plans_count > 0)
+            ? '<span class="badge bg-success ms-1 plan-created-badge"><i class="fas fa-clipboard-check me-1"></i>Plan Created</span>'
+            : '';
 
         return `
-            <div class="gap-card mb-2 p-3 border rounded">
+            <div class="gap-card mb-2 p-3 border rounded" data-gap-id="${gap.id}">
                 <div class="d-flex justify-content-between align-items-start mb-2">
                     <div>
                         <h6 class="mb-1">${gap.skill_name} <span class="badge bg-secondary">${gap.proficiency_level}</span></h6>
@@ -375,6 +378,7 @@ class SkillGapAnalyzer {
                     <div>
                         ${severityBadge}
                         ${statusBadge}
+                        ${planBadge}
                     </div>
                 </div>
                 ${gap.recommendations_pending ? `

@@ -3533,6 +3533,7 @@ def analyze_skill_gaps_api(request, board_id):
                 'has_team_coverage': gap_data.get('has_team_coverage', False),
                 'recommendations': skill_gap.ai_recommendations or [],
                 'recommendations_pending': not skill_gap.ai_recommendations,
+                'plans_count': skill_gap.development_plans.count(),
                 'identified_at': skill_gap.identified_at.isoformat()
             })
         
@@ -3805,10 +3806,16 @@ def create_skill_development_plan_api(request):
             target_users = User.objects.filter(id__in=data['target_user_ids'])
             plan.target_users.set(target_users)
         
+        # Update skill gap status to in_progress now that a plan exists
+        if skill_gap.status == 'identified':
+            skill_gap.status = 'in_progress'
+            skill_gap.save(update_fields=['status'])
+        
         return JsonResponse({
             'success': True,
             'plan_id': plan.id,
-            'message': 'Development plan created successfully'
+            'message': 'Development plan created successfully',
+            'gap_status': skill_gap.status
         })
         
     except json.JSONDecodeError:
@@ -3941,6 +3948,7 @@ def get_skill_gaps_list_api(request, board_id):
                 'status': gap.status,
                 'affected_tasks_count': gap.affected_tasks.count(),
                 'recommendations_count': len(gap.ai_recommendations) if gap.ai_recommendations else 0,
+                'plans_count': gap.development_plans.count(),
                 'identified_at': gap.identified_at.isoformat()
             })
         
