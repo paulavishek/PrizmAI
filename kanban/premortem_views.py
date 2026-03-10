@@ -43,7 +43,7 @@ def board_premortem_ready(board):
             'task_count': int,
         }
     """
-    tasks = Task.objects.filter(column__board=board)
+    tasks = Task.objects.filter(column__board=board, item_type='task')
     task_count = tasks.count()
     has_enough_tasks = task_count >= 5
     has_deadline = tasks.filter(due_date__isnull=False).exists()
@@ -62,7 +62,7 @@ def _collect_board_snapshot(board):
     """
     Gather all relevant board data for the Gemini prompt and for archival.
     """
-    tasks = Task.objects.filter(column__board=board)
+    tasks = Task.objects.filter(column__board=board, item_type='task')
     now = timezone.now()
 
     task_count = tasks.count()
@@ -278,12 +278,17 @@ def premortem_dashboard(request, board_id):
     if request.user.is_authenticated:
         has_quota, _, _ = check_ai_quota(request.user)
 
+    acknowledged_count = sum(1 for s in enriched_scenarios if s['acknowledged'])
+    total_scenarios = len(enriched_scenarios)
+
     context = {
         'board': board,
         'readiness': readiness,
         'latest': latest,
         'enriched_scenarios': enriched_scenarios,
         'has_quota': has_quota,
+        'acknowledged_count': acknowledged_count,
+        'total_scenarios': total_scenarios,
     }
     return render(request, 'kanban/premortem_dashboard.html', context)
 
