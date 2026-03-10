@@ -127,17 +127,18 @@ def _gather_board_data(board):
         from kanban.budget_models import ProjectBudget
         budget = ProjectBudget.objects.filter(board=board).first()
         if budget:
-            spent      = getattr(budget, 'actual_cost', None) or 0
             allocated  = float(budget.allocated_budget)
-            spent_f    = float(spent)
+            spent_f    = float(budget.get_spent_amount())
             remaining  = allocated - spent_f
             pct_spent  = round((spent_f / allocated * 100), 1) if allocated else 0
+            over_under = 'Over Budget' if spent_f > allocated else 'Under Budget'
             budget_info = {
                 'allocated':  allocated,
                 'spent':      spent_f,
                 'remaining':  remaining,
                 'pct_spent':  pct_spent,
                 'currency':   budget.currency,
+                'status':     over_under,
             }
     except Exception:
         pass
@@ -154,9 +155,21 @@ def _gather_board_data(board):
         for m in milestones
     ]
 
-    # Scope: tasks added after baseline (tasks created in the last sprint – rough proxy)
-    sprint_start   = today - timedelta(days=14)
-    new_tasks_count = all_tasks.filter(created_at__gte=sprint_start).count()
+    # Scope change: delta from the most recent baseline snapshot, or fallback to 2-week count
+    new_tasks_count = 0
+    try:
+        from kanban.models import ScopeChangeSnapshot
+        baseline_snap = ScopeChangeSnapshot.objects.filter(
+            board=board, is_baseline=True
+        ).order_by('-snapshot_date').first()
+        if baseline_snap:
+            new_tasks_count = total_tasks - baseline_snap.total_tasks
+        else:
+            sprint_start = today - timedelta(days=14)
+            new_tasks_count = all_tasks.filter(created_at__gte=sprint_start).count()
+    except Exception:
+        sprint_start = today - timedelta(days=14)
+        new_tasks_count = all_tasks.filter(created_at__gte=sprint_start).count()
 
     # ── Data-richness warnings ────────────────────────────────────────────────
     warnings = []
@@ -287,6 +300,7 @@ def prizmbrief_setup(request, board_id):
     raw_text = generate_prizmbrief(brief_data)
     elapsed  = int((_time.time() - start) * 1000)
 
+
     track_ai_request(
         user=request.user,
         feature='prizmbrief',
@@ -302,8 +316,14 @@ def prizmbrief_setup(request, board_id):
             'error': 'AI could not generate the brief right now. Please try again shortly.',
         })
 
-    # ── Parse slides ──────────────────────────────────────────────────────────
+    # ── Parse slides and convert bodies to HTML ───────────────────────────────
+    import markdown as _markdown_lib
     slides = _parse_slides(raw_text)
+    for slide in slides:
+        slide['body_html'] = _markdown_lib.markdown(
+            slide['body'],
+            extensions=['nl2br'],
+        )
 
     # ── Full-text for Copy All / Download .txt ────────────────────────────────
     full_text_lines = [

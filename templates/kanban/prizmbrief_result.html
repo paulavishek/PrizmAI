@@ -71,19 +71,31 @@
     margin-bottom: 16px;
   }
   .pb-slide-body {
-    white-space: pre-wrap;
     font-size: 0.94rem;
     line-height: 1.75;
     color: #343a40;
   }
-  /* Style the "Suggested visual:" note italic */
-  .pb-visual-hint {
-    font-style: italic;
-    color: #6c757d;
-    font-size: 0.85rem;
-    margin-top: 8px;
-    display: block;
+  .pb-slide-body h2 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin-top: 1.2rem;
+    margin-bottom: 0.35rem;
+    color: #212529;
   }
+  .pb-slide-body h3 {
+    font-size: 0.97rem;
+    font-weight: 600;
+    margin-top: 0.9rem;
+    color: #495057;
+  }
+  .pb-slide-body ul,
+  .pb-slide-body ol {
+    padding-left: 1.4rem;
+    margin-bottom: 0.5rem;
+  }
+  .pb-slide-body li { margin-bottom: 0.25rem; }
+  .pb-slide-body p  { margin-bottom: 0.5rem; }
+  .pb-slide-body strong { color: #212529; }
 
   /* ── Per-slide copy button ─────────────────────────────────── */
   .pb-copy-slide-btn {
@@ -215,7 +227,7 @@
     </button>
     <div class="pb-slide-number">Slide {{ slide.number }}</div>
     <div class="pb-slide-title">{{ slide.title }}</div>
-    <div class="pb-slide-body" id="slide-body-{{ slide.number }}">{{ slide.body }}</div>
+    <div class="pb-slide-body" id="slide-body-{{ slide.number }}">{{ slide.body_html|safe }}</div>
   </div>
   {% empty %}
   <div class="alert alert-warning">No slides were generated. Please try regenerating.</div>
