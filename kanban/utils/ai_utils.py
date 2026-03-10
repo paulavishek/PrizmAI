@@ -4903,10 +4903,12 @@ def generate_prizmbrief(brief_data: Dict) -> Optional[str]:
             spent      = budget.get('spent', 0)
             remaining  = budget.get('remaining', 0)
             pct_spent  = budget.get('pct_spent', 0)
+            bud_status = budget.get('status', '')
             budget_str = (
                 f"Allocated: {currency} {allocated:,.2f} | "
                 f"Spent: {currency} {spent:,.2f} ({pct_spent}%) | "
-                f"Remaining: {currency} {remaining:,.2f}"
+                f"Remaining: {currency} {remaining:,.2f} | "
+                f"Status: {bud_status}"
             )
         else:
             budget_str = "Budget data not available"
@@ -5005,7 +5007,7 @@ for each slide indicating the best chart or graphic type.
 {blocked_summary}
 - Sprint velocity: {velocity_trend}
 - High-risk tasks: {high_risk_count}
-- Scope: {new_tasks_count} tasks added in last 2 weeks (possible scope creep signal)
+- Scope change since baseline: {new_tasks_count} tasks added beyond baseline (positive = scope creep signal)
 - Budget: {budget_str}
 - Column breakdown: {column_summary}
 - Next milestones:
