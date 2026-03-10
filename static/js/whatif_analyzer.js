@@ -101,6 +101,13 @@
         var deadlineColor = dv === 0 ? '#6c757d' : dv > 0 ? '#198754' : '#dc3545';
         paintSlider(deadlineSlider, deadlineColor);
 
+        // Update deadline icon colour
+        var deadlineIcon = document.getElementById('deadline-icon');
+        if (deadlineIcon) {
+            deadlineIcon.className = 'fas fa-calendar-check me-1 ' +
+                (dv === 0 ? 'text-secondary' : dv > 0 ? 'text-success' : 'text-danger');
+        }
+
         const newTasks = BL.total_tasks + sv;
         scopeAbs.textContent = BL.total_tasks + ' tasks → ' + newTasks + ' tasks';
 
@@ -126,6 +133,8 @@
         deadlineSlider.value = 0;
         updateSliderLabels();
         deadlineVal.className = 'slider-value text-secondary';
+        var deadlineIcon = document.getElementById('deadline-icon');
+        if (deadlineIcon) deadlineIcon.className = 'fas fa-calendar-check me-1 text-secondary';
         impactPanel.classList.remove('show');
         lastResults = null;
         lastParams = null;
@@ -197,7 +206,31 @@
             '<button class="btn-close" data-bs-dismiss="alert"></button></div>';
     }
 
+    // ── Date formatter ──────────────────────────────────────────
+    var MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    function fmtDate(iso) {
+        if (!iso) return 'N/A';
+        var parts = iso.split('-');
+        if (parts.length !== 3) return iso;
+        var m = parseInt(parts[1], 10) - 1;
+        var d = parseInt(parts[2], 10);
+        var y = parts[0];
+        return MONTH_NAMES[m] + ' ' + d + ', ' + y;
+    }
+
     function renderImpactTable(bl, proj, deltas) {
+        // Predicted Date: guard for low-velocity projection
+        var projDate, projDateDelta, projDateDeltaCls;
+        if (proj.low_velocity) {
+            projDate = '<span class="text-muted fst-italic" title="Complete tasks to enable timeline projections.">Insufficient velocity data</span>';
+            projDateDelta = '<span class="text-muted">—</span>';
+            projDateDeltaCls = '';
+        } else {
+            projDate = fmtDate(proj.predicted_date);
+            projDateDelta = signed(deltas.timeline_days, 'd');
+            projDateDeltaCls = deltaClass(deltas.timeline_days, true);
+        }
+
         const rows = [
             { label: 'Total Tasks', bl: fmt(bl.total_tasks), proj: fmt(proj.total_tasks), delta: signed(deltas.tasks), cls: deltaClass(deltas.tasks, true) },
             { label: 'Remaining Tasks', bl: fmt(bl.remaining_tasks), proj: fmt(proj.remaining_tasks), delta: signed(deltas.remaining), cls: deltaClass(deltas.remaining, true) },
@@ -205,7 +238,7 @@
             { label: 'Velocity (tasks/wk)', bl: fmt(bl.velocity_per_week), proj: fmt(proj.velocity_per_week), delta: signed(deltas.velocity), cls: deltaClass(deltas.velocity, false) },
             { label: 'Budget Spent', bl: bl.budget_currency + ' ' + fmt(bl.budget_spent), proj: proj.budget_currency + ' ' + fmt(proj.budget_spent), delta: signed(deltas.budget_spent, ''), cls: deltaClass(deltas.budget_spent, true) },
             { label: 'Budget Utilization', bl: fmt(bl.budget_utilization_pct) + '%', proj: fmt(proj.budget_utilization_pct) + '%', delta: signed(deltas.budget_utilization_pct, '%'), cls: deltaClass(deltas.budget_utilization_pct, true) },
-            { label: 'Predicted Date', bl: bl.predicted_date || 'N/A', proj: proj.predicted_date || 'N/A', delta: signed(deltas.timeline_days, 'd'), cls: deltaClass(deltas.timeline_days, true) },
+            { label: 'Predicted Date', bl: fmtDate(bl.predicted_date), proj: projDate, delta: projDateDelta, cls: projDateDeltaCls },
             { label: 'Delay Probability', bl: fmt(bl.delay_probability) + '%', proj: fmt(proj.delay_probability) + '%', delta: signed(deltas.delay_probability, '%'), cls: deltaClass(deltas.delay_probability, true) },
             { label: 'Risk Level', bl: riskBadge(bl.risk_level), proj: riskBadge(proj.risk_level), delta: '', cls: '' },
             { label: 'Team Utilization', bl: fmt(bl.utilization_pct) + '%', proj: fmt(proj.utilization_pct) + '%', delta: signed(deltas.utilization_pct, '%'), cls: deltaClass(deltas.utilization_pct, true) },
@@ -223,12 +256,23 @@
 
     function renderFeasibility(score) {
         const pct = Math.round(score * 100);
-        document.getElementById('feasibility-fill').style.width = pct + '%';
-        document.getElementById('feasibility-label').textContent = pct + '%';
+        const fill = document.getElementById('feasibility-fill');
         const label = document.getElementById('feasibility-label');
-        if (pct >= 70) label.className = 'fs-4 fw-bold text-success';
-        else if (pct >= 40) label.className = 'fs-4 fw-bold text-warning';
-        else label.className = 'fs-4 fw-bold text-danger';
+        if (pct === 0) {
+            fill.style.width = '4px';
+            fill.style.background = '#dc3545';
+            fill.style.minWidth = '4px';
+            label.textContent = 'Not Feasible';
+            label.className = 'fs-4 fw-bold text-danger';
+        } else {
+            fill.style.width = pct + '%';
+            fill.style.background = '';
+            fill.style.minWidth = '';
+            label.textContent = pct + '%';
+            if (pct >= 70) label.className = 'fs-4 fw-bold text-success';
+            else if (pct >= 40) label.className = 'fs-4 fw-bold text-warning';
+            else label.className = 'fs-4 fw-bold text-danger';
+        }
     }
 
     function renderConflicts(conflicts) {
