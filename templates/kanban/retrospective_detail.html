@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load kanban_filters %}
 
 {% block title %}{{ retrospective.title }}{% endblock %}
 
@@ -172,7 +173,7 @@
                                 <strong>{{ action.title }}</strong>
                                 <br><small class="text-muted">{{ action.description|truncatewords:15 }}</small>
                             </td>
-                            <td><span class="badge bg-secondary">{{ action.get_action_type_display }}</span></td>
+                            <td><span class="badge bg-secondary">{{ action.action_type|humanize_slug }}</span></td>
                             <td><span class="badge bg-{% if action.priority == 'critical' %}danger{% elif action.priority == 'high' %}warning{% else %}info{% endif %}">
                                 {{ action.get_priority_display }}
                             </span></td>
@@ -269,7 +270,7 @@
                 </div>
                 <div class="col-md-3">
                     <strong>Confidence Score:</strong><br>
-                    {{ retrospective.ai_confidence_score|floatformat:2 }}
+                    {{ retrospective.ai_confidence_score|as_percentage }}%
                 </div>
                 <div class="col-md-3">
                     <strong>Sentiment Score:</strong><br>

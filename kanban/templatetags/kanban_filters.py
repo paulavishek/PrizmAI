@@ -4,6 +4,39 @@ from datetime import datetime
 
 register = template.Library()
 
+
+@register.filter
+def humanize_slug(value):
+    """
+    Convert a slug/underscore string to human-readable Title Case.
+    Handles both valid model choices and raw AI-generated values.
+
+    Usage: {{ action.action_type|humanize_slug }}
+    Examples:
+        'process_improvement' → 'Process Improvement'
+        'team_building'       → 'Team Building'
+        'Process Change'      → 'Process Change'  (already human-readable, untouched)
+    """
+    try:
+        return str(value).replace('_', ' ').title()
+    except (AttributeError, TypeError):
+        return value
+
+
+@register.filter
+def as_percentage(value):
+    """
+    Convert a decimal fraction (0–1) to a display percentage integer.
+
+    Usage: {{ retrospective.ai_confidence_score|as_percentage }}
+    Example: 0.63 → 63
+    """
+    try:
+        return int(float(value) * 100)
+    except (ValueError, TypeError):
+        return 0
+
+
 @register.filter
 def percentage(value, arg):
     """
