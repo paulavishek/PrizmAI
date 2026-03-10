@@ -115,7 +115,7 @@
                     Analyzed on: {{ latest.created_at|date:"M d, Y H:i" }}
                 </span>
                 <span class="text-muted">
-                    Run by: {{ latest.created_by.get_full_name|default:latest.created_by.username }}
+                    Run by: {% if latest.created_by %}{{ latest.created_by.get_full_name|default:latest.created_by.username }}{% else %}Unknown{% endif %}
                 </span>
             </div>
             <div>

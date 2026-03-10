@@ -147,7 +147,7 @@
                     Analyzed: {{ latest_report.created_at|date:"M d, Y H:i" }}
                 </span>
                 <span class="text-muted">
-                    Run by: {{ latest_report.created_by.get_full_name|default:latest_report.created_by.username }}
+                    Run by: {% if latest_report.created_by %}{{ latest_report.created_by.get_full_name|default:latest_report.created_by.username }}{% else %}Unknown{% endif %}
                 </span>
             </div>
             <div>
