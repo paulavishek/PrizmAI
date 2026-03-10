@@ -127,6 +127,30 @@
                 {% endif %}
             </div>
         </div>
+        {% if total_scenarios > 0 %}
+        <div class="card-footer bg-light py-2 px-3">
+            <div class="d-flex align-items-center justify-content-between mb-1">
+                <small class="fw-semibold text-muted">
+                    <i class="fas fa-tasks me-1"></i>
+                    Scenarios Addressed:
+                    <span id="ack-counter">{{ acknowledged_count }}</span>/{{ total_scenarios }}
+                </small>
+                {% if acknowledged_count == total_scenarios %}
+                <small class="text-success fw-semibold"><i class="fas fa-check-circle me-1"></i>All risks addressed!</small>
+                {% endif %}
+            </div>
+            <div class="progress" style="height: 8px;">
+                <div id="ack-progress-bar"
+                     class="progress-bar {% if acknowledged_count == total_scenarios %}bg-success{% else %}bg-warning{% endif %}"
+                     role="progressbar"
+                     style="width: {% widthratio acknowledged_count total_scenarios 100 %}%;"
+                     aria-valuenow="{{ acknowledged_count }}"
+                     aria-valuemin="0"
+                     aria-valuemax="{{ total_scenarios }}">
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     {% if latest.analysis_json.confidence_note %}
@@ -253,6 +277,22 @@ function acknowledgeScenario(premortemId, scenarioIndex, btnEl) {
                 <i class="fas fa-check-circle me-1"></i>
                 Addressed by ${data.acknowledged_by} on ${new Date(data.acknowledged_at).toLocaleDateString()}
             </span>`;
+
+            // Update the progress tracker
+            const counterEl = document.getElementById('ack-counter');
+            const progressBar = document.getElementById('ack-progress-bar');
+            if (counterEl && progressBar) {
+                const total = parseInt(progressBar.getAttribute('aria-valuemax'), 10);
+                const current = parseInt(counterEl.textContent, 10) + 1;
+                counterEl.textContent = current;
+                progressBar.setAttribute('aria-valuenow', current);
+                const pct = total > 0 ? (current / total * 100) : 0;
+                progressBar.style.width = pct + '%';
+                if (current >= total) {
+                    progressBar.classList.remove('bg-warning');
+                    progressBar.classList.add('bg-success');
+                }
+            }
         } else {
             alert(data.error || 'Could not acknowledge scenario.');
             btnEl.disabled = false;
