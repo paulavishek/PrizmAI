@@ -1,10 +1,13 @@
 import json
+import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import User
 from .models import ChatMessage, ChatRoom, TaskThreadComment, UserTypingStatus, Notification
 from kanban.models import Task
 from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 
 class ChatRoomConsumer(AsyncWebsocketConsumer):
@@ -315,10 +318,18 @@ class ChatRoomConsumer(AsyncWebsocketConsumer):
     # Database operations
     @database_sync_to_async
     def is_user_authorized(self):
-        """Check if user is authorized to access this room"""
+        """Check if user is authorized to access this room.
+        
+        Matches the HTTP view (chat_room_detail): all authenticated users
+        can access chat rooms.  If the user is not yet a member, they are
+        added automatically so they appear in the members list and can
+        receive messages.
+        """
         try:
             chat_room = ChatRoom.objects.get(id=self.room_id)
-            return chat_room.members.filter(id=self.user.id).exists()
+            if not chat_room.members.filter(id=self.user.id).exists():
+                chat_room.members.add(self.user)
+            return True
         except ChatRoom.DoesNotExist:
             return False
     

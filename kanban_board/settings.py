@@ -455,14 +455,17 @@ CACHES = {
     },
     
     # Session Cache - for storing session data
+    # NOTE: Must stay on Redis (NOT LocMemCache) even in DEBUG mode.
+    # Django's CacheHandler uses threading.local(), so each thread gets its own
+    # LocMemCache instance. Django Channels' database_sync_to_async runs session
+    # lookups in a thread pool, creating a new empty LocMemCache instance that
+    # can't see sessions created by the HTTP handler thread -> WebSocket WSREJECT.
     'session_cache': {
-        'BACKEND': 'django_redis.cache.RedisCache',
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
         'LOCATION': REDIS_URL.replace('/0', '/2'),  # Use DB 2 for sessions
         'OPTIONS': {
-            'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            'IGNORE_EXCEPTIONS': True,
-            'SOCKET_CONNECT_TIMEOUT': 5,
-            'SOCKET_TIMEOUT': 5,
+            'socket_connect_timeout': 5,
+            'socket_timeout': 5,
         },
         'KEY_PREFIX': 'prizmAI:session',
         'TIMEOUT': 86400,  # 24 hours for sessions
@@ -502,21 +505,16 @@ if DEBUG and not os.getenv('FORCE_REDIS_CACHE'):
             'MAX_ENTRIES': 2000,
         },
     }
-    # NOTE: ai_cache is intentionally NOT overridden here.
-    # The AI summary debounce lock must be visible across ALL processes
+    # NOTE: ai_cache and session_cache are intentionally NOT overridden here.
+    # ai_cache: The AI summary debounce lock must be visible across ALL processes
     # (Daphne web server + Celery worker). LocMemCache is per-process, so
     # the Celery worker's lock-release would be invisible to the web process,
     # causing the polling spinner to run for the full 10-minute lock TTL.
-    # Redis is always available in this project, so keep ai_cache as Redis
-    # even in DEBUG mode.
-    CACHES['session_cache'] = {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'prizmAI-session-cache',
-        'TIMEOUT': 86400,
-        'OPTIONS': {
-            'MAX_ENTRIES': 1000,
-        },
-    }
+    # session_cache: Django's CacheHandler uses threading.local(), so LocMemCache
+    # is per-THREAD. Django Channels' database_sync_to_async runs WebSocket session
+    # lookups in a thread pool thread that gets a new empty LocMemCache instance,
+    # making all sessions invisible -> WebSocket auth always fails (WSREJECT).
+    # Redis is always available in this project, so keep both caches on Redis.
     CACHES['analytics_cache'] = {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'prizmAI-analytics-cache',
@@ -556,9 +554,13 @@ if _ai_cache_ttls_env:
     except Exception:
         pass
 
-# Session backend - use cache-backed sessions for scalability
+# Session backend - use cache-backed sessions for scalability.
+# SESSION_CACHE_ALIAS must always point to a Redis-backed cache (session_cache).
+# Using 'default' (LocMemCache in DEBUG) breaks WebSocket authentication because
+# Django's CacheHandler is per-thread: the WebSocket auth thread pool thread gets
+# an empty LocMemCache and cannot read sessions created by the HTTP handler thread.
 SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
-SESSION_CACHE_ALIAS = 'session_cache' if not DEBUG else 'default'
+SESSION_CACHE_ALIAS = 'session_cache'
 
 # Create logs directory if it doesn't exist
 LOGS_DIR = os.path.join(BASE_DIR, 'logs')
