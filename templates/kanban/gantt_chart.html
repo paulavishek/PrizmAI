@@ -42,15 +42,14 @@
     }
 
     /* ============================================
-       PROFESSIONAL DEPENDENCY ARROWS
+       DEPENDENCY LINES — CUSTOM ELBOW CONNECTORS
        ============================================ */
 
-    /* Hide ALL default frappe-gantt arrow polygons (they appear as distorted Y-shapes) 
-       Use multiple selectors and maximum specificity to override inline styles */
-    .gantt polygon:not(.milestone-diamond-shape):not(.custom-arrowhead),
+    /* Hide ALL frappe-gantt native arrow polygons */
+    .gantt polygon:not(.milestone-diamond-shape):not(.custom-arrowhead):not(.dep-chevron),
     .gantt g.arrow polygon,
     .gantt .arrow polygon,
-    svg#gantt polygon:not(.milestone-diamond-shape):not(.custom-arrowhead) {
+    svg#gantt polygon:not(.milestone-diamond-shape):not(.custom-arrowhead):not(.dep-chevron) {
         display: none !important;
         visibility: hidden !important;
         opacity: 0 !important;
@@ -59,10 +58,47 @@
         transform: scale(0) !important;
     }
 
-    /* But show polygons inside our custom markers (defs) */
-    .gantt defs marker polygon,
-    .gantt defs marker polygon.custom-arrowhead,
-    svg#gantt defs marker polygon {
+    /* Hide ALL frappe-gantt native arrow paths — we draw our own */
+    .gantt g.arrow,
+    .gantt g.arrow path,
+    .gantt path.arrow,
+    svg#gantt g.arrow,
+    svg#gantt g.arrow path {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
+
+    /* Custom dependency line (elbow connector) */
+    .custom-dep-line {
+        fill: none;
+        stroke: #6b7280;
+        stroke-width: 1.5px;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        opacity: 0.75;
+        cursor: pointer;
+        pointer-events: stroke;
+        transition: stroke-width 0.15s ease, opacity 0.15s ease;
+    }
+    .custom-dep-line:hover {
+        stroke-width: 2.5px !important;
+        opacity: 1 !important;
+    }
+    .custom-dep-line.critical-dep {
+        stroke: #ef4444;
+        stroke-width: 2px;
+        opacity: 0.85;
+    }
+    .custom-dep-line.critical-dep:hover {
+        stroke-width: 3px !important;
+        opacity: 1 !important;
+    }
+
+    /* Mid-line directional chevron — force visible against any hide rules */
+    .dep-chevron {
+        pointer-events: none;
         display: block !important;
         visibility: visible !important;
         opacity: 1 !important;
@@ -71,26 +107,25 @@
         transform: none !important;
     }
 
-    /* Main arrow path styling - clean, consistent look */
-    .gantt .arrow,
-    .gantt path.arrow,
-    .gantt g.arrow path,
-    svg#gantt g.arrow path {
-        fill: none !important;
-        stroke: #64748b !important;
-        stroke-width: 2px !important;
-        stroke-linecap: round !important;
-        stroke-linejoin: round !important;
-        opacity: 0.8 !important;
-        marker-end: url(#arrowhead-custom) !important;
+    /* Dependency hover tooltip */
+    .dep-tooltip {
+        position: fixed;
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        color: white;
+        padding: 8px 14px;
+        border-radius: 8px;
+        font-size: 12px;
+        font-weight: 500;
+        pointer-events: none;
+        z-index: 1001;
+        white-space: nowrap;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.25);
+        display: none;
+        border: 1px solid rgba(255,255,255,0.1);
     }
-
-    .gantt .arrow:hover,
-    .gantt path.arrow:hover,
-    .gantt g.arrow path:hover {
-        stroke: #3b82f6 !important;
-        stroke-width: 2.5px !important;
-        opacity: 1 !important;
+    .dep-tooltip.show {
+        display: block;
+        animation: tooltipFadeIn 0.15s ease-out;
     }
 
     /* ============================================
@@ -997,6 +1032,40 @@
         box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
     }
 
+    /* ============================================
+       FLOATING LABELS FOR NARROW TASK BARS
+       ============================================ */
+
+    .floating-task-label {
+        font-size: 10px;
+        font-weight: 600;
+        fill: #334155;
+        text-anchor: start;
+        dominant-baseline: auto;
+        pointer-events: none;
+        filter: drop-shadow(0 1px 1px rgba(255,255,255,0.8));
+    }
+
+    body[data-view-mode="Month"] .floating-task-label {
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    /* ============================================
+       PRIORITY DOT ON TASK BARS
+       ============================================ */
+
+    .priority-dot-circle {
+        stroke: rgba(255, 255, 255, 0.5);
+        stroke-width: 1;
+        pointer-events: none;
+    }
+
+    .priority-dot-circle[data-priority="urgent"] { fill: #ef4444; }
+    .priority-dot-circle[data-priority="high"]   { fill: #f59e0b; }
+    .priority-dot-circle[data-priority="medium"]  { fill: #fbbf24; }
+    .priority-dot-circle[data-priority="low"]     { fill: #9ca3af; }
+
 </style>
 {% endblock %}
 
@@ -1130,7 +1199,7 @@
                     <i class="fas fa-sitemap me-1"></i> View Network Diagram
                 </button>
                 <div class="critical-path-toggle">
-                    <input type="checkbox" id="critical-path-toggle" checked>
+                    <input type="checkbox" id="critical-path-toggle">
                     <label for="critical-path-toggle">
                         <span class="cp-indicator"></span>
                         Show Critical Path
@@ -1145,6 +1214,8 @@
             
             <!-- Custom Tooltip -->
             <div class="gantt-tooltip" id="gantt-tooltip"></div>
+            <!-- Dependency line hover tooltip -->
+            <div class="dep-tooltip" id="dep-tooltip"></div>
             
             <!-- Legend -->
             <div class="gantt-legend">
@@ -1195,13 +1266,9 @@
                     <span>Completed Milestone</span>
                 </div>
                 <div class="legend-item" style="margin-left: auto;">
-                    <svg width="40" height="12" style="vertical-align: middle;">
-                        <defs>
-                            <marker id="arrowhead-legend" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-                                <polygon points="0 0, 6 3, 0 6" fill="#64748b"/>
-                            </marker>
-                        </defs>
-                        <path d="M 2 6 L 30 6" stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrowhead-legend)"/>
+                    <svg width="44" height="12" style="vertical-align: middle;">
+                        <path d="M 2 6 L 42 6" stroke="#6b7280" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+                        <polygon points="19,3 25,6 19,9" fill="#6b7280"/>
                     </svg>
                     <span>Dependency</span>
                 </div>
@@ -1565,7 +1632,7 @@
     // CRITICAL PATH METHOD (CPM) IMPLEMENTATION
     // ============================================
     
-    let showCriticalPath = true; // Default: ON
+    let showCriticalPath = localStorage.getItem('gantt_show_critical_path') === 'true';
     let criticalPathTasks = new Set(); // Store task IDs on critical path
     
     /**
@@ -1873,8 +1940,11 @@
     document.addEventListener('DOMContentLoaded', function() {
         const toggle = document.getElementById('critical-path-toggle');
         if (toggle) {
+            // Sync checkbox state from localStorage preference
+            toggle.checked = showCriticalPath;
             toggle.addEventListener('change', function() {
                 toggleCriticalPath(this.checked);
+                localStorage.setItem('gantt_show_critical_path', this.checked ? 'true' : 'false');
             });
         }
     });
@@ -1912,7 +1982,7 @@
                     // Second pass to ensure all elements are styled
                     requestAnimationFrame(() => {
                         applyCustomStyling();
-                        enhanceDependencyArrows();
+                        drawCustomDependencyLines();
                         // Remove transitioning class after styling is complete
                         chartWrapper.classList.remove('transitioning');
                     });
@@ -1983,13 +2053,13 @@
                 // Set up arrow polygon observer for this chart instance
                 setupArrowPolygonObserver();
                 
-                // Apply arrow styling after chart is visible
+                // Draw custom dependency lines after chart is visible
                 requestAnimationFrame(() => {
-                    enhanceDependencyArrows();
+                    drawCustomDependencyLines();
                     
-                    // Final cleanup pass for any remaining arrow issues
+                    // Final cleanup pass
                     setTimeout(() => {
-                        enhanceDependencyArrows();
+                        drawCustomDependencyLines();
                     }, 200);
                 });
             });
@@ -2030,8 +2100,8 @@
         }
         applyCriticalPathStyling();
 
-        // Enhance dependency arrows with better styling
-        enhanceDependencyArrows();
+        // Draw custom dependency lines (elbow connectors with mid-line chevrons)
+        drawCustomDependencyLines();
 
         // Add manual click handlers to all bars for better compatibility.
         // NOTE: cloneNode(true) replaces every barWrapper – diamond drawing MUST come after.
@@ -2125,114 +2195,304 @@
         addTooltipHandlers();
     }
 
-    // Fix frappe-gantt's arrow rendering - remove distorted polygons and use clean arrowheads
-    function enhanceDependencyArrows() {
+    // ============================================
+    // CUSTOM DEPENDENCY LINES — ELBOW CONNECTORS WITH MID-LINE CHEVRONS
+    // ============================================
+    function drawCustomDependencyLines() {
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
 
-        // Find or create defs
-        let defs = ganttSvg.querySelector('defs');
-        if (!defs) {
-            defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-            ganttSvg.insertBefore(defs, ganttSvg.firstChild);
-        }
+        // 1. Remove any previously drawn custom dependency elements
+        ganttSvg.querySelectorAll('.custom-dep-group').forEach(el => el.remove());
 
-        // Check if our custom arrowhead already exists
-        let existingMarker = defs.querySelector('#arrowhead-custom');
-        if (!existingMarker) {
-            // Create ONE clean arrowhead marker with unique ID
-            const marker = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
-            marker.setAttribute('id', 'arrowhead-custom');
-            marker.setAttribute('markerWidth', '10');
-            marker.setAttribute('markerHeight', '10');
-            marker.setAttribute('refX', '9');
-            marker.setAttribute('refY', '5');
-            marker.setAttribute('orient', 'auto');
-            marker.setAttribute('markerUnits', 'strokeWidth');
+        // 2. Hide ALL frappe-gantt native arrow elements
+        ganttSvg.querySelectorAll('g.arrow, path.arrow').forEach(el => {
+            el.style.display = 'none';
+            el.style.visibility = 'hidden';
+        });
 
-            // Clean filled triangle arrowhead (pointing right)
-            const polygon = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-            polygon.setAttribute('points', '0,0 10,5 0,10');
-            polygon.setAttribute('fill', '#64748b');
-            polygon.classList.add('custom-arrowhead');
-
-            marker.appendChild(polygon);
-            defs.appendChild(marker);
-        }
-
-        // AGGRESSIVELY remove or hide ALL standalone polygons that are frappe-gantt's default arrow heads
-        // These appear as distorted Y-shapes or horizontal Y patterns
+        // 3. Remove stray frappe-gantt arrow polygons
         ganttSvg.querySelectorAll('polygon').forEach(polygon => {
-            // Keep polygons that are:
-            // 1. Inside defs (our custom markers)
-            // 2. Our custom arrowhead class
-            // 3. Milestone diamond shapes (Asana-style diamond markers)
             const isInDefs = polygon.closest('defs');
-            const isCustomArrow = polygon.classList.contains('custom-arrowhead');
             const isMilestoneDiamond = polygon.classList.contains('milestone-diamond-shape');
-            
-            if (!isInDefs && !isCustomArrow && !isMilestoneDiamond) {
-                // First try to remove it
-                try {
-                    polygon.remove();
-                } catch (e) {
-                    // If removal fails, hide it with inline styles
+            const isDepChevron = polygon.classList.contains('dep-chevron');
+            if (!isInDefs && !isMilestoneDiamond && !isDepChevron) {
+                try { polygon.remove(); } catch (e) {
                     polygon.style.display = 'none';
-                    polygon.style.visibility = 'hidden';
-                    polygon.style.opacity = '0';
-                    polygon.setAttribute('points', '0,0 0,0 0,0'); // Collapse to nothing
                 }
             }
         });
 
-        // Style all arrow paths with proper attributes
-        ganttSvg.querySelectorAll('path').forEach(path => {
-            const className = path.getAttribute('class') || '';
+        // 4. Build bar geometry map from rendered SVG rects
+        const barGeo = {}; // keyed by task id
+        const allBars = [];  // flat list for collision checks
+        const allItems = [...tasks, ...ganttMilestones];
+        allItems.forEach(task => {
+            const wrapper = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
+            if (!wrapper) return;
+            const bar = wrapper.querySelector('.bar');
+            if (!bar) return;
+            const x = parseFloat(bar.getAttribute('x') || 0);
+            const y = parseFloat(bar.getAttribute('y') || 0);
+            const w = parseFloat(bar.getAttribute('width') || 0);
+            const h = parseFloat(bar.getAttribute('height') || 0);
+            if (w <= 0 || h <= 0) return;
+            const geo = {
+                id: String(task.id),
+                x: x, y: y, w: w, h: h,
+                rightX: x + w, rightY: y + h / 2,
+                leftX: x, leftY: y + h / 2
+            };
+            barGeo[String(task.id)] = geo;
+            allBars.push(geo);
+        });
 
-            // Only target arrow paths (frappe-gantt uses 'arrow' class)
-            if (className.includes('arrow')) {
-                // Apply clean styling
-                path.setAttribute('stroke', '#64748b');
-                path.setAttribute('stroke-width', '2');
-                path.setAttribute('stroke-linecap', 'round');
-                path.setAttribute('stroke-linejoin', 'round');
-                path.setAttribute('fill', 'none');
-                path.setAttribute('marker-end', 'url(#arrowhead-custom)');
-                path.style.opacity = '0.8';
-                
-                // Remove any inline polygon children that might interfere
-                path.querySelectorAll('polygon').forEach(p => {
-                    if (!p.classList.contains('custom-arrowhead')) {
-                        p.remove();
+        // 5. Build task name lookup
+        const nameMap = {};
+        allItems.forEach(t => { nameMap[String(t.id)] = t.fullName || t.name; });
+
+        // 6. Critical path set
+        const criticalIds = showCriticalPath ? criticalPathTasks : new Set();
+
+        // 7. Collect all dependency pairs
+        const depPairs = [];
+        allItems.forEach(task => {
+            if (!task.dependencies) return;
+            const depStr = typeof task.dependencies === 'string' ? task.dependencies : String(task.dependencies);
+            if (!depStr) return;
+            depStr.split(',').map(d => d.trim()).filter(Boolean).forEach(depId => {
+                if (barGeo[depId] && barGeo[String(task.id)]) {
+                    depPairs.push({ from: depId, to: String(task.id) });
+                }
+            });
+        });
+
+        // --- Collision helpers ---
+
+        // Check if vertical line at x from yMin→yMax passes through any bar's horizontal range
+        function vertSegHitsBar(testX, yMin, yMax, excludeIds) {
+            for (let i = 0; i < allBars.length; i++) {
+                const b = allBars[i];
+                if (excludeIds && excludeIds.has(b.id)) continue;
+                // bar horizontal range overlaps testX, AND bar vertical range overlaps [yMin,yMax]
+                if (testX >= b.x && testX <= b.x + b.w &&
+                    yMax >= b.y && yMin <= b.y + b.h) {
+                    return b;
+                }
+            }
+            return null;
+        }
+
+        // Find a clear X for a vertical segment: offset right of any overlapping bar
+        function findClearVertX(startX, yMin, yMax, excludeIds) {
+            let testX = startX;
+            for (let attempt = 0; attempt < 8; attempt++) {
+                const hit = vertSegHitsBar(testX, yMin, yMax, excludeIds);
+                if (!hit) return testX;
+                testX = hit.x + hit.w + 12; // 12px right of the overlapping bar's right edge
+            }
+            return testX; // best effort after 8 tries
+        }
+
+        // Check if point (px, py) is inside any bar's bounding box
+        function pointInsideAnyBar(px, py) {
+            for (let i = 0; i < allBars.length; i++) {
+                const b = allBars[i];
+                if (px >= b.x && px <= b.x + b.w && py >= b.y && py <= b.y + b.h) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // 8. Dependency tooltip element
+        const depTooltip = document.getElementById('dep-tooltip');
+
+        let chevronCount = 0;
+
+        // 9. Draw each dependency
+        depPairs.forEach(dep => {
+            const pred = barGeo[dep.from];
+            const succ = barGeo[dep.to];
+            if (!pred || !succ) return;
+
+            const isCritical = criticalIds.has(dep.from) && criticalIds.has(dep.to);
+            const color = isCritical ? '#ef4444' : '#6b7280';
+            const excludeIds = new Set([dep.from, dep.to]);
+
+            // 8px gap: exit 8px right of pred, enter 8px left of succ
+            const EDGE_GAP = 8;
+            // Start and end points (on bar edges)
+            const barExitX = pred.rightX;
+            const barExitY = pred.rightY;
+            const barEntryX = succ.leftX;
+            const barEntryY = succ.leftY;
+            // After gap offsets
+            const sx = barExitX + EDGE_GAP;
+            const sy = barExitY;
+            const ex = barEntryX - EDGE_GAP;
+            const ey = barEntryY;
+
+            // Build elbow path segments
+            let segments = []; // array of {x1,y1,x2,y2,dir} for each line segment
+            let pathD;
+
+            if (ex > sx + 4) {
+                // Normal case: successor is to the right of predecessor
+                let midX = (sx + ex) / 2;
+
+                // Bug 1 fix: check if vertical segment at midX passes through any bar
+                const yMin = Math.min(sy, ey);
+                const yMax = Math.max(sy, ey);
+                midX = findClearVertX(midX, yMin, yMax, excludeIds);
+
+                pathD = `M ${barExitX},${sy} L ${sx},${sy} L ${midX},${sy} L ${midX},${ey} L ${ex},${ey} L ${barEntryX},${ey}`;
+
+                segments = [
+                    { x1: barExitX, y1: sy, x2: sx, y2: sy, dir: 'right', len: sx - barExitX },
+                    { x1: sx, y1: sy, x2: midX, y2: sy, dir: 'right', len: midX - sx },
+                    { x1: midX, y1: sy, x2: midX, y2: ey, dir: ey > sy ? 'down' : 'up', len: Math.abs(ey - sy) },
+                    { x1: midX, y1: ey, x2: ex, y2: ey, dir: 'right', len: ex - midX },
+                    { x1: ex, y1: ey, x2: barEntryX, y2: ey, dir: 'right', len: barEntryX - ex }
+                ];
+            } else {
+                // Edge case: successor starts before or near predecessor right edge
+                // Route: right gap → down/up to clearance → left to succ approach → down/up → left gap → entry
+                const goingDown = ey >= sy;
+                const clearanceY = goingDown
+                    ? Math.max(pred.y + pred.h + 14, succ.y + succ.h + 14)
+                    : Math.min(pred.y - 14, succ.y - 14);
+
+                // Vertical segment 1: sx to clearanceY — check collision
+                let vert1X = findClearVertX(sx, Math.min(sy, clearanceY), Math.max(sy, clearanceY), excludeIds);
+                // Vertical segment 2: clearanceY to ey — check collision
+                let vert2X = findClearVertX(ex, Math.min(clearanceY, ey), Math.max(clearanceY, ey), excludeIds);
+
+                pathD = `M ${barExitX},${sy} L ${vert1X},${sy} L ${vert1X},${clearanceY} L ${vert2X},${clearanceY} L ${vert2X},${ey} L ${barEntryX},${ey}`;
+
+                segments = [
+                    { x1: barExitX, y1: sy, x2: vert1X, y2: sy, dir: 'right', len: Math.abs(vert1X - barExitX) },
+                    { x1: vert1X, y1: sy, x2: vert1X, y2: clearanceY, dir: goingDown ? 'down' : 'up', len: Math.abs(clearanceY - sy) },
+                    { x1: vert1X, y1: clearanceY, x2: vert2X, y2: clearanceY, dir: vert2X > vert1X ? 'right' : 'left', len: Math.abs(vert2X - vert1X) },
+                    { x1: vert2X, y1: clearanceY, x2: vert2X, y2: ey, dir: goingDown ? 'up' : 'down', len: Math.abs(ey - clearanceY) },
+                    { x1: vert2X, y1: ey, x2: barEntryX, y2: ey, dir: 'right', len: Math.abs(barEntryX - vert2X) }
+                ];
+            }
+
+            // Find the longest segment for chevron placement
+            let longestSeg = null;
+            let longestLen = 0;
+            segments.forEach(seg => {
+                if (seg.len > longestLen) {
+                    longestLen = seg.len;
+                    longestSeg = seg;
+                }
+            });
+
+            // Create SVG group
+            const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            group.setAttribute('class', 'custom-dep-group');
+
+            // Create path element
+            const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            pathEl.setAttribute('d', pathD);
+            pathEl.setAttribute('class', 'custom-dep-line' + (isCritical ? ' critical-dep' : ''));
+            pathEl.setAttribute('data-from', dep.from);
+            pathEl.setAttribute('data-to', dep.to);
+            group.appendChild(pathEl);
+
+            // Compute chevron position at midpoint of longest segment
+            let drawChevron = false;
+            let chevronX, chevronY, chevronDir;
+
+            if (longestSeg && longestLen > 12) {
+                chevronX = (longestSeg.x1 + longestSeg.x2) / 2;
+                chevronY = (longestSeg.y1 + longestSeg.y2) / 2;
+                chevronDir = longestSeg.dir;
+
+                // Bug 2 fix: check if chevron lands inside a bar, nudge up to 3 times
+                let nudgeDx = 0, nudgeDy = 0;
+                if (chevronDir === 'right') nudgeDx = 15;
+                else if (chevronDir === 'left') nudgeDx = -15;
+                else if (chevronDir === 'down') nudgeDy = 15;
+                else if (chevronDir === 'up') nudgeDy = -15;
+
+                let cleared = !pointInsideAnyBar(chevronX, chevronY);
+                if (!cleared) {
+                    for (let nudge = 0; nudge < 3 && !cleared; nudge++) {
+                        chevronX += nudgeDx;
+                        chevronY += nudgeDy;
+                        cleared = !pointInsideAnyBar(chevronX, chevronY);
                     }
+                }
+
+                drawChevron = cleared;
+            }
+
+            if (drawChevron) {
+                const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                chevron.setAttribute('class', 'dep-chevron');
+                chevron.setAttribute('fill', color);
+                // Force visibility with inline styles to override any CSS or observer
+                chevron.style.display = 'block';
+                chevron.style.visibility = 'visible';
+                chevron.style.opacity = '1';
+                let pts;
+                switch (chevronDir) {
+                    case 'right':
+                        pts = `${chevronX - 4},${chevronY - 3} ${chevronX + 4},${chevronY} ${chevronX - 4},${chevronY + 3}`;
+                        break;
+                    case 'left':
+                        pts = `${chevronX + 4},${chevronY - 3} ${chevronX - 4},${chevronY} ${chevronX + 4},${chevronY + 3}`;
+                        break;
+                    case 'down':
+                        pts = `${chevronX - 3},${chevronY - 4} ${chevronX},${chevronY + 4} ${chevronX + 3},${chevronY - 4}`;
+                        break;
+                    case 'up':
+                        pts = `${chevronX - 3},${chevronY + 4} ${chevronX},${chevronY - 4} ${chevronX + 3},${chevronY + 4}`;
+                        break;
+                    default:
+                        pts = `${chevronX - 4},${chevronY - 3} ${chevronX + 4},${chevronY} ${chevronX - 4},${chevronY + 3}`;
+                }
+                chevron.setAttribute('points', pts);
+                group.appendChild(chevron);
+                chevronCount++;
+            }
+
+            ganttSvg.appendChild(group);
+
+            // Hover: show dependency tooltip
+            if (depTooltip) {
+                pathEl.addEventListener('mouseenter', function(e) {
+                    const fromName = nameMap[dep.from] || dep.from;
+                    const toName = nameMap[dep.to] || dep.to;
+                    depTooltip.textContent = `${fromName} \u2192 ${toName} (Finish to Start)`;
+                    depTooltip.classList.add('show');
+                    positionDepTooltip(e);
+                });
+                pathEl.addEventListener('mousemove', positionDepTooltip);
+                pathEl.addEventListener('mouseleave', function() {
+                    depTooltip.classList.remove('show');
                 });
             }
         });
 
-        // Also look for paths inside .arrow groups and apply same styling
-        ganttSvg.querySelectorAll('.arrow path, g.arrow path').forEach(path => {
-            path.setAttribute('stroke', '#64748b');
-            path.setAttribute('stroke-width', '2');
-            path.setAttribute('stroke-linecap', 'round');
-            path.setAttribute('stroke-linejoin', 'round');
-            path.setAttribute('fill', 'none');
-            path.setAttribute('marker-end', 'url(#arrowhead-custom)');
-            path.style.opacity = '0.8';
-        });
-        
-        // Handle arrow groups (g.arrow) - remove any child polygons aggressively
-        ganttSvg.querySelectorAll('g.arrow, g[class*="arrow"]').forEach(group => {
-            group.querySelectorAll('polygon').forEach(p => {
-                if (!p.classList.contains('custom-arrowhead')) {
-                    try {
-                        p.remove();
-                    } catch (e) {
-                        p.style.display = 'none';
-                        p.setAttribute('points', '0,0 0,0 0,0');
-                    }
-                }
-            });
-        });
+        // Debug: log chevron count
+        console.log('[Gantt Dep Lines] Drew ' + depPairs.length + ' dependency lines, ' + chevronCount + ' chevrons rendered');
+
+        function positionDepTooltip(e) {
+            const tt = document.getElementById('dep-tooltip');
+            if (!tt || !tt.classList.contains('show')) return;
+            const ttRect = tt.getBoundingClientRect();
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            let left = e.pageX + 12;
+            let top = e.pageY - ttRect.height - 8;
+            if (left + ttRect.width > vw - 10) left = e.pageX - ttRect.width - 12;
+            if (top < 10) top = e.pageY + 16;
+            tt.style.left = left + 'px';
+            tt.style.top = top + 'px';
+        }
     }
 
     // Add tooltip functionality for task bars
@@ -2258,6 +2518,28 @@
                 barWrapper.setAttribute('data-is-milestone', 'true');
                 barWrapper.setAttribute('data-milestone-status', task.milestoneStatus || 'upcoming');
                 barWrapper.setAttribute('data-due-date', task.dueDate || task.start);
+            }
+
+            // Native HTML title attribute for accessibility (works in all views)
+            const assigneeName = task.assignee_first_name && task.assignee_last_name
+                ? `${task.assignee_first_name} ${task.assignee_last_name}`
+                : task.assigned_to;
+            if (task.isMilestone) {
+                const mStatus = (task.milestoneStatus === 'completed') ? 'Completed' : 'Upcoming';
+                const mDate = task.dueDate || task.start;
+                barWrapper.setAttribute('title',
+                    `${task.fullName}\nMilestone \u2022 ${mStatus}\nDue: ${formatDateDisplay(mDate)}`);
+            } else {
+                barWrapper.setAttribute('title',
+                    `${task.fullName}\nAssignee: ${assigneeName}\nPriority: ${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}\nDates: ${formatDateDisplay(task.start)} \u2013 ${formatDateDisplay(task.end)}\nProgress: ${task.progress}%`);
+            }
+
+            // Also set title on the bar rect itself for SVG tooltip
+            const barEl = barWrapper.querySelector('.bar');
+            if (barEl) {
+                const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+                titleEl.textContent = barWrapper.getAttribute('title');
+                barEl.appendChild(titleEl);
             }
 
             // Add mouseenter event
@@ -2402,8 +2684,17 @@
         }
     }
 
-    // Enhance bars with task names only (no progress, no assignments)
+    // Enhance bars: enforce min width in Month view, truncated labels, floating labels, priority dots
     function enhanceBarsWithInfo() {
+        const ganttSvg = document.querySelector('#gantt');
+        if (!ganttSvg) return;
+
+        // Remove any previous floating labels and priority dots
+        ganttSvg.querySelectorAll('.floating-task-label, .priority-dot-group').forEach(el => el.remove());
+
+        const MIN_BAR_WIDTH_MONTH = 80;
+        const AVATAR_ONLY_THRESHOLD = 40;
+
         // Process regular tasks only — milestone labels are handled separately in PASS 2
         const allItems = [...tasks];
         allItems.forEach(task => {
@@ -2413,102 +2704,108 @@
             const bar = barWrapper.querySelector('.bar');
             if (!bar) return;
 
-            // Safely get bounding box - getBBox() can throw or return invalid values
+            // Safely get bounding box
             let barRect;
             try {
                 barRect = bar.getBBox();
             } catch (e) {
-                console.warn(`Could not get bounding box for task ${task.id}:`, e);
                 return;
             }
-            
-            // Validate dimensions - skip if invalid (negative or zero)
-            const barWidth = barRect.width;
+
+            let barWidth = barRect.width;
             const barHeight = barRect.height;
-            
-            if (barWidth <= 0 || barHeight <= 0 || !isFinite(barWidth) || !isFinite(barHeight)) {
-                console.warn(`Invalid bar dimensions for task ${task.id}: width=${barWidth}, height=${barHeight}`);
-                return;
+
+            if (barWidth <= 0 || barHeight <= 0 || !isFinite(barWidth) || !isFinite(barHeight)) return;
+
+            // --- Month view: enforce minimum bar width of 80px ---
+            if (currentViewMode === 'Month' && barWidth < MIN_BAR_WIDTH_MONTH) {
+                bar.setAttribute('width', MIN_BAR_WIDTH_MONTH);
+                barWidth = MIN_BAR_WIDTH_MONTH;
             }
 
-            // Calculate space reserved for assignee initials (if task has assignee and bar is wide enough)
+            // Calculate space reserved for assignee initials
             const hasAssignee = task.assigned_to !== 'Unassigned';
-            const initialsSpace = (hasAssignee && barWidth >= 40) ? 28 : 0; // 20px circle + 8px padding
+            const initialsSpace = (hasAssignee && barWidth >= AVATAR_ONLY_THRESHOLD) ? 28 : 0;
 
-            // Find and modify the existing label to show truncated name ONLY - INSIDE the bar
+            // --- Priority dot (colored circle at the left edge of the bar) ---
+            const priorityColors = { urgent: '#ef4444', high: '#f59e0b', medium: '#fbbf24', low: '#9ca3af' };
+            const dotGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            dotGroup.setAttribute('class', 'priority-dot-group');
+            const dotRadius = 4;
+            const dotX = parseFloat(bar.getAttribute('x') || barRect.x) + dotRadius + 3;
+            const dotY = barRect.y + barHeight / 2;
+            const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            dot.setAttribute('cx', dotX);
+            dot.setAttribute('cy', dotY);
+            dot.setAttribute('r', dotRadius);
+            dot.setAttribute('class', 'priority-dot-circle');
+            dot.setAttribute('data-priority', task.priority);
+            dot.setAttribute('fill', priorityColors[task.priority] || '#9ca3af');
+            dotGroup.appendChild(dot);
+            barWrapper.appendChild(dotGroup);
+
+            const priorityDotSpace = dotRadius * 2 + 6; // space consumed by priority dot
+
+            // --- Label rendering ---
             const existingLabel = barWrapper.querySelector('.bar-label');
-            if (existingLabel) {
-                // Adjust minimum width threshold based on view mode - more aggressive showing
-                let minWidth = 20;  // Show text for bars as small as 20px
-                if (currentViewMode === 'Month') {
-                    minWidth = 12; // More aggressive showing in month view
-                } else if (currentViewMode === 'Day') {
-                    minWidth = 40; // Day view has larger bars
+            if (!existingLabel) return;
+
+            // Determine font size
+            let fontSize, charWidth;
+            if (barWidth < 50) { fontSize = 8; charWidth = 4.5; }
+            else if (barWidth < 80) { fontSize = 9; charWidth = 5; }
+            else if (currentViewMode === 'Month') { fontSize = 10; charWidth = 5.5; }
+            else if (currentViewMode === 'Day') { fontSize = 11; charWidth = 6; }
+            else { fontSize = 10; charWidth = 5.5; }
+
+            existingLabel.style.fontSize = fontSize + 'px';
+
+            // Available width for text inside bar
+            const availableWidth = barWidth - priorityDotSpace - 4 - initialsSpace;
+            const maxChars = Math.floor(availableWidth / charWidth);
+
+            // If bar too narrow for even a short label, show only avatar (hide label)
+            // and add a floating label above the bar instead
+            if (barWidth < AVATAR_ONLY_THRESHOLD || maxChars < 2) {
+                existingLabel.textContent = '';
+                existingLabel.style.display = 'none';
+
+                // Add floating label above the bar
+                const floatingLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                floatingLabel.setAttribute('class', 'floating-task-label');
+                const floatX = parseFloat(bar.getAttribute('x') || barRect.x);
+                const floatY = barRect.y - 4;
+                floatingLabel.setAttribute('x', floatX);
+                floatingLabel.setAttribute('y', floatY);
+
+                // Show truncated name (up to 20 chars)
+                let floatName = task.fullName;
+                if (floatName.length > 20) floatName = floatName.substring(0, 17) + '...';
+                floatingLabel.textContent = floatName;
+                barWrapper.appendChild(floatingLabel);
+            } else {
+                // Show text inside the bar
+                let displayName = task.fullName;
+                if (maxChars < 4) {
+                    displayName = task.fullName.substring(0, Math.max(2, maxChars));
+                } else if (displayName.length > maxChars) {
+                    displayName = displayName.substring(0, maxChars - 3) + '...';
                 }
 
-                // Show labels for bars wider than minimum width
-                if (barWidth > minWidth) {
-                    // Calculate how many characters can fit - use smaller font for narrow bars
-                    let charWidth = 5.5; // Tighter character width estimate
-                    let fontSize = 10;
-                    
-                    // Adjust font size based on bar width for better readability
-                    if (barWidth < 40) {
-                        fontSize = 8;
-                        charWidth = 4.5;
-                    } else if (barWidth < 80) {
-                        fontSize = 9;
-                        charWidth = 5;
-                    } else if (currentViewMode === 'Month') {
-                        fontSize = 9;
-                        charWidth = 5;
-                    } else if (currentViewMode === 'Day') {
-                        fontSize = 11;
-                        charWidth = 6;
-                    } else {
-                        // Week view
-                        fontSize = 10;
-                        charWidth = 5.5;
-                    }
-                    
-                    existingLabel.style.fontSize = fontSize + 'px';
-                    
-                    // Account for assignee initials space on the right
-                    const availableWidth = barWidth - 6 - initialsSpace; // Padding + initials space
-                    const maxChars = Math.floor(availableWidth / charWidth);
-
-                    let displayName = task.fullName;
-                    
-                    // For very small bars, show at least initial
-                    if (maxChars < 2) {
-                        displayName = task.fullName.substring(0, 1);
-                    } else if (maxChars < 4) {
-                        displayName = task.fullName.substring(0, maxChars);
-                    } else if (displayName.length > maxChars) {
-                        displayName = displayName.substring(0, maxChars - 3) + '...';
-                    }
-
-                    // Update the label text and position - shift left if there's an assignee
-                    existingLabel.textContent = displayName;
-                    const labelX = barRect.x + (barWidth - initialsSpace) / 2;
-                    existingLabel.setAttribute('x', labelX);
-                    existingLabel.setAttribute('y', barRect.y + barHeight / 2);
-                    existingLabel.setAttribute('text-anchor', 'middle');
-                    existingLabel.setAttribute('dominant-baseline', 'middle');
-                    existingLabel.style.display = 'block';
-                    
-                    // Remove any outside positioning classes
-                    existingLabel.classList.remove('outside-left', 'outside-right');
-                } else {
-                    // Only hide label if bar is extremely small
-                    existingLabel.textContent = '';
-                    existingLabel.style.display = 'none';
-                }
+                existingLabel.textContent = displayName;
+                // Position: offset right for priority dot
+                const labelX = parseFloat(bar.getAttribute('x') || barRect.x) + priorityDotSpace + (availableWidth) / 2;
+                existingLabel.setAttribute('x', labelX);
+                existingLabel.setAttribute('y', barRect.y + barHeight / 2);
+                existingLabel.setAttribute('text-anchor', 'middle');
+                existingLabel.setAttribute('dominant-baseline', 'middle');
+                existingLabel.style.display = 'block';
+                existingLabel.classList.remove('outside-left', 'outside-right');
             }
         });
     }
 
-    // Add assignee initials to task bars (like ClickUp)
+    // Add assignee initials to task bars
     function addAssigneeInitials() {
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
@@ -2517,7 +2814,6 @@
         ganttSvg.querySelectorAll('.assignee-group').forEach(el => el.remove());
 
         tasks.forEach(task => {
-            // Skip if no assignee or is milestone
             if (task.assigned_to === 'Unassigned') return;
             if (task.isMilestone) return;
 
@@ -2528,36 +2824,30 @@
             if (!bar) return;
 
             let barRect;
-            try {
-                barRect = bar.getBBox();
-            } catch (e) {
-                return;
-            }
+            try { barRect = bar.getBBox(); } catch (e) { return; }
 
-            // Only show initials if bar is wide enough (at least 40px for circle)
-            if (barRect.width < 40) return;
+            // Read possibly-widened bar width attribute
+            const barWidth = parseFloat(bar.getAttribute('width')) || barRect.width;
+            if (barWidth < 40) return;
 
-            // Get initials from first and last name, fallback to username
+            // Get initials
             let initials = '';
             if (task.assignee_first_name && task.assignee_last_name) {
                 initials = (task.assignee_first_name.charAt(0) + task.assignee_last_name.charAt(0)).toUpperCase();
             } else if (task.assignee_first_name) {
                 initials = task.assignee_first_name.substring(0, 2).toUpperCase();
             } else {
-                // Use first 2 chars of username
                 initials = task.assigned_to.substring(0, 2).toUpperCase();
             }
 
-            // Create SVG group for assignee avatar
             const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             group.setAttribute('class', 'assignee-group');
 
-            // Position at the right side of the bar
             const circleRadius = 10;
-            const circleX = barRect.x + barRect.width - circleRadius - 4;
+            const barX = parseFloat(bar.getAttribute('x') || barRect.x);
+            const circleX = barX + barWidth - circleRadius - 4;
             const circleY = barRect.y + barRect.height / 2;
 
-            // Create circle background
             const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
             circle.setAttribute('cx', circleX);
             circle.setAttribute('cy', circleY);
@@ -2565,7 +2855,6 @@
             circle.setAttribute('class', 'assignee-circle');
             group.appendChild(circle);
 
-            // Create initials text
             const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             text.setAttribute('x', circleX);
             text.setAttribute('y', circleY);
@@ -2573,7 +2862,6 @@
             text.textContent = initials;
             group.appendChild(text);
 
-            // Insert into the bar wrapper
             barWrapper.appendChild(group);
         });
     }
@@ -2601,7 +2889,8 @@
                                 const isInDefs = node.closest && node.closest('defs');
                                 const isCustom = node.classList && node.classList.contains('custom-arrowhead');
                                 const isMilestoneDiamond = node.classList && node.classList.contains('milestone-diamond-shape');
-                                if (!isInDefs && !isCustom && !isMilestoneDiamond) {
+                                const isDepChevron = node.classList && node.classList.contains('dep-chevron');
+                                if (!isInDefs && !isCustom && !isMilestoneDiamond && !isDepChevron) {
                                     node.remove();
                                 }
                             }
@@ -2611,7 +2900,8 @@
                                     const isInDefs = p.closest('defs');
                                     const isCustom = p.classList.contains('custom-arrowhead');
                                     const isMilestoneDiamond = p.classList.contains('milestone-diamond-shape');
-                                    if (!isInDefs && !isCustom && !isMilestoneDiamond) {
+                                    const isDepChevron = p.classList.contains('dep-chevron');
+                                    if (!isInDefs && !isCustom && !isMilestoneDiamond && !isDepChevron) {
                                         p.remove();
                                     }
                                 });
@@ -3058,13 +3348,13 @@
                 // Set up arrow polygon observer for this chart instance
                 setupArrowPolygonObserver();
                 
-                // Additional pass for dependency arrows
+                // Draw custom dependency lines
                 requestAnimationFrame(() => {
-                    enhanceDependencyArrows();
+                    drawCustomDependencyLines();
                     
                     // Final cleanup pass
                     setTimeout(() => {
-                        enhanceDependencyArrows();
+                        drawCustomDependencyLines();
                     }, 200);
                 });
             });
