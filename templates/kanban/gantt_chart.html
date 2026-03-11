@@ -80,7 +80,7 @@
         opacity: 0.75;
         cursor: pointer;
         pointer-events: stroke;
-        transition: stroke-width 0.15s ease, opacity 0.15s ease;
+        transition: stroke-width 0.15s ease, opacity 0.15s ease, stroke 0.15s ease;
     }
     .custom-dep-line:hover {
         stroke-width: 2.5px !important;
@@ -94,6 +94,29 @@
     .custom-dep-line.critical-dep:hover {
         stroke-width: 3px !important;
         opacity: 1 !important;
+    }
+
+    /* Dependency highlight on task hover */
+    .custom-dep-line.dep-active {
+        stroke: #3b82f6 !important;
+        stroke-width: 3px !important;
+        opacity: 1 !important;
+    }
+    .custom-dep-line.dep-active.critical-dep {
+        stroke: #ef4444 !important;
+        stroke-width: 3px !important;
+    }
+    .custom-dep-line.dep-dimmed {
+        opacity: 0.12 !important;
+    }
+    .dep-chevron.dep-active {
+        fill: #ffffff !important;
+        stroke: #1e40af !important;
+        stroke-width: 1px;
+        opacity: 1 !important;
+    }
+    .dep-chevron.dep-dimmed {
+        opacity: 0.12 !important;
     }
 
     /* Mid-line directional chevron — force visible against any hide rules */
@@ -495,25 +518,23 @@
     .gantt .bar-label {
         font-size: 11px;
         font-weight: 600;
-        fill: white !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        fill: #334155 !important;
         pointer-events: none;
-        text-anchor: middle !important;
+        text-anchor: start !important;
         dominant-baseline: middle !important;
         letter-spacing: 0.02em;
+        filter: drop-shadow(0 0 2px rgba(255,255,255,0.9));
     }
     
     /* Month view: increase label font size for better readability */
     body[data-view-mode="Month"] .gantt .bar-label {
         font-size: 12px;
         font-weight: 700;
-        text-shadow: 0 1px 4px rgba(0,0,0,0.5);
     }
 
     .gantt .bar-label.outside-left,
     .gantt .bar-label.outside-right {
-        fill: white !important;
-        text-shadow: 0 1px 3px rgba(0,0,0,0.4) !important;
+        fill: #334155 !important;
         font-weight: 600;
     }
 
@@ -1041,9 +1062,9 @@
         font-weight: 600;
         fill: #334155;
         text-anchor: start;
-        dominant-baseline: auto;
+        dominant-baseline: middle;
         pointer-events: none;
-        filter: drop-shadow(0 1px 1px rgba(255,255,255,0.8));
+        filter: drop-shadow(0 0 2px rgba(255,255,255,0.9));
     }
 
     body[data-view-mode="Month"] .floating-task-label {
@@ -2182,15 +2203,15 @@
             }
         });
 
-        // Enhance bars with additional info
-        enhanceBarsWithInfo();
+        // Phase 1: Enhance bars with priority dots and enforce min widths (no labels yet)
+        enhanceBarsWithPriorityDots();
 
-        // Add assignee initials to task bars
-        addAssigneeInitials();
-
-        // Draw dependency lines AFTER all visual elements (diamonds, labels, initials)
-        // are in the DOM so obstacle detection includes everything visible.
+        // Phase 2: Draw dependency lines — obstacle list only has bars + diamonds,
+        // NOT labels (they don't exist yet), so lines route cleanly between bars.
         drawCustomDependencyLines();
+
+        // Phase 3: NOW position labels to the right of bars, after lines are drawn.
+        positionBarLabels();
 
         // Add tooltip functionality
         addTooltipHandlers();
@@ -2258,34 +2279,8 @@
                 };
             }
 
-            // Label obstacle (text that may extend outside the bar)
-            const label = wrapper.querySelector('.bar-label');
-            if (label) {
-                try {
-                    const bbox = label.getBBox();
-                    if (bbox.width > 2 && bbox.height > 2) {
-                        obstacles.push({
-                            ownerId: wId, type: 'label',
-                            left: bbox.x - PAD, right: bbox.x + bbox.width + PAD,
-                            top: bbox.y - PAD, bottom: bbox.y + bbox.height + PAD
-                        });
-                    }
-                } catch (e) {}
-            }
-
-            // Floating label obstacle (shown above narrow bars)
-            wrapper.querySelectorAll('.floating-task-label').forEach(fl => {
-                try {
-                    const bbox = fl.getBBox();
-                    if (bbox.width > 2 && bbox.height > 2) {
-                        obstacles.push({
-                            ownerId: wId, type: 'floatingLabel',
-                            left: bbox.x - PAD, right: bbox.x + bbox.width + PAD,
-                            top: bbox.y - PAD, bottom: bbox.y + bbox.height + PAD
-                        });
-                    }
-                } catch (e) {}
-            });
+            // NOTE: Labels are NOT in the DOM yet (added in Phase 3 after dep lines).
+            // This ensures dep lines only route around bars and diamonds, not labels.
 
             // Milestone diamond obstacle
             const diamond = wrapper.querySelector('.milestone-diamond-shape');
@@ -2302,20 +2297,6 @@
                 } catch (e) {}
             }
 
-            // Assignee initials circle obstacle
-            const assigneeGroup = wrapper.querySelector('.assignee-group');
-            if (assigneeGroup) {
-                try {
-                    const bbox = assigneeGroup.getBBox();
-                    if (bbox.width > 0 && bbox.height > 0) {
-                        obstacles.push({
-                            ownerId: wId, type: 'assignee',
-                            left: bbox.x - PAD, right: bbox.x + bbox.width + PAD,
-                            top: bbox.y - PAD, bottom: bbox.y + bbox.height + PAD
-                        });
-                    }
-                } catch (e) {}
-            }
         });
 
         // Name lookup
@@ -2379,6 +2360,41 @@
             return false;
         }
 
+        // Does a horizontal line at testY from xMin→xMax hit any obstacle?
+        // Checks ALL obstacle types (bars, labels, assignees) for non-skipOwners.
+        // skipOwners obstacles are fully skipped (pred/succ own elements).
+        function horizHits(testY, xMin, xMax, skipOwners) {
+            for (let i = 0; i < obstacles.length; i++) {
+                const o = obstacles[i];
+                if (skipOwners && skipOwners.has(o.ownerId)) continue;
+                if (testY >= o.top && testY <= o.bottom &&
+                    xMax >= o.left && xMin <= o.right) {
+                    return o;
+                }
+            }
+            return null;
+        }
+
+        // Find a clear Y for a horizontal line by pushing up or down past collisions.
+        // direction: 'up' tries going up first, 'down' tries going down first.
+        function findClearY(startY, xMin, xMax, skipOwners, direction) {
+            let yUp = startY;
+            let yDown = startY;
+            let maxIter = obstacles.length * 2 + 30;
+            while (maxIter-- > 0) {
+                if (direction === 'up') {
+                    const hitUp = horizHits(yUp, xMin, xMax, skipOwners);
+                    if (!hitUp) return yUp;
+                    yUp = hitUp.top - 6;
+                } else {
+                    const hitDown = horizHits(yDown, xMin, xMax, skipOwners);
+                    if (!hitDown) return yDown;
+                    yDown = hitDown.bottom + 6;
+                }
+            }
+            return direction === 'up' ? yUp : yDown;
+        }
+
         const depTooltip = document.getElementById('dep-tooltip');
         let chevronCount = 0;
 
@@ -2408,43 +2424,138 @@
 
             if (sameRow && succIsRight) {
                 // ── Straight horizontal line ──
-                pathD = `M ${exitX},${exitY} L ${entryX},${entryY}`;
-                segments = [{ x1: exitX, y1: exitY, x2: entryX, y2: entryY, dir: 'right', len: entryX - exitX }];
+                // Check for collisions with bars in between
+                const straightHit = horizHits(exitY, exitX, entryX, skipOwners);
+                if (!straightHit) {
+                    pathD = `M ${exitX},${exitY} L ${entryX},${entryY}`;
+                    segments = [{ x1: exitX, y1: exitY, x2: entryX, y2: entryY, dir: 'right', len: entryX - exitX }];
+                } else {
+                    // Route above or below the blocking bar
+                    const detourDir = (exitY <= straightHit.top) ? 'up' : 'down';
+                    const detourY = findClearY(detourDir === 'up' ? straightHit.top - 6 : straightHit.bottom + 6,
+                        exitX, entryX, skipOwners, detourDir);
+                    const turnX1 = straightHit.left - GAP;
+                    const turnX2 = straightHit.right + GAP;
+                    pathD = `M ${exitX},${exitY} L ${turnX1},${exitY} L ${turnX1},${detourY} L ${turnX2},${detourY} L ${turnX2},${entryY} L ${entryX},${entryY}`;
+                    segments = [
+                        { x1: exitX, y1: exitY, x2: turnX1, y2: exitY, dir: 'right', len: turnX1 - exitX },
+                        { x1: turnX1, y1: exitY, x2: turnX1, y2: detourY, dir: detourDir, len: Math.abs(detourY - exitY) },
+                        { x1: turnX1, y1: detourY, x2: turnX2, y2: detourY, dir: 'right', len: turnX2 - turnX1 },
+                        { x1: turnX2, y1: detourY, x2: turnX2, y2: entryY, dir: detourDir === 'up' ? 'down' : 'up', len: Math.abs(entryY - detourY) },
+                        { x1: turnX2, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - turnX2 }
+                    ];
+                }
 
             } else if (succIsRight) {
                 // ── Successor to the right, different row — try L-shape first ──
-                // L-shape: exit → horizontal at exitY → vertical at turnX → horizontal at entryY → entry
                 let turnX = entryX - GAP;
                 const lClear = !vertHits(turnX, yMin, yMax, skipOwners);
 
                 if (lClear) {
-                    // Simple L-shape — cleanest look
-                    pathD = `M ${exitX},${exitY} L ${turnX},${exitY} L ${turnX},${entryY} L ${entryX},${entryY}`;
-                    segments = [
-                        { x1: exitX, y1: exitY, x2: turnX, y2: exitY, dir: 'right', len: turnX - exitX },
-                        { x1: turnX, y1: exitY, x2: turnX, y2: entryY, dir: entryY > exitY ? 'down' : 'up', len: Math.abs(entryY - exitY) },
-                        { x1: turnX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - turnX }
-                    ];
+                    // Check horizontal segments for collisions
+                    const exitSegHit = horizHits(exitY, exitX, turnX, skipOwners);
+                    const entrySegHit = horizHits(entryY, turnX, entryX, skipOwners);
+
+                    if (!exitSegHit && !entrySegHit) {
+                        // Simple L-shape — cleanest look, no collisions
+                        pathD = `M ${exitX},${exitY} L ${turnX},${exitY} L ${turnX},${entryY} L ${entryX},${entryY}`;
+                        segments = [
+                            { x1: exitX, y1: exitY, x2: turnX, y2: exitY, dir: 'right', len: turnX - exitX },
+                            { x1: turnX, y1: exitY, x2: turnX, y2: entryY, dir: entryY > exitY ? 'down' : 'up', len: Math.abs(entryY - exitY) },
+                            { x1: turnX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - turnX }
+                        ];
+                    } else {
+                        // L-shape has horizontal collisions — route the exit horizontal above/below
+                        const goingDown = entryY > exitY;
+                        let clearExitY = exitY;
+                        if (exitSegHit) {
+                            clearExitY = findClearY(goingDown ? exitSegHit.top - 6 : exitSegHit.bottom + 6,
+                                exitX, turnX, skipOwners, goingDown ? 'up' : 'down');
+                        }
+                        // Also ensure entry horizontal is clear
+                        let clearEntryY = entryY;
+                        if (entrySegHit) {
+                            clearEntryY = findClearY(goingDown ? entrySegHit.bottom + 6 : entrySegHit.top - 6,
+                                turnX, entryX, skipOwners, goingDown ? 'down' : 'up');
+                        }
+
+                        if (clearExitY === exitY && clearEntryY === entryY) {
+                            // After findClearY they ended up same — simple L
+                            pathD = `M ${exitX},${exitY} L ${turnX},${exitY} L ${turnX},${entryY} L ${entryX},${entryY}`;
+                            segments = [
+                                { x1: exitX, y1: exitY, x2: turnX, y2: exitY, dir: 'right', len: turnX - exitX },
+                                { x1: turnX, y1: exitY, x2: turnX, y2: entryY, dir: goingDown ? 'down' : 'up', len: Math.abs(entryY - exitY) },
+                                { x1: turnX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - turnX }
+                            ];
+                        } else {
+                            // 5-segment route: exit h → v to clearExitY → h to turnX → v to clearEntryY → h to entry
+                            const midVertX = exitX + GAP;
+                            pathD = `M ${exitX},${exitY} L ${midVertX},${exitY} L ${midVertX},${clearExitY} L ${turnX},${clearExitY} L ${turnX},${clearEntryY} L ${entryX},${clearEntryY}`;
+                            // If clearEntryY != entryY, add final segment
+                            if (Math.abs(clearEntryY - entryY) > 1) {
+                                pathD = `M ${exitX},${exitY} L ${midVertX},${exitY} L ${midVertX},${clearExitY} L ${turnX},${clearExitY} L ${turnX},${entryY} L ${entryX},${entryY}`;
+                            }
+                            segments = [
+                                { x1: exitX, y1: exitY, x2: turnX, y2: exitY, dir: 'right', len: turnX - exitX },
+                                { x1: turnX, y1: clearExitY, x2: turnX, y2: entryY, dir: goingDown ? 'down' : 'up', len: Math.abs(entryY - clearExitY) },
+                                { x1: turnX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - turnX }
+                            ];
+                        }
+                    }
                 } else {
-                    // L-shape blocked — find a collision-free vertical X
+                    // L-shape blocked vertically — find a collision-free vertical X
                     let vertX = findClearX(exitX + GAP, yMin, yMax, skipOwners);
-                    pathD = `M ${exitX},${exitY} L ${vertX},${exitY} L ${vertX},${entryY} L ${entryX},${entryY}`;
-                    segments = [
-                        { x1: exitX, y1: exitY, x2: vertX, y2: exitY, dir: 'right', len: Math.abs(vertX - exitX) },
-                        { x1: vertX, y1: exitY, x2: vertX, y2: entryY, dir: entryY > exitY ? 'down' : 'up', len: Math.abs(entryY - exitY) },
-                        { x1: vertX, y1: entryY, x2: entryX, y2: entryY, dir: vertX > entryX ? 'left' : 'right', len: Math.abs(entryX - vertX) }
-                    ];
+                    // Check horizontal segments for collisions too
+                    const exitSegHit = horizHits(exitY, exitX, vertX, skipOwners);
+                    const entrySegHit = horizHits(entryY, Math.min(vertX, entryX), Math.max(vertX, entryX), skipOwners);
+
+                    if (!exitSegHit && !entrySegHit) {
+                        pathD = `M ${exitX},${exitY} L ${vertX},${exitY} L ${vertX},${entryY} L ${entryX},${entryY}`;
+                        segments = [
+                            { x1: exitX, y1: exitY, x2: vertX, y2: exitY, dir: 'right', len: Math.abs(vertX - exitX) },
+                            { x1: vertX, y1: exitY, x2: vertX, y2: entryY, dir: entryY > exitY ? 'down' : 'up', len: Math.abs(entryY - exitY) },
+                            { x1: vertX, y1: entryY, x2: entryX, y2: entryY, dir: vertX > entryX ? 'left' : 'right', len: Math.abs(entryX - vertX) }
+                        ];
+                    } else {
+                        // Route exit horizontal above/below collision
+                        const goingDown = entryY > exitY;
+                        let clearExitY = exitY;
+                        if (exitSegHit) {
+                            clearExitY = findClearY(goingDown ? exitSegHit.top - 6 : exitSegHit.bottom + 6,
+                                exitX, vertX, skipOwners, goingDown ? 'up' : 'down');
+                        }
+                        const exitVertX = exitX + GAP;
+                        pathD = `M ${exitX},${exitY} L ${exitVertX},${exitY} L ${exitVertX},${clearExitY} L ${vertX},${clearExitY} L ${vertX},${entryY} L ${entryX},${entryY}`;
+                        segments = [
+                            { x1: exitX, y1: exitY, x2: exitVertX, y2: exitY, dir: 'right', len: GAP },
+                            { x1: exitVertX, y1: exitY, x2: exitVertX, y2: clearExitY, dir: goingDown ? 'up' : 'down', len: Math.abs(clearExitY - exitY) },
+                            { x1: exitVertX, y1: clearExitY, x2: vertX, y2: clearExitY, dir: 'right', len: Math.abs(vertX - exitVertX) },
+                            { x1: vertX, y1: clearExitY, x2: vertX, y2: entryY, dir: goingDown ? 'down' : 'up', len: Math.abs(entryY - clearExitY) },
+                            { x1: vertX, y1: entryY, x2: entryX, y2: entryY, dir: vertX > entryX ? 'left' : 'right', len: Math.abs(entryX - vertX) }
+                        ];
+                    }
                 }
 
             } else {
                 // ── Successor to the left or overlapping — U-shape routing ──
                 const goingDown = entryY >= exitY;
-                const clearanceY = goingDown
+                let clearanceY = goingDown
                     ? Math.max(pred.bottom, succ.bottom) + 20
                     : Math.min(pred.top, succ.top) - 20;
 
                 let vert1X = findClearX(pred.right + GAP,
                     Math.min(exitY, clearanceY), Math.max(exitY, clearanceY), skipOwners);
+
+                // Check horizontal segment at clearanceY for collisions
+                const hMin = Math.min(vert1X, entryX - GAP);
+                const hMax = Math.max(vert1X, entryX - GAP);
+                const horzHit = horizHits(clearanceY, hMin, hMax, skipOwners);
+                if (horzHit) {
+                    // Push clearanceY further away to avoid the collision
+                    clearanceY = findClearY(
+                        goingDown ? horzHit.bottom + 6 : horzHit.top - 6,
+                        hMin, hMax, skipOwners, goingDown ? 'down' : 'up');
+                }
 
                 pathD = `M ${exitX},${exitY} L ${vert1X},${exitY} L ${vert1X},${clearanceY} L ${entryX - GAP},${clearanceY} L ${entryX - GAP},${entryY} L ${entryX},${entryY}`;
                 segments = [
@@ -2620,6 +2731,37 @@
                 const milestoneStatus = this.getAttribute('data-milestone-status');
                 const milestoneDueDate = this.getAttribute('data-due-date');
 
+                // --- Highlight connected dependency lines ---
+                const taskId = this.getAttribute('data-id');
+                const allDepLines = document.querySelectorAll('.custom-dep-line');
+                const allChevrons = document.querySelectorAll('.dep-chevron');
+                if (allDepLines.length > 0) {
+                    allDepLines.forEach(line => {
+                        const fromId = line.getAttribute('data-from');
+                        const toId = line.getAttribute('data-to');
+                        if (fromId === taskId || toId === taskId) {
+                            line.classList.add('dep-active');
+                            line.classList.remove('dep-dimmed');
+                        } else {
+                            line.classList.add('dep-dimmed');
+                            line.classList.remove('dep-active');
+                        }
+                    });
+                    allChevrons.forEach(chevron => {
+                        const group = chevron.closest('.custom-dep-group');
+                        if (group) {
+                            const line = group.querySelector('.custom-dep-line');
+                            if (line && line.classList.contains('dep-active')) {
+                                chevron.classList.add('dep-active');
+                                chevron.classList.remove('dep-dimmed');
+                            } else {
+                                chevron.classList.add('dep-dimmed');
+                                chevron.classList.remove('dep-active');
+                            }
+                        }
+                    });
+                }
+
                 // Build enhanced tooltip content
                 let tooltipContent;
                 if (isMilestone) {
@@ -2653,6 +2795,14 @@
             // Add mouseleave event
             barWrapper.addEventListener('mouseleave', function() {
                 tooltip.classList.remove('show');
+
+                // Remove dependency line highlighting
+                document.querySelectorAll('.custom-dep-line').forEach(line => {
+                    line.classList.remove('dep-active', 'dep-dimmed');
+                });
+                document.querySelectorAll('.dep-chevron').forEach(chevron => {
+                    chevron.classList.remove('dep-active', 'dep-dimmed');
+                });
             });
         });
 
@@ -2750,16 +2900,15 @@
         }
     }
 
-    // Enhance bars: enforce min width in Month view, truncated labels, floating labels, priority dots
-    function enhanceBarsWithInfo() {
+    // Phase 1: Add priority dots and enforce min bar widths (NO labels — those come after dep lines)
+    function enhanceBarsWithPriorityDots() {
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
 
-        // Remove any previous floating labels and priority dots
-        ganttSvg.querySelectorAll('.floating-task-label, .priority-dot-group').forEach(el => el.remove());
+        // Remove any previous floating labels, priority dots, and assignee groups
+        ganttSvg.querySelectorAll('.floating-task-label, .priority-dot-group, .assignee-group').forEach(el => el.remove());
 
         const MIN_BAR_WIDTH_MONTH = 80;
-        const AVATAR_ONLY_THRESHOLD = 40;
 
         // Process regular tasks only — milestone labels are handled separately in PASS 2
         const allItems = [...tasks];
@@ -2770,17 +2919,11 @@
             const bar = barWrapper.querySelector('.bar');
             if (!bar) return;
 
-            // Safely get bounding box
             let barRect;
-            try {
-                barRect = bar.getBBox();
-            } catch (e) {
-                return;
-            }
+            try { barRect = bar.getBBox(); } catch (e) { return; }
 
             let barWidth = barRect.width;
             const barHeight = barRect.height;
-
             if (barWidth <= 0 || barHeight <= 0 || !isFinite(barWidth) || !isFinite(barHeight)) return;
 
             // --- Month view: enforce minimum bar width of 80px ---
@@ -2788,10 +2931,6 @@
                 bar.setAttribute('width', MIN_BAR_WIDTH_MONTH);
                 barWidth = MIN_BAR_WIDTH_MONTH;
             }
-
-            // Calculate space reserved for assignee initials
-            const hasAssignee = task.assigned_to !== 'Unassigned';
-            const initialsSpace = (hasAssignee && barWidth >= AVATAR_ONLY_THRESHOLD) ? 28 : 0;
 
             // --- Priority dot (colored circle at the left edge of the bar) ---
             const priorityColors = { urgent: '#ef4444', high: '#f59e0b', medium: '#fbbf24', low: '#9ca3af' };
@@ -2810,64 +2949,68 @@
             dotGroup.appendChild(dot);
             barWrapper.appendChild(dotGroup);
 
-            const priorityDotSpace = dotRadius * 2 + 6; // space consumed by priority dot
+            // Hide the default label for now — it will be repositioned in positionBarLabels()
+            const existingLabel = barWrapper.querySelector('.bar-label');
+            if (existingLabel) {
+                existingLabel.textContent = '';
+                existingLabel.style.display = 'none';
+            }
+        });
+    }
 
-            // --- Label rendering ---
+    // Phase 3: Position labels to the RIGHT of bars AFTER dependency lines are drawn.
+    // This ensures lines don't collide with titles and titles don't collide with lines.
+    function positionBarLabels() {
+        const ganttSvg = document.querySelector('#gantt');
+        if (!ganttSvg) return;
+
+        // Remove any leftover floating labels
+        ganttSvg.querySelectorAll('.floating-task-label').forEach(el => el.remove());
+
+        const allItems = [...tasks];
+        allItems.forEach(task => {
+            const barWrapper = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
+            if (!barWrapper) return;
+
+            const bar = barWrapper.querySelector('.bar');
+            if (!bar) return;
+
+            let barRect;
+            try { barRect = bar.getBBox(); } catch (e) { return; }
+
+            const barWidth = parseFloat(bar.getAttribute('width')) || barRect.width;
+            const barHeight = barRect.height;
+            if (barWidth <= 0 || barHeight <= 0) return;
+
             const existingLabel = barWrapper.querySelector('.bar-label');
             if (!existingLabel) return;
 
-            // Determine font size
-            let fontSize, charWidth;
-            if (barWidth < 50) { fontSize = 8; charWidth = 4.5; }
-            else if (barWidth < 80) { fontSize = 9; charWidth = 5; }
-            else if (currentViewMode === 'Month') { fontSize = 10; charWidth = 5.5; }
-            else if (currentViewMode === 'Day') { fontSize = 11; charWidth = 6; }
-            else { fontSize = 10; charWidth = 5.5; }
+            // Font size based on view mode
+            let fontSize;
+            if (currentViewMode === 'Month') { fontSize = 12; }
+            else if (currentViewMode === 'Day') { fontSize = 11; }
+            else { fontSize = 11; }
 
             existingLabel.style.fontSize = fontSize + 'px';
 
-            // Available width for text inside bar
-            const availableWidth = barWidth - priorityDotSpace - 4 - initialsSpace;
-            const maxChars = Math.floor(availableWidth / charWidth);
+            // Position label to the right of the bar with a small gap
+            const barRightEdge = parseFloat(bar.getAttribute('x') || barRect.x) + barWidth;
+            const labelGap = 6;
+            const labelX = barRightEdge + labelGap;
 
-            // If bar too narrow for even a short label, show only avatar (hide label)
-            // and add a floating label above the bar instead
-            if (barWidth < AVATAR_ONLY_THRESHOLD || maxChars < 2) {
-                existingLabel.textContent = '';
-                existingLabel.style.display = 'none';
-
-                // Add floating label above the bar
-                const floatingLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                floatingLabel.setAttribute('class', 'floating-task-label');
-                const floatX = parseFloat(bar.getAttribute('x') || barRect.x);
-                const floatY = barRect.y - 4;
-                floatingLabel.setAttribute('x', floatX);
-                floatingLabel.setAttribute('y', floatY);
-
-                // Show truncated name (up to 20 chars)
-                let floatName = task.fullName;
-                if (floatName.length > 20) floatName = floatName.substring(0, 17) + '...';
-                floatingLabel.textContent = floatName;
-                barWrapper.appendChild(floatingLabel);
-            } else {
-                // Show text inside the bar
-                let displayName = task.fullName;
-                if (maxChars < 4) {
-                    displayName = task.fullName.substring(0, Math.max(2, maxChars));
-                } else if (displayName.length > maxChars) {
-                    displayName = displayName.substring(0, maxChars - 3) + '...';
-                }
-
-                existingLabel.textContent = displayName;
-                // Position: offset right for priority dot
-                const labelX = parseFloat(bar.getAttribute('x') || barRect.x) + priorityDotSpace + (availableWidth) / 2;
-                existingLabel.setAttribute('x', labelX);
-                existingLabel.setAttribute('y', barRect.y + barHeight / 2);
-                existingLabel.setAttribute('text-anchor', 'middle');
-                existingLabel.setAttribute('dominant-baseline', 'middle');
-                existingLabel.style.display = 'block';
-                existingLabel.classList.remove('outside-left', 'outside-right');
+            // Show full task name (truncate only if very long)
+            let displayName = task.fullName;
+            if (displayName.length > 40) {
+                displayName = displayName.substring(0, 37) + '...';
             }
+
+            existingLabel.textContent = displayName;
+            existingLabel.setAttribute('x', labelX);
+            existingLabel.setAttribute('y', barRect.y + barHeight / 2);
+            existingLabel.setAttribute('text-anchor', 'start');
+            existingLabel.setAttribute('dominant-baseline', 'middle');
+            existingLabel.style.display = 'block';
+            existingLabel.classList.remove('outside-left', 'outside-right');
         });
     }
 
