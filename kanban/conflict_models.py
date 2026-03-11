@@ -123,8 +123,12 @@ class ConflictDetection(models.Model):
             self.resolution_effectiveness = effectiveness
         self.save()
         
-        # Learn from this resolution
-        ResolutionPattern.learn_from_resolution(self, resolution, effectiveness)
+        # Only learn from this resolution when an effectiveness rating is provided.
+        # Without a rating we cannot determine success/failure, so deferring until
+        # the user submits feedback avoids counting an unrated apply as a failure
+        # (which would incorrectly lower the success rate).
+        if effectiveness:
+            ResolutionPattern.learn_from_resolution(self, resolution, effectiveness)
     
     def ignore(self, user=None, reason=None):
         """Mark conflict as ignored."""

@@ -69,8 +69,19 @@ def filter_global(patterns):
 
 @register.filter
 def avg_success_rate(patterns):
-    """Calculate average success rate of patterns"""
+    """Calculate usage-weighted success rate across patterns.
+
+    Uses a weighted average (sum(times_successful) / sum(times_used)) so that
+    low-sample patterns (e.g. a brand-new board-specific pattern with 1 use)
+    don't distort the overall figure the same way a simple arithmetic mean
+    would. Falls back to a simple mean when no usage data is available.
+    """
     if not patterns:
         return 0
+    total_used = sum(p.times_used for p in patterns)
+    if total_used > 0:
+        total_successful = sum(p.times_successful for p in patterns)
+        return total_successful / total_used
+    # Fallback: simple mean of stored rates
     total = sum(p.success_rate for p in patterns)
     return total / len(patterns)
