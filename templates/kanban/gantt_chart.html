@@ -2203,6 +2203,11 @@
             }
         });
 
+        // Module-level arrays to store dependency line segment positions.
+        // positionBarLabels() reads these to push titles past any overlapping lines.
+        window._depVerticalSegments = [];
+        window._depHorizontalSegments = [];
+
         // Phase 1: Enhance bars with priority dots and enforce min widths (no labels yet)
         enhanceBarsWithPriorityDots();
 
@@ -2447,92 +2452,101 @@
                 }
 
             } else if (succIsRight) {
-                // ── Successor to the right, different row — try L-shape first ──
-                let turnX = entryX - GAP;
-                const lClear = !vertHits(turnX, yMin, yMax, skipOwners);
+                // ── Successor to the right, different row — Double-L (S-shape) routing ──
+                // Monday.com style: exit right → short stub → vertical at midpoint → horizontal → enter left
+                // This ensures the vertical segment is safely between both bars, never cutting through either.
+                const goingDown = entryY > exitY;
 
-                if (lClear) {
+                // Calculate midpoint X between predecessor right edge and successor left edge
+                let midX = (pred.rightX + succ.leftX) / 2;
+
+                // Ensure midX has enough clearance from both bars
+                const minMidX = pred.rightX + GAP;
+                const maxMidX = succ.leftX - GAP;
+                if (midX < minMidX) midX = minMidX;
+                if (midX > maxMidX) midX = maxMidX;
+
+                // If there's not enough space between bars for a clean double-L,
+                // fall through to U-shape routing below
+                if (maxMidX <= minMidX) {
+                    // Not enough horizontal room — use U-shape (handled in else branch below)
+                    const uGoingDown = entryY >= exitY;
+                    let clearanceY = uGoingDown
+                        ? Math.max(pred.bottom, succ.bottom) + 20
+                        : Math.min(pred.top, succ.top) - 20;
+
+                    let vert1X = findClearX(pred.right + GAP,
+                        Math.min(exitY, clearanceY), Math.max(exitY, clearanceY), skipOwners);
+
+                    const hMin = Math.min(vert1X, entryX - GAP);
+                    const hMax = Math.max(vert1X, entryX - GAP);
+                    const horzHit = horizHits(clearanceY, hMin, hMax, skipOwners);
+                    if (horzHit) {
+                        clearanceY = findClearY(
+                            uGoingDown ? horzHit.bottom + 6 : horzHit.top - 6,
+                            hMin, hMax, skipOwners, uGoingDown ? 'down' : 'up');
+                    }
+
+                    pathD = `M ${exitX},${exitY} L ${vert1X},${exitY} L ${vert1X},${clearanceY} L ${entryX - GAP},${clearanceY} L ${entryX - GAP},${entryY} L ${entryX},${entryY}`;
+                    segments = [
+                        { x1: exitX, y1: exitY, x2: vert1X, y2: exitY, dir: 'right', len: Math.abs(vert1X - exitX) },
+                        { x1: vert1X, y1: exitY, x2: vert1X, y2: clearanceY, dir: uGoingDown ? 'down' : 'up', len: Math.abs(clearanceY - exitY) },
+                        { x1: vert1X, y1: clearanceY, x2: entryX - GAP, y2: clearanceY, dir: vert1X > entryX - GAP ? 'left' : 'right', len: Math.abs(vert1X - (entryX - GAP)) },
+                        { x1: entryX - GAP, y1: clearanceY, x2: entryX - GAP, y2: entryY, dir: uGoingDown ? 'up' : 'down', len: Math.abs(entryY - clearanceY) },
+                        { x1: entryX - GAP, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: GAP }
+                    ];
+                } else {
+                    // Enough space — use double-L (S-shape) routing through midX
+                    // Find a collision-free vertical X near the midpoint
+                    midX = findClearX(midX, yMin, yMax, skipOwners);
+                    // Clamp midX so it doesn't drift past the successor
+                    if (midX > maxMidX) midX = maxMidX;
+
                     // Check horizontal segments for collisions
-                    const exitSegHit = horizHits(exitY, exitX, turnX, skipOwners);
-                    const entrySegHit = horizHits(entryY, turnX, entryX, skipOwners);
+                    const exitSegHit = horizHits(exitY, exitX, midX, skipOwners);
+                    const entrySegHit = horizHits(entryY, midX, entryX, skipOwners);
 
                     if (!exitSegHit && !entrySegHit) {
-                        // Simple L-shape — cleanest look, no collisions
-                        pathD = `M ${exitX},${exitY} L ${turnX},${exitY} L ${turnX},${entryY} L ${entryX},${entryY}`;
+                        // Clean double-L: exit → midX horizontal, midX vertical, midX → entry horizontal
+                        pathD = `M ${exitX},${exitY} L ${midX},${exitY} L ${midX},${entryY} L ${entryX},${entryY}`;
                         segments = [
-                            { x1: exitX, y1: exitY, x2: turnX, y2: exitY, dir: 'right', len: turnX - exitX },
-                            { x1: turnX, y1: exitY, x2: turnX, y2: entryY, dir: entryY > exitY ? 'down' : 'up', len: Math.abs(entryY - exitY) },
-                            { x1: turnX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - turnX }
+                            { x1: exitX, y1: exitY, x2: midX, y2: exitY, dir: 'right', len: midX - exitX },
+                            { x1: midX, y1: exitY, x2: midX, y2: entryY, dir: goingDown ? 'down' : 'up', len: Math.abs(entryY - exitY) },
+                            { x1: midX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - midX }
                         ];
                     } else {
-                        // L-shape has horizontal collisions — route the exit horizontal above/below
-                        const goingDown = entryY > exitY;
+                        // Horizontal collision — route around with 5-segment path
                         let clearExitY = exitY;
                         if (exitSegHit) {
                             clearExitY = findClearY(goingDown ? exitSegHit.top - 6 : exitSegHit.bottom + 6,
-                                exitX, turnX, skipOwners, goingDown ? 'up' : 'down');
+                                exitX, midX, skipOwners, goingDown ? 'up' : 'down');
                         }
-                        // Also ensure entry horizontal is clear
                         let clearEntryY = entryY;
                         if (entrySegHit) {
                             clearEntryY = findClearY(goingDown ? entrySegHit.bottom + 6 : entrySegHit.top - 6,
-                                turnX, entryX, skipOwners, goingDown ? 'down' : 'up');
+                                midX, entryX, skipOwners, goingDown ? 'down' : 'up');
                         }
 
                         if (clearExitY === exitY && clearEntryY === entryY) {
-                            // After findClearY they ended up same — simple L
-                            pathD = `M ${exitX},${exitY} L ${turnX},${exitY} L ${turnX},${entryY} L ${entryX},${entryY}`;
+                            // findClearY found no issue — clean double-L
+                            pathD = `M ${exitX},${exitY} L ${midX},${exitY} L ${midX},${entryY} L ${entryX},${entryY}`;
                             segments = [
-                                { x1: exitX, y1: exitY, x2: turnX, y2: exitY, dir: 'right', len: turnX - exitX },
-                                { x1: turnX, y1: exitY, x2: turnX, y2: entryY, dir: goingDown ? 'down' : 'up', len: Math.abs(entryY - exitY) },
-                                { x1: turnX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - turnX }
+                                { x1: exitX, y1: exitY, x2: midX, y2: exitY, dir: 'right', len: midX - exitX },
+                                { x1: midX, y1: exitY, x2: midX, y2: entryY, dir: goingDown ? 'down' : 'up', len: Math.abs(entryY - exitY) },
+                                { x1: midX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - midX }
                             ];
                         } else {
-                            // 5-segment route: exit h → v to clearExitY → h to turnX → v to clearEntryY → h to entry
-                            const midVertX = exitX + GAP;
-                            pathD = `M ${exitX},${exitY} L ${midVertX},${exitY} L ${midVertX},${clearExitY} L ${turnX},${clearExitY} L ${turnX},${clearEntryY} L ${entryX},${clearEntryY}`;
-                            // If clearEntryY != entryY, add final segment
-                            if (Math.abs(clearEntryY - entryY) > 1) {
-                                pathD = `M ${exitX},${exitY} L ${midVertX},${exitY} L ${midVertX},${clearExitY} L ${turnX},${clearExitY} L ${turnX},${entryY} L ${entryX},${entryY}`;
-                            }
+                            // 5-segment route with clear Y values
+                            const stubX = exitX + GAP;
+                            pathD = `M ${exitX},${exitY} L ${stubX},${exitY} L ${stubX},${clearExitY} L ${midX},${clearExitY} L ${midX},${entryY} L ${entryX},${entryY}`;
                             segments = [
-                                { x1: exitX, y1: exitY, x2: turnX, y2: exitY, dir: 'right', len: turnX - exitX },
-                                { x1: turnX, y1: clearExitY, x2: turnX, y2: entryY, dir: goingDown ? 'down' : 'up', len: Math.abs(entryY - clearExitY) },
-                                { x1: turnX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - turnX }
+                                { x1: exitX, y1: exitY, x2: stubX, y2: exitY, dir: 'right', len: GAP },
+                                { x1: stubX, y1: exitY, x2: stubX, y2: clearExitY, dir: goingDown ? 'up' : 'down', len: Math.abs(clearExitY - exitY) },
+                                { x1: stubX, y1: clearExitY, x2: midX, y2: clearExitY, dir: 'right', len: Math.abs(midX - stubX) },
+                                { x1: midX, y1: clearExitY, x2: midX, y2: entryY, dir: goingDown ? 'down' : 'up', len: Math.abs(entryY - clearExitY) },
+                                { x1: midX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - midX }
                             ];
                         }
-                    }
-                } else {
-                    // L-shape blocked vertically — find a collision-free vertical X
-                    let vertX = findClearX(exitX + GAP, yMin, yMax, skipOwners);
-                    // Check horizontal segments for collisions too
-                    const exitSegHit = horizHits(exitY, exitX, vertX, skipOwners);
-                    const entrySegHit = horizHits(entryY, Math.min(vertX, entryX), Math.max(vertX, entryX), skipOwners);
-
-                    if (!exitSegHit && !entrySegHit) {
-                        pathD = `M ${exitX},${exitY} L ${vertX},${exitY} L ${vertX},${entryY} L ${entryX},${entryY}`;
-                        segments = [
-                            { x1: exitX, y1: exitY, x2: vertX, y2: exitY, dir: 'right', len: Math.abs(vertX - exitX) },
-                            { x1: vertX, y1: exitY, x2: vertX, y2: entryY, dir: entryY > exitY ? 'down' : 'up', len: Math.abs(entryY - exitY) },
-                            { x1: vertX, y1: entryY, x2: entryX, y2: entryY, dir: vertX > entryX ? 'left' : 'right', len: Math.abs(entryX - vertX) }
-                        ];
-                    } else {
-                        // Route exit horizontal above/below collision
-                        const goingDown = entryY > exitY;
-                        let clearExitY = exitY;
-                        if (exitSegHit) {
-                            clearExitY = findClearY(goingDown ? exitSegHit.top - 6 : exitSegHit.bottom + 6,
-                                exitX, vertX, skipOwners, goingDown ? 'up' : 'down');
-                        }
-                        const exitVertX = exitX + GAP;
-                        pathD = `M ${exitX},${exitY} L ${exitVertX},${exitY} L ${exitVertX},${clearExitY} L ${vertX},${clearExitY} L ${vertX},${entryY} L ${entryX},${entryY}`;
-                        segments = [
-                            { x1: exitX, y1: exitY, x2: exitVertX, y2: exitY, dir: 'right', len: GAP },
-                            { x1: exitVertX, y1: exitY, x2: exitVertX, y2: clearExitY, dir: goingDown ? 'up' : 'down', len: Math.abs(clearExitY - exitY) },
-                            { x1: exitVertX, y1: clearExitY, x2: vertX, y2: clearExitY, dir: 'right', len: Math.abs(vertX - exitVertX) },
-                            { x1: vertX, y1: clearExitY, x2: vertX, y2: entryY, dir: goingDown ? 'down' : 'up', len: Math.abs(entryY - clearExitY) },
-                            { x1: vertX, y1: entryY, x2: entryX, y2: entryY, dir: vertX > entryX ? 'left' : 'right', len: Math.abs(entryX - vertX) }
-                        ];
                     }
                 }
 
@@ -2637,7 +2651,15 @@
                 chevronCount++;
             }
 
-            ganttSvg.appendChild(group);
+            // Insert dep lines BEFORE bar-wrappers so bars render on top,
+            // naturally masking/hiding line portions that pass through bars (Monday.com style).
+            const firstBar = ganttSvg.querySelector('.bar-wrapper');
+            if (firstBar) {
+                // bar-wrapper may be nested inside a <g> — insert into the same parent
+                firstBar.parentNode.insertBefore(group, firstBar);
+            } else {
+                ganttSvg.appendChild(group);
+            }
 
             // Hover tooltip
             if (depTooltip) {
@@ -2655,7 +2677,39 @@
             }
         });
 
-        console.log('[Gantt Dep Lines] Drew ' + depPairs.length + ' deps, ' + chevronCount + ' chevrons, ' + obstacles.length + ' obstacles tracked');
+        // Collect vertical AND horizontal segment positions for positionBarLabels()
+        // Scan all drawn dependency paths and extract both segment types
+        ganttSvg.querySelectorAll('.custom-dep-line').forEach(pathEl => {
+            const d = pathEl.getAttribute('d');
+            if (!d) return;
+            // Parse SVG path M/L commands into coordinate pairs
+            const coords = [];
+            const re = /[ML]\s*([\d.e+-]+)[,\s]+([\d.e+-]+)/gi;
+            let m;
+            while ((m = re.exec(d)) !== null) {
+                coords.push({ x: parseFloat(m[1]), y: parseFloat(m[2]) });
+            }
+            for (let i = 0; i < coords.length - 1; i++) {
+                const a = coords[i], b = coords[i + 1];
+                if (Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) > 1) {
+                    // Vertical segment (same X, different Y)
+                    window._depVerticalSegments.push({
+                        x: a.x,
+                        yMin: Math.min(a.y, b.y),
+                        yMax: Math.max(a.y, b.y)
+                    });
+                } else if (Math.abs(a.y - b.y) < 1 && Math.abs(a.x - b.x) > 1) {
+                    // Horizontal segment (same Y, different X)
+                    window._depHorizontalSegments.push({
+                        y: a.y,
+                        xMin: Math.min(a.x, b.x),
+                        xMax: Math.max(a.x, b.x)
+                    });
+                }
+            }
+        });
+
+        console.log('[Gantt Dep Lines] Drew ' + depPairs.length + ' deps, ' + chevronCount + ' chevrons, ' + obstacles.length + ' obstacles tracked, ' + window._depVerticalSegments.length + ' vert segs, ' + window._depHorizontalSegments.length + ' horiz segs');
 
         function positionDepTooltip(e) {
             const tt = document.getElementById('dep-tooltip');
@@ -2993,10 +3047,56 @@
 
             existingLabel.style.fontSize = fontSize + 'px';
 
-            // Position label to the right of the bar with a small gap
+            // Position label to the right of the bar with a minimum buffer distance
+            // from all dependency lines (vertical + horizontal) and task bars.
             const barRightEdge = parseFloat(bar.getAttribute('x') || barRect.x) + barWidth;
-            const labelGap = 6;
-            const labelX = barRightEdge + labelGap;
+            const labelGap = 8;
+            let labelX = barRightEdge + labelGap;
+
+            // Gather all dependency line segments
+            const vSegs = window._depVerticalSegments || [];
+            const hSegs = window._depHorizontalSegments || [];
+            const labelYTop = barRect.y;
+            const labelYBottom = barRect.y + barHeight;
+            const labelYCenter = barRect.y + barHeight / 2;
+            const BUFFER = 12; // minimum buffer distance from any line or bar
+
+            // Estimate label width (approximate: fontSize * 0.6 per char)
+            let displayNameForWidth = task.fullName;
+            if (displayNameForWidth.length > 40) displayNameForWidth = displayNameForWidth.substring(0, 37) + '...';
+            const estLabelWidth = displayNameForWidth.length * fontSize * 0.55;
+
+            for (let attempt = 0; attempt < 8; attempt++) {
+                let blocked = false;
+                const labelRight = labelX + estLabelWidth;
+
+                // Check against vertical line segments
+                for (let s = 0; s < vSegs.length; s++) {
+                    const seg = vSegs[s];
+                    // Vertical segment overlaps label Y range and X is within label span + buffer
+                    if (seg.yMax >= labelYTop - BUFFER && seg.yMin <= labelYBottom + BUFFER &&
+                        seg.x >= labelX - BUFFER && seg.x <= labelRight + BUFFER) {
+                        labelX = seg.x + BUFFER;
+                        blocked = true;
+                        break;
+                    }
+                }
+                if (blocked) continue;
+
+                // Check against horizontal line segments
+                for (let s = 0; s < hSegs.length; s++) {
+                    const seg = hSegs[s];
+                    // Horizontal segment is near label Y center and overlaps label X span + buffer
+                    if (Math.abs(seg.y - labelYCenter) < barHeight / 2 + BUFFER &&
+                        seg.xMax >= labelX - BUFFER && seg.xMin <= labelRight + BUFFER) {
+                        // Push label past the end of this horizontal segment
+                        labelX = seg.xMax + BUFFER;
+                        blocked = true;
+                        break;
+                    }
+                }
+                if (!blocked) break;
+            }
 
             // Show full task name (truncate only if very long)
             let displayName = task.fullName;
