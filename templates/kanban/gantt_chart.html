@@ -2100,9 +2100,6 @@
         }
         applyCriticalPathStyling();
 
-        // Draw custom dependency lines (elbow connectors with mid-line chevrons)
-        drawCustomDependencyLines();
-
         // Add manual click handlers to all bars for better compatibility.
         // NOTE: cloneNode(true) replaces every barWrapper – diamond drawing MUST come after.
         document.querySelectorAll('.bar-wrapper').forEach(barWrapper => {
@@ -2191,6 +2188,10 @@
         // Add assignee initials to task bars
         addAssigneeInitials();
 
+        // Draw dependency lines AFTER all visual elements (diamonds, labels, initials)
+        // are in the DOM so obstacle detection includes everything visible.
+        drawCustomDependencyLines();
+
         // Add tooltip functionality
         addTooltipHandlers();
     }
@@ -2202,76 +2203,36 @@
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
 
-        // 1. Remove any previously drawn custom dependency elements
+        // ── Cleanup ──
         ganttSvg.querySelectorAll('.custom-dep-group').forEach(el => el.remove());
-
-        // 2. Hide ALL frappe-gantt native arrow elements
         ganttSvg.querySelectorAll('g.arrow, path.arrow').forEach(el => {
             el.style.display = 'none';
             el.style.visibility = 'hidden';
         });
-
-        // 3. Remove stray frappe-gantt arrow polygons AND any stray <rect> elements
-        //    that are not part of bar-wrappers, defs, or grid (fixes phantom rectangle
-        //    near "Core Authentication Ready" milestone).
         ganttSvg.querySelectorAll('polygon').forEach(polygon => {
             const isInDefs = polygon.closest('defs');
             const isMilestoneDiamond = polygon.classList.contains('milestone-diamond-shape');
             const isDepChevron = polygon.classList.contains('dep-chevron');
             if (!isInDefs && !isMilestoneDiamond && !isDepChevron) {
-                try { polygon.remove(); } catch (e) {
-                    polygon.style.display = 'none';
-                }
+                try { polygon.remove(); } catch (e) { polygon.style.display = 'none'; }
             }
         });
-        // Remove stray <rect> elements that are direct children of the SVG root
-        // (not inside bar-wrappers, defs, grid, or other legitimate containers)
         ganttSvg.querySelectorAll(':scope > rect, .custom-dep-group rect').forEach(rect => {
             try { rect.remove(); } catch (e) { rect.style.display = 'none'; }
         });
 
-        // ──────────────────────────────────────────────────────────
-        // STEP 1 — Build a COMPLETE bar boundary list before drawing any lines.
-        //          Includes task bars, milestone bars, AND phase header bars.
-        // ──────────────────────────────────────────────────────────
-        const barGeo = {}; // keyed by task id
-        const allBars = [];  // flat list for collision checks (all visible bar boundaries)
+        // ── Build COMPLETE obstacle list: bars + labels + diamonds + assignees ──
+        // Every visible element that dependency lines must route around.
+        const barGeo = {};      // keyed by task id — endpoint geometry (no padding)
+        const obstacles = [];   // ALL visual obstacles with padding
         const allItems = [...tasks, ...ganttMilestones];
+        const PAD = 5;
 
-        // Helper: extract geometry from a bar-wrapper
-        function extractBarGeo(wrapperId) {
-            const wrapper = document.querySelector(`.bar-wrapper[data-id="${wrapperId}"]`);
-            if (!wrapper) return null;
-            const bar = wrapper.querySelector('.bar');
-            if (!bar) return null;
-            const x = parseFloat(bar.getAttribute('x') || 0);
-            const y = parseFloat(bar.getAttribute('y') || 0);
-            const w = parseFloat(bar.getAttribute('width') || 0);
-            const h = parseFloat(bar.getAttribute('height') || 0);
-            if (w <= 0 || h <= 0) return null;
-            return {
-                id: String(wrapperId),
-                left: x, right: x + w, top: y, bottom: y + h,
-                // convenience aliases used by path builder
-                x: x, y: y, w: w, h: h,
-                rightX: x + w, rightY: y + h / 2,
-                leftX: x, leftY: y + h / 2
-            };
-        }
-
-        // Add task + milestone bars
-        allItems.forEach(task => {
-            const geo = extractBarGeo(task.id);
-            if (!geo) return;
-            barGeo[String(task.id)] = geo;
-            allBars.push(geo);
-        });
-
-        // Add phase header bars (ids like "phase-1", "phase-2", etc.)
         ganttSvg.querySelectorAll('.bar-wrapper').forEach(wrapper => {
             const wId = wrapper.getAttribute('data-id');
             if (!wId) return;
-            if (barGeo[wId]) return; // already added
+            if (wrapper.style.display === 'none') return;
+
             const bar = wrapper.querySelector('.bar');
             if (!bar) return;
             const x = parseFloat(bar.getAttribute('x') || 0);
@@ -2279,23 +2240,92 @@
             const w = parseFloat(bar.getAttribute('width') || 0);
             const h = parseFloat(bar.getAttribute('height') || 0);
             if (w <= 0 || h <= 0) return;
-            allBars.push({
-                id: String(wId),
-                left: x, right: x + w, top: y, bottom: y + h,
-                x: x, y: y, w: w, h: h,
-                rightX: x + w, rightY: y + h / 2,
-                leftX: x, leftY: y + h / 2
+
+            // Bar rect obstacle
+            obstacles.push({
+                ownerId: wId, type: 'bar',
+                left: x - PAD, right: x + w + PAD,
+                top: y - PAD, bottom: y + h + PAD
             });
+
+            // Endpoint geometry (no padding) — only for dependency-connectable items
+            if (!barGeo[wId]) {
+                barGeo[wId] = {
+                    id: wId, x, y, w, h,
+                    left: x, right: x + w, top: y, bottom: y + h,
+                    rightX: x + w, rightY: y + h / 2,
+                    leftX: x, leftY: y + h / 2
+                };
+            }
+
+            // Label obstacle (text that may extend outside the bar)
+            const label = wrapper.querySelector('.bar-label');
+            if (label) {
+                try {
+                    const bbox = label.getBBox();
+                    if (bbox.width > 2 && bbox.height > 2) {
+                        obstacles.push({
+                            ownerId: wId, type: 'label',
+                            left: bbox.x - PAD, right: bbox.x + bbox.width + PAD,
+                            top: bbox.y - PAD, bottom: bbox.y + bbox.height + PAD
+                        });
+                    }
+                } catch (e) {}
+            }
+
+            // Floating label obstacle (shown above narrow bars)
+            wrapper.querySelectorAll('.floating-task-label').forEach(fl => {
+                try {
+                    const bbox = fl.getBBox();
+                    if (bbox.width > 2 && bbox.height > 2) {
+                        obstacles.push({
+                            ownerId: wId, type: 'floatingLabel',
+                            left: bbox.x - PAD, right: bbox.x + bbox.width + PAD,
+                            top: bbox.y - PAD, bottom: bbox.y + bbox.height + PAD
+                        });
+                    }
+                } catch (e) {}
+            });
+
+            // Milestone diamond obstacle
+            const diamond = wrapper.querySelector('.milestone-diamond-shape');
+            if (diamond) {
+                try {
+                    const bbox = diamond.getBBox();
+                    if (bbox.width > 0 && bbox.height > 0) {
+                        obstacles.push({
+                            ownerId: wId, type: 'diamond',
+                            left: bbox.x - PAD, right: bbox.x + bbox.width + PAD,
+                            top: bbox.y - PAD, bottom: bbox.y + bbox.height + PAD
+                        });
+                    }
+                } catch (e) {}
+            }
+
+            // Assignee initials circle obstacle
+            const assigneeGroup = wrapper.querySelector('.assignee-group');
+            if (assigneeGroup) {
+                try {
+                    const bbox = assigneeGroup.getBBox();
+                    if (bbox.width > 0 && bbox.height > 0) {
+                        obstacles.push({
+                            ownerId: wId, type: 'assignee',
+                            left: bbox.x - PAD, right: bbox.x + bbox.width + PAD,
+                            top: bbox.y - PAD, bottom: bbox.y + bbox.height + PAD
+                        });
+                    }
+                } catch (e) {}
+            }
         });
 
-        // 5. Build task name lookup
+        // Name lookup
         const nameMap = {};
         allItems.forEach(t => { nameMap[String(t.id)] = t.fullName || t.name; });
 
-        // 6. Critical path set
+        // Critical path set
         const criticalIds = showCriticalPath ? criticalPathTasks : new Set();
 
-        // 7. Collect all dependency pairs
+        // Dependency pairs
         const depPairs = [];
         allItems.forEach(task => {
             if (!task.dependencies) return;
@@ -2308,64 +2338,51 @@
             });
         });
 
-        // ──────────────────────────────────────────────────────────
-        // STEP 2 — Safe vertical corridor: find an X coordinate that
-        //          does NOT fall within ANY bar's left-to-right range
-        //          for the vertical span [yMin … yMax].
-        // ──────────────────────────────────────────────────────────
+        // ── Collision helpers ──
 
-        /**
-         * Returns the first bar whose horizontal span contains testX AND whose
-         * vertical span overlaps [yMin, yMax]. Returns null when clear.
-         */
-        function vertSegHitsBar(testX, yMin, yMax, excludeIds) {
-            for (let i = 0; i < allBars.length; i++) {
-                const b = allBars[i];
-                if (excludeIds && excludeIds.has(b.id)) continue;
-                if (testX >= b.left && testX <= b.right &&
-                    yMax >= b.top && yMin <= b.bottom) {
-                    return b;
+        // Does a vertical line at testX from yMin→yMax hit any obstacle?
+        // skipOwners: Set of ownerIds whose obstacles we ignore (pred/succ).
+        function vertHits(testX, yMin, yMax, skipOwners) {
+            for (let i = 0; i < obstacles.length; i++) {
+                const o = obstacles[i];
+                if (skipOwners && skipOwners.has(o.ownerId)) continue;
+                if (testX >= o.left && testX <= o.right &&
+                    yMax >= o.top && yMin <= o.bottom) {
+                    return o;
                 }
             }
             return null;
         }
 
-        /**
-         * Starting from candidateX, push right until the X is outside every
-         * bar's horizontal range (for the given vertical span).
-         * Restarts the full bar scan each time it bumps — guarantees no bar overlap.
-         */
-        function findClearVertX(candidateX, yMin, yMax, excludeIds) {
-            let testX = candidateX;
-            let maxIter = allBars.length + 10; // safety cap
+        // Find clear X for a vertical line by pushing right past each collision.
+        // Restarts the full scan after each bump.
+        function findClearX(startX, yMin, yMax, skipOwners) {
+            let x = startX;
+            let maxIter = obstacles.length * 2 + 30;
             while (maxIter-- > 0) {
-                const hit = vertSegHitsBar(testX, yMin, yMax, excludeIds);
-                if (!hit) return testX;
-                testX = hit.right + 10; // push past that bar + 10px gap, then restart
+                const hit = vertHits(x, yMin, yMax, skipOwners);
+                if (!hit) return x;
+                x = hit.right + 6;
             }
-            return testX;
+            return x;
         }
 
-        // ──────────────────────────────────────────────────────────
-        // STEP 3 helper — Check if a point (with padding) falls inside any bar.
-        // ──────────────────────────────────────────────────────────
-        function pointInsideAnyBarPadded(px, py, pad) {
-            for (let i = 0; i < allBars.length; i++) {
-                const b = allBars[i];
-                if (px >= b.left - pad && px <= b.right + pad &&
-                    py >= b.top - pad && py <= b.bottom + pad) {
+        // Is a point inside any obstacle (with extra padding)?
+        function pointInObstacle(px, py, pad) {
+            for (let i = 0; i < obstacles.length; i++) {
+                const o = obstacles[i];
+                if (px >= o.left - pad && px <= o.right + pad &&
+                    py >= o.top - pad && py <= o.bottom + pad) {
                     return true;
                 }
             }
             return false;
         }
 
-        // 8. Dependency tooltip element
         const depTooltip = document.getElementById('dep-tooltip');
-
         let chevronCount = 0;
 
-        // 9. Draw each dependency
+        // ── Draw each dependency ──
         depPairs.forEach(dep => {
             const pred = barGeo[dep.from];
             const succ = barGeo[dep.to];
@@ -2373,75 +2390,82 @@
 
             const isCritical = criticalIds.has(dep.from) && criticalIds.has(dep.to);
             const color = isCritical ? '#ef4444' : '#6b7280';
-            const excludeIds = new Set([dep.from, dep.to]);
+            // Skip obstacles owned by pred/succ (the line connects to their edges)
+            const skipOwners = new Set([dep.from, dep.to]);
 
-            // 8px gap: exit 8px right of pred, enter 8px left of succ
-            const EDGE_GAP = 8;
-            const barExitX = pred.rightX;
-            const barExitY = pred.rightY;
-            const barEntryX = succ.leftX;
-            const barEntryY = succ.leftY;
-            const sx = barExitX + EDGE_GAP;
-            const sy = barExitY;
-            const ex = barEntryX - EDGE_GAP;
-            const ey = barEntryY;
+            const GAP = 8;
+            const exitX  = pred.rightX;
+            const exitY  = pred.rightY;
+            const entryX = succ.leftX;
+            const entryY = succ.leftY;
 
-            let segments = [];
             let pathD;
+            let segments = [];
+            const yMin = Math.min(exitY, entryY);
+            const yMax = Math.max(exitY, entryY);
+            const sameRow    = Math.abs(exitY - entryY) <= 3;
+            const succIsRight = entryX > exitX + 2 * GAP;
 
-            if (ex > sx + 4) {
-                // Normal case: successor is to the right of predecessor
-                const yMin = Math.min(sy, ey);
-                const yMax = Math.max(sy, ey);
-                // Start candidate at predecessor bar right + 10, then find clear corridor
-                let midX = findClearVertX(pred.rightX + 10, yMin, yMax, excludeIds);
+            if (sameRow && succIsRight) {
+                // ── Straight horizontal line ──
+                pathD = `M ${exitX},${exitY} L ${entryX},${entryY}`;
+                segments = [{ x1: exitX, y1: exitY, x2: entryX, y2: entryY, dir: 'right', len: entryX - exitX }];
 
-                pathD = `M ${barExitX},${sy} L ${sx},${sy} L ${midX},${sy} L ${midX},${ey} L ${ex},${ey} L ${barEntryX},${ey}`;
+            } else if (succIsRight) {
+                // ── Successor to the right, different row — try L-shape first ──
+                // L-shape: exit → horizontal at exitY → vertical at turnX → horizontal at entryY → entry
+                let turnX = entryX - GAP;
+                const lClear = !vertHits(turnX, yMin, yMax, skipOwners);
 
-                segments = [
-                    { x1: barExitX, y1: sy, x2: sx, y2: sy, dir: 'right', len: sx - barExitX },
-                    { x1: sx, y1: sy, x2: midX, y2: sy, dir: 'right', len: midX - sx },
-                    { x1: midX, y1: sy, x2: midX, y2: ey, dir: ey > sy ? 'down' : 'up', len: Math.abs(ey - sy) },
-                    { x1: midX, y1: ey, x2: ex, y2: ey, dir: 'right', len: ex - midX },
-                    { x1: ex, y1: ey, x2: barEntryX, y2: ey, dir: 'right', len: barEntryX - ex }
-                ];
+                if (lClear) {
+                    // Simple L-shape — cleanest look
+                    pathD = `M ${exitX},${exitY} L ${turnX},${exitY} L ${turnX},${entryY} L ${entryX},${entryY}`;
+                    segments = [
+                        { x1: exitX, y1: exitY, x2: turnX, y2: exitY, dir: 'right', len: turnX - exitX },
+                        { x1: turnX, y1: exitY, x2: turnX, y2: entryY, dir: entryY > exitY ? 'down' : 'up', len: Math.abs(entryY - exitY) },
+                        { x1: turnX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - turnX }
+                    ];
+                } else {
+                    // L-shape blocked — find a collision-free vertical X
+                    let vertX = findClearX(exitX + GAP, yMin, yMax, skipOwners);
+                    pathD = `M ${exitX},${exitY} L ${vertX},${exitY} L ${vertX},${entryY} L ${entryX},${entryY}`;
+                    segments = [
+                        { x1: exitX, y1: exitY, x2: vertX, y2: exitY, dir: 'right', len: Math.abs(vertX - exitX) },
+                        { x1: vertX, y1: exitY, x2: vertX, y2: entryY, dir: entryY > exitY ? 'down' : 'up', len: Math.abs(entryY - exitY) },
+                        { x1: vertX, y1: entryY, x2: entryX, y2: entryY, dir: vertX > entryX ? 'left' : 'right', len: Math.abs(entryX - vertX) }
+                    ];
+                }
+
             } else {
-                // Edge case: successor starts before or near predecessor right edge
-                const goingDown = ey >= sy;
+                // ── Successor to the left or overlapping — U-shape routing ──
+                const goingDown = entryY >= exitY;
                 const clearanceY = goingDown
-                    ? Math.max(pred.bottom + 14, succ.bottom + 14)
-                    : Math.min(pred.top - 14, succ.top - 14);
+                    ? Math.max(pred.bottom, succ.bottom) + 20
+                    : Math.min(pred.top, succ.top) - 20;
 
-                // Vertical corridors — start from predecessor right + 10 and find clear X
-                let vert1X = findClearVertX(pred.rightX + 10, Math.min(sy, clearanceY), Math.max(sy, clearanceY), excludeIds);
-                let vert2X = findClearVertX(succ.rightX + 10, Math.min(clearanceY, ey), Math.max(clearanceY, ey), excludeIds);
+                let vert1X = findClearX(pred.right + GAP,
+                    Math.min(exitY, clearanceY), Math.max(exitY, clearanceY), skipOwners);
 
-                pathD = `M ${barExitX},${sy} L ${vert1X},${sy} L ${vert1X},${clearanceY} L ${vert2X},${clearanceY} L ${vert2X},${ey} L ${barEntryX},${ey}`;
-
+                pathD = `M ${exitX},${exitY} L ${vert1X},${exitY} L ${vert1X},${clearanceY} L ${entryX - GAP},${clearanceY} L ${entryX - GAP},${entryY} L ${entryX},${entryY}`;
                 segments = [
-                    { x1: barExitX, y1: sy, x2: vert1X, y2: sy, dir: 'right', len: Math.abs(vert1X - barExitX) },
-                    { x1: vert1X, y1: sy, x2: vert1X, y2: clearanceY, dir: goingDown ? 'down' : 'up', len: Math.abs(clearanceY - sy) },
-                    { x1: vert1X, y1: clearanceY, x2: vert2X, y2: clearanceY, dir: vert2X > vert1X ? 'right' : 'left', len: Math.abs(vert2X - vert1X) },
-                    { x1: vert2X, y1: clearanceY, x2: vert2X, y2: ey, dir: goingDown ? 'up' : 'down', len: Math.abs(ey - clearanceY) },
-                    { x1: vert2X, y1: ey, x2: barEntryX, y2: ey, dir: 'right', len: Math.abs(barEntryX - vert2X) }
+                    { x1: exitX, y1: exitY, x2: vert1X, y2: exitY, dir: 'right', len: Math.abs(vert1X - exitX) },
+                    { x1: vert1X, y1: exitY, x2: vert1X, y2: clearanceY, dir: goingDown ? 'down' : 'up', len: Math.abs(clearanceY - exitY) },
+                    { x1: vert1X, y1: clearanceY, x2: entryX - GAP, y2: clearanceY, dir: vert1X > entryX - GAP ? 'left' : 'right', len: Math.abs(vert1X - (entryX - GAP)) },
+                    { x1: entryX - GAP, y1: clearanceY, x2: entryX - GAP, y2: entryY, dir: goingDown ? 'up' : 'down', len: Math.abs(entryY - clearanceY) },
+                    { x1: entryX - GAP, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: GAP }
                 ];
             }
 
-            // Find the longest segment for chevron placement
-            let longestSeg = null;
-            let longestLen = 0;
+            // Find longest segment for chevron placement
+            let longestSeg = null, longestLen = 0;
             segments.forEach(seg => {
-                if (seg.len > longestLen) {
-                    longestLen = seg.len;
-                    longestSeg = seg;
-                }
+                if (seg.len > longestLen) { longestLen = seg.len; longestSeg = seg; }
             });
 
             // Create SVG group
             const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             group.setAttribute('class', 'custom-dep-group');
 
-            // Create path element
             const pathEl = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             pathEl.setAttribute('d', pathD);
             pathEl.setAttribute('class', 'custom-dep-line' + (isCritical ? ' critical-dep' : ''));
@@ -2449,15 +2473,11 @@
             pathEl.setAttribute('data-to', dep.to);
             group.appendChild(pathEl);
 
-            // ──────────────────────────────────────────────────────────
-            // STEP 3 — Chevron placement with bar-collision safety.
-            //          5px padding check, 10px nudge along path direction,
-            //          up to 5 attempts. Skip chevron if still overlapping.
-            // ──────────────────────────────────────────────────────────
+            // ── Chevron on longest segment (collision-safe, 5 attempts) ──
             let drawChevron = false;
             let chevronX, chevronY, chevronDir;
 
-            if (longestSeg && longestLen > 12) {
+            if (longestSeg && longestLen > 20) {
                 chevronX = (longestSeg.x1 + longestSeg.x2) / 2;
                 chevronY = (longestSeg.y1 + longestSeg.y2) / 2;
                 chevronDir = longestSeg.dir;
@@ -2468,15 +2488,12 @@
                 else if (chevronDir === 'down') nudgeDy = 10;
                 else if (chevronDir === 'up') nudgeDy = -10;
 
-                let cleared = !pointInsideAnyBarPadded(chevronX, chevronY, 5);
-                if (!cleared) {
-                    for (let nudge = 0; nudge < 5 && !cleared; nudge++) {
-                        chevronX += nudgeDx;
-                        chevronY += nudgeDy;
-                        cleared = !pointInsideAnyBarPadded(chevronX, chevronY, 5);
-                    }
+                let cleared = !pointInObstacle(chevronX, chevronY, 5);
+                for (let a = 0; a < 5 && !cleared; a++) {
+                    chevronX += nudgeDx;
+                    chevronY += nudgeDy;
+                    cleared = !pointInObstacle(chevronX, chevronY, 5);
                 }
-
                 drawChevron = cleared;
             }
 
@@ -2511,7 +2528,7 @@
 
             ganttSvg.appendChild(group);
 
-            // Hover: show dependency tooltip
+            // Hover tooltip
             if (depTooltip) {
                 pathEl.addEventListener('mouseenter', function(e) {
                     const fromName = nameMap[dep.from] || dep.from;
@@ -2527,8 +2544,7 @@
             }
         });
 
-        // Debug: log chevron count
-        console.log('[Gantt Dep Lines] Drew ' + depPairs.length + ' dependency lines, ' + chevronCount + ' chevrons rendered, ' + allBars.length + ' bar boundaries tracked');
+        console.log('[Gantt Dep Lines] Drew ' + depPairs.length + ' deps, ' + chevronCount + ' chevrons, ' + obstacles.length + ' obstacles tracked');
 
         function positionDepTooltip(e) {
             const tt = document.getElementById('dep-tooltip');
