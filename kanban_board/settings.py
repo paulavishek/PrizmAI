@@ -505,16 +505,6 @@ if DEBUG and not os.getenv('FORCE_REDIS_CACHE'):
             'MAX_ENTRIES': 2000,
         },
     }
-    # NOTE: ai_cache and session_cache are intentionally NOT overridden here.
-    # ai_cache: The AI summary debounce lock must be visible across ALL processes
-    # (Daphne web server + Celery worker). LocMemCache is per-process, so
-    # the Celery worker's lock-release would be invisible to the web process,
-    # causing the polling spinner to run for the full 10-minute lock TTL.
-    # session_cache: Django's CacheHandler uses threading.local(), so LocMemCache
-    # is per-THREAD. Django Channels' database_sync_to_async runs WebSocket session
-    # lookups in a thread pool thread that gets a new empty LocMemCache instance,
-    # making all sessions invisible -> WebSocket auth always fails (WSREJECT).
-    # Redis is always available in this project, so keep both caches on Redis.
     CACHES['analytics_cache'] = {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'prizmAI-analytics-cache',
@@ -523,6 +513,59 @@ if DEBUG and not os.getenv('FORCE_REDIS_CACHE'):
             'MAX_ENTRIES': 500,
         },
     }
+
+    # Check if Redis is actually reachable. When running with the batch file
+    # (Daphne + Celery + Redis), Redis is available and ai_cache/session_cache
+    # MUST stay on Redis for cross-process debounce locks and cross-thread
+    # WebSocket session auth. But when running just `manage.py runserver`
+    # without Redis, fall back gracefully so the dev server doesn't crash.
+    def _redis_is_available():
+        import socket
+        try:
+            s = socket.create_connection((_redis_host, _redis_port), timeout=1)
+            s.close()
+            return True
+        except (ConnectionRefusedError, OSError):
+            return False
+
+    if not _redis_is_available():
+        import warnings
+        warnings.warn(
+            "Redis is not running — falling back to local dev mode. "
+            "WebSocket messaging and Celery tasks will NOT work. "
+            "Start Redis (or use start_prizmAI.bat) for full functionality.",
+            stacklevel=1,
+        )
+        # Fall back ai_cache to LocMemCache (debounce locks won't span processes,
+        # but there's no Celery worker running anyway without the batch file).
+        CACHES['ai_cache'] = {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'prizmAI-ai-cache',
+            'TIMEOUT': 1800,
+            'OPTIONS': {
+                'MAX_ENTRIES': 500,
+            },
+        }
+        CACHES['session_cache'] = {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'prizmAI-session-cache',
+            'TIMEOUT': 86400,
+            'OPTIONS': {
+                'MAX_ENTRIES': 2000,
+            },
+        }
+        # Use database-backed sessions instead of cache-backed sessions.
+        # LocMemCache is per-thread so cache-backed sessions break with
+        # Channels, but without Redis there's no Channels anyway — and DB
+        # sessions are fully reliable with the Django dev server.
+        SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+        # Use in-memory channel layer (WebSockets won't work cross-process
+        # but the app won't crash on import).
+        CHANNEL_LAYERS = {
+            'default': {
+                'BACKEND': 'channels.layers.InMemoryChannelLayer',
+            },
+        }
 
 # Cache timeout presets (in seconds)
 CACHE_TIMEOUTS = {
