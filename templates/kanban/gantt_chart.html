@@ -3013,7 +3013,8 @@
     }
 
     // Phase 3: Position labels to the RIGHT of bars AFTER dependency lines are drawn.
-    // This ensures lines don't collide with titles and titles don't collide with lines.
+    // For each bar/milestone, scan its row for ALL dependency line segments passing through,
+    // find the furthest line from the bar, and place the title past it with a buffer.
     function positionBarLabels() {
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
@@ -3021,6 +3022,41 @@
         // Remove any leftover floating labels
         ganttSvg.querySelectorAll('.floating-task-label').forEach(el => el.remove());
 
+        const vSegs = window._depVerticalSegments || [];
+        const hSegs = window._depHorizontalSegments || [];
+        const BUFFER = 12; // minimum buffer distance past the furthest line
+
+        // Helper: given a row's Y range, find the X position of the furthest (rightmost)
+        // dependency line segment that passes through the row and is to the right of startX.
+        function findFurthestLineX(rowYTop, rowYBottom, startX) {
+            let furthestX = startX;
+
+            // Check vertical segments passing through this row
+            for (let i = 0; i < vSegs.length; i++) {
+                const seg = vSegs[i];
+                // Vertical segment overlaps the row's Y range and is to the right of the bar
+                if (seg.yMax >= rowYTop && seg.yMin <= rowYBottom && seg.x > startX) {
+                    if (seg.x > furthestX) {
+                        furthestX = seg.x;
+                    }
+                }
+            }
+
+            // Check horizontal segments passing through this row
+            for (let i = 0; i < hSegs.length; i++) {
+                const seg = hSegs[i];
+                // Horizontal segment's Y is within the row and extends past the bar
+                if (seg.y >= rowYTop && seg.y <= rowYBottom && seg.xMax > startX) {
+                    if (seg.xMax > furthestX) {
+                        furthestX = seg.xMax;
+                    }
+                }
+            }
+
+            return furthestX;
+        }
+
+        // ── Position regular task labels ──
         const allItems = [...tasks];
         allItems.forEach(task => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
@@ -3047,55 +3083,20 @@
 
             existingLabel.style.fontSize = fontSize + 'px';
 
-            // Position label to the right of the bar with a minimum buffer distance
-            // from all dependency lines (vertical + horizontal) and task bars.
+            // Row Y range = the bar's vertical extent
+            const rowYTop = barRect.y;
+            const rowYBottom = barRect.y + barHeight;
             const barRightEdge = parseFloat(bar.getAttribute('x') || barRect.x) + barWidth;
-            const labelGap = 8;
-            let labelX = barRightEdge + labelGap;
 
-            // Gather all dependency line segments
-            const vSegs = window._depVerticalSegments || [];
-            const hSegs = window._depHorizontalSegments || [];
-            const labelYTop = barRect.y;
-            const labelYBottom = barRect.y + barHeight;
-            const labelYCenter = barRect.y + barHeight / 2;
-            const BUFFER = 12; // minimum buffer distance from any line or bar
+            // Find the furthest line in this row to the right of the bar
+            const furthestLineX = findFurthestLineX(rowYTop, rowYBottom, barRightEdge);
 
-            // Estimate label width (approximate: fontSize * 0.6 per char)
-            let displayNameForWidth = task.fullName;
-            if (displayNameForWidth.length > 40) displayNameForWidth = displayNameForWidth.substring(0, 37) + '...';
-            const estLabelWidth = displayNameForWidth.length * fontSize * 0.55;
-
-            for (let attempt = 0; attempt < 8; attempt++) {
-                let blocked = false;
-                const labelRight = labelX + estLabelWidth;
-
-                // Check against vertical line segments
-                for (let s = 0; s < vSegs.length; s++) {
-                    const seg = vSegs[s];
-                    // Vertical segment overlaps label Y range and X is within label span + buffer
-                    if (seg.yMax >= labelYTop - BUFFER && seg.yMin <= labelYBottom + BUFFER &&
-                        seg.x >= labelX - BUFFER && seg.x <= labelRight + BUFFER) {
-                        labelX = seg.x + BUFFER;
-                        blocked = true;
-                        break;
-                    }
-                }
-                if (blocked) continue;
-
-                // Check against horizontal line segments
-                for (let s = 0; s < hSegs.length; s++) {
-                    const seg = hSegs[s];
-                    // Horizontal segment is near label Y center and overlaps label X span + buffer
-                    if (Math.abs(seg.y - labelYCenter) < barHeight / 2 + BUFFER &&
-                        seg.xMax >= labelX - BUFFER && seg.xMin <= labelRight + BUFFER) {
-                        // Push label past the end of this horizontal segment
-                        labelX = seg.xMax + BUFFER;
-                        blocked = true;
-                        break;
-                    }
-                }
-                if (!blocked) break;
+            // Place title past the furthest line (or past the bar if no lines in row)
+            let labelX;
+            if (furthestLineX > barRightEdge) {
+                labelX = furthestLineX + BUFFER;
+            } else {
+                labelX = barRightEdge + 8; // default gap when no lines in the row
             }
 
             // Show full task name (truncate only if very long)
@@ -3111,6 +3112,37 @@
             existingLabel.setAttribute('dominant-baseline', 'middle');
             existingLabel.style.display = 'block';
             existingLabel.classList.remove('outside-left', 'outside-right');
+        });
+
+        // ── Reposition milestone labels past lines in their rows ──
+        ganttMilestones.forEach(milestone => {
+            const barWrapper = document.querySelector(`.bar-wrapper[data-id="${milestone.id}"]`);
+            if (!barWrapper) return;
+
+            const barLabel = barWrapper.querySelector('.bar-label');
+            if (!barLabel) return;
+
+            const diamond = barWrapper.querySelector('.milestone-diamond-shape');
+            if (!diamond) return;
+
+            let bbox;
+            try { bbox = diamond.getBBox(); } catch (e) { return; }
+            if (bbox.width <= 0 || bbox.height <= 0) return;
+
+            const diamondRightEdge = bbox.x + bbox.width;
+            const rowYTop = bbox.y;
+            const rowYBottom = bbox.y + bbox.height;
+
+            const furthestLineX = findFurthestLineX(rowYTop, rowYBottom, diamondRightEdge);
+
+            let labelX;
+            if (furthestLineX > diamondRightEdge) {
+                labelX = furthestLineX + BUFFER;
+            } else {
+                labelX = diamondRightEdge + 6; // default gap after diamond
+            }
+
+            barLabel.setAttribute('x', labelX);
         });
     }
 
