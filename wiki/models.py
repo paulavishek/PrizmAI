@@ -124,7 +124,33 @@ class WikiPage(models.Model):
         if not self.slug:
             self.slug = slugify(self.title)
         super().save(*args, **kwargs)
-    
+
+    def get_snippet(self, length=150):
+        """Return clean plain-text preview with all Markdown symbols stripped."""
+        import re
+        text = self.content or ''
+        # Remove fenced code blocks (``` ... ```)
+        text = re.sub(r'```[\s\S]*?```', '', text)
+        # Remove inline code (`...`)
+        text = re.sub(r'`[^`]*`', '', text)
+        # Remove headings (# Heading)
+        text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+        # Remove bold/italic (**, __, *, _)
+        text = re.sub(r'(\*{1,3}|_{1,3})(.*?)\1', r'\2', text)
+        # Remove blockquotes
+        text = re.sub(r'^>+\s?', '', text, flags=re.MULTILINE)
+        # Remove horizontal rules
+        text = re.sub(r'^[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+        # Remove images and links, keep link text
+        text = re.sub(r'!\[.*?\]\(.*?\)', '', text)
+        text = re.sub(r'\[(.*?)\]\(.*?\)', r'\1', text)
+        # Remove list markers
+        text = re.sub(r'^\s*[-*+]\s+', '', text, flags=re.MULTILINE)
+        text = re.sub(r'^\s*\d+\.\s+', '', text, flags=re.MULTILINE)
+        # Collapse whitespace
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text[:length]
+
     def get_html_content(self):
         """Convert markdown content to HTML and sanitize to prevent XSS"""
         import bleach

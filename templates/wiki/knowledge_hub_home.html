@@ -149,7 +149,7 @@
                                             </div>
                                         {% endif %}
                                         <p class="text-muted small mb-0">
-                                            {{ page.content|truncatewords:30|striptags }}
+                                            {{ page.get_snippet }}
                                         </p>
                                     </div>
                                     <span class="badge badge-wiki ms-3">
