@@ -138,6 +138,17 @@ def create_session(request):
             session = form.save(commit=False)
             session.user = request.user
             session.save()
+
+            # Reset any stale conversation-flow state so a new session
+            # doesn't inherit leftover mid-flow state from a previous chat.
+            from ai_assistant.models import SpectraConversationState
+            SpectraConversationState.objects.filter(
+                user=request.user,
+            ).exclude(mode='normal').update(
+                mode='normal',
+                collected_data=dict(),
+                pending_action='',
+            )
             
             return JsonResponse({
                 'status': 'success',
