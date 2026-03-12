@@ -219,6 +219,26 @@ def _extract_task_fields(message):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Board-name extraction from "Create a board called X" messages
+# ──────────────────────────────────────────────────────────────────────────────
+
+_BOARD_NAME_RE = re.compile(
+    r"""(?:called|named|titled)\s+['\u2018\u201c"]+(.+?)['\u2019\u201d"]+"""
+    r"""|(?:called|named|titled)\s+(.+?)$""",
+    re.IGNORECASE,
+)
+
+
+def _extract_board_name(message):
+    """Extract board name from a 'create board called X' message. Returns str or None."""
+    m = _BOARD_NAME_RE.search(message)
+    if m:
+        name = (m.group(1) or m.group(2) or '').strip().rstrip("'\"")
+        return name if name else None
+    return None
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Question detection helper (for board name collection)
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -565,9 +585,29 @@ class ConversationFlowManager:
     def _start_board_flow(self, user, message, state):
         state.mode = 'collecting_board'
         state.pending_action = 'create_board'
-        state.collected_data = {'step': 0}
-        state.save()
+        data = {'step': 0}
 
+        # Try to extract board name from the initial message
+        name = _extract_board_name(message)
+        if name and not _looks_like_question(name):
+            data['name'] = name
+            # Duplicate check
+            if _check_duplicate_board(name, user):
+                data['duplicate_warned'] = True
+                data['step'] = 0.5
+                state.collected_data = data
+                state.save()
+                return (
+                    f"There's already a board called **\"{name}\"**. "
+                    "Do you still want to create another one, or would you like a different name?"
+                )
+            data['step'] = 1
+            state.collected_data = data
+            state.save()
+            return f"I'll name it **\"{name}\"**. **Any description for this board?** (or say 'skip')"
+
+        state.collected_data = data
+        state.save()
         return "Let's create a new board! **What should the board be called?**"
 
     def _continue_board_flow(self, user, board, message, state):
@@ -794,21 +834,35 @@ class ConversationFlowManager:
         if intent == 'cancel_action':
             return self._handle_cancellation(state)
 
-        # Check for off-topic: if it's not a confirm/cancel and the message
-        # looks like a normal question rather than data entry, warn the user
-        # but still process it as data.  We only flag truly off-topic messages
-        # when they start a *new* action intent of a different type.
+        # If the user repeats the same action intent that matches the
+        # current flow, restart that flow instead of blocking them.
+        _INTENT_TO_MODE = {
+            'create_task': 'collecting_task',
+            'create_board': 'collecting_board',
+            'activate_automation': 'collecting_automation',
+        }
         if intent and intent not in ('confirm_action', 'cancel_action'):
-            # User is trying to start a different action mid-flow
-            flow_name = {
-                'collecting_task': 'creating a task',
-                'collecting_board': 'creating a board',
-                'collecting_automation': 'setting up an automation',
-            }.get(state.mode, 'something')
-            return (
-                f"I'm currently in the middle of **{flow_name}** for you. "
-                "Would you like to **continue** with that, or should I **cancel** it and start fresh?"
-            )
+            expected_mode = _INTENT_TO_MODE.get(intent)
+            if expected_mode == state.mode:
+                # Same intent — restart the flow from scratch
+                state.reset()
+                if intent == 'create_task':
+                    return self._start_task_flow(user, board, message, state)
+                if intent == 'create_board':
+                    return self._start_board_flow(user, message, state)
+                if intent == 'activate_automation':
+                    return self._start_automation_flow(user, board, message, state)
+            else:
+                # Different action intent — warn the user
+                flow_name = {
+                    'collecting_task': 'creating a task',
+                    'collecting_board': 'creating a board',
+                    'collecting_automation': 'setting up an automation',
+                }.get(state.mode, 'something')
+                return (
+                    f"I'm currently in the middle of **{flow_name}** for you. "
+                    "Would you like to **continue** with that, or should I **cancel** it and start fresh?"
+                )
 
         if state.mode == 'collecting_task':
             return self._continue_task_flow(user, board, message, state)
