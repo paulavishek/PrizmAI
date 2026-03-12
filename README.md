@@ -34,7 +34,15 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 
 ### AI Intelligence (Google Gemini)
 
-- **AI Project Assistant** — Natural language queries with RAG technology and web search, scoped to your project data
+- **Spectra — AI Project Assistant** — Natural language queries with RAG technology and web search, scoped to your project data. Beyond Q&A, Spectra can **take action** directly from the chat:
+  - **Create Tasks & Boards** — "Create a high-priority task called API integration due next Friday"
+  - **Send Messages** — "Tell Alex the deployment is ready" — Spectra drafts and sends team messages
+  - **Log Time** — "Log 3 hours on the database migration task" — time entries without leaving the chat
+  - **Schedule Events** — "Schedule a standup tomorrow at 10 AM with the backend team"
+  - **Generate Retrospectives** — "Create a sprint retrospective for the last two weeks"
+  - **Create Automations** — "Set up an automation that marks overdue tasks as urgent" (trigger-based and scheduled)
+  
+  Spectra uses a **Tiered Agentic Architecture**: a lightweight Flash-Lite model routes intent cheaply, while Flash with Function Calling extracts structured parameters and executes actions — keeping AI costs low while enabling rich multi-step interactions.
 - **AI Coach** — Proactive, personalized coaching with recommendations that learn from your feedback
 - **Explainable AI** — Every recommendation includes a transparent breakdown: confidence level, contributing factors, assumptions, limitations, and alternative perspectives
 - **Scope Creep Detection** — Automatic baseline tracking with alerts when scope expands beyond the original plan
