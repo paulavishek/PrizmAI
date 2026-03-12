@@ -11,6 +11,7 @@ Every public method returns a plain-text response string that Spectra sends
 back to the user.  State is read/written through ``SpectraConversationState``.
 """
 import logging
+import re
 from datetime import datetime, timedelta
 
 from django.db import IntegrityError
@@ -92,6 +93,45 @@ def _parse_date(text):
     if not text or text.lower() in ('skip', 'none', 'no', 'n/a', '-'):
         return None
 
+    today = timezone.now().date()
+
+    # Handle "tomorrow"
+    if text.lower() == 'tomorrow':
+        dt = datetime.combine(today + timedelta(days=1), datetime.min.time())
+        return timezone.make_aware(dt)
+
+    # Handle "today"
+    if text.lower() == 'today':
+        dt = datetime.combine(today, datetime.min.time())
+        return timezone.make_aware(dt)
+
+    # Handle "next <weekday>" / "this <weekday>"
+    day_names = {
+        'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
+        'friday': 4, 'saturday': 5, 'sunday': 6,
+    }
+    rel_match = re.match(
+        r'^(next|this)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$',
+        text.strip(),
+        re.IGNORECASE,
+    )
+    if rel_match:
+        modifier = rel_match.group(1).lower()
+        target_day = day_names[rel_match.group(2).lower()]
+        current_day = today.weekday()
+        days_ahead = (target_day - current_day) % 7
+        if modifier == 'next':
+            # "next Friday" always means at least 1 day ahead;
+            # if today IS that day, go to the following week
+            if days_ahead == 0:
+                days_ahead = 7
+        else:
+            # "this Friday" — this week's occurrence (could be today)
+            if days_ahead == 0:
+                days_ahead = 0
+        dt = datetime.combine(today + timedelta(days=days_ahead), datetime.min.time())
+        return timezone.make_aware(dt)
+
     try:
         from dateutil import parser as dateutil_parser
         dt = dateutil_parser.parse(text, fuzzy=True, dayfirst=False)
@@ -120,6 +160,62 @@ def _check_duplicate_board(name, user):
         name__iexact=name,
         created_by=user,
     ).exists()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Inline field extraction — parse title/priority/date/assignee from one message
+# ──────────────────────────────────────────────────────────────────────────────
+
+_TITLE_RE = re.compile(
+    r"""(?:called|named|titled)\s+['\u2018\u201c"]+(.+?)['\u2019\u201d"]+"""
+    r"""|(?:called|named|titled)\s+(.+?)(?:\s+with\b|\s+due\b|\s+assign|\s*$)""",
+    re.IGNORECASE,
+)
+
+_PRIORITY_RE = re.compile(
+    r'\b(low|medium|high|urgent|critical)\s*priority\b',
+    re.IGNORECASE,
+)
+
+_DUE_DATE_RE = re.compile(
+    r'(?:due\s+(?:on\s+)?|by\s+)(next\s+\w+|tomorrow|today|'
+    r'(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2}(?:,?\s+\d{4})?|'
+    r'\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?)',
+    re.IGNORECASE,
+)
+
+_ASSIGNEE_RE = re.compile(
+    r'assign(?:ed)?\s+(?:(?:the\s+)?(?:task\s+)?to|it\s+to)\s+["\']?(\w+(?:\s+\w+)?)["\']?',
+    re.IGNORECASE,
+)
+
+
+def _extract_task_fields(message):
+    """
+    Extract task fields (title, priority, due_date_text, assignee_text)
+    from a single-sentence task-creation message.
+
+    Returns a dict with only the fields that were found.
+    """
+    result = {}
+
+    m = _TITLE_RE.search(message)
+    if m:
+        result['title'] = (m.group(1) or m.group(2) or '').strip()
+
+    m = _PRIORITY_RE.search(message)
+    if m:
+        result['priority'] = m.group(1).lower()
+
+    m = _DUE_DATE_RE.search(message)
+    if m:
+        result['due_date_text'] = m.group(1).strip()
+
+    m = _ASSIGNEE_RE.search(message)
+    if m:
+        result['assignee_text'] = m.group(1).strip()
+
+    return result
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -216,6 +312,15 @@ class ConversationFlowManager:
                 boards = _user_board_names(user)
                 if boards:
                     board_list = ', '.join(f'**{b}**' for b in boards)
+                    # Enter collecting_task at step -1 (awaiting board selection)
+                    # so the next message is intercepted by the flow
+                    state.mode = 'collecting_task'
+                    state.pending_action = 'create_task'
+                    state.collected_data = {
+                        'step': -1,
+                        'original_message': message,
+                    }
+                    state.save()
                     return (
                         "I'd love to help you create a task! But I need to know which board "
                         f"it belongs to. Please select a board from the dropdown above first.\n\n"
@@ -228,15 +333,143 @@ class ConversationFlowManager:
 
         state.mode = 'collecting_task'
         state.pending_action = 'create_task'
-        state.collected_data = {'step': 0, 'board_id': board.id, 'board_name': board.name}
-        state.save()
+        data = {'step': 0, 'board_id': board.id, 'board_name': board.name}
 
+        # Try to extract fields from the initial message
+        extracted = _extract_task_fields(message)
+        if extracted.get('title'):
+            data['title'] = extracted['title']
+            data['step'] = 1
+            if extracted.get('priority'):
+                data['priority'] = extracted['priority']
+
+            # Resolve due date if provided inline
+            if extracted.get('due_date_text'):
+                parsed = _parse_date(extracted['due_date_text'])
+                if parsed:
+                    data['due_date'] = parsed.isoformat()
+                    data['due_date_display'] = parsed.strftime('%A, %B %d, %Y')
+                else:
+                    data['due_date'] = None
+                    data['due_date_display'] = 'Not set'
+                data['step'] = 2
+
+            # Resolve assignee if provided inline
+            if extracted.get('assignee_text'):
+                assignee, _ = action_service._resolve_assignee(
+                    extracted['assignee_text'], board,
+                )
+                if assignee:
+                    data['assignee_id'] = assignee.id
+                    data['assignee_display'] = (
+                        assignee.get_full_name() or assignee.username
+                    )
+                    data['step'] = 3
+
+            state.collected_data = data
+
+            # If we have all fields, go straight to confirmation
+            if data['step'] == 3:
+                state.mode = 'awaiting_confirmation'
+                state.save()
+                return self._format_task_confirmation(data)
+
+            state.save()
+
+            # Check for duplicate
+            if _check_duplicate_task(data['title'], board):
+                data['duplicate_warned'] = True
+                data['step'] = 0.5
+                state.collected_data = data
+                state.save()
+                return (
+                    f"There's already a task called **\"{data['title']}\"** on this board. "
+                    "Do you still want to create another one, or would you like a different name?"
+                )
+
+            if data['step'] == 1:
+                return (
+                    f"Got it — **\"{data['title']}\"**. "
+                    "**Any due date?** You can say something like 'next Friday' or 'skip'."
+                )
+            if data['step'] == 2:
+                return (
+                    f"Got it — **\"{data['title']}\"**, due {data['due_date_display']}. "
+                    "**Who should this be assigned to?** (Type a name or 'skip')"
+                )
+
+        state.collected_data = data
+        state.save()
         return "Sure! Let's create a task. **What should the task be called?**"
 
     def _continue_task_flow(self, user, board, message, state):
         data = state.collected_data
         step = data.get('step', 0)
         msg = message.strip()
+
+        if step == -1:
+            # Awaiting board selection
+            from kanban.models import Board
+            user_boards = list(
+                Board.objects.filter(
+                    Q(created_by=user) | Q(members=user),
+                    is_archived=False,
+                ).distinct()
+            )
+            # Try to match the user's reply to a board name
+            selected = None
+            msg_lower = msg.lower()
+            for b in user_boards:
+                if b.name.lower() == msg_lower or b.name.lower() in msg_lower:
+                    selected = b
+                    break
+            if selected is None:
+                # Fuzzy: check if any board name is contained in the message
+                for b in user_boards:
+                    if msg_lower in b.name.lower():
+                        selected = b
+                        break
+
+            if selected is None:
+                boards = [b.name for b in user_boards]
+                board_list = ', '.join(f'**{b}**' for b in boards)
+                return (
+                    f"I couldn't find a board matching **\"{msg}\"**. "
+                    f"Please pick one of these: {board_list}"
+                )
+
+            board = selected
+            data['board_id'] = board.id
+            data['board_name'] = board.name
+            # Try to extract fields from the original create message
+            original = data.pop('original_message', '')
+            extracted = _extract_task_fields(original) if original else {}
+            data.update(extracted)
+            if data.get('title'):
+                # We already have the title from the original message
+                data['step'] = 1
+                state.collected_data = data
+                state.save()
+                title = data['title']
+                if board and _check_duplicate_task(title, board):
+                    data['duplicate_warned'] = True
+                    data['step'] = 0.5
+                    state.collected_data = data
+                    state.save()
+                    return (
+                        f"OK, I'll use **{board.name}**. "
+                        f"But there's already a task called **\"{title}\"** on this board. "
+                        "Do you still want to create another one, or would you like a different name?"
+                    )
+                return (
+                    f"OK, I'll use **{board.name}**. "
+                    "**Any due date?** You can say something like 'next Friday' or 'skip'."
+                )
+            else:
+                data['step'] = 0
+                state.collected_data = data
+                state.save()
+                return f"OK, I'll use **{board.name}**. **What should the task be called?**"
 
         if step == 0:
             # Collecting title
@@ -423,6 +656,11 @@ class ConversationFlowManager:
                 boards = _user_board_names(user)
                 if boards:
                     board_list = ', '.join(f'**{b}**' for b in boards)
+                    # Enter collecting_automation at step -1 (awaiting board)
+                    state.mode = 'collecting_automation'
+                    state.pending_action = 'activate_automation'
+                    state.collected_data = {'step': -1}
+                    state.save()
                     return (
                         "I can set up automations, but I need a board to work with. "
                         f"Please select a board from the dropdown above first.\n\n"
@@ -450,6 +688,50 @@ class ConversationFlowManager:
         data = state.collected_data
         step = data.get('step', 0)
         msg = message.strip()
+
+        if step == -1:
+            # Awaiting board selection
+            from kanban.models import Board
+            user_boards = list(
+                Board.objects.filter(
+                    Q(created_by=user) | Q(members=user),
+                    is_archived=False,
+                ).distinct()
+            )
+            selected = None
+            msg_lower = msg.lower()
+            for b in user_boards:
+                if b.name.lower() == msg_lower or b.name.lower() in msg_lower:
+                    selected = b
+                    break
+            if selected is None:
+                for b in user_boards:
+                    if msg_lower in b.name.lower():
+                        selected = b
+                        break
+
+            if selected is None:
+                boards = [b.name for b in user_boards]
+                board_list = ', '.join(f'**{b}**' for b in boards)
+                return (
+                    f"I couldn't find a board matching **\"{msg}\"**. "
+                    f"Please pick one of these: {board_list}"
+                )
+
+            board = selected
+            data['board_id'] = board.id
+            data['board_name'] = board.name
+            data['step'] = 0
+            state.collected_data = data
+            state.save()
+            return (
+                f"OK, I'll use **{board.name}**.\n\n"
+                "I can set up one of these automations for this board:\n\n"
+                "1. **Mark overdue tasks as Urgent**\n"
+                "2. **Notify creator when task is completed**\n"
+                "3. **Alert assignee 2 days before deadline**\n\n"
+                "Which would you like? (say the number or describe what you need)"
+            )
 
         if step == 0:
             # Trying to parse template selection
