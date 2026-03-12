@@ -141,6 +141,20 @@ ACTION_INTENT_PATTERNS = {
         'create a board', 'new board', 'make a board', 'add a board',
         'create board', 'new project board', 'create a new board',
     ],
+    # More specific automation intents MUST come before generic 'activate_automation'
+    'create_scheduled_automation': [
+        'every day at', 'every morning', 'every evening',
+        'every monday', 'every tuesday', 'every wednesday',
+        'every thursday', 'every friday', 'every saturday', 'every sunday',
+        'daily at', 'weekly on', 'runs every', 'run every',
+        'recurring automation', 'scheduled automation',
+        'automation that runs every', 'automation that runs daily',
+    ],
+    'create_automation': [
+        'when a task', 'when task', 'when any task', 'if a task', 'if task',
+        'automatically move', 'automatically notify', 'automatically assign',
+        'custom automation', 'create a custom automation',
+    ],
     'activate_automation': [
         'set up automation', 'set up an automation', 'setup automation',
         'create automation', 'create an automation', 'automate',

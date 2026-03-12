@@ -5,6 +5,7 @@ This service is completely separate from the AI / Gemini logic.
 Every database write is wrapped in try / except and returns a structured dict.
 """
 import logging
+import re
 from django.db import transaction
 from django.db.models import Q
 from django.urls import reverse
@@ -405,16 +406,61 @@ class SpectraActionService:
             if not self._user_has_board_access(user, board):
                 return {'success': False, 'error': "You don't have access to this board."}
 
-            # Resolve task by name
+            # Resolve task by name — multi-tier matching
             task_name = collected_data.get('task_name', '')
-            task = Task.objects.filter(
-                column__board=board,
-                title__icontains=task_name,
-            ).first()
+            board_tasks = Task.objects.filter(column__board=board)
+
+            # Tier 1: exact substring match
+            task = board_tasks.filter(title__icontains=task_name).first()
+
+            # Tier 2: word-overlap matching
+            if not task and task_name:
+                stop_words = {'the', 'a', 'an', 'on', 'in', 'for', 'of', 'to', 'my', 'task'}
+                query_words = {
+                    w.lower() for w in re.sub(r'[^\w\s]', '', task_name).split()
+                } - stop_words
+                if query_words:
+                    best_task = None
+                    best_score = 0
+                    candidates = []
+                    for t in board_tasks.all():
+                        title_words = {
+                            w.lower() for w in re.sub(r'[^\w\s]', '', t.title).split()
+                        } - stop_words
+                        overlap = len(query_words & title_words)
+                        if overlap > 0:
+                            score = overlap / max(len(query_words), 1)
+                            candidates.append((t, score))
+                            if score > best_score:
+                                best_score = score
+                                best_task = t
+                    # Accept if ≥50% of query words matched
+                    if best_task and best_score >= 0.5:
+                        # Check for ambiguity — multiple tasks with same top score
+                        top_matches = [t for t, s in candidates if s == best_score]
+                        if len(top_matches) == 1:
+                            task = best_task
+                        else:
+                            names = ', '.join(f'**{t.title}**' for t in top_matches[:3])
+                            return {
+                                'success': False,
+                                'error': (
+                                    f'Multiple tasks match "{task_name}": {names}. '
+                                    'Please be more specific.'
+                                ),
+                            }
+
             if not task:
+                # Suggest closest matches if any exist
+                all_tasks = list(board_tasks.values_list('title', flat=True)[:5])
+                hint = ''
+                if all_tasks:
+                    hint = '\n\nTasks on this board: ' + ', '.join(
+                        f'**{t}**' for t in all_tasks
+                    )
                 return {
                     'success': False,
-                    'error': f'Could not find a task matching "{task_name}" on this board.',
+                    'error': f'Could not find a task matching "{task_name}" on this board.{hint}',
                 }
 
             hours = collected_data.get('hours', 0)
