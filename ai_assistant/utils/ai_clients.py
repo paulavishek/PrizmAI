@@ -262,3 +262,188 @@ class GeminiClient:
                 'session_mode': 'error',
                 'model_used': 'none'
             }
+
+    # ------------------------------------------------------------------
+    # Tier 1: Intent classification via Flash-Lite
+    # ------------------------------------------------------------------
+
+    def classify_intent(self, message, system_prompt=None):
+        """
+        Use Flash-Lite to classify user intent quickly and cheaply.
+
+        Returns dict with 'intent' (str) and 'confidence' (float),
+        or None if the call fails (caller should fall back to regex).
+        """
+        model = self.get_model(task_complexity='simple')  # Flash-Lite
+        if not model:
+            return None
+
+        default_system = (
+            "You are an intent classifier for a project management AI assistant called Spectra.\n"
+            "Classify the user's message into exactly ONE intent.\n"
+            "Respond with JSON only: {\"intent\": \"<intent>\", \"confidence\": <0.0-1.0>}\n\n"
+            "Intents:\n"
+            "- \"conversation\" — questions, chat, analysis, help, greetings, anything that is NOT an action request\n"
+            "- \"create_task\" — wants to create or add a task\n"
+            "- \"create_board\" — wants to create a new project board\n"
+            "- \"create_automation\" — wants to set up automation rules (trigger-based or scheduled)\n"
+            "- \"send_message\" — wants to send a message or DM to a team member\n"
+            "- \"log_time\" — wants to log time or hours worked on a task\n"
+            "- \"schedule_event\" — wants to schedule a meeting, event, or calendar entry\n"
+            "- \"create_retrospective\" — wants to generate or create a retrospective\n"
+            "- \"confirm_action\" — saying yes, confirm, go ahead, looks good (affirming a pending action)\n"
+            "- \"cancel_action\" — saying no, cancel, stop, nevermind (cancelling a pending action)\n"
+        )
+        prompt = f"{system_prompt or default_system}\n\nUser message: {message}"
+
+        try:
+            generation_config = {
+                'temperature': 0.1,
+                'top_p': 0.8,
+                'top_k': 40,
+                'max_output_tokens': 100,
+            }
+            response = model.generate_content(prompt, generation_config=generation_config)
+
+            if not response.candidates or not response.candidates[0].content.parts:
+                return None
+
+            text = response.text.strip()
+            # Extract JSON from response (handle markdown code blocks)
+            if '```' in text:
+                text = text.split('```')[1]
+                if text.startswith('json'):
+                    text = text[4:]
+                text = text.strip()
+
+            result = json.loads(text)
+            intent = result.get('intent', 'conversation')
+            confidence = float(result.get('confidence', 0.5))
+
+            valid_intents = {
+                'conversation', 'create_task', 'create_board', 'create_automation',
+                'send_message', 'log_time', 'schedule_event', 'create_retrospective',
+                'confirm_action', 'cancel_action',
+            }
+            if intent not in valid_intents:
+                intent = 'conversation'
+
+            logger.info(f"Intent classified: {intent} (confidence: {confidence:.2f}) for: {message[:80]}")
+            return {'intent': intent, 'confidence': confidence}
+
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
+            logger.warning(f"Intent classification parse error: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Intent classification failed: {e}")
+            return None
+
+    # ------------------------------------------------------------------
+    # Tier 2: Function Calling via Flash
+    # ------------------------------------------------------------------
+
+    def get_function_call_response(self, message, system_prompt, tools,
+                                   conversation_history=None, temperature=0.2):
+        """
+        Use Gemini Flash with native Function Calling to extract structured
+        parameters from user messages.
+
+        Args:
+            message: Current user message
+            system_prompt: Context (user, board, members, columns, etc.)
+            tools: list of genai.types.Tool objects with FunctionDeclarations
+            conversation_history: Optional prior turns in this action flow
+            temperature: Low for deterministic extraction (default 0.2)
+
+        Returns:
+            dict with either:
+              - 'function_call': {'name': str, 'args': dict}  (all params ready)
+              - 'text': str  (model asking follow-up for missing params)
+              - 'error': str  (on failure)
+            Plus 'tokens' and 'model_used' metadata.
+        """
+        if self.models is None:
+            return {'error': 'Model not initialized', 'tokens': 0, 'model_used': 'none'}
+
+        try:
+            from google.generativeai.types import content_types
+            import google.generativeai as genai
+
+            # Always use Flash for function calling (needs capable model)
+            model_name = 'gemini-2.5-flash'
+
+            # Create a model instance with tools (separate from cached plain models)
+            fc_model = genai.GenerativeModel(
+                model_name,
+                generation_config={
+                    'temperature': temperature,
+                    'top_p': 0.8,
+                    'top_k': 40,
+                    'max_output_tokens': 2048,
+                },
+                safety_settings=self.safety_settings,
+                tools=tools,
+            )
+
+            # Build the prompt with conversation history
+            parts = []
+            if system_prompt:
+                parts.append(f"{system_prompt}\n\n")
+            if conversation_history:
+                parts.append("Previous conversation in this flow:\n")
+                for turn in conversation_history:
+                    parts.append(f"{turn}\n")
+                parts.append("\n")
+            parts.append(f"User: {message}")
+
+            full_prompt = ''.join(parts)
+
+            response = fc_model.generate_content(full_prompt)
+
+            # Calculate tokens
+            token_count = 0
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                token_count = (
+                    getattr(response.usage_metadata, 'prompt_token_count', 0) +
+                    getattr(response.usage_metadata, 'candidates_token_count', 0)
+                )
+
+            # Check if the model returned a function call
+            if (response.candidates and response.candidates[0].content.parts):
+                for part in response.candidates[0].content.parts:
+                    if hasattr(part, 'function_call') and part.function_call.name:
+                        fc = part.function_call
+                        # Convert proto args to dict
+                        args = dict(fc.args) if fc.args else {}
+                        logger.info(
+                            f"Function call extracted: {fc.name}({args}) "
+                            f"[tokens: {token_count}]"
+                        )
+                        return {
+                            'function_call': {'name': fc.name, 'args': args},
+                            'tokens': token_count,
+                            'model_used': model_name,
+                        }
+
+                # Model returned text instead of function call — it's asking follow-up
+                text = response.text if hasattr(response, 'text') else ''
+                logger.info(f"FC model returned text (follow-up): {text[:100]}...")
+                return {
+                    'text': text,
+                    'tokens': token_count,
+                    'model_used': model_name,
+                }
+
+            return {
+                'text': "I need a bit more information to proceed. Could you provide more details?",
+                'tokens': token_count,
+                'model_used': model_name,
+            }
+
+        except Exception as e:
+            logger.error(f"Function calling failed: {e}")
+            return {
+                'error': str(e),
+                'tokens': 0,
+                'model_used': 'none',
+            }
