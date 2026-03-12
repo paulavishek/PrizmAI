@@ -523,3 +523,105 @@ def create_tasks_from_chat_attachment(request, file_id):
         "column_name": column.name,
     })
 
+
+# ---------------------------------------------------------------------------
+# View 7: AI Message Composer — rewrite a draft into a professional message
+# ---------------------------------------------------------------------------
+
+# Maximum length of the raw draft text accepted from the user
+_COMPOSE_MAX_LENGTH = 2000
+
+_VALID_TONES = {"professional", "urgent", "friendly", "diplomatic"}
+
+
+@login_required
+@require_POST
+def compose_message(request, room_id):
+    """
+    POST /messaging/room/<room_id>/ai/compose/
+    Body (JSON): {"message": "...", "tone": "professional"}
+    Returns: {"rewritten": "...", "alternatives": [...], "original": "..."}
+    """
+    room = get_object_or_404(ChatRoom, pk=room_id)
+    if not _require_room_member(request, room):
+        return JsonResponse({"error": "You are not a member of this room."}, status=403)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({"error": "Invalid JSON body."}, status=400)
+
+    raw_message = str(body.get("message", "")).strip()
+    if not raw_message:
+        return JsonResponse({"error": "Please type a message first."}, status=400)
+    if len(raw_message) > _COMPOSE_MAX_LENGTH:
+        return JsonResponse(
+            {"error": f"Message too long (max {_COMPOSE_MAX_LENGTH} characters)."},
+            status=400,
+        )
+
+    tone = str(body.get("tone", "professional")).lower().strip()
+    if tone not in _VALID_TONES:
+        tone = "professional"
+
+    prompt = f"""You are a communication assistant for a project management team.
+Rewrite the following rough draft into a clear, {tone} team update message.
+
+DRAFT:
+\"\"\"
+{raw_message}
+\"\"\"
+
+Return ONLY a raw JSON object (no markdown, no prose) with exactly these keys:
+  "rewritten"    : the polished message (keep it concise, under 280 characters if possible)
+  "alternatives" : an array of 2 alternative rewrites in slightly different styles
+
+Do NOT add greetings like "Hi team" unless the original draft includes one.
+Preserve all factual details (dates, names, numbers) from the original draft."""
+
+    try:
+        from kanban.utils.ai_utils import generate_ai_content
+        raw = generate_ai_content(prompt, task_type="simple")
+    except Exception as exc:
+        logger.exception("AI compose_message failed for room %s: %s", room_id, exc)
+        return JsonResponse({"error": "AI service unavailable. Please try again."}, status=503)
+
+    if not raw:
+        return JsonResponse({"error": "AI returned an empty response. Please try again."}, status=503)
+
+    # Parse the JSON response from the AI
+    result = _extract_json_object(raw)
+    if result is None:
+        # Fallback: treat the entire response as the rewritten message
+        return JsonResponse({
+            "rewritten": raw.strip(),
+            "alternatives": [],
+            "original": raw_message,
+        })
+
+    return JsonResponse({
+        "rewritten": str(result.get("rewritten", raw.strip())).strip(),
+        "alternatives": [
+            str(a).strip() for a in result.get("alternatives", []) if a
+        ][:3],
+        "original": raw_message,
+    })
+
+
+def _extract_json_object(text):
+    """
+    Defensively extract the first JSON object from an AI response string.
+    Handles markdown code fences and surrounding prose.
+    Returns a Python dict or None on failure.
+    """
+    if not text:
+        return None
+    text = re.sub(r"```(?:json)?", "", text).strip()
+    match = re.search(r"(\{.*\})", text, re.DOTALL)
+    if not match:
+        return None
+    try:
+        return json.loads(match.group(1))
+    except (json.JSONDecodeError, ValueError):
+        return None
+

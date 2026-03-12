@@ -194,6 +194,43 @@
         font-size: 0.9rem;
     }
 
+    /* AI Compose preview panel */
+    #ai-compose-preview {
+        border-left: 4px solid #764ba2;
+        background: #f8f4ff;
+        font-size: 0.9rem;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        border-radius: 4px;
+        animation: slideDown 0.2s ease;
+    }
+    @keyframes slideDown {
+        from { opacity: 0; transform: translateY(-8px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    #ai-compose-preview .ai-rewritten-text {
+        font-size: 0.95rem;
+        line-height: 1.5;
+        color: #333;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    #ai-compose-preview .ai-alt-chip {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        margin: 0.2rem;
+        font-size: 0.8rem;
+        border-radius: 12px;
+        background: #e0d5f8;
+        color: #5a2d82;
+        cursor: pointer;
+        border: none;
+        transition: background 0.15s;
+    }
+    #ai-compose-preview .ai-alt-chip:hover {
+        background: #d0c0f0;
+    }
+
     /* Per-message AI extract button — reveal on hover */
     .msg-ai-extract-btn {
         display: none;
@@ -1284,9 +1321,90 @@ const AI_ROOM_ID = {{ chat_room.id }};
 const AI_SUMMARIZE_URL = "{% url 'messaging:ai_summarize_thread' room_id=chat_room.id %}";
 const AI_EXTRACT_THREAD_URL = "{% url 'messaging:ai_extract_tasks_thread' room_id=chat_room.id %}";
 const AI_CONFIRM_TASKS_URL = "{% url 'messaging:ai_confirm_tasks' room_id=chat_room.id %}";
+const AI_COMPOSE_URL = "{% url 'messaging:ai_compose_message' room_id=chat_room.id %}";
 
 // Store the current suggested tasks while the modal is open
 let _aiPendingTasks = [];
+
+// ---- AI Message Composer ----
+let _aiComposeCurrentText = '';
+
+function aiComposeMessage() {
+    const input = document.querySelector('input[name="message"]');
+    const rawText = input.value.trim();
+    if (!rawText) {
+        input.classList.add('is-invalid');
+        setTimeout(() => input.classList.remove('is-invalid'), 1500);
+        return;
+    }
+
+    const spinner = document.getElementById('compose-spinner');
+    const icon = document.getElementById('compose-icon');
+    spinner.style.display = 'inline-block';
+    icon.style.display = 'none';
+
+    fetch(AI_COMPOSE_URL, {
+        method: 'POST',
+        headers: {'X-CSRFToken': _getCSRF(), 'Content-Type': 'application/json'},
+        body: JSON.stringify({message: rawText, tone: 'professional'}),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            alert('AI Compose: ' + data.error);
+            return;
+        }
+        _aiComposeCurrentText = data.rewritten || '';
+        document.getElementById('ai-compose-text').textContent = _aiComposeCurrentText;
+
+        // Alternatives
+        const altsContainer = document.getElementById('ai-compose-alts');
+        const altsList = document.getElementById('ai-compose-alts-list');
+        altsList.innerHTML = '';
+        if (data.alternatives && data.alternatives.length) {
+            data.alternatives.forEach(alt => {
+                const chip = document.createElement('button');
+                chip.className = 'ai-alt-chip';
+                chip.textContent = alt.length > 80 ? alt.substring(0, 77) + '...' : alt;
+                chip.title = alt;
+                chip.onclick = function() {
+                    _aiComposeCurrentText = alt;
+                    document.getElementById('ai-compose-text').textContent = alt;
+                };
+                altsList.appendChild(chip);
+            });
+            altsContainer.style.display = 'block';
+        } else {
+            altsContainer.style.display = 'none';
+        }
+
+        document.getElementById('ai-compose-preview').classList.remove('d-none');
+    })
+    .catch(() => alert('AI Compose request failed. Please check your connection.'))
+    .finally(() => {
+        spinner.style.display = 'none';
+        icon.style.display = 'inline-block';
+    });
+}
+
+function aiComposeAccept() {
+    const input = document.querySelector('input[name="message"]');
+    input.value = _aiComposeCurrentText;
+    document.getElementById('ai-compose-preview').classList.add('d-none');
+    input.focus();
+}
+
+function aiComposeEdit() {
+    const input = document.querySelector('input[name="message"]');
+    input.value = _aiComposeCurrentText;
+    document.getElementById('ai-compose-preview').classList.add('d-none');
+    input.focus();
+}
+
+function aiComposeDiscard() {
+    document.getElementById('ai-compose-preview').classList.add('d-none');
+    document.querySelector('input[name="message"]').focus();
+}
 
 function _getCSRF() {
     const el = document.querySelector('[name=csrfmiddlewaretoken]');
@@ -1696,11 +1814,39 @@ function aiConfirmCreateTasks() {
                         <button type="submit" class="btn btn-primary flex-grow-1" title="Send (or press Enter)">
                             <i class="fas fa-paper-plane"></i> Send
                         </button>
+                        <button type="button" class="btn btn-outline-info" onclick="aiComposeMessage()" title="AI Compose — rewrite your message professionally">
+                            <span class="spinner-border spinner-border-sm me-1" id="compose-spinner" role="status" style="display:none;"></span>
+                            <i class="fas fa-magic" id="compose-icon"></i>
+                        </button>
                         <button type="button" class="btn btn-outline-secondary" onclick="toggleFileUpload()" title="Attach file">
                             <i class="fas fa-paperclip"></i>
                         </button>
                     </div>
                 </form>
+
+                <!-- AI Compose Preview Panel -->
+                <div id="ai-compose-preview" class="d-none">
+                    <div class="d-flex justify-content-between align-items-start mb-1">
+                        <strong><i class="fas fa-magic me-1" style="color:#764ba2;"></i> AI Compose</strong>
+                        <button type="button" class="btn-close flex-shrink-0" onclick="aiComposeDiscard()" aria-label="Close"></button>
+                    </div>
+                    <div class="ai-rewritten-text" id="ai-compose-text"></div>
+                    <div id="ai-compose-alts" class="mt-2" style="display:none;">
+                        <small class="text-muted">Alternatives:</small>
+                        <div id="ai-compose-alts-list"></div>
+                    </div>
+                    <div class="d-flex gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-primary" onclick="aiComposeAccept()">
+                            <i class="fas fa-check me-1"></i> Accept
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="aiComposeEdit()">
+                            <i class="fas fa-pen me-1"></i> Edit
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="aiComposeDiscard()">
+                            <i class="fas fa-times me-1"></i> Discard
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

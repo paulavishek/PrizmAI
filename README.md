@@ -65,7 +65,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 
 - **Open Access Model** — Any authenticated user can access all boards and features; access control is intentionally kept flat to reduce friction
 - **Stakeholder Management** — Track influence, interest levels, and engagement across projects
-- **Real-Time Messaging** — WebSocket-powered team chat with @mentions and notifications
+- **Real-Time Messaging** — WebSocket-powered team chat with @mentions, notifications, and **AI Message Composer** — type a rough draft and let AI rewrite it as a polished, professional team update in one click
 - **Board Member Invitations** — Invite collaborators via email with tokenized invitation links
 - **Knowledge Base & Wiki** — Markdown documentation with AI-assisted meeting analysis
 - **Meeting Transcript Import** — Import from Fireflies, Otter, Zoom, Teams, and Meet with AI extraction
