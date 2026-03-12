@@ -90,46 +90,33 @@ def chat_interface(request, session_id=None):
     # Get user's organization
     user_org = request.user.profile.organization if hasattr(request.user, 'profile') else None
     
-    # Import simplified mode setting
-    from kanban.utils.demo_settings import SIMPLIFIED_MODE
-    
-    # Get user's boards for context selection - filtered by organization
-    if user_org:
+    # Detect which workspace mode the user is in.
+    is_demo_mode = False
+    if hasattr(request.user, 'profile'):
+        is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False)
+
+    # Get user's boards for context selection — workspace-aware.
+    if is_demo_mode:
+        # Demo workspace: official demo boards + boards created via Spectra
+        # while exploring demo mode.
         user_boards = Board.objects.filter(
-            organization=user_org,
-        ).filter(
-            Q(created_by=request.user) | Q(members=request.user)
-        )
+            Q(is_official_demo_board=True)
+            | Q(created_by_session=f'spectra_demo_{request.user.id}')
+        ).distinct()
     else:
-        user_boards = Board.objects.none()
-    
-    # SIMPLIFIED MODE: Include official demo boards for all users
-    if SIMPLIFIED_MODE:
-        demo_boards = Board.objects.filter(is_official_demo_board=True)
-        user_boards = user_boards | demo_boards
-    
-    user_boards = user_boards.distinct()
-    
-    # Count active boards for welcome message — context-aware.
-    # Only count the user's real personal boards (exclude demo boards so that
-    # "My Workspace" users with no boards don't see an inflated count).
-    if user_org:
-        personal_boards_count = Board.objects.filter(
-            organization=user_org,
-        ).filter(
-            Q(created_by=request.user) | Q(members=request.user)
-        ).distinct().count()
-    else:
-        personal_boards_count = 0
+        # Personal workspace: user's own boards, excluding demo artifacts.
+        if user_org:
+            user_boards = Board.objects.filter(
+                organization=user_org,
+            ).filter(
+                Q(created_by=request.user) | Q(members=request.user)
+            ).exclude(
+                created_by_session__startswith='spectra_demo_'
+            ).distinct()
+        else:
+            user_boards = Board.objects.none()
 
-    demo_boards_count = Board.objects.filter(is_official_demo_board=True).count() if SIMPLIFIED_MODE else 0
-
-    # If the current session is a demo session, Spectra is operating over demo
-    # boards; otherwise it operates over the user's own boards only.
-    if session and session.is_demo:
-        active_boards_count = demo_boards_count
-    else:
-        active_boards_count = personal_boards_count
+    active_boards_count = user_boards.count()
     
     # Get initial query from URL parameter (e.g., from wiki quick queries)
     initial_query = request.GET.get('q', '')
@@ -140,6 +127,7 @@ def chat_interface(request, session_id=None):
         'user_preferences': user_pref,
         'initial_query': initial_query,
         'active_boards_count': active_boards_count,
+        'is_demo_mode': is_demo_mode,
     }
     return render(request, 'ai_assistant/chat.html', context)
 
@@ -293,6 +281,11 @@ def send_message(request):
             attachment=active_attachment,
         )
         
+        # ── Detect workspace mode ────────────────────────────────────
+        is_demo_mode = False
+        if hasattr(request.user, 'profile'):
+            is_demo_mode = getattr(request.user.profile, 'is_viewing_demo', False)
+
         # ── Conversational Spectra: check conversation state ─────────
         from ai_assistant.utils.conversation_flow import (
             ConversationFlowManager, get_or_create_state,
@@ -302,6 +295,7 @@ def send_message(request):
         flow_mgr = ConversationFlowManager()
         flow_response = flow_mgr.handle_message(
             request.user, board, message_text, conv_state,
+            is_demo_mode=is_demo_mode,
         )
 
         if flow_response is not None:
@@ -360,7 +354,10 @@ def send_message(request):
         
         # Get response from chatbot service
         # Note: Using stateless mode - no history passed to prevent session persistence
-        chatbot = TaskFlowChatbotService(user=request.user, board=board, session_id=session.id)
+        chatbot = TaskFlowChatbotService(
+            user=request.user, board=board, session_id=session.id,
+            is_demo_mode=is_demo_mode,
+        )
         response = chatbot.get_response(
             message_text,
             use_cache=not refresh_data,

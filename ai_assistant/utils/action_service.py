@@ -170,11 +170,13 @@ class SpectraActionService:
     # Board creation
     # ------------------------------------------------------------------
 
-    def create_board(self, user, collected_data):
+    def create_board(self, user, collected_data, is_demo_mode=False):
         """
         Create a Board with default columns and add *user* as owner.
 
         Expected keys: ``name`` (required), ``description`` (str | None).
+        When *is_demo_mode* is True the board is tagged so it appears in the
+        Demo Workspace and not in the user's personal workspace.
 
         Returns ``{'success': True, 'board': <Board>, 'url': str}``
         or ``{'success': False, 'error': str}``.
@@ -195,6 +197,10 @@ class SpectraActionService:
                     organization=organization,
                     created_by=user,
                 )
+                # Tag the board so it shows up in demo workspace (and is
+                # excluded from the personal workspace).
+                if is_demo_mode:
+                    board.created_by_session = f'spectra_demo_{user.id}'
                 board.save()
                 board.members.add(user)
 
