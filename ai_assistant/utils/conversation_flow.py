@@ -20,11 +20,70 @@ from django.utils import timezone
 
 from ai_assistant.models import SpectraConversationState
 from ai_assistant.utils.action_service import SpectraActionService
-from ai_assistant.utils.chatbot_service import detect_action_intent
+from ai_assistant.utils.chatbot_service import detect_action_intent, classify_intent_with_ai
 
 logger = logging.getLogger(__name__)
 
 action_service = SpectraActionService()
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# FC context prompt builder (compact context for Flash Function Calling)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def build_fc_context(user, board):
+    """
+    Build a compact system prompt for the Flash Function-Calling model.
+
+    Includes just enough context to resolve names, dates, and board details
+    — much smaller than the full Q&A system prompt.
+    """
+    now = timezone.now()
+    user_name = user.get_full_name() or user.username
+    parts = [
+        f"Today: {now.strftime('%A, %B %d, %Y')}. Current time: {now.strftime('%H:%M')}.",
+        f"User: {user_name} (username: {user.username}).",
+    ]
+
+    if board:
+        parts.append(f"Active board: {board.name} (ID {board.id}).")
+
+        # Board members for resolving names like "Alex" → user object
+        members = list(board.members.all().select_related())
+        if board.created_by and board.created_by not in members:
+            members.append(board.created_by)
+        if members:
+            member_strs = [
+                f"{m.get_full_name() or m.username} (@{m.username})"
+                for m in members[:20]
+            ]
+            parts.append(f"Board members: {', '.join(member_strs)}.")
+
+        # Column names for task placement context
+        from kanban.models import Column
+        columns = list(
+            Column.objects.filter(board=board)
+            .order_by('position')
+            .values_list('name', flat=True)[:10]
+        )
+        if columns:
+            parts.append(f"Columns: {' → '.join(columns)}.")
+
+        # Recent tasks (for time-entry matching / context)
+        from kanban.models import Task
+        recent_tasks = list(
+            Task.objects.filter(column__board=board)
+            .order_by('-updated_at')
+            .values_list('title', flat=True)[:10]
+        )
+        if recent_tasks:
+            parts.append(f"Recent tasks: {', '.join(recent_tasks)}.")
+
+    parts.append(
+        "Extract the action parameters from the user's message. "
+        "If a required parameter is missing, ask for it concisely."
+    )
+    return '\n'.join(parts)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -300,14 +359,30 @@ class ConversationFlowManager:
         if mode in ('collecting_task', 'collecting_board', 'collecting_automation'):
             return self._handle_collecting(user, board, message, state)
 
+        # FC-based collecting modes
+        if mode in self._FC_NEW_MODES:
+            return self._handle_collecting(user, board, message, state)
+
         # ── Normal mode — detect new action intent ───────────────────────
-        intent = detect_action_intent(message)
+        # Tier 1: Try AI classification first, fall back to regex
+        from ai_assistant.utils.ai_clients import GeminiClient
+        try:
+            client = GeminiClient()
+        except Exception:
+            client = None
+        classification = classify_intent_with_ai(message, gemini_client=client)
+        intent = classification['intent']
+
         if intent == 'create_task':
             return self._start_task_flow(user, board, message, state)
         if intent == 'create_board':
             return self._start_board_flow(user, message, state)
         if intent == 'activate_automation':
             return self._start_automation_flow(user, board, message, state)
+
+        # FC-based intents
+        if intent in self._FC_INTENT_META:
+            return self._start_fc_flow(user, board, message, state, intent)
 
         # Not an action intent — caller should fall through to normal Q&A
         return None
@@ -876,8 +951,353 @@ class ConversationFlowManager:
         return None
 
     # ------------------------------------------------------------------
-    # Collection dispatcher (routes to the right _continue_ method)
+    # FC-BASED flows (message, time entry, event, retrospective,
+    #                 custom automation, scheduled automation)
     # ------------------------------------------------------------------
+
+    _FC_NEW_MODES = frozenset({
+        'collecting_message', 'collecting_time_entry',
+        'collecting_event', 'collecting_retrospective',
+    })
+
+    _FC_INTENT_META = {
+        'send_message': {
+            'mode': 'collecting_message',
+            'pending': 'send_message',
+            'label': 'sending a message',
+            'needs_board': True,
+        },
+        'log_time': {
+            'mode': 'collecting_time_entry',
+            'pending': 'log_time',
+            'label': 'logging time',
+            'needs_board': True,
+        },
+        'schedule_event': {
+            'mode': 'collecting_event',
+            'pending': 'schedule_event',
+            'label': 'scheduling an event',
+            'needs_board': False,
+        },
+        'create_retrospective': {
+            'mode': 'collecting_retrospective',
+            'pending': 'create_retrospective',
+            'label': 'creating a retrospective',
+            'needs_board': True,
+        },
+        'create_automation': {
+            'mode': 'collecting_automation',
+            'pending': 'create_custom_automation',
+            'label': 'creating an automation',
+            'needs_board': True,
+        },
+        'create_scheduled_automation': {
+            'mode': 'collecting_automation',
+            'pending': 'create_scheduled_automation',
+            'label': 'creating a scheduled automation',
+            'needs_board': True,
+        },
+    }
+
+    def _start_fc_flow(self, user, board, message, state, intent):
+        """
+        Generic entry point for all FC-based action flows.
+
+        Sends the user message + compact context to Flash with Function Calling.
+        If the model returns a function_call, we store the args and go to
+        confirmation.  If it returns text, that's a follow-up question.
+        """
+        meta = self._FC_INTENT_META.get(intent)
+        if not meta:
+            return None  # caller falls through to Q&A
+
+        # Board requirement check
+        if meta['needs_board'] and board is None:
+            board = self._auto_select_board(user)
+            if board is None:
+                boards = _user_board_names(user)
+                if boards:
+                    board_list = ', '.join(f'**{b}**' for b in boards)
+                    state.mode = meta['mode']
+                    state.pending_action = meta['pending']
+                    state.collected_data = {
+                        'awaiting_board': True,
+                        'original_message': message,
+                    }
+                    state.save()
+                    return (
+                        f"I'd love to help with **{meta['label']}**, but I need a board. "
+                        f"Please select one from the dropdown above.\n\n"
+                        f"Your boards: {board_list}"
+                    )
+                return (
+                    f"I'd love to help with **{meta['label']}**, but you don't have any boards yet. "
+                    "Would you like to **create a board** first?"
+                )
+
+        # Build compact context and call Flash FC
+        from ai_assistant.utils.spectra_tools import get_action_tools, FUNCTION_TO_ACTION
+        from ai_assistant.utils.ai_clients import GeminiClient
+
+        context = build_fc_context(user, board)
+        tools = get_action_tools()
+        client = GeminiClient()
+        result = client.get_function_call_response(message, context, tools)
+
+        if result.get('error'):
+            logger.error(f"FC flow error: {result['error']}")
+            return (
+                "I ran into a problem understanding that request. "
+                "Could you try rephrasing it?"
+            )
+
+        if result.get('function_call'):
+            fc = result['function_call']
+            pending = FUNCTION_TO_ACTION.get(fc['name'], meta['pending'])
+            data = dict(fc['args'])
+            data['_fc_function'] = fc['name']
+            if board:
+                data['board_id'] = board.id
+                data['board_name'] = board.name
+
+            state.mode = 'awaiting_confirmation'
+            state.pending_action = pending
+            state.collected_data = data
+            state.save()
+            return self._format_fc_confirmation(pending, data)
+
+        # Model returned text — it needs more info
+        state.mode = meta['mode']
+        state.pending_action = meta['pending']
+        state.collected_data = {
+            'history': [f"User: {message}", f"Spectra: {result.get('text', '')}"],
+        }
+        if board:
+            state.collected_data['board_id'] = board.id
+            state.collected_data['board_name'] = board.name
+        state.save()
+        return result.get('text', "Could you provide a few more details?")
+
+    def _continue_fc_flow(self, user, board, message, state):
+        """
+        Continue an FC-based flow when the model previously asked a follow-up.
+        Re-sends the full conversation history to Flash FC.
+        """
+        data = state.collected_data
+
+        # Handle board selection if we were waiting for it
+        if data.get('awaiting_board'):
+            board = self._resolve_board_from_reply(user, message)
+            if board is None:
+                boards = _user_board_names(user)
+                board_list = ', '.join(f'**{b}**' for b in boards) if boards else 'None'
+                return (
+                    f"I couldn't find a board matching **\"{message}\"**. "
+                    f"Choose one of: {board_list}"
+                )
+            data.pop('awaiting_board', None)
+            original = data.pop('original_message', message)
+            data['board_id'] = board.id
+            data['board_name'] = board.name
+            state.collected_data = data
+            state.save()
+            # Re-run the original message now that we have a board
+            return self._start_fc_flow(
+                user, board, original, state,
+                self._pending_to_intent(state.pending_action),
+            )
+
+        # Resolve board from stored data
+        if board is None and data.get('board_id'):
+            from kanban.models import Board
+            try:
+                board = Board.objects.get(id=data['board_id'])
+            except Board.DoesNotExist:
+                state.reset()
+                return "The board no longer exists. Please try again."
+
+        from ai_assistant.utils.spectra_tools import get_action_tools, FUNCTION_TO_ACTION
+        from ai_assistant.utils.ai_clients import GeminiClient
+
+        context = build_fc_context(user, board)
+        tools = get_action_tools()
+        history = data.get('history', [])
+        history.append(f"User: {message}")
+
+        client = GeminiClient()
+        result = client.get_function_call_response(
+            message, context, tools, conversation_history=history,
+        )
+
+        if result.get('error'):
+            logger.error(f"FC continue error: {result['error']}")
+            return "Something went wrong. Could you rephrase that?"
+
+        if result.get('function_call'):
+            fc = result['function_call']
+            meta = self._FC_INTENT_META.get(
+                self._pending_to_intent(state.pending_action), {}
+            )
+            pending = FUNCTION_TO_ACTION.get(fc['name'], state.pending_action)
+            new_data = dict(fc['args'])
+            new_data['_fc_function'] = fc['name']
+            if board:
+                new_data['board_id'] = board.id
+                new_data['board_name'] = board.name
+
+            state.mode = 'awaiting_confirmation'
+            state.pending_action = pending
+            state.collected_data = new_data
+            state.save()
+            return self._format_fc_confirmation(pending, new_data)
+
+        # Still asking follow-up
+        follow_up = result.get('text', "Could you give me a bit more detail?")
+        history.append(f"Spectra: {follow_up}")
+        data['history'] = history
+        state.collected_data = data
+        state.save()
+        return follow_up
+
+    @staticmethod
+    def _auto_select_board(user):
+        """Return the user's sole board, or None."""
+        from kanban.models import Board
+        boards = list(
+            Board.objects.filter(
+                Q(created_by=user) | Q(members=user),
+                is_archived=False,
+            ).distinct()[:2]
+        )
+        return boards[0] if len(boards) == 1 else None
+
+    @staticmethod
+    def _resolve_board_from_reply(user, message):
+        """Try to match a user reply to one of their boards."""
+        from kanban.models import Board
+        user_boards = list(
+            Board.objects.filter(
+                Q(created_by=user) | Q(members=user),
+                is_archived=False,
+            ).distinct()
+        )
+        msg_lower = message.lower().strip()
+        for b in user_boards:
+            if b.name.lower() == msg_lower or b.name.lower() in msg_lower:
+                return b
+        for b in user_boards:
+            if msg_lower in b.name.lower():
+                return b
+        return None
+
+    @staticmethod
+    def _pending_to_intent(pending_action):
+        """Map pending_action back to an intent key."""
+        _map = {
+            'send_message': 'send_message',
+            'log_time': 'log_time',
+            'schedule_event': 'schedule_event',
+            'create_retrospective': 'create_retrospective',
+            'create_custom_automation': 'create_automation',
+            'create_scheduled_automation': 'create_scheduled_automation',
+        }
+        return _map.get(pending_action, 'conversation')
+
+    # ── FC confirmation formatters ────────────────────────────────────
+
+    def _format_fc_confirmation(self, pending, data):
+        """Build a human-readable confirmation for any FC-extracted action."""
+        formatters = {
+            'send_message': self._format_message_confirmation,
+            'log_time': self._format_time_confirmation,
+            'schedule_event': self._format_event_confirmation,
+            'create_retrospective': self._format_retro_confirmation,
+            'create_custom_automation': self._format_custom_auto_confirmation,
+            'create_scheduled_automation': self._format_sched_auto_confirmation,
+        }
+        formatter = formatters.get(pending)
+        if formatter:
+            return formatter(data)
+        # Fallback for task/board (shouldn't normally reach here)
+        return (
+            "Here's what I'll do:\n\n"
+            + '\n'.join(f"**{k}:** {v}" for k, v in data.items() if not k.startswith('_'))
+            + "\n\nType **confirm** to proceed, or tell me what to change."
+        )
+
+    @staticmethod
+    def _format_message_confirmation(data):
+        return (
+            "Here's the message I'll send:\n\n"
+            f"👤 **To:** {data.get('recipient', 'Unknown')}\n"
+            f"💬 **Message:** {data.get('message_content', '')}\n\n"
+            "Type **confirm** to send, or tell me what to change."
+        )
+
+    @staticmethod
+    def _format_time_confirmation(data):
+        return (
+            "Here's the time entry I'll log:\n\n"
+            f"📋 **Task:** {data.get('task_name', 'Unknown')}\n"
+            f"⏱️ **Hours:** {data.get('hours', 0)}\n"
+            f"📅 **Date:** {data.get('work_date', 'Today')}\n"
+            f"📝 **Description:** {data.get('description', 'None')}\n\n"
+            "Type **confirm** to log this, or tell me what to change."
+        )
+
+    @staticmethod
+    def _format_event_confirmation(data):
+        participants = data.get('participants', [])
+        if isinstance(participants, list):
+            participants = ', '.join(participants) if participants else 'None'
+        return (
+            "Here's the event I'll schedule:\n\n"
+            f"📅 **Event:** {data.get('title', 'Untitled')}\n"
+            f"🕐 **Start:** {data.get('start_datetime', 'Not set')}\n"
+            f"🕑 **End:** {data.get('end_datetime', '1 hour after start')}\n"
+            f"📍 **Location:** {data.get('location', 'Not set')}\n"
+            f"👥 **Participants:** {participants}\n"
+            f"📝 **Type:** {data.get('event_type', 'meeting')}\n\n"
+            "Type **confirm** to schedule, or tell me what to change."
+        )
+
+    @staticmethod
+    def _format_retro_confirmation(data):
+        return (
+            "Here's the retrospective I'll generate:\n\n"
+            f"📊 **Type:** {data.get('retrospective_type', 'sprint').capitalize()}\n"
+            f"📅 **Period:** {data.get('period_start', '?')} → {data.get('period_end', '?')}\n"
+            f"📝 **Notes:** {data.get('manual_insights', 'None')}\n"
+            f"📁 **Board:** {data.get('board_name', 'Current board')}\n\n"
+            "Type **confirm** to generate, or tell me what to change."
+        )
+
+    @staticmethod
+    def _format_custom_auto_confirmation(data):
+        return (
+            "Here's the automation I'll create:\n\n"
+            f"⚡ **Name:** {data.get('name', 'Untitled')}\n"
+            f"🎯 **Trigger:** {data.get('trigger_type', '?')}"
+            f"{' (' + data['trigger_value'] + ')' if data.get('trigger_value') else ''}\n"
+            f"🔔 **Action:** {data.get('action_type', '?')}"
+            f"{' (' + data['action_value'] + ')' if data.get('action_value') else ''}\n"
+            f"📁 **Board:** {data.get('board_name', 'Current board')}\n\n"
+            "Type **confirm** to create, or tell me what to change."
+        )
+
+    @staticmethod
+    def _format_sched_auto_confirmation(data):
+        return (
+            "Here's the scheduled automation I'll create:\n\n"
+            f"⚡ **Name:** {data.get('name', 'Untitled')}\n"
+            f"🕐 **Schedule:** {data.get('schedule_type', 'daily')}"
+            f" at {data.get('scheduled_time', '09:00')}\n"
+            f"🔔 **Action:** {data.get('action', '?')}\n"
+            f"🎯 **Target:** {data.get('notify_target', 'board_members')}\n"
+            f"📋 **Filter:** {data.get('task_filter', 'all')} tasks\n"
+            f"📁 **Board:** {data.get('board_name', 'Current board')}\n\n"
+            "Type **confirm** to create, or tell me what to change."
+        )
 
     def _handle_collecting(self, user, board, message, state):
         """Route to the correct continuation handler based on state mode."""
@@ -910,6 +1330,10 @@ class ConversationFlowManager:
                     'collecting_task': 'creating a task',
                     'collecting_board': 'creating a board',
                     'collecting_automation': 'setting up an automation',
+                    'collecting_message': 'sending a message',
+                    'collecting_time_entry': 'logging time',
+                    'collecting_event': 'scheduling an event',
+                    'collecting_retrospective': 'creating a retrospective',
                 }.get(state.mode, 'something')
                 return (
                     f"I'm currently in the middle of **{flow_name}** for you. "
@@ -922,6 +1346,10 @@ class ConversationFlowManager:
             return self._continue_board_flow(user, board, message, state)
         if state.mode == 'collecting_automation':
             return self._continue_automation_flow(user, board, message, state)
+
+        # FC-based modes
+        if state.mode in self._FC_NEW_MODES:
+            return self._continue_fc_flow(user, board, message, state)
 
         # Shouldn't happen, but reset as safety
         state.reset()
@@ -1013,6 +1441,24 @@ class ConversationFlowManager:
                     "2. Notify creator when task is completed\n"
                     "3. Alert assignee 2 days before deadline"
                 )
+            elif pending in (
+                'send_message', 'log_time', 'schedule_event',
+                'create_retrospective', 'create_custom_automation',
+                'create_scheduled_automation',
+            ):
+                # FC-based actions: restart the FC flow with the change request
+                intent = self._pending_to_intent(pending)
+                meta = self._FC_INTENT_META.get(intent, {})
+                mode = meta.get('mode', 'normal')
+                state.mode = mode
+                state.collected_data = {
+                    'history': [f"User: {message}"],
+                }
+                if data.get('board_id'):
+                    state.collected_data['board_id'] = data['board_id']
+                    state.collected_data['board_name'] = data.get('board_name', '')
+                state.save()
+                return self._continue_fc_flow(user, board, message, state)
 
         # Unrecognised response — gently prompt
         return (
@@ -1034,6 +1480,12 @@ class ConversationFlowManager:
             return self._execute_board_creation(user, state, data)
         elif pending == 'activate_automation':
             return self._execute_automation(user, board, state, data)
+        elif pending in (
+            'send_message', 'log_time', 'schedule_event',
+            'create_retrospective', 'create_custom_automation',
+            'create_scheduled_automation',
+        ):
+            return self._execute_fc_action(user, board, state, data)
         else:
             state.reset()
             return "I'm not sure what to create. Let's start over — how can I help?"
@@ -1160,6 +1612,54 @@ class ConversationFlowManager:
             return (
                 f"I couldn't activate that automation. {result['error']}"
             )
+
+    # ── Execute: FC-based actions ─────────────────────────────────────
+
+    def _execute_fc_action(self, user, board, state, data):
+        """Execute any FC-based action by delegating to action_service."""
+        from kanban.models import Board
+
+        pending = state.pending_action
+
+        # Resolve board from stored data if not provided
+        if board is None and data.get('board_id'):
+            try:
+                board = Board.objects.get(id=data['board_id'])
+            except Board.DoesNotExist:
+                state.reset()
+                return "The board no longer exists. Please try again."
+
+        if board is None and pending not in ('schedule_event',):
+            state.reset()
+            return (
+                "I need a board for this action. "
+                "Please select a board from the dropdown above and try again."
+            )
+
+        # Dispatch to the appropriate action_service method
+        method_map = {
+            'send_message': 'send_message',
+            'log_time': 'log_time_entry',
+            'schedule_event': 'schedule_event',
+            'create_retrospective': 'create_retrospective',
+            'create_custom_automation': 'create_custom_automation',
+            'create_scheduled_automation': 'create_scheduled_automation',
+        }
+
+        method_name = method_map.get(pending)
+        if not method_name or not hasattr(action_service, method_name):
+            state.reset()
+            return "I'm not sure how to execute that action. Let's start over."
+
+        method = getattr(action_service, method_name)
+        result = method(user, board, data)
+
+        state.reset()
+
+        if result.get('success'):
+            return result.get('message', '✅ Done!')
+        else:
+            return f"Something went wrong: {result.get('error', 'Unknown error')}. Please try again."
 
     # ------------------------------------------------------------------
     # Confirmation message formatters

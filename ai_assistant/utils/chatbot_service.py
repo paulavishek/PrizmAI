@@ -177,6 +177,43 @@ def detect_action_intent(message: str) -> str | None:
     return None
 
 
+def classify_intent_with_ai(message: str, gemini_client=None) -> dict:
+    """
+    Tier-1 intent classification using Flash-Lite, with regex fallback.
+
+    Returns ``{'intent': str, 'confidence': float, 'source': str}``
+    where *source* is ``'ai'`` or ``'regex'``.
+
+    For confirm/cancel during active flows the function is NOT called —
+    the caller should use ``detect_action_intent()`` directly for those.
+    """
+    # Try Flash-Lite AI classification first
+    if gemini_client is not None:
+        result = gemini_client.classify_intent(message)
+        if result and result.get('confidence', 0) >= 0.6:
+            return {
+                'intent': result['intent'],
+                'confidence': result['confidence'],
+                'source': 'ai',
+            }
+
+    # Fallback: regex-based detection
+    regex_intent = detect_action_intent(message)
+    if regex_intent:
+        return {
+            'intent': regex_intent,
+            'confidence': 0.85,  # regex matches are exact-phrase, high confidence
+            'source': 'regex',
+        }
+
+    # No action detected — conversation
+    return {
+        'intent': 'conversation',
+        'confidence': 0.9 if gemini_client is None else 0.7,
+        'source': 'regex',
+    }
+
+
 class TaskFlowChatbotService:
     """
     Chatbot service for PrizmAI project assistant
@@ -3810,6 +3847,13 @@ Your role is to help project managers and team members with:
 - **Decision Center**: Pending decisions, risk assessments, briefings
 - **Knowledge Graph**: Organizational memory, lessons learned, patterns
 - **Analytics**: Team performance, engagement metrics, feedback
+- **Spectra Actions** (say "create a task", "send a message", etc.):
+  • Create tasks, boards, and automation rules
+  • Send messages to board members
+  • Log time entries on tasks
+  • Schedule calendar events and meetings
+  • Generate AI-powered retrospectives
+  • Create custom trigger-based or scheduled automations
 
 CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 1. **ALWAYS USE PROVIDED CONTEXT DATA**: When project data is provided in the "Available Context Data" section, you MUST use it to answer questions directly and specifically

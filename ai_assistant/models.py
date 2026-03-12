@@ -306,6 +306,10 @@ class SpectraConversationState(models.Model):
         ('collecting_task', 'Collecting task details'),
         ('collecting_board', 'Collecting board details'),
         ('collecting_automation', 'Collecting automation selection'),
+        ('collecting_message', 'Collecting message details'),
+        ('collecting_time_entry', 'Collecting time entry details'),
+        ('collecting_event', 'Collecting event details'),
+        ('collecting_retrospective', 'Collecting retrospective details'),
         ('awaiting_confirmation', 'Awaiting user confirmation'),
     ]
     PENDING_ACTION_CHOICES = [
@@ -313,6 +317,12 @@ class SpectraConversationState(models.Model):
         ('create_task', 'Create Task'),
         ('create_board', 'Create Board'),
         ('activate_automation', 'Activate Automation'),
+        ('send_message', 'Send Message'),
+        ('log_time', 'Log Time'),
+        ('schedule_event', 'Schedule Event'),
+        ('create_retrospective', 'Create Retrospective'),
+        ('create_custom_automation', 'Create Custom Automation'),
+        ('create_scheduled_automation', 'Create Scheduled Automation'),
     ]
 
     user = models.ForeignKey(

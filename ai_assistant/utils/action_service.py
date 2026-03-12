@@ -312,3 +312,406 @@ class SpectraActionService:
         except Exception as exc:
             logger.exception('Spectra automation activation failed: %s', exc)
             return {'success': False, 'error': str(exc)}
+
+    # ------------------------------------------------------------------
+    # Send message
+    # ------------------------------------------------------------------
+
+    def send_message(self, user, board, collected_data):
+        """
+        Send a chat message to a board member.
+
+        Expected keys: ``recipient`` (name/username), ``message_content`` (str).
+        """
+        from messaging.models import ChatRoom, ChatMessage
+
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            # Resolve recipient
+            recipient_text = collected_data.get('recipient', '')
+            recipient, member_names = self._resolve_assignee(recipient_text, board)
+            if not recipient:
+                names = ', '.join(member_names) if member_names else 'No members'
+                return {
+                    'success': False,
+                    'error': f'Could not find "{recipient_text}". Board members: {names}',
+                }
+
+            content = collected_data.get('message_content', '')
+            if not content:
+                return {'success': False, 'error': 'Message content cannot be empty.'}
+
+            # Find or create a chat room on this board (use "General" room)
+            room = ChatRoom.objects.filter(board=board).first()
+            if not room:
+                room = ChatRoom.objects.create(
+                    board=board,
+                    name='General',
+                    created_by=user,
+                )
+                room.members.add(user, recipient)
+
+            # Ensure both users are room members
+            room.members.add(user, recipient)
+
+            with transaction.atomic():
+                msg = ChatMessage.objects.create(
+                    chat_room=room,
+                    author=user,
+                    content=content,
+                )
+                msg.mentioned_users.add(recipient)
+
+            logger.info(
+                'Spectra sent message from %s to %s in room %s',
+                user.username, recipient.username, room.name,
+            )
+            return {
+                'success': True,
+                'message': (
+                    f"✅ **Message sent!**\n\n"
+                    f"💬 Your message to **{recipient.get_full_name() or recipient.username}** "
+                    f"has been posted in **{room.name}** on **{board.name}**."
+                ),
+            }
+
+        except Exception as exc:
+            logger.exception('Spectra send_message failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
+    # ------------------------------------------------------------------
+    # Log time entry
+    # ------------------------------------------------------------------
+
+    def log_time_entry(self, user, board, collected_data):
+        """
+        Log a time entry against a task.
+
+        Expected keys: ``task_name`` (str), ``hours`` (number),
+        ``work_date`` (str, optional), ``description`` (str, optional).
+        """
+        from kanban.budget_models import TimeEntry
+        from kanban.models import Task
+
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            # Resolve task by name
+            task_name = collected_data.get('task_name', '')
+            task = Task.objects.filter(
+                column__board=board,
+                title__icontains=task_name,
+            ).first()
+            if not task:
+                return {
+                    'success': False,
+                    'error': f'Could not find a task matching "{task_name}" on this board.',
+                }
+
+            hours = collected_data.get('hours', 0)
+            try:
+                hours = float(hours)
+            except (TypeError, ValueError):
+                return {'success': False, 'error': 'Invalid hours value.'}
+            if hours < 0.01 or hours > 16:
+                return {'success': False, 'error': 'Hours must be between 0.01 and 16.'}
+
+            # Parse work date
+            work_date_str = collected_data.get('work_date', '')
+            if work_date_str:
+                from ai_assistant.utils.conversation_flow import _parse_date
+                parsed = _parse_date(work_date_str)
+                work_date = parsed.date() if parsed else timezone.now().date()
+            else:
+                work_date = timezone.now().date()
+
+            with transaction.atomic():
+                entry = TimeEntry.objects.create(
+                    task=task,
+                    user=user,
+                    hours_spent=hours,
+                    work_date=work_date,
+                    description=collected_data.get('description', ''),
+                )
+
+            logger.info(
+                'Spectra logged %s hours on task "%s" for user %s',
+                hours, task.title, user.username,
+            )
+            return {
+                'success': True,
+                'message': (
+                    f"✅ **Time logged!**\n\n"
+                    f"⏱️ **{hours}h** logged on **{task.title}** "
+                    f"for {work_date.strftime('%B %d, %Y')}."
+                ),
+            }
+
+        except Exception as exc:
+            logger.exception('Spectra log_time_entry failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
+    # ------------------------------------------------------------------
+    # Schedule event
+    # ------------------------------------------------------------------
+
+    def schedule_event(self, user, board, collected_data):
+        """
+        Create a calendar event.
+
+        Expected keys: ``title`` (str), ``start_datetime`` (str),
+        ``end_datetime`` (str, optional), ``event_type`` (str, optional),
+        ``participants`` (list of names, optional), ``location`` (str, optional).
+        """
+        from kanban.models import CalendarEvent
+
+        try:
+            title = collected_data.get('title', 'Untitled Event')
+
+            # Parse start datetime
+            from ai_assistant.utils.conversation_flow import _parse_date
+            start_str = collected_data.get('start_datetime', '')
+            start_dt = _parse_date(start_str) if start_str else None
+            if not start_dt:
+                return {'success': False, 'error': f'Could not parse start time: "{start_str}"'}
+
+            # Parse end datetime (default: 1 hour after start)
+            end_str = collected_data.get('end_datetime', '')
+            end_dt = _parse_date(end_str) if end_str else None
+            if not end_dt:
+                from datetime import timedelta
+                end_dt = start_dt + timedelta(hours=1)
+
+            event_type = collected_data.get('event_type', 'meeting')
+            valid_types = ('meeting', 'out_of_office', 'busy_block', 'team_event')
+            if event_type not in valid_types:
+                event_type = 'meeting'
+
+            with transaction.atomic():
+                event = CalendarEvent.objects.create(
+                    title=title,
+                    start_datetime=start_dt,
+                    end_datetime=end_dt,
+                    event_type=event_type,
+                    location=collected_data.get('location', ''),
+                    description=collected_data.get('description', ''),
+                    board=board,
+                    created_by=user,
+                )
+                # Add creator as participant
+                event.participants.add(user)
+
+                # Resolve and add other participants
+                participants = collected_data.get('participants', [])
+                if isinstance(participants, list) and board:
+                    for name in participants:
+                        p, _ = self._resolve_assignee(str(name), board)
+                        if p:
+                            event.participants.add(p)
+
+            logger.info(
+                'Spectra scheduled event "%s" for user %s', title, user.username,
+            )
+            return {
+                'success': True,
+                'message': (
+                    f"✅ **Event scheduled!**\n\n"
+                    f"📅 **{event.title}** on "
+                    f"{start_dt.strftime('%A, %B %d at %I:%M %p')}."
+                ),
+            }
+
+        except Exception as exc:
+            logger.exception('Spectra schedule_event failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
+    # ------------------------------------------------------------------
+    # Create retrospective
+    # ------------------------------------------------------------------
+
+    def create_retrospective(self, user, board, collected_data):
+        """
+        Generate an AI-powered retrospective using RetrospectiveGenerator.
+
+        Expected keys: ``period_start`` (str), ``period_end`` (str),
+        ``retrospective_type`` (str, optional), ``manual_insights`` (str, optional).
+        """
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            from ai_assistant.utils.conversation_flow import _parse_date
+
+            start_str = collected_data.get('period_start', '')
+            end_str = collected_data.get('period_end', '')
+
+            start_dt = _parse_date(start_str)
+            end_dt = _parse_date(end_str)
+
+            if not start_dt or not end_dt:
+                return {
+                    'success': False,
+                    'error': f'Could not parse period dates: "{start_str}" to "{end_str}"',
+                }
+
+            retro_type = collected_data.get('retrospective_type', 'sprint')
+
+            from kanban.utils.retrospective_generator import RetrospectiveGenerator
+            generator = RetrospectiveGenerator(
+                board=board,
+                period_start=start_dt.date() if hasattr(start_dt, 'date') else start_dt,
+                period_end=end_dt.date() if hasattr(end_dt, 'date') else end_dt,
+            )
+            retro = generator.create_retrospective(
+                created_by=user,
+                retrospective_type=retro_type,
+            )
+
+            logger.info(
+                'Spectra created %s retrospective for board %s, user %s',
+                retro_type, board.name, user.username,
+            )
+            return {
+                'success': True,
+                'message': (
+                    f"✅ **Retrospective generated!**\n\n"
+                    f"📊 **{retro_type.capitalize()} retrospective** for **{board.name}** "
+                    f"({start_dt.strftime('%b %d')} → {end_dt.strftime('%b %d, %Y')}) "
+                    f"is ready for review."
+                ),
+            }
+
+        except Exception as exc:
+            logger.exception('Spectra create_retrospective failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
+    # ------------------------------------------------------------------
+    # Create custom automation (trigger-based)
+    # ------------------------------------------------------------------
+
+    def create_custom_automation(self, user, board, collected_data):
+        """
+        Create a custom trigger-based automation rule.
+
+        Expected keys: ``name``, ``trigger_type``, ``action_type``,
+        plus optional ``trigger_value``, ``action_value``.
+        """
+        from kanban.automation_models import BoardAutomation
+
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            name = collected_data.get('name', 'Untitled Automation')
+            trigger_type = collected_data.get('trigger_type', '')
+            action_type = collected_data.get('action_type', '')
+
+            if not trigger_type or not action_type:
+                return {'success': False, 'error': 'Trigger type and action type are required.'}
+
+            with transaction.atomic():
+                automation = BoardAutomation.objects.create(
+                    board=board,
+                    name=name,
+                    trigger_type=trigger_type,
+                    trigger_value=collected_data.get('trigger_value', ''),
+                    action_type=action_type,
+                    action_value=collected_data.get('action_value', ''),
+                    is_active=True,
+                    created_by=user,
+                )
+
+            logger.info(
+                'Spectra created automation "%s" on board %s for user %s',
+                name, board.name, user.username,
+            )
+            return {
+                'success': True,
+                'message': (
+                    f"✅ **Automation created!**\n\n"
+                    f"⚡ **{automation.name}** is now active on **{board.name}**.\n"
+                    f"Trigger: {trigger_type} → Action: {action_type}"
+                ),
+            }
+
+        except Exception as exc:
+            logger.exception('Spectra create_custom_automation failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
+
+    # ------------------------------------------------------------------
+    # Create scheduled automation
+    # ------------------------------------------------------------------
+
+    def create_scheduled_automation(self, user, board, collected_data):
+        """
+        Create a time-based scheduled automation.
+
+        Expected keys: ``name``, ``schedule_type``, ``action``,
+        plus optional ``scheduled_time``, ``notify_target``, ``task_filter``,
+        ``action_value``.
+        """
+        from kanban.automation_models import ScheduledAutomation
+
+        try:
+            if not self._user_has_board_access(user, board):
+                return {'success': False, 'error': "You don't have access to this board."}
+
+            name = collected_data.get('name', 'Untitled Scheduled Automation')
+            schedule_type = collected_data.get('schedule_type', 'daily')
+            action = collected_data.get('action', '')
+
+            if not action:
+                return {'success': False, 'error': 'Action type is required.'}
+
+            # Parse scheduled time
+            time_str = collected_data.get('scheduled_time', '09:00')
+            from datetime import time as dt_time
+            try:
+                parts = time_str.split(':')
+                scheduled_time = dt_time(int(parts[0]), int(parts[1]) if len(parts) > 1 else 0)
+            except (ValueError, IndexError):
+                scheduled_time = dt_time(9, 0)
+
+            with transaction.atomic():
+                sa = ScheduledAutomation.objects.create(
+                    board=board,
+                    created_by=user,
+                    name=name,
+                    is_active=True,
+                    schedule_type=schedule_type,
+                    scheduled_time=scheduled_time,
+                    action=action,
+                    action_value=collected_data.get('action_value', ''),
+                    notify_target=collected_data.get('notify_target', 'board_members'),
+                    task_filter=collected_data.get('task_filter', 'all'),
+                )
+
+            # Register with Celery Beat
+            try:
+                from kanban.scheduled_automation_utils import create_periodic_task_for_automation
+                create_periodic_task_for_automation(sa)
+            except Exception as celery_err:
+                logger.warning(
+                    'Celery Beat registration failed for scheduled automation %s: %s',
+                    sa.id, celery_err,
+                )
+
+            logger.info(
+                'Spectra created scheduled automation "%s" on board %s for user %s',
+                name, board.name, user.username,
+            )
+            return {
+                'success': True,
+                'message': (
+                    f"✅ **Scheduled automation created!**\n\n"
+                    f"⏰ **{sa.name}** will run **{schedule_type}** at "
+                    f"**{scheduled_time.strftime('%I:%M %p')}** on **{board.name}**."
+                ),
+            }
+
+        except Exception as exc:
+            logger.exception('Spectra create_scheduled_automation failed: %s', exc)
+            return {'success': False, 'error': str(exc)}
