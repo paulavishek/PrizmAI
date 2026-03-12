@@ -2354,78 +2354,83 @@ class TaskFlowChatbotService:
         return bool(re.search(r'\[[\w\s\-]+\]', prompt))
     
     def _is_wiki_query(self, prompt):
-        """Detect if query is about wiki/documentation"""
+        """Detect if query is about wiki/documentation (including meeting docs stored as wiki pages)"""
         wiki_keywords = [
             'wiki', 'documentation', 'docs', 'guide', 'reference',
             'article', 'page', 'knowledge base', 'kb', 'documentation',
             'how to', 'tutorial', 'best practice', 'guidelines',
-            'onboarding', 'style guide', 'standards', 'architecture'
+            'onboarding', 'style guide', 'standards', 'architecture',
+            'documented', 'written down', 'recorded', 'published',
+            'knowledge hub', 'wiki page',
         ]
         prompt_lower = prompt.lower()
         return any(kw in prompt_lower for kw in wiki_keywords)
     
     def _is_meeting_query(self, prompt):
-        """Detect if query is about meetings/discussions"""
+        """Detect if query is about meetings/discussions (including wiki-based meeting notes)"""
         meeting_keywords = [
             'meeting', 'standup', 'sync', 'discussion', 'talked about',
             'discussed', 'action item', 'minutes', 'notes', 'transcript',
             'agenda', 'retrospective', 'planning meeting', 'sprint planning',
-            'review meeting', 'what did we discuss', 'what was decided'
+            'review meeting', 'what did we discuss', 'what was decided',
+            'meeting notes', 'meeting summary', 'what meetings',
+            'any meetings', 'recent meetings', 'documented meetings',
         ]
         prompt_lower = prompt.lower()
         return any(kw in prompt_lower for kw in meeting_keywords)
     
     def _get_wiki_context(self, prompt):
         """
-        Get context from wiki pages and knowledge base
-        
-        Returns relevant wiki pages based on query content
+        Get context from wiki pages and knowledge base.
+
+        Returns relevant wiki pages based on query content.  Meeting Notes
+        category pages are given higher priority so meeting-related queries
+        surface wiki-stored meeting content even when the MeetingNotes model
+        has no entries.
         """
         try:
-            from wiki.models import WikiPage, WikiCategory
+            from wiki.models import WikiPage, WikiCategory, WikiLink, WikiMeetingAnalysis
             from accounts.models import Organization
             from django.db.models import Q
-            
+
             if not self.user:
                 logger.warning("Wiki query failed: No user context")
                 return None
-            
+
             # Get user's organization - use demo org as fallback
             org = None
             if hasattr(self.user, 'profile') and self.user.profile.organization:
                 org = self.user.profile.organization
             else:
-                # Fallback to demo organization for users without org
                 org = Organization.objects.filter(name='Demo - Acme Corporation').first()
                 if org:
                     logger.info(f"User {self.user.username} has no org, using demo org for wiki queries")
                 else:
-                    logger.warning(f"Wiki query failed: No demo organization found")
+                    logger.warning("Wiki query failed: No demo organization found")
                     return None
-            
+
             context = "**📚 Wiki & Documentation Context:**\n\n"
-            
+
             logger.info(f"Wiki query by {self.user.username} in org '{org.name}'")
-            
+
             # Check if this is a template query like "Find documentation about [topic]"
             if self._is_template_query(prompt):
                 logger.info("Template/placeholder query detected - showing all documentation topics")
-                
-                # Show available documentation organized by category
+
                 categories = WikiCategory.objects.filter(organization=org)
-                
+
                 if categories.exists():
                     context += "**USER ASKED ABOUT DOCUMENTATION USING A PLACEHOLDER [topic].**\n"
                     context += "**DO NOT ask them to clarify. Instead, show this list of all available documentation:**\n\n"
                     context += "**Available Documentation Topics:**\n\n"
-                    
+
                     for category in categories:
                         pages = WikiPage.objects.filter(
                             category=category,
                             organization=org,
                             is_published=True
                         )[:10]
-                        
+
                         if pages.exists():
                             context += f"**{category.name}** ({pages.count()} pages):\n"
                             for page in pages:
@@ -2434,74 +2439,92 @@ class TaskFlowChatbotService:
                                     context += f" [Tags: {', '.join(page.tags[:3])}]"
                                 context += "\n"
                             context += "\n"
-                    
+
                     context += "💡 **Tell the user they can ask about any specific topic above, like:**\n"
                     context += '  - "Show me the API documentation"\n'
                     context += '  - "What are our coding standards?"\n'
                     context += '  - "Find the deployment guide"\n'
                     context += "\n**IMPORTANT: Present this as the answer. Do not ask them to clarify what topic they want.**\n"
-                    
+
                     return context
                 else:
                     context += "No wiki pages found. You can create documentation from the Knowledge Hub.\n"
                     return context
-            
-            # Search wiki pages by title and content
+
+            # ── Collect published wiki pages ──────────────────────────────
             prompt_words = prompt.lower().split()
+
+            # Base queryset: all published pages the user can see in their org
             wiki_pages = WikiPage.objects.filter(
                 organization=org,
                 is_published=True
             ).select_related('category', 'created_by')
-            
-            logger.info(f"Total wiki pages in org: {wiki_pages.count()}")
+
+            # Also include pages linked directly to the active board (regardless of org)
+            if self.board:
+                board_linked_page_ids = WikiLink.objects.filter(
+                    board=self.board, link_type='board'
+                ).values_list('wiki_page_id', flat=True)
+                wiki_pages = (
+                    wiki_pages | WikiPage.objects.filter(
+                        id__in=board_linked_page_ids, is_published=True
+                    ).select_related('category', 'created_by')
+                ).distinct()
+
+            logger.info(f"Total wiki pages in scope: {wiki_pages.count()}")
             logger.info(f"Search words (>3 chars): {[w for w in prompt_words if len(w) > 3]}")
-            
-            # Search in title, content, and tags
+
+            # ── Relevance scoring ─────────────────────────────────────────
+            # Identify meeting-type categories for priority boost
+            meeting_category_ids = set(
+                WikiCategory.objects.filter(
+                    Q(ai_assistant_type='meeting') | Q(name__icontains='meeting')
+                ).values_list('id', flat=True)
+            )
+
             matching_pages = []
             for page in wiki_pages:
                 relevance_score = 0
-                page_text = f"{page.title} {page.content}".lower()
-                
-                # Check for word matches
+
                 for word in prompt_words:
-                    if len(word) > 3:  # Skip short words
+                    if len(word) > 3:
                         if word in page.title.lower():
-                            relevance_score += 3  # Title matches are more important
+                            relevance_score += 3
                         elif word in page.content.lower():
                             relevance_score += 1
                         if page.tags and word in str(page.tags).lower():
                             relevance_score += 2
-                
+
+                # Boost pages in Meeting Notes categories when meeting terms appear
+                if page.category_id in meeting_category_ids:
+                    if self._is_meeting_query(prompt):
+                        relevance_score += 5
+
+                # Boost pages linked to the active board
+                if self.board and board_linked_page_ids and page.id in set(board_linked_page_ids):
+                    relevance_score += 2
+
+                # Boost pinned pages slightly
+                if page.is_pinned:
+                    relevance_score += 1
+
                 if relevance_score > 0:
                     matching_pages.append((page, relevance_score))
-            
+
             logger.info(f"Found {len(matching_pages)} pages with relevance > 0")
-            
-            # Sort by relevance
+
             matching_pages.sort(key=lambda x: x[1], reverse=True)
-            
+
             if matching_pages:
                 logger.info(f"Returning top {min(5, len(matching_pages))} wiki pages")
                 context += f"Found {len(matching_pages)} relevant wiki page(s):\n\n"
-                
-                # Show top 5 most relevant pages
+
                 for page, score in matching_pages[:5]:
-                    context += f"**📄 {page.title}**\n"
-                    context += f"  • Category: {page.category.name}\n"
-                    context += f"  • Created by: {page.created_by.get_full_name() or page.created_by.username}\n"
-                    context += f"  • Last updated: {page.updated_at.strftime('%Y-%m-%d')}\n"
-                    if page.tags:
-                        context += f"  • Tags: {', '.join(page.tags)}\n"
-                    
-                    # Include content excerpt (first 500 chars)
-                    content_preview = page.content[:500]
-                    if len(page.content) > 500:
-                        content_preview += "..."
-                    context += f"  • Content:\n{content_preview}\n\n"
-                
+                    context += self._format_wiki_page_context(page)
+
                 return context
             else:
-                # No matches found - list all available wiki pages
+                # No keyword matches - list all available wiki pages as fallback
                 all_pages = list(wiki_pages[:10])
                 if all_pages:
                     context += "No direct matches found. Available wiki pages:\n\n"
@@ -2509,11 +2532,207 @@ class TaskFlowChatbotService:
                         context += f"• {page.title} ({page.category.name})\n"
                     context += "\n"
                     return context
-                
+
             return None
-            
+
         except Exception as e:
             logger.error(f"Error getting wiki context: {e}", exc_info=True)
+            return None
+
+    # ── Helper: format a single WikiPage for context injection ────────
+    def _format_wiki_page_context(self, page):
+        """Format a WikiPage into a context string for Gemini, including
+        meeting analysis data when available."""
+        from wiki.models import WikiMeetingAnalysis
+
+        ctx = f"**📄 {page.title}**\n"
+        ctx += f"  • Category: {page.category.name}\n"
+        ctx += f"  • Created by: {page.created_by.get_full_name() or page.created_by.username}\n"
+        ctx += f"  • Created: {page.created_at.strftime('%Y-%m-%d')}\n"
+        ctx += f"  • Last updated: {page.updated_at.strftime('%Y-%m-%d')}\n"
+        if page.tags:
+            ctx += f"  • Tags: {', '.join(page.tags)}\n"
+
+        # Transcript metadata (meeting date, participants, duration)
+        if page.transcript_metadata:
+            meta = page.transcript_metadata
+            if meta.get('meeting_date'):
+                ctx += f"  • Meeting date: {meta['meeting_date']}\n"
+            if meta.get('participants'):
+                ctx += f"  • Participants: {', '.join(meta['participants'][:10])}\n"
+            if meta.get('duration_minutes'):
+                ctx += f"  • Duration: {meta['duration_minutes']} minutes\n"
+
+        # Content excerpt (truncated to ~500 chars)
+        content_preview = page.content[:500]
+        if len(page.content) > 500:
+            content_preview += "..."
+        ctx += f"  • Content:\n{content_preview}\n"
+
+        # Append AI meeting analysis (action items, decisions, blockers)
+        analyses = WikiMeetingAnalysis.objects.filter(
+            wiki_page=page, processing_status='completed'
+        ).order_by('-processed_at')[:1]
+        if analyses.exists():
+            analysis = analyses[0]
+            results = analysis.analysis_results or {}
+
+            action_items = results.get('action_items', [])
+            if action_items:
+                ctx += f"  • Action items ({len(action_items)}):\n"
+                for item in action_items[:5]:
+                    if isinstance(item, dict):
+                        desc = item.get('title', item.get('description', str(item)))
+                        ctx += f"    - {desc}"
+                        if item.get('assignee'):
+                            ctx += f" (Assigned: {item['assignee']})"
+                        if item.get('due_date'):
+                            ctx += f" (Due: {item['due_date']})"
+                        ctx += "\n"
+                    else:
+                        ctx += f"    - {item}\n"
+
+            decisions = results.get('decisions', [])
+            if decisions:
+                ctx += f"  • Decisions ({len(decisions)}):\n"
+                for d in decisions[:5]:
+                    if isinstance(d, dict):
+                        ctx += f"    - {d.get('decision', str(d))}\n"
+                    else:
+                        ctx += f"    - {d}\n"
+
+            blockers = results.get('blockers', [])
+            if blockers:
+                ctx += f"  • Blockers ({len(blockers)}):\n"
+                for b in blockers[:3]:
+                    if isinstance(b, dict):
+                        ctx += f"    - {b.get('blocker', str(b))}\n"
+                    else:
+                        ctx += f"    - {b}\n"
+
+        ctx += "\n"
+        return ctx
+
+    def _get_wiki_meeting_pages_context(self, org, prompt):
+        """Search wiki pages in meeting-type categories when MeetingNotes model
+        has no entries.  This bridges the gap where meetings are documented as
+        wiki pages rather than via the dedicated MeetingNotes model."""
+        try:
+            from wiki.models import WikiPage, WikiCategory
+            from django.db.models import Q
+
+            meeting_categories = WikiCategory.objects.filter(
+                Q(organization=org) & (
+                    Q(ai_assistant_type='meeting') | Q(name__icontains='meeting')
+                )
+            )
+            if not meeting_categories.exists():
+                return None
+
+            pages = WikiPage.objects.filter(
+                category__in=meeting_categories,
+                organization=org,
+                is_published=True,
+            ).select_related('category', 'created_by').order_by('-updated_at')[:10]
+
+            if not pages.exists():
+                return None
+
+            ctx = f"**📝 Meeting Documentation (from Wiki - {pages.count()} pages):**\n\n"
+            for page in pages[:5]:
+                ctx += self._format_wiki_page_context(page)
+            return ctx
+
+        except Exception as e:
+            logger.error(f"Error getting wiki meeting pages: {e}", exc_info=True)
+            return None
+
+    def _get_documentation_summary_context(self):
+        """Always-on documentation summary injected into every query context.
+
+        Provides Spectra with awareness of ALL published wiki pages so it can
+        answer questions about wiki content even when the user doesn't use
+        wiki-specific keywords (e.g. "what meetings were documented?").
+
+        Meeting Notes category pages are listed first for priority.
+        Each page entry is kept compact (~1 line) to minimise token usage;
+        full content is loaded by `_get_wiki_context` when a deeper query is
+        detected.
+        """
+        try:
+            from wiki.models import WikiPage, WikiCategory, WikiLink
+            from accounts.models import Organization
+            from django.db.models import Q
+
+            if not self.user:
+                return None
+
+            org = None
+            if hasattr(self.user, 'profile') and self.user.profile.organization:
+                org = self.user.profile.organization
+            else:
+                org = Organization.objects.filter(name='Demo - Acme Corporation').first()
+            if not org:
+                return None
+
+            pages_qs = WikiPage.objects.filter(
+                organization=org,
+                is_published=True,
+            ).select_related('category', 'created_by').order_by('-updated_at')
+
+            # Also include pages linked to the current board
+            if self.board:
+                board_page_ids = WikiLink.objects.filter(
+                    board=self.board, link_type='board'
+                ).values_list('wiki_page_id', flat=True)
+                pages_qs = (
+                    pages_qs | WikiPage.objects.filter(
+                        id__in=board_page_ids, is_published=True
+                    ).select_related('category', 'created_by')
+                ).distinct()
+
+            total = pages_qs.count()
+            if total == 0:
+                return None
+
+            # Identify meeting categories for sort priority
+            meeting_cat_ids = set(
+                WikiCategory.objects.filter(
+                    Q(ai_assistant_type='meeting') | Q(name__icontains='meeting')
+                ).values_list('id', flat=True)
+            )
+
+            # Sort: meeting-category pages first, then by updated_at desc
+            pages = list(pages_qs[:30])
+            pages.sort(key=lambda p: (0 if p.category_id in meeting_cat_ids else 1, -(p.updated_at.timestamp() if p.updated_at else 0)))
+
+            ctx = f"**📚 Documentation Overview ({total} published wiki pages):**\n"
+
+            # Group by category for readability
+            from collections import OrderedDict
+            by_category = OrderedDict()
+            for page in pages:
+                cat_name = page.category.name if page.category else 'Uncategorized'
+                by_category.setdefault(cat_name, []).append(page)
+
+            for cat_name, cat_pages in by_category.items():
+                ctx += f"\n**{cat_name}** ({len(cat_pages)} pages):\n"
+                for page in cat_pages[:8]:
+                    snippet = page.get_snippet(120)
+                    ctx += f"  • {page.title}"
+                    if page.created_at:
+                        ctx += f" [{page.created_at.strftime('%Y-%m-%d')}]"
+                    if snippet:
+                        ctx += f" — {snippet}"
+                    ctx += "\n"
+                if len(cat_pages) > 8:
+                    ctx += f"  ... and {len(cat_pages) - 8} more\n"
+
+            ctx += "\n💡 Ask about any wiki page by name or topic for full content.\n\n"
+            return ctx
+
+        except Exception as e:
+            logger.error(f"Error getting documentation summary: {e}", exc_info=True)
             return None
     
     def _get_meeting_context(self, prompt):
@@ -2721,6 +2940,11 @@ class TaskFlowChatbotService:
                 all_meetings_count = MeetingNotes.objects.filter(organization=org).count()
                 
                 if all_meetings_count == 0:
+                    # Before giving up, check wiki pages in meeting-type categories
+                    wiki_meeting_context = self._get_wiki_meeting_pages_context(org, prompt)
+                    if wiki_meeting_context:
+                        context += wiki_meeting_context
+                        return context
                     context += "**No meetings found in the knowledge base.**\n\n"
                     context += "Meeting notes can be created from the Knowledge Hub. "
                     context += "Once meetings are documented, I'll be able to help you find decisions, action items, and discussions.\n"
@@ -3161,8 +3385,18 @@ Format responses clearly with:
                 context_parts.append(session_memory)
                 logger.debug('Added session memory context')
             
+            # 0c. Always-on documentation summary — gives Spectra awareness of all
+            #     published wiki pages so it can reference them even when the user
+            #     doesn't use wiki-specific keywords (compact, ~1 line per page).
+            doc_summary = self._get_documentation_summary_context()
+            if doc_summary:
+                context_parts.append(doc_summary)
+                logger.debug('Added documentation summary context')
+            
             # 1. Wiki context (documentation, guides, best practices)
-            if is_wiki_query:
+            #    Also triggered for meeting queries so wiki-stored meeting pages
+            #    are surfaced alongside MeetingNotes model data.
+            if is_wiki_query or is_meeting_query:
                 wiki_context = self._get_wiki_context(prompt)
                 if wiki_context:
                     context_parts.append(wiki_context)
