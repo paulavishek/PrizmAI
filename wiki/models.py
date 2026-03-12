@@ -49,9 +49,21 @@ class WikiCategory(models.Model):
     def __str__(self):
         return self.name
     
+    # Keywords whose presence in a category name implies meeting-type AI
+    MEETING_KEYWORDS = [
+        'meeting', 'meetings', 'standup', 'standups', 'sprint',
+        'retrospective', 'retro', 'planning', 'sync', 'review',
+        'discussion', 'agenda', 'minutes',
+    ]
+
     def save(self, *args, **kwargs):
         if not self.slug:
             self.slug = slugify(self.name)
+        # Auto-detect AI assistant type for new categories when not explicitly set
+        if not self.pk and self.ai_assistant_type == 'documentation':
+            name_lower = self.name.lower()
+            if any(kw in name_lower for kw in self.MEETING_KEYWORDS):
+                self.ai_assistant_type = 'meeting'
         super().save(*args, **kwargs)
 
 
