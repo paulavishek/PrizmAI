@@ -110,8 +110,26 @@ def chat_interface(request, session_id=None):
     
     user_boards = user_boards.distinct()
     
-    # Count active boards for welcome message
-    active_boards_count = user_boards.count()
+    # Count active boards for welcome message — context-aware.
+    # Only count the user's real personal boards (exclude demo boards so that
+    # "My Workspace" users with no boards don't see an inflated count).
+    if user_org:
+        personal_boards_count = Board.objects.filter(
+            organization=user_org,
+        ).filter(
+            Q(created_by=request.user) | Q(members=request.user)
+        ).distinct().count()
+    else:
+        personal_boards_count = 0
+
+    demo_boards_count = Board.objects.filter(is_official_demo_board=True).count() if SIMPLIFIED_MODE else 0
+
+    # If the current session is a demo session, Spectra is operating over demo
+    # boards; otherwise it operates over the user's own boards only.
+    if session and session.is_demo:
+        active_boards_count = demo_boards_count
+    else:
+        active_boards_count = personal_boards_count
     
     # Get initial query from URL parameter (e.g., from wiki quick queries)
     initial_query = request.GET.get('q', '')
