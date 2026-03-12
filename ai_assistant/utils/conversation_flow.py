@@ -123,6 +123,25 @@ def _check_duplicate_board(name, user):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Question detection helper (for board name collection)
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _looks_like_question(text):
+    """Return True if *text* looks like a question rather than a board name."""
+    txt = text.strip()
+    if txt.endswith('?'):
+        return True
+    low = txt.lower()
+    question_starters = [
+        'can we', 'can i', 'how ', 'what ', 'when ', 'where ', 'why ',
+        'who ', 'which ', 'is there', 'are there', 'do we', 'does ',
+        'will ', 'would ', 'could ', 'should ', 'show me', 'tell me',
+        'list ', 'compare ', 'summarize ', 'analyze ',
+    ]
+    return any(low.startswith(q) for q in question_starters)
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Board list helper
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -183,18 +202,29 @@ class ConversationFlowManager:
 
     def _start_task_flow(self, user, board, message, state):
         if board is None:
-            boards = _user_board_names(user)
-            if boards:
-                board_list = ', '.join(f'**{b}**' for b in boards)
-                return (
-                    "I'd love to help you create a task! But I need to know which board "
-                    f"it belongs to. Please select a board from the dropdown above first.\n\n"
-                    f"Your boards: {board_list}"
-                )
-            return (
-                "I'd love to help you create a task, but you don't seem to have any boards yet. "
-                "Would you like to **create a board** first?"
+            # Auto-select if user has exactly one board
+            from kanban.models import Board
+            user_boards = list(
+                Board.objects.filter(
+                    Q(created_by=user) | Q(members=user),
+                    is_archived=False,
+                ).distinct()[:2]
             )
+            if len(user_boards) == 1:
+                board = user_boards[0]
+            else:
+                boards = _user_board_names(user)
+                if boards:
+                    board_list = ', '.join(f'**{b}**' for b in boards)
+                    return (
+                        "I'd love to help you create a task! But I need to know which board "
+                        f"it belongs to. Please select a board from the dropdown above first.\n\n"
+                        f"Your boards: {board_list}"
+                    )
+                return (
+                    "I'd love to help you create a task, but you don't seem to have any boards yet. "
+                    "Would you like to **create a board** first?"
+                )
 
         state.mode = 'collecting_task'
         state.pending_action = 'create_task'
@@ -313,6 +343,14 @@ class ConversationFlowManager:
         msg = message.strip()
 
         if step == 0:
+            # Collecting name — detect if the user typed a question instead
+            if _looks_like_question(msg):
+                return (
+                    f"That looks like a question rather than a board name. "
+                    f"Would you like me to **cancel** creating this board so I can answer your question? "
+                    f"Or if you really want that as the board name, just type it again."
+                )
+
             # Collecting name
             data['name'] = msg
 
@@ -371,18 +409,29 @@ class ConversationFlowManager:
 
     def _start_automation_flow(self, user, board, message, state):
         if board is None:
-            boards = _user_board_names(user)
-            if boards:
-                board_list = ', '.join(f'**{b}**' for b in boards)
-                return (
-                    "I can set up automations, but I need a board to work with. "
-                    f"Please select a board from the dropdown above first.\n\n"
-                    f"Your boards: {board_list}"
-                )
-            return (
-                "I can set up automations, but you don't have any boards yet. "
-                "Would you like to **create a board** first?"
+            # Auto-select if user has exactly one board
+            from kanban.models import Board
+            user_boards = list(
+                Board.objects.filter(
+                    Q(created_by=user) | Q(members=user),
+                    is_archived=False,
+                ).distinct()[:2]
             )
+            if len(user_boards) == 1:
+                board = user_boards[0]
+            else:
+                boards = _user_board_names(user)
+                if boards:
+                    board_list = ', '.join(f'**{b}**' for b in boards)
+                    return (
+                        "I can set up automations, but I need a board to work with. "
+                        f"Please select a board from the dropdown above first.\n\n"
+                        f"Your boards: {board_list}"
+                    )
+                return (
+                    "I can set up automations, but you don't have any boards yet. "
+                    "Would you like to **create a board** first?"
+                )
 
         state.mode = 'collecting_automation'
         state.pending_action = 'activate_automation'
