@@ -252,6 +252,9 @@ def send_message(request):
                 )
             session.board = board
             session.save()
+        elif session.board_id:
+            # Restore board from session when not explicitly provided
+            board = session.board
         
         # Save user message
         user_message = AIAssistantMessage.objects.create(
