@@ -66,13 +66,20 @@ def dashboard(request):
     demo_mode = getattr(profile, 'is_viewing_demo', False)
     
     if demo_mode:
-        # Demo mode: show only official demo boards
-        boards = Board.objects.filter(is_official_demo_board=True).distinct()
+        # Demo mode: show official demo boards + boards the user created
+        # via Spectra while exploring demo mode.
+        boards = Board.objects.filter(
+            Q(is_official_demo_board=True)
+            | Q(created_by_session=f'spectra_demo_{request.user.id}')
+        ).distinct()
     elif profile.onboarding_version >= 2:
-        # v2 real mode: only the user's own boards (no demo boards)
+        # v2 real mode: only the user's own boards (no demo boards,
+        # no boards created during demo exploration via Spectra).
         boards = Board.objects.filter(
             Q(created_by=request.user) | Q(members=request.user),
-            is_official_demo_board=False
+            is_official_demo_board=False,
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
         ).distinct()
     else:
         # v1 legacy: demo + user boards mixed

@@ -329,6 +329,24 @@ def _user_board_names(user):
     return list(boards)
 
 
+def _user_board_names_for_env(user, is_demo_mode):
+    """Return board names visible in the user's current workspace."""
+    from kanban.models import Board
+    if is_demo_mode:
+        boards = Board.objects.filter(
+            Q(is_official_demo_board=True)
+            | Q(created_by_session=f'spectra_demo_{user.id}')
+        ).distinct().values_list('name', flat=True)[:20]
+    else:
+        boards = Board.objects.filter(
+            Q(created_by=user) | Q(members=user),
+            is_official_demo_board=False,
+        ).exclude(
+            created_by_session__startswith='spectra_demo_'
+        ).distinct().values_list('name', flat=True)[:20]
+    return list(boards)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # ConversationFlowManager
 # ══════════════════════════════════════════════════════════════════════════════
@@ -343,13 +361,14 @@ class ConversationFlowManager:
     # Main dispatcher
     # ------------------------------------------------------------------
 
-    def handle_message(self, user, board, message, state):
+    def handle_message(self, user, board, message, state, is_demo_mode=False):
         """
         Route *message* to the appropriate handler according to *state.mode*.
 
         Returns a response string.  The caller is responsible for saving the
         state (``state.save()`` is called internally when needed).
         """
+        self._is_demo_mode = is_demo_mode
         mode = state.mode
 
         # ── Already in a flow ────────────────────────────────────────────
@@ -392,23 +411,37 @@ class ConversationFlowManager:
     # ------------------------------------------------------------------
 
     def _start_task_flow(self, user, board, message, state):
+        is_demo = getattr(self, '_is_demo_mode', False)
         if board is None:
-            # Auto-select if user has exactly one board
             from kanban.models import Board
-            user_boards = list(
-                Board.objects.filter(
-                    Q(created_by=user) | Q(members=user),
-                    is_archived=False,
-                ).distinct()[:2]
-            )
+
+            # Build workspace-appropriate board list
+            if is_demo:
+                user_boards = list(
+                    Board.objects.filter(
+                        Q(is_official_demo_board=True)
+                        | Q(created_by_session=f'spectra_demo_{user.id}'),
+                        is_archived=False,
+                    ).distinct()[:2]
+                )
+            else:
+                user_boards = list(
+                    Board.objects.filter(
+                        Q(created_by=user) | Q(members=user),
+                        is_archived=False,
+                    ).exclude(
+                        created_by_session__startswith='spectra_demo_'
+                    ).exclude(
+                        is_official_demo_board=True,
+                    ).distinct()[:2]
+                )
+
             if len(user_boards) == 1:
                 board = user_boards[0]
             else:
-                boards = _user_board_names(user)
+                boards = _user_board_names_for_env(user, is_demo)
                 if boards:
                     board_list = ', '.join(f'**{b}**' for b in boards)
-                    # Enter collecting_task at step -1 (awaiting board selection)
-                    # so the next message is intercepted by the flow
                     state.mode = 'collecting_task'
                     state.pending_action = 'create_task'
                     state.collected_data = {
@@ -420,6 +453,12 @@ class ConversationFlowManager:
                         "I'd love to help you create a task! But I need to know which board "
                         f"it belongs to. Please select a board from the dropdown above first.\n\n"
                         f"Your boards: {board_list}"
+                    )
+                # No boards in this environment
+                if is_demo:
+                    return (
+                        "There are no boards in **Demo Workspace** right now. "
+                        "Would you like to **create a board** here to experiment with?"
                     )
                 return (
                     "I'd love to help you create a task, but you don't seem to have any boards yet. "
@@ -709,6 +748,14 @@ class ConversationFlowManager:
         state.pending_action = 'create_board'
         data = {'step': 0}
 
+        # Notify user about workspace context if they're in demo mode
+        demo_prefix = ''
+        if getattr(self, '_is_demo_mode', False):
+            demo_prefix = (
+                "📌 You're in **Demo Workspace**. The board will be created here "
+                "so you can experiment freely — it won't appear in your personal workspace.\n\n"
+            )
+
         # Try to extract board name from the initial message
         name = _extract_board_name(message)
         if name and not _looks_like_question(name):
@@ -720,17 +767,18 @@ class ConversationFlowManager:
                 state.collected_data = data
                 state.save()
                 return (
+                    f"{demo_prefix}"
                     f"There's already a board called **\"{name}\"**. "
                     "Do you still want to create another one, or would you like a different name?"
                 )
             data['step'] = 1
             state.collected_data = data
             state.save()
-            return f"I'll name it **\"{name}\"**. **Any description for this board?** (or say 'skip')"
+            return f"{demo_prefix}I'll name it **\"{name}\"**. **Any description for this board?** (or say 'skip')"
 
         state.collected_data = data
         state.save()
-        return "Let's create a new board! **What should the board be called?**"
+        return f"{demo_prefix}Let's create a new board! **What should the board be called?**"
 
     def _continue_board_flow(self, user, board, message, state):
         data = state.collected_data
@@ -1534,11 +1582,20 @@ class ConversationFlowManager:
         if result['success']:
             task = result['task']
             url = result['url']
+
+            # Let the user know the task lives in demo workspace
+            demo_note = ''
+            if getattr(self, '_is_demo_mode', False):
+                demo_note = (
+                    "\n\n📌 This task was created inside **Demo Workspace** "
+                    "so you can experiment freely."
+                )
+
             return (
                 f"✅ **Task created successfully!**\n\n"
                 f"📋 **{task.title}** has been added to **{board.name}** "
                 f"in the **{task.column.name}** column.\n\n"
-                f"[View task]({url})"
+                f"[View task]({url}){demo_note}"
             )
         else:
             return (
@@ -1550,23 +1607,33 @@ class ConversationFlowManager:
     # ── Execute: Board ────────────────────────────────────────────────
 
     def _execute_board_creation(self, user, state, data):
+        is_demo = getattr(self, '_is_demo_mode', False)
         create_data = {
             'name': data.get('name', 'Untitled Board'),
             'description': data.get('description', ''),
         }
 
-        result = action_service.create_board(user, create_data)
+        result = action_service.create_board(user, create_data, is_demo_mode=is_demo)
 
         state.reset()
 
         if result['success']:
             board_obj = result['board']
             url = result['url']
+
+            env_note = ''
+            if is_demo:
+                env_note = (
+                    "\n\n📌 This board was created inside **Demo Workspace** "
+                    "so you can experiment freely. It won't appear in your "
+                    "personal workspace."
+                )
+
             return (
                 f"✅ **Board created successfully!**\n\n"
                 f"🗂️ **{board_obj.name}** is ready with columns: "
                 f"To Do → In Progress → Done.\n\n"
-                f"[Open board]({url})"
+                f"[Open board]({url}){env_note}"
             )
         else:
             return (

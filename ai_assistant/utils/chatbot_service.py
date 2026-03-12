@@ -220,10 +220,11 @@ class TaskFlowChatbotService:
     Adapted from Nexus 360 for PrizmAI's project management data
     """
     
-    def __init__(self, user=None, board=None, session_id=None):
+    def __init__(self, user=None, board=None, session_id=None, is_demo_mode=False):
         self.user = user
         self.board = board
         self.session_id = session_id
+        self.is_demo_mode = is_demo_mode
         
         # Initialize clients with error handling
         try:
@@ -1743,7 +1744,9 @@ class TaskFlowChatbotService:
     
     def _get_user_boards(self, organization=None):
         """Helper to get user's boards with optional organization filter.
-        Excludes archived boards so Spectra only reports on active projects."""
+        Excludes archived boards so Spectra only reports on active projects.
+        Respects workspace mode: demo mode sees only demo boards,
+        personal mode sees only the user's own (non-demo) boards."""
         try:
             if not organization:
                 organization = self.user.profile.organization
@@ -1752,20 +1755,36 @@ class TaskFlowChatbotService:
         
         base_filter = Q(is_archived=False)
         
+        # ── Workspace-aware filtering ───────────────────────────────
+        if self.is_demo_mode:
+            # Demo workspace: only official demo boards + boards the user
+            # created via Spectra while exploring demo mode.
+            return Board.objects.filter(
+                base_filter & (
+                    Q(is_official_demo_board=True)
+                    | Q(created_by_session=f'spectra_demo_{self.user.id}')
+                )
+            ).distinct()
+        
+        # Personal workspace
         if organization:
             return Board.objects.filter(
                 base_filter &
                 Q(organization=organization) & 
                 (Q(created_by=self.user) | Q(members=self.user))
+            ).exclude(
+                created_by_session__startswith='spectra_demo_'
             ).distinct()
         else:
-            # Include demo boards for users without organization
             return Board.objects.filter(
                 base_filter & (
-                    Q(is_official_demo_board=True) |
                     Q(created_by=self.user) | 
                     Q(members=self.user)
                 )
+            ).exclude(
+                created_by_session__startswith='spectra_demo_'
+            ).exclude(
+                is_official_demo_board=True
             ).distinct()
     
     def _get_organization_context(self, prompt):
@@ -3824,6 +3843,12 @@ class TaskFlowChatbotService:
         user_username = self.user.username if self.user else 'unknown'
         board_name = self.board.name if self.board else 'All boards'
         
+        # Workspace environment context
+        if self.is_demo_mode:
+            workspace_env = 'Demo Workspace (viewing demo/sample boards — read-only demo data)'
+        else:
+            workspace_env = 'My Workspace (user\'s personal boards and tasks)'
+        
         return f"""You are Spectra, PrizmAI's AI Project Assistant — an intelligent project management assistant.
 
 **CURRENT CONTEXT:**
@@ -3831,6 +3856,7 @@ class TaskFlowChatbotService:
 - Current Time: {current_time}
 - Current User: {user_name} (username: {user_username})
 - Active Board: {board_name}
+- Workspace: {workspace_env}
 
 Your role is to help project managers and team members with:
 - Project planning and strategy
@@ -3860,6 +3886,10 @@ CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 2. **NEVER ASK FOR INFORMATION YOU HAVE**: If context data contains the answer, provide it immediately without asking follow-up questions
 3. **BE SPECIFIC AND CONCRETE**: Use actual numbers, names, dates from the context data - not general statements
 4. **ANSWER DIRECTLY FIRST**: Start with the specific answer from the data, then provide additional insights or recommendations
+5. **WORKSPACE AWARENESS**: The user is currently in the **{workspace_env}**. You MUST only reference data from this environment:
+   - In "Demo Workspace": Only discuss demo boards, demo tasks, and demo data. If the user asks about something that only exists in their personal workspace, say: "I can only see Demo Workspace data right now. Switch to My Workspace to ask about your personal boards."
+   - In "My Workspace": Only discuss the user's personal boards and tasks. If the user asks about demo content, say: "I can only see your personal workspace data right now. Switch to Demo Workspace to explore the demo boards."
+   - When creating boards or tasks, they stay in the current environment — demo artifacts don't leak into My Workspace and vice versa.
 5. **NO UNNECESSARY QUESTIONS**: Don't ask "What is your name?" or "Which board?" — you already know the user is {user_name} and the board context
 6. **LEVERAGE WIKI & MEETINGS**: When wiki pages or meeting notes are provided, reference them directly and quote relevant sections
 7. **DATE AWARENESS**: Always compare task due dates against today's date ({current_date}). Proactively flag overdue tasks (due date before today) and approaching deadlines (due within 7 days). If a task is overdue, ALWAYS highlight it with a warning, even if not explicitly asked.
