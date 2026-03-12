@@ -154,23 +154,50 @@ def _parse_date(text):
 
     today = timezone.now().date()
 
-    # Handle "tomorrow"
-    if text.lower() == 'tomorrow':
-        dt = datetime.combine(today + timedelta(days=1), datetime.min.time())
+    # Handle "tomorrow" optionally with a time (e.g. "tomorrow at 2 PM")
+    tomorrow_match = re.match(
+        r'^tomorrow(?:\s+(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?))?$',
+        text.strip(),
+        re.IGNORECASE,
+    )
+    if tomorrow_match:
+        time_part = datetime.min.time()
+        if tomorrow_match.group(1):
+            try:
+                from dateutil import parser as dateutil_parser
+                time_dt = dateutil_parser.parse(tomorrow_match.group(1))
+                time_part = time_dt.time()
+            except (ValueError, OverflowError):
+                pass
+        dt = datetime.combine(today + timedelta(days=1), time_part)
         return timezone.make_aware(dt)
 
-    # Handle "today"
-    if text.lower() == 'today':
-        dt = datetime.combine(today, datetime.min.time())
+    # Handle "today" optionally with a time
+    today_match = re.match(
+        r'^today(?:\s+(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?))?$',
+        text.strip(),
+        re.IGNORECASE,
+    )
+    if today_match:
+        time_part = datetime.min.time()
+        if today_match.group(1):
+            try:
+                from dateutil import parser as dateutil_parser
+                time_dt = dateutil_parser.parse(today_match.group(1))
+                time_part = time_dt.time()
+            except (ValueError, OverflowError):
+                pass
+        dt = datetime.combine(today, time_part)
         return timezone.make_aware(dt)
 
-    # Handle "next <weekday>" / "this <weekday>"
+    # Handle "next <weekday>" / "this <weekday>", optionally with a time
     day_names = {
         'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
         'friday': 4, 'saturday': 5, 'sunday': 6,
     }
     rel_match = re.match(
-        r'^(next|this)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$',
+        r'^(next|this)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)'
+        r'(?:\s+(?:at\s+)?(\d{1,2}(?::\d{2})?\s*(?:am|pm)?))?',
         text.strip(),
         re.IGNORECASE,
     )
@@ -188,7 +215,17 @@ def _parse_date(text):
             # "this Friday" — this week's occurrence (could be today)
             if days_ahead == 0:
                 days_ahead = 0
-        dt = datetime.combine(today + timedelta(days=days_ahead), datetime.min.time())
+        target_date = today + timedelta(days=days_ahead)
+        # Parse optional time component
+        time_part = datetime.min.time()
+        if rel_match.group(3):
+            try:
+                from dateutil import parser as dateutil_parser
+                time_dt = dateutil_parser.parse(rel_match.group(3))
+                time_part = time_dt.time()
+            except (ValueError, OverflowError):
+                pass
+        dt = datetime.combine(target_date, time_part)
         return timezone.make_aware(dt)
 
     try:
@@ -232,7 +269,8 @@ _TITLE_RE = re.compile(
 )
 
 _PRIORITY_RE = re.compile(
-    r'\b(low|medium|high|urgent|critical)\s*priority\b',
+    r'\b(low|medium|high|urgent|critical)[\s-]*priority\b'
+    r'|\bpriority[\s:-]*(low|medium|high|urgent|critical)\b',
     re.IGNORECASE,
 )
 
@@ -260,11 +298,12 @@ def _extract_task_fields(message):
 
     m = _TITLE_RE.search(message)
     if m:
-        result['title'] = (m.group(1) or m.group(2) or '').strip().strip("'\"\u2018\u2019\u201c\u201d")
+        title = (m.group(1) or m.group(2) or '').strip().strip("'\"\u2018\u2019\u201c\u201d")
+        result['title'] = title.rstrip('.,;:!?')
 
     m = _PRIORITY_RE.search(message)
     if m:
-        result['priority'] = m.group(1).lower()
+        result['priority'] = (m.group(1) or m.group(2)).lower()
 
     m = _DUE_DATE_RE.search(message)
     if m:
@@ -283,7 +322,7 @@ def _extract_task_fields(message):
 
 _BOARD_NAME_RE = re.compile(
     r"""(?:called|named|titled)\s+['\u2018\u201c"]+(.+?)['\u2019\u201d"]+"""
-    r"""|(?:called|named|titled)\s+(.+?)$""",
+    r"""|(?:called|named|titled)\s+(.+?)(?:\s+with\b|\s*$)""",
     re.IGNORECASE,
 )
 
@@ -295,6 +334,22 @@ def _extract_board_name(message):
         name = (m.group(1) or m.group(2) or '').strip().strip("'\"‘’“”")
         return name if name else None
     return None
+
+
+_BOARD_DESC_RE = re.compile(
+    r'\bwith\s+(?:(?:a|the)\s+)?desc(?:ription)?[\s:]+(.+?)$',
+    re.IGNORECASE,
+)
+
+
+def _extract_board_description(message):
+    """Extract inline description from 'create board called X with description Y'."""
+    m = _BOARD_DESC_RE.search(message)
+    if m:
+        desc = m.group(1).strip()
+        return desc if desc else None
+    return None
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -771,6 +826,16 @@ class ConversationFlowManager:
                     f"There's already a board called **\"{name}\"**. "
                     "Do you still want to create another one, or would you like a different name?"
                 )
+            # Try to extract inline description ("...with description Y")
+            desc = _extract_board_description(message)
+            if desc:
+                data['description'] = desc
+                data['description_display'] = desc
+                data['step'] = 2
+                state.collected_data = data
+                state.mode = 'awaiting_confirmation'
+                state.save()
+                return self._format_board_confirmation(data)
             data['step'] = 1
             state.collected_data = data
             state.save()
@@ -1354,12 +1419,31 @@ class ConversationFlowManager:
         if intent == 'cancel_action':
             return self._handle_cancellation(state)
 
+        # If regex found nothing but the message looks like a command (not a
+        # short single-word reply like "Sam", "skip", or "1"), ask the AI
+        # classifier whether it's a different action intent.
+        if intent is None and len(message.strip()) > 15:
+            from ai_assistant.utils.ai_clients import GeminiClient
+            try:
+                client = GeminiClient()
+            except Exception:
+                client = None
+            ai_cls = classify_intent_with_ai(message, gemini_client=client)
+            if ai_cls['intent'] not in ('conversation', 'confirm_action', 'cancel_action'):
+                intent = ai_cls['intent']
+
         # If the user repeats the same action intent that matches the
         # current flow, restart that flow instead of blocking them.
         _INTENT_TO_MODE = {
             'create_task': 'collecting_task',
             'create_board': 'collecting_board',
             'activate_automation': 'collecting_automation',
+            'send_message': 'collecting_message',
+            'log_time': 'collecting_time_entry',
+            'schedule_event': 'collecting_event',
+            'create_retrospective': 'collecting_retrospective',
+            'create_automation': 'collecting_automation',
+            'create_scheduled_automation': 'collecting_automation',
         }
         if intent and intent not in ('confirm_action', 'cancel_action'):
             expected_mode = _INTENT_TO_MODE.get(intent)
@@ -1372,6 +1456,9 @@ class ConversationFlowManager:
                     return self._start_board_flow(user, message, state)
                 if intent == 'activate_automation':
                     return self._start_automation_flow(user, board, message, state)
+                # FC-based intents
+                if intent in self._FC_INTENT_META:
+                    return self._start_fc_flow(user, board, message, state, intent)
             else:
                 # Different action intent — warn the user
                 flow_name = {
@@ -1393,6 +1480,11 @@ class ConversationFlowManager:
         if state.mode == 'collecting_board':
             return self._continue_board_flow(user, board, message, state)
         if state.mode == 'collecting_automation':
+            # Distinguish template-based vs FC-based automation flows.
+            # FC flow stores 'awaiting_board' or 'history'; template flow stores 'step'.
+            cd = state.collected_data or {}
+            if cd.get('awaiting_board') or cd.get('history') or cd.get('_fc_function'):
+                return self._continue_fc_flow(user, board, message, state)
             return self._continue_automation_flow(user, board, message, state)
 
         # FC-based modes
@@ -1507,6 +1599,31 @@ class ConversationFlowManager:
                     state.collected_data['board_name'] = data.get('board_name', '')
                 state.save()
                 return self._continue_fc_flow(user, board, message, state)
+
+        # Before falling back, check if the user is starting a completely
+        # different action (e.g. "Tell Sam the meeting was moved to 3 PM"
+        # while confirming a task-create).
+        if len(message.strip()) > 15:
+            from ai_assistant.utils.ai_clients import GeminiClient
+            try:
+                client = GeminiClient()
+            except Exception:
+                client = None
+            ai_cls = classify_intent_with_ai(message, gemini_client=client)
+            new_intent = ai_cls.get('intent')
+            if new_intent and new_intent not in (
+                'conversation', 'confirm_action', 'cancel_action'
+            ):
+                # Abandon the pending action and start the new flow
+                state.reset()
+                if new_intent == 'create_task':
+                    return self._start_task_flow(user, board, message, state)
+                if new_intent == 'create_board':
+                    return self._start_board_flow(user, message, state)
+                if new_intent == 'activate_automation':
+                    return self._start_automation_flow(user, board, message, state)
+                if new_intent in self._FC_INTENT_META:
+                    return self._start_fc_flow(user, board, message, state, new_intent)
 
         # Unrecognised response — gently prompt
         return (
@@ -1791,6 +1908,6 @@ class ConversationFlowManager:
             f"⚡ **Automation:** {tpl['name']}\n"
             f"🎯 **Trigger:** {tpl['trigger']}\n"
             f"🔔 **Action:** {tpl['action']}\n"
-            f"📁 **Board:** {board_name}\n\n"
+            f"📁 **Board:** {board_name or 'Current board'}\n\n"
             "Type **confirm** to activate this automation, or say **cancel**."
         )

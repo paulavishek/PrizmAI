@@ -22,6 +22,7 @@ class AIAssistantSession(models.Model):
     
     # Session metadata
     message_count = models.IntegerField(default=0, help_text="Total messages in this session")
+    question_count = models.IntegerField(default=0, help_text="Number of original user questions (excluding follow-ups in multi-step flows)")
     total_tokens_used = models.IntegerField(default=0, help_text="Total tokens used in this session")
     
     class Meta:

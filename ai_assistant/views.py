@@ -292,6 +292,9 @@ def send_message(request):
         )
 
         conv_state = get_or_create_state(request.user, board)
+        # Track if this is an original question (mode is 'normal') vs a
+        # follow-up in a multi-step flow (mode is 'collecting_*' etc.)
+        is_initial_question = conv_state.mode == 'normal'
         flow_mgr = ConversationFlowManager()
         flow_response = flow_mgr.handle_message(
             request.user, board, message_text, conv_state,
@@ -315,9 +318,9 @@ def send_message(request):
             session.message_count = AIAssistantMessage.objects.filter(
                 session=session
             ).count()
+            if is_initial_question:
+                session.question_count = (session.question_count or 0) + 1
             session.save()
-
-            # Track usage (no tokens consumed for flow messages)
             try:
                 response_time_ms = int((time.time() - start_time) * 1000)
                 track_ai_request(
@@ -379,6 +382,8 @@ def send_message(request):
         
         # Update session message count
         session.message_count = AIAssistantMessage.objects.filter(session=session).count()
+        if is_initial_question:
+            session.question_count = (session.question_count or 0) + 1
         session.total_tokens_used += response.get('tokens', 0)
         session.save()
         
@@ -592,6 +597,7 @@ def get_sessions(request):
                 'id': s.id,
                 'title': s.title,
                 'description': s.description,
+                'question_count': s.question_count or 0,
                 'message_count': s.message_count,
                 'is_active': s.is_active,
                 'updated_at': s.updated_at.isoformat(),
@@ -761,6 +767,7 @@ def export_session(request, session_id):
             content = f"# {session.title}\n\n"
             content += f"**Created:** {session.created_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
             content += f"**Last Updated:** {session.updated_at.strftime('%Y-%m-%d %H:%M:%S')}\n"
+            content += f"**Questions Asked:** {session.question_count or 0}\n"
             content += f"**Total Messages:** {session.message_count}\n"
             if session.board:
                 content += f"**Board Context:** {session.board.name}\n"
@@ -793,6 +800,7 @@ def export_session(request, session_id):
                     'description': session.description,
                     'created_at': session.created_at.isoformat(),
                     'updated_at': session.updated_at.isoformat(),
+                    'question_count': session.question_count or 0,
                     'message_count': session.message_count,
                     'total_tokens_used': session.total_tokens_used,
                     'board': session.board.name if session.board else None,

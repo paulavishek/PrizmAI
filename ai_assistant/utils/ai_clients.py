@@ -286,7 +286,9 @@ class GeminiClient:
             "- \"conversation\" — questions, chat, analysis, help, greetings, anything that is NOT an action request\n"
             "- \"create_task\" — wants to create or add a task\n"
             "- \"create_board\" — wants to create a new project board\n"
-            "- \"create_automation\" — wants to set up automation rules (trigger-based or scheduled)\n"
+            "- \"activate_automation\" — wants to pick from predefined automation templates (generic 'set up automation')\n"
+            "- \"create_automation\" — wants to create a custom automation with specific trigger/action (e.g. 'when a task is marked done, notify the creator')\n"
+            "- \"create_scheduled_automation\" — wants a time-based recurring automation (e.g. 'every day at 9 AM', 'daily', 'weekly')\n"
             "- \"send_message\" — wants to send a message or DM to a team member\n"
             "- \"log_time\" — wants to log time or hours worked on a task\n"
             "- \"schedule_event\" — wants to schedule a meeting, event, or calendar entry\n"
@@ -321,7 +323,8 @@ class GeminiClient:
             confidence = float(result.get('confidence', 0.5))
 
             valid_intents = {
-                'conversation', 'create_task', 'create_board', 'create_automation',
+                'conversation', 'create_task', 'create_board',
+                'activate_automation', 'create_automation', 'create_scheduled_automation',
                 'send_message', 'log_time', 'schedule_event', 'create_retrospective',
                 'confirm_action', 'cancel_action',
             }
