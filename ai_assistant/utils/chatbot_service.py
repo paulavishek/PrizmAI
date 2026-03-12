@@ -860,6 +860,8 @@ class TaskFlowChatbotService:
             'tasks for', 'workload for', 'deadline for', 'overdue for',
             'assigned to alex', 'assigned to sam', 'assigned to jordan',
             'assign to', 'should i assign', 'team skill', 'team skills',
+            'skill', 'skills', 'skill gap', 'skill gaps', 'proficiency',
+            'expertise', 'competency', 'competencies', 'capabilities',
             'workload', 'current workload', 'team workload'
         ]
         return any(kw in prompt_lower for kw in user_keywords)
@@ -1156,12 +1158,22 @@ class TaskFlowChatbotService:
         return any(kw in prompt.lower() for kw in progress_keywords)
     
     def _is_overdue_query(self, prompt):
-        """Detect if query is asking for overdue tasks"""
+        """Detect if query is asking for overdue tasks or tasks due within a timeframe"""
         overdue_keywords = [
             'overdue', 'late', 'past due', 'missed deadline',
-            'due soon', 'upcoming deadline', 'deadline', 'due date'
+            'due soon', 'upcoming deadline', 'deadline', 'due date',
+            'due this week', 'due next week', 'due this month',
+            'due today', 'due tomorrow', 'tasks due', 'what is due',
+            "what's due", 'anything due', 'something due',
         ]
-        return any(kw in prompt.lower() for kw in overdue_keywords)
+        prompt_lower = prompt.lower()
+        if any(kw in prompt_lower for kw in overdue_keywords):
+            return True
+        # Also match patterns like "due by", "due before", "due in"
+        import re
+        if re.search(r'\bdue\b', prompt_lower):
+            return True
+        return False
     
     def _get_user_tasks_context(self, prompt):
         """
@@ -1621,10 +1633,13 @@ class TaskFlowChatbotService:
             if overdue.exists():
                 context += f"⚠️ **OVERDUE TASKS ({overdue.count()}):**\n"
                 for task in overdue[:10]:
-                    days_overdue = (today - task.due_date).days
+                    task_due = task.due_date
+                    if hasattr(task_due, 'date'):
+                        task_due = task_due.date()
+                    days_overdue = (today - task_due).days
                     assignee = task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else 'Unassigned'
                     context += f"  • **{task.title}**\n"
-                    context += f"    - Due: {task.due_date} ({days_overdue} day{'s' if days_overdue != 1 else ''} overdue)\n"
+                    context += f"    - Due: {task_due} ({days_overdue} day{'s' if days_overdue != 1 else ''} overdue)\n"
                     context += f"    - Assigned: {assignee}\n"
                     context += f"    - Board: {task.column.board.name if task.column else 'Unknown'}\n"
                     context += f"    - Status: {task.column.name if task.column else 'Unknown'}\n"
@@ -1642,10 +1657,13 @@ class TaskFlowChatbotService:
             if due_soon.exists():
                 context += f"📆 **DUE WITHIN 7 DAYS ({due_soon.count()}):**\n"
                 for task in due_soon[:10]:
-                    days_until = (task.due_date - today).days
+                    task_due = task.due_date
+                    if hasattr(task_due, 'date'):
+                        task_due = task_due.date()
+                    days_until = (task_due - today).days
                     assignee = task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else 'Unassigned'
                     context += f"  • {task.title}\n"
-                    context += f"    - Due: {task.due_date} (in {days_until} day{'s' if days_until != 1 else ''})\n"
+                    context += f"    - Due: {task_due} (in {days_until} day{'s' if days_until != 1 else ''})\n"
                     context += f"    - Assigned: {assignee}, Priority: {task.get_priority_display()}\n"
                 context += "\n"
             
@@ -3393,10 +3411,32 @@ class TaskFlowChatbotService:
         automations, etc.) so Spectra can answer questions about any feature.
         """
         try:
-            if not self.board:
+            boards_to_check = []
+            if self.board:
+                boards_to_check = [self.board]
+            else:
+                user_boards = self._get_user_boards()
+                if user_boards.exists():
+                    boards_to_check = list(user_boards[:5])
+            
+            if not boards_to_check:
                 return None
 
-            board = self.board
+            all_context = ""
+            for board in boards_to_check:
+                single_ctx = self._get_single_board_features_context(board)
+                if single_ctx:
+                    all_context += single_ctx + "\n"
+            
+            return all_context if all_context.strip() else None
+
+        except Exception as e:
+            logger.error(f"Error getting board features context: {e}", exc_info=True)
+            return None
+
+    def _get_single_board_features_context(self, board):
+        """Get feature context for a single board."""
+        try:
             context = f"**🔧 Board Features & AI Tools Data for '{board.name}':**\n\n"
             found_data = False
 
