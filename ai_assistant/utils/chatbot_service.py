@@ -205,26 +205,25 @@ class TaskFlowChatbotService:
     
     def get_taskflow_context(self, use_cache=True):
         """
-        Get context from PrizmAI project data
-        
-        Args:
-            use_cache (bool): Whether to use cached context
-            
-        Returns:
-            str: Formatted project context
+        Get LIVE context from PrizmAI project data.
+        Always queries the database directly (no caching) so Spectra sees
+        the current state after any task/board edits.
         """
         try:
             context = "**PrizmAI Project Context:**\n\n"
             
             if self.board:
+                # Skip archived boards
+                if self.board.is_archived:
+                    context += f"⚠️ Board '{self.board.name}' is archived.\n"
+                    return context
+
                 context += f"Board: {self.board.name}\n"
                 if self.board.description:
                     context += f"Description: {self.board.description}\n"
 
                 # ---------------------------------------------------------------
                 # Strategic hierarchy context (Goal → Mission → Strategy → Board)
-                # Walk the chain and prepend a strategic framing block so Gemini can
-                # evaluate task progress against the top-level Organization Goal.
                 # ---------------------------------------------------------------
                 try:
                     strategy = getattr(self.board, 'strategy', None)
@@ -268,7 +267,7 @@ class TaskFlowChatbotService:
                     logger.warning(f"Could not build strategic hierarchy context: {hierarchy_err}")
                 # ---------------------------------------------------------------
                 
-                # Get tasks with comprehensive information
+                # Get LIVE tasks — always fresh from DB
                 tasks = Task.objects.filter(column__board=self.board).select_related(
                     'assigned_to', 'created_by', 'column', 'parent_task'
                 ).prefetch_related('labels', 'subtasks', 'dependencies')
@@ -276,15 +275,15 @@ class TaskFlowChatbotService:
                 if tasks.exists():
                     context += f"\n**Tasks Summary ({tasks.count()} total):**\n"
                     
-                    # Group by status
+                    # Group by status (column name)
                     from django.db.models import Count
-                    status_counts = tasks.values('column__name').annotate(count=Count('id'))
+                    status_counts = tasks.values('column__name').annotate(count=Count('id')).order_by('column__position')
                     for status in status_counts:
                         context += f"  - {status['column__name']}: {status['count']}\n"
                     
-                    # Show sample tasks with key details
-                    context += f"\n**Key Tasks (sample):**\n"
-                    for task in tasks[:15]:  # Show top 15
+                    # Show ALL tasks for accurate answering (up to 50)
+                    context += f"\n**All Tasks:**\n"
+                    for task in tasks[:50]:
                         status = task.column.name if task.column else 'Unknown'
                         priority = task.get_priority_display() if hasattr(task, 'get_priority_display') else task.priority
                         assignee = task.assigned_to.get_full_name() or task.assigned_to.username if task.assigned_to else 'Unassigned'
@@ -292,18 +291,29 @@ class TaskFlowChatbotService:
                         context += f"- [{status}] {task.title}\n"
                         context += f"  • Priority: {priority}, Assigned: {assignee}, Progress: {task.progress}%\n"
                         
-                        # Add risk info if available
+                        if task.due_date:
+                            from django.utils import timezone
+                            due = task.due_date.date() if hasattr(task.due_date, 'date') else task.due_date
+                            today = timezone.now().date()
+                            if due < today:
+                                days_overdue = (today - due).days
+                                context += f"  • Due: {due} ⚠️ OVERDUE by {days_overdue} days\n"
+                            else:
+                                context += f"  • Due: {due}\n"
+                        
                         if task.risk_level or task.ai_risk_score:
                             risk_info = f"Risk: {task.risk_level or 'Unknown'}"
                             if task.ai_risk_score:
                                 risk_info += f" (Score: {task.ai_risk_score}/100)"
                             context += f"  • {risk_info}\n"
                         
-                        # Add dependency info
                         if task.parent_task:
                             context += f"  • Depends on: {task.parent_task.title}\n"
                         if task.subtasks.exists():
                             context += f"  • Has {task.subtasks.count()} subtask(s)\n"
+                    
+                    if tasks.count() > 50:
+                        context += f"  ... and {tasks.count() - 50} more tasks\n"
                 
                 # Get team members with skills
                 members = self.board.members.select_related('profile').all()
@@ -319,12 +329,25 @@ class TaskFlowChatbotService:
                         except Exception:
                             pass
                         context += f"  - {member_info}\n"
+
+                # ── Board columns (so Spectra knows the workflow) ─────────
+                columns = self.board.columns.order_by('position')
+                if columns.exists():
+                    context += f"\n**Workflow Columns:** {' → '.join(c.name for c in columns)}\n"
+
+                # ── Board-level metadata ──────────────────────────────────
+                if self.board.project_deadline:
+                    context += f"**Project Deadline:** {self.board.project_deadline}\n"
+                if self.board.baseline_task_count is not None:
+                    context += f"**Scope Baseline:** {self.board.baseline_task_count} tasks (set {self.board.baseline_set_date.strftime('%Y-%m-%d') if self.board.baseline_set_date else 'N/A'})\n"
             
             elif self.user:
-                # Get all user's boards and projects with aggregated stats
+                # Get all user's active (non-archived) boards
                 boards = Board.objects.filter(
-                    Q(created_by=self.user) | Q(members=self.user)
-                ).distinct()[:5]
+                    Q(is_archived=False) & (
+                        Q(created_by=self.user) | Q(members=self.user)
+                    )
+                ).distinct()[:10]
                 
                 if boards:
                     context += f"**User's Projects ({boards.count()} boards):**\n"
@@ -1664,25 +1687,30 @@ class TaskFlowChatbotService:
         return any(kw in prompt_lower for kw in strategic_keywords)
     
     def _get_user_boards(self, organization=None):
-        """Helper to get user's boards with optional organization filter"""
+        """Helper to get user's boards with optional organization filter.
+        Excludes archived boards so Spectra only reports on active projects."""
         try:
             if not organization:
                 organization = self.user.profile.organization
         except Exception:
             organization = None
         
+        base_filter = Q(is_archived=False)
+        
         if organization:
             return Board.objects.filter(
+                base_filter &
                 Q(organization=organization) & 
                 (Q(created_by=self.user) | Q(members=self.user))
             ).distinct()
         else:
             # Include demo boards for users without organization
-            # Use Q objects to combine queries properly instead of queryset union
             return Board.objects.filter(
-                Q(is_official_demo_board=True) |
-                Q(created_by=self.user) | 
-                Q(members=self.user)
+                base_filter & (
+                    Q(is_official_demo_board=True) |
+                    Q(created_by=self.user) | 
+                    Q(members=self.user)
+                )
             ).distinct()
     
     def _get_organization_context(self, prompt):
@@ -3235,6 +3263,478 @@ class TaskFlowChatbotService:
         except Exception as e:
             logger.error(f"Error getting deadline projection context: {e}", exc_info=True)
             return None
+
+    # ==================================================================
+    # STRATEGIC WORKFLOW CONTEXT
+    # Full OrganizationGoal → Mission → Strategy → Board hierarchy
+    # ==================================================================
+    def _is_strategic_workflow_query(self, prompt):
+        """Detect queries about the strategic hierarchy / workflow."""
+        keywords = [
+            'goal', 'mission', 'strategy', 'strategies', 'hierarchy',
+            'organization goal', 'org goal', 'workflow', 'strategic',
+            'objective', 'vision', 'target metric', 'missions',
+            'linked boards', 'goal progress', 'mission progress',
+        ]
+        prompt_lower = prompt.lower()
+        return any(kw in prompt_lower for kw in keywords)
+
+    def _get_strategic_workflow_context(self, prompt):
+        """
+        Get the full Organization Goal → Mission → Strategy → Board hierarchy
+        so Spectra can answer questions about the strategic planning workflow.
+        """
+        try:
+            from kanban.models import OrganizationGoal, Mission, Strategy
+            from django.db.models import Count
+
+            user_boards = self._get_user_boards()
+            if not user_boards.exists():
+                return None
+
+            context = "**🏗️ Strategic Workflow (Goal → Mission → Strategy → Board):**\n\n"
+
+            # Collect all goals reachable from user's boards
+            strategy_ids = set(user_boards.exclude(strategy__isnull=True).values_list('strategy_id', flat=True))
+            mission_ids = set(Strategy.objects.filter(id__in=strategy_ids).values_list('mission_id', flat=True))
+            goal_ids = set(Mission.objects.filter(id__in=mission_ids).exclude(organization_goal__isnull=True).values_list('organization_goal_id', flat=True))
+
+            # Also fetch goals created by this user or in their org
+            try:
+                org = self.user.profile.organization
+            except Exception:
+                org = None
+            if org:
+                org_goals = OrganizationGoal.objects.filter(organization=org)
+            else:
+                org_goals = OrganizationGoal.objects.filter(
+                    Q(id__in=goal_ids) | Q(created_by=self.user)
+                )
+
+            if not org_goals.exists():
+                context += "No Organization Goals defined yet.\n"
+                context += "Users can create goals from the Goals page, and AI can generate missions, strategies and boards from those goals.\n"
+                return context
+
+            for goal in org_goals[:5]:
+                context += f"🏆 **{goal.name}** (Status: {goal.get_status_display()})\n"
+                if goal.target_metric:
+                    context += f"   Target Metric: {goal.target_metric}\n"
+                if goal.target_date:
+                    context += f"   Target Date: {goal.target_date}\n"
+                if goal.description:
+                    context += f"   Context: {goal.description[:200]}\n"
+                if goal.ai_summary:
+                    context += f"   AI Summary: {goal.ai_summary[:200]}\n"
+
+                missions = goal.missions.all()
+                if missions.exists():
+                    for m in missions[:5]:
+                        context += f"\n   🎯 Mission: {m.name} (Status: {m.get_status_display()})\n"
+                        if m.description:
+                            context += f"      Problem: {m.description[:150]}\n"
+                        if m.ai_summary:
+                            context += f"      AI Summary: {m.ai_summary[:200]}\n"
+
+                        strategies = m.strategies.all()
+                        for s in strategies[:5]:
+                            context += f"\n      💡 Strategy: {s.name} (Status: {s.get_status_display()})\n"
+                            if s.description:
+                                context += f"         Approach: {s.description[:150]}\n"
+
+                            boards = s.boards.filter(is_archived=False)
+                            for b in boards[:5]:
+                                task_count = Task.objects.filter(column__board=b).count()
+                                context += f"         📋 Board: {b.name} ({task_count} tasks, {b.members.count()} members)\n"
+                else:
+                    context += "   No missions linked yet.\n"
+
+                context += "\n"
+
+            # Also show standalone missions/strategies not linked to a goal
+            standalone_missions = Mission.objects.filter(
+                organization_goal__isnull=True,
+                id__in=mission_ids
+            )
+            if standalone_missions.exists():
+                context += f"**Standalone Missions (no goal linked):** {standalone_missions.count()}\n"
+                for m in standalone_missions[:3]:
+                    context += f"  • {m.name} ({m.get_status_display()})\n"
+                context += "\n"
+
+            return context
+
+        except Exception as e:
+            logger.error(f"Error getting strategic workflow context: {e}", exc_info=True)
+            return None
+
+    # ==================================================================
+    # BOARD FEATURES CONTEXT
+    # Gives Spectra awareness of all AI/non-AI features on a board
+    # ==================================================================
+    def _is_board_features_query(self, prompt):
+        """Detect queries about board features, AI tools, or capabilities."""
+        keywords = [
+            'feature', 'ai tool', 'tools', 'capability', 'what can',
+            'budget', 'burndown', 'forecast', 'pre-mortem', 'premortem',
+            'what-if', 'whatif', 'scenario', 'scope creep', 'scope autopsy',
+            'conflict', 'coaching', 'coach', 'retrospective', 'retro',
+            'automation', 'scheduled', 'gantt', 'calendar', 'triple constraint',
+            'resource leveling', 'skill gap', 'stakeholder', 'briefing',
+            'action plan', 'daily briefing', 'decision center',
+            'knowledge graph', 'memory', 'organizational memory',
+        ]
+        prompt_lower = prompt.lower()
+        return any(kw in prompt_lower for kw in keywords)
+
+    def _get_board_features_context(self, prompt):
+        """
+        Provide live data from all board-level features (AI Tools, analytics,
+        automations, etc.) so Spectra can answer questions about any feature.
+        """
+        try:
+            if not self.board:
+                return None
+
+            board = self.board
+            context = f"**🔧 Board Features & AI Tools Data for '{board.name}':**\n\n"
+            found_data = False
+
+            # ── 1. Budget & Cost Tracking ─────────────────────────────
+            try:
+                from kanban.budget_models import ProjectBudget, TaskCost, TimeEntry, ProjectROI, BudgetRecommendation
+                budget = ProjectBudget.objects.filter(board=board).first()
+                if budget:
+                    found_data = True
+                    total_cost = TaskCost.objects.filter(task__column__board=board)
+                    spent = sum(tc.actual_cost or 0 for tc in total_cost)
+                    estimated = sum(tc.estimated_cost or 0 for tc in total_cost)
+                    context += f"**💰 Budget Tracking:**\n"
+                    context += f"  • Allocated: {budget.currency} {budget.allocated_budget}\n"
+                    context += f"  • Estimated Cost: {budget.currency} {estimated}\n"
+                    context += f"  • Actual Spent: {budget.currency} {spent}\n"
+                    context += f"  • Warning Threshold: {budget.warning_threshold}%\n"
+                    if budget.allocated_budget and budget.allocated_budget > 0:
+                        usage_pct = (spent / float(budget.allocated_budget)) * 100
+                        context += f"  • Budget Usage: {usage_pct:.1f}%\n"
+                        if usage_pct >= budget.critical_threshold:
+                            context += f"  ⚠️ CRITICAL: Budget exceeds {budget.critical_threshold}% threshold!\n"
+                    # ROI
+                    roi = ProjectROI.objects.filter(board=board).order_by('-created_at').first()
+                    if roi:
+                        context += f"  • ROI: {roi.roi_percentage:.1f}% (Expected Value: {roi.expected_value})\n"
+                    # Recent recommendations
+                    recs = BudgetRecommendation.objects.filter(board=board, status='pending')[:3]
+                    if recs.exists():
+                        context += f"  • Pending Recommendations: {recs.count()}\n"
+                        for r in recs:
+                            context += f"    - {r.title} (Savings: {r.estimated_savings}, Confidence: {r.confidence_score}%)\n"
+                    context += "\n"
+            except Exception as e:
+                logger.debug(f"Budget context: {e}")
+
+            # ── 2. Burndown / Velocity ────────────────────────────────
+            try:
+                from kanban.burndown_models import TeamVelocitySnapshot, BurndownPrediction
+                snapshots = TeamVelocitySnapshot.objects.filter(board=board).order_by('-period_end')[:3]
+                if snapshots.exists():
+                    found_data = True
+                    context += f"**📉 Burndown & Velocity:**\n"
+                    latest = snapshots[0]
+                    context += f"  • Latest Velocity: {latest.tasks_completed} tasks/{latest.get_period_type_display()}\n"
+                    context += f"  • Active Team: {latest.active_team_members} members\n"
+                    context += f"  • Quality Score: {latest.quality_score}%\n"
+                    # Latest prediction
+                    pred = BurndownPrediction.objects.filter(board=board).order_by('-created_at').first()
+                    if pred:
+                        context += f"  • Predicted Completion: {pred.predicted_completion_date}\n"
+                        context += f"  • Confidence: {pred.confidence_level}\n"
+                    context += "\n"
+            except Exception as e:
+                logger.debug(f"Burndown context: {e}")
+
+            # ── 3. Scope Creep / Autopsy ──────────────────────────────
+            try:
+                from kanban.scope_autopsy_models import ScopeAutopsyReport
+                autopsy = ScopeAutopsyReport.objects.filter(board=board, status='complete').order_by('-created_at').first()
+                if autopsy:
+                    found_data = True
+                    context += f"**📊 Scope Creep Analysis:**\n"
+                    context += f"  • Baseline Tasks: {autopsy.baseline_task_count}\n"
+                    context += f"  • Final Tasks: {autopsy.final_task_count}\n"
+                    context += f"  • Scope Growth: {autopsy.total_scope_growth_percentage:.1f}%\n"
+                    if autopsy.total_delay_days:
+                        context += f"  • Estimated Delay: {autopsy.total_delay_days} days\n"
+                    if autopsy.total_budget_impact:
+                        context += f"  • Budget Impact: ${autopsy.total_budget_impact}\n"
+                    if autopsy.recommendations:
+                        context += f"  • Recommendations: {len(autopsy.recommendations)}\n"
+                        for rec in (autopsy.recommendations if isinstance(autopsy.recommendations, list) else [])[:3]:
+                            if isinstance(rec, dict):
+                                context += f"    - {rec.get('title', rec.get('recommendation', str(rec)))}\n"
+                            else:
+                                context += f"    - {rec}\n"
+                    context += "\n"
+                elif board.baseline_task_count:
+                    found_data = True
+                    current_count = Task.objects.filter(column__board=board).count()
+                    growth = ((current_count - board.baseline_task_count) / max(board.baseline_task_count, 1)) * 100
+                    context += f"**📊 Scope Tracking:**\n"
+                    context += f"  • Baseline: {board.baseline_task_count} tasks\n"
+                    context += f"  • Current: {current_count} tasks\n"
+                    context += f"  • Scope Change: {growth:+.1f}%\n\n"
+            except Exception as e:
+                logger.debug(f"Scope context: {e}")
+
+            # ── 4. Pre-Mortem Analysis ────────────────────────────────
+            try:
+                from kanban.premortem_models import PreMortemAnalysis
+                premortem = PreMortemAnalysis.objects.filter(board=board).order_by('-created_at').first()
+                if premortem:
+                    found_data = True
+                    context += f"**🔮 Pre-Mortem Analysis:**\n"
+                    context += f"  • Overall Risk: {premortem.overall_risk_level.upper()}\n"
+                    context += f"  • Generated: {premortem.created_at.strftime('%Y-%m-%d')}\n"
+                    scenarios = premortem.analysis_json if isinstance(premortem.analysis_json, list) else premortem.analysis_json.get('scenarios', [])
+                    if scenarios:
+                        context += f"  • Failure Scenarios ({len(scenarios)}):\n"
+                        for i, s in enumerate(scenarios[:5]):
+                            if isinstance(s, dict):
+                                context += f"    {i+1}. {s.get('title', s.get('scenario', str(s)[:80]))}\n"
+                                if s.get('risk_level'):
+                                    context += f"       Risk: {s['risk_level']}\n"
+                    ack_count = premortem.acknowledgments.count()
+                    if ack_count:
+                        context += f"  • {ack_count} scenarios acknowledged by team\n"
+                    context += "\n"
+            except Exception as e:
+                logger.debug(f"PreMortem context: {e}")
+
+            # ── 5. What-If Scenarios ──────────────────────────────────
+            try:
+                from kanban.whatif_models import WhatIfScenario
+                scenarios = WhatIfScenario.objects.filter(board=board).order_by('-created_at')[:5]
+                if scenarios.exists():
+                    found_data = True
+                    context += f"**🔄 What-If Scenarios ({scenarios.count()} saved):**\n"
+                    for s in scenarios:
+                        context += f"  • {s.name} ({s.get_scenario_type_display()}) {'⭐' if s.is_starred else ''}\n"
+                        if s.impact_results and isinstance(s.impact_results, dict):
+                            impact = s.impact_results
+                            if impact.get('summary'):
+                                context += f"    Impact: {str(impact['summary'])[:100]}\n"
+                    context += "\n"
+            except Exception as e:
+                logger.debug(f"WhatIf context: {e}")
+
+            # ── 6. Conflict Detection ─────────────────────────────────
+            try:
+                from kanban.conflict_models import ConflictDetection
+                active_conflicts = ConflictDetection.objects.filter(
+                    board=board
+                ).exclude(status='resolved').order_by('-created_at')[:5]
+                if active_conflicts.exists():
+                    found_data = True
+                    context += f"**⚡ Active Conflicts ({active_conflicts.count()}):**\n"
+                    for c in active_conflicts:
+                        context += f"  • {c.get_conflict_type_display()} — Severity: {c.get_severity_display()} ({c.get_status_display()})\n"
+                    context += "\n"
+            except Exception as e:
+                logger.debug(f"Conflict context: {e}")
+
+            # ── 7. Coaching Suggestions ───────────────────────────────
+            try:
+                from kanban.coach_models import CoachingSuggestion
+                suggestions = CoachingSuggestion.objects.filter(
+                    board=board, status='active'
+                ).order_by('-created_at')[:5]
+                if suggestions.exists():
+                    found_data = True
+                    context += f"**🎓 Active Coaching Suggestions ({suggestions.count()}):**\n"
+                    for s in suggestions:
+                        context += f"  • [{s.get_severity_display()}] {s.title}\n"
+                        context += f"    {s.message[:100]}...\n" if len(s.message) > 100 else f"    {s.message}\n"
+                    context += "\n"
+            except Exception as e:
+                logger.debug(f"Coaching context: {e}")
+
+            # ── 8. Retrospectives ─────────────────────────────────────
+            try:
+                from kanban.retrospective_models import ProjectRetrospective, LessonLearned
+                retros = ProjectRetrospective.objects.filter(board=board).order_by('-created_at')[:3]
+                if retros.exists():
+                    found_data = True
+                    context += f"**📝 Retrospectives ({retros.count()}):**\n"
+                    for r in retros:
+                        context += f"  • {r.title} ({r.get_retrospective_type_display()}, {r.get_status_display()})\n"
+                        if r.period_start and r.period_end:
+                            context += f"    Period: {r.period_start} to {r.period_end}\n"
+                        # Count lessons
+                        lessons = LessonLearned.objects.filter(retrospective=r).count()
+                        if lessons:
+                            context += f"    Lessons Learned: {lessons}\n"
+                    context += "\n"
+            except Exception as e:
+                logger.debug(f"Retrospective context: {e}")
+
+            # ── 9. Automations ────────────────────────────────────────
+            try:
+                from kanban.automation_models import BoardAutomation, ScheduledAutomation
+                trigger_autos = BoardAutomation.objects.filter(board=board, is_active=True)
+                scheduled_autos = ScheduledAutomation.objects.filter(board=board, is_active=True)
+                if trigger_autos.exists() or scheduled_autos.exists():
+                    found_data = True
+                    context += f"**⚙️ Active Automations:**\n"
+                    if trigger_autos.exists():
+                        context += f"  Trigger-Based: {trigger_autos.count()}\n"
+                        for a in trigger_autos[:5]:
+                            context += f"    • When '{a.get_trigger_type_display()}' → '{a.get_action_type_display()}' (ran {a.run_count}x)\n"
+                    if scheduled_autos.exists():
+                        context += f"  Scheduled: {scheduled_autos.count()}\n"
+                        for a in scheduled_autos[:5]:
+                            context += f"    • {a.get_schedule_type_display()}: '{a.get_action_type_display()}' on {a.get_task_filter_display()} tasks\n"
+                    context += "\n"
+            except Exception as e:
+                logger.debug(f"Automation context: {e}")
+
+            # ── 10. Stakeholders ──────────────────────────────────────
+            try:
+                from kanban.stakeholder_models import ProjectStakeholder
+                stakeholders = ProjectStakeholder.objects.filter(board=board)[:10]
+                if stakeholders.exists():
+                    found_data = True
+                    context += f"**👥 Stakeholders ({stakeholders.count()}):**\n"
+                    for s in stakeholders[:5]:
+                        context += f"  • {s.name} ({s.role}) — Influence: {s.get_influence_level_display()}, Interest: {s.get_interest_level_display()}\n"
+                    context += "\n"
+            except Exception as e:
+                logger.debug(f"Stakeholder context: {e}")
+
+            # ── 11. Resource Leveling ─────────────────────────────────
+            try:
+                from kanban.resource_leveling_models import ResourceLevelingSuggestion
+                suggestions = ResourceLevelingSuggestion.objects.filter(
+                    task__column__board=board, status='pending'
+                )[:5]
+                if suggestions.exists():
+                    found_data = True
+                    context += f"**📊 Resource Leveling Suggestions ({suggestions.count()} pending):**\n"
+                    for s in suggestions:
+                        context += f"  • '{s.task.title}': Move from {s.current_assignee or 'Unassigned'} → {s.suggested_assignee} "
+                        context += f"(Confidence: {s.confidence_score}%, Time Saved: {s.time_savings_hours}h)\n"
+                    context += "\n"
+            except Exception as e:
+                logger.debug(f"Resource leveling context: {e}")
+
+            # ── 12. Decision Center items for this board ──────────────
+            try:
+                from decision_center.models import DecisionItem
+                pending_items = DecisionItem.objects.filter(
+                    board=board, status='pending'
+                ).order_by('-created_at')[:5]
+                if pending_items.exists():
+                    found_data = True
+                    context += f"**🎯 Decision Center (Pending Items: {pending_items.count()}):**\n"
+                    for item in pending_items:
+                        context += f"  • [{item.get_priority_level_display()}] {item.title} ({item.get_item_type_display()})\n"
+                    context += "\n"
+            except Exception as e:
+                logger.debug(f"Decision center context: {e}")
+
+            # ── 13. Knowledge Graph / Org Memory ──────────────────────
+            try:
+                from knowledge_graph.models import MemoryNode
+                nodes = MemoryNode.objects.filter(board=board).order_by('-created_at')[:5]
+                if nodes.exists():
+                    found_data = True
+                    total_nodes = MemoryNode.objects.filter(board=board).count()
+                    context += f"**🧠 Knowledge Graph ({total_nodes} memories):**\n"
+                    for n in nodes:
+                        context += f"  • [{n.get_memory_type_display()}] {n.title}\n"
+                    context += "\n"
+            except Exception as e:
+                logger.debug(f"Knowledge graph context: {e}")
+
+            # ── 14. Gantt / Triple Constraint ─────────────────────────
+            try:
+                if board.project_deadline:
+                    found_data = True
+                    from django.utils import timezone
+                    days_left = (board.project_deadline - timezone.now().date()).days
+                    context += f"**📅 Triple Constraint:**\n"
+                    context += f"  • Project Deadline: {board.project_deadline}\n"
+                    context += f"  • Days Remaining: {days_left}\n"
+                    if board.num_phases:
+                        context += f"  • Gantt Phases: {board.num_phases}\n"
+                    context += "\n"
+            except Exception as e:
+                logger.debug(f"Gantt context: {e}")
+
+            if not found_data:
+                context += "No feature-specific data configured for this board yet.\n"
+                context += "Available features: Budget Tracking, Burndown Charts, Scope Creep Analysis, "
+                context += "Pre-Mortem Analysis, What-If Scenarios, Conflict Detection, AI Coaching, "
+                context += "Retrospectives, Automations, Stakeholder Management, Resource Leveling, "
+                context += "Decision Center, Knowledge Graph, Gantt Charts, Triple Constraint.\n"
+
+            return context
+
+        except Exception as e:
+            logger.error(f"Error getting board features context: {e}", exc_info=True)
+            return None
+
+    # ==================================================================
+    # ALWAYS-ON LIVE PROJECT SNAPSHOT
+    # Injected into every query so Spectra always has current state
+    # ==================================================================
+    def _get_live_project_snapshot_context(self):
+        """
+        Compact always-on snapshot of the current board state.
+        Gives Spectra accurate live task counts and status distribution
+        so it never uses stale data. Kept compact to minimize tokens.
+        """
+        try:
+            if not self.board:
+                return None
+            if self.board.is_archived:
+                return None
+
+            from django.db.models import Count
+            from django.utils import timezone
+
+            tasks = Task.objects.filter(column__board=self.board)
+            total = tasks.count()
+            if total == 0:
+                return f"**📌 Live Board Snapshot ({self.board.name}):** 0 tasks.\n"
+
+            status_counts = (
+                tasks.values('column__name', 'column__position')
+                .annotate(count=Count('id'))
+                .order_by('column__position')
+            )
+
+            today = timezone.now().date()
+            overdue = tasks.filter(due_date__lt=today).exclude(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+            ).count()
+            unassigned = tasks.filter(assigned_to__isnull=True).exclude(
+                Q(column__name__icontains='done') | Q(column__name__icontains='closed')
+            ).count()
+
+            ctx = f"**📌 Live Board Snapshot ({self.board.name}) — {total} tasks:**\n"
+            for s in status_counts:
+                ctx += f"  {s['column__name']}: {s['count']}"
+                ctx += "\n"
+            if overdue:
+                ctx += f"  ⚠️ Overdue: {overdue}\n"
+            if unassigned:
+                ctx += f"  📋 Unassigned: {unassigned}\n"
+            ctx += "\n"
+            return ctx
+
+        except Exception as e:
+            logger.debug(f"Live snapshot error: {e}")
+            return None
     
     def generate_system_prompt(self):
         """Generate system prompt for AI model with dynamic context"""
@@ -3265,6 +3765,11 @@ Your role is to help project managers and team members with:
 - Best practices and recommendations
 - Wiki/Documentation search and knowledge retrieval
 - Meeting notes analysis and action item tracking
+- **Strategic Workflow**: Org Goals → Missions → Strategies → Boards hierarchy
+- **AI Tools on Boards**: Budget tracking, Burndown/Velocity charts, Scope Creep Analysis, Pre-Mortem risk scenarios, What-If simulations, Conflict detection, AI Coaching, Retrospectives, Automations (trigger & scheduled), Stakeholder management, Resource Leveling, Gantt charts & Triple Constraint
+- **Decision Center**: Pending decisions, risk assessments, briefings
+- **Knowledge Graph**: Organizational memory, lessons learned, patterns
+- **Analytics**: Team performance, engagement metrics, feedback
 
 CRITICAL INSTRUCTIONS FOR DATA-DRIVEN RESPONSES:
 1. **ALWAYS USE PROVIDED CONTEXT DATA**: When project data is provided in the "Available Context Data" section, you MUST use it to answer questions directly and specifically
@@ -3370,6 +3875,8 @@ Format responses clearly with:
             is_wiki_query = self._is_wiki_query(prompt)
             is_meeting_query = self._is_meeting_query(prompt)
             is_deadline_projection_query = self._is_deadline_projection_query(prompt)
+            is_strategic_workflow_query = self._is_strategic_workflow_query(prompt)
+            is_board_features_query = self._is_board_features_query(prompt)
             
             # Build context in priority order
             context_parts = []
@@ -3392,6 +3899,13 @@ Format responses clearly with:
             if doc_summary:
                 context_parts.append(doc_summary)
                 logger.debug('Added documentation summary context')
+            
+            # 0d. Always-on live board snapshot — accurate task counts & status
+            #     distribution so Spectra never uses stale data.
+            live_snapshot = self._get_live_project_snapshot_context()
+            if live_snapshot:
+                context_parts.append(live_snapshot)
+                logger.debug('Added live board snapshot context')
             
             # 1. Wiki context (documentation, guides, best practices)
             #    Also triggered for meeting queries so wiki-stored meeting pages
@@ -3529,6 +4043,20 @@ Format responses clearly with:
                 if deadline_context:
                     context_parts.append(deadline_context)
                     logger.debug("Added deadline projection context")
+            
+            # 15c. Strategic workflow context (org goals → missions → strategies → boards)
+            if is_strategic_workflow_query:
+                strategic_wf_context = self._get_strategic_workflow_context(prompt)
+                if strategic_wf_context:
+                    context_parts.append(strategic_wf_context)
+                    logger.debug("Added strategic workflow context")
+            
+            # 15d. Board features context (AI Tools, budget, burndown, etc.)
+            if is_board_features_query:
+                board_features_ctx = self._get_board_features_context(prompt)
+                if board_features_ctx:
+                    context_parts.append(board_features_ctx)
+                    logger.debug("Added board features context")
             
             # 16. General project context (if not already covered by specialized contexts)
             if is_project_query and not context_parts:
