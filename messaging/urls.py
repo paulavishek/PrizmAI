@@ -54,4 +54,5 @@ urlpatterns = [
     path('room/<int:room_id>/ai/extract-tasks/', ai_views.extract_tasks_from_thread, name='ai_extract_tasks_thread'),
     path('message/<int:message_id>/ai/extract-tasks/', ai_views.extract_tasks_from_message, name='ai_extract_tasks_message'),
     path('room/<int:room_id>/ai/confirm-tasks/', ai_views.confirm_create_tasks, name='ai_confirm_tasks'),
+    path('room/<int:room_id>/ai/compose/', ai_views.compose_message, name='ai_compose_message'),
 ]
