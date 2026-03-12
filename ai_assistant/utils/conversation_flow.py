@@ -201,7 +201,7 @@ def _extract_task_fields(message):
 
     m = _TITLE_RE.search(message)
     if m:
-        result['title'] = (m.group(1) or m.group(2) or '').strip()
+        result['title'] = (m.group(1) or m.group(2) or '').strip().strip("'\"\u2018\u2019\u201c\u201d")
 
     m = _PRIORITY_RE.search(message)
     if m:
@@ -233,7 +233,7 @@ def _extract_board_name(message):
     """Extract board name from a 'create board called X' message. Returns str or None."""
     m = _BOARD_NAME_RE.search(message)
     if m:
-        name = (m.group(1) or m.group(2) or '').strip().rstrip("'\"")
+        name = (m.group(1) or m.group(2) or '').strip().strip("'\"‘’“”")
         return name if name else None
     return None
 
@@ -427,6 +427,15 @@ class ConversationFlowManager:
         step = data.get('step', 0)
         msg = message.strip()
 
+        # Resolve board from collected_data when not provided by the view
+        if board is None and data.get('board_id'):
+            from kanban.models import Board
+            try:
+                board = Board.objects.get(id=data['board_id'])
+            except Board.DoesNotExist:
+                state.reset()
+                return "The board no longer exists. Please try again."
+
         if step == -1:
             # Awaiting board selection
             from kanban.models import Board
@@ -467,24 +476,62 @@ class ConversationFlowManager:
             data.update(extracted)
             if data.get('title'):
                 # We already have the title from the original message
-                data['step'] = 1
-                state.collected_data = data
-                state.save()
                 title = data['title']
-                if board and _check_duplicate_task(title, board):
-                    data['duplicate_warned'] = True
-                    data['step'] = 0.5
+                if data.get('priority'):
+                    pass  # already stored
+
+                # Resolve due date if extracted inline
+                if data.get('due_date_text') and not data.get('due_date'):
+                    parsed = _parse_date(data.pop('due_date_text'))
+                    if parsed:
+                        data['due_date'] = parsed.isoformat()
+                        data['due_date_display'] = parsed.strftime('%A, %B %d, %Y')
+
+                # Resolve assignee if extracted inline
+                if data.get('assignee_text') and not data.get('assignee_id'):
+                    assignee_text = data.pop('assignee_text')
+                    assignee, _ = action_service._resolve_assignee(assignee_text, board)
+                    if assignee:
+                        data['assignee_id'] = assignee.id
+                        data['assignee_display'] = assignee.get_full_name() or assignee.username
+
+                # Determine which step to skip to
+                if data.get('assignee_id') is not None or data.get('assignee_display'):
+                    data['step'] = 3
+                    state.mode = 'awaiting_confirmation'
                     state.collected_data = data
                     state.save()
                     return (
-                        f"OK, I'll use **{board.name}**. "
-                        f"But there's already a task called **\"{title}\"** on this board. "
-                        "Do you still want to create another one, or would you like a different name?"
+                        f"OK, I'll use **{board.name}**.\n\n"
+                        + self._format_task_confirmation(data)
                     )
-                return (
-                    f"OK, I'll use **{board.name}**. "
-                    "**Any due date?** You can say something like 'next Friday' or 'skip'."
-                )
+                elif data.get('due_date'):
+                    data['step'] = 2
+                    state.collected_data = data
+                    state.save()
+                    return (
+                        f"OK, I'll use **{board.name}**. Got it — **\"{title}\"**, "
+                        f"due {data.get('due_date_display', '')}. "
+                        "**Who should this be assigned to?** (Type a name or 'skip')"
+                    )
+                else:
+                    data['step'] = 1
+                    state.collected_data = data
+                    state.save()
+                    if board and _check_duplicate_task(title, board):
+                        data['duplicate_warned'] = True
+                        data['step'] = 0.5
+                        state.collected_data = data
+                        state.save()
+                        return (
+                            f"OK, I'll use **{board.name}**. "
+                            f"But there's already a task called **\"{title}\"** on this board. "
+                            "Do you still want to create another one, or a different name?"
+                        )
+                    return (
+                        f"OK, I'll use **{board.name}**. "
+                        "**Any due date?** You can say something like 'next Friday' or 'skip'."
+                    )
             else:
                 data['step'] = 0
                 state.collected_data = data
@@ -665,8 +712,13 @@ class ConversationFlowManager:
                 data['description'] = ''
                 data['description_display'] = 'None'
             else:
-                data['description'] = msg
-                data['description_display'] = msg
+                # Strip common command prefixes like "Add this description:"
+                desc = re.sub(
+                    r'^(?:(?:add|set|use)\s+(?:this\s+)?description\s*[:;\-]?\s*)',
+                    '', msg, flags=re.IGNORECASE,
+                ).strip() or msg
+                data['description'] = desc
+                data['description_display'] = desc
 
             data['step'] = 2
             state.collected_data = data
@@ -891,27 +943,67 @@ class ConversationFlowManager:
 
         # User might want to change something — check for specific change requests
         if any(w in msg_lower for w in ['change', 'modify', 'edit', 'update', 'different']):
-            # Re-enter the collection flow
             pending = state.pending_action
+            data = state.collected_data
+
+            # Try to detect which specific field the user wants to change
             if pending == 'create_task':
-                state.mode = 'collecting_task'
-                data = state.collected_data
+                if any(f in msg_lower for f in ['name', 'title', 'called']):
+                    data['step'] = 0
+                    data.pop('title', None)
+                    state.mode = 'collecting_task'
+                    state.collected_data = data
+                    state.save()
+                    return "OK. **What should the task be called?**"
+                if any(f in msg_lower for f in ['due', 'date', 'deadline']):
+                    data['step'] = 1
+                    state.mode = 'collecting_task'
+                    state.collected_data = data
+                    state.save()
+                    return "OK. **What due date?** (e.g. 'next Friday' or 'skip')"
+                if any(f in msg_lower for f in ['assign', 'assignee', 'person', 'member']):
+                    data['step'] = 2
+                    state.mode = 'collecting_task'
+                    state.collected_data = data
+                    state.save()
+                    return "OK. **Who should this be assigned to?** (Type a name or 'skip')"
+                if any(f in msg_lower for f in ['priority']):
+                    data['step'] = 0
+                    data.pop('title', None)
+                    state.mode = 'collecting_task'
+                    state.collected_data = data
+                    state.save()
+                    return "OK, let's start over. **What should the task be called?**"
+                # Fallback: restart from beginning
                 data['step'] = 0
                 data.pop('title', None)
+                state.mode = 'collecting_task'
                 state.collected_data = data
                 state.save()
                 return "OK, let's start over. **What should the task be called?**"
             elif pending == 'create_board':
-                state.mode = 'collecting_board'
-                data = state.collected_data
+                if any(f in msg_lower for f in ['name', 'title', 'called']):
+                    data['step'] = 0
+                    data.pop('name', None)
+                    state.mode = 'collecting_board'
+                    state.collected_data = data
+                    state.save()
+                    return "OK. **What should the board be called?**"
+                if any(f in msg_lower for f in ['desc', 'description']):
+                    data['step'] = 1
+                    state.mode = 'collecting_board'
+                    state.collected_data = data
+                    state.save()
+                    return "OK. **What description would you like?** (or say 'skip')"
+                # Fallback: restart from beginning
                 data['step'] = 0
                 data.pop('name', None)
+                state.mode = 'collecting_board'
                 state.collected_data = data
                 state.save()
                 return "OK, let's start over. **What should the board be called?**"
             elif pending == 'activate_automation':
                 state.mode = 'collecting_automation'
-                data = state.collected_data
                 data['step'] = 0
                 state.collected_data = data
                 state.save()
