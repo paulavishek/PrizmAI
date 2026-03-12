@@ -602,14 +602,50 @@
         
         <!-- Messages Area -->
         <div class="chat-messages" id="chat-messages">
-            <div style="text-align: center; color: #999; margin: auto;">
+            <div id="spectra-welcome" style="text-align: center; color: #999; margin: auto; max-width: 600px;">
                 <div style="font-size: 40px; margin-bottom: 10px;">🤖</div>
-                <p id="welcome-message">Hello, I'm Spectra. I have analyzed your {{ active_boards_count }} active board{{ active_boards_count|pluralize }} and documentation. What can I clarify for you?</p>
+                <p id="welcome-message" style="margin-bottom: 18px;">Hello, I'm <strong style="color:#667eea;">Spectra</strong>. I've analyzed your {{ active_boards_count }} active board{{ active_boards_count|pluralize }} and documentation. What can I help with?</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; margin: 0 auto 16px auto; max-width: 520px;">
+                    <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 15px; margin-bottom: 4px;">💬 <strong style="color:#444;">Ask Anything</strong></div>
+                        <div style="font-size: 12px; color: #888;">Project status, risks, tasks, resources, strategy</div>
+                    </div>
+                    <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 15px; margin-bottom: 4px;">📋 <strong style="color:#444;">Create Tasks & Boards</strong></div>
+                        <div style="font-size: 12px; color: #888;">"Create a high-priority task called…"</div>
+                    </div>
+                    <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 15px; margin-bottom: 4px;">✉️ <strong style="color:#444;">Send Messages</strong></div>
+                        <div style="font-size: 12px; color: #888;">"Send Alex the meeting summary…"</div>
+                    </div>
+                    <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 15px; margin-bottom: 4px;">⏱️ <strong style="color:#444;">Log Time</strong></div>
+                        <div style="font-size: 12px; color: #888;">"Log 2 hours on the API task…"</div>
+                    </div>
+                    <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 15px; margin-bottom: 4px;">📅 <strong style="color:#444;">Schedule Events</strong></div>
+                        <div style="font-size: 12px; color: #888;">"Schedule a standup tomorrow at 10 AM…"</div>
+                    </div>
+                    <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 12px 14px;">
+                        <div style="font-size: 15px; margin-bottom: 4px;">⚡ <strong style="color:#444;">Automate & Retrospect</strong></div>
+                        <div style="font-size: 12px; color: #888;">Automations, retrospectives, and more</div>
+                    </div>
+                </div>
+                <p style="font-size: 12px; color: #bbb;">Try clicking a suggestion below, or type anything to get started.</p>
             </div>
         </div>
         
         <!-- Input Area -->
         <div class="chat-input-area">
+            <!-- Quick-action suggestion chips -->
+            <div id="spectra-suggestions" style="display: flex; flex-wrap: wrap; gap: 6px; padding: 0 0 10px 0;">
+                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">📋 Create a task</button>
+                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">📅 Schedule a meeting</button>
+                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">⏱️ Log time on a task</button>
+                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">✉️ Send a message</button>
+                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">📊 What's overdue?</button>
+                <button class="suggested-action-btn" onclick="useSuggestion(this)" style="font-size: 12px; padding: 6px 14px;">🗂️ Create a board</button>
+            </div>
             <!-- Active file badge (shown when a file is attached to this session) -->
             <div id="active-file-badge" style="display:none; padding: 4px 12px; background:#e8f4fd; border-radius:6px 6px 0 0; border:1px solid #bee5eb; border-bottom:none; font-size:0.82rem; color:#0c5460; display:none; align-items:center; gap:6px;">
                 <i class="fas fa-paperclip text-info"></i>
@@ -642,12 +678,35 @@
         <div style="display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; padding: 40px; text-align: center;">
             <div style="font-size: 80px; margin-bottom: 20px;">🤖</div>
             <h2 style="color: #333; margin-bottom: 15px;">Welcome to Spectra</h2>
-            <p style="color: #666; max-width: 500px; margin-bottom: 25px;">
-                I'm your AI assistant for project management. I can help you analyze your boards, tasks, track progress, and provide insights about your projects.
+            <p style="color: #666; max-width: 540px; margin-bottom: 20px;">
+                Your AI project assistant — ask questions, get insights, <strong>and take action</strong>, all in one conversation.
             </p>
-            <p style="color: #888; margin-bottom: 20px;">
-                Click <strong>"New Chat"</strong> on the left to start a conversation.
-            </p>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 560px; margin-bottom: 24px; text-align: left;">
+                <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
+                    <div style="font-size: 14px;">💬 <strong style="color:#444;">Ask</strong></div>
+                    <div style="font-size: 11px; color: #888;">Status, risks, workload</div>
+                </div>
+                <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
+                    <div style="font-size: 14px;">📋 <strong style="color:#444;">Create</strong></div>
+                    <div style="font-size: 11px; color: #888;">Tasks, boards, automations</div>
+                </div>
+                <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
+                    <div style="font-size: 14px;">✉️ <strong style="color:#444;">Message</strong></div>
+                    <div style="font-size: 11px; color: #888;">Send messages to teammates</div>
+                </div>
+                <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
+                    <div style="font-size: 14px;">⏱️ <strong style="color:#444;">Log Time</strong></div>
+                    <div style="font-size: 11px; color: #888;">Track hours on tasks</div>
+                </div>
+                <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
+                    <div style="font-size: 14px;">📅 <strong style="color:#444;">Schedule</strong></div>
+                    <div style="font-size: 11px; color: #888;">Events and meetings</div>
+                </div>
+                <div style="background: #f8f9ff; border: 1px solid #e0e4f5; border-radius: 10px; padding: 10px 12px;">
+                    <div style="font-size: 14px;">📊 <strong style="color:#444;">Retrospect</strong></div>
+                    <div style="font-size: 11px; color: #888;">AI-powered sprint reviews</div>
+                </div>
+            </div>
             <button class="btn btn-primary btn-lg" onclick="createNewSession()">
                 <i class="fas fa-plus me-2"></i> Start New Chat
             </button>
@@ -791,6 +850,12 @@
     // Add message to UI
     function addMessageToUI(role, content, model = null) {
         const container = document.getElementById('chat-messages');
+        // Hide welcome panel and suggestions after the first real message
+        const welcome = document.getElementById('spectra-welcome');
+        if (welcome) welcome.remove();
+        const suggestions = document.getElementById('spectra-suggestions');
+        if (suggestions) suggestions.style.display = 'none';
+
         const msgDiv = document.createElement('div');
         msgDiv.className = `message ${role}`;
         
@@ -907,6 +972,14 @@
         const d = document.createElement('div');
         d.textContent = str || '';
         return d.innerHTML;
+    }
+
+    // Click a suggestion chip to populate the input
+    function useSuggestion(btn) {
+        const input = document.getElementById('chat-input');
+        // Strip leading emoji + space from button text
+        input.value = btn.textContent.replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}]+\s*/u, '').trim();
+        input.focus();
     }
 
     // Send message
