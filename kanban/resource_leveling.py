@@ -457,6 +457,49 @@ class ResourceLevelingService:
         Returns:
             ResourceLevelingSuggestion object or None
         """
+        # --- Guard: require sufficient task and team data before generating a suggestion ---
+        # This prevents fabricated metrics (e.g. "88% savings vs team median") for brand-new
+        # tasks that lack any real historical grounding.
+
+        # 1. Task must have at least one time log entry OR a due date set.
+        #    A task with neither has no concrete scope or pacing data.
+        from kanban.budget_models import TimeEntry
+        has_time_log = TimeEntry.objects.filter(task=task).exists()
+        has_due_date = bool(task.due_date)
+        if not (has_time_log or has_due_date):
+            logger.debug(
+                f"Suppressing resource suggestion for task {task.id}: no time log entries and no due date."
+            )
+            return None
+
+        # 2. At least one board member (other than the current assignee) must have
+        #    completed at least one task, so the team median is backed by real data.
+        board = task.column.board if hasattr(task, 'column') and task.column else None
+        if board:
+            exclude_user_ids = [task.assigned_to.id] if task.assigned_to else []
+            has_peer_history = UserPerformanceProfile.objects.filter(
+                user__in=board.members.all(),
+                total_tasks_completed__gt=0,
+            ).exclude(user_id__in=exclude_user_ids).exists()
+            if not has_peer_history:
+                logger.debug(
+                    f"Suppressing resource suggestion for task {task.id}: no peer with completed-task history on this board."
+                )
+                return None
+
+        # 3. Task must have been open for at least 1 hour before any suggestion is shown.
+        #    This prevents a banner firing the instant a task is saved.
+        if hasattr(task, 'created_at') and task.created_at:
+            task_age = timezone.now() - task.created_at
+            if task_age < timedelta(hours=1):
+                logger.debug(
+                    f"Suppressing resource suggestion for task {task.id}: task is only "
+                    f"{task_age.total_seconds() / 60:.1f} minutes old (< 1 hour required)."
+                )
+                return None
+
+        # --- End of guard conditions ---
+
         analysis = self.analyze_task_assignment(task, requesting_user=requesting_user, temp_workload_adjustments=temp_workload_adjustments)
         
         if 'error' in analysis:
