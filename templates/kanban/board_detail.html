@@ -557,35 +557,32 @@
                         {% endif %}
                     {% endif %}
                 </div>                <div class="column-actions">
-                    {% if column.name|lower == 'to do' or column.name|lower == 'todo' %}
-                        <!-- Edit button for To Do column -->
-                        <button type="button" class="btn btn-sm btn-outline-primary me-2 edit-column-btn" 
-                                data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
-                                data-bs-toggle="modal" data-bs-target="#editColumnModal"
-                                title="Rename Column">
-                            <i class="fas fa-edit"></i>
+                    <!-- "…" overflow menu — edit always visible, delete hidden for To Do -->
+                    <div class="dropdown">
+                        <button type="button" class="btn btn-sm btn-outline-secondary"
+                                data-bs-toggle="dropdown" aria-expanded="false" title="Column options">
+                            <i class="fas fa-ellipsis-v"></i>
                         </button>
-                        <!-- Lock icon for To Do column (cannot be deleted) -->
-                        <button type="button" class="btn btn-sm btn-outline-secondary" 
-                                disabled title="The 'To Do' column cannot be deleted as it's required for creating new tasks">
-                            <i class="fas fa-lock"></i>
-                        </button>
-                    {% else %}
-                        <!-- Edit button for other columns -->
-                        <button type="button" class="btn btn-sm btn-outline-primary me-2 edit-column-btn" 
-                                data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
-                                data-bs-toggle="modal" data-bs-target="#editColumnModal"
-                                title="Rename Column">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <!-- Delete button for other columns -->
-                        <button type="button" class="btn btn-sm btn-outline-danger delete-column-btn" 
-                                data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
-                                data-bs-toggle="modal" data-bs-target="#deleteColumnModal"
-                                title="Delete Column">
-                            <i class="fas fa-trash-alt"></i>
-                        </button>
-                    {% endif %}
+                        <ul class="dropdown-menu dropdown-menu-end" style="font-size:.85rem;">
+                            <li>
+                                <button type="button" class="dropdown-item edit-column-btn"
+                                        data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
+                                        data-bs-toggle="modal" data-bs-target="#editColumnModal">
+                                    <i class="fas fa-edit me-2 text-primary"></i>Rename column
+                                </button>
+                            </li>
+                            {% if not column.name|lower == 'to do' and not column.name|lower == 'todo' %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <button type="button" class="dropdown-item text-danger delete-column-btn"
+                                        data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
+                                        data-bs-toggle="modal" data-bs-target="#deleteColumnModal">
+                                    <i class="fas fa-trash-alt me-2"></i>Delete column
+                                </button>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </div>
                 </div>
             </div>
         </div>        <div class="kanban-column-tasks" data-column-id="{{ column.id }}">
@@ -724,10 +721,10 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p>Are you sure you want to delete the column "<span id="deleteColumnName"></span>"?</p>
+                <p>Delete column "<strong id="deleteColumnName"></strong>"?</p>
                 <div class="alert alert-warning">
                     <i class="fas fa-exclamation-triangle me-2"></i>
-                    <strong>Warning:</strong> This will also delete all tasks in this column!
+                    All <strong><span id="deleteColumnTaskCount">0</span> task(s)</strong> in this column will be moved to <strong>To Do</strong>.
                 </div>
             </div>
             <div class="modal-footer">
@@ -973,10 +970,16 @@
                 const columnId = this.dataset.columnId;
                 const columnName = this.dataset.columnName;
                 const deleteForm = document.getElementById('deleteColumnForm');
-                const deleteColumnNameSpan = document.getElementById('deleteColumnName');
                 
                 deleteForm.action = `/columns/${columnId}/delete/`;
-                deleteColumnNameSpan.textContent = columnName;
+                document.getElementById('deleteColumnName').textContent = columnName;
+                
+                // Count tasks currently in this column
+                const columnEl = document.getElementById('column-' + columnId);
+                const taskCount = columnEl
+                    ? columnEl.querySelectorAll('.kanban-task').length
+                    : 0;
+                document.getElementById('deleteColumnTaskCount').textContent = taskCount;
             });
         });
         

@@ -45,15 +45,17 @@
         <div class="card-body">
             <div class="row align-items-center">
                 <div class="col-md-6">
-                    <h6 class="mb-2">
+                    <h6 class="mb-1 task-title-header fw-bold">
                         <a href="#" class="task-link text-dark"></a>
                     </h6>
-                    <div class="suggestion-users mb-2">
-                        <span class="badge badge-secondary current-assignee"></span>
-                        <i class="fas fa-arrow-right mx-2"></i>
-                        <span class="badge badge-success suggested-assignee"></span>
+                    <p class="reassign-line text-muted small mb-1"></p>
+                    <p class="clean-reason small mb-1"></p>
+                    <div class="reasoning-collapse">
+                        <a href="#" class="see-reasoning-link small text-info" onclick="toggleReasoning(this); return false;">
+                            <i class="fas fa-chevron-right reasoning-chevron" style="font-size:0.7em;"></i> See reasoning
+                        </a>
+                        <p class="full-reasoning text-muted small mt-1 mb-0" style="display:none;"></p>
                     </div>
-                    <p class="reasoning text-muted small mb-0"></p>
                 </div>
                 <div class="col-md-3 text-center">
                     <div class="metrics">
@@ -419,19 +421,31 @@ function displaySuggestions(suggestions, insufficientData) {
         
         card.dataset.suggestionId = suggestion.id;
         
-        // Task link
+        // Task title header (bold link)
         const taskLink = clone.querySelector('.task-link');
         taskLink.href = `/tasks/${suggestion.task_id}/`;
         taskLink.textContent = suggestion.task_title;
         
-        // Users
-        clone.querySelector('.current-assignee').textContent = 
-            suggestion.current_assignee || 'Unassigned';
-        clone.querySelector('.suggested-assignee').textContent = 
-            suggestion.suggested_name;
+        // Reassign line
+        const currentLabel = suggestion.current_assignee || 'Unassigned';
+        clone.querySelector('.reassign-line').textContent =
+            `Reassign from ${currentLabel} → ${suggestion.suggested_name}`;
         
-        // Reasoning
-        clone.querySelector('.reasoning').textContent = suggestion.reasoning;
+        // Clean one-sentence reason + collapsible full reasoning
+        const fullReasoning = suggestion.reasoning || '';
+        // Split off the "The X% time savings is calculated…" details
+        const calcMatch = fullReasoning.match(/ The \d+% time savings is calculated/);
+        const primaryPart = calcMatch
+            ? fullReasoning.substring(0, fullReasoning.indexOf(calcMatch[0]))
+            : fullReasoning;
+        // Strip the "Move task to NAME: " / "Assign to NAME: " prefix and capitalise
+        const colonIdx = primaryPart.indexOf(': ');
+        let cleanSentence = colonIdx >= 0 ? primaryPart.substring(colonIdx + 2) : primaryPart;
+        // Capitalise first letter and ensure it ends with a period
+        cleanSentence = cleanSentence.charAt(0).toUpperCase() + cleanSentence.slice(1);
+        if (cleanSentence && !cleanSentence.endsWith('.')) cleanSentence += '.';
+        clone.querySelector('.clean-reason').textContent = cleanSentence;
+        clone.querySelector('.full-reasoning').textContent = fullReasoning;
         
         // Metrics
         clone.querySelector('.time-savings').textContent = suggestion.time_savings;
@@ -504,6 +518,15 @@ function acceptSuggestion(button) {
         button.disabled = false;
         button.innerHTML = '<i class="fas fa-check"></i> Accept';
     });
+}
+
+function toggleReasoning(link) {
+    const fullReasoning = link.closest('.reasoning-collapse').querySelector('.full-reasoning');
+    const chevron = link.querySelector('.reasoning-chevron');
+    const isHidden = fullReasoning.style.display === 'none';
+    fullReasoning.style.display = isHidden ? 'block' : 'none';
+    chevron.style.transform = isHidden ? 'rotate(90deg)' : '';
+    link.querySelector('span, i.reasoning-chevron') && (chevron.style.transition = 'transform 0.2s');
 }
 
 function rejectSuggestion(button) {
