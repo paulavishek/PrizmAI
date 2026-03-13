@@ -42,11 +42,11 @@
         </form>
     </div>
 
-    <div>
-        <form method="post" action="{% url 'onboarding_skip' %}" class="d-inline">
+    <div style="max-width: 340px; margin: 0 auto;">
+        <form method="post" action="{% url 'onboarding_skip' %}">
             {% csrf_token %}
-            <button type="submit" class="link-subtle" style="background:none; border:none; cursor:pointer;">
-                Skip — I'll set things up myself
+            <button type="submit" class="btn btn-prizm btn-lg w-100" style="background: linear-gradient(135deg, #94a3b8 0%, #64748b 100%);">
+                <i class="bi bi-arrow-right-circle me-2"></i>Skip — I'll set things up myself
             </button>
         </form>
     </div>
