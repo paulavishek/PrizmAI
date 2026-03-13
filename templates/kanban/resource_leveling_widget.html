@@ -244,23 +244,9 @@ function toggleAIOptimization() {
     }
 }
 
-// Restore state from localStorage on page load (default: collapsed)
+// Always start collapsed on page load
 document.addEventListener('DOMContentLoaded', function() {
-    const savedState = localStorage.getItem(AI_OPT_STORAGE_KEY);
-    if (savedState === 'expanded') {
-        const content = document.getElementById('ai-optimization-content');
-        const toggleIcon = document.getElementById('ai-optimization-toggle');
-        const headerSmall = document.querySelector('#ai-optimization-header small');
-        content.style.display = 'block';
-        toggleIcon.classList.add('expanded');
-        if (headerSmall) headerSmall.textContent = '(Click to collapse)';
-        if (currentBoardId && currentBoardId !== null) {
-            loadWorkloadReport();
-            loadSuggestions();
-            aiOptimizationLoaded = true;
-        }
-    }
-    console.log('Resource Leveling Widget: Ready (state:', savedState || 'collapsed', ')');
+    console.log('Resource Leveling Widget: Ready (state: collapsed)');
 });
 
 function showError(message) {
