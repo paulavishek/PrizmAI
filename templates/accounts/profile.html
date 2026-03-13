@@ -3,6 +3,77 @@
 
 {% block title %}My Profile - PrizmAI{% endblock %}
 
+{% block extra_css %}
+<style>
+    .profile-section-header {
+        background: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        padding: 0.75rem 1.25rem;
+        border-radius: 0;
+    }
+    .profile-section-header h5 {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #343a40;
+    }
+    .avatar-upload-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 1.25rem;
+    }
+    .avatar-circle {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        overflow: hidden;
+        border: 2px solid #dee2e6;
+        background: #f1f3f5;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        position: relative;
+        transition: border-color 0.2s;
+    }
+    .avatar-circle:hover {
+        border-color: #6c757d;
+    }
+    .avatar-circle img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .avatar-camera-badge {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        width: 24px;
+        height: 24px;
+        background: #495057;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-size: 10px;
+        cursor: pointer;
+    }
+    .avatar-upload-btn {
+        margin-top: 0.6rem;
+        font-size: 0.8rem;
+    }
+    #id_profile_picture {
+        display: none !important;
+    }
+    /* Hide the crispy-rendered profile_picture form group */
+    .profile-picture-field-row {
+        display: none !important;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h2><i class="fas fa-user-circle me-2"></i>My Profile</h2>
@@ -13,8 +84,8 @@
 <div class="row">
     <div class="col-md-4">
         <div class="card shadow mb-4">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">Profile Information</h5>
+            <div class="profile-section-header card-header">
+                <h5>Profile Information</h5>
             </div>
             <div class="card-body text-center">
                 {% if profile.profile_picture %}
@@ -64,13 +135,49 @@
     
     <div class="col-md-8">
         <div class="card shadow">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">Edit Profile</h5>
+            <div class="profile-section-header card-header">
+                <h5>Edit Profile</h5>
             </div>
             <div class="card-body">
-                <form method="post" enctype="multipart/form-data">
+                <form method="post" enctype="multipart/form-data" id="profile-form">
                     {% csrf_token %}
-                    {{ form|crispy }}
+
+                    <!-- Styled Profile Picture Upload -->
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold" style="font-size:0.9rem;">Profile Picture</label>
+                        <div class="avatar-upload-wrapper">
+                            <div class="avatar-circle" id="avatar-circle" onclick="document.getElementById('id_profile_picture').click()" title="Click to change photo">
+                                {% if profile.profile_picture %}
+                                    <img src="{{ profile.profile_picture.url }}" id="avatar-preview-img" alt="Profile Picture" />
+                                    <div class="avatar-camera-badge"><i class="fas fa-camera"></i></div>
+                                {% else %}
+                                    <i class="fas fa-user fa-2x text-secondary" id="avatar-placeholder-icon"></i>
+                                    <img id="avatar-preview-img" src="" alt="" style="display:none;" />
+                                    <div class="avatar-camera-badge"><i class="fas fa-camera"></i></div>
+                                {% endif %}
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-secondary avatar-upload-btn" onclick="document.getElementById('id_profile_picture').click()">
+                                <i class="fas fa-upload me-1"></i>Upload Photo
+                            </button>
+                            <input type="file" name="profile_picture" accept="image/*" id="id_profile_picture">
+                        </div>
+                    </div>
+
+                    <!-- Remaining form fields (excluding profile_picture which is rendered above) -->
+                    {% for field in form %}
+                        {% if field.html_name != 'profile_picture' %}
+                        <div class="mb-3">
+                            {{ field.label_tag }}
+                            {{ field }}
+                            {% if field.help_text %}
+                                <div class="form-text text-muted">{{ field.help_text }}</div>
+                            {% endif %}
+                            {% for error in field.errors %}
+                                <div class="invalid-feedback d-block">{{ error }}</div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    {% endfor %}
                     
                     <button type="submit" class="btn btn-primary mt-3">Save Changes</button>
                 </form>
@@ -78,8 +185,8 @@
         </div>
         
         <div class="card shadow mt-4">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">Account Information</h5>
+            <div class="profile-section-header card-header">
+                <h5>Account Information</h5>
             </div>
             <div class="card-body">
                 <div class="row">
@@ -95,8 +202,8 @@
         </div>
         
         <div class="card shadow mt-4">
-            <div class="card-header bg-secondary text-white">
-                <h5 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Security Settings</h5>
+            <div class="profile-section-header card-header">
+                <h5><i class="fas fa-shield-alt me-2"></i>Security Settings</h5>
             </div>
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-3">
@@ -124,4 +231,22 @@
         </div>
     </div>
 </div>
+
+{% block extra_js %}
+<script>
+document.getElementById('id_profile_picture').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(evt) {
+        const img = document.getElementById('avatar-preview-img');
+        const placeholder = document.getElementById('avatar-placeholder-icon');
+        img.src = evt.target.result;
+        img.style.display = 'block';
+        if (placeholder) placeholder.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+});
+</script>
+{% endblock %}
 {% endblock %}
