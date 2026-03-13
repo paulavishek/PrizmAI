@@ -1,9 +1,242 @@
 {% extends 'base.html' %}
-{% load crispy_forms_tags %}
 
 {% block title %}Complete Your Signup - PrizmAI{% endblock %}
 
+{% block navbar_unauthenticated %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    main.container {
+        max-width: 100% !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+    .auth-bg {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #e8eaf6 0%, #e3f2fd 50%, #f3e5f5 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1rem;
+    }
+    .auth-card {
+        width: 100%;
+        max-width: 520px;
+        background: #ffffff;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(99, 102, 241, 0.12), 0 2px 8px rgba(0,0,0,0.08);
+        padding: 2.75rem 2.75rem 2.25rem;
+    }
+    .auth-brand {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .auth-brand-logo {
+        font-size: 1.6rem;
+        font-weight: 800;
+        color: #4338ca;
+        letter-spacing: -0.5px;
+        text-decoration: none;
+    }
+    .auth-brand-logo .z-accent {
+        color: #ef4444;
+        font-style: italic;
+    }
+    .auth-heading {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 0.35rem;
+    }
+    .auth-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: #374151;
+        margin-bottom: 0.35rem;
+        display: block;
+    }
+    .auth-input {
+        width: 100%;
+        border: 1.5px solid #d1d5db;
+        border-radius: 10px;
+        padding: 0.6rem 0.85rem;
+        font-size: 0.95rem;
+        color: #111827;
+        background: #fff;
+        transition: border-color 0.15s, box-shadow 0.15s;
+        outline: none;
+    }
+    .auth-input:focus {
+        border-color: #6366f1;
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+    }
+    .field-error {
+        font-size: 0.8rem;
+        color: #dc2626;
+        margin-top: 0.3rem;
+    }
+    .google-info-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        background: #f0fdf4;
+        border: 1.5px solid #bbf7d0;
+        border-radius: 10px;
+        padding: 0.85rem 1rem;
+        margin-bottom: 1.5rem;
+        font-size: 0.9rem;
+        color: #166534;
+    }
+    .consent-box {
+        background: #f8f9ff;
+        border: 1.5px solid #e0e7ff;
+        border-radius: 10px;
+        padding: 1rem 1.1rem;
+        margin-bottom: 1.5rem;
+        font-size: 0.875rem;
+        color: #374151;
+        line-height: 1.5;
+    }
+    .consent-box label {
+        cursor: pointer;
+    }
+    .auth-submit-btn {
+        padding: 0.72rem 1.5rem;
+        border-radius: 10px;
+        border: none;
+        background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+        color: #fff;
+        font-weight: 700;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: opacity 0.15s, box-shadow 0.15s;
+        box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+    }
+    .auth-submit-btn:hover {
+        opacity: 0.92;
+        box-shadow: 0 6px 18px rgba(99, 102, 241, 0.45);
+    }
+    .btn-cancel {
+        padding: 0.65rem 1.25rem;
+        border-radius: 10px;
+        border: 1.5px solid #e5e7eb;
+        background: transparent;
+        color: #6b7280;
+        font-size: 0.9rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: background 0.15s, border-color 0.15s;
+    }
+    .btn-cancel:hover {
+        background: #f9fafb;
+        border-color: #d1d5db;
+        color: #374151;
+    }
+    .help-note {
+        background: #fafafa;
+        border: 1.5px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 1rem 1.1rem;
+        margin-top: 1.5rem;
+        font-size: 0.875rem;
+        color: #6b7280;
+    }
+    .help-note a {
+        color: #4f46e5;
+        font-weight: 600;
+        text-decoration: none;
+    }
+    .help-note a:hover { text-decoration: underline; }
+    .invalid-feedback { font-size: 0.8rem; color: #dc2626; margin-top: 0.3rem; }
+</style>
+{% endblock %}
+
 {% block content %}
+<div class="auth-bg">
+    <div class="auth-card">
+
+        <!-- Brand -->
+        <div class="auth-brand">
+            <a href="/" class="auth-brand-logo">
+                <i class="fas fa-brain me-1"></i>Pri<span class="z-accent">z</span>mAI
+            </a>
+        </div>
+
+        <h1 class="auth-heading">Complete Your Account Setup</h1>
+
+        <!-- Google info banner -->
+        <div class="google-info-banner">
+            <svg width="22" height="22" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="flex-shrink:0;margin-top:1px">
+                <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.8 2.5 30.2 0 24 0 14.7 0 6.8 5.4 2.9 13.3l7.9 6.1C12.6 13.2 17.8 9.5 24 9.5z"/>
+                <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.4-4.8 7.1l7.5 5.8c4.4-4.1 6.9-10.1 6.9-16.9z"/>
+                <path fill="#FBBC05" d="M10.8 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.6L2.4 13.3A24 24 0 0 0 0 24c0 3.9.9 7.5 2.5 10.8l8.3-6.2z"/>
+                <path fill="#34A853" d="M24 48c6.3 0 11.5-2 15.4-5.5l-7.5-5.8c-2.1 1.4-4.8 2.3-7.9 2.3-6.2 0-11.4-4.2-13.3-9.8l-8.2 6.3C6.8 42.7 14.8 48 24 48z"/>
+            </svg>
+            <div><strong>Almost there!</strong> You're signing up with your Google account. Please review and confirm your details below.</div>
+        </div>
+
+        <!-- Signup Form -->
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="mb-3">
+                <label for="{{ form.username.id_for_label }}" class="auth-label">Username <span style="color:#ef4444">*</span></label>
+                {{ form.username }}
+                {% if form.username.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.username.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+                <small style="font-size:0.8rem;color:#9ca3af;">This will be your unique identifier on PrizmAI. It's pre-filled from your Google name but you can change it.</small>
+            </div>
+
+            {% if form.email %}
+            <div class="mb-3">
+                <label for="{{ form.email.id_for_label }}" class="auth-label">Email</label>
+                {{ form.email }}
+                {% if form.email.errors %}
+                    <div class="invalid-feedback d-block">
+                        {% for error in form.email.errors %}{{ error }}{% endfor %}
+                    </div>
+                {% endif %}
+            </div>
+            {% endif %}
+
+            <!-- Consent -->
+            <div class="consent-box">
+                <div class="form-check" style="display:flex;gap:0.65rem;align-items:flex-start;">
+                    <input class="form-check-input" type="checkbox" id="terms-checkbox" required style="margin-top:3px;flex-shrink:0;">
+                    <label class="form-check-label" for="terms-checkbox">
+                        I understand that by clicking "Create Account", a new account will be created for me on PrizmAI using my Google credentials.
+                    </label>
+                </div>
+            </div>
+
+            <!-- Actions -->
+            <div class="d-flex justify-content-between align-items-center">
+                <a href="{% url 'login' %}" class="btn-cancel"><i class="fas fa-arrow-left me-1"></i> Cancel</a>
+                <button type="submit" class="auth-submit-btn"><i class="fas fa-check me-1"></i> Create Account</button>
+            </div>
+        </form>
+
+        <!-- Help note -->
+        <div class="help-note">
+            <strong>Already have an account?</strong> If you already have a PrizmAI account with a different email,
+            please <a href="{% url 'login' %}">login with that account</a> first, then connect your Google account from profile settings.
+        </div>
+
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('input[type=text], input[type=email]').forEach(function(el) {
+        el.classList.add('auth-input');
+    });
+});
+</script>
+{% endblock %}
 <div class="row justify-content-center">
     <div class="col-md-8">
         <div class="card shadow">
