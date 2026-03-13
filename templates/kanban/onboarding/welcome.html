@@ -4,18 +4,16 @@
 
 {% block body %}
 <div class="text-center" style="max-width: 540px;">
-    <!-- Logo / icon -->
+    <!-- Logo / icon — matches auth pages -->
     <div class="mb-4">
-        <i class="fas fa-prism fa-3x" style="background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"></i>
-        <h1 class="mt-3 mb-2" style="font-weight: 800; font-size: 2rem;">
-            <i class="bi bi-stars" style="background: linear-gradient(135deg, #667eea, #764ba2); -webkit-background-clip: text; -webkit-text-fill-color: transparent;"></i>
-            PrizmAI
-        </h1>
+        <a href="/" style="font-size: 1.8rem; font-weight: 800; color: #4338ca; letter-spacing: -0.5px; text-decoration: none;">
+            <i class="fas fa-brain me-1"></i>Pri<span style="color: #ef4444; font-style: italic;">z</span>mAI
+        </a>
     </div>
 
-    <!-- One sentence -->
+    <!-- One sentence — matches auth page tagline -->
     <p class="lead mb-4" style="color: #475569; font-size: 1.15rem;">
-        Manage projects from strategy to execution — powered by AI.
+        Turn strategy into execution — powered by AI.
     </p>
 
     <!-- Visual teaser -->
@@ -36,13 +34,10 @@
         <a href="{% url 'onboarding_goal' %}" class="btn btn-prizm btn-lg">
             <i class="bi bi-rocket-takeoff me-2"></i>Set up my workspace
         </a>
-    </div>
-
-    <div class="mb-3">
-        <form method="post" action="{% url 'onboarding_explore_demo' %}" class="d-inline">
+        <form method="post" action="{% url 'onboarding_explore_demo' %}">
             {% csrf_token %}
-            <button type="submit" class="btn btn-outline-secondary">
-                <i class="bi bi-eye me-1"></i>Show me a demo first
+            <button type="submit" class="btn btn-prizm btn-lg w-100" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <i class="bi bi-eye me-2"></i>Show me a demo first
             </button>
         </form>
     </div>

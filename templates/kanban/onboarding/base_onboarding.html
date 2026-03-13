@@ -18,7 +18,7 @@
         }
         body {
             font-family: 'Inter', 'Segoe UI', -apple-system, sans-serif;
-            background: var(--prizm-bg);
+            background: linear-gradient(135deg, #e8eaf6 0%, #e3f2fd 50%, #f3e5f5 100%);
             min-height: 100vh;
         }
         /* Progress bar at the top */
@@ -88,7 +88,7 @@
 <body>
     {% block progress %}{% endblock %}
 
-    <main class="d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 50px); padding: 2rem 1rem;">
+    <main class="d-flex align-items-center justify-content-center" style="min-height: calc(100vh - 56px); padding: 3.5rem 1rem;">
         {% block body %}{% endblock %}
     </main>
 
