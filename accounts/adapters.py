@@ -64,8 +64,13 @@ class CustomSocialAccountAdapter(DefaultSocialAccountAdapter):
                 # Check if user already exists with this email
                 try:
                     user = User.objects.get(email=email)
-                    # Connect the social account to existing user
-                    sociallogin.connect(request, user)
+                    # If the social account isn't already linked, tell allauth
+                    # to use this existing user instead of creating a new one.
+                    # NOTE: Do NOT call sociallogin.connect() here — that
+                    # prematurely authenticates the user and causes the
+                    # sidebar to appear on the social-auth confirmation pages.
+                    if not sociallogin.is_existing:
+                        sociallogin.user = user
                 except User.DoesNotExist:
                     pass
     

@@ -108,7 +108,7 @@
     </style>
 
     <!-- ===== SIDEBAR (authenticated users only) ===== -->
-    {% if user.is_authenticated %}
+    {% if user.is_authenticated and not force_auth_layout %}
     <div id="appShell" class="{% if request.session.sidebar_collapsed %}sidebar-collapsed{% endif %}">
         {% include 'partials/sidebar.html' %}
 
@@ -249,7 +249,7 @@
 
     {% block content %}{% endblock %}
 
-    {% if user.is_authenticated %}
+    {% if user.is_authenticated and not force_auth_layout %}
             </main>
         </div><!-- /prizm-main-wrapper -->
 
@@ -376,7 +376,7 @@
     </script>
     
     <!-- Share PrizmAI Modal -->
-    {% if user.is_authenticated and not is_demo_account %}
+    {% if user.is_authenticated and not is_demo_account and not force_auth_layout %}
     <div class="modal fade" id="shareModal" tabindex="-1" aria-labelledby="shareModalLabel" aria-hidden="true">
       <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
@@ -482,7 +482,7 @@
     {% endif %}
     
     <!-- Custom JS -->
-    {% if user.is_authenticated %}
+    {% if user.is_authenticated and not force_auth_layout %}
     <script>
     /* Decision Center — sidebar badge + notification bell entry */
     (function() {
