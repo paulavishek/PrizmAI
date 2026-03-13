@@ -1067,9 +1067,24 @@
     
     // Create new session
     function createNewSession() {
-        const title = prompt('Enter session title:');
-        if (!title) return;
-        
+        // Reset input and show the modal
+        const input = document.getElementById('newSessionTitleInput');
+        if (input) input.value = '';
+        const modal = new bootstrap.Modal(document.getElementById('newSessionModal'));
+        modal.show();
+        setTimeout(() => { if (input) input.focus(); }, 300);
+    }
+
+    function submitNewSession() {
+        const input = document.getElementById('newSessionTitleInput');
+        const today = new Date();
+        const dateStr = today.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const title = (input && input.value.trim()) ? input.value.trim() : `Chat \u2014 ${dateStr}`;
+
+        const modalEl = document.getElementById('newSessionModal');
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+
         fetch('{% url "ai_assistant:create_session" %}', {
             method: 'POST',
             headers: {
@@ -1413,4 +1428,35 @@
         }
     });
 </script>
+
+<!-- New Chat Session Modal -->
+<div class="modal fade" id="newSessionModal" tabindex="-1" aria-labelledby="newSessionModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="newSessionModalLabel">Start New Chat Session</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <label for="newSessionTitleInput" class="form-label fw-semibold">Session Title</label>
+        <input
+          type="text"
+          class="form-control"
+          id="newSessionTitleInput"
+          placeholder="e.g. Sprint Planning Discussion"
+          maxlength="200"
+          onkeydown="if(event.key==='Enter') submitNewSession();"
+        />
+        <div class="form-text text-muted">Leave blank to auto-generate a title based on today&#39;s date.</div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" onclick="submitNewSession()">
+          <i class="fas fa-comment-dots me-1"></i> Start Chat
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 {% endblock %}
