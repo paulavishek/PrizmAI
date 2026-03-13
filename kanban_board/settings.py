@@ -145,6 +145,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'kanban_board.context_processors.static_version',
+                'kanban_board.context_processors.force_auth_layout',
                 'kanban_board.context_processors.user_preferences',
                 'kanban.context_processors.conflict_count',
                 'kanban.context_processors.demo_context',  # Demo mode context
