@@ -291,11 +291,58 @@ def _refresh_task_dates(now, base_date):
                     created_date = task.start_date - timedelta(days=days_before)
                     Task.objects.filter(pk=task.pk).update(created_at=created_date)
 
+        # After the uniform shift, force a few demo tasks to be overdue so the
+        # dashboard "Overdue" counter and the Decision Center are consistent.
+        _force_overdue_demo_tasks(now)
+
         return len(tasks_to_update)
 
     except Exception as e:
         logger.warning(f"Error refreshing task dates: {e}")
         return 0
+
+
+def _force_overdue_demo_tasks(now):
+    """
+    After the uniform date shift, set specific demo tasks to be overdue.
+    This ensures the dashboard overdue counter and Decision Center always
+    show a realistic small number of overdue items.
+    """
+    import datetime as _dt
+    from kanban.models import Task, Board
+
+    overdue_specs = [
+        {'title': 'Database Schema & Migrations', 'days_overdue': 5},
+        {'title': 'User Registration Flow',       'days_overdue': 3},
+        {'title': 'Authentication System',        'days_overdue': 4},
+    ]
+
+    demo_board = Board.objects.filter(
+        name='Software Development', is_official_demo_board=True,
+    ).first()
+    if not demo_board:
+        return
+
+    for spec in overdue_specs:
+        task = Task.objects.filter(
+            column__board=demo_board,
+            title=spec['title'],
+            item_type='task',
+        ).exclude(progress=100).first()
+        if not task:
+            continue
+
+        past_due = (now - timedelta(days=spec['days_overdue'])).date()
+        complexity = getattr(task, 'complexity_score', 5) or 5
+        duration = max(3, complexity)
+        new_start = past_due - timedelta(days=duration)
+
+        Task.objects.filter(pk=task.pk).update(
+            start_date=new_start,
+            due_date=timezone.make_aware(
+                _dt.datetime.combine(past_due, _dt.time.min)
+            ),
+        )
 
 
 def _refresh_time_entry_dates(base_date):

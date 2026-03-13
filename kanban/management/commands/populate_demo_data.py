@@ -21,6 +21,7 @@ from kanban.burndown_models import TeamVelocitySnapshot, BurndownPrediction, Spr
 from kanban.retrospective_models import ProjectRetrospective, LessonLearned, ImprovementMetric, RetrospectiveActionItem
 from kanban.coach_models import CoachingSuggestion, PMMetrics, CoachingInsight
 from kanban.stakeholder_models import ProjectStakeholder, StakeholderTaskInvolvement
+from decision_center.models import DecisionItem
 import random
 import os
 
@@ -572,6 +573,10 @@ class Command(BaseCommand):
             call_command('populate_ai_assistant_demo_data', '--reset')
         except Exception as e:
             self.stdout.write(self.style.WARNING(f'   ⚠️  AI Assistant demo data skipped: {e}'))
+
+        # Create overdue tasks and matching Decision Center items
+        self.stdout.write(self.style.SUCCESS('\n⏰ Creating overdue demo tasks & Decision Center items...\n'))
+        self.create_overdue_and_decision_items(software_board, alex)
 
         self.stdout.write(self.style.SUCCESS('\n' + '='*70))
         self.stdout.write(self.style.SUCCESS('✅ DEMO DATA POPULATION COMPLETE'))
@@ -1440,47 +1445,62 @@ class Command(BaseCommand):
             # Create task costs for ALL tasks (not just first 15)
             tasks = Task.objects.filter(column__board=board)
             task_costs_created = 0
-            
-            # Define board-specific cost and hour ranges for realistic demo data
+
             board_name = config['name']
-            if board_name == 'Software Development':
-                # Higher costs and hours for development work
-                min_cost, max_cost = 800, 8000
-                min_hours, max_hours = 8, 60
-                hourly_rate_range = (75, 150)  # Developer rates
-            elif board_name == 'Marketing Campaign':
-                # Moderate costs for marketing
-                min_cost, max_cost = 500, 5000
-                min_hours, max_hours = 4, 40
-                hourly_rate_range = (50, 100)  # Marketing rates
-            else:  # Bug Tracking
-                # Lower costs for bug fixes
-                min_cost, max_cost = 200, 3000
-                min_hours, max_hours = 2, 24
-                hourly_rate_range = (60, 120)  # QA/Dev rates
+            use_controlled_costs = (board_name == 'Software Development')
+
+            if use_controlled_costs:
+                # ── Controlled costs: target CPI 0.78-0.88 ──────────────────
+                # CPI = (done/total × allocated) / sum(actual_cost)
+                # We compute the right total spend so CPI ≈ 0.82.
+                all_board_tasks = Task.objects.filter(column__board=board, item_type='task')
+                total_t = all_board_tasks.count() or 1
+                done_t = all_board_tasks.filter(progress=100).count()
+                comp_ratio = done_t / total_t
+                alloc = float(config['budget'])
+                earned_value = comp_ratio * alloc
+                target_cpi = 0.82
+                target_total_spent = earned_value / target_cpi if target_cpi else alloc
+                num_costed = tasks.count() or 1
+                base_cost_per_task = Decimal(str(round(target_total_spent / num_costed, 2)))
 
             for i, task in enumerate(tasks):
-                # Base estimated cost and hours
-                estimated_cost = Decimal(random.uniform(min_cost, max_cost)).quantize(Decimal('0.01'))
-                estimated_hours = Decimal(random.uniform(min_hours, max_hours)).quantize(Decimal('0.01'))
-                hourly_rate = Decimal(random.uniform(*hourly_rate_range)).quantize(Decimal('0.01'))
-                
-                # Adjust based on task complexity if available
-                complexity = getattr(task, 'complexity_score', 5)
-                if complexity >= 8:
-                    # Complex tasks cost more
-                    estimated_cost = estimated_cost * Decimal('1.3')
-                    estimated_hours = estimated_hours * Decimal('1.4')
-                elif complexity <= 3:
-                    # Simple tasks cost less
-                    estimated_cost = estimated_cost * Decimal('0.6')
-                    estimated_hours = estimated_hours * Decimal('0.5')
-
-                # Some tasks over budget for realistic demo (every 5th task)
-                if i % 5 == 0:
-                    actual_cost = estimated_cost * Decimal('1.25')
+                if use_controlled_costs:
+                    # Distribute total spend with ±10% jitter per task
+                    variance = Decimal(str(round(random.uniform(0.90, 1.10), 4)))
+                    actual_cost = (base_cost_per_task * variance).quantize(Decimal('0.01'))
+                    # estimated_cost is 15-20% below actual ("slightly over estimate")
+                    overrun = Decimal(str(round(random.uniform(1.15, 1.20), 4)))
+                    estimated_cost = (actual_cost / overrun).quantize(Decimal('0.01'))
+                    estimated_hours = Decimal(str(round(random.uniform(8, 40), 2)))
+                    hourly_rate = Decimal(random.choice(['75.00', '100.00', '125.00', '150.00']))
                 else:
-                    actual_cost = estimated_cost * Decimal(random.uniform(0.7, 1.1))
+                    # Original random generation for other boards
+                    if board_name == 'Marketing Campaign':
+                        min_cost, max_cost = 500, 5000
+                        min_hours, max_hours = 4, 40
+                        hourly_rate_range = (50, 100)
+                    else:  # Bug Tracking
+                        min_cost, max_cost = 200, 3000
+                        min_hours, max_hours = 2, 24
+                        hourly_rate_range = (60, 120)
+
+                    estimated_cost = Decimal(random.uniform(min_cost, max_cost)).quantize(Decimal('0.01'))
+                    estimated_hours = Decimal(random.uniform(min_hours, max_hours)).quantize(Decimal('0.01'))
+                    hourly_rate = Decimal(random.uniform(*hourly_rate_range)).quantize(Decimal('0.01'))
+
+                    complexity = getattr(task, 'complexity_score', 5)
+                    if complexity >= 8:
+                        estimated_cost = estimated_cost * Decimal('1.3')
+                        estimated_hours = estimated_hours * Decimal('1.4')
+                    elif complexity <= 3:
+                        estimated_cost = estimated_cost * Decimal('0.6')
+                        estimated_hours = estimated_hours * Decimal('0.5')
+
+                    if i % 5 == 0:
+                        actual_cost = estimated_cost * Decimal('1.25')
+                    else:
+                        actual_cost = estimated_cost * Decimal(random.uniform(0.7, 1.1))
 
                 TaskCost.objects.get_or_create(
                     task=task,
@@ -1492,7 +1512,7 @@ class Command(BaseCommand):
                     }
                 )
                 task_costs_created += 1
-            
+
             self.stdout.write(f'   ✅ Created {task_costs_created} task costs for {config["name"]}')
 
             # Create historical ROI snapshots (10 months of data)
@@ -2642,3 +2662,71 @@ class Command(BaseCommand):
         """Create wiki links for tasks (if wiki system exists)"""
         # This is a placeholder - implement if wiki system is available
         self.stdout.write('   ✅ Wiki links skipped (wiki system not configured)')
+
+    def create_overdue_and_decision_items(self, software_board, admin_user):
+        """
+        Force 3 specific in-progress/review tasks to be overdue, and create
+        matching DecisionItem records so the dashboard overdue counter and the
+        Decision Center show the same data.
+        """
+        from datetime import datetime as _dt
+
+        now = timezone.now()
+        overdue_specs = [
+            {'title': 'Database Schema & Migrations', 'days_overdue': 5},
+            {'title': 'User Registration Flow',       'days_overdue': 3},
+            {'title': 'Authentication System',        'days_overdue': 4},
+        ]
+
+        updated = 0
+        overdue_titles = []
+        for spec in overdue_specs:
+            task = Task.objects.filter(
+                column__board=software_board,
+                title=spec['title'],
+                item_type='task',
+            ).first()
+            if not task or task.progress >= 100:
+                continue
+
+            # Set due_date in the past; keep start_date before due_date
+            past_due = (now - timedelta(days=spec['days_overdue'])).date()
+            complexity = getattr(task, 'complexity_score', 5) or 5
+            duration = max(3, complexity)
+            new_start = past_due - timedelta(days=duration)
+
+            task.start_date = new_start
+            task.due_date = timezone.make_aware(
+                _dt.combine(past_due, _dt.min.time())
+            )
+            task.save(update_fields=['start_date', 'due_date'])
+            updated += 1
+            overdue_titles.append(spec['title'])
+
+        self.stdout.write(f'   ✅ Marked {updated} tasks as overdue')
+
+        # Create a matching DecisionItem so the Decision Center is consistent
+        if updated and admin_user:
+            item, created = DecisionItem.objects.get_or_create(
+                created_for=admin_user,
+                board=software_board,
+                item_type='overdue_task',
+                status='pending',
+                defaults={
+                    'priority_level': 'action_required',
+                    'title': f'{updated} tasks are past their due date',
+                    'description': (
+                        'The following tasks have missed their deadlines: '
+                        + ', '.join(overdue_titles)
+                        + '. Review timelines and reassign if necessary.'
+                    ),
+                    'suggested_action': 'Open the board, review the overdue tasks, and update their due dates or escalate blockers.',
+                    'estimated_minutes': 5,
+                    'context_data': {
+                        'overdue_count': updated,
+                        'most_overdue_days': max(s['days_overdue'] for s in overdue_specs),
+                    },
+                },
+            )
+            if created:
+                self.stdout.write(f'   ✅ Created Decision Center item for overdue tasks')
