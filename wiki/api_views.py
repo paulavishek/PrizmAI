@@ -207,7 +207,11 @@ def analyze_wiki_meeting_page(request, wiki_page_id):
                 'title': wiki_page.title,
                 'created_at': wiki_page.created_at.isoformat(),
                 'created_by': wiki_page.created_by.username,
-                'tags': wiki_page.tags if wiki_page.tags else []
+                'tags': wiki_page.tags if wiki_page.tags else [],
+                'participants': (
+                    wiki_page.transcript_metadata.get('participants', [])
+                    if wiki_page.transcript_metadata else []
+                )
             }
             
             # Run AI analysis
@@ -308,6 +312,8 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
         selected_indices = data.get('selected_action_items', [])
         column_id = data.get('column_id')  # Optional: specific column
         phase = data.get('phase')  # Optional: phase assignment
+        # {str(idx): username_or_name} — user-selected assignee overrides per action item
+        assignee_overrides = data.get('assignee_overrides', {})
         
         if not board_id:
             return JsonResponse({'error': 'board_id is required'}, status=400)
@@ -361,24 +367,54 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                         phase=phase  # Set phase if provided (None if not)
                     )
                     
-                    # Try to assign if suggested
-                    assignee_username = action_item.get('assignee') or action_item.get('suggested_assignee')
-                    if assignee_username:
+                    # Resolve assignee: user override takes priority over AI suggestion
+                    assignee_name = (
+                        assignee_overrides.get(str(idx))
+                        or action_item.get('assignee')
+                        or action_item.get('suggested_assignee')
+                    )
+                    if assignee_name:
                         try:
-                            # Try to find user by username
-                            assignee = User.objects.filter(username=assignee_username).first()
-                            if assignee and assignee.profile.organization == org:
-                                task.assigned_to = assignee
-                            else:
-                                # Try partial match if exact match fails
-                                assignee = User.objects.filter(
-                                    username__icontains=assignee_username,
-                                    profile__organization=org
+                            # Restrict lookup to board members (creator + members)
+                            board_member_ids = list(board.members.values_list('id', flat=True))
+                            board_member_ids.append(board.created_by_id)
+                            board_qs = User.objects.filter(id__in=board_member_ids)
+
+                            name_lower = assignee_name.lower().strip()
+
+                            # 1. Exact username match within board
+                            assignee = board_qs.filter(username__iexact=assignee_name).first()
+
+                            # 2. Exact first-name match
+                            if not assignee:
+                                assignee = board_qs.filter(first_name__iexact=assignee_name).first()
+
+                            # 3. Full name match (iterate — small list)
+                            if not assignee:
+                                for u in board_qs:
+                                    if u.get_full_name().lower() == name_lower:
+                                        assignee = u
+                                        break
+
+                            # 4. Partial username / first-name match
+                            if not assignee:
+                                assignee = board_qs.filter(
+                                    Q(username__icontains=assignee_name)
+                                    | Q(first_name__icontains=assignee_name)
                                 ).first()
-                                if assignee:
-                                    task.assigned_to = assignee
+
+                            # 5. Org-wide fallback (exact matches only)
+                            if not assignee and org:
+                                assignee = User.objects.filter(
+                                    Q(username__iexact=assignee_name)
+                                    | Q(first_name__iexact=assignee_name),
+                                    profile__organization=org,
+                                ).first()
+
+                            if assignee:
+                                task.assigned_to = assignee
                         except Exception as e:
-                            logger.warning(f"Could not assign task to {assignee_username}: {str(e)}")
+                            logger.warning(f"Could not assign task to {assignee_name}: {str(e)}")
                     
                     # Set due date if suggested
                     due_date_str = action_item.get('due_date_suggestion')
@@ -534,13 +570,27 @@ def get_boards_for_organization(request):
                     'name': column.name,
                     'position': column.position
                 })
-            
+
+            # Collect board members (creator + members, deduplicated)
+            seen_ids = set()
+            members_data = []
+            for member in [board.created_by] + list(board.members.all()):
+                if member.id not in seen_ids:
+                    seen_ids.add(member.id)
+                    members_data.append({
+                        'id': member.id,
+                        'username': member.username,
+                        'full_name': member.get_full_name() or member.username,
+                        'first_name': member.first_name,
+                    })
+
             boards_data.append({
                 'id': board.id,
                 'name': board.name,
                 'description': board.description,
                 'columns': columns,
-                'num_phases': board.num_phases
+                'num_phases': board.num_phases,
+                'members': members_data,
             })
         
         return JsonResponse({

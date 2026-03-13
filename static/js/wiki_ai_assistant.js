@@ -10,6 +10,7 @@ let currentAnalysisResults = null;
 let currentAnalysisType = null; // 'meeting' or 'documentation'
 let selectedActionItems = new Set();
 let availableBoards = [];
+let meetingParticipants = []; // Names extracted from meeting analysis
 
 // Detect page type and show appropriate AI assistant button
 function detectPageTypeAndShowButton() {
@@ -434,6 +435,7 @@ function showTaskCreationModal() {
     }
     
     document.getElementById('selectedTasksCount').textContent = selectedActionItems.size;
+    renderItemAssignees();
     const taskModal = new bootstrap.Modal(document.getElementById('taskCreationModal'));
     taskModal.show();
 }
@@ -446,6 +448,7 @@ function showDocsTaskCreationModal() {
     }
     
     document.getElementById('selectedTasksCount').textContent = selectedActionItems.size;
+    renderItemAssignees();
     const taskModal = new bootstrap.Modal(document.getElementById('taskCreationModal'));
     taskModal.show();
 }
@@ -482,6 +485,7 @@ function updateColumnSelect() {
     if (!boardId) {
         columnSelect.innerHTML = '<option value="">To Do (Default)</option>';
         if (phaseSelectContainer) phaseSelectContainer.style.display = 'none';
+        renderItemAssignees();
         return;
     }
     
@@ -507,6 +511,7 @@ function updateColumnSelect() {
             phaseSelectContainer.style.display = 'none';
         }
     }
+    renderItemAssignees();
 }
 
 // Confirm task creation
@@ -528,6 +533,14 @@ async function confirmTaskCreation() {
     try {
         let endpoint;
         let requestBody;
+
+        // Collect per-item assignee overrides set by the user
+        const assigneeOverrides = {};
+        document.querySelectorAll('[id^="assigneeOverride_"]').forEach(select => {
+            if (select.value) {
+                assigneeOverrides[select.dataset.itemIndex] = select.value;
+            }
+        });
         
         if (currentAnalysisType === 'meeting' && currentAnalysisId) {
             // Meeting analysis has its own task creation endpoint
@@ -536,7 +549,8 @@ async function confirmTaskCreation() {
                 board_id: boardId,
                 column_id: columnId || null,
                 phase: phase,
-                selected_action_items: Array.from(selectedActionItems)
+                selected_action_items: Array.from(selectedActionItems),
+                assignee_overrides: assigneeOverrides
             };
         } else {
             // Documentation analysis - create tasks directly (we'll need to add this endpoint)
@@ -600,6 +614,114 @@ function showModalError(modalBody, message) {
             <p>${message}</p>
         </div>
     `;
+}
+
+// Escape HTML to prevent XSS in dynamic content
+function escapeHtml(text) {
+    const map = {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'};
+    return String(text || '').replace(/[&<>"']/g, m => map[m]);
+}
+
+// Match an AI-extracted name to a board member's username.
+// Returns the member's username if matched, otherwise returns the original name.
+function findBestMemberMatch(aiName, members) {
+    if (!aiName || !members || members.length === 0) return aiName || '';
+    const nameLower = aiName.toLowerCase().trim();
+
+    // 1. Exact username
+    let match = members.find(m => m.username.toLowerCase() === nameLower);
+    if (match) return match.username;
+
+    // 2. Exact first name
+    match = members.find(m => m.first_name && m.first_name.toLowerCase() === nameLower);
+    if (match) return match.username;
+
+    // 3. Full name
+    match = members.find(m => m.full_name && m.full_name.toLowerCase() === nameLower);
+    if (match) return match.username;
+
+    // 4. First name is contained in the AI name (e.g. "Alex Smith" vs "Alex")
+    match = members.find(m =>
+        m.first_name && (nameLower.startsWith(m.first_name.toLowerCase()) ||
+        m.username.toLowerCase().includes(nameLower))
+    );
+    if (match) return match.username;
+
+    // No board member matched — return original so it shows as attendee option
+    return aiName;
+}
+
+// Render per-action-item assignee dropdowns inside the task creation modal.
+// Called when the modal opens and again when the board selection changes.
+function renderItemAssignees() {
+    const section = document.getElementById('itemAssigneeSection');
+    if (!section) return;
+
+    const actionItems = (currentAnalysisResults && currentAnalysisResults.action_items) || [];
+    const selectedIndices = Array.from(selectedActionItems);
+
+    if (selectedIndices.length === 0) {
+        section.innerHTML = '';
+        return;
+    }
+
+    const boardId = document.getElementById('boardSelect') && document.getElementById('boardSelect').value;
+    const board = boardId ? availableBoards.find(b => b.id == boardId) : null;
+    const members = (board && board.members) || [];
+    const memberUsernames = new Set(members.map(m => m.username));
+
+    const hintText = members.length > 0
+        ? 'AI-suggested assignees matched to board members. Override as needed.'
+        : 'Select a board above to match assignees to board members.';
+
+    let html = `
+        <div class="mb-3">
+            <label class="form-label fw-semibold">Assignees per Action Item</label>
+            <small class="text-muted d-block mb-2">${hintText}</small>
+    `;
+
+    selectedIndices.forEach(idx => {
+        const item = actionItems[idx];
+        if (!item) return;
+
+        const title = item.title || item.text || `Action Item ${idx + 1}`;
+        const aiName = (item.assignee || item.suggested_assignee || '').trim();
+        const bestMatch = findBestMemberMatch(aiName, members);
+
+        // Build <option> list
+        let options = '<option value="">-- Unassigned --</option>';
+
+        members.forEach(m => {
+            const sel = (m.username === bestMatch) ? ' selected' : '';
+            options += `<option value="${escapeHtml(m.username)}"${sel}>${escapeHtml(m.full_name || m.username)}</option>`;
+        });
+
+        // Meeting participants not already in the board member list
+        meetingParticipants.forEach(p => {
+            if (!memberUsernames.has(p)) {
+                const sel = (p === bestMatch) ? ' selected' : '';
+                options += `<option value="${escapeHtml(p)}"${sel}>${escapeHtml(p)} (attendee)</option>`;
+            }
+        });
+
+        // If AI suggested a name that isn't in members or participants, keep it visible
+        if (aiName && bestMatch === aiName && !memberUsernames.has(aiName) && !meetingParticipants.includes(aiName)) {
+            options += `<option value="${escapeHtml(aiName)}" selected>${escapeHtml(aiName)} (from notes)</option>`;
+        }
+
+        const displayTitle = title.length > 72 ? title.substring(0, 72) + '\u2026' : title;
+        html += `
+            <div class="border rounded p-2 mb-2 bg-light">
+                <div class="small fw-semibold text-truncate mb-1" title="${escapeHtml(title)}">${escapeHtml(displayTitle)}</div>
+                <select class="form-select form-select-sm" id="assigneeOverride_${idx}" data-item-index="${idx}">
+                    ${options}
+                </select>
+            </div>
+        `;
+    });
+
+    html += '</div>';
+    section.innerHTML = html;
 }
 
 // Helper functions
