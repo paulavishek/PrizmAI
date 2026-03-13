@@ -809,127 +809,156 @@ class Command(BaseCommand):
         items = []
         now = timezone.now().date()
         from datetime import datetime, time
+        import random
+
+        # =====================================================================
+        # Date & dependency design — "Mainline + One Branch" per phase
+        # =====================================================================
+        #
+        # Each phase has 10 tasks.  8 form the MAINLINE (critical path) and
+        # 2 BRANCH OFF in parallel, giving them positive slack so that the
+        # Critical Path highlight shows a clear distinction.
+        #
+        # Layout per phase (indices 0-9):
+        #
+        #   [0]→[1]─┬─→[3]─┬─→[5]→[6]→[7]→[8]→[9]   ← mainline (critical)
+        #            │      │
+        #            └→[2]  └→[4]                       ← branches (slack)
+        #
+        # Every task has exactly ONE finish-to-start dependency (except [0]
+        # which starts the phase).  Branch tasks [2] and [4] each depend
+        # on their branch-off point ([1] and [3] respectively) but are
+        # shorter, so they finish before the mainline successor and
+        # accumulate slack.
+        #
+        # Dates are computed sequentially: each mainline task starts at
+        # the previous task's end + a seeded-random gap (1-3 days).  Branch
+        # tasks share the same start as the next mainline task but have a
+        # shorter duration.  Phases are separated by a 5-day gap.
+        # =====================================================================
+
+        # Seeded RNG so gaps are reproducible but differ across phases
+        rng = random.Random(42)
+
+        def _compute_phase_dates(task_defs, phase_start_date):
+            """
+            Walk through 10 task definitions and assign start_date / due_date
+            following the mainline+branch layout described above.
+
+            Mainline order: 0, 1, 3, 5, 6, 7, 8, 9
+            Branch tasks:   2 (branches from 1), 4 (branches from 3)
+
+            Returns the list of task defs (mutated with 'start' and 'due')
+            and the date one day after the last mainline task finishes.
+            """
+            MAINLINE = [0, 1, 3, 5, 6, 7, 8, 9]
+            BRANCHES = {2: 1, 4: 3}  # branch_idx → branch_off_mainline_idx
+
+            # --- Pass 1: mainline dates ---
+            cursor = phase_start_date  # first mainline task starts here
+            for seq, idx in enumerate(MAINLINE):
+                t = task_defs[idx]
+                t['start'] = cursor
+                t['due'] = cursor + timedelta(days=t['duration'])
+                # advance cursor: end of this task + random gap
+                gap = rng.randint(1, 3)
+                cursor = t['due'] + timedelta(days=gap)
+
+            # --- Pass 2: branch tasks ---
+            for br_idx, parent_idx in BRANCHES.items():
+                parent = task_defs[parent_idx]
+                br = task_defs[br_idx]
+                # Branch starts right after its parent ends (same gap pattern)
+                br_gap = rng.randint(1, 2)
+                br['start'] = parent['due'] + timedelta(days=br_gap)
+                br['due'] = br['start'] + timedelta(days=br['duration'])
+
+            # The "next phase anchor" is the day after the last mainline task
+            last_mainline_due = task_defs[MAINLINE[-1]]['due']
+            return task_defs, last_mainline_due
 
         # =====================================================================
         # Phase 1: Foundation & Setup (10 tasks)
-        # Dependency structure:
-        # [0] Requirements ──────────────────┐
-        #                                    ├──► [4] Base API ──► [7] Database Migrations
-        # [1] Environment Setup ─────────────┘                            │
-        #                                                                  │
-        # [2] Architecture Design ───────────┐                             │
-        #                                    ├──► [5] Auth System ──► [8] Auth Testing ─┐
-        # [3] Security Patterns ─────────────┘            │                              │
-        #                                                 │                              │
-        #                                                 └──► [6] User Registration     │
-        #                                                                                │
-        #                                     [9] Documentation Setup ◄──────────────────┘
         # =====================================================================
         phase1_data = [
-            {'title': 'Requirements Analysis & Planning', 'desc': 'Gather requirements, define scope, and create project roadmap', 'priority': 'high', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 5},
-            {'title': 'Development Environment Setup', 'desc': 'Configure Docker, CI/CD pipelines, and development tools', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 4},
-            {'title': 'System Architecture Design', 'desc': 'Design microservices architecture and define API contracts', 'priority': 'high', 'complexity': 8, 'assignee': jordan, 'progress': 100, 'column': done, 'start_offset': 0, 'duration': 10},
-            {'title': 'Security Architecture Patterns', 'desc': 'Define security patterns, encryption standards, and access control', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': 2, 'duration': 8},
-            {'title': 'Base API Structure', 'desc': 'Set up REST API framework with versioning and documentation', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': 5, 'duration': 6},
-            {'title': 'Authentication System', 'desc': 'Build secure login with JWT tokens and session management', 'priority': 'high', 'complexity': 4, 'assignee': sam, 'progress': 80, 'column': review, 'start_offset': 10, 'duration': 3},
-            {'title': 'User Registration Flow', 'desc': 'Build signup with email verification and onboarding', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 60, 'column': in_progress, 'start_offset': 13, 'duration': 4},
-            {'title': 'Database Schema & Migrations', 'desc': 'Create ERD and define core database models with migrations', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 40, 'column': in_progress, 'start_offset': 11, 'duration': 7},
-            {'title': 'Authentication Testing Suite', 'desc': 'Comprehensive test coverage for auth system with security tests', 'priority': 'high', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': 13, 'duration': 10},
-            {'title': 'Project Documentation Setup', 'desc': 'Set up documentation site with API reference and dev guides', 'priority': 'medium', 'complexity': 7, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': 23, 'duration': 5},
+            {'title': 'Requirements Analysis & Planning', 'desc': 'Gather requirements, define scope, and create project roadmap', 'priority': 'high', 'complexity': 5, 'assignee': alex, 'progress': 100, 'column': done, 'duration': 5},
+            {'title': 'Development Environment Setup', 'desc': 'Configure Docker, CI/CD pipelines, and development tools', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 100, 'column': done, 'duration': 4},
+            {'title': 'System Architecture Design', 'desc': 'Design microservices architecture and define API contracts', 'priority': 'high', 'complexity': 8, 'assignee': jordan, 'progress': 100, 'column': done, 'duration': 3},
+            {'title': 'Security Architecture Patterns', 'desc': 'Define security patterns, encryption standards, and access control', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 100, 'column': done, 'duration': 8},
+            {'title': 'Base API Structure', 'desc': 'Set up REST API framework with versioning and documentation', 'priority': 'medium', 'complexity': 5, 'assignee': sam, 'progress': 100, 'column': done, 'duration': 3},
+            {'title': 'Authentication System', 'desc': 'Build secure login with JWT tokens and session management', 'priority': 'high', 'complexity': 4, 'assignee': sam, 'progress': 80, 'column': review, 'duration': 6},
+            {'title': 'User Registration Flow', 'desc': 'Build signup with email verification and onboarding', 'priority': 'medium', 'complexity': 4, 'assignee': alex, 'progress': 60, 'column': in_progress, 'duration': 4},
+            {'title': 'Database Schema & Migrations', 'desc': 'Create ERD and define core database models with migrations', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 40, 'column': in_progress, 'duration': 7},
+            {'title': 'Authentication Testing Suite', 'desc': 'Comprehensive test coverage for auth system with security tests', 'priority': 'high', 'complexity': 3, 'assignee': jordan, 'progress': 0, 'column': todo, 'duration': 5},
+            {'title': 'Project Documentation Setup', 'desc': 'Set up documentation site with API reference and dev guides', 'priority': 'medium', 'complexity': 7, 'assignee': jordan, 'progress': 0, 'column': todo, 'duration': 5},
         ]
+        phase1_data, phase1_end = _compute_phase_dates(phase1_data, now)
 
-        for i, t in enumerate(phase1_data):
-            start = now + timedelta(days=t['start_offset'])
-            due_date_obj = start + timedelta(days=t['duration'])
-            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, time(12, 0)))
+        for t in phase1_data:
+            due_datetime = timezone.make_aware(datetime.combine(t['due'], time(12, 0)))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
                 assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
-                start_date=start, due_date=due_datetime, phase='Phase 1',
+                start_date=t['start'], due_date=due_datetime, phase='Phase 1',
                 is_seed_demo_data=True,
             )
             items.append(task)
 
         # =====================================================================
-        # Phase 2: Core Features (10 tasks)
-        #
-        # Dependency structure (same generic pattern, indices 0-9 within this phase):
-        #   [4] depends on [0],[1]   [5] depends on [2],[3]
-        #   [6] depends on [5]       [7] depends on [4]
-        #   [8] depends on [5]       [9] depends on [7],[8]
-        #
-        # Critical-path design (durations chosen so only ONE chain has 0 slack):
-        #   CRITICAL: [0](d=10) → [4](d=7) → [7](d=5) → [9](d=2)  total = 24 days
-        #   [1] slack=3  [2] slack=3  [3] slack=1  [5] slack=1  [6] slack=3  [8] slack=1
-        #
-        # Tasks [1],[2],[3] start in PARALLEL with [0] at phase_start (not after it),
-        # which is the key difference from the old data that caused every task to appear
-        # critical by forcing them all to start at phase_start+10.
+        # Phase 2: Core Features (10 tasks) — starts 5 days after Phase 1
         # =====================================================================
-        phase_start = 28
+        phase2_start = phase1_end + timedelta(days=5)
         phase2_data = [
-            # [0] Critical-path anchor – longest parallel starter (d=10)
-            {'title': 'Dashboard UI Development', 'desc': 'Create responsive dashboard with charts and widgets', 'priority': 'urgent', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': done, 'start_offset': phase_start, 'duration': 10},
-            # [1] Parallel to Dashboard, shorter (d=7) → 3 days slack
-            {'title': 'File Upload System', 'desc': 'Support multiple file types with S3 storage integration', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 80, 'column': review, 'start_offset': phase_start, 'duration': 7},
-            # [2] Parallel starter, shortest (d=6) → 3 days slack
-            {'title': 'Notification Service', 'desc': 'Real-time notifications via WebSocket and email queues', 'priority': 'high', 'complexity': 7, 'assignee': jordan, 'progress': 70, 'column': in_progress, 'start_offset': phase_start, 'duration': 6},
-            # [3] Parallel starter (d=8), one day shorter than [0]'s effective gate → 1 day slack
-            {'title': 'User Management API', 'desc': 'CRUD operations for users with role-based access control', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 60, 'column': in_progress, 'start_offset': phase_start, 'duration': 8},
-            # [4] Waits for [0] and [1]; driven by [0] (d=10+7=17). Critical.
-            {'title': 'Search & Indexing Engine', 'desc': 'Full-text search with Elasticsearch and filters', 'priority': 'medium', 'complexity': 7, 'assignee': sam, 'progress': 30, 'column': in_progress, 'start_offset': phase_start + 10, 'duration': 7},
-            # [5] Waits for [2] and [3]; driven by [3] (d=8+9=17). 1 day slack vs critical path.
-            {'title': 'Real-time Collaboration', 'desc': 'WebSocket-based real-time editing and presence features', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 8, 'duration': 9},
-            # [6] After [5] (EF=17+4=21 vs project end 24) → 3 days slack
-            {'title': 'Data Caching Layer', 'desc': 'Redis-based caching for improved performance', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 17, 'duration': 4},
-            # [7] After [4] (EF=17+5=22, then +2=24). Critical.
-            {'title': 'API Rate Limiting', 'desc': 'Implement rate limiting and throttling for API endpoints', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 17, 'duration': 5},
-            # [8] After [5] (EF=17+4=21 vs 22) → 1 day slack
-            {'title': 'Integration Testing Suite', 'desc': 'End-to-end integration tests for all core features', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 17, 'duration': 4},
-            # [9] After max([7],[8])=22. Critical.
-            {'title': 'Core Features Code Review', 'desc': 'Comprehensive code review and refactoring', 'priority': 'urgent', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 22, 'duration': 2},
+            {'title': 'Dashboard UI Development', 'desc': 'Create responsive dashboard with charts and widgets', 'priority': 'urgent', 'complexity': 8, 'assignee': sam, 'progress': 100, 'column': done, 'duration': 10},
+            {'title': 'File Upload System', 'desc': 'Support multiple file types with S3 storage integration', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 80, 'column': review, 'duration': 7},
+            {'title': 'Notification Service', 'desc': 'Real-time notifications via WebSocket and email queues', 'priority': 'high', 'complexity': 7, 'assignee': jordan, 'progress': 70, 'column': in_progress, 'duration': 4},
+            {'title': 'User Management API', 'desc': 'CRUD operations for users with role-based access control', 'priority': 'high', 'complexity': 7, 'assignee': sam, 'progress': 60, 'column': in_progress, 'duration': 8},
+            {'title': 'Search & Indexing Engine', 'desc': 'Full-text search with Elasticsearch and filters', 'priority': 'medium', 'complexity': 7, 'assignee': sam, 'progress': 30, 'column': in_progress, 'duration': 3},
+            {'title': 'Real-time Collaboration', 'desc': 'WebSocket-based real-time editing and presence features', 'priority': 'high', 'complexity': 6, 'assignee': jordan, 'progress': 0, 'column': todo, 'duration': 9},
+            {'title': 'Data Caching Layer', 'desc': 'Redis-based caching for improved performance', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': todo, 'duration': 4},
+            {'title': 'API Rate Limiting', 'desc': 'Implement rate limiting and throttling for API endpoints', 'priority': 'high', 'complexity': 5, 'assignee': sam, 'progress': 0, 'column': todo, 'duration': 5},
+            {'title': 'Integration Testing Suite', 'desc': 'End-to-end integration tests for all core features', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'duration': 4},
+            {'title': 'Core Features Code Review', 'desc': 'Comprehensive code review and refactoring', 'priority': 'urgent', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'duration': 2},
         ]
+        phase2_data, phase2_end = _compute_phase_dates(phase2_data, phase2_start)
 
-        for i, t in enumerate(phase2_data):
-            start = now + timedelta(days=t['start_offset'])
-            due_date_obj = start + timedelta(days=t['duration'])
-            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, time(12, 0)))
+        for t in phase2_data:
+            due_datetime = timezone.make_aware(datetime.combine(t['due'], time(12, 0)))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
                 assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
-                start_date=start, due_date=due_datetime, phase='Phase 2',
+                start_date=t['start'], due_date=due_datetime, phase='Phase 2',
                 is_seed_demo_data=True,
             )
             items.append(task)
 
         # =====================================================================
-        # Phase 3: Polish & Launch (10 tasks)
+        # Phase 3: Polish & Launch (10 tasks) — starts 5 days after Phase 2
         # =====================================================================
-        phase_start = 66
+        phase3_start = phase2_end + timedelta(days=5)
         phase3_data = [
-            {'title': 'Performance Optimization', 'desc': 'Database query optimization and caching improvements', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start, 'duration': 8},
-            {'title': 'Security Audit & Fixes', 'desc': 'Address findings from penetration testing', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start, 'duration': 4},
-            {'title': 'UI/UX Polish', 'desc': 'Final UI polish and mobile responsive improvements', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 8, 'duration': 6},
-            {'title': 'Load Testing & Optimization', 'desc': 'Conduct load tests and fix performance bottlenecks', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 5},
-            {'title': 'User Onboarding Flow', 'desc': 'Interactive tutorial and onboarding experience', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 19, 'duration': 6},
-            {'title': 'Error Tracking & Monitoring', 'desc': 'Configure Sentry, APM and alerting systems', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 19, 'duration': 3},
-            {'title': 'Accessibility Compliance', 'desc': 'WCAG 2.1 AA compliance updates and testing', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 22, 'duration': 4},
-            {'title': 'Final Documentation', 'desc': 'Complete user guides and API documentation', 'priority': 'low', 'complexity': 2, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 2},
-            {'title': 'Deployment Automation', 'desc': 'One-click deployment pipeline to production', 'priority': 'medium', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 27, 'duration': 3},
-            {'title': 'Launch & Go-Live', 'desc': 'Final checklist, DNS cutover, and production deployment', 'priority': 'urgent', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 30, 'duration': 2},
+            {'title': 'Performance Optimization', 'desc': 'Database query optimization and caching improvements', 'priority': 'high', 'complexity': 6, 'assignee': sam, 'progress': 0, 'column': todo, 'duration': 8},
+            {'title': 'Security Audit & Fixes', 'desc': 'Address findings from penetration testing', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'duration': 4},
+            {'title': 'UI/UX Polish', 'desc': 'Final UI polish and mobile responsive improvements', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'duration': 3},
+            {'title': 'Load Testing & Optimization', 'desc': 'Conduct load tests and fix performance bottlenecks', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'duration': 5},
+            {'title': 'User Onboarding Flow', 'desc': 'Interactive tutorial and onboarding experience', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 0, 'column': todo, 'duration': 3},
+            {'title': 'Error Tracking & Monitoring', 'desc': 'Configure Sentry, APM and alerting systems', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'duration': 6},
+            {'title': 'Accessibility Compliance', 'desc': 'WCAG 2.1 AA compliance updates and testing', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': todo, 'duration': 4},
+            {'title': 'Final Documentation', 'desc': 'Complete user guides and API documentation', 'priority': 'low', 'complexity': 2, 'assignee': jordan, 'progress': 0, 'column': todo, 'duration': 2},
+            {'title': 'Deployment Automation', 'desc': 'One-click deployment pipeline to production', 'priority': 'medium', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'duration': 3},
+            {'title': 'Launch & Go-Live', 'desc': 'Final checklist, DNS cutover, and production deployment', 'priority': 'urgent', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'duration': 2},
         ]
+        phase3_data, phase3_end = _compute_phase_dates(phase3_data, phase3_start)
 
-        for i, t in enumerate(phase3_data):
-            start = now + timedelta(days=t['start_offset'])
-            due_date_obj = start + timedelta(days=t['duration'])
-            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, time(12, 0)))
+        for t in phase3_data:
+            due_datetime = timezone.make_aware(datetime.combine(t['due'], time(12, 0)))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
                 assigned_to=t['assignee'], created_by=alex, progress=t['progress'],
-                start_date=start, due_date=due_datetime, phase='Phase 3',
+                start_date=t['start'], due_date=due_datetime, phase='Phase 3',
                 is_seed_demo_data=True,
             )
             items.append(task)
@@ -939,25 +968,17 @@ class Command(BaseCommand):
     def create_gantt_milestones(self, software_tasks, board, creator):
         """
         Create Gantt-chart milestones (item_type='milestone') for the Software
-        Development board – 2 per phase, positioned between real tasks so the
-        Gantt diamond markers appear in meaningful places.
+        Development board – 2 per phase, positioned after key tasks.
 
-        Phase 1 (Foundation & Setup):
-          M1 – "Foundation Architecture Complete"  after task[2] (System Architecture Design, EF day 10)
-          M2 – "Core Authentication Ready"          after task[5] (Authentication System, EF day 13)
+        Milestone dates are derived from the actual task due_dates so they
+        stay correct regardless of the random gaps used during task creation.
 
-        Phase 2 (Core Features) – uses redesigned task timeline:
-          M1 – "Search Infrastructure Ready"        after task[14] (Search & Indexing, EF day 45)
-          M2 – "API Layer Complete"                 after task[17] (API Rate Limiting, EF day 50)
-
-        Phase 3 (Polish & Launch):
-          M1 – "Beta Release Checkpoint"            after task[24] (User Onboarding Flow, EF day 80)
-          M2 – "Go-Live Authorization"              after task[28] (Deployment Automation, EF day 91)
+        Phase 1: M1 after task[2], M2 after task[5]
+        Phase 2: M1 after task[14], M2 after task[17]
+        Phase 3: M1 after task[24], M2 after task[28]
         """
         from datetime import datetime, time as _time
         from django.utils import timezone
-
-        now = timezone.now().date()
 
         # Attach to the backlog/first column (same logic as add_gantt_milestone view)
         column = (
@@ -968,9 +989,16 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING('   ⚠️  No column found for milestones – skipping'))
             return
 
-        def _make_milestone(title, desc, phase, day_offset, position_task, status):
-            """Helper to create a single milestone Task."""
-            due_date = now + timedelta(days=day_offset)
+        def _task_due_date(task_obj):
+            """Extract the date portion of a task's due_date."""
+            dd = task_obj.due_date
+            if hasattr(dd, 'date'):
+                return timezone.localtime(dd).date()
+            return dd
+
+        def _make_milestone(title, desc, phase, ref_task, status):
+            """Create a milestone aligned to ref_task's due date."""
+            due_date = _task_due_date(ref_task)
             Task.objects.create(
                 title=title,
                 description=desc,
@@ -983,67 +1011,55 @@ class Command(BaseCommand):
                 progress=100 if status == 'completed' else 0,
                 item_type='milestone',
                 milestone_status=status,
-                position_after_task=position_task,
+                position_after_task=ref_task,
                 is_seed_demo_data=True,
             )
 
         # ── Phase 1 milestones ────────────────────────────────────────────────
-        # M1: after System Architecture Design (task index 2, EF = day 10)
         _make_milestone(
             title='Foundation Architecture Complete',
             desc='All architecture decisions finalised; base API and DB schema unblocked.',
             phase='Phase 1',
-            day_offset=10,
-            position_task=software_tasks[2],   # System Architecture Design
+            ref_task=software_tasks[2],   # System Architecture Design
             status='completed',
         )
-        # M2: after Authentication System (task index 5, EF = day 13)
         _make_milestone(
             title='Core Authentication Ready',
             desc='JWT auth system in review; user registration and testing can now proceed in parallel.',
             phase='Phase 1',
-            day_offset=13,
-            position_task=software_tasks[5],   # Authentication System
+            ref_task=software_tasks[5],   # Authentication System
             status='upcoming',
         )
 
         # ── Phase 2 milestones ────────────────────────────────────────────────
-        # M1: after Search & Indexing Engine (task index 14, EF = phase_start+17 = day 45)
         _make_milestone(
             title='Search Infrastructure Ready',
             desc='Full-text search and indexing complete; API rate limiting sprint can begin.',
             phase='Phase 2',
-            day_offset=45,
-            position_task=software_tasks[14],  # Search & Indexing Engine
+            ref_task=software_tasks[14],  # Search & Indexing Engine
             status='upcoming',
         )
-        # M2: after API Rate Limiting (task index 17, EF = phase_start+22 = day 50)
         _make_milestone(
             title='API Layer Complete',
             desc='Rate limiting, caching, and core API hardening signed off; integration testing gates cleared.',
             phase='Phase 2',
-            day_offset=50,
-            position_task=software_tasks[17],  # API Rate Limiting
+            ref_task=software_tasks[17],  # API Rate Limiting
             status='upcoming',
         )
 
         # ── Phase 3 milestones ────────────────────────────────────────────────
-        # M1: after User Onboarding Flow (task index 24, EF = day 80)
         _make_milestone(
             title='Beta Release Checkpoint',
             desc='Performance, security, onboarding and UX validated. Green light to enter deployment pipeline.',
             phase='Phase 3',
-            day_offset=80,
-            position_task=software_tasks[24],  # User Onboarding Flow
+            ref_task=software_tasks[24],  # User Onboarding Flow
             status='upcoming',
         )
-        # M2: after Deployment Automation (task index 28, EF = day 91)
         _make_milestone(
             title='Go-Live Authorization',
             desc='Deployment pipeline verified and stakeholder sign-off received. Ready for production launch.',
             phase='Phase 3',
-            day_offset=91,
-            position_task=software_tasks[28],  # Deployment Automation
+            ref_task=software_tasks[28],  # Deployment Automation
             status='upcoming',
         )
 
@@ -1267,56 +1283,41 @@ class Command(BaseCommand):
 
     def create_dependencies(self, software_tasks, marketing_tasks, bug_tasks):
         """
-        Create realistic task dependencies with parallel paths and merge points.
-        Uses the same pattern as the construction demo for proper critical path visualization.
-        
-        Dependency structure per phase (same for all boards):
-        [0] Start Task ──────────────────┐
-                                         ├──► [4] Merge Point 1 ──► [7] Work Item
-        [1] Parallel Task 1 ─────────────┘                               │
-                                                                         │
-        [2] Parallel Task 2 ─────────────┐                               │
-                                         ├──► [5] Gate ──► [8] Work Item ─┐
-        [3] Parallel Task 3 ─────────────┘        │                       │
-                                                  │                       │
-                                                  └──► [6] Side Task     │
-                                                                         │
-                                              [9] Final Task ◄───────────┘
-                                                (depends on [7] AND [8])
+        Create simple finish-to-start dependencies for the Software Development
+        board using a "Mainline + One Branch" pattern per phase.
+
+        Layout per phase (indices 0-9 within the phase):
+
+           [0]→[1]─┬─→[3]─┬─→[5]→[6]→[7]→[8]→[9]   ← mainline (critical path)
+                    │      │
+                    └→[2]  └→[4]                       ← branches (positive slack)
+
+        Every task has exactly ONE predecessor (except [0]).
+        Branch tasks [2] and [4] have shorter durations than the mainline
+        segment they parallel, giving them visible slack when the CPM
+        algorithm runs.
         """
-        def create_phase_dependencies(tasks, phase_offset):
-            """Create dependencies for a single phase (10 tasks)"""
-            if len(tasks) < phase_offset + 10:
+        def create_phase_dependencies(tasks, base):
+            if len(tasks) < base + 10:
                 return
-            
-            base = phase_offset
-            # Task 4 depends on Tasks 0 and 1
-            tasks[base + 4].dependencies.add(tasks[base + 0])
-            tasks[base + 4].dependencies.add(tasks[base + 1])
-            
-            # Task 5 depends on Tasks 2 and 3
-            tasks[base + 5].dependencies.add(tasks[base + 2])
+            # Mainline chain: 0→1→3→5→6→7→8→9
+            tasks[base + 1].dependencies.add(tasks[base + 0])
+            tasks[base + 3].dependencies.add(tasks[base + 1])
             tasks[base + 5].dependencies.add(tasks[base + 3])
-            
-            # Task 6 depends on Task 5
             tasks[base + 6].dependencies.add(tasks[base + 5])
-            
-            # Task 7 depends on Task 4
-            tasks[base + 7].dependencies.add(tasks[base + 4])
-            
-            # Task 8 depends on Task 5
-            tasks[base + 8].dependencies.add(tasks[base + 5])
-            
-            # Task 9 depends on Tasks 7 and 8 (merge point)
-            tasks[base + 9].dependencies.add(tasks[base + 7])
+            tasks[base + 7].dependencies.add(tasks[base + 6])
+            tasks[base + 8].dependencies.add(tasks[base + 7])
             tasks[base + 9].dependencies.add(tasks[base + 8])
+            # Branch tasks
+            tasks[base + 2].dependencies.add(tasks[base + 1])  # branch off [1]
+            tasks[base + 4].dependencies.add(tasks[base + 3])  # branch off [3]
 
         # Software Development
         if len(software_tasks) >= 30:
             create_phase_dependencies(software_tasks, 0)   # Phase 1
             create_phase_dependencies(software_tasks, 10)  # Phase 2
             create_phase_dependencies(software_tasks, 20)  # Phase 3
-        self.stdout.write('   ✅ Software Development dependencies created (parallel paths with merge points)')
+        self.stdout.write('   ✅ Software Development dependencies created (mainline + branch per phase)')
 
     def create_lean_labels(self, software_board, marketing_board, bug_board):
         """Create Lean Six Sigma labels for all boards"""
