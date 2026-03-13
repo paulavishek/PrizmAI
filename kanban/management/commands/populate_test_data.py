@@ -23,6 +23,7 @@ from kanban.retrospective_models import (
 )
 from messaging.models import ChatRoom, ChatMessage
 from wiki.models import WikiCategory, WikiPage, WikiAttachment, MeetingNotes
+from decision_center.models import DecisionItem
 
 class Command(BaseCommand):
     help = 'Populate the database with test data'
@@ -82,6 +83,9 @@ class Command(BaseCommand):
 
         # Seed AI Coach demo data (coaching effectiveness metrics)
         self.create_ai_coach_demo_data()
+
+        # Create Decision Center demo items (pending decisions)
+        self.create_decision_center_demo_data()
         
         # Refresh all demo data dates to be relative to current date
         # This ensures that even if demo data creation took time, all dates are current
@@ -129,6 +133,7 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS('✅ Scope Tracking - Baseline snapshots for all boards'))
         self.stdout.write(self.style.SUCCESS('✅ Budget & ROI Tracking - Complete financial analysis with AI'))
         self.stdout.write(self.style.SUCCESS('✅ Conflict Detection - Realistic conflict scenarios created'))
+        self.stdout.write(self.style.SUCCESS('✅ Decision Center - Pending decision items for demo review'))
         self.stdout.write(self.style.SUCCESS('='*70 + '\n'))
 
     def create_users(self):
@@ -3049,19 +3054,43 @@ Carol: Sounds good. Great work this week!
             users = list(User.objects.all()[:5])
             time_entries_created = 0
             task_costs_created = 0
-            
+
+            # For the Software Project board, use controlled cost values so that
+            # CPI lands between 0.78-0.88 (target ≈ 0.82 = "slightly over budget").
+            # CPI formula: (done_tasks/total_tasks × allocated_budget) / sum(actual_cost)
+            # Other boards keep random values.
+            use_controlled_costs = (board.name == 'Software Project')
+            if use_controlled_costs:
+                all_board_tasks = Task.objects.filter(column__board=board, item_type='task')
+                total_t = all_board_tasks.count()
+                done_t = all_board_tasks.filter(progress=100).count()
+                comp_ratio = (done_t / total_t) if total_t else 0
+                alloc = float(board_config['budget'])  # 50000
+                earned_value = comp_ratio * alloc
+                target_cpi = 0.82
+                target_total_spent = earned_value / target_cpi if target_cpi else alloc
+                num_costed = min(tasks.count(), 15)
+                base_cost_per_task = Decimal(str(round(target_total_spent / num_costed, 2))) if num_costed else Decimal('500.00')
+
             for i, task in enumerate(tasks):
-                # Create TaskCost
-                estimated_cost = Decimal(random.uniform(100, 2000))
-                estimated_hours = Decimal(random.uniform(2, 40))
-                
-                # Make some tasks over budget for demo
-                is_over_budget = i % 4 == 0  # Every 4th task
-                variance_factor = Decimal(random.uniform(1.1, 1.4)) if is_over_budget else Decimal(random.uniform(0.7, 1.0))
-                
-                actual_cost = estimated_cost * variance_factor
-                hourly_rate = Decimal(random.choice(['50.00', '75.00', '100.00', '125.00']))
-                resource_cost = Decimal(random.uniform(0, 500)) if i % 3 == 0 else Decimal('0.00')
+                if use_controlled_costs:
+                    # Distribute total spend across tasks with ±10% variation
+                    variance = Decimal(str(round(random.uniform(0.90, 1.10), 4)))
+                    actual_cost = (base_cost_per_task * variance).quantize(Decimal('0.01'))
+                    # estimated_cost slightly lower to show "over budget" pattern
+                    estimated_cost = (actual_cost * Decimal(str(round(random.uniform(0.75, 0.92), 4)))).quantize(Decimal('0.01'))
+                    estimated_hours = Decimal(str(round(random.uniform(8, 30), 2)))
+                    hourly_rate = Decimal(random.choice(['75.00', '100.00', '125.00']))
+                    resource_cost = Decimal(str(round(random.uniform(50, 200), 2))) if i % 3 == 0 else Decimal('0.00')
+                else:
+                    # Original random generation for other boards
+                    estimated_cost = Decimal(random.uniform(100, 2000))
+                    estimated_hours = Decimal(random.uniform(2, 40))
+                    is_over_budget = i % 4 == 0  # Every 4th task
+                    variance_factor = Decimal(random.uniform(1.1, 1.4)) if is_over_budget else Decimal(random.uniform(0.7, 1.0))
+                    actual_cost = estimated_cost * variance_factor
+                    hourly_rate = Decimal(random.choice(['50.00', '75.00', '100.00', '125.00']))
+                    resource_cost = Decimal(random.uniform(0, 500)) if i % 3 == 0 else Decimal('0.00')
                 
                 task_cost, created = TaskCost.objects.get_or_create(
                     task=task,
@@ -3283,7 +3312,7 @@ Carol: Sounds good. Great work this week!
         alice = User.objects.get(username='alice_williams')
         
         # Get dev organization and board
-        dev_org = Organization.objects.filter(name='TechCorp Solutions').first()
+        dev_org = Organization.objects.filter(name='Dev Team').first()
         if not dev_org:
             self.stdout.write(self.style.WARNING('  ⚠️ Dev organization not found, skipping conflict scenarios'))
             return
@@ -4129,5 +4158,70 @@ Carol: Sounds good. Great work this week!
             f'  ✅ AI Coach demo data seeded: {total_created} suggestions created across {demo_boards.count()} boards'
         ))
 
+    def create_decision_center_demo_data(self):
+        """Create pending DecisionItem records so the Decision Center isn't empty."""
+        self.stdout.write(self.style.NOTICE('\n📋 Creating Decision Center demo data...'))
 
+        software_board = Board.objects.filter(name='Software Project').first()
+        if not software_board:
+            self.stdout.write(self.style.WARNING('  ⚠️ Software Project board not found, skipping Decision Center items'))
+            return
 
+        admin_user = self.users.get('admin')
+        if not admin_user:
+            self.stdout.write(self.style.WARNING('  ⚠️ Admin user not found, skipping Decision Center items'))
+            return
+
+        # Avoid duplicates on re-run
+        existing = DecisionItem.objects.filter(
+            created_for=admin_user,
+            board=software_board,
+            status='pending',
+        ).count()
+        if existing >= 2:
+            self.stdout.write(f'  ⏭️  Decision Center already has {existing} pending items, skipping...')
+            return
+
+        # Item 1 — action_required: overdue tasks need attention
+        DecisionItem.objects.get_or_create(
+            created_for=admin_user,
+            board=software_board,
+            item_type='overdue_task',
+            status='pending',
+            defaults={
+                'priority_level': 'action_required',
+                'title': '2 tasks are past their due date',
+                'description': (
+                    'The tasks "Update API Documentation" and '
+                    '"User Feedback Analysis Report" have missed their deadlines. '
+                    'Review timelines and reassign if necessary.'
+                ),
+                'suggested_action': 'Open the board, review the overdue tasks, and update their due dates or escalate blockers.',
+                'estimated_minutes': 5,
+                'context_data': {'most_overdue_days': 3, 'overdue_count': 2},
+            },
+        )
+
+        # Item 2 — awareness: budget utilization approaching threshold
+        DecisionItem.objects.get_or_create(
+            created_for=admin_user,
+            board=software_board,
+            item_type='budget_threshold',
+            status='pending',
+            defaults={
+                'priority_level': 'awareness',
+                'title': 'Budget utilization nearing warning threshold',
+                'description': (
+                    'The Software Project board has used a significant portion of its '
+                    'allocated budget. Consider reviewing remaining task costs to stay on track.'
+                ),
+                'suggested_action': 'Review the Budget & ROI dashboard and adjust task priorities if needed.',
+                'estimated_minutes': 3,
+                'context_data': {'utilization_pct': 78},
+            },
+        )
+
+        created_count = DecisionItem.objects.filter(
+            created_for=admin_user, board=software_board, status='pending',
+        ).count()
+        self.stdout.write(self.style.SUCCESS(f'  ✓ Decision Center: {created_count} pending items for admin user'))
