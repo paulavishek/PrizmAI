@@ -365,9 +365,11 @@
         border: 1px solid #991b1b;
     }
 
-    /* Hide progress overlay for cleaner look */
+    /* Show in-bar progress fill — complements the split-view table Progress column */
     .gantt .bar-wrapper .bar-progress {
-        display: none !important;
+        fill: rgba(255, 255, 255, 0.25) !important;
+        rx: 6;
+        ry: 6;
     }
 
     /* Ensure bars have uniform color and rounded corners */
@@ -1087,6 +1089,293 @@
     .priority-dot-circle[data-priority="medium"]  { fill: #fbbf24; }
     .priority-dot-circle[data-priority="low"]     { fill: #9ca3af; }
 
+    /* ============================================
+       SPLIT-VIEW: FIXED TABLE + SCROLLABLE TIMELINE
+       ============================================ */
+
+    .gantt-split-view {
+        display: flex;
+        position: relative;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #fff;
+    }
+
+    /* ── Left: Task Table Panel ── */
+    #gantt-table-panel {
+        flex-shrink: 0;
+        overflow-y: hidden;
+        overflow-x: hidden;
+        background: #f8fafc;
+        border-right: none;
+        z-index: 2;
+        display: flex;
+        flex-direction: column;
+    }
+
+    #gantt-table-panel .table-header {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+        color: #f1f5f9;
+        display: flex;
+        align-items: center;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        border-bottom: 2px solid #475569;
+        flex-shrink: 0;
+        min-height: 50px;
+        box-sizing: border-box;
+    }
+
+    #gantt-table-panel .table-header .th-cell {
+        padding: 0 10px;
+        display: flex;
+        align-items: center;
+        height: 100%;
+    }
+
+    #gantt-table-panel .th-activity { flex: 1; min-width: 0; }
+    #gantt-table-panel .th-responsible { width: 100px; justify-content: center; }
+    #gantt-table-panel .th-progress { width: 90px; justify-content: center; }
+
+    #gantt-table-body {
+        overflow-y: hidden;
+        flex: 1;
+    }
+
+    /* ── Table rows ── */
+    .gantt-table-row {
+        display: flex;
+        align-items: center;
+        border-bottom: 1px solid #f1f5f9;
+        box-sizing: border-box;
+        transition: background 0.12s ease;
+        cursor: default;
+    }
+
+    .gantt-table-row:hover {
+        background: #eff6ff;
+    }
+
+    .gantt-table-row .td-cell {
+        padding: 0 10px;
+        display: flex;
+        align-items: center;
+        height: 100%;
+        overflow: hidden;
+        font-size: 0.82rem;
+        color: #334155;
+    }
+
+    .gantt-table-row .td-activity {
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-weight: 500;
+    }
+
+    .gantt-table-row .td-responsible {
+        width: 100px;
+        justify-content: center;
+    }
+
+    .gantt-table-row .td-progress {
+        width: 90px;
+        justify-content: center;
+    }
+
+    /* Phase row styling */
+    .gantt-table-row.phase-row {
+        background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%);
+        font-weight: 600;
+        color: #4338ca;
+        cursor: pointer;
+        border-bottom: 1px solid #c7d2fe;
+    }
+
+    .gantt-table-row.phase-row:hover {
+        background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+    }
+
+    .gantt-table-row.phase-row .phase-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        margin-right: 6px;
+        font-size: 10px;
+        color: #6366f1;
+        flex-shrink: 0;
+    }
+
+    /* Milestone row styling */
+    .gantt-table-row.milestone-row {
+        background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+        border-bottom: 1px solid #e9d5ff;
+    }
+
+    .gantt-table-row.milestone-row .td-activity {
+        color: #7c3aed;
+        font-weight: 600;
+    }
+
+    .milestone-icon {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        margin-right: 6px;
+        flex-shrink: 0;
+    }
+
+    .milestone-icon polygon {
+        fill: #7c3aed;
+        stroke: #5b21b6;
+        stroke-width: 1;
+    }
+
+    .milestone-icon.completed polygon {
+        fill: #10b981;
+        stroke: #064e3b;
+    }
+
+    /* Assignee avatar */
+    .table-assignee-avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        font-size: 10px;
+        font-weight: 700;
+        color: white;
+        flex-shrink: 0;
+    }
+
+    .table-assignee-avatar.has-assignee {
+        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    }
+
+    .table-assignee-avatar.unassigned {
+        background: #cbd5e1;
+        color: #94a3b8;
+    }
+
+    /* Mini progress bar */
+    .mini-progress-bar {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        width: 100%;
+    }
+
+    .mini-progress-track {
+        flex: 1;
+        height: 6px;
+        background: #e2e8f0;
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .mini-progress-fill {
+        height: 100%;
+        border-radius: 3px;
+        transition: width 0.3s ease;
+    }
+
+    .mini-progress-fill.progress-high { background: linear-gradient(90deg, #22c55e, #16a34a); }
+    .mini-progress-fill.progress-mid  { background: linear-gradient(90deg, #3b82f6, #2563eb); }
+    .mini-progress-fill.progress-low  { background: linear-gradient(90deg, #94a3b8, #64748b); }
+
+    .mini-progress-text {
+        font-size: 10px;
+        font-weight: 600;
+        color: #64748b;
+        min-width: 28px;
+        text-align: right;
+    }
+
+    /* ── Resizable divider between panels ── */
+    .gantt-split-divider {
+        width: 5px;
+        cursor: col-resize;
+        background: #e2e8f0;
+        flex-shrink: 0;
+        z-index: 4;
+        transition: background 0.15s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .gantt-split-divider:hover,
+    .gantt-split-divider.dragging {
+        background: #3b82f6;
+    }
+
+    .gantt-split-divider::after {
+        content: '';
+        width: 2px;
+        height: 24px;
+        border-radius: 1px;
+        background: #94a3b8;
+    }
+
+    .gantt-split-divider:hover::after,
+    .gantt-split-divider.dragging::after {
+        background: white;
+    }
+
+    /* ── Right: Timeline Panel ── */
+    #gantt-timeline-panel {
+        flex: 1;
+        overflow-x: auto;
+        overflow-y: hidden;
+        min-width: 0;
+    }
+
+    /* ── Responsive: collapse table columns ── */
+    @media (max-width: 768px) {
+        #gantt-table-panel .th-responsible,
+        #gantt-table-panel .th-progress,
+        .gantt-table-row .td-responsible,
+        .gantt-table-row .td-progress {
+            display: none;
+        }
+    }
+
+    @media (max-width: 576px) {
+        #gantt-table-panel,
+        .gantt-split-divider {
+            display: none !important;
+        }
+        #gantt-timeline-panel {
+            flex: 1;
+        }
+        /* Revert to inline labels on very small screens */
+        .gantt .bar-label {
+            display: block !important;
+        }
+    }
+
+    /* Critical path highlight in table */
+    .gantt-table-row.critical-row {
+        border-left: 3px solid #dc2626;
+        background: #fef2f2;
+    }
+
+    .gantt-table-row.critical-row:hover {
+        background: #fee2e2;
+    }
+
 </style>
 {% endblock %}
 
@@ -1228,9 +1517,28 @@
                 </div>
             </div>
 
-            <!-- Gantt Chart Wrapper - this div will be cleared and recreated on each render -->
-            <div id="gantt-chart-wrapper">
-                <svg id="gantt"></svg>
+            <!-- Split-View: Fixed Table + Scrollable Gantt Timeline -->
+            <div class="gantt-split-view" id="gantt-split-view">
+                <!-- Left: Task Table Panel -->
+                <div id="gantt-table-panel">
+                    <div class="table-header">
+                        <div class="th-cell th-activity">Activity</div>
+                        <div class="th-cell th-responsible">Responsible</div>
+                        <div class="th-cell th-progress">Progress</div>
+                    </div>
+                    <div id="gantt-table-body"></div>
+                </div>
+
+                <!-- Resizable Divider -->
+                <div class="gantt-split-divider" id="gantt-split-divider"></div>
+
+                <!-- Right: Timeline Panel -->
+                <div id="gantt-timeline-panel">
+                    <!-- Gantt Chart Wrapper - cleared and recreated on each render -->
+                    <div id="gantt-chart-wrapper">
+                        <svg id="gantt"></svg>
+                    </div>
+                </div>
             </div>
             
             <!-- Custom Tooltip -->
@@ -2080,6 +2388,8 @@
                     requestAnimationFrame(() => {
                         applyCustomStyling();
                         drawCustomDependencyLines();
+                        // Rebuild the split-view table with updated row heights
+                        refreshSplitView();
                         // Remove transitioning class after styling is complete
                         chartWrapper.classList.remove('transitioning');
                     });
@@ -2153,6 +2463,10 @@
                 // Draw custom dependency lines after chart is visible
                 requestAnimationFrame(() => {
                     drawCustomDependencyLines();
+
+                    // Build/refresh the split-view table
+                    _lastRenderedItems = buildOrderedTaskList(topologicalSortTasks(tasks), visibleMilestones);
+                    refreshSplitView();
                     
                     // Final cleanup pass
                     setTimeout(() => {
@@ -2850,8 +3164,8 @@
     }
 
     // Phase 3: Position labels to the RIGHT of bars AFTER dependency lines are drawn.
-    // For each bar/milestone, scan its row for ALL dependency line segments passing through,
-    // find the furthest line from the bar, and place the title past it with a buffer.
+    // When split-view table is active, labels are hidden (the table shows task names).
+    // On very small screens (<576px) where the table is hidden, labels reappear.
     function positionBarLabels() {
         const ganttSvg = document.querySelector('#gantt');
         if (!ganttSvg) return;
@@ -2859,88 +3173,81 @@
         // Remove any leftover floating labels
         ganttSvg.querySelectorAll('.floating-task-label').forEach(el => el.remove());
 
+        // If the split-view table is visible, hide all SVG labels
+        const tablePanel = document.getElementById('gantt-table-panel');
+        const tableVisible = tablePanel && tablePanel.offsetParent !== null && window.innerWidth > 576;
+        if (tableVisible) {
+            // Hide all task labels — the fixed table replaces them
+            [...tasks].forEach(task => {
+                const bw = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
+                if (!bw) return;
+                const lbl = bw.querySelector('.bar-label');
+                if (lbl) lbl.style.display = 'none';
+            });
+            ganttMilestones.forEach(milestone => {
+                const bw = document.querySelector(`.bar-wrapper[data-id="${milestone.id}"]`);
+                if (!bw) return;
+                const lbl = bw.querySelector('.bar-label');
+                if (lbl) lbl.style.display = 'none';
+            });
+            return;
+        }
+
+        // ── Fallback: position labels inline (small screens or no table) ──
         const vSegs = window._depVerticalSegments || [];
         const hSegs = window._depHorizontalSegments || [];
-        const BUFFER = 12; // minimum buffer distance past the furthest line
+        const BUFFER = 12;
 
-        // Helper: given a row's Y range, find the X position of the furthest (rightmost)
-        // dependency line segment that passes through the row and is to the right of startX.
         function findFurthestLineX(rowYTop, rowYBottom, startX) {
             let furthestX = startX;
-
-            // Check vertical segments passing through this row
             for (let i = 0; i < vSegs.length; i++) {
                 const seg = vSegs[i];
-                // Vertical segment overlaps the row's Y range and is to the right of the bar
                 if (seg.yMax >= rowYTop && seg.yMin <= rowYBottom && seg.x > startX) {
-                    if (seg.x > furthestX) {
-                        furthestX = seg.x;
-                    }
+                    if (seg.x > furthestX) furthestX = seg.x;
                 }
             }
-
-            // Check horizontal segments passing through this row
             for (let i = 0; i < hSegs.length; i++) {
                 const seg = hSegs[i];
-                // Horizontal segment's Y is within the row and extends past the bar
                 if (seg.y >= rowYTop && seg.y <= rowYBottom && seg.xMax > startX) {
-                    if (seg.xMax > furthestX) {
-                        furthestX = seg.xMax;
-                    }
+                    if (seg.xMax > furthestX) furthestX = seg.xMax;
                 }
             }
-
             return furthestX;
         }
 
-        // ── Position regular task labels ──
         const allItems = [...tasks];
         allItems.forEach(task => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${task.id}"]`);
             if (!barWrapper) return;
-
             const bar = barWrapper.querySelector('.bar');
             if (!bar) return;
-
             let barRect;
             try { barRect = bar.getBBox(); } catch (e) { return; }
-
             const barWidth = parseFloat(bar.getAttribute('width')) || barRect.width;
             const barHeight = barRect.height;
             if (barWidth <= 0 || barHeight <= 0) return;
-
             const existingLabel = barWrapper.querySelector('.bar-label');
             if (!existingLabel) return;
 
-            // Font size based on view mode
             let fontSize;
             if (currentViewMode === 'Month') { fontSize = 12; }
-            else if (currentViewMode === 'Day') { fontSize = 11; }
             else { fontSize = 11; }
-
             existingLabel.style.fontSize = fontSize + 'px';
 
-            // Row Y range = the bar's vertical extent
             const rowYTop = barRect.y;
             const rowYBottom = barRect.y + barHeight;
             const barRightEdge = parseFloat(bar.getAttribute('x') || barRect.x) + barWidth;
-
-            // Find the furthest line in this row to the right of the bar
             const furthestLineX = findFurthestLineX(rowYTop, rowYBottom, barRightEdge);
 
-            // Place title past the furthest line (or past the bar if no lines in row)
             let labelX;
             if (furthestLineX > barRightEdge) {
                 labelX = furthestLineX + BUFFER;
             } else {
-                labelX = barRightEdge + 8; // default gap when no lines in the row
+                labelX = barRightEdge + 8;
             }
 
-            // Show full task name (truncate only if very long)
             let displayName = task.fullName;
-            if (displayName.length > 40) {
-                displayName = displayName.substring(0, 37) + '...';
-            }
+            if (displayName.length > 40) displayName = displayName.substring(0, 37) + '...';
 
             existingLabel.textContent = displayName;
             existingLabel.setAttribute('x', labelX);
@@ -2951,37 +3258,373 @@
             existingLabel.classList.remove('outside-left', 'outside-right');
         });
 
-        // ── Reposition milestone labels past lines in their rows ──
+        // Reposition milestone labels
         ganttMilestones.forEach(milestone => {
             const barWrapper = document.querySelector(`.bar-wrapper[data-id="${milestone.id}"]`);
             if (!barWrapper) return;
-
             const barLabel = barWrapper.querySelector('.bar-label');
             if (!barLabel) return;
-
             const diamond = barWrapper.querySelector('.milestone-diamond-shape');
             if (!diamond) return;
-
             let bbox;
             try { bbox = diamond.getBBox(); } catch (e) { return; }
             if (bbox.width <= 0 || bbox.height <= 0) return;
-
             const diamondRightEdge = bbox.x + bbox.width;
             const rowYTop = bbox.y;
             const rowYBottom = bbox.y + bbox.height;
-
             const furthestLineX = findFurthestLineX(rowYTop, rowYBottom, diamondRightEdge);
-
             let labelX;
             if (furthestLineX > diamondRightEdge) {
                 labelX = furthestLineX + BUFFER;
             } else {
-                labelX = diamondRightEdge + 6; // default gap after diamond
+                labelX = diamondRightEdge + 6;
             }
-
             barLabel.setAttribute('x', labelX);
         });
     }
+
+    // ============================================
+    // SPLIT-VIEW: TABLE BUILDER + SCROLL SYNC + DIVIDER RESIZE
+    // ============================================
+
+    // Track the ordered item list used for the last render so the table can mirror it
+    let _lastRenderedItems = [];
+
+    /**
+     * Build (or rebuild) the HTML task table in the left panel.
+     * Called after every Gantt render / re-render.
+     */
+    function buildTaskTable() {
+        const tableBody = document.getElementById('gantt-table-body');
+        if (!tableBody) return;
+
+        // Determine the item list in the same order as the SVG rows
+        const items = _lastRenderedItems.length > 0 ? _lastRenderedItems : buildOrderedTaskList(topologicalSortTasks(tasks), visibleMilestones);
+
+        let html = '';
+        items.forEach(item => {
+            const isPhase = item.isPhase === true;
+            const isMilestone = item.isMilestone === true;
+            const isCritical = showCriticalPath && criticalPathTasks.has(String(item.id));
+
+            let rowClass = 'gantt-table-row';
+            if (isPhase) rowClass += ' phase-row';
+            if (isMilestone) rowClass += ' milestone-row';
+            if (isCritical) rowClass += ' critical-row';
+
+            // ── Activity cell ──
+            let activityHTML = '';
+            if (isPhase) {
+                const isExpanded = expandedPhases.has(item.phaseName);
+                const icon = isExpanded ? '&#9660;' : '&#9654;';
+                activityHTML = `<span class="phase-toggle">${icon}</span>`;
+                activityHTML += `<span>${escapeHTML(item.phaseName)}</span>`;
+            } else if (isMilestone) {
+                const completedClass = item.milestoneStatus === 'completed' ? ' completed' : '';
+                activityHTML = `<svg class="milestone-icon${completedClass}" width="12" height="12" viewBox="0 0 12 12"><polygon points="6,0 12,6 6,12 0,6"/></svg>`;
+                activityHTML += `<span title="${escapeHTML(item.fullName || item.name)}">${escapeHTML(truncate(item.fullName || item.name, 30))}</span>`;
+            } else {
+                activityHTML = `<span title="${escapeHTML(item.fullName || item.name)}">${escapeHTML(truncate(item.fullName || item.name, 30))}</span>`;
+            }
+
+            // ── Responsible cell ──
+            let responsibleHTML = '';
+            if (!isPhase) {
+                const fname = item.assignee_first_name || '';
+                const lname = item.assignee_last_name || '';
+                const assignedTo = item.assigned_to || 'Unassigned';
+                if (assignedTo !== 'Unassigned' && assignedTo !== '') {
+                    const displayName = fname && lname ? `${fname} ${lname}` : assignedTo;
+                    const initials = fname && lname
+                        ? (fname.charAt(0) + lname.charAt(0)).toUpperCase()
+                        : assignedTo.substring(0, 2).toUpperCase();
+                    responsibleHTML = `<span class="table-assignee-avatar has-assignee" title="${escapeHTML(displayName)}">${escapeHTML(initials)}</span>`;
+                } else {
+                    responsibleHTML = `<span class="table-assignee-avatar unassigned" title="Unassigned">—</span>`;
+                }
+            }
+
+            // ── Progress cell ──
+            let progressHTML = '';
+            if (isPhase) {
+                progressHTML = '';
+            } else if (isMilestone) {
+                const statusLabel = item.milestoneStatus === 'completed' ? '✅' : '◇';
+                progressHTML = `<span style="font-size:13px;" title="${escapeHTML(item.milestoneStatus || 'upcoming')}">${statusLabel}</span>`;
+            } else {
+                const pct = parseInt(item.progress) || 0;
+                let fillClass = 'progress-low';
+                if (pct > 75) fillClass = 'progress-high';
+                else if (pct >= 25) fillClass = 'progress-mid';
+                progressHTML = `<div class="mini-progress-bar"><div class="mini-progress-track"><div class="mini-progress-fill ${fillClass}" style="width:${pct}%"></div></div><span class="mini-progress-text">${pct}%</span></div>`;
+            }
+
+            // ── Build row ──
+            const clickAttr = isPhase
+                ? ` onclick="togglePhase('${escapeHTML((item.phaseName || '').replace(/'/g, "\\'"))}', event)"`
+                : '';
+
+            html += `<div class="${rowClass}" data-table-id="${escapeHTML(String(item.id))}"${clickAttr}>`;
+            html += `<div class="td-cell td-activity">${activityHTML}</div>`;
+            html += `<div class="td-cell td-responsible">${responsibleHTML}</div>`;
+            html += `<div class="td-cell td-progress">${progressHTML}</div>`;
+            html += `</div>`;
+        });
+
+        tableBody.innerHTML = html;
+
+        // Sync row heights after DOM paint
+        requestAnimationFrame(() => { syncTableRowHeights(); });
+    }
+
+    /** Escape HTML entities to prevent XSS */
+    function escapeHTML(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    /** Truncate a string */
+    function truncate(str, max) {
+        if (!str) return '';
+        return str.length > max ? str.substring(0, max - 1) + '…' : str;
+    }
+
+    /**
+     * Sync HTML table row heights with SVG bar Y-positions.
+     * Strictly separates DOM reads from DOM writes to prevent layout thrashing.
+     */
+    function syncTableRowHeights() {
+        const tableBody = document.getElementById('gantt-table-body');
+        const ganttSvg = document.querySelector('#gantt');
+        if (!tableBody || !ganttSvg) return;
+
+        const tableRows = tableBody.querySelectorAll('.gantt-table-row');
+        if (tableRows.length === 0) return;
+
+        // ── PASS 1: READ all SVG Y-positions into an array (no DOM writes) ──
+        const yPositions = [];
+
+        ganttSvg.querySelectorAll('.bar-wrapper').forEach(wrapper => {
+            if (wrapper.style.display === 'none') return;
+            const bar = wrapper.querySelector('.bar');
+            if (!bar) return;
+            const y = parseFloat(bar.getAttribute('y') || 0);
+            const h = parseFloat(bar.getAttribute('height') || 0);
+            if (h > 0) yPositions.push({ id: wrapper.getAttribute('data-id'), y, h });
+        });
+
+        if (yPositions.length < 1) return;
+
+        // Compute row pitches from consecutive Y positions
+        yPositions.sort((a, b) => a.y - b.y);
+
+        // Compute header height as the real pixel distance from the top of
+        // the timeline panel to the top of the first bar. Using
+        // getBoundingClientRect() is immune to intermediate wrapper divs,
+        // SVG viewBox transforms, or padding that Frappe Gantt may inject.
+        const timelinePanelEl = document.getElementById('gantt-timeline-panel');
+        const firstBarEl = yPositions[0] && document.querySelector(`.bar-wrapper[data-id="${yPositions[0].id}"] .bar`);
+        let headerHeight;
+        if (timelinePanelEl && firstBarEl) {
+            headerHeight = firstBarEl.getBoundingClientRect().top - timelinePanelEl.getBoundingClientRect().top;
+        } else {
+            // Fallback to SVG coordinate
+            headerHeight = yPositions[0].y;
+        }
+        if (headerHeight <= 0) {
+            // Fallback: grid-header BBox bottom edge
+            const gridHeader = ganttSvg.querySelector('.grid-header');
+            if (gridHeader) {
+                try {
+                    const ghBox = gridHeader.getBBox();
+                    headerHeight = ghBox.height + ghBox.y;
+                } catch (e) { headerHeight = 50; }
+            } else {
+                headerHeight = 50;
+            }
+        }
+
+        // Frappe Gantt positions each bar with padding/2 above and below it
+        // inside its row slot.  headerHeight currently points at the bar's TOP
+        // edge, but the table row text is vertically centred in a row whose
+        // height equals the full pitch (barHeight + padding).  Shifting the
+        // header up by padding/2 makes the row slot tops (and therefore the
+        // row centres) coincide with the bar centres.
+        const barPadding = currentViewMode === 'Month' ? 24 : 20;
+        headerHeight = Math.max(0, headerHeight - barPadding / 2);
+
+        // Build a map: data-id → computed row height
+        const heightMap = {};
+        for (let i = 0; i < yPositions.length; i++) {
+            const item = yPositions[i];
+            let rowH;
+            if (i + 1 < yPositions.length) {
+                rowH = yPositions[i + 1].y - item.y;
+            } else {
+                rowH = item.h + (currentViewMode === 'Month' ? 24 : 20);
+            }
+            heightMap[item.id] = Math.max(rowH, 28);
+        }
+
+        // ── PASS 1.5: REORDER table rows to match SVG bar order ──
+        // Frappe Gantt internally sorts bars by start date, which may differ
+        // from the topological order used to build the table. Reorder the DOM
+        // children so each table row lines up with its corresponding SVG bar.
+        const svgOrder = yPositions.map(p => String(p.id));
+        const rowsByTid = {};
+        tableRows.forEach(row => {
+            const tid = row.getAttribute('data-table-id');
+            if (tid) rowsByTid[tid] = row;
+        });
+
+        // Append rows in SVG order (DOM appendChild moves existing nodes)
+        svgOrder.forEach(id => {
+            if (rowsByTid[id]) {
+                tableBody.appendChild(rowsByTid[id]);
+                delete rowsByTid[id];
+            }
+        });
+        // Append any remaining rows that had no SVG match (unmapped)
+        Object.values(rowsByTid).forEach(row => tableBody.appendChild(row));
+
+        // ── PASS 2: WRITE heights to table rows (no DOM reads) ──
+        const tableHeaderEl = document.querySelector('#gantt-table-panel .table-header');
+        if (tableHeaderEl) {
+            tableHeaderEl.style.height = headerHeight + 'px';
+            tableHeaderEl.style.minHeight = headerHeight + 'px';
+        }
+
+        // Default height for rows without a matching SVG bar
+        const defaultRowH = currentViewMode === 'Month' ? (40 + 24) : (32 + 20);
+
+        // Re-query rows after reordering
+        const reorderedRows = tableBody.querySelectorAll('.gantt-table-row');
+        reorderedRows.forEach(row => {
+            const tid = row.getAttribute('data-table-id');
+            if (tid && heightMap[tid] !== undefined) {
+                row.style.height = heightMap[tid] + 'px';
+            } else {
+                row.style.height = defaultRowH + 'px';
+            }
+        });
+
+        // After heights are set, sync scroll positions
+        syncInitialScroll();
+    }
+
+    /**
+     * Synchronized vertical scrolling between table and timeline panels.
+     * Uses requestAnimationFrame to prevent scroll jank.
+     */
+    let _isSyncingScroll = false;
+    let _scrollRAF = null;
+
+    function setupScrollSync() {
+        const tableBody = document.getElementById('gantt-table-body');
+        const timelinePanel = document.getElementById('gantt-timeline-panel');
+        if (!tableBody || !timelinePanel) return;
+
+        tableBody.addEventListener('scroll', function () {
+            if (_isSyncingScroll) return;
+            if (_scrollRAF) cancelAnimationFrame(_scrollRAF);
+            _scrollRAF = requestAnimationFrame(() => {
+                _isSyncingScroll = true;
+                timelinePanel.scrollTop = tableBody.scrollTop;
+                _isSyncingScroll = false;
+            });
+        }, { passive: true });
+
+        timelinePanel.addEventListener('scroll', function () {
+            if (_isSyncingScroll) return;
+            if (_scrollRAF) cancelAnimationFrame(_scrollRAF);
+            _scrollRAF = requestAnimationFrame(() => {
+                _isSyncingScroll = true;
+                tableBody.scrollTop = timelinePanel.scrollTop;
+                _isSyncingScroll = false;
+            });
+        }, { passive: true });
+    }
+
+    function syncInitialScroll() {
+        const tableBody = document.getElementById('gantt-table-body');
+        const timelinePanel = document.getElementById('gantt-timeline-panel');
+        if (tableBody && timelinePanel) {
+            tableBody.scrollTop = timelinePanel.scrollTop;
+        }
+    }
+
+    /**
+     * Draggable divider to resize the table panel width.
+     * Persists user preference in localStorage.
+     */
+    function setupDividerResize() {
+        const divider = document.getElementById('gantt-split-divider');
+        const tablePanel = document.getElementById('gantt-table-panel');
+        if (!divider || !tablePanel) return;
+
+        // Restore saved width
+        const savedWidth = localStorage.getItem('ganttTablePanelWidth');
+        if (savedWidth) {
+            const w = parseInt(savedWidth, 10);
+            if (w >= 180 && w <= 600) {
+                tablePanel.style.width = w + 'px';
+            }
+        } else {
+            tablePanel.style.width = '340px';
+        }
+
+        let isDragging = false;
+        let startX = 0;
+        let startWidth = 0;
+
+        divider.addEventListener('mousedown', function (e) {
+            e.preventDefault();
+            isDragging = true;
+            startX = e.clientX;
+            startWidth = tablePanel.offsetWidth;
+            divider.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        });
+
+        document.addEventListener('mousemove', function (e) {
+            if (!isDragging) return;
+            const delta = e.clientX - startX;
+            const newWidth = Math.max(180, Math.min(600, startWidth + delta));
+            tablePanel.style.width = newWidth + 'px';
+        });
+
+        document.addEventListener('mouseup', function () {
+            if (!isDragging) return;
+            isDragging = false;
+            divider.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            localStorage.setItem('ganttTablePanelWidth', tablePanel.offsetWidth);
+        });
+    }
+
+    /**
+     * Master function: called after every Gantt render to rebuild the table and sync.
+     */
+    function refreshSplitView() {
+        buildTaskTable();
+    }
+
+    // Initialize split-view infrastructure once on page load
+    document.addEventListener('DOMContentLoaded', function () {
+        setupScrollSync();
+        setupDividerResize();
+
+        // Re-sync heights on window resize
+        let _resizeTimer;
+        window.addEventListener('resize', function () {
+            clearTimeout(_resizeTimer);
+            _resizeTimer = setTimeout(() => {
+                syncTableRowHeights();
+            }, 150);
+        });
+    });
 
     // Add assignee initials to task bars
     function addAssigneeInitials() {
@@ -3523,6 +4166,10 @@
                 // Draw custom dependency lines
                 requestAnimationFrame(() => {
                     drawCustomDependencyLines();
+
+                    // Build/refresh the split-view table with same data
+                    _lastRenderedItems = data;
+                    refreshSplitView();
                     
                     // Final cleanup pass
                     setTimeout(() => {
