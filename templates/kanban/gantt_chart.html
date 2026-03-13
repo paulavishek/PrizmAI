@@ -2755,22 +2755,13 @@
             const assigneeName = task.assignee_first_name && task.assignee_last_name
                 ? `${task.assignee_first_name} ${task.assignee_last_name}`
                 : task.assigned_to;
-            if (task.isMilestone) {
-                const mStatus = (task.milestoneStatus === 'completed') ? 'Completed' : 'Upcoming';
-                const mDate = task.dueDate || task.start;
-                barWrapper.setAttribute('title',
-                    `${task.fullName}\nMilestone \u2022 ${mStatus}\nDue: ${formatDateDisplay(mDate)}`);
-            } else {
-                barWrapper.setAttribute('title',
-                    `${task.fullName}\nAssignee: ${assigneeName}\nPriority: ${task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}\nDates: ${formatDateDisplay(task.start)} \u2013 ${formatDateDisplay(task.end)}\nProgress: ${task.progress}%`);
-            }
+            // Remove any native title attribute to prevent browser default tooltip
+            barWrapper.removeAttribute('title');
 
-            // Also set title on the bar rect itself for SVG tooltip
+            // Remove any existing SVG <title> elements to prevent SVG native tooltip
             const barEl = barWrapper.querySelector('.bar');
             if (barEl) {
-                const titleEl = document.createElementNS('http://www.w3.org/2000/svg', 'title');
-                titleEl.textContent = barWrapper.getAttribute('title');
-                barEl.appendChild(titleEl);
+                barEl.querySelectorAll('title').forEach(t => t.remove());
             }
 
             // Add mouseenter event
