@@ -213,6 +213,7 @@
         {% endif %}
 
     {% else %}
+    {% block navbar_unauthenticated %}
     <!-- ===== UNAUTHENTICATED: original top navbar ===== -->
     <nav class="navbar navbar-expand-lg navbar-dark bg-primary" style="padding: 0.5rem 0;">
         <div class="container-fluid px-3">
@@ -229,6 +230,7 @@
             </ul>
         </div>
     </nav>
+    {% endblock navbar_unauthenticated %}
 
     <!-- Messages for unauthenticated users -->
     {% if messages %}
