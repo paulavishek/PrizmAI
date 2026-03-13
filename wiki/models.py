@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import F
 from django.contrib.auth.models import User
 from django.utils.text import slugify
 from kanban.models import Board, Task
@@ -221,9 +222,8 @@ class WikiPage(models.Model):
         return mark_safe(clean_html)
     
     def increment_view_count(self):
-        """Increment view count for analytics"""
-        self.view_count += 1
-        self.save(update_fields=['view_count'])
+        """Atomically increment view count to avoid race conditions"""
+        WikiPage.objects.filter(pk=self.pk).update(view_count=F('view_count') + 1)
     
     def get_breadcrumb(self):
         """Get breadcrumb navigation path"""

@@ -187,9 +187,15 @@ class WikiPageDetailView(WikiBaseView, DetailView):
         return context
     
     def get(self, request, *args, **kwargs):
-        """Increment view count on page load"""
+        """Increment view count once per session per page for all authenticated users"""
         response = super().get(request, *args, **kwargs)
-        self.object.increment_view_count()
+        viewed_pages = request.session.get('wiki_viewed_pages', [])
+        page_id = self.object.pk
+        if page_id not in viewed_pages:
+            self.object.increment_view_count()
+            viewed_pages.append(page_id)
+            request.session['wiki_viewed_pages'] = viewed_pages
+            request.session.modified = True
         return response
 
 
