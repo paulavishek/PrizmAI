@@ -334,33 +334,52 @@ def analyze_meeting_notes_from_wiki(wiki_content: str, wiki_page_context: Dict,
         """
         
         prompt = f"""
-        You are analyzing meeting notes from a wiki page. Extract ALL valuable information including action items, 
+        You are analyzing meeting notes from a wiki page. Extract ALL valuable information including action items,
         decisions, blockers, risks, and suggestions for task creation.
-        
+
+        ## Category Definitions — apply these BROADLY and GENEROUSLY:
+
+        **ACTION ITEMS**: Any task assigned to someone or implied to be done. Include informal phrasing like
+        "we should...", "need to...", "will do...", "someone should...", "I'll handle...", "let's...".
+
+        **DECISIONS**: Anything agreed upon, approved, or committed to. Examples: "we will launch X",
+        "goal is Y", "we agreed to...", "the plan is...", "we're going with...", "approved: ...",
+        "we decided...", "the team chose...". Even a stated goal or direction counts as a decision.
+
+        **BLOCKERS**: Anything preventing progress, unresolved dependencies, or issues that must be
+        resolved before work can proceed. Examples: waiting on access, missing information, an
+        unresolved dependency, a process that is stuck, something that "needs to happen first".
+
+        **RISKS**: Anything that could go wrong, past failures being carried forward, concerns flagged
+        as urgent or critical, uncertainty about outcomes, or items that are at risk of slipping.
+
+        **CRITICAL INSTRUCTION**: You MUST populate ALL FOUR arrays — action_items, decisions, blockers,
+        AND risks. Do NOT leave any of them as an empty array unless there is genuinely zero content that
+        qualifies after applying the broad definitions above. When in doubt, include the item.
+
         ## Wiki Page Context:
         - Title: {wiki_page_context.get('title', 'Untitled')}
         - Date Created: {wiki_page_context.get('created_at', 'Not specified')}
         - Created By: {wiki_page_context.get('created_by', 'Unknown')}
         - Tags: {', '.join(wiki_page_context.get('tags', []))}
         {org_context}
-        
+
         ## Meeting Notes Content (Markdown):
         {wiki_content}
-        
+
         ## Your Task:
         Analyze these meeting notes and extract:
-        1. **Action Items**: Clear tasks that need to be done
-        2. **Decisions**: Key decisions made during the meeting
-        3. **Blockers**: Issues preventing progress
-        4. **Risks**: Potential risks identified
-        5. **Participants**: People mentioned or involved (extract from content)
-        6. **Key Topics**: Main discussion topics
-        7. **Follow-ups**: Things that need follow-up meetings or check-ins
-        
-        **IMPORTANT**: Be generous in extracting action items. Even informal mentions like "we should...", 
-        "need to...", "will do...", or "someone should..." can be tasks.
-        
-        Format your response as JSON:
+        1. **Action Items** — tasks to be done (be generous; include informal mentions)
+        2. **Decisions** — anything agreed upon, approved, committed to, or set as a goal
+        3. **Blockers** — anything blocking progress or an unresolved dependency
+        4. **Risks** — anything that could go wrong or is flagged as a concern
+        5. **Participants** — people mentioned or involved
+        6. **Key Topics** — main discussion topics
+        7. **Follow-ups** — things needing follow-up meetings or check-ins
+
+        Format your response as JSON. Every item in all four arrays MUST include these four fields:
+        "text", "assignee", "priority", "source_quote".
+
         {{
             "meeting_summary": {{
                 "title": "Suggested meeting title if not clear from context",
@@ -372,14 +391,17 @@ def analyze_meeting_notes_from_wiki(wiki_content: str, wiki_page_context: Dict,
             }},
             "action_items": [
                 {{
-                    "title": "Clear, actionable task title (max 100 chars)",
+                    "text": "Clear, actionable task title (max 100 chars)",
+                    "title": "Same as text — clear, actionable task title",
                     "description": "Detailed description with full context from the notes",
                     "priority": "low|medium|high|urgent",
-                    "suggested_assignee": "username/name if mentioned, else null",
+                    "assignee": "username/name if mentioned, else null",
+                    "suggested_assignee": "Same as assignee",
                     "assignee_confidence": "high|medium|low",
+                    "source_quote": "Direct quote from notes showing where this task came from",
+                    "source_context": "Same as source_quote",
                     "due_date_suggestion": "YYYY-MM-DD or '+N days' or null",
                     "estimated_effort": "e.g., '2-3 hours', '1 day', '1 week'",
-                    "source_context": "Direct quote or paraphrase from notes showing where this came from",
                     "suggested_board_id": "ID of most relevant board or null",
                     "suggested_board_name": "Name of suggested board or null",
                     "tags": ["relevant", "tags"],
@@ -388,26 +410,34 @@ def analyze_meeting_notes_from_wiki(wiki_content: str, wiki_page_context: Dict,
             ],
             "decisions": [
                 {{
-                    "decision": "Clear statement of the decision made",
-                    "context": "Why this decision was made",
-                    "impact": "Who/what this affects",
-                    "requires_action": true/false,
-                    "action_description": "What needs to be done if requires_action is true"
+                    "text": "Clear statement of the decision, agreement, or commitment made",
+                    "assignee": "Person responsible for following through, or null",
+                    "priority": "low|medium|high|urgent",
+                    "source_quote": "Direct quote from notes where this decision was made",
+                    "context": "Why this decision was made or what prompted it",
+                    "impact": "Who or what this decision affects",
+                    "requires_action": true,
+                    "action_description": "What needs to be done as a result of this decision"
                 }}
             ],
             "blockers": [
                 {{
-                    "blocker": "Description of the blocker",
-                    "affected_area": "What is blocked",
-                    "severity": "low|medium|high|critical",
-                    "suggested_resolution": "How to resolve it",
-                    "owner": "Who should resolve it or null"
+                    "text": "Description of what is blocking progress",
+                    "assignee": "Who should resolve this blocker, or null",
+                    "priority": "low|medium|high|critical",
+                    "source_quote": "Direct quote from notes where this blocker was mentioned",
+                    "affected_area": "What work or goal is blocked",
+                    "severity": "Same as priority — low|medium|high|critical",
+                    "suggested_resolution": "Suggested way to unblock this"
                 }}
             ],
             "risks": [
                 {{
-                    "risk": "Description of the risk",
-                    "impact": "Potential impact if risk materializes",
+                    "text": "Description of the risk or concern",
+                    "assignee": "Who should monitor or address this risk, or null",
+                    "priority": "low|medium|high|critical",
+                    "source_quote": "Direct quote from notes where this risk was raised",
+                    "impact": "Potential impact if this risk materializes",
                     "probability": "low|medium|high",
                     "mitigation": "Suggested mitigation strategy"
                 }}
@@ -428,7 +458,7 @@ def analyze_meeting_notes_from_wiki(wiki_content: str, wiki_page_context: Dict,
                 "total_decisions": 0,
                 "total_blockers": 0,
                 "total_risks": 0,
-                "requires_immediate_attention": true/false,
+                "requires_immediate_attention": true,
                 "overall_sentiment": "positive|neutral|concerning",
                 "processing_notes": "Any important notes about the analysis"
             }}

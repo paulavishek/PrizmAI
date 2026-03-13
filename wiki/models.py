@@ -605,7 +605,10 @@ class WikiMeetingAnalysis(models.Model):
     def has_critical_blockers(self):
         """Check if there are any critical blockers"""
         blockers = self.get_blockers()
-        return any(blocker.get('severity') == 'critical' for blocker in blockers)
+        return any(
+            blocker.get('priority') in ('critical', 'urgent') or blocker.get('severity') == 'critical'
+            for blocker in blockers
+        )
     
     def update_counts(self):
         """Update denormalized counts from analysis results"""
