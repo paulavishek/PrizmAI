@@ -350,8 +350,9 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                     }
                     priority = priority_map.get(action_item.get('priority', 'medium'), 'medium')
                     
+                    task_title = action_item.get('text') or action_item.get('title', '')
                     task = Task.objects.create(
-                        title=action_item['title'][:200],  # Limit title length
+                        title=task_title[:200],  # Limit title length
                         description=action_item.get('description', ''),
                         column=target_column,
                         priority=priority,
@@ -361,7 +362,7 @@ def create_tasks_from_meeting_analysis(request, analysis_id):
                     )
                     
                     # Try to assign if suggested
-                    assignee_username = action_item.get('suggested_assignee')
+                    assignee_username = action_item.get('assignee') or action_item.get('suggested_assignee')
                     if assignee_username:
                         try:
                             # Try to find user by username
