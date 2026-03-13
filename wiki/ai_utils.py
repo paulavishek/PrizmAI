@@ -362,6 +362,7 @@ def analyze_meeting_notes_from_wiki(wiki_content: str, wiki_page_context: Dict,
         - Date Created: {wiki_page_context.get('created_at', 'Not specified')}
         - Created By: {wiki_page_context.get('created_by', 'Unknown')}
         - Tags: {', '.join(wiki_page_context.get('tags', []))}
+        - Known Participants: {', '.join(wiki_page_context.get('participants', [])) or 'Not specified'}
         {org_context}
 
         ## Meeting Notes Content (Markdown):
@@ -376,6 +377,16 @@ def analyze_meeting_notes_from_wiki(wiki_content: str, wiki_page_context: Dict,
         5. **Participants** — people mentioned or involved
         6. **Key Topics** — main discussion topics
         7. **Follow-ups** — things needing follow-up meetings or check-ins
+
+        **ASSIGNEE EXTRACTION RULES** — apply to action_items, decisions, blockers, and risks:
+        Look for EXPLICIT ownership language in the notes. Examples:
+        - "Alex will implement X" or "Alex to handle X" → assignee: "Alex"
+        - "John is responsible for Y" or "John will take care of Y" → assignee: "John"
+        - "@username" mention before a task → assignee: "username"
+        - A speaker label followed by a commitment ("Sarah: I'll do Z") → assignee: "Sarah"
+        Use the name or username EXACTLY as it appears in the notes (preserve capitalisation).
+        Cross-reference with the Known Participants list if available.
+        If NO explicit person is named as owner, set assignee to null — do NOT guess.
 
         Format your response as JSON. Every item in all four arrays MUST include these four fields:
         "text", "assignee", "priority", "source_quote".
@@ -395,9 +406,9 @@ def analyze_meeting_notes_from_wiki(wiki_content: str, wiki_page_context: Dict,
                     "title": "Same as text — clear, actionable task title",
                     "description": "Detailed description with full context from the notes",
                     "priority": "low|medium|high|urgent",
-                    "assignee": "username/name if mentioned, else null",
-                    "suggested_assignee": "Same as assignee",
-                    "assignee_confidence": "high|medium|low",
+                    "assignee": "EXACT name/username of the explicitly assigned person (e.g. 'Alex will...' → 'Alex'), else null",
+                    "suggested_assignee": "Same as assignee — the explicit owner if one is mentioned, null otherwise",
+                    "assignee_confidence": "high (explicitly named)|medium (implied)|low (unclear)",
                     "source_quote": "Direct quote from notes showing where this task came from",
                     "source_context": "Same as source_quote",
                     "due_date_suggestion": "YYYY-MM-DD or '+N days' or null",
