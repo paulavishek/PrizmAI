@@ -846,7 +846,7 @@ class Task(models.Model):
             # Convert start_date (date) to aware datetime at midnight
             import datetime as _dt
             start_dt = timezone.make_aware(
-                _dt.datetime.combine(self.start_date, _dt.time.min)
+                _dt.datetime.combine(self.start_date, _dt.time(12, 0))
             )
             total_seconds = (due - start_dt).total_seconds()
             if total_seconds > 0:

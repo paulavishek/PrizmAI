@@ -313,13 +313,13 @@ class Command(BaseCommand):
         ]
 
         # Create tasks
-        from datetime import datetime
+        from datetime import datetime, time
         for i, t in enumerate(phase1_data):
             start = now + timedelta(days=t['start_offset'])
             due_date_obj = start + timedelta(days=t['duration'])
             # Convert date to timezone-aware datetime for due_date field
             due_datetime = timezone.make_aware(
-                datetime.combine(due_date_obj, datetime.min.time())
+                datetime.combine(due_date_obj, time(12, 0))
             )
             task = Task.objects.create(
                 column=t['column'],
@@ -536,12 +536,12 @@ class Command(BaseCommand):
             },
         ]
 
-        from datetime import datetime
+        from datetime import datetime, time
         for i, t in enumerate(phase2_data):
             start = now + timedelta(days=t['start_offset'])
             due_date_obj = start + timedelta(days=t['duration'])
             due_datetime = timezone.make_aware(
-                datetime.combine(due_date_obj, datetime.min.time())
+                datetime.combine(due_date_obj, time(12, 0))
             )
             task = Task.objects.create(
                 column=t['column'],
@@ -765,12 +765,12 @@ class Command(BaseCommand):
             },
         ]
 
-        from datetime import datetime
+        from datetime import datetime, time
         for i, t in enumerate(phase3_data):
             start = now + timedelta(days=t['start_offset'])
             due_date_obj = start + timedelta(days=t['duration'])
             due_datetime = timezone.make_aware(
-                datetime.combine(due_date_obj, datetime.min.time())
+                datetime.combine(due_date_obj, time(12, 0))
             )
             task = Task.objects.create(
                 column=t['column'],
