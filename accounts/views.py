@@ -114,6 +114,11 @@ def login_view(request):
     return render(request, 'accounts/login.html', {'form': form, 'next': next_url})
 
 def logout_view(request):
+    # Consume any pending messages so they don't leak into the next session
+    # via Django's FallbackStorage cookie (which survives session.flush()).
+    storage = messages.get_messages(request)
+    for _ in storage:
+        pass
     logout(request)
     return redirect('login')
 
@@ -122,8 +127,11 @@ def register_view(request, org_id=None):
     Simplified registration - no organization assignment required.
     Organization field is now optional.
     """
+    if request.user.is_authenticated:
+        return redirect('dashboard')
+
     # org_id parameter is kept for backward compatibility but ignored
-    
+
     if request.method == 'POST':
         form = RegistrationForm(request.POST)
         if form.is_valid():

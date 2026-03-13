@@ -8,7 +8,24 @@ import re
 
 class CustomAccountAdapter(DefaultAccountAdapter):
     """Custom adapter for regular account signup"""
-    
+
+    def add_message(self, request, level, message_template=None, message_context=None, extra_tags="", **kwargs):
+        """
+        Suppress the allauth "Successfully signed in as..." message.
+        Django's FallbackStorage writes messages to cookies, which survive
+        logout(). Suppressing this message at source prevents it from
+        appearing on unrelated pages (e.g. the register form) after logout.
+        """
+        if message_template and 'logged_in' in str(message_template):
+            return
+        super().add_message(
+            request, level,
+            message_template=message_template,
+            message_context=message_context,
+            extra_tags=extra_tags,
+            **kwargs,
+        )
+
     def clean_email(self, email):
         """
         Validates the email and checks if it matches an organization domain
