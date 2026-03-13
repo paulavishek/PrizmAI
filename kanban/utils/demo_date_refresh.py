@@ -260,9 +260,12 @@ def _refresh_task_dates(now, base_date):
 
                 # Preserve the original duration: due_date − start_date
                 if task.due_date:
-                    # due_date is a DateTimeField (datetime)
+                    # due_date is a DateTimeField (datetime) stored in UTC.
+                    # Convert to local time before extracting date to avoid
+                    # off-by-one errors when the local tz is ahead of UTC
+                    # (e.g. Asia/Kolkata midnight → previous day in UTC).
                     if hasattr(task.due_date, 'date'):
-                        old_due_date = task.due_date.date()
+                        old_due_date = timezone.localtime(task.due_date).date()
                     else:
                         old_due_date = task.due_date
                     duration_days = (old_due_date - task.start_date).days
@@ -272,8 +275,9 @@ def _refresh_task_dates(now, base_date):
                     duration_days = max(3, min((complexity // 2) + 3, 6))
 
                 new_due_date = new_start + timedelta(days=duration_days)
+                # Use noon (12:00) to avoid date boundary issues across timezones
                 new_due_datetime = timezone.make_aware(
-                    _dt.datetime.combine(new_due_date, _dt.time.min)
+                    _dt.datetime.combine(new_due_date, _dt.time(12, 0))
                 )
 
                 task.start_date = new_start
@@ -340,7 +344,7 @@ def _force_overdue_demo_tasks(now):
         Task.objects.filter(pk=task.pk).update(
             start_date=new_start,
             due_date=timezone.make_aware(
-                _dt.datetime.combine(past_due, _dt.time.min)
+                _dt.datetime.combine(past_due, _dt.time(12, 0))
             ),
         )
 

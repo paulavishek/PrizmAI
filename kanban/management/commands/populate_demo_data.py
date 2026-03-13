@@ -808,7 +808,7 @@ class Command(BaseCommand):
         done = columns.get('Done') or review
         items = []
         now = timezone.now().date()
-        from datetime import datetime
+        from datetime import datetime, time
 
         # =====================================================================
         # Phase 1: Foundation & Setup (10 tasks)
@@ -841,7 +841,7 @@ class Command(BaseCommand):
         for i, t in enumerate(phase1_data):
             start = now + timedelta(days=t['start_offset'])
             due_date_obj = start + timedelta(days=t['duration'])
-            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, time(12, 0)))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -894,7 +894,7 @@ class Command(BaseCommand):
         for i, t in enumerate(phase2_data):
             start = now + timedelta(days=t['start_offset'])
             due_date_obj = start + timedelta(days=t['duration'])
-            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, time(12, 0)))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -914,8 +914,8 @@ class Command(BaseCommand):
             {'title': 'UI/UX Polish', 'desc': 'Final UI polish and mobile responsive improvements', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 8, 'duration': 6},
             {'title': 'Load Testing & Optimization', 'desc': 'Conduct load tests and fix performance bottlenecks', 'priority': 'medium', 'complexity': 5, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 5},
             {'title': 'User Onboarding Flow', 'desc': 'Interactive tutorial and onboarding experience', 'priority': 'high', 'complexity': 6, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 19, 'duration': 6},
-            {'title': 'Error Tracking & Monitoring', 'desc': 'Configure Sentry, APM and alerting systems', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 3},
-            {'title': 'Accessibility Compliance', 'desc': 'WCAG 2.1 AA compliance updates and testing', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 14, 'duration': 4},
+            {'title': 'Error Tracking & Monitoring', 'desc': 'Configure Sentry, APM and alerting systems', 'priority': 'medium', 'complexity': 4, 'assignee': sam, 'progress': 0, 'column': todo, 'start_offset': phase_start + 19, 'duration': 3},
+            {'title': 'Accessibility Compliance', 'desc': 'WCAG 2.1 AA compliance updates and testing', 'priority': 'medium', 'complexity': 4, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 22, 'duration': 4},
             {'title': 'Final Documentation', 'desc': 'Complete user guides and API documentation', 'priority': 'low', 'complexity': 2, 'assignee': jordan, 'progress': 0, 'column': todo, 'start_offset': phase_start + 25, 'duration': 2},
             {'title': 'Deployment Automation', 'desc': 'One-click deployment pipeline to production', 'priority': 'medium', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 27, 'duration': 3},
             {'title': 'Launch & Go-Live', 'desc': 'Final checklist, DNS cutover, and production deployment', 'priority': 'urgent', 'complexity': 3, 'assignee': alex, 'progress': 0, 'column': todo, 'start_offset': phase_start + 30, 'duration': 2},
@@ -924,7 +924,7 @@ class Command(BaseCommand):
         for i, t in enumerate(phase3_data):
             start = now + timedelta(days=t['start_offset'])
             due_date_obj = start + timedelta(days=t['duration'])
-            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, time(12, 0)))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -977,7 +977,7 @@ class Command(BaseCommand):
                 column=column,
                 created_by=creator,
                 start_date=due_date,
-                due_date=timezone.make_aware(datetime.combine(due_date, _time.min)),
+                due_date=timezone.make_aware(datetime.combine(due_date, _time(12, 0))),
                 phase=phase,
                 priority='medium',
                 progress=100 if status == 'completed' else 0,
@@ -1067,7 +1067,7 @@ class Command(BaseCommand):
         done = columns.get('Done') or review
         items = []
         now = timezone.now().date()
-        from datetime import datetime
+        from datetime import datetime, time
 
         # =====================================================================
         # Phase 1: Planning & Strategy (10 tasks) - Same dependency pattern
@@ -1088,7 +1088,7 @@ class Command(BaseCommand):
         for i, t in enumerate(phase1_data):
             start = now + timedelta(days=t['start_offset'])
             due_date_obj = start + timedelta(days=t['duration'])
-            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, time(12, 0)))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -1118,7 +1118,7 @@ class Command(BaseCommand):
         for i, t in enumerate(phase2_data):
             start = now + timedelta(days=t['start_offset'])
             due_date_obj = start + timedelta(days=t['duration'])
-            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, time(12, 0)))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -1148,7 +1148,7 @@ class Command(BaseCommand):
         for i, t in enumerate(phase3_data):
             start = now + timedelta(days=t['start_offset'])
             due_date_obj = start + timedelta(days=t['duration'])
-            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, time(12, 0)))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -1172,7 +1172,7 @@ class Command(BaseCommand):
         done = columns.get('Done') or review
         items = []
         now = timezone.now().date()
-        from datetime import datetime
+        from datetime import datetime, time
 
         # =====================================================================
         # Phase 1: Critical & Security Bugs (10 tasks) - Same dependency pattern
@@ -1193,7 +1193,7 @@ class Command(BaseCommand):
         for i, t in enumerate(phase1_data):
             start = now + timedelta(days=t['start_offset'])
             due_date_obj = start + timedelta(days=t['duration'])
-            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, time(12, 0)))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -1223,7 +1223,7 @@ class Command(BaseCommand):
         for i, t in enumerate(phase2_data):
             start = now + timedelta(days=t['start_offset'])
             due_date_obj = start + timedelta(days=t['duration'])
-            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, time(12, 0)))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],
@@ -1253,7 +1253,7 @@ class Command(BaseCommand):
         for i, t in enumerate(phase3_data):
             start = now + timedelta(days=t['start_offset'])
             due_date_obj = start + timedelta(days=t['duration'])
-            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, datetime.min.time()))
+            due_datetime = timezone.make_aware(datetime.combine(due_date_obj, time(12, 0)))
             task = Task.objects.create(
                 column=t['column'], title=t['title'], description=t['desc'],
                 priority=t['priority'], complexity_score=t['complexity'],

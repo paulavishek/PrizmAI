@@ -2298,7 +2298,7 @@ def add_gantt_milestone(request, board_id):
         column=column,
         created_by=request.user,
         start_date=due_date,
-        due_date=datetime.combine(due_date, _time.min),  # DateTimeField expects datetime
+        due_date=datetime.combine(due_date, _time(12, 0)),  # Use noon to avoid timezone date-shift
         phase=phase if phase else None,
         priority='medium',
         progress=100 if status == 'completed' else 0,
@@ -2400,7 +2400,7 @@ def milestone_detail(request, milestone_id):
             milestone.description = description
             milestone.phase = phase if phase else None
             milestone.start_date = due_date
-            milestone.due_date = _dt2.combine(due_date, _time_cls.min)
+            milestone.due_date = _dt2.combine(due_date, _time_cls(12, 0))
             milestone.milestone_status = status
             milestone.progress = 100 if status == 'completed' else 0
             milestone.position_after_task = position_after_task
