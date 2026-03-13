@@ -13,8 +13,8 @@
         margin: 0 !important;
     }
     .auth-bg {
-        min-height: calc(100vh - 62px);
-        background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 50%, #ede9fe 100%);
+        min-height: 100vh;
+        background: linear-gradient(135deg, #e8eaf6 0%, #e3f2fd 50%, #f3e5f5 100%);
         display: flex;
         align-items: center;
         justify-content: center;
@@ -25,7 +25,7 @@
         max-width: 460px;
         background: #ffffff;
         border-radius: 16px;
-        box-shadow: 0 8px 32px rgba(79, 70, 229, 0.12), 0 2px 8px rgba(0,0,0,0.06);
+        box-shadow: 0 8px 32px rgba(99, 102, 241, 0.12), 0 2px 8px rgba(0,0,0,0.08);
         padding: 2.75rem 2.75rem 2.25rem;
     }
     .auth-brand {
@@ -194,6 +194,8 @@
 </style>
 {% endblock %}
 
+{% block navbar_unauthenticated %}{% endblock %}
+
 {% block content %}
 <div class="auth-bg">
     <div class="auth-card">
@@ -209,7 +211,7 @@
             {% if organization %}Register for {{ organization.name }}{% else %}Create your account{% endif %}
         </h1>
         <p class="auth-subheading">
-            {% if organization %}Your email must end with @{{ organization.domain }}{% else %}Join PrizmAI and manage projects intelligently{% endif %}
+            {% if organization %}Your email must end with @{{ organization.domain }}{% else %}Turn strategy into execution — powered by AI.{% endif %}
         </p>
 
         {% if organization %}
