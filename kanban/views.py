@@ -1434,16 +1434,44 @@ def task_detail(request, task_id):
             if task.due_date:
                 is_likely_late = task.predicted_completion_date > task.due_date
             
+            # Parse early/late dates from metadata (may be ISO strings or missing)
+            raw_early = task.prediction_metadata.get('early_date')
+            raw_late = task.prediction_metadata.get('late_date')
+            from dateutil.parser import parse as parse_dt
+            try:
+                early_date = parse_dt(raw_early) if isinstance(raw_early, str) else raw_early
+            except Exception:
+                early_date = None
+            try:
+                late_date = parse_dt(raw_late) if isinstance(raw_late, str) else raw_late
+            except Exception:
+                late_date = None
+
+            # Ensure minimum 3-day spread for meaningful range display
+            predicted = task.predicted_completion_date
+            if early_date and late_date:
+                if hasattr(early_date, 'date'):
+                    spread = (late_date - early_date).total_seconds() / 86400
+                else:
+                    spread = 0
+                if spread < 3:
+                    half_pad = timedelta(days=(3 - spread) / 2)
+                    early_date = early_date - half_pad
+                    late_date = late_date + half_pad
+            else:
+                early_date = predicted - timedelta(days=2)
+                late_date = predicted + timedelta(days=3)
+
             prediction_data = {
-                'predicted_date': task.predicted_completion_date,
+                'predicted_date': predicted,
                 'confidence': task.prediction_confidence,
                 'confidence_percentage': int(task.prediction_confidence * 100),
                 'confidence_interval_days': task.prediction_metadata.get('confidence_interval_days', 0),
                 'based_on_tasks': task.prediction_metadata.get('based_on_tasks', 0),
                 'similar_tasks': task.prediction_metadata.get('similar_tasks', []),
                 'factors': task.prediction_metadata.get('factors', {}),
-                'early_date': task.prediction_metadata.get('early_date'),
-                'late_date': task.prediction_metadata.get('late_date'),
+                'early_date': early_date,
+                'late_date': late_date,
                 'prediction_method': task.prediction_metadata.get('prediction_method', 'unknown'),
                 'is_likely_late': is_likely_late
             }

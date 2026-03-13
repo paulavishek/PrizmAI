@@ -61,6 +61,206 @@ COMMENT_TEMPLATES = [
     "Updated based on stakeholder feedback from yesterday's meeting.",
 ]
 
+# Task-specific comment pools keyed by keywords in the task title
+TASK_SPECIFIC_COMMENTS = {
+    'authentication': [
+        "Finished implementing JWT access and refresh token rotation. Token lifetime is set to 15 min / 7 days respectively.",
+        "Found a session fixation vulnerability during review — regenerating session ID on login now.",
+        "OAuth2 PKCE flow is integrated for third-party providers. Google and GitHub sign-in working in staging.",
+        "Added rate limiting on the login endpoint (5 attempts per minute) to mitigate brute-force attacks.",
+        "CSRF double-submit cookie pattern is in place. Need @{mention} to verify the SameSite attribute on staging.",
+        "Switched password hashing from bcrypt to Argon2id as recommended by OWASP. All existing hashes still valid through auto-upgrade.",
+        "Multi-factor TOTP enrollment flow is ready. QR codes render correctly on mobile.",
+    ],
+    'registration': [
+        "Email verification link now expires after 24 hours and is single-use. Re-send flow tested.",
+        "Added input sanitisation on the signup form — XSS payloads in the name field are now escaped.",
+        "Onboarding wizard saves partial progress so users can resume if they close the tab.",
+        "Integrated Mailgun for transactional emails. Welcome email template looks good on all major clients.",
+    ],
+    'dashboard': [
+        "Chart.js widgets are rendering with live data. Tooltip formatting still needs polish.",
+        "Lazy-loading the analytics panel cut initial page load from 3.2 s to 1.1 s.",
+        "Added skeleton loaders for each card while the API call is in flight.",
+        "Drag-and-drop widget reordering persists to localStorage for now; will move to user preferences API.",
+    ],
+    'database': [
+        "Normalised the schema to 3NF — removed the redundant task_count column from boards.",
+        "Added composite index on (board_id, position) which dropped the column reorder query from 120 ms to 8 ms.",
+        "Migration 0042 adds a GIN index for full-text search on task title + description.",
+        "Reviewed the ERD with the team. Agreed to keep a soft-delete column instead of cascading deletes.",
+    ],
+    'api': [
+        "REST endpoints are versioned under /api/v1/. Swagger docs auto-generate from the serialiser.",
+        "Added cursor-based pagination — offset pagination was causing timeouts on large boards.",
+        "Wrote a custom throttle class: 100 req/min for authenticated users, 20 for anonymous.",
+        "Hypermedia links (HATEOAS) added to list endpoints so the frontend can discover URLs.",
+    ],
+    'search': [
+        "Elasticsearch index rebuilt with edge-ngram analyser for instant prefix search.",
+        "Faceted filtering by label, assignee, and date range is working. Response under 50 ms.",
+        "Bulk reindex management command added — processes 10 k docs/sec with --parallel flag.",
+        "Synonym mapping configured so 'bug' also matches 'defect' and 'issue'.",
+    ],
+    'notification': [
+        "WebSocket consumer now fans out to the correct per-user group. No more cross-talk between sessions.",
+        "Email digest batches notifications every 4 hours to avoid inbox flooding.",
+        "Push notification payload trimmed to < 4 KB to stay within APNs limits.",
+        "Unsubscribe one-click link tested — removes user from channel without authentication.",
+    ],
+    'file upload': [
+        "Presigned S3 URLs are generated server-side; the browser uploads directly to the bucket.",
+        "Added virus scanning via ClamAV on upload. Quarantine bucket isolates flagged files.",
+        "Thumbnail generation runs as a Celery task — average processing time is 0.8 s per image.",
+        "Max upload size enforced at 50 MB. Chunked upload support planned for next sprint.",
+    ],
+    'collaboration': [
+        "Operational Transform engine syncs edits with < 100 ms latency on localhost. Need to load-test under real network.",
+        "Presence indicators (green dot) update via heartbeat every 30 s over the existing WebSocket channel.",
+        "Cursor positions of other users now render as coloured carets with usernames.",
+        "Conflict resolution defaults to last-write-wins but the UI shows a diff for manual merge.",
+    ],
+    'security': [
+        "Pen-test report identified 2 medium-severity XSS vectors in the Markdown renderer — patched with DOMPurify.",
+        "Content-Security-Policy header tightened: removed unsafe-inline for scripts.",
+        "Dependency audit (npm audit + safety check) flagged 3 packages — upgraded all to patched versions.",
+        "Added HSTS preload header and submitted to the Chrome preload list.",
+    ],
+    'performance': [
+        "Query profiling shows N+1 on the board list view — added select_related/prefetch_related.",
+        "Gunicorn workers bumped from 2 to 4; p95 response time dropped from 400 ms to 180 ms.",
+        "Enabled gzip compression on Nginx — average payload shrank by 68 %.",
+        "Connection pooling via pgBouncer reduced idle connections from 40 to 8.",
+    ],
+    'testing': [
+        "Integration test suite now covers 14 end-to-end flows including auth, CRUD, and file upload.",
+        "Factored out fixtures into conftest.py for reuse across test modules.",
+        "Added contract tests for the REST API using schemathesis — caught 2 undocumented 500 errors.",
+        "CI pipeline runs the full suite in 3 min 20 s after parallelising with pytest-xdist.",
+    ],
+    'documentation': [
+        "MkDocs site deployed to GitHub Pages. Auto-build triggers on merge to main.",
+        "Added interactive examples using Swagger UI embedded in the docs.",
+        "Architecture Decision Records (ADRs) for auth strategy and database choice committed.",
+        "README quickstart section validated on a fresh Ubuntu 22.04 VM — all steps work.",
+    ],
+    'cache': [
+        "Redis cache-aside pattern implemented for board detail queries — cache TTL 5 min.",
+        "Cache invalidation fires on task create/update/delete via Django signals.",
+        "Added a /health/cache endpoint that checks Redis connectivity and hit rate.",
+        "Peak memory usage is 120 MB — well within the 512 MB allocation.",
+    ],
+    'rate limit': [
+        "Token-bucket algorithm implemented with Redis backend for distributed rate limiting.",
+        "Custom response headers (X-RateLimit-Remaining, X-RateLimit-Reset) added per RFC 6585.",
+        "Admin API has a separate, higher limit (500 req/min) to allow batch operations.",
+        "Rate limit bypass for internal service-to-service calls validated with shared HMAC secret.",
+    ],
+    'review': [
+        "Reviewed 12 PRs across the core features branch. Main feedback: improve error messages.",
+        "Refactored the view layer to reduce cyclomatic complexity from 18 to 6.",
+        "Static analysis (flake8 + mypy) clean — zero warnings on the entire codebase.",
+        "Merged feature branches into develop after resolving 4 merge conflicts.",
+    ],
+    'ui': [
+        "Responsive breakpoints adjusted — tablet layout no longer clips the sidebar.",
+        "Contrast ratio on all body text now meets WCAG AA (>= 4.5:1).",
+        "Icon set migrated from Font Awesome 5 to 6; tree-shaking cut the icon CSS by 40 %.",
+        "Dark-mode toggle persists choice in localStorage and respects prefers-color-scheme.",
+    ],
+    'deployment': [
+        "Terraform modules for ECS + ALB reviewed and tagged v1.0. Zero-downtime rolling deploy confirmed.",
+        "Docker multi-stage build reduced image size from 1.2 GB to 340 MB.",
+        "GitHub Actions workflow: lint → test → build → push → deploy. Average pipeline 5 min 30 s.",
+        "Rollback playbook documented and tested — one-command revert to previous task definition.",
+    ],
+    'requirements': [
+        "Product owner signed off on the final scope document — 47 user stories across 3 epics.",
+        "Identified 8 non-functional requirements: latency < 200 ms p95, 99.9 % uptime, etc.",
+        "Prioritised backlog using MoSCoW — 12 Must-haves, 18 Should-haves, 17 Could-haves.",
+        "Risk register updated: top risk is third-party API rate limits on the auth provider.",
+    ],
+    'environment': [
+        "Docker Compose stack: app + Postgres + Redis + Celery worker. One-command spin-up.",
+        "Pre-commit hooks added: black, isort, flake8, mypy. Auto-formats on every commit.",
+        "Secrets injected via .env (local) and AWS Secrets Manager (staging/prod).",
+        "CI runners migrated to GitHub-hosted larger runners — build time halved.",
+    ],
+    'architecture': [
+        "Decided on a modular monolith for v1 — service boundaries defined for future extraction.",
+        "Event bus (Django signals + Celery) decouples the notification subsystem from core.",
+        "API gateway layer added for request routing, auth verification, and logging.",
+        "ADR-003 documents the choice of PostgreSQL over MongoDB for ACID guarantees.",
+    ],
+    'monitoring': [
+        "Sentry DSN configured for both backend and frontend — source maps uploaded automatically.",
+        "Prometheus metrics endpoint exposes request count, latency histogram, and error rate.",
+        "PagerDuty integration fires on 5xx error rate > 1 % over a 5-min window.",
+        "Structured JSON logging with correlation IDs enables end-to-end request tracing.",
+    ],
+    'accessibility': [
+        "Screen reader audit with NVDA complete — all interactive elements have ARIA labels.",
+        "Keyboard navigation: every action is reachable via Tab/Enter/Escape. Skip-to-content link added.",
+        "Colour contrast checker passed on 100 % of text elements after palette adjustment.",
+        "Focus indicators styled with a visible 2 px outline — no reliance on colour alone.",
+    ],
+    'onboarding': [
+        "3-step interactive tutorial guides new users through board creation, task add, and drag.",
+        "Tooltip tour built with Shepherd.js — dismisses on completion and doesn't show again.",
+        "Sample demo board auto-created on first login so the workspace never looks empty.",
+        "Analytics event fires on each tour step — will measure drop-off after launch.",
+    ],
+    'load test': [
+        "Locust script simulates 500 concurrent users: browse boards, create tasks, add comments.",
+        "p99 response time under load: 320 ms (target < 500 ms). Passed.",
+        "Identified a connection leak in the WebSocket handler — fixed and re-tested.",
+        "Database CPU peaked at 60 % during the soak test. Scaling plan: read replica at 80 %.",
+    ],
+    'marketing': [
+        "Campaign landing page A/B test results: variant B improved CTR by 18 %.",
+        "Social media calendar for the next 4 weeks is finalised and scheduled in Buffer.",
+        "Influencer outreach list compiled — 12 micro-influencers in the PM tools niche.",
+        "Email drip sequence (5 emails over 14 days) written and loaded into Mailchimp.",
+    ],
+    'design': [
+        "Figma prototypes for the new dashboard handed off to engineering with a spec sheet.",
+        "Icon library standardised — all custom SVGs exported at 24 × 24 with consistent stroke width.",
+        "Brand colour palette expanded with semantic tokens: success, warning, danger, info.",
+        "Mobile wireframes reviewed — hamburger menu replaces sidebar below 768 px.",
+    ],
+    'analytics': [
+        "GA4 events mapped to key user actions: sign-up, task-create, invite-member.",
+        "Custom Looker Studio dashboard tracks WAU, retention cohort, and feature adoption.",
+        "Mixpanel funnel shows 62 % conversion from sign-up to first task creation.",
+        "Data warehouse ETL pipeline refreshes nightly — query latency under 2 s.",
+    ],
+    'email': [
+        "Transactional emails now pass SPF, DKIM, and DMARC checks on all major providers.",
+        "HTML email template renders correctly in Gmail, Outlook, Apple Mail, and Yahoo.",
+        "Unsubscribe rate for the product update newsletter is 0.3 % — well below the 1 % threshold.",
+        "A/B test on subject lines: personalised variant lifted open rate from 22 % to 31 %.",
+    ],
+    'bug': [
+        "Root cause identified: race condition in the task-move handler when two users drag simultaneously.",
+        "Patched with SELECT FOR UPDATE to serialise conflicting writes. Regression test added.",
+        "Reproduced the Safari login bug — was a SameSite cookie issue. Fixed by setting SameSite=None; Secure.",
+        "Memory leak in the notification WebSocket consumer tracked down with py-spy. Fixed circular reference.",
+    ],
+    'launch': [
+        "Go-live checklist reviewed: DNS, SSL cert, monitoring, rollback plan — all green.",
+        "Staged rollout: 10 % traffic on day 1, 50 % on day 2, 100 % on day 3.",
+        "Press release and blog post drafted and scheduled for launch morning.",
+        "On-call rotation set up for the first 2 weeks post-launch.",
+    ],
+}
+
+# Time-of-day slots for realistic comment timestamps (hour, minute)
+COMMENT_TIME_SLOTS = [
+    (9, 15), (9, 42), (10, 8), (10, 35), (11, 3), (11, 47),
+    (12, 22), (13, 5), (13, 40), (14, 10), (14, 30), (14, 55),
+    (15, 18), (15, 45), (16, 20), (16, 50), (17, 5), (17, 30),
+]
+
 # Technical details for comment templates
 TECHNICAL_DETAILS = [
     "the database connection pooling",
@@ -1352,12 +1552,25 @@ class Command(BaseCommand):
                     remaining_days = max(1, estimated_total_days - days_elapsed)
                     task.predicted_completion_date = now + timedelta(days=remaining_days)
                     task.prediction_confidence = round(random.uniform(0.65, 0.92), 2)
+                    # Ensure a minimum 3-day spread for meaningful confidence range
+                    half_spread = max(2, random.randint(2, 4))
+                    early_offset = max(1, remaining_days - half_spread)
+                    late_offset = remaining_days + half_spread
+                    early_dt = (now + timedelta(days=early_offset)).isoformat()
+                    late_dt = (now + timedelta(days=late_offset)).isoformat()
                     task.prediction_metadata = {
                         'based_on_tasks': random.randint(10, 50),
-                        'confidence_interval': [remaining_days - 2, remaining_days + 4],
-                        'factors': ['historical_velocity', 'complexity_score', 'assignee_performance'],
+                        'confidence_interval': [early_offset, late_offset],
+                        'confidence_interval_days': half_spread * 2,
+                        'early_date': early_dt,
+                        'late_date': late_dt,
+                        'factors': {
+                            'data_quality': random.choice(['high', 'medium', 'low']),
+                            'adjustments_applied': ['historical_velocity', 'complexity_score', 'assignee_performance'],
+                        },
                         'model_version': '2.1',
-                        'calculation_date': now.isoformat()
+                        'calculation_date': now.isoformat(),
+                        'prediction_method': 'historical_analysis',
                     }
                     task.last_prediction_update = now - timedelta(hours=random.randint(1, 24))
             
@@ -2179,54 +2392,113 @@ class Command(BaseCommand):
         self.stdout.write(f'   ✅ Coaching insights created ({len(insights_data)} total)')
 
     def create_comments(self, tasks, alex, sam, jordan):
-        """Create realistic comments for tasks"""
+        """Create realistic, task-specific comments with varied timestamps"""
         users = [alex, sam, jordan]
         comments_created = 0
         now = timezone.now()
 
         for task in tasks:
-            # Create 0-4 comments per task
-            num_comments = random.randint(0, 4)
+            # Determine number of comments: tasks with progress get more
+            if task.progress >= 80:
+                num_comments = random.randint(3, 4)
+            elif task.progress >= 30:
+                num_comments = random.randint(2, 3)
+            elif task.progress > 0:
+                num_comments = random.randint(1, 2)
+            else:
+                num_comments = random.randint(0, 1)
+
+            if num_comments == 0:
+                continue
+
+            # Find task-specific comment pool by matching keywords in title
+            title_lower = task.title.lower()
+            specific_pool = []
+            for keyword, pool in TASK_SPECIFIC_COMMENTS.items():
+                if keyword in title_lower:
+                    specific_pool.extend(pool)
+
+            # Generate a base day offset so comments start well before "now"
+            # Spread across different days with 1-3 day gaps between comments
+            day_offsets = []
+            current_offset = random.randint(10, 20)
+            for _ in range(num_comments):
+                day_offsets.append(current_offset)
+                current_offset -= random.randint(1, 3)
+            day_offsets.sort()  # oldest first
+
+            # Pick unique time slots for each comment
+            available_times = list(COMMENT_TIME_SLOTS)
+            random.shuffle(available_times)
 
             for i in range(num_comments):
-                user = random.choice(users)
-                template = random.choice(COMMENT_TEMPLATES)
+                # Alternate users realistically
+                if i == 0:
+                    user = task.created_by or alex
+                elif task.assigned_to and i % 2 == 1:
+                    user = task.assigned_to
+                else:
+                    user = random.choice([u for u in users if u != (task.assigned_to or alex)])
 
-                # Fill in template variables
-                comment_text = template.format(
-                    progress_detail=random.choice(PROGRESS_DETAILS),
-                    technical_detail=random.choice(TECHNICAL_DETAILS),
-                    complexity_reason=random.choice(COMPLEXITY_REASONS),
-                    mention=random.choice([u.username for u in users if u != user]),
-                    related_task=random.choice(tasks).title[:30] if tasks else 'another task',
-                )
+                # Pick comment text: prefer task-specific, fall back to generic
+                if specific_pool:
+                    comment_text = specific_pool.pop(random.randrange(len(specific_pool)))
+                    # Fill in any mention placeholders
+                    comment_text = comment_text.replace(
+                        '{mention}',
+                        random.choice([u.username for u in users if u != user])
+                    )
+                else:
+                    template = random.choice(COMMENT_TEMPLATES)
+                    comment_text = template.format(
+                        progress_detail=random.choice(PROGRESS_DETAILS),
+                        technical_detail=random.choice(TECHNICAL_DETAILS),
+                        complexity_reason=random.choice(COMPLEXITY_REASONS),
+                        mention=random.choice([u.username for u in users if u != user]),
+                        related_task=random.choice(tasks).title[:30] if tasks else 'another task',
+                    )
 
-                comment_date = now - timedelta(days=random.randint(1, 30), hours=random.randint(0, 23))
+                # Build timestamp: distinct day + distinct time-of-day
+                day_offset = day_offsets[i] if i < len(day_offsets) else random.randint(1, 15)
+                hour, minute = available_times[i % len(available_times)]
+                comment_date = now - timedelta(days=day_offset)
+                comment_date = comment_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
-                Comment.objects.create(
+                # Create then force-update created_at (auto_now_add ignores constructor value)
+                comment = Comment.objects.create(
                     task=task,
                     user=user,
                     content=comment_text,
-                    created_at=comment_date,
                 )
+                Comment.objects.filter(pk=comment.pk).update(created_at=comment_date)
                 comments_created += 1
 
         self.stdout.write(f'   ✅ Created {comments_created} comments')
 
     def create_activity_logs(self, tasks, alex, sam, jordan):
-        """Create activity logs for tasks"""
+        """Create activity logs for tasks with spaced-out timestamps"""
         users = [alex, sam, jordan]
         activities_created = 0
         now = timezone.now()
 
         for task in tasks:
-            # Always create a 'created' activity
-            TaskActivity.objects.create(
+            # Base day for this task's activity timeline
+            base_day_offset = random.randint(10, 25)
+
+            # Always create a 'created' activity (earliest)
+            created_date = now - timedelta(days=base_day_offset)
+            created_date = created_date.replace(
+                hour=random.choice([9, 10, 11]),
+                minute=random.randint(0, 59),
+                second=0, microsecond=0,
+            )
+            activity = TaskActivity.objects.create(
                 task=task,
                 user=task.created_by or alex,
                 activity_type='created',
                 description=random.choice(ACTIVITY_TEMPLATES['created']),
             )
+            TaskActivity.objects.filter(pk=activity.pk).update(created_at=created_date)
             activities_created += 1
 
             # Add 1-3 more activities based on task progress
@@ -2248,12 +2520,22 @@ class Command(BaseCommand):
                         label='Kaizen',
                     )
 
-                    TaskActivity.objects.create(
+                    # Each subsequent activity is 1-3 days later with a different time
+                    activity_offset = base_day_offset - (i + 1) * random.randint(1, 3)
+                    activity_offset = max(1, activity_offset)
+                    activity_date = now - timedelta(days=activity_offset)
+                    hour, minute = random.choice(COMMENT_TIME_SLOTS)
+                    activity_date = activity_date.replace(
+                        hour=hour, minute=minute, second=0, microsecond=0,
+                    )
+
+                    activity = TaskActivity.objects.create(
                         task=task,
                         user=random.choice(users),
                         activity_type=activity_type,
                         description=description,
                     )
+                    TaskActivity.objects.filter(pk=activity.pk).update(created_at=activity_date)
                     activities_created += 1
 
         self.stdout.write(f'   ✅ Created {activities_created} activity logs')

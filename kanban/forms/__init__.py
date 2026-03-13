@@ -672,9 +672,17 @@ class CommentForm(forms.ModelForm):
     class Meta:
         model = Comment
         fields = ['content']
+        labels = {
+            'content': 'Add a comment',
+        }
         widgets = {
             'content': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': 'Add a comment...'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['content'].required = True
+        self.fields['content'].label = 'Add a comment'
 
 class TaskMoveForm(forms.Form):
     column = forms.ModelChoiceField(queryset=None, widget=forms.Select(attrs={'class': 'form-select'}))

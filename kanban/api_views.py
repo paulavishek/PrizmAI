@@ -3022,18 +3022,44 @@ def get_task_prediction_api(request, task_id):
             if task.due_date:
                 is_likely_late = task.predicted_completion_date > task.due_date
             
+            # Parse early/late dates and ensure minimum 3-day spread
+            raw_early = task.prediction_metadata.get('early_date', '')
+            raw_late = task.prediction_metadata.get('late_date', '')
+            from dateutil.parser import parse as parse_dt
+            try:
+                early_dt = parse_dt(raw_early) if isinstance(raw_early, str) and raw_early else None
+            except Exception:
+                early_dt = None
+            try:
+                late_dt = parse_dt(raw_late) if isinstance(raw_late, str) and raw_late else None
+            except Exception:
+                late_dt = None
+
+            predicted = task.predicted_completion_date
+            if early_dt and late_dt:
+                spread = (late_dt - early_dt).total_seconds() / 86400
+                if spread < 3:
+                    half_pad = timedelta(days=(3 - spread) / 2)
+                    early_dt = early_dt - half_pad
+                    late_dt = late_dt + half_pad
+            else:
+                early_dt = predicted - timedelta(days=2)
+                late_dt = predicted + timedelta(days=3)
+
             return JsonResponse({
                 'has_prediction': True,
                 'prediction': {
-                    'predicted_date': task.predicted_completion_date.isoformat(),
-                    'predicted_date_formatted': task.predicted_completion_date.strftime('%B %d, %Y'),
+                    'predicted_date': predicted.isoformat(),
+                    'predicted_date_formatted': predicted.strftime('%B %d, %Y'),
                     'confidence': task.prediction_confidence,
                     'confidence_percentage': int(task.prediction_confidence * 100),
                     'confidence_interval_days': task.prediction_metadata.get('confidence_interval_days', 0),
                     'based_on_tasks': task.prediction_metadata.get('based_on_tasks', 0),
                     'similar_tasks': task.prediction_metadata.get('similar_tasks', []),
-                    'early_date': task.prediction_metadata.get('early_date', ''),
-                    'late_date': task.prediction_metadata.get('late_date', ''),
+                    'early_date': early_dt.isoformat(),
+                    'early_date_formatted': early_dt.strftime('%b %d'),
+                    'late_date': late_dt.isoformat(),
+                    'late_date_formatted': late_dt.strftime('%b %d'),
                     'prediction_method': task.prediction_metadata.get('prediction_method', 'unknown'),
                     'factors': task.prediction_metadata.get('factors', {}),
                     'is_likely_late': is_likely_late,
