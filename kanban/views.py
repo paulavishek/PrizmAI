@@ -2813,7 +2813,15 @@ def delete_column(request, column_id):
         # Store column name for success message
         column_name = column.name
         
-        # Delete the column (will cascade delete all tasks in this column)
+        # Move all tasks in this column to "To Do" before deleting
+        todo_column = Column.objects.filter(
+            board=board, name__iexact='to do'
+        ).first() or Column.objects.filter(board=board).order_by('position').first()
+        
+        if todo_column and todo_column != column:
+            column.tasks.update(column=todo_column)
+        
+        # Delete the (now-empty) column
         column.delete()
         
         # Reorder remaining columns to ensure sequential positions
@@ -2823,7 +2831,7 @@ def delete_column(request, column_id):
                 col.position = index
                 col.save()
                 
-        messages.success(request, f'Column "{column_name}" and its tasks have been deleted.')
+        messages.success(request, f'Column "{column_name}" has been deleted. Its tasks were moved to To Do.')
         return redirect('board_detail', board_id=board.id)
     
     return render(request, 'kanban/delete_column.html', {

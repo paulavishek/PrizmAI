@@ -591,7 +591,20 @@ class Command(BaseCommand):
         columns = {col.name: col for col in Column.objects.filter(board=board)}
         todo = columns.get('To Do') or columns.get('Backlog') or list(columns.values())[0]
         in_progress = columns.get('In Progress') or todo
-        review = columns.get('In Review') or in_progress
+
+        # Ensure "In Review" column exists between In Progress and Done
+        if 'In Review' not in columns:
+            done_col = columns.get('Done')
+            in_review_position = (done_col.position - 1) if done_col else (in_progress.position + 1)
+            review = Column.objects.create(
+                name='In Review',
+                board=board,
+                position=in_review_position,
+            )
+            self.stdout.write(self.style.SUCCESS('   ✅ Created missing "In Review" column'))
+        else:
+            review = columns['In Review']
+
         done = columns.get('Done') or review
         items = []
         now = timezone.now().date()

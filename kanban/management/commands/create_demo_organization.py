@@ -3,7 +3,7 @@ Management command to create demo organization with board and personas.
 
 Structure:
 - 1 Organization: "Demo - Acme Corporation"
-- 1 Board: Software Development (3 columns: To Do, In Progress, Done)
+- 1 Board: Software Development (4 columns: To Do, In Progress, In Review, Done)
 - 3 Personas: Alex Chen (Admin/PM), Sam Rivera (Member/Lead Dev), Jordan Taylor (Member/Architect-QA)
 
 Usage:
@@ -253,7 +253,7 @@ class Command(BaseCommand):
             {
                 'name': 'Software Development',
                 'description': 'Track features, sprints, and releases for our product. Showcase AI-powered task management and burndown forecasting.',
-                'columns': ['To Do', 'In Progress', 'Done'],
+                'columns': ['To Do', 'In Progress', 'In Review', 'Done'],
             },
         ]
         
