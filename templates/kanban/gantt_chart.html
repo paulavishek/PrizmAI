@@ -1649,6 +1649,82 @@
         return result;
     }
 
+    /**
+     * Topological sort: order tasks so predecessors always appear before successors.
+     * Produces clean top-to-bottom dependency lines (Monday.com style).
+     * Tasks with no dependencies are sorted by start date as a tiebreaker.
+     * O(V + E) — scales to 100+ tasks without issue.
+     */
+    function topologicalSortTasks(taskList) {
+        if (!taskList || taskList.length <= 1) return taskList;
+
+        const taskMap = new Map();
+        const taskIdSet = new Set();
+        taskList.forEach(t => {
+            taskMap.set(String(t.id), t);
+            taskIdSet.add(String(t.id));
+        });
+
+        // Build adjacency: for each task, which tasks depend on it (successors)
+        const successors = new Map(); // taskId -> [successor taskIds]
+        const inDegree = new Map();   // taskId -> number of dependencies within this set
+        taskIdSet.forEach(id => {
+            successors.set(id, []);
+            inDegree.set(id, 0);
+        });
+
+        taskList.forEach(t => {
+            if (!t.dependencies) return;
+            const depStr = typeof t.dependencies === 'string' ? t.dependencies : String(t.dependencies);
+            depStr.split(',').map(d => d.trim()).filter(Boolean).forEach(depId => {
+                if (taskIdSet.has(depId)) {
+                    successors.get(depId).push(String(t.id));
+                    inDegree.set(String(t.id), (inDegree.get(String(t.id)) || 0) + 1);
+                }
+            });
+        });
+
+        // Kahn's algorithm with start-date priority queue
+        // Tasks with zero in-degree are ready; among them, earliest start date goes first
+        const queue = [];
+        taskIdSet.forEach(id => {
+            if (inDegree.get(id) === 0) queue.push(id);
+        });
+        // Sort initial queue by start date
+        queue.sort((a, b) => {
+            const ta = taskMap.get(a), tb = taskMap.get(b);
+            return new Date(ta.start) - new Date(tb.start);
+        });
+
+        const sorted = [];
+        while (queue.length > 0) {
+            const id = queue.shift();
+            sorted.push(taskMap.get(id));
+            const succs = successors.get(id) || [];
+            // Collect newly-ready successors, then sort by start date before adding
+            const newlyReady = [];
+            succs.forEach(succId => {
+                inDegree.set(succId, inDegree.get(succId) - 1);
+                if (inDegree.get(succId) === 0) newlyReady.push(succId);
+            });
+            newlyReady.sort((a, b) => {
+                const ta = taskMap.get(a), tb = taskMap.get(b);
+                return new Date(ta.start) - new Date(tb.start);
+            });
+            newlyReady.forEach(id => queue.push(id));
+        }
+
+        // If any tasks weren't reached (cycle), append them at the end by start date
+        if (sorted.length < taskList.length) {
+            const sortedIds = new Set(sorted.map(t => String(t.id)));
+            const remaining = taskList.filter(t => !sortedIds.has(String(t.id)));
+            remaining.sort((a, b) => new Date(a.start) - new Date(b.start));
+            remaining.forEach(t => sorted.push(t));
+        }
+
+        return sorted;
+    }
+
     // ============================================
     // CRITICAL PATH METHOD (CPM) IMPLEMENTATION
     // ============================================
@@ -2032,7 +2108,7 @@
             dependencies: t.dependencies
         })));
         
-        ganttChart = new Gantt('#gantt', buildOrderedTaskList(tasks, visibleMilestones), {
+        ganttChart = new Gantt('#gantt', buildOrderedTaskList(topologicalSortTasks(tasks), visibleMilestones), {
                 view_mode: viewMode,
                 bar_height: barHeight,
                 bar_corner_radius: 6,
@@ -2247,12 +2323,9 @@
             try { rect.remove(); } catch (e) { rect.style.display = 'none'; }
         });
 
-        // ── Build COMPLETE obstacle list: bars + labels + diamonds + assignees ──
-        // Every visible element that dependency lines must route around.
-        const barGeo = {};      // keyed by task id — endpoint geometry (no padding)
-        const obstacles = [];   // ALL visual obstacles with padding
+        // ── Build bar geometry for dependency line endpoints ──
+        const barGeo = {};      // keyed by task id — endpoint geometry
         const allItems = [...tasks, ...ganttMilestones];
-        const PAD = 5;
 
         ganttSvg.querySelectorAll('.bar-wrapper').forEach(wrapper => {
             const wId = wrapper.getAttribute('data-id');
@@ -2267,14 +2340,7 @@
             const h = parseFloat(bar.getAttribute('height') || 0);
             if (w <= 0 || h <= 0) return;
 
-            // Bar rect obstacle
-            obstacles.push({
-                ownerId: wId, type: 'bar',
-                left: x - PAD, right: x + w + PAD,
-                top: y - PAD, bottom: y + h + PAD
-            });
-
-            // Endpoint geometry (no padding) — only for dependency-connectable items
+            // Endpoint geometry for dependency-connectable items
             if (!barGeo[wId]) {
                 barGeo[wId] = {
                     id: wId, x, y, w, h,
@@ -2283,25 +2349,6 @@
                     leftX: x, leftY: y + h / 2
                 };
             }
-
-            // NOTE: Labels are NOT in the DOM yet (added in Phase 3 after dep lines).
-            // This ensures dep lines only route around bars and diamonds, not labels.
-
-            // Milestone diamond obstacle
-            const diamond = wrapper.querySelector('.milestone-diamond-shape');
-            if (diamond) {
-                try {
-                    const bbox = diamond.getBBox();
-                    if (bbox.width > 0 && bbox.height > 0) {
-                        obstacles.push({
-                            ownerId: wId, type: 'diamond',
-                            left: bbox.x - PAD, right: bbox.x + bbox.width + PAD,
-                            top: bbox.y - PAD, bottom: bbox.y + bbox.height + PAD
-                        });
-                    }
-                } catch (e) {}
-            }
-
         });
 
         // Name lookup
@@ -2324,84 +2371,18 @@
             });
         });
 
-        // ── Collision helpers ──
-
-        // Does a vertical line at testX from yMin→yMax hit any obstacle?
-        // skipOwners: Set of ownerIds whose obstacles we ignore (pred/succ).
-        function vertHits(testX, yMin, yMax, skipOwners) {
-            for (let i = 0; i < obstacles.length; i++) {
-                const o = obstacles[i];
-                if (skipOwners && skipOwners.has(o.ownerId)) continue;
-                if (testX >= o.left && testX <= o.right &&
-                    yMax >= o.top && yMin <= o.bottom) {
-                    return o;
-                }
-            }
-            return null;
-        }
-
-        // Find clear X for a vertical line by pushing right past each collision.
-        // Restarts the full scan after each bump.
-        function findClearX(startX, yMin, yMax, skipOwners) {
-            let x = startX;
-            let maxIter = obstacles.length * 2 + 30;
-            while (maxIter-- > 0) {
-                const hit = vertHits(x, yMin, yMax, skipOwners);
-                if (!hit) return x;
-                x = hit.right + 6;
-            }
-            return x;
-        }
-
-        // Is a point inside any obstacle (with extra padding)?
-        function pointInObstacle(px, py, pad) {
-            for (let i = 0; i < obstacles.length; i++) {
-                const o = obstacles[i];
-                if (px >= o.left - pad && px <= o.right + pad &&
-                    py >= o.top - pad && py <= o.bottom + pad) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        // Does a horizontal line at testY from xMin→xMax hit any obstacle?
-        // Checks ALL obstacle types (bars, labels, assignees) for non-skipOwners.
-        // skipOwners obstacles are fully skipped (pred/succ own elements).
-        function horizHits(testY, xMin, xMax, skipOwners) {
-            for (let i = 0; i < obstacles.length; i++) {
-                const o = obstacles[i];
-                if (skipOwners && skipOwners.has(o.ownerId)) continue;
-                if (testY >= o.top && testY <= o.bottom &&
-                    xMax >= o.left && xMin <= o.right) {
-                    return o;
-                }
-            }
-            return null;
-        }
-
-        // Find a clear Y for a horizontal line by pushing up or down past collisions.
-        // direction: 'up' tries going up first, 'down' tries going down first.
-        function findClearY(startY, xMin, xMax, skipOwners, direction) {
-            let yUp = startY;
-            let yDown = startY;
-            let maxIter = obstacles.length * 2 + 30;
-            while (maxIter-- > 0) {
-                if (direction === 'up') {
-                    const hitUp = horizHits(yUp, xMin, xMax, skipOwners);
-                    if (!hitUp) return yUp;
-                    yUp = hitUp.top - 6;
-                } else {
-                    const hitDown = horizHits(yDown, xMin, xMax, skipOwners);
-                    if (!hitDown) return yDown;
-                    yDown = hitDown.bottom + 6;
-                }
-            }
-            return direction === 'up' ? yUp : yDown;
-        }
+        // ── Monday.com-style dependency routing ──
+        // With topological sort ensuring predecessors are above successors,
+        // we use simple L-shape / S-shape connectors — no collision avoidance needed.
+        // Each line is O(1) to compute, scaling cleanly to 100+ tasks.
 
         const depTooltip = document.getElementById('dep-tooltip');
         let chevronCount = 0;
+        const CHEVRON_OFFSET = 14; // px before successor entry point
+
+        // Cache first bar element for insertion (avoids repeated querySelector per dep)
+        const firstBarEl = ganttSvg.querySelector('.bar-wrapper');
+        const insertParent = firstBarEl ? firstBarEl.parentNode : ganttSvg;
 
         // ── Draw each dependency ──
         depPairs.forEach(dep => {
@@ -2411,10 +2392,8 @@
 
             const isCritical = criticalIds.has(dep.from) && criticalIds.has(dep.to);
             const color = isCritical ? '#ef4444' : '#6b7280';
-            // Skip obstacles owned by pred/succ (the line connects to their edges)
-            const skipOwners = new Set([dep.from, dep.to]);
 
-            const GAP = 8;
+            const GAP = 10;
             const exitX  = pred.rightX;
             const exitY  = pred.rightY;
             const entryX = succ.leftX;
@@ -2422,170 +2401,50 @@
 
             let pathD;
             let segments = [];
-            const yMin = Math.min(exitY, entryY);
-            const yMax = Math.max(exitY, entryY);
-            const sameRow    = Math.abs(exitY - entryY) <= 3;
-            const succIsRight = entryX > exitX + 2 * GAP;
+            const sameRow = Math.abs(exitY - entryY) <= 3;
+            const succIsRight = entryX > exitX + GAP;
 
             if (sameRow && succIsRight) {
-                // ── Straight horizontal line ──
-                // Check for collisions with bars in between
-                const straightHit = horizHits(exitY, exitX, entryX, skipOwners);
-                if (!straightHit) {
-                    pathD = `M ${exitX},${exitY} L ${entryX},${entryY}`;
-                    segments = [{ x1: exitX, y1: exitY, x2: entryX, y2: entryY, dir: 'right', len: entryX - exitX }];
-                } else {
-                    // Route above or below the blocking bar
-                    const detourDir = (exitY <= straightHit.top) ? 'up' : 'down';
-                    const detourY = findClearY(detourDir === 'up' ? straightHit.top - 6 : straightHit.bottom + 6,
-                        exitX, entryX, skipOwners, detourDir);
-                    const turnX1 = straightHit.left - GAP;
-                    const turnX2 = straightHit.right + GAP;
-                    pathD = `M ${exitX},${exitY} L ${turnX1},${exitY} L ${turnX1},${detourY} L ${turnX2},${detourY} L ${turnX2},${entryY} L ${entryX},${entryY}`;
-                    segments = [
-                        { x1: exitX, y1: exitY, x2: turnX1, y2: exitY, dir: 'right', len: turnX1 - exitX },
-                        { x1: turnX1, y1: exitY, x2: turnX1, y2: detourY, dir: detourDir, len: Math.abs(detourY - exitY) },
-                        { x1: turnX1, y1: detourY, x2: turnX2, y2: detourY, dir: 'right', len: turnX2 - turnX1 },
-                        { x1: turnX2, y1: detourY, x2: turnX2, y2: entryY, dir: detourDir === 'up' ? 'down' : 'up', len: Math.abs(entryY - detourY) },
-                        { x1: turnX2, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - turnX2 }
-                    ];
-                }
+                // ── Case 1: Straight horizontal (same row, successor to the right) ──
+                pathD = `M ${exitX},${exitY} L ${entryX},${entryY}`;
+                segments = [{ x1: exitX, y1: exitY, x2: entryX, y2: entryY, dir: 'right', len: entryX - exitX }];
 
             } else if (succIsRight) {
-                // ── Successor to the right, different row — Double-L (S-shape) routing ──
-                // Monday.com style: exit right → short stub → vertical at midpoint → horizontal → enter left
-                // This ensures the vertical segment is safely between both bars, never cutting through either.
+                // ── Case 2: L-shape (successor to the right, different row) ──
+                // Monday.com style: horizontal to midpoint, vertical drop, horizontal to entry
                 const goingDown = entryY > exitY;
+                let midX = (exitX + entryX) / 2;
+                // Clamp midX to stay between bar edges with clearance
+                midX = Math.max(midX, exitX + GAP);
+                midX = Math.min(midX, entryX - GAP);
 
-                // Calculate midpoint X between predecessor right edge and successor left edge
-                let midX = (pred.rightX + succ.leftX) / 2;
-
-                // Ensure midX has enough clearance from both bars
-                const minMidX = pred.rightX + GAP;
-                const maxMidX = succ.leftX - GAP;
-                if (midX < minMidX) midX = minMidX;
-                if (midX > maxMidX) midX = maxMidX;
-
-                // If there's not enough space between bars for a clean double-L,
-                // fall through to U-shape routing below
-                if (maxMidX <= minMidX) {
-                    // Not enough horizontal room — use U-shape (handled in else branch below)
-                    const uGoingDown = entryY >= exitY;
-                    let clearanceY = uGoingDown
-                        ? Math.max(pred.bottom, succ.bottom) + 20
-                        : Math.min(pred.top, succ.top) - 20;
-
-                    let vert1X = findClearX(pred.right + GAP,
-                        Math.min(exitY, clearanceY), Math.max(exitY, clearanceY), skipOwners);
-
-                    const hMin = Math.min(vert1X, entryX - GAP);
-                    const hMax = Math.max(vert1X, entryX - GAP);
-                    const horzHit = horizHits(clearanceY, hMin, hMax, skipOwners);
-                    if (horzHit) {
-                        clearanceY = findClearY(
-                            uGoingDown ? horzHit.bottom + 6 : horzHit.top - 6,
-                            hMin, hMax, skipOwners, uGoingDown ? 'down' : 'up');
-                    }
-
-                    pathD = `M ${exitX},${exitY} L ${vert1X},${exitY} L ${vert1X},${clearanceY} L ${entryX - GAP},${clearanceY} L ${entryX - GAP},${entryY} L ${entryX},${entryY}`;
-                    segments = [
-                        { x1: exitX, y1: exitY, x2: vert1X, y2: exitY, dir: 'right', len: Math.abs(vert1X - exitX) },
-                        { x1: vert1X, y1: exitY, x2: vert1X, y2: clearanceY, dir: uGoingDown ? 'down' : 'up', len: Math.abs(clearanceY - exitY) },
-                        { x1: vert1X, y1: clearanceY, x2: entryX - GAP, y2: clearanceY, dir: vert1X > entryX - GAP ? 'left' : 'right', len: Math.abs(vert1X - (entryX - GAP)) },
-                        { x1: entryX - GAP, y1: clearanceY, x2: entryX - GAP, y2: entryY, dir: uGoingDown ? 'up' : 'down', len: Math.abs(entryY - clearanceY) },
-                        { x1: entryX - GAP, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: GAP }
-                    ];
-                } else {
-                    // Enough space — use double-L (S-shape) routing through midX
-                    // Find a collision-free vertical X near the midpoint
-                    midX = findClearX(midX, yMin, yMax, skipOwners);
-                    // Clamp midX so it doesn't drift past the successor
-                    if (midX > maxMidX) midX = maxMidX;
-
-                    // Check horizontal segments for collisions
-                    const exitSegHit = horizHits(exitY, exitX, midX, skipOwners);
-                    const entrySegHit = horizHits(entryY, midX, entryX, skipOwners);
-
-                    if (!exitSegHit && !entrySegHit) {
-                        // Clean double-L: exit → midX horizontal, midX vertical, midX → entry horizontal
-                        pathD = `M ${exitX},${exitY} L ${midX},${exitY} L ${midX},${entryY} L ${entryX},${entryY}`;
-                        segments = [
-                            { x1: exitX, y1: exitY, x2: midX, y2: exitY, dir: 'right', len: midX - exitX },
-                            { x1: midX, y1: exitY, x2: midX, y2: entryY, dir: goingDown ? 'down' : 'up', len: Math.abs(entryY - exitY) },
-                            { x1: midX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - midX }
-                        ];
-                    } else {
-                        // Horizontal collision — route around with 5-segment path
-                        let clearExitY = exitY;
-                        if (exitSegHit) {
-                            clearExitY = findClearY(goingDown ? exitSegHit.top - 6 : exitSegHit.bottom + 6,
-                                exitX, midX, skipOwners, goingDown ? 'up' : 'down');
-                        }
-                        let clearEntryY = entryY;
-                        if (entrySegHit) {
-                            clearEntryY = findClearY(goingDown ? entrySegHit.bottom + 6 : entrySegHit.top - 6,
-                                midX, entryX, skipOwners, goingDown ? 'down' : 'up');
-                        }
-
-                        if (clearExitY === exitY && clearEntryY === entryY) {
-                            // findClearY found no issue — clean double-L
-                            pathD = `M ${exitX},${exitY} L ${midX},${exitY} L ${midX},${entryY} L ${entryX},${entryY}`;
-                            segments = [
-                                { x1: exitX, y1: exitY, x2: midX, y2: exitY, dir: 'right', len: midX - exitX },
-                                { x1: midX, y1: exitY, x2: midX, y2: entryY, dir: goingDown ? 'down' : 'up', len: Math.abs(entryY - exitY) },
-                                { x1: midX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - midX }
-                            ];
-                        } else {
-                            // 5-segment route with clear Y values
-                            const stubX = exitX + GAP;
-                            pathD = `M ${exitX},${exitY} L ${stubX},${exitY} L ${stubX},${clearExitY} L ${midX},${clearExitY} L ${midX},${entryY} L ${entryX},${entryY}`;
-                            segments = [
-                                { x1: exitX, y1: exitY, x2: stubX, y2: exitY, dir: 'right', len: GAP },
-                                { x1: stubX, y1: exitY, x2: stubX, y2: clearExitY, dir: goingDown ? 'up' : 'down', len: Math.abs(clearExitY - exitY) },
-                                { x1: stubX, y1: clearExitY, x2: midX, y2: clearExitY, dir: 'right', len: Math.abs(midX - stubX) },
-                                { x1: midX, y1: clearExitY, x2: midX, y2: entryY, dir: goingDown ? 'down' : 'up', len: Math.abs(entryY - clearExitY) },
-                                { x1: midX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - midX }
-                            ];
-                        }
-                    }
-                }
+                pathD = `M ${exitX},${exitY} L ${midX},${exitY} L ${midX},${entryY} L ${entryX},${entryY}`;
+                segments = [
+                    { x1: exitX, y1: exitY, x2: midX, y2: exitY, dir: 'right', len: midX - exitX },
+                    { x1: midX, y1: exitY, x2: midX, y2: entryY, dir: goingDown ? 'down' : 'up', len: Math.abs(entryY - exitY) },
+                    { x1: midX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: entryX - midX }
+                ];
 
             } else {
-                // ── Successor to the left or overlapping — U-shape routing ──
+                // ── Case 3: S-shape (successor to the left or overlapping — rare after topo sort) ──
+                // Route: right stub → vertical past both bars → horizontal left → vertical to entry row → short entry
                 const goingDown = entryY >= exitY;
-                let clearanceY = goingDown
+                const stubX = exitX + GAP;
+                // Go below or above both bars
+                const clearanceY = goingDown
                     ? Math.max(pred.bottom, succ.bottom) + 20
                     : Math.min(pred.top, succ.top) - 20;
+                const entryStubX = entryX - GAP;
 
-                let vert1X = findClearX(pred.right + GAP,
-                    Math.min(exitY, clearanceY), Math.max(exitY, clearanceY), skipOwners);
-
-                // Check horizontal segment at clearanceY for collisions
-                const hMin = Math.min(vert1X, entryX - GAP);
-                const hMax = Math.max(vert1X, entryX - GAP);
-                const horzHit = horizHits(clearanceY, hMin, hMax, skipOwners);
-                if (horzHit) {
-                    // Push clearanceY further away to avoid the collision
-                    clearanceY = findClearY(
-                        goingDown ? horzHit.bottom + 6 : horzHit.top - 6,
-                        hMin, hMax, skipOwners, goingDown ? 'down' : 'up');
-                }
-
-                pathD = `M ${exitX},${exitY} L ${vert1X},${exitY} L ${vert1X},${clearanceY} L ${entryX - GAP},${clearanceY} L ${entryX - GAP},${entryY} L ${entryX},${entryY}`;
+                pathD = `M ${exitX},${exitY} L ${stubX},${exitY} L ${stubX},${clearanceY} L ${entryStubX},${clearanceY} L ${entryStubX},${entryY} L ${entryX},${entryY}`;
                 segments = [
-                    { x1: exitX, y1: exitY, x2: vert1X, y2: exitY, dir: 'right', len: Math.abs(vert1X - exitX) },
-                    { x1: vert1X, y1: exitY, x2: vert1X, y2: clearanceY, dir: goingDown ? 'down' : 'up', len: Math.abs(clearanceY - exitY) },
-                    { x1: vert1X, y1: clearanceY, x2: entryX - GAP, y2: clearanceY, dir: vert1X > entryX - GAP ? 'left' : 'right', len: Math.abs(vert1X - (entryX - GAP)) },
-                    { x1: entryX - GAP, y1: clearanceY, x2: entryX - GAP, y2: entryY, dir: goingDown ? 'up' : 'down', len: Math.abs(entryY - clearanceY) },
-                    { x1: entryX - GAP, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: GAP }
+                    { x1: exitX, y1: exitY, x2: stubX, y2: exitY, dir: 'right', len: GAP },
+                    { x1: stubX, y1: exitY, x2: stubX, y2: clearanceY, dir: goingDown ? 'down' : 'up', len: Math.abs(clearanceY - exitY) },
+                    { x1: stubX, y1: clearanceY, x2: entryStubX, y2: clearanceY, dir: stubX < entryStubX ? 'right' : 'left', len: Math.abs(entryStubX - stubX) },
+                    { x1: entryStubX, y1: clearanceY, x2: entryStubX, y2: entryY, dir: goingDown ? 'up' : 'down', len: Math.abs(entryY - clearanceY) },
+                    { x1: entryStubX, y1: entryY, x2: entryX, y2: entryY, dir: 'right', len: GAP }
                 ];
             }
-
-            // Find longest segment for chevron placement
-            let longestSeg = null, longestLen = 0;
-            segments.forEach(seg => {
-                if (seg.len > longestLen) { longestLen = seg.len; longestSeg = seg; }
-            });
 
             // Create SVG group
             const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -2598,65 +2457,52 @@
             pathEl.setAttribute('data-to', dep.to);
             group.appendChild(pathEl);
 
-            // ── Chevron on longest segment (collision-safe, 5 attempts) ──
-            let drawChevron = false;
-            let chevronX, chevronY, chevronDir;
+            // ── Chevron near the successor entry (right-pointing, on last horizontal segment) ──
+            const lastSeg = segments[segments.length - 1];
+            if (lastSeg && lastSeg.dir === 'right' && lastSeg.len >= 8) {
+                // Place chevron CHEVRON_OFFSET px before entry, or midway if segment is short
+                const chevronX = lastSeg.len > CHEVRON_OFFSET * 2
+                    ? lastSeg.x2 - CHEVRON_OFFSET
+                    : (lastSeg.x1 + lastSeg.x2) / 2;
+                const chevronY = lastSeg.y1;
 
-            if (longestSeg && longestLen > 20) {
-                chevronX = (longestSeg.x1 + longestSeg.x2) / 2;
-                chevronY = (longestSeg.y1 + longestSeg.y2) / 2;
-                chevronDir = longestSeg.dir;
-
-                let nudgeDx = 0, nudgeDy = 0;
-                if (chevronDir === 'right') nudgeDx = 10;
-                else if (chevronDir === 'left') nudgeDx = -10;
-                else if (chevronDir === 'down') nudgeDy = 10;
-                else if (chevronDir === 'up') nudgeDy = -10;
-
-                let cleared = !pointInObstacle(chevronX, chevronY, 5);
-                for (let a = 0; a < 5 && !cleared; a++) {
-                    chevronX += nudgeDx;
-                    chevronY += nudgeDy;
-                    cleared = !pointInObstacle(chevronX, chevronY, 5);
-                }
-                drawChevron = cleared;
-            }
-
-            if (drawChevron) {
                 const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
                 chevron.setAttribute('class', 'dep-chevron');
                 chevron.setAttribute('fill', color);
-                chevron.style.display = 'block';
-                chevron.style.visibility = 'visible';
-                chevron.style.opacity = '1';
-                let pts;
-                switch (chevronDir) {
-                    case 'right':
-                        pts = `${chevronX - 4},${chevronY - 3} ${chevronX + 4},${chevronY} ${chevronX - 4},${chevronY + 3}`;
-                        break;
-                    case 'left':
-                        pts = `${chevronX + 4},${chevronY - 3} ${chevronX - 4},${chevronY} ${chevronX + 4},${chevronY + 3}`;
-                        break;
-                    case 'down':
-                        pts = `${chevronX - 3},${chevronY - 4} ${chevronX},${chevronY + 4} ${chevronX + 3},${chevronY - 4}`;
-                        break;
-                    case 'up':
-                        pts = `${chevronX - 3},${chevronY + 4} ${chevronX},${chevronY - 4} ${chevronX + 3},${chevronY + 4}`;
-                        break;
-                    default:
-                        pts = `${chevronX - 4},${chevronY - 3} ${chevronX + 4},${chevronY} ${chevronX - 4},${chevronY + 3}`;
-                }
+                // Slightly larger chevron (5px half-width, 4px half-height) for better visibility
+                const pts = `${chevronX - 5},${chevronY - 4} ${chevronX + 5},${chevronY} ${chevronX - 5},${chevronY + 4}`;
                 chevron.setAttribute('points', pts);
                 group.appendChild(chevron);
                 chevronCount++;
+            } else {
+                // Fallback: find the longest segment and place chevron there
+                let longestSeg = null, longestLen = 0;
+                segments.forEach(seg => {
+                    if (seg.len > longestLen) { longestLen = seg.len; longestSeg = seg; }
+                });
+                if (longestSeg && longestLen > 20) {
+                    const chevronX = (longestSeg.x1 + longestSeg.x2) / 2;
+                    const chevronY = (longestSeg.y1 + longestSeg.y2) / 2;
+                    const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    chevron.setAttribute('class', 'dep-chevron');
+                    chevron.setAttribute('fill', color);
+                    let pts;
+                    if (longestSeg.dir === 'right' || longestSeg.dir === 'left') {
+                        const dx = longestSeg.dir === 'right' ? 1 : -1;
+                        pts = `${chevronX - 5 * dx},${chevronY - 4} ${chevronX + 5 * dx},${chevronY} ${chevronX - 5 * dx},${chevronY + 4}`;
+                    } else {
+                        const dy = longestSeg.dir === 'down' ? 1 : -1;
+                        pts = `${chevronX - 4},${chevronY - 5 * dy} ${chevronX},${chevronY + 5 * dy} ${chevronX + 4},${chevronY - 5 * dy}`;
+                    }
+                    chevron.setAttribute('points', pts);
+                    group.appendChild(chevron);
+                    chevronCount++;
+                }
             }
 
-            // Insert dep lines BEFORE bar-wrappers so bars render on top,
-            // naturally masking/hiding line portions that pass through bars (Monday.com style).
-            const firstBar = ganttSvg.querySelector('.bar-wrapper');
-            if (firstBar) {
-                // bar-wrapper may be nested inside a <g> — insert into the same parent
-                firstBar.parentNode.insertBefore(group, firstBar);
+            // Insert dep lines BEFORE bar-wrappers so bars render on top
+            if (firstBarEl) {
+                insertParent.insertBefore(group, firstBarEl);
             } else {
                 ganttSvg.appendChild(group);
             }
@@ -2709,7 +2555,7 @@
             }
         });
 
-        console.log('[Gantt Dep Lines] Drew ' + depPairs.length + ' deps, ' + chevronCount + ' chevrons, ' + obstacles.length + ' obstacles tracked, ' + window._depVerticalSegments.length + ' vert segs, ' + window._depHorizontalSegments.length + ' horiz segs');
+        console.log('[Gantt Dep Lines] Drew ' + depPairs.length + ' deps, ' + chevronCount + ' chevrons, ' + Object.keys(barGeo).length + ' bars tracked, ' + window._depVerticalSegments.length + ' vert segs, ' + window._depHorizontalSegments.length + ' horiz segs');
 
         function positionDepTooltip(e) {
             const tt = document.getElementById('dep-tooltip');
@@ -3513,22 +3359,16 @@
 
             // If expanded, add tasks and milestones for this phase
             if (isExpanded) {
-                // Get phase tasks and sort by ID to maintain consistent order
-                // (regardless of date changes)
-                const expandedPhaseTasks = tasks
-                    .filter(t => t.phase === phaseName)
-                    .sort((a, b) => parseInt(a.id) - parseInt(b.id));
-                
-                // Process tasks
-                const regularTasks = [];
-                
-                expandedPhaseTasks.forEach(task => {
-                    // Only include tasks with valid start and end date
-                    if (!task.end || task.end === 'None' || task.end === '') return;
-                    if (!task.start || task.start === 'None' || task.start === '') return;
-                    
-                    regularTasks.push(task);
+                // Get phase tasks with valid dates
+                const expandedPhaseTasks = tasks.filter(t => {
+                    if (t.phase !== phaseName) return false;
+                    if (!t.end || t.end === 'None' || t.end === '') return false;
+                    if (!t.start || t.start === 'None' || t.start === '') return false;
+                    return true;
                 });
+
+                // Topological sort: predecessors above successors → clean downward lines
+                const regularTasks = topologicalSortTasks(expandedPhaseTasks);
                 
                 // Add all tasks + milestones in position-aware order for this phase
                 const phaseMilestones = visibleMilestones.filter(m => m.phase === phaseName);
