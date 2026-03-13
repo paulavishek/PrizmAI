@@ -83,13 +83,20 @@ def predict_task_completion_date(task):
     std_dev = historical_stats.get('std_dev', 0) or 0
     confidence_interval = std_dev * 1.96  # 95% confidence interval
     
-    # Calculate early/late estimates
+    # Calculate early/late estimates with minimum 3-day spread
     early_date = base_date + timedelta(
         days=max(0.5, adjusted_days - confidence_interval)
     )
     late_date = base_date + timedelta(
         days=adjusted_days + confidence_interval
     )
+    # Ensure at least a 3-day spread for a meaningful confidence range
+    min_spread_days = 3
+    spread = (late_date - early_date).total_seconds() / 86400
+    if spread < min_spread_days:
+        half_pad = (min_spread_days - spread) / 2
+        early_date = early_date - timedelta(days=half_pad)
+        late_date = late_date + timedelta(days=half_pad)
     
     # Compile factors used in prediction
     factors = {
@@ -451,7 +458,17 @@ def _fallback_prediction(task):
     # Lower confidence for fallback predictions
     confidence = 0.35
     confidence_interval = adjusted_days * 0.5  # ±50% uncertainty
-    
+
+    early_estimate = base_date + timedelta(days=max(complexity_minimum * 0.5, adjusted_days * 0.5))
+    late_estimate = base_date + timedelta(days=adjusted_days * 1.5)
+    # Ensure at least a 3-day spread for a meaningful confidence range
+    min_spread_days = 3
+    spread = (late_estimate - early_estimate).total_seconds() / 86400
+    if spread < min_spread_days:
+        half_pad = (min_spread_days - spread) / 2
+        early_estimate = early_estimate - timedelta(days=half_pad)
+        late_estimate = late_estimate + timedelta(days=half_pad)
+
     return {
         'predicted_date': predicted_date,
         'confidence': confidence,
@@ -465,8 +482,8 @@ def _fallback_prediction(task):
             'priority': task.priority,
             'note': 'Insufficient historical data - using rule-based estimation'
         },
-        'early_date': base_date + timedelta(days=max(complexity_minimum * 0.5, adjusted_days * 0.5)),
-        'late_date': base_date + timedelta(days=adjusted_days * 1.5),
+        'early_date': early_estimate,
+        'late_date': late_estimate,
         'prediction_method': 'rule_based_fallback'
     }
 

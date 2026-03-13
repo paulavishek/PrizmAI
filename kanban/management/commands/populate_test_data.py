@@ -895,6 +895,119 @@ class Command(BaseCommand):
     def create_tasks(self, tasks_data, column):
         # Helper function to create tasks with comments and activity
         position = 0
+        # Task-specific comment lookup by keyword
+        task_comment_map = {
+            'authentication': [
+                "JWT token validation middleware is in place. Testing refresh token rotation now.",
+                "Session invalidation on password change implemented and tested.",
+            ],
+            'database': [
+                "ER diagram reviewed with the team. Added indexes for frequent query patterns.",
+                "Migration script handles both upgrade and rollback paths.",
+            ],
+            'ci/cd': [
+                "GitHub Actions workflow triggers on push to main and PRs. Build + test in 4 min.",
+                "Added caching for pip dependencies — shaved 90 s off each run.",
+            ],
+            'component': [
+                "Storybook set up for visual regression testing of all base components.",
+                "Button, Modal, and Toast components are done. Starting on DataTable next.",
+            ],
+            'documentation': [
+                "Swagger spec auto-generates from DRF serializers. Interactive docs at /api/docs/.",
+                "Added request/response examples for every endpoint.",
+            ],
+            'dashboard': [
+                "Sidebar collapses to icons at <992 px. Main content area reflows correctly.",
+                "Widget grid uses CSS Grid. Drag-to-reorder coming in the next sprint.",
+            ],
+            'middleware': [
+                "Token validation middleware rejects expired JWTs with a 401 and a clear error body.",
+                "Added request-ID header propagation for distributed tracing.",
+            ],
+            'homepage': [
+                "Hero section imagery updated. CTA button contrast ratio now meets WCAG AA.",
+                "Lighthouse score: Performance 94, Accessibility 100, Best Practices 100.",
+            ],
+            'repository': [
+                "Branch protection rules set: require PR review + passing CI before merge.",
+                "Monorepo structure: /backend, /frontend, /infra with shared lint config.",
+            ],
+            'mockup': [
+                "Figma prototypes exported. All screens include light and dark mode variants.",
+                "Design tokens (colours, spacing, typography) documented in a shared library.",
+            ],
+            'legacy': [
+                "Removed 1200 LOC of deprecated utility functions. Test suite still green.",
+                "Replaced hand-rolled CSV export with django-import-export — cleaner and maintained.",
+            ],
+            'login': [
+                "Safari issue traced to SameSite=Lax cookies being blocked in cross-site iframe.",
+                "Fixed by setting SameSite=None; Secure and adding a CORS allow-list.",
+            ],
+            'search': [
+                "Query planner switched to GIN trigram index — sub-50 ms for partial matches.",
+                "Added debounce (300 ms) on the search input to reduce backend load.",
+            ],
+            'report': [
+                "Totals mismatch was caused by a timezone offset in the aggregation query.",
+                "Added a reconciliation check that flags discrepancies > 0.1 %.",
+            ],
+            'button': [
+                "Flexbox gap property now used instead of margin hacks. Alignment fixed on iOS.",
+                "Touch target size increased to 44 × 44 px per Apple HIG.",
+            ],
+            'pagination': [
+                "Switched from offset to keyset pagination. Page transitions are instant now.",
+                "Edge case: empty last page no longer shows a blank screen.",
+            ],
+            'upload': [
+                "Server returns 413 with a human-readable message for files > 50 MB.",
+                "Chunked upload fallback added for slow connections.",
+            ],
+            'typo': [
+                "Ran codespell across all user-facing strings. Fixed 7 typos.",
+                "Added a pre-commit hook to catch common misspellings automatically.",
+            ],
+            'campaign': [
+                "Subject-line A/B test: emoji variant outperformed plain by 12 % open rate.",
+                "Segmented the list by engagement tier — re-engagement flow for inactive users.",
+            ],
+            'video': [
+                "Shot list finalised for 3 product demo videos. Estimated 2 days of editing.",
+                "Hosting moved to Mux for adaptive bitrate streaming.",
+            ],
+            'newsletter': [
+                "Content calendar covers 12 weekly sends. Each has a primary CTA and fallback.",
+                "Litmus rendering tests pass on Gmail, Outlook, and Apple Mail.",
+            ],
+            'website': [
+                "Lighthouse mobile score improved from 68 to 91 after image optimisation.",
+                "Next.js ISR set to 60 s — content updates propagate within a minute.",
+            ],
+            'performance report': [
+                "Automated data pull from GA4 + social APIs. Report generates in < 10 s.",
+                "Added month-over-month trend lines for each KPI.",
+            ],
+            'email': [
+                "Email deliverability at 98.7 % after fixing SPF alignment issue.",
+                "CAN-SPAM footer and one-click unsubscribe verified across all templates.",
+            ],
+            'graphics': [
+                "Exported assets at 1×, 2×, and 3× for retina displays. Total bundle < 500 KB.",
+                "Colour palette verified for colour-blind accessibility (Sim Daltonism).",
+            ],
+            'competitor': [
+                "Mapped 5 competitors on a feature matrix. We lead on collaboration; gap on reporting.",
+                "Pricing analysis shows our mid-tier is 15 % below market average.",
+            ],
+            'outdated': [
+                "Archived 23 blog posts older than 18 months with no organic traffic.",
+                "301 redirects set for removed pages so backlinks still resolve.",
+            ],
+        }
+        now = timezone.now()
+
         for task_data in tasks_data:
             task = Task.objects.create(
                 title=task_data['title'],
@@ -915,53 +1028,96 @@ class Command(BaseCommand):
                 for label in task_data['labels']:
                     task.labels.add(label)
             
-            # Create task activity
-            TaskActivity.objects.create(
+            # Create task activity with a realistic past timestamp
+            base_day_offset = random.randint(5, 15)
+            created_ts = now - timedelta(
+                days=base_day_offset,
+                hours=random.randint(0, 3),
+                minutes=random.randint(0, 59),
+            )
+            created_ts = created_ts.replace(
+                hour=random.choice([9, 10, 11]),
+                minute=random.randint(0, 59),
+                second=0, microsecond=0,
+            )
+            activity = TaskActivity.objects.create(
                 task=task,
                 user=task_data['created_by'],
                 activity_type='created',
                 description=f"Created task '{task.title}'"
             )
+            TaskActivity.objects.filter(pk=activity.pk).update(created_at=created_ts)
             
-            # If assigned, create assignment activity
+            # If assigned, create assignment activity (a few hours later)
             if task_data['assigned_to']:
-                TaskActivity.objects.create(
+                assign_ts = created_ts + timedelta(hours=random.randint(1, 4), minutes=random.randint(0, 59))
+                activity = TaskActivity.objects.create(
                     task=task,
                     user=task_data['created_by'],
                     activity_type='assigned',
                     description=f"Assigned to {task_data['assigned_to'].get_full_name() or task_data['assigned_to'].username}"
                 )
+                TaskActivity.objects.filter(pk=activity.pk).update(created_at=assign_ts)
             
-            # Add some comments to random tasks (around 30% chance)
-            if random.random() < 0.3:
-                Comment.objects.create(
+            # Find task-specific comments by matching keywords in title
+            title_lower = task.title.lower()
+            specific_comments = []
+            for keyword, pool in task_comment_map.items():
+                if keyword in title_lower:
+                    specific_comments.extend(pool)
+
+            # Add comments with spaced-out timestamps
+            if random.random() < 0.4 or specific_comments:
+                comment_text = specific_comments.pop(0) if specific_comments else (
+                    f"Reviewed the scope for this task. Aligned with sprint goals."
+                )
+                comment_ts = now - timedelta(days=base_day_offset - 2)
+                comment_ts = comment_ts.replace(
+                    hour=random.choice([10, 13, 15]),
+                    minute=random.randint(0, 59),
+                    second=0, microsecond=0,
+                )
+                comment = Comment.objects.create(
                     task=task,
                     user=task_data['created_by'],
-                    content=f"Let's make sure we prioritize this correctly."
+                    content=comment_text,
                 )
+                Comment.objects.filter(pk=comment.pk).update(created_at=comment_ts)
                 
                 # Record comment activity
-                TaskActivity.objects.create(
+                activity = TaskActivity.objects.create(
                     task=task,
                     user=task_data['created_by'],
                     activity_type='commented',
                     description=f"{task_data['created_by'].get_full_name() or task_data['created_by'].username} commented on this task"
                 )
+                TaskActivity.objects.filter(pk=activity.pk).update(created_at=comment_ts)
                 
-            if random.random() < 0.2 and task_data['assigned_to']:
-                Comment.objects.create(
+            if (random.random() < 0.3 or specific_comments) and task_data['assigned_to']:
+                comment_text = specific_comments.pop(0) if specific_comments else (
+                    f"Picking this up now. Will update once I have initial results."
+                )
+                comment_ts = now - timedelta(days=max(1, base_day_offset - 4))
+                comment_ts = comment_ts.replace(
+                    hour=random.choice([11, 14, 16]),
+                    minute=random.randint(0, 59),
+                    second=0, microsecond=0,
+                )
+                comment = Comment.objects.create(
                     task=task,
                     user=task_data['assigned_to'],
-                    content=f"I'll work on this as soon as possible."
+                    content=comment_text,
                 )
+                Comment.objects.filter(pk=comment.pk).update(created_at=comment_ts)
                 
                 # Record comment activity
-                TaskActivity.objects.create(
+                activity = TaskActivity.objects.create(
                     task=task,
                     user=task_data['assigned_to'],
                     activity_type='commented',
                     description=f"{task_data['assigned_to'].get_full_name() or task_data['assigned_to'].username} commented on this task"
                 )
+                TaskActivity.objects.filter(pk=activity.pk).update(created_at=comment_ts)
 
     def create_risk_management_demo_data(self):
         """Create demo data for risk management features"""

@@ -845,7 +845,10 @@
                                 <hr>
                                 <form method="post">
                                     {% csrf_token %}
-                                    {{ comment_form|crispy }}
+                                    <div class="mb-3">
+                                        <label for="id_content" class="form-label">Add a comment</label>
+                                        <textarea name="content" class="form-control" rows="2" placeholder="Add a comment..." id="id_content" required></textarea>
+                                    </div>
                                     <div class="text-end mt-3">
                                         <button type="submit" class="btn btn-primary">Add Comment</button>
                                     </div>
