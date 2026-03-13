@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load summary_filters %}
 
 {% block title %}AI Usage - PrizmAI{% endblock %}
 
@@ -541,15 +542,7 @@
                         {% endif %}
                     </div>
                     <div>
-                        <div>
-                            {% if feature.feature == 'ai_coach' %}
-                                AI Coach
-                            {% elif feature.feature == 'ai_assistant' %}
-                                AI Assistant
-                            {% else %}
-                                {{ feature.feature|title }}
-                            {% endif %}
-                        </div>
+                        <div>{{ feature.feature|prettify_feature }}</div>
                     </div>
                 </div>
                 <div class="feature-stats">
