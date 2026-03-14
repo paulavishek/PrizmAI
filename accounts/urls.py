@@ -26,6 +26,9 @@ urlpatterns = [
     # Social login completion
     path('social-signup-complete/', views.social_signup_complete, name='social_signup_complete'),
     
+    # Timezone API
+    path('api/set-timezone/', views.set_timezone, name='set_timezone'),
+    
     # Password Reset URLs
     path('password-reset/', 
          auth_views.PasswordResetView.as_view(

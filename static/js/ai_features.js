@@ -1803,10 +1803,12 @@ function getPriorityBadgeClass(priority) {
  */
 function formatDate(dateString) {
     const date = new Date(dateString);
+    const userTz = document.body.getAttribute('data-user-timezone') || 'Asia/Kolkata';
     return date.toLocaleDateString('en-US', { 
         year: 'numeric', 
         month: 'long', 
-        day: 'numeric' 
+        day: 'numeric',
+        timeZone: userTz
     });
 }
 

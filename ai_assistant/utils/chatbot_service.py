@@ -3851,8 +3851,9 @@ class TaskFlowChatbotService:
         from django.utils import timezone
         
         # Dynamic context: current date, user identity, board
-        current_date = timezone.now().strftime('%A, %B %d, %Y')
-        current_time = timezone.now().strftime('%I:%M %p %Z')
+        local_now = timezone.localtime(timezone.now())
+        current_date = local_now.strftime('%A, %B %d, %Y')
+        current_time = local_now.strftime('%I:%M %p %Z')
         user_name = self.user.get_full_name() or self.user.username if self.user else 'Unknown User'
         user_username = self.user.username if self.user else 'unknown'
         board_name = self.board.name if self.board else 'All boards'

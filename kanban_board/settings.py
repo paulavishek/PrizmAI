@@ -115,6 +115,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'accounts.middleware.TimezoneMiddleware',  # Per-user timezone activation
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'csp.middleware.CSPMiddleware',  # Content Security Policy
@@ -147,6 +148,7 @@ TEMPLATES = [
                 'kanban_board.context_processors.static_version',
                 'kanban_board.context_processors.force_auth_layout',
                 'kanban_board.context_processors.user_preferences',
+                'kanban_board.context_processors.user_timezone',
                 'kanban.context_processors.conflict_count',
                 'kanban.context_processors.demo_context',  # Demo mode context
             ],

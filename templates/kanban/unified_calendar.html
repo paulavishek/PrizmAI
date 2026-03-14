@@ -456,8 +456,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // ---- FullCalendar ----
     const calendarEl = document.getElementById('calendar');
+    const userTz = document.body.getAttribute('data-user-timezone') || 'Asia/Kolkata';
     const calendar = new FullCalendar.Calendar(calendarEl, {
-        timeZone: 'Asia/Kolkata',
+        timeZone: userTz,
         initialView: 'dayGridMonth',
         firstDay: 1,
         headerToolbar: {

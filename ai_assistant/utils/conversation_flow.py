@@ -38,7 +38,7 @@ def build_fc_context(user, board):
     Includes just enough context to resolve names, dates, and board details
     — much smaller than the full Q&A system prompt.
     """
-    now = timezone.now()
+    now = timezone.localtime(timezone.now())
     user_name = user.get_full_name() or user.username
     parts = [
         f"Today: {now.strftime('%A, %B %d, %Y')}. Current time: {now.strftime('%H:%M')}.",

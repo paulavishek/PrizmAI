@@ -19,6 +19,7 @@ This document contains detailed information about all advanced features in Prizm
 - [Smart Recommendations](#-smart-recommendations)
 - [AI Assistants for Wiki](#-intelligent-ai-assistants-for-wiki-pages)
 - [Resource Leveling](#-ai-powered-resource-leveling--optimization)
+- [Timezone Support](#-per-user-timezone-support)
 
 ---
 
@@ -694,6 +695,34 @@ For each skill gap, PrizmAI recommends concrete actions:
 2. **TRAINING** (Develop Internal Talent)
    - Training programs and timeline
    - Productivity impact calculations
+
+---
+
+## 🌍 **Per-User Timezone Support**
+
+PrizmAI supports users across the globe with per-user timezone preferences, ensuring every date, time, and deadline is displayed in the user's local timezone.
+
+### How It Works
+
+1. **Topbar Timezone Selector** — A globe icon in the top navigation bar lets users switch their timezone instantly from a searchable dropdown grouped by region (Americas, Europe, Asia & Pacific, Middle East & Africa).
+2. **Browser Auto-Detection** — On first visit, PrizmAI detects the browser's timezone and suggests switching if it differs from the current setting.
+3. **Profile Settings** — Timezone can also be changed from the user's Profile page.
+
+### What Gets Converted
+
+- **All server-rendered dates and times** — Task due dates, activity timestamps, audit logs, notifications, and more automatically display in the user's timezone via Django's `timezone.activate()` middleware.
+- **Calendar views** — FullCalendar (board calendar and unified calendar) renders events in the selected timezone.
+- **AI Assistant (Spectra)** — When you ask Spectra "what time is it?" or it references dates, it uses your timezone.
+- **Deadline predictions** — AI-predicted completion dates display in the user's local timezone.
+- **Gantt chart** — Date-based fields render correctly; DateTimeField due dates are converted by the middleware.
+
+### Technical Details
+
+- Datetimes are stored in **UTC** in the database (`USE_TZ = True`).
+- A `TimezoneMiddleware` activates the user's timezone for each HTTP request.
+- Timezone preference is cached in the session to avoid database lookups on every request.
+- Default timezone for existing users: **Asia/Kolkata (IST)** — backward-compatible with no disruption.
+- Supports all 400+ IANA timezones via `pytz.common_timezones`.
    - Success metrics
 
 3. **CONTRACTOR + TRAINING** (Balanced Approach)

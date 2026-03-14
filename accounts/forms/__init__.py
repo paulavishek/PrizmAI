@@ -2,7 +2,7 @@ from django import forms
 from django.contrib.auth.forms import UserCreationForm, AuthenticationForm, SetPasswordForm, PasswordChangeForm
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from ..models import Organization, UserProfile
+from ..models import Organization, UserProfile, COMMON_TIMEZONES
 from kanban.utils.email_validation import validate_email_for_signup
 
 class LoginForm(AuthenticationForm):
@@ -186,9 +186,18 @@ class UserProfileForm(forms.ModelForm):
         label='Skills'
     )
     
+    # Timezone preference
+    timezone = forms.ChoiceField(
+        choices=[(tz, tz) for tz in COMMON_TIMEZONES],
+        required=True,
+        widget=forms.Select(attrs={'class': 'form-select'}),
+        label='Timezone',
+        help_text='Select your timezone for displaying dates and times'
+    )
+    
     class Meta:
         model = UserProfile
-        fields = ['profile_picture', 'weekly_capacity_hours']
+        fields = ['profile_picture', 'weekly_capacity_hours', 'timezone']
         widgets = {
             'profile_picture': forms.FileInput(attrs={'class': 'form-control'}),
             'weekly_capacity_hours': forms.NumberInput(attrs={
