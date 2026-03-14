@@ -1,4 +1,6 @@
-// Timezone Selector — topbar dropdown for per-user timezone preference
+// Timezone Selector — topbar panel for per-user timezone preference
+// Uses manual getBoundingClientRect() positioning so the panel is never
+// clipped by the fixed topbar's stacking context.
 (function () {
     'use strict';
 
@@ -169,8 +171,43 @@
         }
     }
 
+    var panel = null;
+    var toggleBtn = null;
+    var isOpen = false;
+
+    function openPanel() {
+        if (!panel || !toggleBtn) return;
+        // Calculate position from the button's viewport rectangle
+        var rect = toggleBtn.getBoundingClientRect();
+        panel.style.top  = (rect.bottom + 4) + 'px';
+        // Align right edge of panel with right edge of button
+        panel.style.right = (window.innerWidth - rect.right) + 'px';
+        panel.style.left  = 'auto';
+        panel.removeAttribute('hidden');
+        toggleBtn.setAttribute('aria-expanded', 'true');
+        isOpen = true;
+        // Reset and focus search
+        var searchInput = document.getElementById('timezone-search-input');
+        if (searchInput) {
+            searchInput.value = '';
+            buildList('');
+            searchInput.focus();
+        }
+    }
+
+    function closePanel() {
+        if (!panel) return;
+        panel.setAttribute('hidden', '');
+        if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'false');
+        isOpen = false;
+    }
+
     function initTimezoneSelector() {
         var currentTz = document.body.getAttribute('data-user-timezone') || 'Asia/Kolkata';
+        panel     = document.getElementById('tz-panel');
+        toggleBtn = document.getElementById('tz-toggle-btn');
+
+        if (!panel || !toggleBtn) return;
 
         // Set abbreviation label in button
         var abbrLabel = document.getElementById('tz-abbr-label');
@@ -181,18 +218,28 @@
         // Build initial list
         buildList('');
 
-        // Initialize Bootstrap dropdown with Popper strategy:fixed so the menu
-        // escapes the topbar's stacking context and renders relative to the
-        // viewport rather than the fixed topbar container.
-        var toggleBtn = document.querySelector('#timezone-dropdown [data-bs-toggle="dropdown"]');
-        if (toggleBtn && typeof bootstrap !== 'undefined') {
-            new bootstrap.Dropdown(toggleBtn, {
-                popperConfig: function (defaultConfig) {
-                    defaultConfig.strategy = 'fixed';
-                    return defaultConfig;
-                }
-            });
-        }
+        // Toggle open/close on button click
+        toggleBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (isOpen) { closePanel(); } else { openPanel(); }
+        });
+
+        // Close when clicking outside the panel or button
+        document.addEventListener('click', function (e) {
+            if (isOpen && !panel.contains(e.target) && e.target !== toggleBtn) {
+                closePanel();
+            }
+        });
+
+        // Close on Escape
+        document.addEventListener('keydown', function (e) {
+            if (isOpen && e.key === 'Escape') { closePanel(); }
+        });
+
+        // Reposition on window resize
+        window.addEventListener('resize', function () {
+            if (isOpen) { openPanel(); }
+        });
 
         // Search filtering
         var searchInput = document.getElementById('timezone-search-input');
@@ -200,15 +247,10 @@
             searchInput.addEventListener('input', function () {
                 buildList(this.value);
             });
-            // Focus search input when dropdown opens
-            var dropdown = document.getElementById('timezone-dropdown');
-            if (dropdown) {
-                dropdown.addEventListener('shown.bs.dropdown', function () {
-                    searchInput.value = '';
-                    buildList('');
-                    searchInput.focus();
-                });
-            }
+            // Prevent panel close when typing inside it
+            panel.addEventListener('click', function (e) {
+                e.stopPropagation();
+            });
         }
 
         // Auto-detect browser timezone on first visit and show a suggestion
