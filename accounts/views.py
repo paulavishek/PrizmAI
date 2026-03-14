@@ -3,9 +3,12 @@ from django.contrib.auth import login, authenticate, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.contrib.auth.models import User
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 from .forms import LoginForm, RegistrationForm, UserProfileForm
-from .models import Organization, UserProfile
+from .models import Organization, UserProfile, COMMON_TIMEZONES
 from kanban.permission_audit import log_permission_change
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -230,6 +233,8 @@ def profile_view(request):
         form = UserProfileForm(request.POST, request.FILES, instance=profile)
         if form.is_valid():
             form.save()
+            # Sync timezone session cache so middleware picks it up immediately
+            request.session['user_timezone'] = profile.timezone
             messages.success(request, 'Profile updated successfully!')
             return redirect('profile')
     else:
@@ -317,3 +322,30 @@ def social_signup_complete(request):
         )
         messages.success(request, 'Welcome! Your account is ready to use.')
         return redirect('onboarding_welcome')
+
+
+@login_required
+@require_POST
+def set_timezone(request):
+    """API endpoint to update the user's timezone preference via AJAX."""
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON'}, status=400)
+
+    tzname = data.get('timezone', '').strip()
+    if not tzname or tzname not in COMMON_TIMEZONES:
+        return JsonResponse({'status': 'error', 'message': 'Invalid timezone'}, status=400)
+
+    try:
+        profile = request.user.profile
+    except UserProfile.DoesNotExist:
+        return JsonResponse({'status': 'error', 'message': 'Profile not found'}, status=404)
+
+    profile.timezone = tzname
+    profile.save(update_fields=['timezone'])
+
+    # Update session cache so the middleware picks it up immediately
+    request.session['user_timezone'] = tzname
+
+    return JsonResponse({'status': 'ok', 'timezone': tzname})

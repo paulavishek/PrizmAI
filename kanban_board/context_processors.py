@@ -32,3 +32,16 @@ def user_preferences(request):
         'user_ai_preferences': None
     }
 
+
+def user_timezone(request):
+    """Add user timezone to template context for the timezone selector."""
+    if request.user.is_authenticated:
+        tz = request.session.get('user_timezone')
+        if not tz:
+            try:
+                tz = request.user.profile.timezone
+            except Exception:
+                tz = 'Asia/Kolkata'
+        return {'user_timezone': tz}
+    return {'user_timezone': 'Asia/Kolkata'}
+

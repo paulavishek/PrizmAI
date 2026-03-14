@@ -4,6 +4,7 @@ django-allauth==65.9.0
 asgiref==3.9.2
 sqlparse==0.5.3
 tzdata==2025.2
+pytz==2026.1.post1
 
 # RESTful API Framework (for external integrations)
 djangorestframework==3.15.2

@@ -488,6 +488,60 @@
     line-height: 1.5;
 }
 
+/* ---- Timezone Selector ---- */
+.timezone-toggle-btn {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 4px;
+    width: auto !important;
+    padding: 0 8px !important;
+    font-size: 0.82rem;
+}
+.timezone-toggle-btn .fa-globe {
+    font-size: 0.95rem;
+}
+.timezone-abbr {
+    font-weight: 600;
+    font-size: 0.72rem;
+    letter-spacing: 0.02em;
+}
+.timezone-dropdown-menu {
+    min-width: 300px;
+    max-width: 340px;
+    padding-bottom: 4px;
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.22);
+    z-index: 9999 !important;
+}
+.timezone-search-wrapper input {
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+.timezone-group-header {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    padding: 6px 16px 2px;
+    margin-top: 4px;
+}
+.timezone-item {
+    font-size: 0.82rem;
+    padding: 5px 16px 5px 24px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.timezone-item.active {
+    background: var(--bg-accent, #e8f0fe);
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.timezone-item:hover {
+    background: var(--bg-tertiary, #f1f3f5);
+}
+
 /* Mobile sidebar toggle in topbar */
 .topbar-mobile-toggle {
     display: none;

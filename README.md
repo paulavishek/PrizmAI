@@ -70,6 +70,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Knowledge Base & Wiki** — Markdown documentation with AI-assisted meeting analysis
 - **Meeting Transcript Import** — Import from Fireflies, Otter, Zoom, Teams, and Meet with AI extraction
 - **File Attachments with AI Analysis** — Attach files to tasks and let AI extract structured tasks from documents
+- **Per-User Timezone Support** — Users worldwide can set their preferred timezone from the topbar; all dates, times, calendars, and AI responses automatically display in the selected timezone
 
 ### Security & Compliance
 

@@ -320,8 +320,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     const calendarEl = document.getElementById('calendar');
+    const userTz = document.body.getAttribute('data-user-timezone') || 'Asia/Kolkata';
     const calendar = new FullCalendar.Calendar(calendarEl, {
-        timeZone: 'Asia/Kolkata',
+        timeZone: userTz,
         initialView: 'dayGridMonth',
         headerToolbar: {
             left: 'prev,next today',

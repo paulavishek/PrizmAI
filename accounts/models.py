@@ -1,6 +1,9 @@
+import pytz
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.validators import EmailValidator, RegexValidator
+
+COMMON_TIMEZONES = sorted(pytz.common_timezones)
 
 class Organization(models.Model):
     name = models.CharField(max_length=100)
@@ -40,6 +43,13 @@ class UserProfile(models.Model):
     )
     is_admin = models.BooleanField(default=False)
     profile_picture = models.ImageField(upload_to='profile_pics/', blank=True, null=True)
+    
+    # Timezone preference
+    timezone = models.CharField(
+        max_length=63,
+        default='Asia/Kolkata',
+        help_text="User's preferred timezone for displaying dates and times"
+    )
     
     # Welcome modal tracking
     has_seen_welcome = models.BooleanField(
