@@ -505,13 +505,31 @@
     font-size: 0.72rem;
     letter-spacing: 0.02em;
 }
-.timezone-dropdown-menu {
+/* .timezone-panel is the detached popup that JS positions via
+   getBoundingClientRect(). It lives outside the fixed topbar so
+   position:fixed is always viewport-relative. */
+.timezone-panel {
+    position: fixed;
+    z-index: 10000;
     min-width: 300px;
     max-width: 340px;
     padding-bottom: 4px;
     border-radius: 10px;
+    background: var(--bg-secondary, #fff);
+    border: 1px solid var(--border-color, #dee2e6);
     box-shadow: 0 8px 32px rgba(0,0,0,0.22);
-    z-index: 9999 !important;
+    overflow: hidden;
+}
+.timezone-panel[hidden] {
+    display: none !important;
+}
+.tz-panel-footer {
+    padding: 4px 12px 6px;
+    border-top: 1px solid var(--border-color, #dee2e6);
+}
+.timezone-list {
+    max-height: 300px;
+    overflow-y: auto;
 }
 .timezone-search-wrapper input {
     border-radius: 6px;

@@ -140,23 +140,11 @@
                 </button>
                 <!-- Timezone Selector -->
                 {% if user.is_authenticated %}
-                <div class="dropdown" id="timezone-dropdown">
-                    <button class="topbar-icon-btn timezone-toggle-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Set Timezone" data-bs-auto-close="outside">
+                <div id="timezone-dropdown">
+                    <button class="topbar-icon-btn timezone-toggle-btn" type="button" id="tz-toggle-btn" title="Set Timezone" aria-haspopup="listbox" aria-expanded="false">
                         <i class="fas fa-globe"></i>
                         <span class="timezone-abbr" id="tz-abbr-label"></span>
                     </button>
-                    <div class="dropdown-menu dropdown-menu-end timezone-dropdown-menu">
-                        <div class="timezone-search-wrapper px-2 pt-2 pb-1">
-                            <input type="text" class="form-control form-control-sm" id="timezone-search-input" placeholder="Search timezone..." autocomplete="off">
-                        </div>
-                        <div class="timezone-list" id="timezone-list" style="max-height:300px;overflow-y:auto;">
-                            <!-- Populated by timezone-selector.js -->
-                        </div>
-                        <div class="dropdown-divider"></div>
-                        <div class="px-3 py-1">
-                            <small class="text-muted" id="tz-current-display">Current: {{ user_timezone }}</small>
-                        </div>
-                    </div>
                 </div>
                 {% endif %}
                 <div class="dropdown">
@@ -182,6 +170,22 @@
                 </div>
             </div>
         </header>
+
+        {% if user.is_authenticated %}
+        <!-- Timezone panel: lives outside the fixed topbar so position:fixed
+             is relative to the viewport with no stacking-context interference. -->
+        <div class="timezone-panel" id="tz-panel" role="listbox" aria-label="Select timezone" hidden>
+            <div class="timezone-search-wrapper px-2 pt-2 pb-1">
+                <input type="text" class="form-control form-control-sm" id="timezone-search-input" placeholder="Search timezone..." autocomplete="off">
+            </div>
+            <div class="timezone-list" id="timezone-list">
+                <!-- Populated by timezone-selector.js -->
+            </div>
+            <div class="tz-panel-footer">
+                <small class="text-muted" id="tz-current-display">Current: {{ user_timezone }}</small>
+            </div>
+        </div>
+        {% endif %}
 
         <!-- Demo Limitation Modal (available globally for demo mode) -->
         {% if request.session.is_demo_mode %}
