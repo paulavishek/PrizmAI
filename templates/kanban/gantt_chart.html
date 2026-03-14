@@ -656,6 +656,20 @@
         stroke-dasharray: 4, 4;
     }
 
+    /* Today vertical line */
+    .today-line {
+        stroke: #ef4444;
+        stroke-width: 2;
+        stroke-dasharray: 6, 3;
+        pointer-events: none;
+    }
+    .today-line-label {
+        fill: #ef4444;
+        font-size: 10px;
+        font-weight: 700;
+        pointer-events: none;
+    }
+
     .gantt .lower-text, .gantt .upper-text {
         fill: #64748b;
         font-weight: 500;
@@ -1565,13 +1579,6 @@
                     <span class="legend-color" style="background: #ef4444;"></span>
                     <span>Urgent Priority</span>
                 </div>
-                <div class="legend-item">
-                    <svg width="22" height="16" style="vertical-align: middle;">
-                        <circle cx="11" cy="8" r="7" fill="rgba(59,130,246,0.3)" stroke="rgba(255,255,255,0.5)" stroke-width="1"/>
-                        <text x="11" y="8" text-anchor="middle" dominant-baseline="middle" font-size="8" font-weight="700" fill="white">AB</text>
-                    </svg>
-                    <span>Assignee</span>
-                </div>
                 {% if has_phases %}
                 <div class="legend-item">
                     <span class="legend-color" style="background: #6366f1;"></span>
@@ -1600,6 +1607,12 @@
                         <polygon points="19,3 25,6 19,9" fill="#6b7280"/>
                     </svg>
                     <span>Dependency</span>
+                </div>
+                <div class="legend-item">
+                    <svg width="14" height="16" style="vertical-align: middle; margin-right: 4px; flex-shrink: 0;">
+                        <line x1="7" y1="0" x2="7" y2="16" stroke="#ef4444" stroke-width="2" stroke-dasharray="4,2"/>
+                    </svg>
+                    <span>Today</span>
                 </div>
             </div>
         {% else %}
@@ -2610,6 +2623,61 @@
 
         // Add tooltip functionality
         addTooltipHandlers();
+
+        // Draw today line on top of everything
+        drawTodayLine();
+    }
+
+    // ============================================
+    // TODAY VERTICAL LINE
+    // ============================================
+    function drawTodayLine() {
+        const ganttSvg = document.querySelector('#gantt');
+        if (!ganttSvg || !ganttChart) return;
+
+        // Remove any previously drawn today line
+        ganttSvg.querySelectorAll('.today-line-group').forEach(el => el.remove());
+
+        const svgHeight = parseFloat(ganttSvg.getAttribute('height') || ganttSvg.getBoundingClientRect().height);
+        if (!svgHeight || svgHeight <= 0) return;
+
+        // Use frappe-gantt internals to compute today's exact x position
+        const ganttStart = ganttChart.gantt_start;
+        if (!ganttStart) return;
+        const columnWidth = (ganttChart.options && ganttChart.options.column_width) || 38;
+        const step = (ganttChart.options && ganttChart.options.step) || 24; // hours per column
+
+        const today = new Date();
+        const hoursDiff = (today - ganttStart) / (1000 * 60 * 60);
+        const todayX = (hoursDiff / step) * columnWidth;
+
+        // Only draw if today is within the visible SVG width (with a small margin)
+        const svgWidth = parseFloat(ganttSvg.getAttribute('width') || ganttSvg.getBoundingClientRect().width) || 99999;
+        if (todayX < 0 || todayX > svgWidth) return;
+
+        // The header area in frappe-gantt is ~50px tall; start the line from there
+        const headerHeight = (ganttChart.options && ganttChart.options.header_height) || 50;
+
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        group.classList.add('today-line-group');
+
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', todayX);
+        line.setAttribute('y1', headerHeight);
+        line.setAttribute('x2', todayX);
+        line.setAttribute('y2', svgHeight);
+        line.classList.add('today-line');
+        group.appendChild(line);
+
+        // "Today" label just below the header
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', todayX + 4);
+        text.setAttribute('y', headerHeight + 12);
+        text.classList.add('today-line-label');
+        text.textContent = 'Today';
+        group.appendChild(text);
+
+        ganttSvg.appendChild(group);
     }
 
     // ============================================
