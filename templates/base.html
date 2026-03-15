@@ -55,6 +55,29 @@
             0%, 100% { box-shadow: 0 2px 8px rgba(239,68,68,0.45); }
             50%       { box-shadow: 0 2px 16px rgba(239,68,68,0.75); }
         }
+        /* ════ Quick-View Drawer (shared) ════ */
+        .task-drawer {
+            position: fixed;
+            top: 0; right: 0;
+            width: 480px;
+            max-width: 100vw;
+            height: 100vh;
+            background: var(--card-bg, #fff);
+            box-shadow: -4px 0 20px rgba(0,0,0,.25);
+            z-index: 1060;
+            transform: translateX(100%);
+            transition: transform .3s ease;
+            overflow-y: auto;
+        }
+        .task-drawer.open { transform: translateX(0); }
+        .drawer-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.45);
+            z-index: 1055;
+            display: none;
+        }
+        .drawer-backdrop.open { display: block; }
     </style>
     
     {% block extra_css %}{% endblock %}
@@ -544,6 +567,11 @@
     })();
     </script>
     {% endif %}
+{# ═══════ Quick-View Drawer (shared across all pages) ═══════ #}
+<div id="drawer-backdrop" class="drawer-backdrop"></div>
+<div id="task-drawer" class="task-drawer">
+    <div id="task-drawer-body"></div>
+</div>
     {% block extra_js %}{% endblock %}
 {% if is_demo_account %}
 <script>

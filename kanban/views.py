@@ -2403,10 +2403,22 @@ def board_calendar(request, board_id):
     # uid → color map for fast event lookup
     _color_map = {m['id']: m['color'] for m in _mem_data}
 
+    from datetime import timedelta as _td
+
     events = []
     for t in tasks_with_dates:
         due = t.due_date
-        due_str = due.date().isoformat() if hasattr(due, 'date') else due.isoformat()
+        due_date_obj = due.date() if hasattr(due, 'date') else due
+        due_str = due_date_obj.isoformat()
+
+        # Multi-day bar: use start_date if available, else fall back to due_date
+        if t.start_date:
+            start_str = t.start_date.isoformat()
+        else:
+            start_str = due_str
+
+        # FullCalendar uses exclusive end date — add 1 day
+        end_str = (due_date_obj + _td(days=1)).isoformat()
 
         assignee_id = t.assigned_to_id
         color = _color_map.get(assignee_id, _UNASSIGNED_COLOR)
@@ -2417,15 +2429,19 @@ def board_calendar(request, board_id):
         events.append({
             'id': t.id,
             'title': t.title,
-            'start': due_str,
+            'start': start_str,
+            'end': end_str,
             'url': f'/tasks/{t.id}/',
             'color': color,
             'extendedProps': {
+                'source': 'task',
                 'column': t.column.name,
                 'priority': t.get_priority_display(),
                 'progress': t.progress,
                 'assignee': assignee_display,
                 'assignee_id': assignee_id,
+                'due_date_str': due_str,
+                'start_date_str': t.start_date.isoformat() if t.start_date else None,
             }
         })
 
