@@ -291,23 +291,27 @@ body.colorblind-mode .border-left-info {
    ============================================ */
 
 body.colorblind-mode .task-card.priority-urgent,
-body.colorblind-mode .kanban-task.priority-urgent {
+body.colorblind-mode .kanban-task.priority-urgent,
+body.colorblind-mode .kanban-task-v2.priority-urgent {
     border-left: 5px solid var(--priority-urgent) !important;
     background-image: var(--priority-urgent-pattern) !important;
 }
 
 body.colorblind-mode .task-card.priority-high,
-body.colorblind-mode .kanban-task.priority-high {
+body.colorblind-mode .kanban-task.priority-high,
+body.colorblind-mode .kanban-task-v2.priority-high {
     border-left: 5px solid var(--priority-high) !important;
 }
 
 body.colorblind-mode .task-card.priority-medium,
-body.colorblind-mode .kanban-task.priority-medium {
+body.colorblind-mode .kanban-task.priority-medium,
+body.colorblind-mode .kanban-task-v2.priority-medium {
     border-left: 5px solid var(--priority-medium) !important;
 }
 
 body.colorblind-mode .task-card.priority-low,
-body.colorblind-mode .kanban-task.priority-low {
+body.colorblind-mode .kanban-task.priority-low,
+body.colorblind-mode .kanban-task-v2.priority-low {
     border-left: 5px solid var(--priority-low) !important;
 }
 
