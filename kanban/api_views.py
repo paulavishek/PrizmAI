@@ -2809,6 +2809,106 @@ def update_task_dates_api(request):
 
 
 @login_required
+@require_http_methods(["POST"])
+def update_task_fields_api(request, task_id):
+    """
+    Lightweight API endpoint for the Gantt triage drawer.
+    Updates one or more task fields: column (status), assignee, start_date, due_date.
+    Returns the updated field values as JSON.
+    """
+    try:
+        task = get_object_or_404(Task, id=task_id)
+        board = task.column.board
+
+        # Verify the requesting user is a board member or creator
+        if request.user != board.created_by and not board.members.filter(id=request.user.id).exists():
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        data = json.loads(request.body)
+        changes = []
+
+        # Update column (status)
+        if 'column_id' in data:
+            new_column = get_object_or_404(Column, id=data['column_id'], board=board)
+            old_column_name = task.column.name
+            task.column = new_column
+            # Auto-set progress to 100% when moved to done/complete column
+            col_lower = new_column.name.lower()
+            if 'done' in col_lower or 'complete' in col_lower:
+                task.progress = 100
+            changes.append(f"Status changed from '{old_column_name}' to '{new_column.name}'")
+
+        # Update assignee
+        if 'assigned_to_id' in data:
+            val = data['assigned_to_id']
+            if val is None or val == '':
+                task.assigned_to = None
+                changes.append("Assignee removed")
+            else:
+                new_assignee = get_object_or_404(User, id=int(val))
+                task.assigned_to = new_assignee
+                changes.append(f"Assigned to {new_assignee.get_full_name() or new_assignee.username}")
+
+        # Update dates
+        from datetime import datetime as dt
+        if 'start_date' in data and data['start_date']:
+            task.start_date = dt.strptime(data['start_date'], '%Y-%m-%d').date()
+            changes.append(f"Start date set to {data['start_date']}")
+
+        if 'due_date' in data and data['due_date']:
+            new_date = dt.strptime(data['due_date'], '%Y-%m-%d').date()
+            if task.due_date:
+                task.due_date = dt.combine(new_date, task.due_date.time())
+            else:
+                task.due_date = dt.strptime(data['due_date'] + ' 23:59:59', '%Y-%m-%d %H:%M:%S')
+            changes.append(f"Due date set to {data['due_date']}")
+
+        task.save()
+
+        # Log activity
+        if changes:
+            TaskActivity.objects.create(
+                task=task,
+                user=request.user,
+                activity_type='updated',
+                description='; '.join(changes)
+            )
+
+        # Derive status from column name
+        col_lower = task.column.name.lower()
+        if 'done' in col_lower or 'complete' in col_lower:
+            status = 'done'
+        elif 'progress' in col_lower:
+            status = 'in_progress'
+        else:
+            status = 'todo'
+
+        return JsonResponse({
+            'success': True,
+            'task': {
+                'id': task.id,
+                'column_id': task.column.id,
+                'column_name': task.column.name,
+                'status': status,
+                'assigned_to_id': task.assigned_to.id if task.assigned_to else None,
+                'assigned_to_name': (task.assigned_to.get_full_name() or task.assigned_to.username) if task.assigned_to else None,
+                'assignee_first_name': task.assigned_to.first_name if task.assigned_to else '',
+                'assignee_last_name': task.assigned_to.last_name if task.assigned_to else '',
+                'assigned_to_username': task.assigned_to.username if task.assigned_to else 'Unassigned',
+                'start_date': task.start_date.isoformat() if task.start_date else '',
+                'due_date': task.due_date.date().isoformat() if task.due_date else '',
+                'progress': task.progress,
+            }
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        logger.error(f"Error in update_task_fields_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
 @require_http_methods(["GET"])
 def summarize_task_details_api(request, task_id):
     """

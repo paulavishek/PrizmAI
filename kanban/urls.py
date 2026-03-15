@@ -206,6 +206,7 @@ urlpatterns = [
     
     # Gantt Chart API Endpoints
     path('api/tasks/update-dates/', api_views.update_task_dates_api, name='update_task_dates_api'),
+    path('api/tasks/<int:task_id>/update-fields/', api_views.update_task_fields_api, name='update_task_fields_api'),
 
     # Phase Management API Endpoints
     path('api/board/<int:board_id>/phases/<int:phase_number>/delete/', api_views.delete_phase, name='delete_phase'),

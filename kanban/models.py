@@ -324,8 +324,27 @@ class Board(models.Model):
         help_text="When the board was archived."
     )
 
+    # Gantt Task ID Prefix (e.g. 'PRZ', 'SD')
+    task_prefix = models.CharField(
+        max_length=10,
+        blank=True,
+        default='',
+        help_text="Short prefix for task IDs in Gantt chart (e.g. 'PRZ'). Auto-derived from board name if left blank."
+    )
+
     def __str__(self):
         return self.name
+
+    def get_default_prefix(self):
+        """Derive a default prefix from the board name initials, uppercased, max 5 chars."""
+        words = self.name.split()
+        if len(words) >= 2:
+            return ''.join(w[0] for w in words if w)[:5].upper()
+        return self.name[:3].upper()
+
+    def get_task_prefix(self):
+        """Return the task prefix, auto-generating from name if not set."""
+        return self.task_prefix or self.get_default_prefix()
 
     @property
     def completed_task_count(self):

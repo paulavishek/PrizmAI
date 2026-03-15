@@ -85,8 +85,8 @@ class StrategyAdmin(admin.ModelAdmin):
 
 @admin.register(Board)
 class BoardAdmin(admin.ModelAdmin):
-    list_display = ('name', 'organization', 'created_by', 'created_at')
-    search_fields = ('name', 'description')
+    list_display = ('name', 'organization', 'task_prefix', 'created_by', 'created_at')
+    search_fields = ('name', 'description', 'task_prefix')
     list_filter = ('organization', 'created_at')
 
 @admin.register(BoardInvitation)
