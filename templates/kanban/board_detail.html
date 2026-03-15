@@ -38,6 +38,21 @@
         border-radius: 5px;
         flex: 0 0 300px;
     }
+    /* Collapsed column: shrink to header width only */
+    .kanban-column.column-collapsed {
+        flex: 0 0 auto;
+        min-width: 48px;
+        width: auto;
+    }
+    .kanban-column.column-collapsed .kanban-column-header {
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        white-space: nowrap;
+        height: auto;
+        min-height: 120px;
+        justify-content: center;
+        cursor: pointer;
+    }
     .kanban-column-header {
         padding: 10px;
         background-color: #f8f9fa;
@@ -1624,21 +1639,23 @@
         })();
 
         // ── Collapse Column handler ──
-        document.addEventListener('click', function(e) {
-            const collapseBtn = e.target.closest('.collapse-column-btn');
-            if (collapseBtn) {
-                const colId = collapseBtn.dataset.columnId;
+        // Use direct per-button listeners (not document delegation) so the
+        // handler fires at the button level, before Bootstrap's document-level
+        // clearMenus handler can call stopImmediatePropagation and swallow it.
+        document.querySelectorAll('.collapse-column-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                const colId = this.dataset.columnId;
                 const colEl = document.getElementById('column-' + colId);
-                if (colEl) {
-                    const tasksDiv = colEl.querySelector('.kanban-column-tasks');
-                    const addBtn  = colEl.querySelector('.p-2');
-                    if (tasksDiv) tasksDiv.classList.toggle('d-none');
-                    if (addBtn)  addBtn.classList.toggle('d-none');
-                    collapseBtn.innerHTML = tasksDiv && tasksDiv.classList.contains('d-none')
-                        ? '<i class="fas fa-expand-alt me-2 text-secondary"></i>Expand Column'
-                        : '<i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column';
-                }
-            }
+                if (!colEl) return;
+                const isCollapsed = colEl.classList.toggle('column-collapsed');
+                const tasksDiv = colEl.querySelector('.kanban-column-tasks');
+                const addBtn  = colEl.querySelector('.p-2');
+                if (tasksDiv) tasksDiv.classList.toggle('d-none', isCollapsed);
+                if (addBtn)  addBtn.classList.toggle('d-none', isCollapsed);
+                this.innerHTML = isCollapsed
+                    ? '<i class="fas fa-expand-alt me-2 text-secondary"></i>Expand Column'
+                    : '<i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column';
+            });
         });
         
         // Set up column delete functionality
