@@ -35,10 +35,9 @@ function initColumnDragDrop() {
         // Store reference for later use
         column.dataset.columnIndex = index;
         
-        // Add visual cue to header
+        // Add visual cue to header (cursor is handled by CSS; only add the class)
         const header = column.querySelector('.kanban-column-header');
         if (header) {
-            header.style.cursor = 'grab';
             header.classList.add('column-draggable-header');
         }
         
@@ -58,7 +57,14 @@ function initColumnDragDrop() {
 function columnDragStart(e) {
     // Prevent event from bubbling to task drag handlers
     e.stopPropagation();
-    
+
+    // Don't start a column drag when the event originates from any interactive
+    // element (buttons, links, dropdowns) — those need their own click events.
+    if (e.target.closest('button, a, input, select, textarea, [data-bs-toggle], .dropdown, .dropdown-toggle, .dropdown-menu, .dropdown-item')) {
+        e.preventDefault();
+        return;
+    }
+
     // Only allow dragging from the header area to avoid interfering with tasks
     const header = e.target.closest('.kanban-column-header');
     if (!header) {
@@ -90,10 +96,8 @@ function columnDragStart(e) {
     e.dataTransfer.setDragImage(dragImage, 0, 0);
     setTimeout(() => dragImage.remove(), 0);
     
-    // Visual feedback
+    // Visual feedback (cursor is handled via CSS .column-dragging class)
     draggedColumn.classList.add('column-dragging');
-    const columnHeader = draggedColumn.querySelector('.kanban-column-header');
-    if (columnHeader) columnHeader.style.cursor = 'grabbing';
     draggedColumn.style.opacity = '0.6';
 }
 
@@ -105,8 +109,6 @@ function columnDragEnd(e) {
     if (draggedColumn) {
         draggedColumn.classList.remove('column-dragging');
         draggedColumn.style.opacity = '1';
-        const header = draggedColumn.querySelector('.kanban-column-header');
-        if (header) header.style.cursor = 'grab';
     }
     
     // Remove placeholder

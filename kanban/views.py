@@ -1374,8 +1374,18 @@ def board_detail(request, board_id):
             'wip_limit': col.wip_limit,
         }
 
-    # Board members list for inline assignee picker
-    board_members_list = User.objects.filter(id__in=board_member_ids).select_related('profile')
+    # Board members list for inline assignee picker.
+    # Combine legacy board.members M2M with the RBAC BoardMembership model so
+    # all users – regardless of which path they were added through – appear.
+    from kanban.permission_models import BoardMembership as BM
+    rbac_member_ids = BM.objects.filter(board=board).values_list('user_id', flat=True)
+    all_member_ids = set(board_member_ids) | set(rbac_member_ids)
+    board_members_list = (
+        User.objects
+        .filter(id__in=all_member_ids)
+        .select_related('profile')
+        .order_by('first_name', 'username')
+    )
 
     return render(request, 'kanban/board_detail.html', {
         'board': board,
