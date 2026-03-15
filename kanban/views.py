@@ -1409,6 +1409,7 @@ def board_detail(request, board_id):
         'can_manage_invites': can_manage_invites,  # For invite button visibility
         'column_meta': column_meta,  # Per-column WIP/count metadata
         'board_members_list': board_members_list,  # For inline assignee picker
+        'task_prefix': board.get_task_prefix(),  # For task ID on kanban cards
     })
 
 def task_detail(request, task_id):
@@ -3117,7 +3118,8 @@ def update_task_progress(request, task_id):
             return JsonResponse({
                 'success': True,
                 'progress': task.progress,
-                'colorClass': get_progress_color_class(task.progress)
+                'colorClass': get_progress_color_class(task.progress),
+                'card': _card_json(task),
             })
             
         except json.JSONDecodeError:
@@ -4518,6 +4520,37 @@ def task_quick_view(request, task_id):
     })
 
 
+def _card_json(task):
+    """Build a dict of card-visible fields for live DOM updates."""
+    from django.utils import timezone as _tz
+    now = _tz.now()
+    is_overdue = task.due_date and task.due_date < now and task.progress < 100
+    assignee = task.assigned_to
+    initials = ''
+    avatar_url = ''
+    assignee_name = ''
+    if assignee:
+        assignee_name = assignee.get_full_name() or assignee.username
+        first = (assignee.first_name or assignee.username or '')[:1].upper()
+        last = (assignee.last_name or '')[:1].upper()
+        initials = first + last
+        if hasattr(assignee, 'profile') and assignee.profile.profile_picture:
+            avatar_url = assignee.profile.profile_picture.url
+    board = task.column.board
+    prefix = board.get_task_prefix()
+    return {
+        'id': task.id,
+        'task_id_display': f'{prefix}-{task.id}',
+        'priority': task.priority or 'medium',
+        'progress': task.progress,
+        'due_date': task.due_date.strftime('%b %d') if task.due_date else '',
+        'is_overdue': bool(is_overdue),
+        'assignee_initials': initials,
+        'assignee_avatar_url': avatar_url,
+        'assignee_name': assignee_name,
+    }
+
+
 @login_required
 @require_http_methods(["POST"])
 def task_update_status(request, task_id):
@@ -4542,7 +4575,7 @@ def task_update_status(request, task_id):
         task=task, user=request.user, activity_type='moved',
         description=f"Moved '{task.title}' from '{old_column.name}' to '{new_column.name}'"
     )
-    return JsonResponse({'success': True, 'new_column': new_column.name})
+    return JsonResponse({'success': True, 'new_column': new_column.name, 'card': _card_json(task)})
 
 
 @login_required
@@ -4567,6 +4600,7 @@ def task_update_assignee(request, task_id):
     return JsonResponse({
         'success': True,
         'assignee': task.assigned_to.username if task.assigned_to else None,
+        'card': _card_json(task),
     })
 
 
@@ -4640,4 +4674,4 @@ def task_update_fields(request, task_id):
             activity_type='updated',
             description='; '.join(changes),
         )
-    return JsonResponse({'success': True})
+    return JsonResponse({'success': True, 'card': _card_json(task)})
