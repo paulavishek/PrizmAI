@@ -46,43 +46,48 @@
             </select>
         </div>
 
-        {# Due date #}
+        {# Due date — editable #}
         <div class="qv-field">
             <label class="qv-label">Due date</label>
-            <div class="qv-value {% if is_overdue %}text-danger fw-bold{% elif is_at_risk %}text-warning fw-bold{% endif %}">
-                {% if task.due_date %}
-                    <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
-                    {% if is_overdue %}<i class="fas fa-exclamation-triangle ms-1 text-danger"></i> Overdue{% endif %}
-                    {% if is_at_risk %}<i class="fas fa-exclamation-triangle ms-1 text-warning"></i> At risk{% endif %}
-                {% else %}
-                    <span class="text-muted">No due date</span>
-                {% endif %}
-            </div>
+            <input type="date"
+                   class="form-control form-control-sm qv-due-date"
+                   data-task-id="{{ task.id }}"
+                   value="{{ task.due_date|date:'Y-m-d'|default:'' }}"
+                   {% if is_overdue %}style="border-color:#dc3545;color:#dc3545;"{% elif is_at_risk %}style="border-color:#f59e0b;color:#f59e0b;"{% endif %}>
+            {% if is_overdue %}<small class="text-danger mt-1 d-block"><i class="fas fa-exclamation-triangle me-1"></i>Overdue</small>{% endif %}
+            {% if is_at_risk and not is_overdue %}<small class="text-warning mt-1 d-block"><i class="fas fa-exclamation-triangle me-1"></i>At risk</small>{% endif %}
         </div>
 
-        {# Priority #}
+        {# Priority — editable #}
         <div class="qv-field">
             <label class="qv-label">Priority</label>
-            <span class="badge {% if task.priority == 'high' or task.priority == 'urgent' %}bg-danger{% elif task.priority == 'medium' %}bg-warning text-dark{% else %}bg-secondary{% endif %}" style="font-size:.78rem;">
-                {{ task.priority|title }}
-            </span>
+            <select class="form-select form-select-sm qv-priority-select" data-task-id="{{ task.id }}"
+                    style="{% if task.priority == 'high' or task.priority == 'urgent' %}border-color:#dc3545;color:#dc3545;font-weight:600;{% elif task.priority == 'medium' %}border-color:#f59e0b;color:#92600a;font-weight:600;{% else %}border-color:#6c757d;color:#6c757d;{% endif %}">
+                <option value="low"    {% if task.priority == 'low'    %}selected{% endif %}>Low</option>
+                <option value="medium" {% if task.priority == 'medium' %}selected{% endif %}>Medium</option>
+                <option value="high"   {% if task.priority == 'high'   %}selected{% endif %}>High</option>
+                <option value="urgent" {% if task.priority == 'urgent' %}selected{% endif %}>Urgent</option>
+            </select>
         </div>
 
-        {# Progress #}
+        {# Progress — +/− buttons and direct number input #}
         <div class="qv-field">
             <label class="qv-label">Progress</label>
             <div class="d-flex align-items-center gap-2">
-                <button class="btn btn-sm btn-outline-secondary qv-progress-btn" data-task-id="{{ task.id }}" data-delta="-10" title="−10%">
+                <button class="btn btn-sm btn-outline-secondary qv-progress-btn" data-task-id="{{ task.id }}" data-direction="decrease" title="−10%">
                     <i class="fas fa-minus"></i>
                 </button>
                 <div class="progress flex-grow-1" style="height:8px;">
                     <div class="progress-bar {% if task.progress == 100 %}bg-success{% elif task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
                          style="width:{{ task.progress }}%;" data-progress="{{ task.progress }}"></div>
                 </div>
-                <button class="btn btn-sm btn-outline-secondary qv-progress-btn" data-task-id="{{ task.id }}" data-delta="10" title="+10%">
+                <button class="btn btn-sm btn-outline-secondary qv-progress-btn" data-task-id="{{ task.id }}" data-direction="increase" title="+10%">
                     <i class="fas fa-plus"></i>
                 </button>
-                <span class="text-muted" style="font-size:.8rem;min-width:32px;text-align:center;">{{ task.progress }}%</span>
+                <input type="number" class="form-control form-control-sm qv-progress-input"
+                       data-task-id="{{ task.id }}"
+                       value="{{ task.progress }}" min="0" max="100"
+                       style="width:62px;text-align:center;padding:2px 6px;" title="Type a value and press Enter">
             </div>
         </div>
 
@@ -158,36 +163,122 @@
 (function() {
     const csrfToken = document.querySelector('.qv-body [name=csrfmiddlewaretoken]')?.value
                     || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+    // Derive taskId from the first element that carries it
+    const taskId = document.querySelector('.qv-body [data-task-id]')?.dataset?.taskId;
 
-    // Status change
+    // Reload only the drawer content in-place (keeps the drawer open, shows updated values).
+    // Uses HTMX so the inline script in the new partial is also executed automatically.
+    function reloadDrawer() {
+        if (taskId && typeof htmx !== 'undefined') {
+            htmx.ajax('GET', '/tasks/' + taskId + '/quick-view/', {
+                target: '#task-drawer-body',
+                swap: 'innerHTML'
+            });
+        }
+    }
+
+    // Update a column's task-count badge after a card is moved
+    function updateColumnBadge(colEl) {
+        if (!colEl) return;
+        const cnt = colEl.querySelectorAll('.kanban-task-v2').length;
+        const badge = colEl.querySelector('.column-task-count-badge');
+        if (badge) badge.textContent = cnt;
+    }
+
+    // ── Status change ──
     document.querySelector('.qv-status-select')?.addEventListener('change', function() {
+        const newColumnId = this.value;
         const fd = new FormData();
-        fd.append('column_id', this.value);
-        fetch('/tasks/' + this.dataset.taskId + '/update-status/', {
+        fd.append('column_id', newColumnId);
+        fetch('/tasks/' + taskId + '/update-status/', {
             method: 'POST', headers: {'X-CSRFToken': csrfToken}, body: fd,
-        }).then(r => r.json()).then(() => location.reload());
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success !== false) {
+                // Move the kanban card to the new column in the DOM
+                const card    = document.getElementById('task-' + taskId);
+                const newList = document.querySelector('.kanban-column-tasks[data-column-id="' + newColumnId + '"]');
+                if (card && newList) {
+                    const oldCol = card.closest('.kanban-column');
+                    const newCol = newList.closest('.kanban-column');
+                    newList.prepend(card);
+                    updateColumnBadge(oldCol);
+                    updateColumnBadge(newCol);
+                }
+            }
+            reloadDrawer();
+        })
+        .catch(() => reloadDrawer());
     });
 
-    // Assignee change
+    // ── Assignee change ──
     document.querySelector('.qv-assignee-select')?.addEventListener('change', function() {
         const fd = new FormData();
         fd.append('assignee_id', this.value);
-        fetch('/tasks/' + this.dataset.taskId + '/update-assignee/', {
+        fetch('/tasks/' + taskId + '/update-assignee/', {
             method: 'POST', headers: {'X-CSRFToken': csrfToken}, body: fd,
-        }).then(r => r.json()).then(() => location.reload());
+        })
+        .then(r => r.json())
+        .then(() => reloadDrawer())
+        .catch(() => reloadDrawer());
     });
 
-    // Progress +/-
+    // ── Due date change ──
+    document.querySelector('.qv-due-date')?.addEventListener('change', function() {
+        const fd = new FormData();
+        fd.append('due_date', this.value);
+        fetch('/tasks/' + taskId + '/update-fields/', {
+            method: 'POST', headers: {'X-CSRFToken': csrfToken}, body: fd,
+        })
+        .then(r => r.json())
+        .then(() => reloadDrawer())
+        .catch(() => reloadDrawer());
+    });
+
+    // ── Priority change ──
+    document.querySelector('.qv-priority-select')?.addEventListener('change', function() {
+        const fd = new FormData();
+        fd.append('priority', this.value);
+        fetch('/tasks/' + taskId + '/update-fields/', {
+            method: 'POST', headers: {'X-CSRFToken': csrfToken}, body: fd,
+        })
+        .then(r => r.json())
+        .then(() => reloadDrawer())
+        .catch(() => reloadDrawer());
+    });
+
+    // ── Progress +/− buttons (send 'direction', which is what the view expects) ──
     document.querySelectorAll('.qv-progress-btn').forEach(btn => {
         btn.addEventListener('click', function() {
-            const taskId = this.dataset.taskId;
-            const delta  = parseInt(this.dataset.delta, 10);
+            const direction = this.dataset.direction;
             fetch('/tasks/' + taskId + '/update-progress/', {
                 method: 'POST',
-                headers: {'Content-Type':'application/json','X-CSRFToken': csrfToken, 'X-Requested-With':'XMLHttpRequest'},
-                body: JSON.stringify({delta: delta}),
-            }).then(r => r.json()).then(() => location.reload());
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: JSON.stringify({direction: direction}),
+            })
+            .then(r => r.json())
+            .then(() => reloadDrawer())
+            .catch(() => reloadDrawer());
         });
+    });
+
+    // ── Progress direct number input (type value + Enter or click away) ──
+    document.querySelector('.qv-progress-input')?.addEventListener('change', function() {
+        const val = Math.max(0, Math.min(100, parseInt(this.value, 10) || 0));
+        this.value = val; // clamp display
+        const fd = new FormData();
+        fd.append('progress', val);
+        fetch('/tasks/' + taskId + '/update-fields/', {
+            method: 'POST', headers: {'X-CSRFToken': csrfToken}, body: fd,
+        })
+        .then(r => r.json())
+        .then(() => reloadDrawer())
+        .catch(() => reloadDrawer());
     });
 })();
 </script>

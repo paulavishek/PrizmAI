@@ -119,6 +119,7 @@ urlpatterns = [
     path('tasks/<int:task_id>/delete/', views.delete_task, name='delete_task'),
     path('tasks/move/', views.move_task, name='move_task'),
     path('tasks/<int:task_id>/update-progress/', views.update_task_progress, name='update_task_progress'),
+    path('tasks/<int:task_id>/update-fields/', views.task_update_fields, name='task_update_fields'),
     path('organization-boards/', views.organization_boards, name='organization_boards'),
     path('labels/<int:label_id>/delete/', views.delete_label, name='delete_label'),
     path('columns/<int:column_id>/move/left/', views.move_column, {'direction': 'left'}, name='move_column_left'),    path('columns/<int:column_id>/move/right/', views.move_column, {'direction': 'right'}, name='move_column_right'),
