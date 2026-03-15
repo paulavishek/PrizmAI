@@ -250,6 +250,7 @@
     .kanban-task-v2.done-card { opacity: .65; }
 
     .card-inner { display: flex; flex-direction: column; gap: 4px; }
+    .card-task-id { font-size: .7rem; font-weight: 600; color: #6b7280; letter-spacing: .02em; line-height: 1; }
 
     /* Title — 2-line clamp */
     .card-task-title {
@@ -867,6 +868,7 @@
                     {# ── Card body ── #}
                     <div class="card-inner">
                         <div class="card-title-row">
+                            <span class="card-task-id">{{ task_prefix }}-{{ task.id }}</span>
                             <span class="card-task-title">{{ task.title }}</span>
                         </div>
                         <div class="card-meta-row">
@@ -1244,6 +1246,233 @@
                 openDrawer();
             }
         });
+
+        // ══════════════════════════════════════════════════════
+        // Quick-view drawer field handlers (event delegation)
+        // ══════════════════════════════════════════════════════
+        // ONE change handler + ONE click handler on the
+        // persistent #task-drawer-body container.  Uses plain
+        // fetch (not htmx.ajax) for drawer reload to avoid
+        // HTMX request deduplication / queueing issues.
+        (function() {
+            const drawerBody = document.getElementById('task-drawer-body');
+            if (!drawerBody) return;
+
+            function drawerCsrf() {
+                return drawerBody.querySelector('[name=csrfmiddlewaretoken]')?.value
+                    || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+            }
+            function drawerTaskId() {
+                const el = drawerBody.querySelector('[data-task-id]');
+                return el ? el.dataset.taskId : null;
+            }
+            function reloadDrawer() {
+                const tid = drawerTaskId();
+                if (!tid) return;
+                fetch('/tasks/' + tid + '/quick-view/', {
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                })
+                .then(function(r) { return r.text(); })
+                .then(function(html) { drawerBody.innerHTML = html; })
+                .catch(function() { /* silent */ });
+            }
+            function updateColumnBadge(colEl) {
+                if (!colEl) return;
+                var cnt = colEl.querySelectorAll('.kanban-task-v2').length;
+                var badge = colEl.querySelector('.column-task-count-badge');
+                if (badge) badge.textContent = cnt;
+            }
+
+            // ── Update the kanban card on the board using data from the API ──
+            function refreshCard(cardData) {
+                if (!cardData || !cardData.id) return;
+                var card = document.getElementById('task-' + cardData.id);
+                if (!card) return;
+
+                // Task ID display
+                var taskIdEl = card.querySelector('.card-task-id');
+                if (taskIdEl && cardData.task_id_display) {
+                    taskIdEl.textContent = cardData.task_id_display;
+                }
+
+                // Priority → border-left color
+                var prio = cardData.priority;
+                var borderColor = '#6c757d'; // default (low)
+                if (prio === 'high' || prio === 'urgent') borderColor = '#dc3545';
+                else if (prio === 'medium') borderColor = '#f59e0b';
+                card.style.borderLeftColor = borderColor;
+
+                // Progress → bottom strip
+                var fill = card.querySelector('.card-progress-fill');
+                if (fill) {
+                    fill.style.width = cardData.progress + '%';
+                    fill.className = 'card-progress-fill';
+                    if (cardData.progress === 100) fill.classList.add('bg-success');
+                    else if (cardData.progress < 30) fill.classList.add('bg-danger');
+                    else if (cardData.progress < 70) fill.classList.add('bg-warning');
+                    else fill.classList.add('bg-success');
+                }
+                // Done-card class
+                if (cardData.progress === 100) card.classList.add('done-card');
+                else card.classList.remove('done-card');
+
+                // Due date
+                var dueBadge = card.querySelector('.card-due');
+                if (cardData.due_date) {
+                    if (dueBadge) {
+                        dueBadge.innerHTML = '<i class="far fa-calendar-alt"></i> ' + cardData.due_date
+                            + (cardData.is_overdue ? ' <i class="fas fa-exclamation-triangle ms-1"></i>' : '');
+                        dueBadge.classList.toggle('overdue', cardData.is_overdue);
+                    } else {
+                        // Create due badge if it didn't exist before
+                        var metaLeft = card.querySelector('.card-meta-row .d-flex');
+                        if (metaLeft) {
+                            var sp = document.createElement('span');
+                            sp.className = 'card-due' + (cardData.is_overdue ? ' overdue' : '');
+                            sp.innerHTML = '<i class="far fa-calendar-alt"></i> ' + cardData.due_date
+                                + (cardData.is_overdue ? ' <i class="fas fa-exclamation-triangle ms-1"></i>' : '');
+                            metaLeft.prepend(sp);
+                        }
+                    }
+                } else if (dueBadge) {
+                    dueBadge.remove();
+                }
+
+                // Assignee avatar
+                var avatar = card.querySelector('.card-avatar');
+                if (cardData.assignee_name) {
+                    if (!avatar) {
+                        // Create avatar element
+                        var metaRow = card.querySelector('.card-meta-row');
+                        if (metaRow) {
+                            avatar = document.createElement('span');
+                            avatar.className = 'card-avatar';
+                            metaRow.appendChild(avatar);
+                        }
+                    }
+                    if (avatar) {
+                        avatar.title = cardData.assignee_name;
+                        if (cardData.assignee_avatar_url) {
+                            avatar.innerHTML = '<img src="' + cardData.assignee_avatar_url + '" alt="' + cardData.assignee_name + '">';
+                        } else {
+                            avatar.textContent = cardData.assignee_initials;
+                        }
+                    }
+                } else if (avatar) {
+                    avatar.remove();
+                }
+            }
+
+            // Helper: POST FormData, refresh card + drawer
+            function postAndReload(url, fd) {
+                return fetch(url, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': drawerCsrf() },
+                    body: fd,
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.card) refreshCard(data.card);
+                    reloadDrawer();
+                    return data;
+                })
+                .catch(function() { reloadDrawer(); });
+            }
+
+            // ── Single CHANGE handler (covers all selects & inputs) ──
+            drawerBody.addEventListener('change', function(e) {
+                var target = e.target;
+
+                // Status
+                if (target.matches('.qv-status-select')) {
+                    var taskId      = target.dataset.taskId;
+                    var newColumnId = target.value;
+                    var fd = new FormData();
+                    fd.append('column_id', newColumnId);
+                    fetch('/tasks/' + taskId + '/update-status/', {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': drawerCsrf() },
+                        body: fd,
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (data.card) refreshCard(data.card);
+                        if (data.success !== false) {
+                            var card    = document.getElementById('task-' + taskId);
+                            var newList = document.querySelector(
+                                '.kanban-column-tasks[data-column-id="' + newColumnId + '"]');
+                            if (card && newList) {
+                                var oldCol = card.closest('.kanban-column');
+                                newList.prepend(card);
+                                var newCol = newList.closest('.kanban-column');
+                                updateColumnBadge(oldCol);
+                                updateColumnBadge(newCol);
+                            }
+                        }
+                        reloadDrawer();
+                    })
+                    .catch(function() { reloadDrawer(); });
+                    return;
+                }
+
+                // Assignee
+                if (target.matches('.qv-assignee-select')) {
+                    var fd = new FormData();
+                    fd.append('assignee_id', target.value);
+                    postAndReload('/tasks/' + target.dataset.taskId + '/update-assignee/', fd);
+                    return;
+                }
+
+                // Due date
+                if (target.matches('.qv-due-date')) {
+                    var fd = new FormData();
+                    fd.append('due_date', target.value);
+                    postAndReload('/tasks/' + target.dataset.taskId + '/update-fields/', fd);
+                    return;
+                }
+
+                // Priority
+                if (target.matches('.qv-priority-select')) {
+                    var fd = new FormData();
+                    fd.append('priority', target.value);
+                    postAndReload('/tasks/' + target.dataset.taskId + '/update-fields/', fd);
+                    return;
+                }
+
+                // Progress (number input)
+                if (target.matches('.qv-progress-input')) {
+                    var val = Math.max(0, Math.min(100, parseInt(target.value, 10) || 0));
+                    target.value = val;
+                    var fd = new FormData();
+                    fd.append('progress', val);
+                    postAndReload('/tasks/' + target.dataset.taskId + '/update-fields/', fd);
+                    return;
+                }
+            });
+
+            // ── Single CLICK handler (progress +/− buttons) ──
+            drawerBody.addEventListener('click', function(e) {
+                var btn = e.target.closest('.qv-progress-btn');
+                if (!btn) return;
+                var direction = btn.dataset.direction;
+                var taskId    = btn.dataset.taskId;
+                fetch('/tasks/' + taskId + '/update-progress/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': drawerCsrf(),
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({ direction: direction }),
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.card) refreshCard(data.card);
+                    reloadDrawer();
+                })
+                .catch(function() { reloadDrawer(); });
+            });
+        })();
 
         // ── Inline status picker (card hover bar) ──
         // Attach directly to buttons (not document delegation) because
