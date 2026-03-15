@@ -18,6 +18,19 @@
         opacity: 0.6;
         z-index: 100;
     }
+    /* Interactive elements inside the column must not inherit the grab cursor */
+    .kanban-column button,
+    .kanban-column a,
+    .kanban-column input,
+    .kanban-column select,
+    .kanban-column textarea,
+    .kanban-column .dropdown,
+    .kanban-column .dropdown-menu,
+    .kanban-column .dropdown-toggle,
+    .kanban-column .dropdown-item {
+        cursor: pointer;
+        user-select: auto;
+    }
     .column-drag-placeholder {
         border: 2px dashed #6c757d;
         background-color: rgba(108, 117, 125, 0.1);
@@ -34,6 +47,26 @@
     }
     .kanban-column-header:active {
         cursor: grabbing;
+    }
+    /* Buttons/links inside the header must show pointer and accept clicks normally.
+       Use !important to override any inline cursor styles set by JavaScript. */
+    .kanban-column-header button,
+    .kanban-column-header a,
+    .kanban-column-header .dropdown,
+    .kanban-column-header .dropdown-toggle,
+    .kanban-column-header .dropdown-item,
+    .kanban-column-header button *,
+    .kanban-column-header .dropdown * {
+        cursor: pointer !important;
+        user-select: auto;
+    }
+    /* Ensure the column-dragging state shows grabbing on the header non-interactive area */
+    .kanban-column.column-dragging .kanban-column-header {
+        cursor: grabbing !important;
+    }
+    .kanban-column.column-dragging .kanban-column-header button,
+    .kanban-column.column-dragging .kanban-column-header .dropdown {
+        cursor: grabbing !important;
     }
     .column-task-count {
         display: inline;
@@ -769,10 +802,11 @@
                         </span>
                         {% endif %}
                     {% endif %}
-                    <div class="dropdown">
+                    <div class="dropdown" draggable="false">
                         <button type="button" class="btn btn-sm btn-link text-muted p-0"
                                 data-bs-toggle="dropdown" aria-expanded="false" title="Column options"
-                                style="font-size:1rem;line-height:1;">
+                                draggable="false"
+                                style="font-size:1rem;line-height:1;padding:4px 6px !important;">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" style="font-size:.85rem;">
@@ -877,10 +911,10 @@
 
                     {# ── Inline status dropdown (hidden by default) ── #}
                     <div class="inline-status-picker d-none" data-task-id="{{ task.id }}" onclick="event.stopPropagation();">
-                        {% for col in columns %}
-                        <button class="inline-pick-option {% if col.id == task.column.id %}active{% endif %}"
+                        {% for col in columns %}{% if col.id != task.column.id %}
+                        <button class="inline-pick-option"
                                 data-column-id="{{ col.id }}">{{ col.name }}</button>
-                        {% endfor %}
+                        {% endif %}{% endfor %}
                     </div>
 
                     {# ── Inline assignee picker (hidden by default) ── #}
@@ -1198,69 +1232,98 @@
             return document.querySelector('[name=csrfmiddlewaretoken]')?.value
                 || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
         }
-        function closeAllPickers() {
-            document.querySelectorAll('.inline-status-picker:not(.d-none), .inline-assignee-picker:not(.d-none)').forEach(p => p.classList.add('d-none'));
+        // ── Flyout portal: single fixed div on <body> for all card pickers ──
+        const flyout = document.getElementById('inline-picker-flyout');
+        let flyoutTaskId = null;
+        let flyoutType = null;
+
+        function closeFlyout() {
+            flyout.classList.add('d-none');
+            flyout.innerHTML = '';
+            flyoutTaskId = null;
+            flyoutType = null;
         }
+
+        function openPickerFlyout(btn, type) {
+            const card   = btn.closest('.kanban-task-v2');
+            const taskId = btn.dataset.taskId;
+
+            // Toggle off if same picker is already open
+            if (!flyout.classList.contains('d-none') && flyoutTaskId === taskId && flyoutType === type) {
+                closeFlyout();
+                return;
+            }
+            closeFlyout();
+            flyoutTaskId = taskId;
+            flyoutType   = type;
+
+            // Clone options from the hidden per-card data source
+            const srcPicker = card.querySelector(
+                type === 'status' ? '.inline-status-picker' : '.inline-assignee-picker'
+            );
+            flyout.innerHTML = srcPicker.innerHTML;
+
+            // Position: measure height first, then place above or below the button row
+            const cardRect = card.getBoundingClientRect();
+            const btnRect  = btn.getBoundingClientRect();
+            flyout.style.width = cardRect.width + 'px';
+            flyout.style.top   = '-9999px';
+            flyout.style.left  = '-9999px';
+            flyout.classList.remove('d-none');
+            const flyoutH = flyout.offsetHeight;
+
+            flyout.style.left = cardRect.left + 'px';
+            if (btnRect.top >= flyoutH + 8) {
+                // Enough space above — open upward
+                flyout.style.top = (btnRect.top - flyoutH - 4) + 'px';
+            } else {
+                // Not enough space above — open downward
+                flyout.style.top = (btnRect.bottom + 4) + 'px';
+            }
+        }
+
+        // Delegate option clicks on the flyout
+        flyout.addEventListener('click', function(e) {
+            const opt = e.target.closest('.inline-pick-option');
+            if (!opt) return;
+            e.stopPropagation();
+            const fd = new FormData();
+            if (flyoutType === 'status') {
+                fd.append('column_id', opt.dataset.columnId);
+                fetch(`/tasks/${flyoutTaskId}/update-status/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCsrfToken() },
+                    body: fd,
+                }).then(r => r.json()).then(() => location.reload());
+            } else {
+                fd.append('assignee_id', opt.dataset.assigneeId);
+                fetch(`/tasks/${flyoutTaskId}/update-assignee/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCsrfToken() },
+                    body: fd,
+                }).then(r => r.json()).then(() => location.reload());
+            }
+            closeFlyout();
+        });
 
         document.querySelectorAll('.status-change-btn').forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
-                const card = this.closest('.kanban-task-v2');
-                const picker = card.querySelector('.inline-status-picker');
-                closeAllPickers();
-                picker.classList.toggle('d-none');
+                openPickerFlyout(this, 'status');
             });
         });
 
-        document.querySelectorAll('.inline-status-picker .inline-pick-option').forEach(function(opt) {
-            opt.addEventListener('click', function(e) {
-                e.stopPropagation();
-                const columnId = this.dataset.columnId;
-                const picker   = this.closest('.inline-status-picker');
-                const taskId   = picker.dataset.taskId;
-                const fd = new FormData();
-                fd.append('column_id', columnId);
-                fetch(`/tasks/${taskId}/update-status/`, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': getCsrfToken() },
-                    body: fd,
-                }).then(r => r.json()).then(() => location.reload());
-                picker.classList.add('d-none');
-            });
-        });
-
-        // ── Inline assignee picker (card hover bar) ──
         document.querySelectorAll('.assignee-change-btn').forEach(function(btn) {
             btn.addEventListener('click', function(e) {
                 e.stopPropagation();
-                const card = this.closest('.kanban-task-v2');
-                const picker = card.querySelector('.inline-assignee-picker');
-                closeAllPickers();
-                picker.classList.toggle('d-none');
+                openPickerFlyout(this, 'assignee');
             });
         });
 
-        document.querySelectorAll('.inline-assignee-picker .inline-pick-option').forEach(function(opt) {
-            opt.addEventListener('click', function(e) {
-                e.stopPropagation();
-                const assigneeId = this.dataset.assigneeId;
-                const picker     = this.closest('.inline-assignee-picker');
-                const taskId     = picker.dataset.taskId;
-                const fd = new FormData();
-                fd.append('assignee_id', assigneeId);
-                fetch(`/tasks/${taskId}/update-assignee/`, {
-                    method: 'POST',
-                    headers: { 'X-CSRFToken': getCsrfToken() },
-                    body: fd,
-                }).then(r => r.json()).then(() => location.reload());
-                picker.classList.add('d-none');
-            });
-        });
-
-        // ── Close any open inline pickers when clicking elsewhere ──
+        // ── Close flyout on click outside ──
         document.addEventListener('click', function(e) {
-            if (!e.target.closest('.inline-status-picker, .inline-assignee-picker, .status-change-btn, .assignee-change-btn')) {
-                closeAllPickers();
+            if (!e.target.closest('#inline-picker-flyout, .status-change-btn, .assignee-change-btn')) {
+                closeFlyout();
             }
         });
 
@@ -1569,5 +1632,11 @@
     }, true); // capture phase so it fires before Bootstrap stops propagation
 })();
 </script>
+
+{# ── Single flyout portal for card hover pickers (escapes all overflow containers) ── #}
+<div id="inline-picker-flyout"
+     class="d-none"
+     onclick="event.stopPropagation();"
+     style="position:fixed;z-index:9999;background:var(--card-bg,#fff);border:1px solid var(--border-color,#dee2e6);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.25);display:flex;flex-direction:column;max-height:200px;overflow-y:auto;min-width:120px;"></div>
 
 {% endblock content %}
