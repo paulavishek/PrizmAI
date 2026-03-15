@@ -3725,13 +3725,15 @@
         }
 
         if (chartData.spi_cpi && chartData.spi_cpi.length) {
-            var spiVals = chartData.spi_cpi.map(function(b){ return b.spi; }).filter(function(v){ return v > 0; });
-            var cpiVals = chartData.spi_cpi.map(function(b){ return b.cpi; }).filter(function(v){ return v > 0; });
-            var avgSpi  = spiVals.length ? spiVals.reduce(function(a,b){ return a+b; }, 0) / spiVals.length : 0;
-            var avgCpi  = cpiVals.length ? cpiVals.reduce(function(a,b){ return a+b; }, 0) / cpiVals.length : 0;
-            var spiLabel = avgSpi >= 1.0 ? 'On Schedule' : avgSpi >= 0.8 ? 'Slight Delay' : avgSpi >= 0.5 ? 'Behind Schedule' : 'Severely Behind';
-            var cpiLabel = avgCpi >= 1.0 ? 'On Budget'   : avgCpi >= 0.8 ? 'Slight Overrun' : avgCpi >= 0.5 ? 'Over Budget' : 'Severely Over Budget';
-            if (avgSpi > 0) {
+            // Filter out null/undefined (boards with no overdue tasks = no SPI data).
+            // Do NOT filter out 0 — SPI of 0.0 is valid and means "severely behind schedule".
+            var spiVals = chartData.spi_cpi.map(function(b){ return b.spi; }).filter(function(v){ return v !== null && v !== undefined; });
+            var cpiVals = chartData.spi_cpi.map(function(b){ return b.cpi; }).filter(function(v){ return v !== null && v !== undefined; });
+            var avgSpi  = spiVals.length ? spiVals.reduce(function(a,b){ return a+b; }, 0) / spiVals.length : null;
+            var avgCpi  = cpiVals.length ? cpiVals.reduce(function(a,b){ return a+b; }, 0) / cpiVals.length : null;
+            var spiLabel = (avgSpi !== null) ? (avgSpi >= 1.0 ? 'On Schedule' : avgSpi >= 0.8 ? 'Slight Delay' : avgSpi >= 0.5 ? 'Behind Schedule' : 'Severely Behind') : '';
+            var cpiLabel = (avgCpi !== null) ? (avgCpi >= 1.0 ? 'On Budget'   : avgCpi >= 0.8 ? 'Slight Overrun' : avgCpi >= 0.5 ? 'Over Budget' : 'Severely Over Budget') : '';
+            if (spiVals.length > 0) {
                 buildGauge('spiGauge', 'spi-gauge-val', 'spi-gauge-sub', avgSpi, spiLabel);
                 var spiEmpty = document.getElementById('spi-empty-state');
                 // Use classList so Bootstrap's d-flex !important is properly overridden
@@ -3742,7 +3744,7 @@
                 var spiLabels = spiCanvas && spiCanvas.parentElement.querySelector('.gauge-label');
                 if (spiLabels) spiLabels.style.display = 'none';
             }
-            if (avgCpi > 0) {
+            if (cpiVals.length > 0) {
                 buildGauge('cpiGauge', 'cpi-gauge-val', 'cpi-gauge-sub', avgCpi, cpiLabel);
                 var cpiEmpty = document.getElementById('cpi-empty-state');
                 // Use classList so Bootstrap's d-flex !important is properly overridden

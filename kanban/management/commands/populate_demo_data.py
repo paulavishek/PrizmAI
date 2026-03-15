@@ -807,7 +807,9 @@ class Command(BaseCommand):
 
         done = columns.get('Done') or review
         items = []
-        now = timezone.now().date()
+        # Anchor Phase 1 ten weeks in the past so newly-created demo boards
+        # already have some past-due tasks, making SPI meaningful on first load.
+        now = timezone.now().date() - timedelta(weeks=10)
         from datetime import datetime, time
         import random
 
