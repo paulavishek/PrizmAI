@@ -421,7 +421,10 @@ document.addEventListener('DOMContentLoaded', function() {
             const p = info.event.extendedProps;
             const pKey = (p.priority || '').toLowerCase();
             const pColor = PRIORITY_COLORS[pKey] || '#6c757d';
+            const dueStr = p.due_date_str;
+            const isOverdue = dueStr && (new Date(dueStr) < today) && p.progress < 100;
             tooltip.innerHTML = `
+                ${isOverdue ? '<span style="color:#f87171;font-weight:700;">⚠ OVERDUE</span><br>' : ''}
                 <strong>${info.event.title}</strong><br>
                 <span>📌 ${p.column}</span><br>
                 <span>🚩 <span style="color:${pColor}; font-weight:600;">${p.priority}</span></span>
@@ -445,7 +448,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (d < today && progress < 100) {
                 info.el.style.opacity = '0.75';
                 info.el.style.textDecoration = 'line-through';
-                info.el.title = 'OVERDUE — ' + info.event.title;
+                // Remove native title to avoid double-tooltip with custom #cal-tooltip
+                info.el.removeAttribute('title');
             }
         },
         height: 'auto',
