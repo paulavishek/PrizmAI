@@ -831,3 +831,25 @@ GA4_MEASUREMENT_ID = os.getenv('GA4_MEASUREMENT_ID', '')  # e.g., 'G-XXXXXXXXXX'
 ANALYTICS_SESSION_TIMEOUT = 30  # Minutes of inactivity before session timeout
 ANALYTICS_TRACK_ANONYMOUS = True  # Track anonymous users
 ANALYTICS_MIN_ENGAGEMENT_FOR_FEEDBACK = 0  # Minimum minutes before showing feedback form (0 = always show)
+
+# ============================================
+# HEALTH ROLL-UP CONFIGURATION
+# ============================================
+# Number of days before a due date at which a task is considered "at risk"
+# if it hasn't reached 80% progress. Example: 3 means tasks due within
+# 3 days with <80% progress are classified as "At Risk".
+HEALTH_AT_RISK_DAYS_THRESHOLD = 3
+
+# Percentage thresholds for Schedule Status roll-up at the Board level.
+# If more than this fraction of active tasks are Late, the board becomes Late.
+# If more than this fraction are Late+At Risk combined, the board becomes At Risk.
+HEALTH_BOARD_LATE_THRESHOLD = 0.20       # 20%
+HEALTH_BOARD_AT_RISK_THRESHOLD = 0.20    # 20%
+
+# Percentage thresholds for Risk Level (high/critical-risk tasks).
+HEALTH_BOARD_HIGH_RISK_THRESHOLD = 0.30  # 30% → High Risk
+HEALTH_BOARD_MED_RISK_THRESHOLD = 0.10   # 10% → Medium Risk
+
+# Dashboard health aggregation cache TTL (seconds).
+# Set to 0 to disable caching.
+HEALTH_ROLLUP_CACHE_TTL = 120  # 2 minutes

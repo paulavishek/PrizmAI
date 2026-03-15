@@ -858,6 +858,62 @@
     .health-pill.red   .health-dot  { background: #ef4444; }
 
     /* ================================================================
+       STATUS & RISK PILL BADGES  (dual-axis health roll-up)
+       ================================================================ */
+    .status-pill, .risk-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        padding: 0.2em 0.65em;
+        border-radius: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        white-space: nowrap;
+    }
+    .status-pill .pill-dot, .risk-pill .pill-dot {
+        width: 7px; height: 7px;
+        border-radius: 50%;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+    /* Schedule Status pills */
+    .status-pill.on-track  { background: #d1fae5; color: #065f46; }
+    .status-pill.on-track .pill-dot  { background: #10b981; }
+    .status-pill.at-risk   { background: #fef3c7; color: #92400e; }
+    .status-pill.at-risk .pill-dot   { background: #f59e0b; }
+    .status-pill.late      { background: #fee2e2; color: #7f1d1d; }
+    .status-pill.late .pill-dot      { background: #ef4444; }
+    /* Risk Level pills */
+    .risk-pill.low     { background: #d1fae5; color: #065f46; }
+    .risk-pill.low .pill-dot     { background: #10b981; }
+    .risk-pill.medium  { background: #fef3c7; color: #92400e; }
+    .risk-pill.medium .pill-dot  { background: #f59e0b; }
+    .risk-pill.high    { background: #fee2e2; color: #7f1d1d; }
+    .risk-pill.high .pill-dot    { background: #ef4444; }
+
+    /* ================================================================
+       MISSION OVERVIEW CARDS  (progressive disclosure layout)
+       ================================================================ */
+    .mission-summary-card {
+        border: 1px solid #e3e6f0;
+        border-radius: 12px;
+        transition: box-shadow 0.15s ease, transform 0.15s ease;
+        background: linear-gradient(135deg, #f8f9ff 0%, #ffffff 100%);
+    }
+    .mission-summary-card:hover {
+        box-shadow: 0 6px 20px rgba(78,115,223,0.14);
+        transform: translateY(-2px);
+    }
+    .mission-summary-card .card-body { padding: 1rem 1.15rem; }
+    .goal-header-card {
+        border-left: 4px solid #ffc107;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #fffbea 0%, #fff 100%);
+    }
+
+    /* ================================================================
        STEP 8 — DESIGN POLISH  (typography hierarchy + card consistency)
        ================================================================ */
 
@@ -1563,398 +1619,210 @@
 <!-- /AI Briefing -->
 
 <!-- ============================================================ -->
-<!-- ROW 4: MISSION OVERVIEW (full width, collapsible)           -->
+<!-- ROW 4: MISSION OVERVIEW — Card-based Progressive Disclosure -->
 <!-- ============================================================ -->
-        <!-- Mission Overview Tree (collapsed by default) -->
-        <div class="card shadow mb-4" id="mission-overview-card">
-            <div class="card-header py-2 d-flex align-items-center justify-content-between" 
-                 role="button" data-bs-toggle="collapse" data-bs-target="#missionOverviewBody" aria-expanded="false">
+<div class="card shadow mb-4" id="mission-overview-card">
+    <div class="card-header py-2 d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-2">
+            <h6 class="m-0 fw-bold text-primary">
+                <i class="fas fa-bullseye me-2 text-primary"></i>Mission Overview
+            </h6>
+            {% if mission_count %}
+            <span class="badge bg-primary rounded-pill ms-1">{{ mission_count }}</span>
+            {% endif %}
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <a href="{% url 'goal_list' %}" class="btn btn-sm btn-outline-warning text-dark">
+                <i class="fas fa-trophy fa-sm"></i><span class="d-none d-md-inline ms-1">Goals</span>
+            </a>
+            <a href="{% url 'mission_list' %}" class="btn btn-sm btn-outline-primary">
+                <i class="fas fa-bullseye fa-sm"></i><span class="d-none d-md-inline ms-1">Missions</span>
+            </a>
+            <a href="{% url 'create_mission' %}" class="btn btn-sm btn-primary">
+                <i class="fas fa-plus fa-sm"></i>
+            </a>
+        </div>
+    </div>
+    <div class="card-body p-3">
+        {% if goal_tree %}
+        {% for goal_entry in goal_tree %}
+
+        {# ---- GOAL GROUP HEADER ---- #}
+        {% if goal_entry.goal %}
+        <div class="goal-header-card card border-0 shadow-sm mb-3 p-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div class="d-flex align-items-center gap-2">
-                    <h6 class="m-0 fw-bold text-primary">
-                        <i class="fas fa-bullseye me-2 text-primary"></i>Mission Overview
-                    </h6>
-                    {% if mission_count %}
-                    <span class="badge bg-primary rounded-pill ms-1">{{ mission_count }}</span>
-                    {% endif %}
-                    <i class="fas fa-chevron-down text-muted ms-1" style="font-size:0.7rem; transition:transform 0.2s;"></i>
-                </div>
-                <div class="d-flex align-items-center gap-2" onclick="event.stopPropagation();">
-                    <a href="{% url 'goal_list' %}" class="btn btn-sm btn-outline-warning text-dark">
-                        <i class="fas fa-trophy fa-sm"></i><span class="d-none d-md-inline ms-1">Goals</span>
-                    </a>
-                    <a href="{% url 'mission_list' %}" class="btn btn-sm btn-outline-primary">
-                        <i class="fas fa-bullseye fa-sm"></i><span class="d-none d-md-inline ms-1">Missions</span>
-                    </a>
-                    <a href="{% url 'create_mission' %}" class="btn btn-sm btn-primary">
-                        <i class="fas fa-plus fa-sm"></i>
-                    </a>
-                </div>
-            </div>
-            <div class="collapse" id="missionOverviewBody">
-            <div class="card-body p-3" style="max-height: 600px; overflow-y: auto; scroll-behavior: smooth;">
-                {% if goal_tree %}
-                <div class="mission-tree">
-                    {% for goal_entry in goal_tree %}
-
-                    {% if goal_entry.goal %}
-                    {# ---- ORGANIZATION GOAL node ---- #}
-                    <div class="goal-node mb-4" id="goal-node-{{ goal_entry.goal.id }}">
-                        <div class="card border-0 shadow-sm mb-0" style="border-left: 4px solid #ffc107 !important;">
-                            <div class="card-body p-3">
-                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                                    <div class="d-flex align-items-center gap-2">
-                                        <i class="fas fa-trophy text-warning mt-1"></i>
-                                        <div>
-                                            <span class="badge text-uppercase fw-semibold me-1 mb-1"
-                                                  style="background:#fff8e1; color:#b8860b; border:1px solid #ffe082; font-size:0.6rem; letter-spacing:0.07em; padding:3px 7px;">
-                                                Organization Goal
-                                            </span>
-                                            <h6 class="mb-0 fw-bold">
-                                                <a href="{% url 'goal_detail' goal_entry.goal.id %}" class="text-decoration-none text-dark">{{ goal_entry.goal.name }}</a>
-                                            </h6>
-                                            {% if goal_entry.goal.target_metric %}
-                                            <small class="text-warning fw-semibold">
-                                                <i class="fas fa-bullseye me-1"></i>{{ goal_entry.goal.target_metric }}
-                                            </small>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                                        {% if goal_entry.goal.status == 'active' %}
-                                            <span class="badge bg-success">Active</span>
-                                        {% elif goal_entry.goal.status == 'completed' %}
-                                            <span class="badge bg-primary">Completed</span>
-                                        {% else %}
-                                            <span class="badge bg-warning text-dark">On Hold</span>
-                                        {% endif %}
-                                        <span class="badge bg-light text-dark border">
-                                            <i class="fas fa-bullseye text-primary me-1"></i>{{ goal_entry.missions|length }} mission{{ goal_entry.missions|length|pluralize }}
-                                        </span>
-                                        <a href="{% url 'goal_detail' goal_entry.goal.id %}" class="btn btn-sm btn-outline-warning text-dark" title="Open Goal">
-                                            <i class="fas fa-external-link-alt fa-xs"></i>
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {# missions indented under this goal #}
-                        <div class="ps-4 mt-1">
-                    {% else %}
-                    {# ---- Ungrouped missions (no Organization Goal) ---- #}
-                    <div class="ungrouped-missions-section mb-4">
-                        <div class="text-muted small mb-2 ps-1">
-                            <i class="fas fa-minus-circle me-1"></i><em>Missions not linked to an Organization Goal</em>
-                        </div>
-                        <div>
-                    {% endif %}
-
-                        {# ---- MISSION nodes (inside either Goal or Ungrouped wrapper) ---- #}
-                        {% for mission_item in goal_entry.missions %}
-                        {% with mission=mission_item.mission %}
-                        <div class="mission-node mb-4" id="mission-node-{{ mission.id }}">
-                        <!-- Mission Card -->
-                        <div class="mission-card card border-0 shadow-sm mb-0" style="border-left: 4px solid #4e73df !important;">
-                            <div class="card-body p-3">
-                                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                                    <div class="d-flex align-items-center gap-2 flex-grow-1">
-                                        <i class="fas fa-bullseye text-primary mt-1"></i>
-                                        <div>
-                                            <!-- MISSION label -->
-                                            <span class="badge text-uppercase fw-semibold me-1 mb-1"
-                                                  style="background:#e8f0fe; color:#3a5bd9; border:1px solid #c0d0f8; font-size:0.6rem; letter-spacing:0.07em; padding:3px 7px;">
-                                                Mission
-                                            </span>
-                                            <h6 class="mb-0 fw-bold">
-                                                <a href="{{ mission.get_absolute_url }}" class="text-decoration-none text-dark stretched-link-override">{{ mission.name }}</a>
-                                            </h6>
-                                            {% if mission.description %}
-                                            <small class="text-muted">{{ mission.description|truncatechars:120 }}</small>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                    <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                                        <span class="badge ms-status-badge status-{{ mission.status }}">{{ mission.get_status_display }}</span>
-                                        {# Health pill — derived from high-risk ratio across all boards under this mission #}
-                                        {% if mission_item.health_level == 'red' %}
-                                        <span class="health-pill red" data-bs-toggle="tooltip" data-bs-placement="top" title="At Risk: 30%+ of tasks across this mission's boards are high or critical risk."><span class="health-dot"></span>At Risk</span>
-                                        {% elif mission_item.health_level == 'amber' %}
-                                        <span class="health-pill amber" data-bs-toggle="tooltip" data-bs-placement="top" title="Caution: 10–29% of tasks across this mission's boards are high or critical risk."><span class="health-dot"></span>Caution</span>
-                                        {% else %}
-                                        <span class="health-pill green" data-bs-toggle="tooltip" data-bs-placement="top" title="On Track: Fewer than 10% of tasks are high or critical risk."><span class="health-dot"></span>On Track</span>
-                                        {% endif %}
-                                        <span class="badge bg-light text-dark border">
-                                            <i class="fas fa-sitemap text-primary me-1"></i>{{ mission_item.strategy_count }} strateg{{ mission_item.strategy_count|pluralize:"y,ies" }}
-                                        </span>
-                                        <a href="{{ mission.get_absolute_url }}" class="btn btn-sm btn-outline-primary" title="Open Mission">
-                                            <i class="fas fa-external-link-alt fa-xs"></i>
-                                        </a>
-                                    </div>
-                                </div>
-                                <!-- Mission AI Summary -->
-                                <div class="ai-summary-block mt-2" id="mission-summary-block-{{ mission.id }}">
-                                    {% if mission.ai_summary %}
-                                    <button class="btn btn-xs btn-outline-secondary py-0 px-2 mb-1" type="button"
-                                            data-bs-toggle="collapse" data-bs-target="#mission-ai-collapse-{{ mission.id }}"
-                                            aria-expanded="false">
-                                        <i class="fas fa-robot text-info me-1" style="font-size:0.7rem;"></i><span style="font-size:0.72rem;">AI Summary</span>
-                                        <i class="fas fa-chevron-down ms-1" style="font-size:0.6rem;"></i>
-                                    </button>
-                                    <div class="collapse" id="mission-ai-collapse-{{ mission.id }}">
-                                        <div class="ai-summary-text" id="mission-summary-text-{{ mission.id }}">
-                                            {{ mission.ai_summary|render_bullets }}
-                                        </div>
-                                        <small class="text-muted summary-ts" id="mission-ts-{{ mission.id }}"
-                                              {% if mission.ai_summary_generated_at %}data-ts="{{ mission.ai_summary_generated_at|date:'c' }}"{% endif %}>
-                                            <i class="far fa-clock me-1"></i>Updated {{ mission.ai_summary_generated_at|date:"M d, Y H:i" }}
-                                        </small>
-                                    </div>
-                                    {% else %}
-                                    <div class="ai-summary-text text-muted fst-italic small d-none" id="mission-summary-text-{{ mission.id }}"></div>
-                                    <small class="text-muted summary-ts d-none" id="mission-ts-{{ mission.id }}"></small>
-                                    {% endif %}
-                                    <button class="btn btn-xs btn-outline-info mt-1 generate-summary-btn"
-                                            data-level="mission" data-id="{{ mission.id }}"
-                                            data-url="{% url 'generate_mission_summary_api' mission.id %}"
-                                            title="{% if mission.organization_goal %}Goal-Aware: evaluates whether this mission is moving the needle on '{{ mission.organization_goal.name }}'{% else %}Generate AI executive summary from strategy summaries{% endif %}">
-                                        <i class="fas fa-robot me-1"></i>
-                                        <span class="btn-label">
-                                            {% if mission.organization_goal %}<i class="fas fa-trophy text-warning me-1" style="font-size:0.65rem;"></i>Goal-Aware Summary{% else %}✨ Generate Summary{% endif %}
-                                        </span>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Strategies under this mission -->
-                        {% if mission_item.strategies %}
-                        <div class="strategy-container ps-4 mt-1">
-                            {% for strategy_item in mission_item.strategies %}
-                            {% with strategy=strategy_item.strategy %}
-                            <div class="strategy-node mt-2" id="strategy-node-{{ strategy.id }}">
-                                <!-- Strategy Row (always visible) -->
-                                <div class="strategy-row d-flex align-items-start gap-2 p-2 rounded"
-                                     data-strategy-id="{{ strategy.id }}"
-                                     style="cursor:pointer; background:#f8f9fa; border-left: 3px solid #858796;">
-                                    <span class="tree-branch-icon mt-1 text-muted">&#9492;&#9472;</span>
-                                    <i class="fas fa-chess-knight text-secondary mt-1 flex-shrink-0"></i>
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                                            <div>
-                                                <!-- STRATEGY label -->
-                                                <span class="badge text-uppercase fw-semibold me-1"
-                                                      style="background:#f1f1f3; color:#555; border:1px solid #d0d0d8; font-size:0.58rem; letter-spacing:0.07em; padding:3px 7px;">
-                                                    Strategy
-                                                </span>
-                                                <span class="fw-semibold strategy-name">
-                                                    <a href="{{ strategy.get_absolute_url }}" class="text-decoration-none text-dark" onclick="event.stopPropagation()">{{ strategy.name }}</a>
-                                                </span>
-                                                {% if strategy.description %}
-                                                <small class="text-muted ms-2">{{ strategy.description|truncatechars:80 }}</small>
-                                                {% endif %}
-                                            </div>
-                                            <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                                                <span class="badge ms-status-badge status-{{ strategy.status }}">{{ strategy.get_status_display }}</span>
-                                                {# Strategy health pill #}
-                                                {% if strategy_item.health_level == 'red' %}
-                                                <span class="health-pill red" style="font-size:0.58rem;" data-bs-toggle="tooltip" data-bs-placement="top" title="At Risk: 30%+ of tasks across this strategy's boards are high or critical risk."><span class="health-dot"></span>At Risk</span>
-                                                {% elif strategy_item.health_level == 'amber' %}
-                                                <span class="health-pill amber" style="font-size:0.58rem;" data-bs-toggle="tooltip" data-bs-placement="top" title="Caution: 10–29% of tasks across this strategy's boards are high or critical risk."><span class="health-dot"></span>Caution</span>
-                                                {% else %}
-                                                <span class="health-pill green" style="font-size:0.58rem;" data-bs-toggle="tooltip" data-bs-placement="top" title="On Track: Fewer than 10% of tasks are high or critical risk."><span class="health-dot"></span>On Track</span>
-                                                {% endif %}
-                                                <span class="badge bg-light text-dark border small">
-                                                    <i class="fas fa-clipboard-list text-primary me-1"></i>{{ strategy_item.board_count }} board{{ strategy_item.board_count|pluralize }}
-                                                </span>
-                                                <span class="strategy-chevron text-muted ms-1" id="chevron-{{ strategy.id }}">
-                                                    <i class="fas fa-chevron-right"></i>
-                                                </span>
-                                            </div>
-                                        </div>
-                                        <!-- Strategy AI Summary -->
-                                        <div class="ai-summary-block mt-1" id="strategy-summary-block-{{ strategy.id }}" onclick="event.stopPropagation()">
-                                            {% if strategy.ai_summary %}
-                                            <button class="btn btn-xs btn-outline-secondary py-0 px-2 mb-1" type="button"
-                                                    data-bs-toggle="collapse" data-bs-target="#strategy-ai-collapse-{{ strategy.id }}"
-                                                    aria-expanded="false" onclick="event.stopPropagation()">
-                                                <i class="fas fa-robot text-info me-1" style="font-size:0.65rem;"></i><span style="font-size:0.7rem;">AI Summary</span>
-                                                <i class="fas fa-chevron-down ms-1" style="font-size:0.55rem;"></i>
-                                            </button>
-                                            <div class="collapse" id="strategy-ai-collapse-{{ strategy.id }}">
-                                                <div class="ai-summary-text small" id="strategy-summary-text-{{ strategy.id }}">
-                                                    {{ strategy.ai_summary|render_bullets }}
-                                                </div>
-                                                <small class="text-muted summary-ts" id="strategy-ts-{{ strategy.id }}"
-                                                      {% if strategy.ai_summary_generated_at %}data-ts="{{ strategy.ai_summary_generated_at|date:'c' }}"{% endif %}>Updated {{ strategy.ai_summary_generated_at|date:"M d, Y H:i" }}</small>
-                                            </div>
-                                            {% else %}
-                                            <div class="ai-summary-text text-muted fst-italic small d-none" id="strategy-summary-text-{{ strategy.id }}"></div>
-                                            <small class="text-muted summary-ts d-none" id="strategy-ts-{{ strategy.id }}"></small>
-                                            {% endif %}
-                                            <button class="btn btn-xs btn-outline-info mt-1 generate-summary-btn"
-                                                    data-level="strategy" data-id="{{ strategy.id }}"
-                                                    data-url="{% url 'generate_strategy_summary_api' strategy.id %}"
-                                                    title="Generate/refresh AI summary">
-                                                <i class="fas fa-robot me-1"></i><span class="btn-label">✨ Summarise</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Boards under this strategy (collapsed by default) -->
-                                {% if strategy_item.boards %}
-                                <div class="boards-container ps-4 mt-1 d-none" id="boards-{{ strategy.id }}">
-                                    {% for board_item in strategy_item.boards %}
-                                    {% with board=board_item.board %}
-                                    <div class="board-tile-row d-flex align-items-center gap-2 p-2 mb-1 rounded border bg-white"
-                                         style="border-left: 3px solid {% if board_item.health_level == 'red' %}#ef4444{% elif board_item.health_level == 'amber' %}#f59e0b{% else %}#10b981{% endif %} !important;">
-                                        <span class="tree-branch-icon text-muted small">&#9492;&#9472;</span>
-                                        <i class="fas fa-clipboard-list text-primary flex-shrink-0" style="font-size:0.8rem;"></i>
-                                        <div class="flex-grow-1">
-                                            <div class="d-flex align-items-center justify-content-between flex-wrap gap-1">
-                                                <div>
-                                                    <span class="fw-semibold small">
-                                                        <a href="{% url 'board_detail' board.id %}" class="text-decoration-none text-dark">{{ board.name }}</a>
-                                                    </span>
-                                                    {% if board.is_official_demo_board %}
-                                                    <span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem;">DEMO</span>
-                                                    {% endif %}
-                                                    {% with pm_risk=premortem_risk_map|default_if_none:"" %}
-                                                    {% if pm_risk %}
-                                                        {% for bid, level in premortem_risk_map.items %}
-                                                        {% if bid == board.id %}
-                                                            <span class="badge ms-1 {% if level == 'high' %}bg-danger{% elif level == 'medium' %}bg-warning text-dark{% else %}bg-success{% endif %}" style="font-size:0.6rem;" title="Pre-Mortem Risk: {{ level|title }}">
-                                                                <i class="fas fa-shield-alt"></i> {{ level|upper }}
-                                                            </span>
-                                                        {% endif %}
-                                                        {% endfor %}
-                                                    {% endif %}
-                                                    {% endwith %}
-                                                </div>
-                                                <div class="d-flex align-items-center gap-1 flex-shrink-0">
-                                                    <small class="text-muted">{{ board_item.done_tasks }}/{{ board_item.total_tasks }} tasks</small>
-                                                    <a href="{% url 'board_detail' board.id %}" class="btn btn-xs btn-primary ms-1">Open</a>
-                                                    <a href="{% url 'board_analytics' board.id %}" class="btn btn-xs btn-outline-secondary" title="Analytics"><i class="fas fa-chart-pie fa-xs"></i></a>
-                                                </div>
-                                            </div>
-                                            <!-- Board progress bar -->
-                                            <div class="d-flex align-items-center gap-2 mt-1">
-                                                <div class="progress flex-grow-1" style="height:6px;">
-                                                    <div class="progress-bar {% if board_item.completion_pct < 30 %}bg-danger{% elif board_item.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
-                                                         role="progressbar" style="width:{{ board_item.completion_pct }}%;"></div>
-                                                </div>
-                                                <small class="text-muted flex-shrink-0" style="font-size:0.7rem;">{{ board_item.completion_pct }}%</small>
-                                            </div>
-                                            <!-- Board AI summary -->
-                                            {% if board.ai_summary %}
-                                            <button class="btn btn-xs btn-outline-secondary py-0 px-2 mt-1 mb-1" type="button"
-                                                    data-bs-toggle="collapse" data-bs-target="#board-ai-collapse-{{ board.id }}"
-                                                    aria-expanded="false" onclick="event.stopPropagation()">
-                                                <i class="fas fa-robot me-1" style="font-size:0.6rem;"></i><span style="font-size:0.68rem;">AI Summary</span>
-                                                <i class="fas fa-chevron-down ms-1" style="font-size:0.55rem;"></i>
-                                            </button>
-                                            <div class="collapse" id="board-ai-collapse-{{ board.id }}">
-                                                <div class="ai-summary-text small mt-1" id="board-summary-text-{{ board.id }}">
-                                                    {{ board.ai_summary|render_bullets }}
-                                                </div>
-                                                {% if board.ai_summary_metadata.confidence_score %}
-                                                <div class="d-flex align-items-center mt-1 gap-1 board-ai-confidence" 
-                                                     data-confidence="{{ board.ai_summary_metadata.confidence_score }}">
-                                                    <i class="fas fa-brain" style="font-size:0.6rem;color:#6f42c1;"></i>
-                                                    <small style="font-size:0.65rem;color:#6f42c1;">Confidence:</small>
-                                                    <div style="width:50px;height:4px;background:#e9ecef;border-radius:2px;overflow:hidden;">
-                                                        <div class="conf-bar" style="height:100%;border-radius:2px;"></div>
-                                                    </div>
-                                                    <small class="conf-label" style="font-size:0.65rem;font-weight:600;"></small>
-                                                </div>
-                                                {% endif %}
-                                                <small class="text-muted summary-ts" id="board-ts-{{ board.id }}"
-                                                      {% if board.ai_summary_generated_at %}data-ts="{{ board.ai_summary_generated_at|date:'c' }}"{% endif %}
-                                                      style="font-size:0.68rem;">
-                                                    {% if board.ai_summary_generated_at %}<i class="far fa-clock me-1"></i>Updated {{ board.ai_summary_generated_at|date:"M d, Y H:i" }}{% endif %}
-                                                </small>
-                                            </div>
-                                            {% else %}
-                                            <div class="ai-summary-text small text-muted fst-italic mt-1 d-none" id="board-summary-text-{{ board.id }}"></div>
-                                            <small class="text-muted summary-ts d-none" id="board-ts-{{ board.id }}"></small>
-                                            {% endif %}
-                                            <div class="mt-1" onclick="event.stopPropagation()">
-                                                <button class="btn btn-xs btn-outline-info generate-summary-btn"
-                                                        data-level="board" data-id="{{ board.id }}"
-                                                        data-url="{% url 'generate_board_summary_api' board.id %}"
-                                                        title="Generate/refresh AI board summary">
-                                                    <i class="fas fa-robot me-1"></i><span class="btn-label">✨ Board AI</span>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    {% endwith %}
-                                    {% endfor %}
-                                </div>
-                                {% endif %}
-                            </div>
-                            {% endwith %}
-                            {% endfor %}
-                        </div>
-                        {% else %}
-                        <div class="ps-4 mt-2">
-                            <small class="text-muted fst-italic">
-                                <i class="fas fa-info-circle me-1"></i>No strategies yet.
-                                <a href="{% url 'mission_detail' mission.id %}">Add a strategy</a> to this mission.
-                            </small>
-                        </div>
+                    <i class="fas fa-trophy text-warning"></i>
+                    <div>
+                        <span class="badge text-uppercase fw-semibold me-1"
+                              style="background:#fff8e1; color:#b8860b; border:1px solid #ffe082; font-size:0.58rem; letter-spacing:0.07em; padding:2px 6px;">
+                            Organization Goal
+                        </span>
+                        <h6 class="mb-0 fw-bold">
+                            <a href="{% url 'goal_detail' goal_entry.goal.id %}" class="text-decoration-none text-dark">{{ goal_entry.goal.name }}</a>
+                        </h6>
+                        {% if goal_entry.goal.target_metric %}
+                        <small class="text-warning fw-semibold"><i class="fas fa-bullseye me-1"></i>{{ goal_entry.goal.target_metric }}</small>
                         {% endif %}
                     </div>
-                    {% endwith %}
-                    {% endfor %}
-                    {# close the indentation div inside the goal/ungrouped wrapper #}
-                        </div>
-                    </div>
-                    {% endfor %}
                 </div>
-                {% else %}
-                <!-- Empty state: no goals or missions yet -->
-                <div class="text-center py-5">
-                    {% if onboarding_profile.onboarding_version == 2 and not demo_mode %}
-                    {# V2 empty state — point to AI setup #}
-                    <i class="fas fa-wand-magic-sparkles fa-4x mb-3" style="opacity:0.35;color:#6366f1;"></i>
-                    <p class="mb-2 fw-semibold">Your workspace is empty</p>
-                    <p class="text-muted small mb-4">
-                        Let AI build a complete workspace from your organization's goal,
-                        or create things manually.
-                    </p>
-                    <a href="{% url 'onboarding_welcome' %}" class="btn btn-primary">
-                        <i class="fas fa-rocket fa-sm me-1"></i> Set up with AI
-                    </a>
-                    <a href="{% url 'create_goal' %}" class="btn btn-outline-secondary ms-2">
-                        <i class="fas fa-trophy fa-sm me-1"></i> Create Goal manually
-                    </a>
-                    <a href="{% url 'create_board' %}" class="btn btn-outline-secondary ms-2">
-                        <i class="fas fa-plus fa-sm me-1"></i> New Board
-                    </a>
+                <div class="d-flex align-items-center gap-2 flex-shrink-0 flex-wrap">
+                    {% if goal_entry.goal.status == 'active' %}
+                        <span class="badge bg-success">Active</span>
+                    {% elif goal_entry.goal.status == 'completed' %}
+                        <span class="badge bg-primary">Completed</span>
                     {% else %}
-                    {# V1 / legacy empty state #}
-                    <i class="fas fa-trophy fa-4x text-warning mb-3" style="opacity:0.3;"></i>
-                    <p class="mb-2 fw-semibold">No Organization Goals or Missions yet</p>
-                    <p class="text-muted small mb-4">
-                        Start at the top — define an <strong>Organization Goal</strong> (your North Star),
-                        then add Missions, Strategies and Boards underneath it.
-                    </p>
-                    <a href="{% url 'create_goal' %}" class="btn btn-warning text-dark">
-                        <i class="fas fa-trophy fa-sm me-1"></i> Create Organization Goal
-                    </a>
-                    <a href="{% url 'create_mission' %}" class="btn btn-primary ms-2">
-                        <i class="fas fa-bullseye fa-sm me-1"></i> New Mission
-                    </a>
-                    <a href="{% url 'create_board' %}" class="btn btn-outline-secondary ms-2">
-                        <i class="fas fa-plus fa-sm me-1"></i> New Board
-                    </a>
+                        <span class="badge bg-warning text-dark">On Hold</span>
                     {% endif %}
+                    {# Goal-level health pills #}
+                    <span class="status-pill {{ goal_entry.schedule_status|default:'on_track' }}">
+                        <span class="pill-dot"></span>
+                        {% if goal_entry.schedule_status == 'late' %}Late{% elif goal_entry.schedule_status == 'at_risk' %}At Risk{% else %}On Track{% endif %}
+                    </span>
+                    <span class="risk-pill {{ goal_entry.risk_level|default:'low' }}">
+                        <span class="pill-dot"></span>
+                        {% if goal_entry.risk_level == 'high' %}High Risk{% elif goal_entry.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
+                    </span>
+                    {% if goal_entry.completion_pct is not None %}
+                    <span class="badge bg-light text-dark border" style="font-size:0.68rem;">
+                        {{ goal_entry.completion_pct }}% complete
+                    </span>
+                    {% endif %}
+                    <span class="badge bg-light text-dark border">
+                        <i class="fas fa-bullseye text-primary me-1"></i>{{ goal_entry.missions|length }} mission{{ goal_entry.missions|length|pluralize }}
+                    </span>
+                    <a href="{% url 'goal_detail' goal_entry.goal.id %}" class="btn btn-sm btn-outline-warning text-dark" title="Open Goal">
+                        <i class="fas fa-external-link-alt fa-xs"></i>
+                    </a>
                 </div>
-                {% endif %}
             </div>
-        </div><!-- /collapse missionOverviewBody -->
-        <!-- /Mission Overview -->
+            {% if goal_entry.total_tasks %}
+            <div class="progress mt-2" style="height:5px;">
+                <div class="progress-bar {% if goal_entry.completion_pct < 30 %}bg-danger{% elif goal_entry.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                     role="progressbar" style="width:{{ goal_entry.completion_pct }}%;"></div>
+            </div>
+            {% endif %}
+        </div>
+        {% else %}
+        {# Ungrouped missions #}
+        <div class="text-muted small mb-2 ps-1 mt-3">
+            <i class="fas fa-minus-circle me-1"></i><em>Missions not linked to an Organization Goal</em>
+        </div>
+        {% endif %}
+
+        {# ---- MISSION SUMMARY CARDS (responsive grid) ---- #}
+        <div class="row g-3 mb-4">
+            {% for mission_item in goal_entry.missions %}
+            {% with mission=mission_item.mission %}
+            <div class="col-md-6 col-lg-4">
+                <div class="mission-summary-card card h-100 shadow-sm" style="border-left: 4px solid #4e73df;">
+                    <div class="card-body">
+                        {# Header: Mission name + status #}
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div class="flex-grow-1 me-2">
+                                <span class="badge text-uppercase fw-semibold me-1"
+                                      style="background:#e8f0fe; color:#3a5bd9; border:1px solid #c0d0f8; font-size:0.55rem; letter-spacing:0.07em; padding:2px 6px;">
+                                    Mission
+                                </span>
+                                <h6 class="mb-1 fw-bold" style="font-size:0.95rem; line-height:1.3;">
+                                    {{ mission.name }}
+                                </h6>
+                                {% if mission.description %}
+                                <small class="text-muted" style="font-size:0.78rem;">{{ mission.description|truncatechars:90 }}</small>
+                                {% endif %}
+                            </div>
+                            <span class="badge ms-status-badge status-{{ mission.status }} flex-shrink-0">{{ mission.get_status_display }}</span>
+                        </div>
+
+                        {# Progress bar #}
+                        {% if mission_item.total_tasks %}
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <div class="progress flex-grow-1" style="height:6px;">
+                                <div class="progress-bar {% if mission_item.completion_pct < 30 %}bg-danger{% elif mission_item.completion_pct < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                                     role="progressbar" style="width:{{ mission_item.completion_pct }}%;"></div>
+                            </div>
+                            <small class="text-muted fw-semibold flex-shrink-0" style="font-size:0.72rem;">{{ mission_item.completion_pct }}%</small>
+                        </div>
+                        <small class="text-muted d-block mb-2" style="font-size:0.7rem;">
+                            {{ mission_item.done_tasks }}/{{ mission_item.total_tasks }} tasks complete
+                        </small>
+                        {% endif %}
+
+                        {# Dual health pills #}
+                        <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                            <span class="status-pill {{ mission_item.schedule_status }}">
+                                <span class="pill-dot"></span>
+                                {% if mission_item.schedule_status == 'late' %}Late{% elif mission_item.schedule_status == 'at_risk' %}At Risk{% else %}On Track{% endif %}
+                            </span>
+                            <span class="risk-pill {{ mission_item.risk_level }}">
+                                <span class="pill-dot"></span>
+                                {% if mission_item.risk_level == 'high' %}High Risk{% elif mission_item.risk_level == 'medium' %}Med Risk{% else %}Low Risk{% endif %}
+                            </span>
+                        </div>
+
+                        {# Child summary #}
+                        <small class="text-muted d-block mb-2" style="font-size:0.72rem;">
+                            <i class="fas fa-sitemap me-1 text-primary"></i>
+                            {{ mission_item.strategy_count }} strateg{{ mission_item.strategy_count|pluralize:"y,ies" }}{% if mission_item.strategy_count %}:
+                            {% if mission_item.strategies_on_track %}<span class="text-success fw-semibold">{{ mission_item.strategies_on_track }} On Track</span>{% endif %}
+                            {% if mission_item.strategies_at_risk %}<span class="text-warning fw-semibold ms-1">{{ mission_item.strategies_at_risk }} At Risk</span>{% endif %}
+                            {% if mission_item.strategies_late %}<span class="text-danger fw-semibold ms-1">{{ mission_item.strategies_late }} Late</span>{% endif %}
+                            {% endif %}
+                        </small>
+
+                        {# View Details button #}
+                        <a href="{{ mission.get_absolute_url }}" class="btn btn-sm btn-outline-primary w-100 mt-1">
+                            View Details <i class="fas fa-arrow-right ms-1"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endwith %}
+            {% endfor %}
+        </div>
+        {% endfor %}
+
+        {% else %}
+        <!-- Empty state: no goals or missions yet -->
+        <div class="text-center py-5">
+            {% if onboarding_profile.onboarding_version == 2 and not demo_mode %}
+            <i class="fas fa-wand-magic-sparkles fa-4x mb-3" style="opacity:0.35;color:#6366f1;"></i>
+            <p class="mb-2 fw-semibold">Your workspace is empty</p>
+            <p class="text-muted small mb-4">
+                Let AI build a complete workspace from your organization's goal,
+                or create things manually.
+            </p>
+            <a href="{% url 'onboarding_welcome' %}" class="btn btn-primary">
+                <i class="fas fa-rocket fa-sm me-1"></i> Set up with AI
+            </a>
+            <a href="{% url 'create_goal' %}" class="btn btn-outline-secondary ms-2">
+                <i class="fas fa-trophy fa-sm me-1"></i> Create Goal manually
+            </a>
+            <a href="{% url 'create_board' %}" class="btn btn-outline-secondary ms-2">
+                <i class="fas fa-plus fa-sm me-1"></i> New Board
+            </a>
+            {% else %}
+            <i class="fas fa-trophy fa-4x text-warning mb-3" style="opacity:0.3;"></i>
+            <p class="mb-2 fw-semibold">No Organization Goals or Missions yet</p>
+            <p class="text-muted small mb-4">
+                Start at the top — define an <strong>Organization Goal</strong> (your North Star),
+                then add Missions, Strategies and Boards underneath it.
+            </p>
+            <a href="{% url 'create_goal' %}" class="btn btn-warning text-dark">
+                <i class="fas fa-trophy fa-sm me-1"></i> Create Organization Goal
+            </a>
+            <a href="{% url 'create_mission' %}" class="btn btn-primary ms-2">
+                <i class="fas fa-bullseye fa-sm me-1"></i> New Mission
+            </a>
+            <a href="{% url 'create_board' %}" class="btn btn-outline-secondary ms-2">
+                <i class="fas fa-plus fa-sm me-1"></i> New Board
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+<!-- /Mission Overview -->
 
 <!-- ============================================================ -->
 <!-- ZONE 3: PERFORMANCE ANALYTICS (collapsed by default)        -->
@@ -3238,33 +3106,8 @@
     }
 
     /* ==========================================================
-       MISSION TREE — Strategy expand/collapse & AI summary AJAX
+       MISSION OVERVIEW — AI summary AJAX (strategy toggle removed)
        ========================================================== */
-
-    // Restore expand/collapse state from localStorage on load
-    function storageKey(strategyId) { return 'prizmAI_strategy_expanded_' + strategyId; }
-
-    document.querySelectorAll('.strategy-row').forEach(function(row) {
-        const stratId = row.dataset.strategyId;
-        const boardsDiv  = document.getElementById('boards-' + stratId);
-        const chevron    = document.getElementById('chevron-' + stratId);
-        if (!boardsDiv) return;
-
-        // Restore persisted state
-        if (localStorage.getItem(storageKey(stratId)) === 'true') {
-            boardsDiv.classList.remove('d-none');
-            if (chevron) chevron.classList.add('expanded');
-        }
-
-        row.addEventListener('click', function(e) {
-            // Don't toggle if clicking a link or button inside the row
-            if (e.target.closest('a, button')) return;
-            const expanded = !boardsDiv.classList.contains('d-none');
-            boardsDiv.classList.toggle('d-none', expanded);
-            if (chevron) chevron.classList.toggle('expanded', !expanded);
-            localStorage.setItem(storageKey(stratId), (!expanded).toString());
-        });
-    });
 
     // Toggle "read more / show less" for summary text
     window.toggleSummary = function(link, blockId) {
