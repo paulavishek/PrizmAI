@@ -847,10 +847,10 @@
                                     {% csrf_token %}
                                     <div class="mb-3">
                                         <label for="id_content" class="form-label">Add a comment</label>
-                                        <textarea name="content" class="form-control" rows="2" placeholder="Add a comment..." id="id_content" required></textarea>
+                                        <textarea name="content" class="form-control" rows="2" placeholder="Add a comment..." id="id_content"></textarea>
                                     </div>
                                     <div class="text-end mt-3">
-                                        <button type="submit" class="btn btn-primary">Add Comment</button>
+                                        <button type="button" id="addCommentBtn" class="btn btn-primary">Add Comment</button>
                                     </div>
                                 </form>
                             </div>
@@ -869,7 +869,7 @@
                                     {% csrf_token %}
                                     <div class="mb-3">
                                         <label for="fileInput" class="form-label">Select File</label>
-                                        <input type="file" id="fileInput" name="file" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" required>
+                                        <input type="file" id="fileInput" name="file" class="form-control" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png">
                                         <small class="text-muted">Supported: PDF, Word, Excel, PowerPoint, JPG, PNG (Max: 10MB)</small>
                                     </div>
                                     <div class="mb-3">
@@ -2035,7 +2035,54 @@
                 updateTaskProgress(taskId, 'decrease');
             });
         });
-        
+
+        // Add Comment button — validate non-empty then submit the inner comment form
+        const addCommentBtn = document.getElementById('addCommentBtn');
+        if (addCommentBtn) {
+            addCommentBtn.addEventListener('click', function() {
+                const textarea = document.getElementById('id_content');
+                if (!textarea || textarea.value.trim() === '') {
+                    textarea.classList.add('is-invalid');
+                    if (!document.getElementById('comment-error-msg')) {
+                        const err = document.createElement('div');
+                        err.id = 'comment-error-msg';
+                        err.className = 'invalid-feedback d-block';
+                        err.textContent = 'Please enter a comment before submitting.';
+                        textarea.parentNode.appendChild(err);
+                    }
+                    textarea.focus();
+                    return;
+                }
+                // Remove any previous error
+                textarea.classList.remove('is-invalid');
+                const errMsg = document.getElementById('comment-error-msg');
+                if (errMsg) errMsg.remove();
+
+                // Submit only the comment fields via fetch (AJAX)
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+                const body = new URLSearchParams();
+                body.append('csrfmiddlewaretoken', csrfToken);
+                body.append('content', textarea.value.trim());
+
+                fetch(window.location.pathname, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                    body: body.toString()
+                })
+                .then(response => {
+                    if (response.ok) {
+                        // Reload to show the new comment in the activity tab
+                        window.location.href = window.location.pathname + '#tab-activity';
+                    }
+                })
+                .catch(() => {
+                    addCommentBtn.disabled = false;
+                });
+
+                addCommentBtn.disabled = true;
+            });
+        }
+
         // Initialize labels with their colors
         document.querySelectorAll('.task-label').forEach(label => {
             const color = label.style.getPropertyValue('--label-color');
