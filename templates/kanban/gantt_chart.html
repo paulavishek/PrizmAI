@@ -3629,8 +3629,15 @@
         document.getElementById('triage-overlay').classList.add('open');
         document.getElementById('triage-drawer').classList.add('open');
 
-        // Attach change listeners (remove old ones first via cloning)
+        // Attach change listeners (remove old ones first via cloning).
+        // IMPORTANT: cloneNode(true) copies HTML attributes but NOT programmatically-set
+        // DOM properties (e.g. opt.selected = true). After cloning, the selects and inputs
+        // lose their current values, so we must re-apply them on the new cloned elements.
         _attachDrawerListeners(taskId);
+        document.getElementById('drawer-status').value = String(task.column_id);
+        document.getElementById('drawer-assignee').value = task.assigned_to_id ? String(task.assigned_to_id) : '';
+        document.getElementById('drawer-start-date').value = task.start || '';
+        document.getElementById('drawer-due-date').value = task.end || '';
     }
 
     function closeTriageDrawer() {
