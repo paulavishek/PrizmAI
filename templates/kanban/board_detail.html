@@ -812,7 +812,8 @@
                         <ul class="dropdown-menu dropdown-menu-end" style="font-size:.85rem;">
                             <li>
                                 <button type="button" class="dropdown-item set-wip-btn"
-                                        data-column-id="{{ column.id }}" data-wip="{{ col_meta.wip_limit|default_if_none:'' }}">
+                                        data-column-id="{{ column.id }}" data-wip="{{ col_meta.wip_limit|default_if_none:'' }}"
+                                        data-bs-toggle="modal" data-bs-target="#wipLimitModal">
                                     <i class="fas fa-tachometer-alt me-2 text-info"></i>Set WIP Limit
                                 </button>
                             </li>
@@ -962,6 +963,26 @@
     <div id="task-drawer-body"></div>
 </div>
 <!-- Wiki Links moved to Board Settings → Link Wiki Pages (3-dot menu) -->
+
+<!-- Set WIP Limit Modal -->
+<div class="modal fade" id="wipLimitModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Set WIP Limit</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small mb-2">Leave blank to remove the WIP limit.</p>
+                <input type="number" class="form-control" id="wipLimitInput" min="1" placeholder="e.g. 5">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="wipLimitSaveBtn">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- Delete Column Modal -->
 <div class="modal fade" id="deleteColumnModal" tabindex="-1" aria-hidden="true">
@@ -1327,25 +1348,51 @@
             }
         });
 
-        // ── Set WIP Limit handler ──
-        document.addEventListener('click', function(e) {
-            const wipBtn = e.target.closest('.set-wip-btn');
-            if (wipBtn) {
-                const columnId = wipBtn.dataset.columnId;
-                const current  = wipBtn.dataset.wip;
-                const val = prompt('Set WIP limit (leave blank to remove):', current);
-                if (val === null) return;
+        // ── Set WIP Limit modal handler ──
+        (function() {
+            const wipModal = document.getElementById('wipLimitModal');
+            const wipInput = document.getElementById('wipLimitInput');
+            const wipSaveBtn = document.getElementById('wipLimitSaveBtn');
+            let _wipColumnId = null;
+
+            // When modal is about to open, populate the current WIP value
+            wipModal.addEventListener('show.bs.modal', function(e) {
+                const trigger = e.relatedTarget;
+                if (trigger && trigger.classList.contains('set-wip-btn')) {
+                    _wipColumnId = trigger.dataset.columnId;
+                    wipInput.value = trigger.dataset.wip || '';
+                }
+            });
+
+            // Focus input when modal is fully open
+            wipModal.addEventListener('shown.bs.modal', function() {
+                wipInput.focus();
+                wipInput.select();
+            });
+
+            // Allow pressing Enter to save
+            wipInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') wipSaveBtn.click();
+            });
+
+            // Save handler
+            wipSaveBtn.addEventListener('click', function() {
+                if (!_wipColumnId) return;
                 const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
                                 || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
                 const fd = new FormData();
-                fd.append('wip_limit', val);
-                fetch(`/columns/${columnId}/update-wip/`, {
+                fd.append('wip_limit', wipInput.value.trim());
+                bootstrap.Modal.getInstance(wipModal).hide();
+                fetch(`/columns/${_wipColumnId}/update-wip/`, {
                     method: 'POST',
                     headers: { 'X-CSRFToken': csrfToken },
                     body: fd,
-                }).then(r => r.json()).then(() => location.reload());
-            }
-        });
+                })
+                .then(r => r.json())
+                .then(() => location.reload())
+                .catch(() => location.reload());
+            });
+        })();
 
         // ── Collapse Column handler ──
         document.addEventListener('click', function(e) {
