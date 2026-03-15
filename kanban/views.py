@@ -2093,6 +2093,12 @@ def gantt_chart(request, board_id):
     # so individual matched task bars are visible (not hidden inside collapsed phase bars)
     any_filters_active = bool(search_query or status_filter or priority_filter or assignee_filter)
 
+    # Data for triage drawer: board columns (for status dropdown) and members (for assignee dropdown)
+    board_columns = board.columns.order_by('position').values_list('id', 'name')
+    board_members = User.objects.filter(
+        Q(member_boards=board) | Q(created_boards=board)
+    ).distinct().order_by('username')
+
     context = {
         'board': board,
         'tasks': tasks,
@@ -2110,6 +2116,10 @@ def gantt_chart(request, board_id):
         'assignees': assignees,
         'priority_choices': Task.PRIORITY_CHOICES,
         'any_filters_active': any_filters_active,
+        # Triage drawer & task ID prefix data
+        'task_prefix': board.get_task_prefix(),
+        'board_columns': board_columns,
+        'board_members': board_members,
     }
 
     return render(request, 'kanban/gantt_chart.html', context)

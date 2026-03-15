@@ -1360,8 +1360,10 @@
     @media (max-width: 768px) {
         #gantt-table-panel .th-responsible,
         #gantt-table-panel .th-progress,
+        #gantt-table-panel .th-status,
         .gantt-table-row .td-responsible,
-        .gantt-table-row .td-progress {
+        .gantt-table-row .td-progress,
+        .gantt-table-row .td-status {
             display: none;
         }
     }
@@ -1389,6 +1391,178 @@
     .gantt-table-row.critical-row:hover {
         background: #fee2e2;
     }
+
+    /* ── Task ID Prefix ── */
+    .task-id-prefix {
+        color: #8b95a5;
+        font-size: 11px;
+        font-weight: 600;
+        margin-right: 5px;
+        flex-shrink: 0;
+        letter-spacing: 0.02em;
+    }
+
+    /* ── Status Column ── */
+    #gantt-table-panel .th-status { width: 90px; justify-content: center; }
+    .gantt-table-row .td-status { width: 90px; justify-content: center; }
+
+    /* ── Status Lozenges ── */
+    .status-lozenge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        line-height: 16px;
+        white-space: nowrap;
+    }
+    .status-lozenge.status-todo       { background: rgba(137,147,164,0.18); color: #8993a4; }
+    .status-lozenge.status-in-progress { background: rgba(0,101,255,0.14); color: #0065ff; }
+    .status-lozenge.status-done        { background: rgba(0,135,90,0.14); color: #00875a; }
+
+    /* ── Triage Drawer ── */
+    .triage-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.35);
+        z-index: 9998;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s ease;
+    }
+    .triage-overlay.open {
+        opacity: 1;
+        pointer-events: auto;
+    }
+
+    .triage-drawer {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 380px;
+        max-width: 90vw;
+        height: 100vh;
+        background: #1a1f2e;
+        box-shadow: -4px 0 24px rgba(0,0,0,0.4);
+        z-index: 9999;
+        transform: translateX(100%);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        flex-direction: column;
+        color: #e2e8f0;
+    }
+    .triage-drawer.open {
+        transform: translateX(0);
+    }
+
+    .drawer-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        border-bottom: 1px solid #2d3548;
+        flex-shrink: 0;
+    }
+    .drawer-task-id {
+        font-size: 13px;
+        font-weight: 700;
+        color: #94a3b8;
+        letter-spacing: 0.03em;
+    }
+    .drawer-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .drawer-btn-expand {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 5px 12px;
+        background: #3b82f6;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .drawer-btn-expand:hover { background: #2563eb; color: #fff; }
+    .drawer-btn-close {
+        background: none;
+        border: none;
+        color: #94a3b8;
+        font-size: 20px;
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 4px;
+        line-height: 1;
+        transition: background 0.15s, color 0.15s;
+    }
+    .drawer-btn-close:hover { background: #374151; color: #f1f5f9; }
+
+    .drawer-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px;
+    }
+    .drawer-field {
+        margin-bottom: 18px;
+    }
+    .drawer-field label {
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #64748b;
+        margin-bottom: 6px;
+    }
+    .drawer-field .drawer-value {
+        font-size: 15px;
+        font-weight: 600;
+        color: #f1f5f9;
+        line-height: 1.4;
+    }
+    .drawer-field select,
+    .drawer-field input[type="date"] {
+        width: 100%;
+        padding: 7px 10px;
+        background: #0f172a;
+        border: 1px solid #334155;
+        border-radius: 5px;
+        color: #e2e8f0;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 0.15s;
+    }
+    .drawer-field select:focus,
+    .drawer-field input[type="date"]:focus {
+        border-color: #3b82f6;
+    }
+    .drawer-field input[type="date"]::-webkit-calendar-picker-indicator {
+        filter: invert(0.7);
+    }
+
+    .drawer-footer {
+        padding: 12px 20px;
+        border-top: 1px solid #2d3548;
+        flex-shrink: 0;
+        min-height: 20px;
+    }
+    .drawer-save-status {
+        font-size: 12px;
+        color: #22c55e;
+        font-weight: 500;
+        transition: opacity 0.3s;
+    }
+
+    /* Make table rows clickable for tasks */
+    .gantt-table-row.clickable-row { cursor: pointer; }
 
 </style>
 {% endblock %}
@@ -1537,6 +1711,7 @@
                 <div id="gantt-table-panel">
                     <div class="table-header">
                         <div class="th-cell th-activity">Activity</div>
+                        <div class="th-cell th-status">Status</div>
                         <div class="th-cell th-responsible">Responsible</div>
                         <div class="th-cell th-progress">Progress</div>
                     </div>
@@ -1559,6 +1734,44 @@
             <div class="gantt-tooltip" id="gantt-tooltip"></div>
             <!-- Dependency line hover tooltip -->
             <div class="dep-tooltip" id="dep-tooltip"></div>
+
+            <!-- Triage Drawer Overlay -->
+            <div id="triage-overlay" class="triage-overlay" onclick="closeTriageDrawer()"></div>
+            <!-- Triage Drawer Panel -->
+            <div id="triage-drawer" class="triage-drawer">
+                <div class="drawer-header">
+                    <span class="drawer-task-id" id="drawer-task-id"></span>
+                    <div class="drawer-actions">
+                        <a id="drawer-full-view" href="#" class="drawer-btn-expand" title="Open Full View">&#x2922; Full View</a>
+                        <button id="drawer-close" class="drawer-btn-close" onclick="closeTriageDrawer()" title="Close">&#x2715;</button>
+                    </div>
+                </div>
+                <div class="drawer-body">
+                    <div class="drawer-field">
+                        <label>Title</label>
+                        <div class="drawer-value" id="drawer-title"></div>
+                    </div>
+                    <div class="drawer-field">
+                        <label>Status</label>
+                        <select id="drawer-status"></select>
+                    </div>
+                    <div class="drawer-field">
+                        <label>Assignee</label>
+                        <select id="drawer-assignee"></select>
+                    </div>
+                    <div class="drawer-field">
+                        <label>Start Date</label>
+                        <input type="date" id="drawer-start-date">
+                    </div>
+                    <div class="drawer-field">
+                        <label>Due Date</label>
+                        <input type="date" id="drawer-due-date">
+                    </div>
+                </div>
+                <div class="drawer-footer">
+                    <span class="drawer-save-status" id="drawer-save-status"></span>
+                </div>
+            </div>
             
             <!-- Legend -->
             <div class="gantt-legend">
@@ -1801,6 +2014,13 @@
     const hasPhases = {{ has_phases|yesno:"true,false" }};
     const numPhases = {{ num_phases|default:0 }};
 
+    // ── Task ID prefix & triage drawer reference data ──
+    const TASK_PREFIX = '{{ task_prefix|escapejs }}';
+    const BOARD_ID = {{ board.id }};
+    const BOARD_COLUMNS = [{% for col in board_columns %}{id:{{ col.0 }}, name:'{{ col.1|escapejs }}'}{% if not forloop.last %},{% endif %}{% endfor %}];
+    const BOARD_MEMBERS = [{% for m in board_members %}{id:{{ m.id }}, name:'{{ m.get_full_name|default:m.username|escapejs }}'}{% if not forloop.last %},{% endif %}{% endfor %}];
+    const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', done: 'Done' };
+
     // View state
     // When search/filter is active, force 'all' view so individual matched task
     // bars are directly visible instead of being hidden inside collapsed phase bars.
@@ -1825,6 +2045,9 @@
             assigned_to: '{% if task.assigned_to %}{{ task.assigned_to.username }}{% else %}Unassigned{% endif %}',
             assignee_first_name: '{% if task.assigned_to %}{{ task.assigned_to.first_name|escapejs }}{% endif %}',
             assignee_last_name: '{% if task.assigned_to %}{{ task.assigned_to.last_name|escapejs }}{% endif %}',
+            assigned_to_id: '{% if task.assigned_to %}{{ task.assigned_to.id }}{% endif %}',
+            column_id: '{{ task.column.id }}',
+            column_name: '{{ task.column.name|escapejs }}',
             phase: '{{ task.phase|default:""|escapejs }}'
         }{% if not forloop.last %},{% endif %}
         {% endfor %}
@@ -2551,9 +2774,8 @@
                         const currentUrl = encodeURIComponent(window.location.href);
                         window.location.href = `/milestones/${milestoneDbId}/?next=${currentUrl}`;
                     } else {
-                        // Navigate to regular task detail with return URL
-                        const currentUrl = encodeURIComponent(window.location.href);
-                        window.location.href = `/tasks/${taskId}/?next=${currentUrl}`;
+                        // Open triage drawer instead of navigating away
+                        openTriageDrawer(taskId);
                     }
                 }
             });
@@ -3352,6 +3574,163 @@
     }
 
     // ============================================
+    // TRIAGE DRAWER: Open / Close / Save
+    // ============================================
+
+    let _drawerTaskId = null;
+    let _drawerSaveTimer = null;
+
+    function openTriageDrawer(taskId) {
+        const task = tasks.find(t => String(t.id) === String(taskId));
+        if (!task) return;
+
+        _drawerTaskId = taskId;
+
+        // Populate header
+        document.getElementById('drawer-task-id').textContent = TASK_PREFIX + '-' + taskId;
+
+        // Full view link
+        const currentUrl = encodeURIComponent(window.location.href);
+        document.getElementById('drawer-full-view').href = '/tasks/' + taskId + '/?next=' + currentUrl;
+
+        // Title
+        document.getElementById('drawer-title').textContent = task.fullName || task.name;
+
+        // Status dropdown (board columns)
+        const statusSelect = document.getElementById('drawer-status');
+        statusSelect.innerHTML = '';
+        BOARD_COLUMNS.forEach(col => {
+            const opt = document.createElement('option');
+            opt.value = col.id;
+            opt.textContent = col.name;
+            if (String(col.id) === String(task.column_id)) opt.selected = true;
+            statusSelect.appendChild(opt);
+        });
+
+        // Assignee dropdown (board members)
+        const assigneeSelect = document.getElementById('drawer-assignee');
+        assigneeSelect.innerHTML = '<option value="">Unassigned</option>';
+        BOARD_MEMBERS.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.id;
+            opt.textContent = m.name;
+            if (String(m.id) === String(task.assigned_to_id)) opt.selected = true;
+            assigneeSelect.appendChild(opt);
+        });
+
+        // Dates
+        document.getElementById('drawer-start-date').value = task.start || '';
+        document.getElementById('drawer-due-date').value = task.end || '';
+
+        // Clear save status
+        document.getElementById('drawer-save-status').textContent = '';
+
+        // Show overlay + drawer
+        document.getElementById('triage-overlay').classList.add('open');
+        document.getElementById('triage-drawer').classList.add('open');
+
+        // Attach change listeners (remove old ones first via cloning)
+        _attachDrawerListeners(taskId);
+    }
+
+    function closeTriageDrawer() {
+        document.getElementById('triage-overlay').classList.remove('open');
+        document.getElementById('triage-drawer').classList.remove('open');
+        _drawerTaskId = null;
+    }
+
+    // Close on Escape key
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && _drawerTaskId) closeTriageDrawer();
+    });
+
+    function _attachDrawerListeners(taskId) {
+        // Status
+        const statusEl = document.getElementById('drawer-status');
+        const newStatus = statusEl.cloneNode(true);
+        statusEl.parentNode.replaceChild(newStatus, statusEl);
+        newStatus.addEventListener('change', function() {
+            _saveDrawerField(taskId, { column_id: parseInt(this.value) });
+        });
+
+        // Assignee
+        const assigneeEl = document.getElementById('drawer-assignee');
+        const newAssignee = assigneeEl.cloneNode(true);
+        assigneeEl.parentNode.replaceChild(newAssignee, assigneeEl);
+        newAssignee.addEventListener('change', function() {
+            _saveDrawerField(taskId, { assigned_to_id: this.value || null });
+        });
+
+        // Start date
+        const startEl = document.getElementById('drawer-start-date');
+        const newStart = startEl.cloneNode(true);
+        startEl.parentNode.replaceChild(newStart, startEl);
+        newStart.addEventListener('change', function() {
+            _saveDrawerField(taskId, { start_date: this.value });
+        });
+
+        // Due date
+        const dueEl = document.getElementById('drawer-due-date');
+        const newDue = dueEl.cloneNode(true);
+        dueEl.parentNode.replaceChild(newDue, dueEl);
+        newDue.addEventListener('change', function() {
+            _saveDrawerField(taskId, { due_date: this.value });
+        });
+    }
+
+    function _saveDrawerField(taskId, payload) {
+        const saveStatus = document.getElementById('drawer-save-status');
+        saveStatus.textContent = 'Saving…';
+        saveStatus.style.color = '#94a3b8';
+
+        fetch('/api/tasks/' + taskId + '/update-fields/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+            },
+            body: JSON.stringify(payload),
+        })
+        .then(resp => resp.json())
+        .then(data => {
+            if (data.success) {
+                // Update local task data
+                const task = tasks.find(t => String(t.id) === String(taskId));
+                if (task && data.task) {
+                    task.column_id = String(data.task.column_id);
+                    task.column_name = data.task.column_name;
+                    task.status = data.task.status;
+                    task.custom_class = 'status-' + data.task.column_name.toLowerCase().replace(/\s/g, '');
+                    task.assigned_to = data.task.assigned_to_username || 'Unassigned';
+                    task.assigned_to_id = data.task.assigned_to_id ? String(data.task.assigned_to_id) : '';
+                    task.assignee_first_name = data.task.assignee_first_name || '';
+                    task.assignee_last_name = data.task.assignee_last_name || '';
+                    task.start = data.task.start_date || task.start;
+                    task.end = data.task.due_date || task.end;
+                    task.progress = data.task.progress;
+                }
+                // Refresh left table to show updated lozenge/assignee
+                buildTaskTable();
+
+                saveStatus.textContent = 'Saved ✓';
+                saveStatus.style.color = '#22c55e';
+            } else {
+                saveStatus.textContent = 'Error: ' + (data.error || 'Save failed');
+                saveStatus.style.color = '#ef4444';
+            }
+            // Fade out message
+            clearTimeout(_drawerSaveTimer);
+            _drawerSaveTimer = setTimeout(() => { saveStatus.textContent = ''; }, 2500);
+        })
+        .catch(err => {
+            saveStatus.textContent = 'Network error';
+            saveStatus.style.color = '#ef4444';
+            clearTimeout(_drawerSaveTimer);
+            _drawerSaveTimer = setTimeout(() => { saveStatus.textContent = ''; }, 3000);
+        });
+    }
+
+    // ============================================
     // SPLIT-VIEW: TABLE BUILDER + SCROLL SYNC + DIVIDER RESIZE
     // ============================================
 
@@ -3392,7 +3771,16 @@
                 activityHTML = `<svg class="milestone-icon${completedClass}" width="12" height="12" viewBox="0 0 12 12"><polygon points="6,0 12,6 6,12 0,6"/></svg>`;
                 activityHTML += `<span title="${escapeHTML(item.fullName || item.name)}">${escapeHTML(truncate(item.fullName || item.name, 30))}</span>`;
             } else {
-                activityHTML = `<span title="${escapeHTML(item.fullName || item.name)}">${escapeHTML(truncate(item.fullName || item.name, 30))}</span>`;
+                activityHTML = `<span class="task-id-prefix">${escapeHTML(TASK_PREFIX)}-${escapeHTML(String(item.id))}</span>`;
+                activityHTML += `<span title="${escapeHTML(item.fullName || item.name)}">${escapeHTML(truncate(item.fullName || item.name, 25))}</span>`;
+            }
+
+            // ── Status cell ──
+            let statusHTML = '';
+            if (!isPhase && !isMilestone && item.status) {
+                const statusClass = 'status-' + (item.status || 'todo').replace('_', '-');
+                const statusLabel = STATUS_LABELS[item.status] || item.status;
+                statusHTML = `<span class="status-lozenge ${escapeHTML(statusClass)}">${escapeHTML(statusLabel)}</span>`;
             }
 
             // ── Responsible cell ──
@@ -3428,12 +3816,15 @@
             }
 
             // ── Build row ──
+            const isClickable = !isPhase && !isMilestone;
             const clickAttr = isPhase
                 ? ` onclick="togglePhase('${escapeHTML((item.phaseName || '').replace(/'/g, "\\'"))}', event)"`
-                : '';
+                : (isClickable ? ` onclick="openTriageDrawer('${escapeHTML(String(item.id))}')"` : '');
+            if (isClickable) rowClass += ' clickable-row';
 
             html += `<div class="${rowClass}" data-table-id="${escapeHTML(String(item.id))}"${clickAttr}>`;
             html += `<div class="td-cell td-activity">${activityHTML}</div>`;
+            html += `<div class="td-cell td-status">${statusHTML}</div>`;
             html += `<div class="td-cell td-responsible">${responsibleHTML}</div>`;
             html += `<div class="td-cell td-progress">${progressHTML}</div>`;
             html += `</div>`;
@@ -3638,7 +4029,7 @@
                 tablePanel.style.width = w + 'px';
             }
         } else {
-            tablePanel.style.width = '340px';
+            tablePanel.style.width = '420px';
         }
 
         let isDragging = false;
