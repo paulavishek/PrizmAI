@@ -774,8 +774,8 @@ class Command(BaseCommand):
         except Exception as e:
             self.stdout.write(self.style.WARNING(f'   ⚠️  AI Assistant demo data skipped: {e}'))
 
-        # Create overdue tasks and matching Decision Center items
-        self.stdout.write(self.style.SUCCESS('\n⏰ Creating overdue demo tasks & Decision Center items...\n'))
+        # Find naturally overdue tasks and create Decision Center items
+        self.stdout.write(self.style.SUCCESS('\n⏰ Creating Decision Center items for overdue tasks...\n'))
         self.create_overdue_and_decision_items(software_board, alex)
 
         self.stdout.write(self.style.SUCCESS('\n' + '='*70))
@@ -807,9 +807,10 @@ class Command(BaseCommand):
 
         done = columns.get('Done') or review
         items = []
-        # Anchor Phase 1 ten weeks in the past so newly-created demo boards
+        # Anchor Phase 1 forty days in the past so newly-created demo boards
         # already have some past-due tasks, making SPI meaningful on first load.
-        now = timezone.now().date() - timedelta(weeks=10)
+        # This matches the anchor_offset=40 used in demo_date_refresh.py.
+        now = timezone.now().date() - timedelta(days=40)
         from datetime import datetime, time
         import random
 
@@ -2963,45 +2964,24 @@ class Command(BaseCommand):
 
     def create_overdue_and_decision_items(self, software_board, admin_user):
         """
-        Force 3 specific in-progress/review tasks to be overdue, and create
-        matching DecisionItem records so the dashboard overdue counter and the
-        Decision Center show the same data.
+        Find naturally overdue tasks (due_date < now, progress < 100) and
+        create a matching DecisionItem so the Decision Center is populated.
+
+        With anchor_offset=40 in demo_date_refresh.py, several Phase 1
+        in-progress tasks are naturally past their due dates — no forced
+        date repositioning is needed.
         """
-        from datetime import datetime as _dt
-
         now = timezone.now()
-        overdue_specs = [
-            {'title': 'Database Schema & Migrations', 'days_overdue': 5},
-            {'title': 'User Registration Flow',       'days_overdue': 3},
-            {'title': 'Authentication System',        'days_overdue': 4},
-        ]
 
-        updated = 0
-        overdue_titles = []
-        for spec in overdue_specs:
-            task = Task.objects.filter(
-                column__board=software_board,
-                title=spec['title'],
-                item_type='task',
-            ).first()
-            if not task or task.progress >= 100:
-                continue
+        overdue_tasks = Task.objects.filter(
+            column__board=software_board,
+            item_type='task',
+            due_date__lt=now,
+        ).exclude(progress=100)
+        overdue_titles = list(overdue_tasks.values_list('title', flat=True))
+        updated = len(overdue_titles)
 
-            # Set due_date in the past; keep start_date before due_date
-            past_due = (now - timedelta(days=spec['days_overdue'])).date()
-            complexity = getattr(task, 'complexity_score', 5) or 5
-            duration = max(3, complexity)
-            new_start = past_due - timedelta(days=duration)
-
-            task.start_date = new_start
-            task.due_date = timezone.make_aware(
-                _dt.combine(past_due, _dt.min.time())
-            )
-            task.save(update_fields=['start_date', 'due_date'])
-            updated += 1
-            overdue_titles.append(spec['title'])
-
-        self.stdout.write(f'   ✅ Marked {updated} tasks as overdue')
+        self.stdout.write(f'   ✅ Found {updated} naturally overdue tasks')
 
         # Create a matching DecisionItem so the Decision Center is consistent
         if updated and admin_user:
@@ -3022,7 +3002,6 @@ class Command(BaseCommand):
                     'estimated_minutes': 5,
                     'context_data': {
                         'overdue_count': updated,
-                        'most_overdue_days': max(s['days_overdue'] for s in overdue_specs),
                     },
                 },
             )
