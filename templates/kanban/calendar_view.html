@@ -70,6 +70,38 @@
         padding: 5px 10px !important;
     }
     .assignee-chip.inactive { opacity: 0.35; text-decoration: line-through; }
+
+    /* ═══ Fix 2: Highlight today's date cell ═══ */
+    .fc .fc-day-today {
+        background: rgba(124, 58, 237, 0.06) !important;
+    }
+    .fc .fc-day-today .fc-daygrid-day-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #7c3aed;
+        color: #fff;
+        font-weight: 500;
+    }
+
+    /* ═══ Fix 3: Multi-day bar styling ═══ */
+    .fc-daygrid-block-event .fc-event-main {
+        padding: 2px 6px;
+    }
+    /* Left-clipped indicator when bar continues from prior week */
+    .fc-event:not(.fc-event-start) {
+        border-left: 3px solid rgba(0,0,0,0.3);
+        border-top-left-radius: 0 !important;
+        border-bottom-left-radius: 0 !important;
+    }
+    /* Right-clipped indicator when bar continues into next week */
+    .fc-event:not(.fc-event-end) {
+        border-top-right-radius: 0 !important;
+        border-bottom-right-radius: 0 !important;
+    }
 </style>
 {% endblock %}
 
@@ -286,6 +318,29 @@ document.addEventListener('DOMContentLoaded', function() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
+    // ── Quick-view drawer open / close (reuse pattern from Kanban board) ──
+    const drawer    = document.getElementById('task-drawer');
+    const backdrop  = document.getElementById('drawer-backdrop');
+
+    window.openDrawer = function() {
+        drawer.classList.add('open');
+        backdrop.classList.add('open');
+        document.body.style.overflow = 'hidden';
+    };
+    window.closeDrawer = function() {
+        drawer.classList.remove('open');
+        backdrop.classList.remove('open');
+        document.body.style.overflow = '';
+    };
+    backdrop.addEventListener('click', closeDrawer);
+
+    // HTMX: after drawer content loads, slide it open
+    document.body.addEventListener('htmx:afterSwap', function(e) {
+        if (e.detail.target && e.detail.target.id === 'task-drawer-body') {
+            openDrawer();
+        }
+    });
+
     // Assignee filter state — IDs in this set are HIDDEN
     let hiddenAssigneeIds = new Set();
 
@@ -295,10 +350,12 @@ document.addEventListener('DOMContentLoaded', function() {
         'medium': '#0d6efd', 'low': '#198754'
     };
 
-    // Count overdue
+    // Count overdue (use due_date_str which is always the due date)
     let overdueCount = 0;
     events.forEach(e => {
-        const d = new Date(e.start);
+        const dueStr = e.extendedProps ? e.extendedProps.due_date_str : null;
+        if (!dueStr) return;
+        const d = new Date(dueStr);
         const progress = e.extendedProps ? e.extendedProps.progress : 100;
         if (d < today && progress < 100) overdueCount++;
     });
@@ -346,7 +403,19 @@ document.addEventListener('DOMContentLoaded', function() {
         },
         eventClick: function(info) {
             info.jsEvent.preventDefault();
-            window.location.href = info.event.url;
+            var ep = info.event.extendedProps || {};
+            // Non-task events (calendar events) — fall back to URL navigation
+            if (ep.source && ep.source !== 'task') {
+                if (info.event.url) window.location.href = info.event.url;
+                return;
+            }
+            // Task — open quick-view drawer
+            var taskId = info.event.id;
+            if (taskId) {
+                htmx.ajax('GET', '/tasks/' + taskId + '/quick-view/', {
+                    target: '#task-drawer-body', swap: 'innerHTML'
+                });
+            }
         },
         eventMouseEnter: function(info) {
             const p = info.event.extendedProps;
@@ -367,9 +436,12 @@ document.addEventListener('DOMContentLoaded', function() {
             tooltip.style.display = 'none';
         },
         eventDidMount: function(info) {
-            // Mark overdue events with a striped border
-            const d = new Date(info.event.start);
-            const progress = info.event.extendedProps.progress;
+            // Mark overdue events with a striped border (use due_date_str)
+            var ep = info.event.extendedProps || {};
+            var dueStr = ep.due_date_str;
+            if (!dueStr) return;
+            const d = new Date(dueStr);
+            const progress = ep.progress;
             if (d < today && progress < 100) {
                 info.el.style.opacity = '0.75';
                 info.el.style.textDecoration = 'line-through';
