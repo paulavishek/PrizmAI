@@ -4,9 +4,11 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileResponse
 from django.contrib import messages
-from django.db.models import Count, Q, Case, When, IntegerField, Max, Sum, Value, F
+from django.db.models import Count, Q, Case, When, IntegerField, Max, Sum, Value, F, BooleanField
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
+from django.core.cache import cache
+from django.conf import settings as django_settings
 from datetime import timedelta
 import json
 import csv
@@ -296,21 +298,141 @@ def dashboard(request):
     # Each mission dict holds: mission obj + list of strategy dicts
     # Each strategy dict holds: strategy obj + list of board dicts (with stats)
     # Pre-compute all board task stats in ONE query — avoids N+1 (2 queries × N boards)
+    #
+    # DUAL HEALTH ROLL-UP:
+    #   Schedule Status: On Track / At Risk / Late  (based on due dates + progress)
+    #   Risk Level:      Low Risk / Medium Risk / High Risk  (based on risk_level field)
+    #
+    # Enterprise constraints applied:
+    #   1. Configurable AT_RISK_DAYS from settings (not hardcoded 3)
+    #   2. Active tasks with no due_date count towards the risk denominator
+    #   3. Entire aggregation wrapped in Django cache framework
     _board_ids = list(boards.values_list('id', flat=True))
-    _board_task_stats = (
-        Task.objects
-        .filter(column__board_id__in=_board_ids, item_type='task')
-        .values('column__board_id')
-        .annotate(
-            total_tasks=Count('id'),
-            done_tasks=Count('id', filter=Q(progress=100)),
-            high_risk_tasks=Count('id', filter=Q(risk_level__in=['high', 'critical'])),
+
+    # --- Settings-driven thresholds ---
+    _at_risk_days = getattr(django_settings, 'HEALTH_AT_RISK_DAYS_THRESHOLD', 3)
+    _board_late_thresh = getattr(django_settings, 'HEALTH_BOARD_LATE_THRESHOLD', 0.20)
+    _board_at_risk_thresh = getattr(django_settings, 'HEALTH_BOARD_AT_RISK_THRESHOLD', 0.20)
+    _board_high_risk_thresh = getattr(django_settings, 'HEALTH_BOARD_HIGH_RISK_THRESHOLD', 0.30)
+    _board_med_risk_thresh = getattr(django_settings, 'HEALTH_BOARD_MED_RISK_THRESHOLD', 0.10)
+    _cache_ttl = getattr(django_settings, 'HEALTH_ROLLUP_CACHE_TTL', 120)
+
+    # --- Cache key scoped to user + demo mode (board set varies) ---
+    _cache_key = f'health_rollup:u{request.user.id}:d{int(demo_mode)}'
+    _cached = cache.get(_cache_key) if _cache_ttl > 0 else None
+
+    if _cached is not None:
+        _board_stats_map = _cached['board_stats_map']
+    else:
+        _now_health = timezone.now()
+        _at_risk_cutoff = _now_health + timedelta(days=_at_risk_days)
+
+        _board_task_stats = (
+            Task.objects
+            .filter(column__board_id__in=_board_ids, item_type='task')
+            .exclude(progress=100)  # Only active (incomplete) tasks
+            .values('column__board_id')
+            .annotate(
+                active_tasks=Count('id'),
+                late_tasks=Count('id', filter=Q(due_date__lt=_now_health)),
+                at_risk_tasks=Count('id', filter=Q(
+                    due_date__gte=_now_health,
+                    due_date__lte=_at_risk_cutoff,
+                    progress__lt=80,
+                )),
+                no_due_date_tasks=Count('id', filter=Q(due_date__isnull=True)),
+                high_risk_tasks=Count('id', filter=Q(risk_level__in=['high', 'critical'])),
+            )
         )
-    )
-    _board_stats_map = {
-        row['column__board_id']: row
-        for row in _board_task_stats
-    }
+        # Also get total + done for completion %
+        _board_completion_stats = (
+            Task.objects
+            .filter(column__board_id__in=_board_ids, item_type='task')
+            .values('column__board_id')
+            .annotate(
+                total_tasks=Count('id'),
+                done_tasks=Count('id', filter=Q(progress=100)),
+            )
+        )
+        _completion_map = {
+            row['column__board_id']: row for row in _board_completion_stats
+        }
+
+        _board_stats_map = {}
+        for row in _board_task_stats:
+            bid = row['column__board_id']
+            comp = _completion_map.get(bid, {})
+            _board_stats_map[bid] = {
+                'column__board_id': bid,
+                'total_tasks': comp.get('total_tasks', 0),
+                'done_tasks': comp.get('done_tasks', 0),
+                'active_tasks': row['active_tasks'],
+                'late_tasks': row['late_tasks'],
+                'at_risk_tasks': row['at_risk_tasks'],
+                'no_due_date_tasks': row['no_due_date_tasks'],
+                'high_risk_tasks': row['high_risk_tasks'],
+            }
+        # Boards with only completed tasks (no active) still need total/done
+        for bid, comp in _completion_map.items():
+            if bid not in _board_stats_map:
+                _board_stats_map[bid] = {
+                    'column__board_id': bid,
+                    'total_tasks': comp.get('total_tasks', 0),
+                    'done_tasks': comp.get('done_tasks', 0),
+                    'active_tasks': 0,
+                    'late_tasks': 0,
+                    'at_risk_tasks': 0,
+                    'no_due_date_tasks': 0,
+                    'high_risk_tasks': 0,
+                }
+
+        if _cache_ttl > 0:
+            cache.set(_cache_key, {'board_stats_map': _board_stats_map}, _cache_ttl)
+
+    def _compute_board_health(bstats):
+        """Compute dual health (schedule_status, risk_level) for one board."""
+        active = bstats.get('active_tasks', 0)
+        late = bstats.get('late_tasks', 0)
+        at_risk = bstats.get('at_risk_tasks', 0)
+        no_due = bstats.get('no_due_date_tasks', 0)
+        high_risk = bstats.get('high_risk_tasks', 0)
+
+        # Schedule Status denominator = all active tasks (including those with no due date).
+        # Tasks with no due date are NOT assumed "On Track" — they inflate the denominator,
+        # making the board harder to achieve a clean On Track status.
+        denom = active  # includes late + at_risk + no_due + on-track-active
+        if denom == 0:
+            schedule_status = 'on_track'
+        elif late / denom > _board_late_thresh:
+            schedule_status = 'late'
+        elif (late + at_risk) / denom > _board_at_risk_thresh:
+            schedule_status = 'at_risk'
+        else:
+            schedule_status = 'on_track'
+
+        # Risk Level: based on high/critical risk tasks as fraction of active tasks
+        if denom == 0:
+            risk_level = 'low'
+        elif high_risk / denom >= _board_high_risk_thresh:
+            risk_level = 'high'
+        elif high_risk / denom >= _board_med_risk_thresh:
+            risk_level = 'medium'
+        else:
+            risk_level = 'low'
+
+        return schedule_status, risk_level
+
+    def _worst_schedule(*statuses):
+        """Return worst schedule status from a list."""
+        if 'late' in statuses: return 'late'
+        if 'at_risk' in statuses: return 'at_risk'
+        return 'on_track'
+
+    def _worst_risk(*levels):
+        """Return worst risk level from a list."""
+        if 'high' in levels: return 'high'
+        if 'medium' in levels: return 'medium'
+        return 'low'
 
     mission_tree = []
     mission_item_map = {}  # id -> item dict, used for goal_tree grouping
@@ -324,12 +446,11 @@ def dashboard(request):
                 done_t = _bstats.get('done_tasks', 0)
                 high_risk_t = _bstats.get('high_risk_tasks', 0)
                 pct = round((done_t / total_t * 100), 1) if total_t else 0
-                # Board health level (green / amber / red)
-                if total_t == 0:
-                    b_health = 'green'
-                elif high_risk_t / total_t >= 0.3:
+                b_schedule, b_risk = _compute_board_health(_bstats)
+                # Legacy health_level kept for backward compat (charts, etc.)
+                if b_schedule == 'late' or b_risk == 'high':
                     b_health = 'red'
-                elif high_risk_t / total_t >= 0.1:
+                elif b_schedule == 'at_risk' or b_risk == 'medium':
                     b_health = 'amber'
                 else:
                     b_health = 'green'
@@ -340,14 +461,17 @@ def dashboard(request):
                     'high_risk_tasks': high_risk_t,
                     'completion_pct': pct,
                     'health_level': b_health,
+                    'schedule_status': b_schedule,
+                    'risk_level': b_risk,
                 })
             # Strategy health = worst of its boards
+            s_schedules = [b['schedule_status'] for b in board_list]
+            s_risks = [b['risk_level'] for b in board_list]
+            s_schedule = _worst_schedule(*s_schedules) if s_schedules else 'on_track'
+            s_risk = _worst_risk(*s_risks) if s_risks else 'low'
             s_health = 'green'
-            for b in board_list:
-                if b['health_level'] == 'red':
-                    s_health = 'red'; break
-                if b['health_level'] == 'amber':
-                    s_health = 'amber'
+            if s_schedule == 'late' or s_risk == 'high': s_health = 'red'
+            elif s_schedule == 'at_risk' or s_risk == 'medium': s_health = 'amber'
             s_total = sum(b['total_tasks'] for b in board_list)
             s_done  = sum(b['done_tasks']  for b in board_list)
             strategy_list.append({
@@ -355,22 +479,44 @@ def dashboard(request):
                 'boards': board_list,
                 'board_count': len(board_list),
                 'health_level': s_health,
+                'schedule_status': s_schedule,
+                'risk_level': s_risk,
                 'total_tasks': s_total,
                 'done_tasks':  s_done,
                 'completion_pct': round(s_done / s_total * 100, 1) if s_total else 0,
             })
         # Mission health = worst of its strategies
+        m_schedules = [s['schedule_status'] for s in strategy_list]
+        m_risks = [s['risk_level'] for s in strategy_list]
+        m_schedule = _worst_schedule(*m_schedules) if m_schedules else 'on_track'
+        m_risk = _worst_risk(*m_risks) if m_risks else 'low'
         m_health = 'green'
-        for s in strategy_list:
-            if s['health_level'] == 'red':
-                m_health = 'red'; break
-            if s['health_level'] == 'amber':
-                m_health = 'amber'
+        if m_schedule == 'late' or m_risk == 'high': m_health = 'red'
+        elif m_schedule == 'at_risk' or m_risk == 'medium': m_health = 'amber'
+
+        # Mission-level aggregated stats for dashboard card
+        m_total = sum(s['total_tasks'] for s in strategy_list)
+        m_done = sum(s['done_tasks'] for s in strategy_list)
+        m_pct = round(m_done / m_total * 100, 1) if m_total else 0
+
+        # Child summary counts for dashboard card
+        strategies_on_track = sum(1 for s in strategy_list if s['schedule_status'] == 'on_track')
+        strategies_at_risk = sum(1 for s in strategy_list if s['schedule_status'] == 'at_risk')
+        strategies_late = sum(1 for s in strategy_list if s['schedule_status'] == 'late')
+
         item = {
             'mission': mission,
             'strategies': strategy_list,
             'strategy_count': len(strategy_list),
             'health_level': m_health,
+            'schedule_status': m_schedule,
+            'risk_level': m_risk,
+            'total_tasks': m_total,
+            'done_tasks': m_done,
+            'completion_pct': m_pct,
+            'strategies_on_track': strategies_on_track,
+            'strategies_at_risk': strategies_at_risk,
+            'strategies_late': strategies_late,
         }
         mission_tree.append(item)
         mission_item_map[mission.id] = item
@@ -393,6 +539,19 @@ def dashboard(request):
     goal_tree = list(goal_map.values())
     if ungrouped_missions:
         goal_tree.append({'goal': None, 'missions': ungrouped_missions})
+
+    # Compute goal-level health roll-ups
+    for goal_entry in goal_tree:
+        g_schedules = [m['schedule_status'] for m in goal_entry['missions']]
+        g_risks = [m['risk_level'] for m in goal_entry['missions']]
+        goal_entry['schedule_status'] = _worst_schedule(*g_schedules) if g_schedules else 'on_track'
+        goal_entry['risk_level'] = _worst_risk(*g_risks) if g_risks else 'low'
+        goal_entry['total_tasks'] = sum(m['total_tasks'] for m in goal_entry['missions'])
+        goal_entry['done_tasks'] = sum(m['done_tasks'] for m in goal_entry['missions'])
+        goal_entry['completion_pct'] = (
+            round(goal_entry['done_tasks'] / goal_entry['total_tasks'] * 100, 1)
+            if goal_entry['total_tasks'] else 0
+        )
 
     # Build chart data for the metrics side panel (used by Chart.js)
     # Rolled up from already-computed board stats — zero additional DB queries

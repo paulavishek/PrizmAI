@@ -2,6 +2,31 @@
 
 {% block title %}{{ goal.name }} - Organization Goal - PrizmAI{% endblock %}
 
+{% block extra_css %}
+<style>
+    .status-pill, .risk-pill {
+        display:inline-flex; align-items:center; gap:4px;
+        font-size:0.68rem; font-weight:700; padding:0.2em 0.65em;
+        border-radius:12px; text-transform:uppercase; letter-spacing:0.03em; white-space:nowrap;
+    }
+    .status-pill .pill-dot, .risk-pill .pill-dot {
+        width:7px; height:7px; border-radius:50%; display:inline-block; flex-shrink:0;
+    }
+    .status-pill.on-track  { background:#d1fae5; color:#065f46; }
+    .status-pill.on-track .pill-dot  { background:#10b981; }
+    .status-pill.at-risk   { background:#fef3c7; color:#92400e; }
+    .status-pill.at-risk .pill-dot   { background:#f59e0b; }
+    .status-pill.late      { background:#fee2e2; color:#7f1d1d; }
+    .status-pill.late .pill-dot      { background:#ef4444; }
+    .risk-pill.low    { background:#d1fae5; color:#065f46; }
+    .risk-pill.low .pill-dot    { background:#10b981; }
+    .risk-pill.medium { background:#fef3c7; color:#92400e; }
+    .risk-pill.medium .pill-dot { background:#f59e0b; }
+    .risk-pill.high   { background:#fee2e2; color:#7f1d1d; }
+    .risk-pill.high .pill-dot   { background:#ef4444; }
+</style>
+{% endblock %}
+
 {% block content %}
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb small">
@@ -67,6 +92,29 @@
     </div>
 </div>
 
+<!-- Goal Health Summary Bar -->
+{% if goal_total_tasks %}
+<div class="card shadow-sm mb-4" style="border-radius:12px;">
+    <div class="card-body py-3 d-flex flex-wrap align-items-center gap-3">
+        <span class="fw-semibold small text-muted"><i class="fas fa-heartbeat me-1"></i>Health</span>
+        <span class="status-pill {{ goal_schedule_status|default:'on_track' }}">
+            <span class="pill-dot"></span>{{ goal_schedule_status|default:"on_track"|title }}
+        </span>
+        <span class="risk-pill {{ goal_risk_level|default:'low' }}">
+            <span class="pill-dot"></span>{{ goal_risk_level|default:"low"|title }} Risk
+        </span>
+        <span class="text-muted small">|</span>
+        <div class="d-flex align-items-center gap-2 flex-grow-1" style="max-width:300px;">
+            <div class="progress flex-grow-1" style="height:8px; border-radius:4px;">
+                <div class="progress-bar bg-success" style="width:{{ goal_completion_pct }}%"></div>
+            </div>
+            <small class="fw-bold text-nowrap">{{ goal_completion_pct }}%</small>
+        </div>
+        <small class="text-muted">{{ goal_done_tasks }}/{{ goal_total_tasks }} tasks done</small>
+    </div>
+</div>
+{% endif %}
+
 <!-- AI Summary (if populated) -->
 {% if goal.ai_summary %}
 <div class="card border-warning shadow-sm mb-4">
@@ -112,9 +160,30 @@
                         <span class="badge bg-warning text-dark">On Hold</span>
                     {% endif %}
                 </div>
-                <p class="card-text text-muted small mb-3">
+                <p class="card-text text-muted small mb-2">
                     {% if mission.description %}{{ mission.description|truncatechars:100 }}{% else %}<em>No description.</em>{% endif %}
                 </p>
+
+                <!-- Health pills -->
+                <div class="d-flex align-items-center flex-wrap gap-2 mb-2">
+                    <span class="status-pill {{ mission.health_schedule }}">
+                        <span class="pill-dot"></span>{{ mission.health_schedule|title }}
+                    </span>
+                    <span class="risk-pill {{ mission.health_risk }}">
+                        <span class="pill-dot"></span>{{ mission.health_risk|title }} Risk
+                    </span>
+                </div>
+
+                <!-- Progress bar -->
+                {% if mission.health_total %}
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <div class="progress flex-grow-1" style="height:6px; border-radius:3px;">
+                        <div class="progress-bar bg-success" style="width:{{ mission.health_pct }}%"></div>
+                    </div>
+                    <small class="fw-bold text-nowrap">{{ mission.health_pct }}%</small>
+                </div>
+                {% endif %}
+
                 <div class="d-flex gap-3 mb-2">
                     <small class="text-muted">
                         <i class="fas fa-lightbulb me-1 text-success"></i>
