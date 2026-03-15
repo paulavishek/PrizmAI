@@ -190,23 +190,231 @@
     }
     
     /* Live filter - hide non-matching tasks */
+    .kanban-task-v2.filtered-out,
     .kanban-task.filtered-out {
         display: none !important;
     }
-    
-    /* Task card hover menu (3-dot) */
-    .kanban-task { position: relative; }
-    .task-hover-menu {
-        position: absolute;
-        top: 6px;
-        right: 6px;
-        opacity: 0;
-        transition: opacity .15s;
-        z-index: 2;
+
+    /* ════ Redesigned Card (v2 — 110px compact) ════ */
+    .kanban-task-v2 {
+        position: relative;
+        background: var(--card-bg);
+        border-radius: 6px;
+        border-left: 4px solid #6c757d;   /* overridden inline per-priority */
+        padding: 10px 10px 14px;
+        margin-bottom: 8px;
+        max-height: 110px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px var(--shadow-color);
+        cursor: pointer;
+        transition: transform .15s, box-shadow .15s;
     }
-    .kanban-task:hover .task-hover-menu { opacity: 1; }
-    .task-hover-menu .btn { width: 22px; height: 22px; font-size: .75rem; }
-    
+    .kanban-task-v2:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 3px 8px var(--shadow-color);
+    }
+    .kanban-task-v2.dragging { opacity: .6; transform: rotate(1deg) scale(1.02); z-index: 1000; }
+    .kanban-task-v2.done-card { opacity: .65; }
+
+    .card-inner { display: flex; flex-direction: column; gap: 4px; }
+
+    /* Title — 2-line clamp */
+    .card-task-title {
+        font-weight: 600;
+        font-size: .82rem;
+        line-height: 1.3;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        color: var(--text-primary);
+    }
+
+    /* Meta row */
+    .card-meta-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 6px;
+        font-size: .72rem;
+    }
+    .card-due {
+        color: var(--text-secondary);
+        white-space: nowrap;
+    }
+    .card-due.overdue { color: #dc3545; font-weight: 600; }
+    .card-due.at-risk { color: #f59e0b; font-weight: 600; }
+
+    /* Label pills */
+    .card-label-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        font-size: .65rem;
+        font-weight: 600;
+        padding: 1px 6px;
+        border-radius: 8px;
+        background: var(--bg-tertiary);
+        color: var(--text-secondary);
+        white-space: nowrap;
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .card-label-overflow {
+        font-size: .62rem;
+        font-weight: 700;
+        padding: 1px 5px;
+        border-radius: 8px;
+        background: var(--bg-tertiary);
+        color: var(--text-muted);
+        cursor: default;
+        position: relative;
+    }
+    .card-label-overflow:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: 110%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1a1a2e;
+        color: #fff;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: .65rem;
+        white-space: nowrap;
+        z-index: 10;
+        pointer-events: none;
+    }
+
+    /* Avatar */
+    .card-avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px; height: 24px;
+        border-radius: 50%;
+        background: #6c757d;
+        color: #fff;
+        font-size: .6rem;
+        font-weight: 700;
+        flex-shrink: 0;
+        overflow: hidden;
+    }
+    .card-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+
+    /* 3px progress strip at bottom */
+    .card-progress-strip {
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 3px;
+        background: var(--bg-tertiary);
+        border-radius: 0 0 6px 0;
+    }
+    .card-progress-fill {
+        height: 100%;
+        border-radius: 0 0 0 6px;
+        transition: width .3s;
+    }
+
+    /* ══ Hover action bar ══ */
+    .card-hover-actions {
+        position: absolute;
+        bottom: 4px; left: 4px; right: 4px;
+        display: flex;
+        gap: 4px;
+        justify-content: center;
+        opacity: 0;
+        transition: opacity .2s;
+        z-index: 3;
+        pointer-events: none;
+    }
+    .kanban-task-v2:hover .card-hover-actions {
+        opacity: 1;
+        pointer-events: auto;
+    }
+    .card-action-btn {
+        font-size: .65rem;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: rgba(0,0,0,.7);
+        color: #fff;
+        border: none;
+        cursor: pointer;
+        text-decoration: none;
+        white-space: nowrap;
+    }
+    .card-action-btn:hover { background: rgba(0,0,0,.9); color: #fff; text-decoration: none; }
+
+    /* Inline pickers */
+    .inline-status-picker, .inline-assignee-picker {
+        position: absolute;
+        bottom: 28px; left: 4px; right: 4px;
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        box-shadow: 0 4px 12px var(--shadow-dark);
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        max-height: 200px;
+        overflow-y: auto;
+    }
+    .inline-pick-option {
+        border: none;
+        background: none;
+        padding: 6px 10px;
+        text-align: left;
+        font-size: .78rem;
+        cursor: pointer;
+        color: var(--text-primary);
+    }
+    .inline-pick-option:hover { background: var(--bg-tertiary); }
+    .inline-pick-option.active { font-weight: 700; color: #0d6efd; }
+
+    /* ════ Column header — WIP badges ════ */
+    .wip-badge {
+        display: inline-flex;
+        align-items: center;
+        font-size: .65rem;
+        font-weight: 600;
+        padding: 1px 7px;
+        border-radius: 8px;
+        background: #d4edda;
+        color: #155724;
+    }
+    .wip-badge.exceeded {
+        background: #fff3cd;
+        color: #856404;
+    }
+    .wip-exceeded-header {
+        background-color: #fef3c7 !important;
+    }
+
+    /* ════ Quick-View Drawer ════ */
+    .task-drawer {
+        position: fixed;
+        top: 0; right: 0;
+        width: 480px;
+        max-width: 100vw;
+        height: 100vh;
+        background: var(--card-bg, #fff);
+        box-shadow: -4px 0 20px rgba(0,0,0,.25);
+        z-index: 1060;
+        transform: translateX(100%);
+        transition: transform .3s ease;
+        overflow-y: auto;
+    }
+    .task-drawer.open { transform: translateX(0); }
+    .drawer-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,.45);
+        z-index: 1055;
+        display: none;
+    }
+    .drawer-backdrop.open { display: block; }
+
     /* Task Search Bar Styling */
     #taskSearchCard {
         border-left: 4px solid #0d6efd;
@@ -539,45 +747,66 @@
 <!-- Kanban Board -->
 <div class="kanban-board" id="kanban-board">
     {% for column in columns %}
-    <div class="kanban-column" id="column-{{ column.id }}" data-column-id="{{ column.id }}" draggable="true">
-        <div class="kanban-column-header">            <div class="d-flex justify-content-between align-items-center w-100">
-                <div class="d-flex align-items-center">
-                    <span class="column-position-badge">{{ column.position|add:1 }}</span>
-                    <span class="column-name-text">{{ column.name }}</span>
-                    <span class="ms-2" style="font-size: 0.8rem; color: #6c757d; white-space: nowrap;">
-                        <span style="font-weight: 500;">Tasks:</span> <span class="column-task-count"></span>
+    {% with col_meta=column_meta|get_item:column.id %}
+    <div class="kanban-column {% if col_meta.wip_exceeded %}wip-exceeded{% endif %}" id="column-{{ column.id }}" data-column-id="{{ column.id }}" draggable="true">
+        {# ── Column Header (redesigned) ── #}
+        <div class="kanban-column-header {% if col_meta.wip_exceeded %}wip-exceeded-header{% endif %}">
+            <div class="d-flex justify-content-between align-items-center w-100">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="column-name-text fw-bold">{{ column.name }}</span>
+                    <span class="badge rounded-pill bg-secondary column-task-count-badge" style="font-size:.7rem;">{{ col_meta.task_count }}</span>
+                    {% if col_meta.wip_limit is not None %}
+                    <span class="wip-badge {% if col_meta.wip_exceeded %}exceeded{% endif %}" title="WIP Limit: {{ col_meta.wip_limit }}">
+                        {% if col_meta.wip_exceeded %}<i class="fas fa-exclamation-triangle me-1"></i>{% endif %}WIP {{ col_meta.wip_limit }}
                     </span>
+                    {% endif %}
                 </div>
-                <div>
+                <div class="d-flex align-items-center gap-1">
                     {% if column.id in column_permissions %}
                         {% if not column_permissions|get_item:column.id|get_item:'can_move_to' %}
-                        <span class="badge bg-warning ms-2" title="You cannot move tasks into this column">
-                            <i class="fas fa-lock"></i> Restricted
+                        <span class="badge bg-warning" title="You cannot move tasks into this column" style="font-size:.6rem;">
+                            <i class="fas fa-lock"></i>
                         </span>
                         {% endif %}
                     {% endif %}
-                </div>                <div class="column-actions">
-                    <!-- "…" overflow menu — edit always visible, delete hidden for To Do -->
                     <div class="dropdown">
-                        <button type="button" class="btn btn-sm btn-outline-secondary"
-                                data-bs-toggle="dropdown" aria-expanded="false" title="Column options">
+                        <button type="button" class="btn btn-sm btn-link text-muted p-0"
+                                data-bs-toggle="dropdown" aria-expanded="false" title="Column options"
+                                style="font-size:1rem;line-height:1;">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" style="font-size:.85rem;">
                             <li>
+                                <button type="button" class="dropdown-item set-wip-btn"
+                                        data-column-id="{{ column.id }}" data-wip="{{ col_meta.wip_limit|default_if_none:'' }}">
+                                    <i class="fas fa-tachometer-alt me-2 text-info"></i>Set WIP Limit
+                                </button>
+                            </li>
+                            <li>
+                                <button type="button" class="dropdown-item collapse-column-btn"
+                                        data-column-id="{{ column.id }}">
+                                    <i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column
+                                </button>
+                            </li>
+                            <li>
+                                <a class="dropdown-item" href="{% url 'create_task_in_column' board.id column.id %}">
+                                    <i class="fas fa-plus me-2 text-success"></i>Add Task
+                                </a>
+                            </li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
                                 <button type="button" class="dropdown-item edit-column-btn"
                                         data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
                                         data-bs-toggle="modal" data-bs-target="#editColumnModal">
-                                    <i class="fas fa-edit me-2 text-primary"></i>Rename column
+                                    <i class="fas fa-edit me-2 text-primary"></i>Rename
                                 </button>
                             </li>
                             {% if not column.name|lower == 'to do' and not column.name|lower == 'todo' %}
-                            <li><hr class="dropdown-divider"></li>
                             <li>
                                 <button type="button" class="dropdown-item text-danger delete-column-btn"
                                         data-column-id="{{ column.id }}" data-column-name="{{ column.name }}"
                                         data-bs-toggle="modal" data-bs-target="#deleteColumnModal">
-                                    <i class="fas fa-trash-alt me-2"></i>Delete column
+                                    <i class="fas fa-trash-alt me-2"></i>Delete
                                 </button>
                             </li>
                             {% endif %}
@@ -585,120 +814,104 @@
                     </div>
                 </div>
             </div>
-        </div>        <div class="kanban-column-tasks" data-column-id="{{ column.id }}">
+        </div>
+
+        {# ── Task Cards (redesigned — compact, 110px) ── #}
+        <div class="kanban-column-tasks" data-column-id="{{ column.id }}">
             {% for task in tasks %}
                 {% if task.column.id == column.id %}
-                <div class="kanban-task" id="task-{{ task.id }}" data-task-url="{% url 'task_detail' task.id %}">
-                    <!-- 3-dot hover menu -->
-                    <div class="task-hover-menu">
-                        <div class="dropdown">
-                            <button class="btn btn-sm btn-light border-0 p-0" type="button" data-bs-toggle="dropdown" aria-expanded="false" style="line-height:1;">
-                                <i class="fas fa-ellipsis-v text-muted"></i>
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end" style="font-size:.85rem;">
-                                <li><a class="dropdown-item" href="{% url 'task_detail' task.id %}"><i class="fas fa-eye me-2"></i>View</a></li>
-                                <li><a class="dropdown-item" href="{% url 'task_detail' task.id %}"><i class="fas fa-edit me-2"></i>Edit</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><button type="button" class="dropdown-item text-danger delete-task-btn"
-                                        data-task-id="{{ task.id }}" data-task-title="{{ task.title }}"
-                                        data-bs-toggle="modal" data-bs-target="#deleteTaskModal">
-                                    <i class="fas fa-trash-alt me-2"></i>Delete
-                                </button></li>
-                            </ul>
+                <div class="kanban-task-v2 {% if task.progress == 100 %}done-card{% endif %}"
+                     id="task-{{ task.id }}"
+                     draggable="true"
+                     data-task-id="{{ task.id }}"
+                     hx-get="{% url 'task_quick_view' task.id %}"
+                     hx-target="#task-drawer-body"
+                     hx-swap="innerHTML"
+                     hx-trigger="click"
+                     style="border-left-color:{% if task.priority == 'high' or task.priority == 'urgent' %}#dc3545{% elif task.priority == 'medium' %}#f59e0b{% else %}#6c757d{% endif %};">
+                    {# ── Card body ── #}
+                    <div class="card-inner">
+                        <div class="card-title-row">
+                            <span class="card-task-title">{{ task.title }}</span>
                         </div>
-                    </div>
-
-                    <div class="task-title">{{ task.title }}</div>
-                    
-                    <!-- Compact progress bar -->
-                    <div class="task-progress-container mt-2 mb-1">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <button type="button" class="btn btn-sm btn-outline-secondary progress-btn decrease-progress" 
-                                    data-task-id="{{ task.id }}" title="Decrease progress by 10%">
-                                <i class="fas fa-minus"></i>
-                            </button>
-                            <div class="progress flex-grow-1 mx-1" style="height: 6px;">
-                                <div class="progress-bar {% if task.progress == 100 %}bg-success{% elif task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
-                                     role="progressbar"
-                                     style="width: {{ task.progress }}%;"
-                                     data-progress="{{ task.progress }}"
-                                     aria-valuenow="{{ task.progress }}"
-                                     aria-valuemin="0"
-                                     aria-valuemax="100">
-                                </div>
-                            </div>
-                            <button type="button" class="btn btn-sm btn-outline-secondary progress-btn increase-progress" 
-                                    data-task-id="{{ task.id }}" title="Increase progress by 10%">
-                                <i class="fas fa-plus"></i>
-                            </button>
-                        </div>
-                        <div class="text-center"><small class="text-muted" style="font-size:.75rem;">{{ task.progress }}%</small></div>
-                    </div>
-
-                    {% if task.labels.all %}
-                    <div class="task-labels">
-                        {% for label in task.labels.all %}
-                            {% if label.category == 'lean' %}
-                                <span class="task-label lean-label" data-color="{{ label.color|default:'#6c757d' }}" 
-                                      title="Lean Six Sigma: {{ label.name }}">
-                                    <i class="fas fa-chart-line"></i> {{ label.name }}
+                        <div class="card-meta-row">
+                            <div class="d-flex align-items-center gap-2">
+                                {% if task.due_date %}
+                                <span class="card-due {% if task.is_overdue %}overdue{% elif task.is_at_risk %}at-risk{% endif %}">
+                                    <i class="far fa-calendar-alt"></i>
+                                    {{ task.due_date|date:"M d" }}
+                                    {% if task.is_overdue or task.is_at_risk %}<i class="fas fa-exclamation-triangle ms-1"></i>{% endif %}
                                 </span>
-                            {% else %}
-                                <span class="task-label" data-color="{{ label.color|default:'#6c757d' }}">{{ label.name }}</span>
-                            {% endif %}
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                    
-                    <div class="task-footer">
-                        <div class="d-flex align-items-center gap-1">
-                            <span class="task-priority priority-{{ task.priority }}">{{ task.priority|title }}</span>
-                            {% with status=task.progress_status %}
-                            {% if status == 'at_risk' %}
-                            <span class="badge bg-warning text-dark" style="font-size:.65rem;" title="At Risk"><i class="fas fa-exclamation-triangle"></i></span>
-                            {% elif status == 'late' %}
-                            <span class="badge bg-danger" style="font-size:.65rem;" title="Late"><i class="fas fa-times-circle"></i></span>
-                            {% endif %}
-                            {% endwith %}
-                        </div>
-                        <div>
-                            {% if task.due_date %}
-                            <span class="task-due-date {% if task.due_date < now and task.progress < 100 %}overdue{% endif %}" style="font-size:.8rem;">
-                                <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d" }}
+                                {% endif %}
+                                {% if task.labels.all %}
+                                <span class="card-label-primary">
+                                    {% with first_label=task.labels.all.0 %}
+                                    {% if first_label.category == 'lean' %}<i class="fas fa-chart-line" style="font-size:.55rem;"></i> {% endif %}{{ first_label.name }}
+                                    {% endwith %}
+                                </span>
+                                {% with extra=task.labels.all|length %}
+                                {% if extra > 1 %}
+                                <span class="card-label-overflow" title="{% for lbl in task.labels.all %}{% if not forloop.first %}{{ lbl.name }}{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}">+{{ extra|add:"-1" }}</span>
+                                {% endif %}
+                                {% endwith %}
+                                {% endif %}
+                            </div>
+                            {% if task.assigned_to %}
+                            <span class="card-avatar" title="{{ task.assigned_to.get_full_name|default:task.assigned_to.username }}">
+                                {% if task.assigned_to.profile.profile_picture %}
+                                <img src="{{ task.assigned_to.profile.profile_picture.url }}" alt="{{ task.assigned_to.username }}">
+                                {% else %}
+                                {{ task.assigned_to.first_name|default:task.assigned_to.username|slice:":1"|upper }}{{ task.assigned_to.last_name|slice:":1"|upper }}
+                                {% endif %}
                             </span>
                             {% endif %}
                         </div>
                     </div>
 
-                    {% if task.assigned_to %}
-                    <div class="task-assignee mt-1">
-                        {% if task.assigned_to.profile.profile_picture %}
-                        <img src="{{ task.assigned_to.profile.profile_picture.url }}" alt="{{ task.assigned_to.username }}" class="task-assignee-avatar">
-                        {% else %}
-                        <span class="task-assignee-avatar bg-secondary text-white d-flex align-items-center justify-content-center" style="width:20px;height:20px;font-size:.7rem;">
-                            {{ task.assigned_to.username|slice:":1" }}
-                        </span>
-                        {% endif %}
-                        <small style="font-size:.8rem;">{{ task.assigned_to.username }}</small>
+                    {# ── Hover action bar ── #}
+                    <div class="card-hover-actions" onclick="event.stopPropagation();">
+                        <button class="card-action-btn status-change-btn" data-task-id="{{ task.id }}" title="Change status">⇄ Status</button>
+                        <button class="card-action-btn assignee-change-btn" data-task-id="{{ task.id }}" title="Assign">+ Assign</button>
+                        <a href="{% url 'task_detail' task.id %}" class="card-action-btn" title="Open full detail">↗ Open</a>
                     </div>
-                    {% endif %}
+
+                    {# ── Inline status dropdown (hidden by default) ── #}
+                    <div class="inline-status-picker d-none" data-task-id="{{ task.id }}" onclick="event.stopPropagation();">
+                        {% for col in columns %}
+                        <button class="inline-pick-option {% if col.id == task.column.id %}active{% endif %}"
+                                data-column-id="{{ col.id }}">{{ col.name }}</button>
+                        {% endfor %}
+                    </div>
+
+                    {# ── Inline assignee picker (hidden by default) ── #}
+                    <div class="inline-assignee-picker d-none" data-task-id="{{ task.id }}" onclick="event.stopPropagation();">
+                        <button class="inline-pick-option {% if not task.assigned_to %}active{% endif %}"
+                                data-assignee-id="">Unassigned</button>
+                        {% for member in board_members_list %}
+                        <button class="inline-pick-option {% if task.assigned_to and task.assigned_to.id == member.id %}active{% endif %}"
+                                data-assignee-id="{{ member.id }}">{{ member.get_full_name|default:member.username }}</button>
+                        {% endfor %}
+                    </div>
+
+                    {# ── 3px progress bar at bottom ── #}
+                    <div class="card-progress-strip">
+                        <div class="card-progress-fill {% if task.progress == 100 %}bg-success{% elif task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                             style="width:{{ task.progress }}%;" data-progress="{{ task.progress }}"></div>
+                    </div>
                 </div>
                 {% endif %}
             {% endfor %}
         </div>
-        {% comment %}
-        Show "Add Task" button in:
-        1. Any column named "To Do" or "ToDo" (case insensitive)
-        2. The first column if no "To Do" column exists (fallback for AI-generated columns)
-        {% endcomment %}
-        {% if column.name|lower == 'to do' or column.name|lower == 'todo' or column.name|lower == 'backlog' or forloop.first %}
+
+        {# ── Add Task Button ── #}
         <div class="p-2">
-            <a href="{% url 'create_task_in_column' board.id column.id %}" class="btn btn-sm btn-primary add-task-btn">
-                <i class="fas fa-plus me-1"></i> Add Task
+            <a href="{% url 'create_task_in_column' board.id column.id %}" class="btn btn-sm btn-outline-secondary w-100 add-task-btn"
+               onclick="event.stopPropagation();">
+                <i class="fas fa-plus me-1"></i> Add task
             </a>
         </div>
-        {% endif %}
     </div>
+    {% endwith %}
     {% endfor %}
     
     <!-- Add Column Button -->
@@ -709,7 +922,11 @@
     </div>
 </div>
 
-<!-- Wiki Links Section -->
+{# ═══════ Quick-View Drawer (Tier 1) ═══════ #}
+<div id="drawer-backdrop" class="drawer-backdrop"></div>
+<div id="task-drawer" class="task-drawer">
+    <div id="task-drawer-body"></div>
+</div>
 <!-- Wiki Links moved to Board Settings → Link Wiki Pages (3-dot menu) -->
 
 <!-- Delete Column Modal -->
@@ -943,24 +1160,146 @@
         });
 
         // Set progress bar widths after DOM is loaded
-        document.querySelectorAll('.progress-bar[data-progress]').forEach(el => {
+        document.querySelectorAll('.progress-bar[data-progress], .card-progress-fill[data-progress]').forEach(el => {
             const progressValue = el.dataset.progress;
             el.style.width = progressValue + '%';
-            el.setAttribute('aria-valuenow', progressValue);
-            // Force a repaint to ensure the width is applied
+            if (el.setAttribute) el.setAttribute('aria-valuenow', progressValue);
             el.offsetHeight;
         });
         
-        // Set up search panel toggle icon rotation using Bootstrap events
-        // (search is now inside boardToolsPanel collapse — no separate toggle needed)
-        
-        // Task card click → navigate to task detail (unless clicking a button/link)
-        document.querySelectorAll('.kanban-task[data-task-url]').forEach(card => {
-            card.style.cursor = 'pointer';
-            card.addEventListener('click', function(e) {
-                if (e.target.closest('button, a, .dropdown-menu, .progress-btn')) return;
-                window.location.href = this.dataset.taskUrl;
+        // ── Quick-view drawer open / close ──
+        const drawer    = document.getElementById('task-drawer');
+        const backdrop  = document.getElementById('drawer-backdrop');
+
+        window.openDrawer = function() {
+            drawer.classList.add('open');
+            backdrop.classList.add('open');
+            document.body.style.overflow = 'hidden';
+        };
+        window.closeDrawer = function() {
+            drawer.classList.remove('open');
+            backdrop.classList.remove('open');
+            document.body.style.overflow = '';
+        };
+        backdrop.addEventListener('click', closeDrawer);
+
+        // HTMX: after drawer content loads, slide it open
+        document.body.addEventListener('htmx:afterSwap', function(e) {
+            if (e.detail.target && e.detail.target.id === 'task-drawer-body') {
+                openDrawer();
+            }
+        });
+
+        // ── Inline status picker (card hover bar) ──
+        // Attach directly to buttons (not document delegation) because
+        // the parent .card-hover-actions div uses stopPropagation to
+        // prevent card-level HTMX click from firing.
+        function getCsrfToken() {
+            return document.querySelector('[name=csrfmiddlewaretoken]')?.value
+                || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+        }
+        function closeAllPickers() {
+            document.querySelectorAll('.inline-status-picker:not(.d-none), .inline-assignee-picker:not(.d-none)').forEach(p => p.classList.add('d-none'));
+        }
+
+        document.querySelectorAll('.status-change-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const card = this.closest('.kanban-task-v2');
+                const picker = card.querySelector('.inline-status-picker');
+                closeAllPickers();
+                picker.classList.toggle('d-none');
             });
+        });
+
+        document.querySelectorAll('.inline-status-picker .inline-pick-option').forEach(function(opt) {
+            opt.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const columnId = this.dataset.columnId;
+                const picker   = this.closest('.inline-status-picker');
+                const taskId   = picker.dataset.taskId;
+                const fd = new FormData();
+                fd.append('column_id', columnId);
+                fetch(`/tasks/${taskId}/update-status/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCsrfToken() },
+                    body: fd,
+                }).then(r => r.json()).then(() => location.reload());
+                picker.classList.add('d-none');
+            });
+        });
+
+        // ── Inline assignee picker (card hover bar) ──
+        document.querySelectorAll('.assignee-change-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const card = this.closest('.kanban-task-v2');
+                const picker = card.querySelector('.inline-assignee-picker');
+                closeAllPickers();
+                picker.classList.toggle('d-none');
+            });
+        });
+
+        document.querySelectorAll('.inline-assignee-picker .inline-pick-option').forEach(function(opt) {
+            opt.addEventListener('click', function(e) {
+                e.stopPropagation();
+                const assigneeId = this.dataset.assigneeId;
+                const picker     = this.closest('.inline-assignee-picker');
+                const taskId     = picker.dataset.taskId;
+                const fd = new FormData();
+                fd.append('assignee_id', assigneeId);
+                fetch(`/tasks/${taskId}/update-assignee/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCsrfToken() },
+                    body: fd,
+                }).then(r => r.json()).then(() => location.reload());
+                picker.classList.add('d-none');
+            });
+        });
+
+        // ── Close any open inline pickers when clicking elsewhere ──
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.inline-status-picker, .inline-assignee-picker, .status-change-btn, .assignee-change-btn')) {
+                closeAllPickers();
+            }
+        });
+
+        // ── Set WIP Limit handler ──
+        document.addEventListener('click', function(e) {
+            const wipBtn = e.target.closest('.set-wip-btn');
+            if (wipBtn) {
+                const columnId = wipBtn.dataset.columnId;
+                const current  = wipBtn.dataset.wip;
+                const val = prompt('Set WIP limit (leave blank to remove):', current);
+                if (val === null) return;
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
+                                || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+                const fd = new FormData();
+                fd.append('wip_limit', val);
+                fetch(`/columns/${columnId}/update-wip/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': csrfToken },
+                    body: fd,
+                }).then(r => r.json()).then(() => location.reload());
+            }
+        });
+
+        // ── Collapse Column handler ──
+        document.addEventListener('click', function(e) {
+            const collapseBtn = e.target.closest('.collapse-column-btn');
+            if (collapseBtn) {
+                const colId = collapseBtn.dataset.columnId;
+                const colEl = document.getElementById('column-' + colId);
+                if (colEl) {
+                    const tasksDiv = colEl.querySelector('.kanban-column-tasks');
+                    const addBtn  = colEl.querySelector('.p-2');
+                    if (tasksDiv) tasksDiv.classList.toggle('d-none');
+                    if (addBtn)  addBtn.classList.toggle('d-none');
+                    collapseBtn.innerHTML = tasksDiv && tasksDiv.classList.contains('d-none')
+                        ? '<i class="fas fa-expand-alt me-2 text-secondary"></i>Expand Column'
+                        : '<i class="fas fa-compress-alt me-2 text-secondary"></i>Collapse Column';
+                }
+            }
         });
         
         // Set up column delete functionality
@@ -977,7 +1316,7 @@
                 // Count tasks currently in this column
                 const columnEl = document.getElementById('column-' + columnId);
                 const taskCount = columnEl
-                    ? columnEl.querySelectorAll('.kanban-task').length
+                    ? columnEl.querySelectorAll('.kanban-task-v2').length
                     : 0;
                 document.getElementById('deleteColumnTaskCount').textContent = taskCount;
             });

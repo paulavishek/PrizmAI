@@ -480,12 +480,22 @@ class Column(models.Model):
     name = models.CharField(max_length=100)
     board = models.ForeignKey(Board, on_delete=models.CASCADE, related_name='columns')
     position = models.IntegerField(default=0)
+    wip_limit = models.PositiveIntegerField(null=True, blank=True, default=None,
+                                            help_text="Maximum number of tasks allowed in this column. Leave blank for no limit.")
     
     class Meta:
         ordering = ['position']
     
     def __str__(self):
         return f"{self.name} - {self.board.name}"
+    
+    def is_wip_exceeded(self, task_count=None):
+        """Return True if the column has exceeded its WIP limit."""
+        if self.wip_limit is None:
+            return False
+        if task_count is None:
+            task_count = self.task_set.filter(item_type='task').count()
+        return task_count > self.wip_limit
 
 class TaskLabel(models.Model):
     CATEGORY_CHOICES = [

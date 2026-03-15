@@ -239,7 +239,7 @@ if (typeof kanbanInitialized === 'undefined') {
 }
 
 function initKanbanBoard() {
-    const tasks = document.querySelectorAll('.kanban-task');
+    const tasks = document.querySelectorAll('.kanban-task, .kanban-task-v2');
     const columns = document.querySelectorAll('.kanban-column-tasks');
     
     // Initialize column scrolling based on task count
@@ -726,7 +726,7 @@ function dragEnter(e) {
     column.classList.add('drag-over');
     
     // If column is short, extend it temporarily
-    const tasks = column.querySelectorAll('.kanban-task:not(.dragging)');
+    const tasks = column.querySelectorAll('.kanban-task:not(.dragging), .kanban-task-v2:not(.dragging)');
     if (tasks.length < 3) { // If column has few tasks
         column.classList.add('drag-over-extended');
     }
@@ -775,7 +775,7 @@ function drop(e) {
         // Calculate drop position within the column
         const rect = column.getBoundingClientRect();
         const mouseY = e.clientY - rect.top;
-        const tasks = Array.from(column.querySelectorAll('.kanban-task:not(.dragging)'));
+        const tasks = Array.from(column.querySelectorAll('.kanban-task:not(.dragging), .kanban-task-v2:not(.dragging)'));
         
         let insertIndex = tasks.length; // Default to end
         
@@ -864,7 +864,7 @@ function updateColumnTaskCount(columnWrapper, taskCount) {
 function updateAllColumnTaskCounts() {
     const columns = document.querySelectorAll('.kanban-column-tasks');
     columns.forEach(column => {
-        const tasks = column.querySelectorAll('.kanban-task');
+        const tasks = column.querySelectorAll('.kanban-task, .kanban-task-v2');
         const taskCount = tasks.length;
         const columnWrapper = column.closest('.kanban-column');
         updateColumnTaskCount(columnWrapper, taskCount);
@@ -879,7 +879,7 @@ function updateColumnScrolling() {
         console.log(`Found ${columns.length} columns`);
         
         columns.forEach((column, index) => {
-            const tasks = column.querySelectorAll('.kanban-task');
+            const tasks = column.querySelectorAll('.kanban-task, .kanban-task-v2');
             const taskCount = tasks.length;
             const columnWrapper = column.closest('.kanban-column');
             
@@ -1047,7 +1047,7 @@ function addDropZoneIndicator(column) {
 function showDropZoneIndicators() {
     document.querySelectorAll('.drop-zone-indicator').forEach(indicator => {
         const column = indicator.parentElement;
-        const tasks = column.querySelectorAll('.kanban-task:not(.dragging)');
+        const tasks = column.querySelectorAll('.kanban-task:not(.dragging), .kanban-task-v2:not(.dragging)');
         
         // Show indicator for columns with few tasks
         if (tasks.length < 4) {
@@ -1372,7 +1372,7 @@ function addKeyboardSupport() {
         const activeElement = document.activeElement;
         
         // Handle task selection and movement with keyboard
-        if (activeElement && activeElement.classList.contains('kanban-task')) {
+        if (activeElement && (activeElement.classList.contains('kanban-task') || activeElement.classList.contains('kanban-task-v2'))) {
             switch(e.key) {
                 case 'ArrowRight':
                     e.preventDefault();
@@ -1393,16 +1393,15 @@ function addKeyboardSupport() {
                 case 'Enter':
                 case ' ':
                     e.preventDefault();
-                    // Open task detail or trigger edit
-                    const taskId = activeElement.id.replace('task-', '');
-                    window.location.href = `/tasks/${taskId}/`;
+                    // Trigger HTMX click to open quick-view drawer (or navigate for old cards)
+                    activeElement.click();
                     break;
             }
         }
     });
     
     // Make tasks focusable for keyboard navigation
-    document.querySelectorAll('.kanban-task').forEach(task => {
+    document.querySelectorAll('.kanban-task, .kanban-task-v2').forEach(task => {
         task.setAttribute('tabindex', '0');
         task.addEventListener('focus', function() {
             this.style.outline = '2px solid #007bff';
@@ -1460,7 +1459,7 @@ function moveTaskToPrevColumn(taskElement) {
 }
 
 function focusPreviousTask(taskElement) {
-    const allTasks = Array.from(document.querySelectorAll('.kanban-task'));
+    const allTasks = Array.from(document.querySelectorAll('.kanban-task, .kanban-task-v2'));
     const currentIndex = allTasks.indexOf(taskElement);
     
     if (currentIndex > 0) {
@@ -1469,7 +1468,7 @@ function focusPreviousTask(taskElement) {
 }
 
 function focusNextTask(taskElement) {
-    const allTasks = Array.from(document.querySelectorAll('.kanban-task'));
+    const allTasks = Array.from(document.querySelectorAll('.kanban-task, .kanban-task-v2'));
     const currentIndex = allTasks.indexOf(taskElement);
     
     if (currentIndex < allTasks.length - 1) {

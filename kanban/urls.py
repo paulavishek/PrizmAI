@@ -112,6 +112,9 @@ urlpatterns = [
     path('boards/<int:board_id>/export/', views.export_board, name='export_board'),
     path('boards/import/', views.import_board, name='import_board'),
     path('tasks/<int:task_id>/', views.task_detail, name='task_detail'),
+    path('tasks/<int:task_id>/quick-view/', views.task_quick_view, name='task_quick_view'),
+    path('tasks/<int:task_id>/update-status/', views.task_update_status, name='task_update_status'),
+    path('tasks/<int:task_id>/update-assignee/', views.task_update_assignee, name='task_update_assignee'),
     path('milestones/<int:milestone_id>/', views.milestone_detail, name='milestone_detail'),
     path('tasks/<int:task_id>/delete/', views.delete_task, name='delete_task'),
     path('tasks/move/', views.move_task, name='move_task'),
@@ -122,6 +125,7 @@ urlpatterns = [
     path('columns/reorder/', views.reorder_columns, name='reorder_columns'),
     path('columns/reorder-multiple/', views.reorder_multiple_columns, name='reorder_multiple_columns'),
     path('columns/<int:column_id>/update/', views.update_column, name='update_column'),
+    path('columns/<int:column_id>/update-wip/', views.column_update_wip, name='column_update_wip'),
     path('columns/<int:column_id>/delete/', views.delete_column, name='delete_column'),    path('boards/<int:board_id>/add-lean-labels/', views.add_lean_labels, name='add_lean_labels'),
     
     # Test page for AI features

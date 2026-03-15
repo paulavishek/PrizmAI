@@ -1348,6 +1348,35 @@ def board_detail(request, board_id):
         getattr(getattr(request.user, 'profile', None), 'is_admin', False)
     )
 
+    # ── Annotate tasks with overdue / at-risk flags for card rendering ──
+    today = timezone.now()
+    for t in tasks:
+        t.is_overdue = (
+            t.due_date is not None
+            and t.due_date < today
+            and t.progress < 100
+        )
+        t.is_at_risk = (
+            not t.is_overdue
+            and t.predicted_completion_date is not None
+            and t.due_date is not None
+            and t.predicted_completion_date > t.due_date
+            and t.progress < 100
+        )
+
+    # ── Build per-column metadata (task count, WIP exceeded) ──
+    column_meta = {}
+    for col in columns:
+        count = sum(1 for t in tasks if t.column_id == col.id)
+        column_meta[col.id] = {
+            'task_count': count,
+            'wip_exceeded': col.is_wip_exceeded(count),
+            'wip_limit': col.wip_limit,
+        }
+
+    # Board members list for inline assignee picker
+    board_members_list = User.objects.filter(id__in=board_member_ids).select_related('profile')
+
     return render(request, 'kanban/board_detail.html', {
         'board': board,
         'columns': columns,
@@ -1355,7 +1384,7 @@ def board_detail(request, board_id):
         'labels': labels,
         'board_member_profiles': board_member_profiles,
         'available_org_members': available_org_members,
-        'now': timezone.now(),  # Used for due date comparison
+        'now': today,  # Used for due date comparison
         'search_form': search_form,  # Add the search form to the context
         'any_filter_active': any_filter_active,  # Add the flag for active filters
         'wiki_links': wiki_links,  # Add linked wiki pages
@@ -1368,6 +1397,8 @@ def board_detail(request, board_id):
         'can_edit_board': can_edit_board,
         'can_create_tasks': can_create_tasks,
         'can_manage_invites': can_manage_invites,  # For invite button visibility
+        'column_meta': column_meta,  # Per-column WIP/count metadata
+        'board_members_list': board_members_list,  # For inline assignee picker
     })
 
 def task_detail(request, task_id):
@@ -4405,3 +4436,142 @@ def board_status_report(request, board_id):
         'error': error,
     }
     return render(request, 'kanban/status_report.html', context)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Quick-View Drawer & Inline Edit Endpoints (Two-Tier Kanban Redesign)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@login_required
+def task_quick_view(request, task_id):
+    """Tier 1 — Return partial HTML for the quick-view drawer sidebar."""
+    task = get_object_or_404(
+        Task.objects.select_related(
+            'column', 'column__board', 'assigned_to', 'assigned_to__profile',
+            'created_by',
+        ).prefetch_related('labels', 'dependencies', 'subtasks'),
+        id=task_id,
+    )
+    board = task.column.board
+
+    # Overdue / at-risk flags
+    now = timezone.now()
+    is_overdue = (
+        task.due_date is not None and task.due_date < now and task.progress < 100
+    )
+    is_at_risk = (
+        not is_overdue
+        and task.predicted_completion_date is not None
+        and task.due_date is not None
+        and task.predicted_completion_date > task.due_date
+        and task.progress < 100
+    )
+
+    # Prediction data (reuse pattern from task_detail)
+    prediction_data = None
+    if task.predicted_completion_date:
+        confidence_pct = int((task.prediction_confidence or 0) * 100)
+        based_on = (task.prediction_metadata or {}).get('based_on_tasks', 0)
+        prediction_data = {
+            'predicted_date': task.predicted_completion_date,
+            'confidence_percentage': confidence_pct,
+            'based_on_tasks': based_on,
+        }
+
+    # Dependencies
+    blocked_by = task.dependencies.all()
+    blocking = Task.objects.filter(dependencies=task, item_type='task')
+
+    # Stakeholders
+    stakeholders = StakeholderTaskInvolvement.objects.filter(
+        task=task
+    ).select_related('stakeholder')
+
+    # Board columns (for status dropdown) and members (for assignee picker)
+    columns = Column.objects.filter(board=board).order_by('position')
+    board_members = User.objects.filter(
+        id__in=board.members.values_list('id', flat=True)
+    ).select_related('profile')
+
+    return render(request, 'kanban/task_quick_view.html', {
+        'task': task,
+        'board': board,
+        'is_overdue': is_overdue,
+        'is_at_risk': is_at_risk,
+        'prediction_data': prediction_data,
+        'blocked_by': blocked_by,
+        'blocking': blocking,
+        'stakeholders': stakeholders,
+        'columns': columns,
+        'board_members': board_members,
+        'now': now,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def task_update_status(request, task_id):
+    """Inline status change from the quick-view drawer or card hover bar."""
+    task = get_object_or_404(Task, id=task_id)
+    new_column_id = request.POST.get('column_id')
+    if not new_column_id:
+        return JsonResponse({'error': 'column_id required'}, status=400)
+
+    new_column = get_object_or_404(Column, id=new_column_id, board=task.column.board)
+    old_column = task.column
+    task.column = new_column
+
+    # Auto-progress when moved to Done/Complete
+    col_lower = new_column.name.lower()
+    if 'done' in col_lower or 'complete' in col_lower:
+        task.progress = 100
+
+    task.save()
+
+    TaskActivity.objects.create(
+        task=task, user=request.user, activity_type='moved',
+        description=f"Moved '{task.title}' from '{old_column.name}' to '{new_column.name}'"
+    )
+    return JsonResponse({'success': True, 'new_column': new_column.name})
+
+
+@login_required
+@require_http_methods(["POST"])
+def task_update_assignee(request, task_id):
+    """Inline assignee change from the quick-view drawer or card hover bar."""
+    task = get_object_or_404(Task, id=task_id)
+    assignee_id = request.POST.get('assignee_id')
+
+    if assignee_id:
+        user = get_object_or_404(User, id=assignee_id)
+        task.assigned_to = user
+    else:
+        task.assigned_to = None
+
+    task.save()
+
+    TaskActivity.objects.create(
+        task=task, user=request.user, activity_type='updated',
+        description=f"Changed assignee for '{task.title}' to '{task.assigned_to}'"
+    )
+    return JsonResponse({
+        'success': True,
+        'assignee': task.assigned_to.username if task.assigned_to else None,
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def column_update_wip(request, column_id):
+    """Set or clear the WIP limit on a column."""
+    column = get_object_or_404(Column, id=column_id)
+    raw = request.POST.get('wip_limit', '').strip()
+    if raw == '' or raw.lower() == 'none':
+        column.wip_limit = None
+    else:
+        try:
+            column.wip_limit = max(0, int(raw))
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Invalid WIP limit value'}, status=400)
+    column.save()
+    return JsonResponse({'success': True, 'wip_limit': column.wip_limit})

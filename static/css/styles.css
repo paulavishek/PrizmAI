@@ -417,7 +417,8 @@ body {
     opacity: 0.8;
 }
 
-.kanban-task {
+.kanban-task,
+.kanban-task-v2 {
     background-color: var(--card-bg);
     border-radius: 5px;
     padding: 15px;
@@ -428,19 +429,22 @@ body {
     transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.kanban-task:hover {
+.kanban-task:hover,
+.kanban-task-v2:hover {
     transform: translateY(-1px);
     box-shadow: 0 2px 6px var(--shadow-color);
 }
 
-.kanban-task.dragging {
+.kanban-task.dragging,
+.kanban-task-v2.dragging {
     opacity: 0.7;
     transform: rotate(2deg) scale(1.02);
     box-shadow: 0 5px 15px var(--shadow-dark);
     z-index: 1000;
 }
 
-.kanban-task:active {
+.kanban-task:active,
+.kanban-task-v2:active {
     cursor: grabbing;
 }
 
@@ -933,7 +937,8 @@ body {
     }
     
     /* Larger touch targets on mobile */
-    .kanban-task {
+    .kanban-task,
+    .kanban-task-v2 {
         padding: 20px;
         margin-bottom: 15px;
         touch-action: manipulation;

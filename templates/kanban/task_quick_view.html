@@ -1,0 +1,215 @@
+{% load static %}
+{# ────────────────────────────────────────────────────────────────────────── #}
+{#  Tier 1 — Quick-View Drawer  (partial, loaded via HTMX into #task-drawer) #}
+{# ────────────────────────────────────────────────────────────────────────── #}
+
+<div class="qv-drawer">
+    {# ── Header ── #}
+    <div class="qv-header">
+        <div class="d-flex align-items-start gap-2 flex-grow-1 min-w-0">
+            <h5 class="qv-title mb-0">{{ task.title }}</h5>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-shrink-0">
+            <a href="{% url 'task_detail' task.id %}" class="btn btn-sm btn-primary qv-open-full">
+                Open full detail <span style="font-size:.9em;">→</span>
+            </a>
+            <button type="button" class="btn btn-sm btn-link text-muted p-0" onclick="closeDrawer()" title="Close" style="font-size:1.2rem;line-height:1;">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
+
+    {# ── Body ── #}
+    <div class="qv-body">
+        {% csrf_token %}
+
+        {# Status #}
+        <div class="qv-field">
+            <label class="qv-label">Status</label>
+            <select class="form-select form-select-sm qv-status-select" data-task-id="{{ task.id }}">
+                {% for col in columns %}
+                <option value="{{ col.id }}" {% if col.id == task.column.id %}selected{% endif %}>{{ col.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        {# Assignee #}
+        <div class="qv-field">
+            <label class="qv-label">Assignee</label>
+            <select class="form-select form-select-sm qv-assignee-select" data-task-id="{{ task.id }}">
+                <option value="">Unassigned</option>
+                {% for member in board_members %}
+                <option value="{{ member.id }}" {% if task.assigned_to and task.assigned_to.id == member.id %}selected{% endif %}>
+                    {{ member.get_full_name|default:member.username }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        {# Due date #}
+        <div class="qv-field">
+            <label class="qv-label">Due date</label>
+            <div class="qv-value {% if is_overdue %}text-danger fw-bold{% elif is_at_risk %}text-warning fw-bold{% endif %}">
+                {% if task.due_date %}
+                    <i class="far fa-calendar-alt me-1"></i>{{ task.due_date|date:"M d, Y" }}
+                    {% if is_overdue %}<i class="fas fa-exclamation-triangle ms-1 text-danger"></i> Overdue{% endif %}
+                    {% if is_at_risk %}<i class="fas fa-exclamation-triangle ms-1 text-warning"></i> At risk{% endif %}
+                {% else %}
+                    <span class="text-muted">No due date</span>
+                {% endif %}
+            </div>
+        </div>
+
+        {# Priority #}
+        <div class="qv-field">
+            <label class="qv-label">Priority</label>
+            <span class="badge {% if task.priority == 'high' or task.priority == 'urgent' %}bg-danger{% elif task.priority == 'medium' %}bg-warning text-dark{% else %}bg-secondary{% endif %}" style="font-size:.78rem;">
+                {{ task.priority|title }}
+            </span>
+        </div>
+
+        {# Progress #}
+        <div class="qv-field">
+            <label class="qv-label">Progress</label>
+            <div class="d-flex align-items-center gap-2">
+                <button class="btn btn-sm btn-outline-secondary qv-progress-btn" data-task-id="{{ task.id }}" data-delta="-10" title="−10%">
+                    <i class="fas fa-minus"></i>
+                </button>
+                <div class="progress flex-grow-1" style="height:8px;">
+                    <div class="progress-bar {% if task.progress == 100 %}bg-success{% elif task.progress < 30 %}bg-danger{% elif task.progress < 70 %}bg-warning{% else %}bg-success{% endif %}"
+                         style="width:{{ task.progress }}%;" data-progress="{{ task.progress }}"></div>
+                </div>
+                <button class="btn btn-sm btn-outline-secondary qv-progress-btn" data-task-id="{{ task.id }}" data-delta="10" title="+10%">
+                    <i class="fas fa-plus"></i>
+                </button>
+                <span class="text-muted" style="font-size:.8rem;min-width:32px;text-align:center;">{{ task.progress }}%</span>
+            </div>
+        </div>
+
+        {% if prediction_data %}
+        {# AI Predicted Completion #}
+        <div class="qv-section">
+            <div class="qv-section-header"><i class="fas fa-robot me-1 text-info"></i> AI predicted completion</div>
+            <div class="qv-prediction-box">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                    <strong style="font-size:.9rem;">{{ prediction_data.predicted_date|date:"M d, Y" }}</strong>
+                    <span class="badge bg-info text-dark" style="font-size:.7rem;">{{ prediction_data.confidence_percentage }}% conf.</span>
+                </div>
+                <div class="text-muted" style="font-size:.72rem;">
+                    Based on {{ prediction_data.based_on_tasks }} similar task{{ prediction_data.based_on_tasks|pluralize }} · org-wide data
+                </div>
+                {% if is_at_risk %}
+                <div class="mt-1" style="font-size:.72rem;color:#f59e0b;">
+                    <i class="fas fa-exclamation-triangle"></i> Predicted before due date — currently on track
+                </div>
+                {% elif is_overdue %}
+                <div class="mt-1" style="font-size:.72rem;color:#dc3545;">
+                    <i class="fas fa-exclamation-triangle"></i> Task is overdue
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# Dependencies #}
+        {% if blocked_by or blocking %}
+        <div class="qv-section">
+            <div class="qv-section-header"><i class="fas fa-project-diagram me-1"></i> Dependencies</div>
+            {% if blocked_by %}
+            <div class="mb-2">
+                <small class="text-muted fw-bold">Blocked by (must finish first)</small>
+                {% for dep in blocked_by %}
+                <div class="qv-dep-item">
+                    <a href="{% url 'task_detail' dep.id %}">{{ dep.title }}</a>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% if blocking %}
+            <div>
+                <small class="text-muted fw-bold">Blocking</small>
+                {% for dep in blocking %}
+                <div class="qv-dep-item">
+                    <a href="{% url 'task_detail' dep.id %}">{{ dep.title }}</a>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {# Stakeholders #}
+        {% if stakeholders %}
+        <div class="qv-section">
+            <div class="qv-section-header"><i class="fas fa-users me-1"></i> Stakeholders</div>
+            {% for inv in stakeholders %}
+            <div class="qv-stakeholder">
+                <span class="fw-semibold">{{ inv.stakeholder.name }}</span>
+                {% if inv.role %}<span class="text-muted" style="font-size:.75rem;">— {{ inv.role }}</span>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+{# ── Inline JS for drawer interactions ── #}
+<script>
+(function() {
+    const csrfToken = document.querySelector('.qv-body [name=csrfmiddlewaretoken]')?.value
+                    || document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
+
+    // Status change
+    document.querySelector('.qv-status-select')?.addEventListener('change', function() {
+        const fd = new FormData();
+        fd.append('column_id', this.value);
+        fetch('/tasks/' + this.dataset.taskId + '/update-status/', {
+            method: 'POST', headers: {'X-CSRFToken': csrfToken}, body: fd,
+        }).then(r => r.json()).then(() => location.reload());
+    });
+
+    // Assignee change
+    document.querySelector('.qv-assignee-select')?.addEventListener('change', function() {
+        const fd = new FormData();
+        fd.append('assignee_id', this.value);
+        fetch('/tasks/' + this.dataset.taskId + '/update-assignee/', {
+            method: 'POST', headers: {'X-CSRFToken': csrfToken}, body: fd,
+        }).then(r => r.json()).then(() => location.reload());
+    });
+
+    // Progress +/-
+    document.querySelectorAll('.qv-progress-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const taskId = this.dataset.taskId;
+            const delta  = parseInt(this.dataset.delta, 10);
+            fetch('/tasks/' + taskId + '/update-progress/', {
+                method: 'POST',
+                headers: {'Content-Type':'application/json','X-CSRFToken': csrfToken, 'X-Requested-With':'XMLHttpRequest'},
+                body: JSON.stringify({delta: delta}),
+            }).then(r => r.json()).then(() => location.reload());
+        });
+    });
+})();
+</script>
+
+<style>
+.qv-drawer { display:flex; flex-direction:column; height:100%; }
+.qv-header {
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:16px 20px; border-bottom:1px solid var(--border-color,#dee2e6);
+    position:sticky; top:0; background:var(--card-bg,#fff); z-index:2;
+}
+.qv-title { font-size:1rem; font-weight:700; line-height:1.3; word-break:break-word; color:var(--text-primary); }
+.qv-open-full { white-space:nowrap; font-weight:600; font-size:.78rem; }
+.qv-body { flex:1; padding:16px 20px; overflow-y:auto; }
+.qv-field { margin-bottom:14px; }
+.qv-label { display:block; font-size:.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--text-muted,#6c757d); margin-bottom:4px; }
+.qv-value { font-size:.85rem; }
+.qv-section { margin-top:18px; padding-top:14px; border-top:1px solid var(--border-color,#eee); }
+.qv-section-header { font-size:.78rem; font-weight:700; margin-bottom:8px; color:var(--text-primary); }
+.qv-prediction-box { background:var(--bg-tertiary,#f8f9fa); border-radius:8px; padding:10px 14px; border-left:3px solid #0ea5e9; }
+.qv-dep-item { font-size:.82rem; padding:3px 0; }
+.qv-dep-item a { color:var(--link-color,#0d6efd); text-decoration:none; }
+.qv-dep-item a:hover { text-decoration:underline; }
+.qv-stakeholder { font-size:.82rem; padding:3px 0; }
+</style>
