@@ -4585,3 +4585,59 @@ def column_update_wip(request, column_id):
             return JsonResponse({'error': 'Invalid WIP limit value'}, status=400)
     column.save()
     return JsonResponse({'success': True, 'wip_limit': column.wip_limit})
+
+
+@login_required
+@require_http_methods(["POST"])
+def task_update_fields(request, task_id):
+    """Update priority, due_date, and/or progress from the quick-view drawer."""
+    from datetime import datetime as _dt
+    from django.utils import timezone as _tz
+
+    task = get_object_or_404(Task, id=task_id)
+    changes = []
+
+    if 'priority' in request.POST:
+        valid = [c[0] for c in Task.PRIORITY_CHOICES]
+        prio = request.POST['priority']
+        if prio in valid:
+            task.priority = prio
+            changes.append(f"Priority → {prio}")
+
+    if 'due_date' in request.POST:
+        raw = request.POST['due_date'].strip()
+        if raw == '':
+            task.due_date = None
+            changes.append("Due date cleared")
+        else:
+            try:
+                nd = _dt.strptime(raw, '%Y-%m-%d').date()
+                if task.due_date:
+                    naive_new = _dt.combine(nd, task.due_date.time())
+                    if _tz.is_aware(task.due_date):
+                        task.due_date = naive_new.replace(tzinfo=task.due_date.tzinfo)
+                    else:
+                        task.due_date = naive_new
+                else:
+                    task.due_date = _tz.make_aware(_dt(nd.year, nd.month, nd.day, 23, 59, 59))
+                changes.append(f"Due date → {raw}")
+            except ValueError:
+                return JsonResponse({'error': 'Invalid date format'}, status=400)
+
+    if 'progress' in request.POST:
+        try:
+            val = max(0, min(100, int(request.POST['progress'])))
+            task.progress = val
+            changes.append(f"Progress → {val}%")
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Invalid progress value'}, status=400)
+
+    if changes:
+        task.save()
+        TaskActivity.objects.create(
+            task=task,
+            user=request.user,
+            activity_type='updated',
+            description='; '.join(changes),
+        )
+    return JsonResponse({'success': True})
