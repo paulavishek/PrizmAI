@@ -1,0 +1,366 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ branch.name }} — Shadow Board{% endblock %}
+
+{% block extra_css %}
+<style>
+    .snapshot-timeline {
+        position: relative;
+        padding-left: 40px;
+    }
+
+    .snapshot-timeline-item {
+        display: flex;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid #e0e0e0;
+    }
+
+    .snapshot-timeline-item:last-child {
+        border-bottom: none;
+    }
+
+    .timeline-dot {
+        position: absolute;
+        left: 0;
+        width: 16px;
+        height: 16px;
+        background: #0d6efd;
+        border-radius: 50%;
+        border: 3px solid #fff;
+        box-shadow: 0 0 0 1px #dee2e6;
+    }
+
+    .timeline-content {
+        flex-grow: 1;
+        margin-left: 0;
+    }
+
+    .divergence-log {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 12px;
+        border-radius: 4px;
+        margin-bottom: 1rem;
+    }
+
+    .divergence-log.increase {
+        background: #d1f2eb;
+        border-left-color: #198754;
+    }
+
+    .divergence-log.decrease {
+        background: #f8d7da;
+        border-left-color: #dc3545;
+    }
+
+    .feasibility-trend {
+        height: 200px;
+        position: relative;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid my-4">
+    <!-- Back button & Header -->
+    <div class="mb-4">
+        <a href="{% url 'shadow_board_list' board.id %}" class="btn btn-sm btn-outline-secondary mb-3">
+            <i class="fas fa-arrow-left me-1"></i>Back to Shadow Board
+        </a>
+        <div class="d-flex justify-content-between align-items-start">
+            <div>
+                <h1 class="mb-2">
+                    <i class="fas fa-code-branch me-2" style="color: {{ branch.branch_color }};"></i>
+                    {{ branch.name }}
+                </h1>
+                <p class="text-muted mb-0">
+                    Created by {{ branch.created_by.first_name|default:branch.created_by.username }} on {{ branch.created_at|date:"M d, Y H:i" }}
+                </p>
+                {% if branch.description %}
+                <p class="text-muted mb-0"><em>{{ branch.description }}</em></p>
+                {% endif %}
+            </div>
+            <div class="text-end">
+                <span class="badge {% if branch.status == 'committed' %}bg-success{% elif branch.status == 'archived' %}bg-secondary{% else %}bg-primary{% endif %} mb-2">
+                    {{ branch.get_status_display }}
+                </span>
+                {% if branch.source_scenario %}
+                <div class="small text-muted">
+                    <i class="fas fa-link me-1"></i>From scenario: {{ branch.source_scenario.name }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Latest Snapshot Section -->
+    {% if latest_snapshot %}
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-chart-line me-2"></i>Current Projection</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6 border-end">
+                            <small class="text-muted d-block">Feasibility Score</small>
+                            <h3 class="text-primary">{{ latest_snapshot.feasibility_score }}%</h3>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block">Projected Completion</small>
+                            <h5>{{ latest_snapshot.projected_completion_date|date:"M d, Y"|default:"—" }}</h5>
+                        </div>
+                    </div>
+                    
+                    {% if latest_snapshot.projected_budget_utilization %}
+                    <div class="mt-3">
+                        <small class="text-muted d-block mb-2">Budget Utilization</small>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar {% if latest_snapshot.projected_budget_utilization > 100 %}bg-danger{% elif latest_snapshot.projected_budget_utilization > 80 %}bg-warning{% else %}bg-success{% endif %}"
+                                 style="width: {{ latest_snapshot.projected_budget_utilization|min:100 }}%">
+                                {{ latest_snapshot.projected_budget_utilization|floatformat:0 }}%
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <!-- Deltas -->
+                    <div class="mt-3 pt-3 border-top">
+                        <small class="text-muted d-block mb-2">Scenario Deltas</small>
+                        <div class="font-monospace small">
+                            <div class="mb-2">
+                                <i class="fas fa-tasks me-2 text-primary"></i>
+                                Scope: <strong>{{ latest_snapshot.scope_delta|stringformat:"+d" }} tasks</strong>
+                            </div>
+                            <div class="mb-2">
+                                <i class="fas fa-users me-2 text-success"></i>
+                                Team: <strong>{{ latest_snapshot.team_delta|stringformat:"+d" }} members</strong>
+                            </div>
+                            <div>
+                                <i class="fas fa-calendar me-2 text-info"></i>
+                                Deadline: <strong>{{ latest_snapshot.deadline_delta_weeks|stringformat:"+d" }} weeks</strong>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h6 class="mb-0"><i class="fas fa-brain me-2"></i>AI Recommendation</h6>
+                </div>
+                <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+                    {% if latest_snapshot.gemini_recommendation %}
+                        <p class="mb-0">{{ latest_snapshot.gemini_recommendation|linebreaks }}</p>
+                    {% else %}
+                        <p class="text-muted mb-0"><em>No AI recommendation available for this snapshot.</em></p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Feasibility Trend Chart -->
+    {% if feasibility_history|length > 1 %}
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <h6 class="mb-0"><i class="fas fa-chart-area me-2"></i>Feasibility Trend</h6>
+        </div>
+        <div class="card-body">
+            <canvas id="feasibilityChart"></canvas>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Snapshot History Timeline -->
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <h6 class="mb-0"><i class="fas fa-history me-2"></i>Snapshot History</h6>
+        </div>
+        <div class="card-body">
+            {% if snapshots|length > 0 %}
+            <div class="snapshot-timeline">
+                {% for snapshot in snapshots %}
+                <div class="snapshot-timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="d-flex justify-content-between align-items-start mb-2">
+                            <div>
+                                <strong>Snapshot {{ forloop.revcounter }}</strong>
+                                <small class="text-muted d-block">{{ snapshot.captured_at|date:"M d, Y H:i" }}</small>
+                            </div>
+                            <span class="badge bg-primary">
+                                {{ snapshot.feasibility_score }}%
+                            </span>
+                        </div>
+                        <p class="small text-muted mb-0">
+                            <i class="fas fa-tasks me-1"></i>Δ Scope: {{ snapshot.scope_delta|stringformat:"+d" }}
+                            <i class="fas fa-users ms-3 me-1"></i>Δ Team: {{ snapshot.team_delta|stringformat:"+d" }}
+                            <i class="fas fa-calendar ms-3 me-1"></i>Δ Deadline: {{ snapshot.deadline_delta_weeks|stringformat:"+d" }}w
+                        </p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-muted text-center mb-0">No snapshots yet. First recalculation is in progress...</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Divergence Log -->
+    {% if divergence_logs|length > 0 %}
+    <div class="card">
+        <div class="card-header bg-light">
+            <h6 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Divergence Events (> 5 point changes)</h6>
+        </div>
+        <div class="card-body">
+            {% for log in divergence_logs %}
+            <div class="divergence-log {% if log.score_delta > 0 %}increase{% elif log.score_delta < 0 %}decrease{% endif %}">
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                        <strong>
+                            {% if log.score_delta > 0 %}
+                                <i class="fas fa-arrow-up text-success me-2"></i>Improved
+                            {% elif log.score_delta < 0 %}
+                                <i class="fas fa-arrow-down text-danger me-2"></i>Declined
+                            {% else %}
+                                <i class="fas fa-minus text-muted me-2"></i>Stable
+                            {% endif %}
+                        </strong>
+                        <small class="text-muted d-block">{{ log.logged_at|date:"M d, Y H:i" }}</small>
+                    </div>
+                    <span class="badge {% if log.score_delta > 0 %}bg-success{% else %}bg-danger{% endif %}">
+                        {{ log.old_score }} → {{ log.new_score }} ({{ log.score_delta|stringformat:"+d" }})
+                    </span>
+                </div>
+                <p class="small mb-0">
+                    <em>{{ log.trigger_event }}</em>
+                </p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Actions -->
+    <div class="mt-4 mb-4">
+        <a href="{% url 'shadow_board_list' board.id %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left me-2"></i>Back to List
+        </a>
+        {% if branch.status == 'active' %}
+        <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#commitModal">
+            <i class="fas fa-check me-2"></i>Commit This Branch
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Commit Confirmation Modal -->
+<div class="modal fade" id="commitModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title"><i class="fas fa-exclamation-circle me-2"></i>Commit Branch</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Are you sure you want to commit <strong>{{ branch.name }}</strong>?</p>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    This will:
+                    <ul class="mb-0 mt-2">
+                        <li>Mark this branch as the accepted reality</li>
+                        <li>Archive all other active branches</li>
+                        <li>Create an audit log entry</li>
+                    </ul>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="confirmCommitBtn">
+                    <i class="fas fa-check me-2"></i>Yes, Commit
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+    // Feasibility Trend Chart
+    const ctx = document.getElementById('feasibilityChart');
+    if (ctx) {
+        const data = {{ feasibility_history|safe }};
+        const labels = data.map(d => new Date(d.date).toLocaleDateString());
+        const scores = data.map(d => d.score);
+        
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Feasibility Score',
+                    data: scores,
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 4,
+                    pointClassName: 'point',
+                    pointBackgroundColor: function(context) {
+                        const score = context.raw;
+                        if (score >= 70) return '#198754';
+                        if (score >= 50) return '#fd7e14';
+                        return '#dc3545';
+                    }
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: {
+                        min: 0,
+                        max: 100,
+                        ticks: { callback: (v) => v + '%' }
+                    }
+                }
+            }
+        });
+    }
+
+    // Commit button handler
+    document.getElementById('confirmCommitBtn')?.addEventListener('click', function() {
+        fetch('{% url "commit_shadow_branch" board.id branch.id %}', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ confirm: true })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.location.href = data.redirect_url;
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(e => alert('Error: ' + e.message));
+    });
+</script>
+{% endblock %}

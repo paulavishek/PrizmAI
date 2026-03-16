@@ -1809,6 +1809,13 @@ class BoardInvitation(models.Model):
         self.save()
 
 
+# ---------------------------------------------------------------------------
+# SHADOW BOARD MODELS — Parallel Universe Simulator
+# ---------------------------------------------------------------------------
+# Import at the end to ensure all dependencies are loaded
+from .shadow_models import ShadowBranch, BranchSnapshot, BranchDivergenceLog  # noqa: E402
+
+
 class CalendarEvent(models.Model):
     """
     Internal calendar events (meetings, OOO, busy blocks, team events).
