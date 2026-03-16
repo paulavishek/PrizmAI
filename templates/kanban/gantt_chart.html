@@ -409,16 +409,11 @@
         transform: translateY(-1px);
     }
 
-    /* Hide left resize handle only — right handle enables due-date resize */
+    /* Left & right resize handles: invisible until hover, col-resize cursor */
     .gantt .handle.left,
-    .gantt .bar-wrapper .handle.left {
-        display: none !important;
-        visibility: hidden !important;
-        opacity: 0 !important;
-        pointer-events: none !important;
-    }
-
-    /* Right resize handle: invisible until hover, col-resize cursor */
+    .gantt .bar-wrapper .handle.left,
+    .gantt .bar-handle.left,
+    rect.handle.left,
     .gantt .handle.right,
     .gantt .bar-wrapper .handle.right,
     .gantt .bar-handle.right,
@@ -431,6 +426,9 @@
         width: 8px !important;
     }
 
+    .gantt .bar-wrapper:hover .handle.left,
+    .gantt .bar-wrapper:hover .bar-handle.left,
+    .gantt .bar-wrapper:hover rect.handle.left,
     .gantt .bar-wrapper:hover .handle.right,
     .gantt .bar-wrapper:hover .bar-handle.right,
     .gantt .bar-wrapper:hover rect.handle.right {
@@ -2771,20 +2769,25 @@
                     return false; // Prevent default behavior
                 },
                 on_date_change: function(frappeTask, start, end) {
-                    // Detect move vs resize by comparing new start to stored original
+                    // Detect move vs left-resize vs right-resize
                     const origTask = tasks.find(t => String(t.id) === String(frappeTask.id));
                     if (!origTask) return false;
                     const newStart = formatDate(start);
                     const newEnd = formatDate(end);
                     const origStart = origTask._origStart || origTask.start;
+                    const origEnd = origTask._origEnd || origTask.end;
                     const startChanged = (newStart !== origStart);
+                    const endChanged = (newEnd !== origEnd);
 
                     // Build payload
                     const payload = {};
-                    if (startChanged) {
-                        // Bar was moved — send both dates
+                    if (startChanged && endChanged) {
+                        // Bar body was dragged — send both dates
                         payload.start_date = newStart;
                         payload.due_date = newEnd;
+                    } else if (startChanged) {
+                        // Left-edge resize — only start_date
+                        payload.start_date = newStart;
                     } else {
                         // Right-edge resize — only due_date
                         payload.due_date = newEnd;
@@ -2995,12 +2998,13 @@
     })();
 
     /**
-     * Store original start dates on local task objects so that
-     * on_date_change can distinguish bar-move from right-edge resize.
+     * Store original start & end dates on local task objects so that
+     * on_date_change can distinguish bar-move from left/right-edge resize.
      */
     function snapshotOriginalDates() {
         tasks.forEach(t => {
             if (!t._origStart) t._origStart = t.start;
+            if (!t._origEnd) t._origEnd = t.end;
         });
     }
 
@@ -4469,6 +4473,72 @@
     }
 
     /**
+     * Recalculate and update a phase bar's SVG position/width after a child
+     * task has been rescheduled.  Works by scanning the local `tasks` array
+     * for the task's phase, deriving min-start / max-end, and patching the
+     * bar rect + label directly in the DOM — no full chart rebuild needed.
+     */
+    function updatePhaseBarForTask(taskId) {
+        if (!ganttChart || currentView !== 'phases') return;
+        const task = tasks.find(t => String(t.id) === String(taskId));
+        if (!task || !task.phase) return;
+
+        const phaseName = task.phase;
+        const phaseId = phaseName.replace(/\s+/g, '-').toLowerCase();
+        const phaseWrapper = document.querySelector(`.bar-wrapper[data-id="${phaseId}"]`);
+        if (!phaseWrapper) return;
+
+        // Gather all tasks in this phase that have valid dates
+        const phaseTasks = tasks.filter(t => t.phase === phaseName && t.start && t.end && t.start !== '' && t.end !== '');
+        if (phaseTasks.length === 0) return;
+
+        const starts = phaseTasks.map(t => new Date(t.start)).filter(d => !isNaN(d.getTime()));
+        const ends   = phaseTasks.map(t => new Date(t.end)).filter(d => !isNaN(d.getTime()));
+        if (starts.length === 0 || ends.length === 0) return;
+
+        const minStart = new Date(Math.min(...starts));
+        const maxEnd   = new Date(Math.max(...ends));
+
+        // Convert dates → SVG x using the same math as svgXToDate (inverse)
+        const opts = ganttChart.options || ganttChart.config;
+        const colW = opts ? opts.column_width : 30;
+        const step = opts ? (opts.step || 24) : 24;
+        const gStart = ganttChart.gantt_start;
+        if (!gStart) return;
+
+        const dateToX = (d) => ((d - gStart) / 3600000 / step) * colW;
+        const newX = dateToX(minStart);
+        const newW = dateToX(maxEnd) - newX;
+        if (newW <= 0) return;
+
+        // Patch the SVG bar rect
+        const barRect = phaseWrapper.querySelector('.bar');
+        if (barRect) {
+            barRect.setAttribute('x', newX);
+            barRect.setAttribute('width', newW);
+        }
+
+        // Patch the label position (centred within the bar)
+        const label = phaseWrapper.querySelector('.bar-label');
+        if (label) {
+            label.setAttribute('x', newX + newW / 2);
+        }
+
+        // Update the handles too
+        const handleLeft = phaseWrapper.querySelector('.handle.left');
+        if (handleLeft) handleLeft.setAttribute('x', newX + 1);
+        const handleRight = phaseWrapper.querySelector('.handle.right');
+        if (handleRight) handleRight.setAttribute('x', newX + newW - 9);
+
+        // Keep local model in sync so future calculations stay correct
+        const phaseBar = (ganttChart.tasks || []).find(t => String(t.id) === phaseId);
+        if (phaseBar) {
+            phaseBar._start = minStart;
+            phaseBar._end = maxEnd;
+        }
+    }
+
+    /**
      * Reschedule a task via the new PATCH endpoint.
      * @param {string|number} taskId
      * @param {Object} payload  — { start_date?, due_date? } in YYYY-MM-DD format
@@ -4501,10 +4571,14 @@
                     }
                     if (data.task.due_date) {
                         task.end = data.task.due_date;
+                        task._origEnd = data.task.due_date;
                     }
                 }
                 // Refresh split-view table row
                 refreshSplitView();
+
+                // Update phase bar if we're in phase view
+                updatePhaseBarForTask(taskId);
 
                 // Redraw custom dependency lines and priority dots to match new bar positions
                 requestAnimationFrame(() => {
@@ -4983,10 +5057,26 @@
                     window.location.href = `/tasks/${task.id}/?next=${currentUrl}`;
                 }
             },
-            on_date_change: function(task, start, end) {
-                if (!task.isPhase && !task.isMilestone) {
-                    updateTaskDates(task.id, start, end);
+            on_date_change: function(frappeTask, start, end) {
+                if (frappeTask.isPhase || frappeTask.isMilestone) return false;
+                const origTask = tasks.find(t => String(t.id) === String(frappeTask.id));
+                const newStart = formatDate(start);
+                const newEnd = formatDate(end);
+                const origStart = origTask ? (origTask._origStart || origTask.start) : null;
+                const origEnd = origTask ? (origTask._origEnd || origTask.end) : null;
+                const startChanged = origStart ? (newStart !== origStart) : true;
+                const endChanged = origEnd ? (newEnd !== origEnd) : true;
+
+                const payload = {};
+                if (startChanged && endChanged) {
+                    payload.start_date = newStart;
+                    payload.due_date = newEnd;
+                } else if (startChanged) {
+                    payload.start_date = newStart;
+                } else {
+                    payload.due_date = newEnd;
                 }
+                rescheduleTask(frappeTask.id, payload, origTask);
             },
             on_progress_change: function(task, progress) {
                 if (!task.isPhase && !task.isMilestone) {
