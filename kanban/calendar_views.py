@@ -227,8 +227,14 @@ def unified_calendar_events_api(request):
             # FullCalendar sends ISO strings like "2026-02-01T00:00:00"
             range_start = datetime.fromisoformat(start_str.rstrip('Z'))
             range_end = datetime.fromisoformat(end_str.rstrip('Z'))
-            task_qs = task_qs.filter(due_date__date__gte=range_start.date(),
-                                      due_date__date__lte=range_end.date())
+            task_qs = task_qs.filter(
+                # Include tasks whose [start_date..due_date] overlaps [range_start..range_end]
+                Q(due_date__date__gte=range_start.date()) &
+                Q(
+                    Q(start_date__lte=range_end.date()) |
+                    Q(start_date__isnull=True, due_date__date__lte=range_end.date())
+                )
+            )
             event_qs = event_qs.filter(
                 start_datetime__date__lte=range_end.date(),
                 end_datetime__date__gte=range_start.date(),
@@ -256,10 +262,24 @@ def unified_calendar_events_api(request):
         if task.assigned_to:
             assignee_name = task.assigned_to.get_full_name() or task.assigned_to.username
 
+        # Multi-day bar: use start_date→due_date span (same as board_calendar)
+        due = task.due_date
+        due_date_obj = due.date() if hasattr(due, 'date') else due
+        due_str = due_date_obj.isoformat()
+
+        if task.start_date:
+            start_str_task = task.start_date.isoformat()
+        else:
+            start_str_task = due_str
+
+        # FullCalendar exclusive end — add 1 day
+        end_str_task = (due_date_obj + timedelta(days=1)).isoformat()
+
         events.append({
             'id': f'task-{task.id}',
             'title': task.title,
-            'start': task.due_date.strftime('%Y-%m-%d'),
+            'start': start_str_task,
+            'end': end_str_task,
             'url': f'/tasks/{task.id}/',
             'color': color,
             'source': 'task',
@@ -275,6 +295,8 @@ def unified_calendar_events_api(request):
                 'assignee_id': task.assigned_to_id,
                 'assignee_name': assignee_name,
                 'assignee_color': color if layer == 'teammate' else None,
+                'due_date_str': due_str,
+                'start_date_str': task.start_date.isoformat() if task.start_date else None,
             },
         })
 
