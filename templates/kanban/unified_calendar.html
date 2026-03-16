@@ -64,6 +64,34 @@
     .teammate-chip.inactive { opacity: 0.35; text-decoration: line-through; }
     /* Modal adjustments */
     .nav-tabs .nav-link { font-size: 0.9rem; }
+    /* ═══ Highlight today's date cell (same as board calendar) ═══ */
+    .fc .fc-day-today {
+        background: rgba(124, 58, 237, 0.06) !important;
+    }
+    .fc .fc-day-today .fc-daygrid-day-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: #7c3aed;
+        color: #fff;
+        font-weight: 500;
+    }
+    /* Multi-day bar styling */
+    .fc-daygrid-block-event .fc-event-main {
+        padding: 2px 6px;
+    }
+    .fc-event:not(.fc-event-start) {
+        border-left: 3px solid rgba(0,0,0,0.3);
+        border-top-left-radius: 0 !important;
+        border-bottom-left-radius: 0 !important;
+    }
+    .fc-event:not(.fc-event-end) {
+        border-top-right-radius: 0 !important;
+        border-bottom-right-radius: 0 !important;
+    }
 </style>
 {% endblock %}
 
@@ -76,7 +104,7 @@
             <h1 class="h3 mb-0 text-gray-800">
                 <i class="fas fa-calendar-alt me-2 text-primary"></i>My Calendar
             </h1>
-            <p class="text-muted mb-0">All tasks &amp; events across your boards — {{ current_month }}</p>
+            <p class="text-muted mb-0" id="calendar-subtitle">All tasks &amp; events across your boards — {{ current_month }}</p>
         </div>
         <button class="btn btn-primary btn-sm" id="btn-new">
             <i class="fas fa-plus me-1"></i> New
@@ -368,6 +396,31 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // ---- Board filter state ----
     let activeBoardIds = [];  // empty = all
+    const DEFAULT_SUBTITLE = 'All tasks & events across your boards \u2014 {{ current_month }}';
+    const CURRENT_MONTH = '{{ current_month }}';
+
+    // ---- Quick-view drawer open / close (reuse base.html drawer) ----
+    const drawer   = document.getElementById('task-drawer');
+    const backdrop = document.getElementById('drawer-backdrop');
+
+    window.openDrawer = function() {
+        drawer.classList.add('open');
+        backdrop.classList.add('open');
+        document.body.style.overflow = 'hidden';
+    };
+    window.closeDrawer = function() {
+        drawer.classList.remove('open');
+        backdrop.classList.remove('open');
+        document.body.style.overflow = '';
+    };
+    backdrop.addEventListener('click', closeDrawer);
+
+    // HTMX: after drawer content loads, slide it open
+    document.body.addEventListener('htmx:afterSwap', function(e) {
+        if (e.detail.target && e.detail.target.id === 'task-drawer-body') {
+            openDrawer();
+        }
+    });
 
     // ---- Team layer / view mode state ----
     let teamViewMode      = localStorage.getItem('prizmTeamViewMode') || 'detail';
@@ -483,28 +536,31 @@ document.addEventListener('DOMContentLoaded', function () {
             clickedDatetime = info.date;
             showPopup(info.jsEvent.clientX, info.jsEvent.clientY);
         },
-        // Click on existing event → show detail popover
+        // Click on existing event: tasks open drawer; events open detail modal
         eventClick: function (info) {
             info.jsEvent.preventDefault();
             createPopup.style.display = 'none';
             const p = info.event.extendedProps;
-            if (!p || p.source === 'busy') return;  // aggregated busy block — no detail
-            const title = info.event.title;
+            if (!p || p.source === 'busy') return;
 
+            // Task — open quick-view drawer via HTMX (same as board calendar)
+            if (p.source === 'task') {
+                var rawId = info.event.id;  // 'task-123'
+                var taskId = rawId.replace('task-', '');
+                if (taskId) {
+                    htmx.ajax('GET', '/tasks/' + taskId + '/quick-view/', {
+                        target: '#task-drawer-body', swap: 'innerHTML'
+                    });
+                }
+                return;
+            }
+
+            // Non-task events — keep existing detail modal
+            const title = info.event.title;
             document.getElementById('detail-title').textContent = title;
 
             let body = '';
-            if (p.source === 'task') {
-                body = `
-                    <div><strong>Board:</strong> ${p.board}</div>
-                    <div><strong>Column:</strong> ${p.column}</div>
-                    <div><strong>Priority:</strong> ${p.priority}</div>
-                    ${p.assignee ? `<div><strong>Assignee:</strong> ${p.assignee}</div>` : ''}
-                    <div><strong>Progress:</strong> ${p.progress}%</div>
-                `;
-                document.getElementById('detail-open-link').href = info.event.url;
-                document.getElementById('detail-open-link').style.display = '';
-            } else if (p.layer === 'teammate_status') {
+            if (p.layer === 'teammate_status') {
                 // Teammate’s status event — show limited info
                 body = `
                     <div><strong>Type:</strong> ${p.event_type}</div>
@@ -583,12 +639,16 @@ document.addEventListener('DOMContentLoaded', function () {
             if (p.layer === 'teammate') {
                 info.el.style.opacity = '0.72';
             }
-            if (p.source === 'task' && p.layer === 'mine') {
-                const d = new Date(info.event.start);
-                const today = new Date(); today.setHours(0,0,0,0);
-                if (d < today && p.progress < 100) {
-                    info.el.style.opacity = '0.7';
-                    info.el.style.textDecoration = 'line-through';
+            // Mark overdue tasks using due_date_str (not start date)
+            if (p.source === 'task') {
+                var dueStr = p.due_date_str;
+                if (dueStr) {
+                    const d = new Date(dueStr);
+                    const today = new Date(); today.setHours(0,0,0,0);
+                    if (d < today && p.progress < 100) {
+                        info.el.style.opacity = '0.7';
+                        info.el.style.textDecoration = 'line-through';
+                    }
                 }
             }
         },
@@ -693,28 +753,46 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    // ---- Board filter chips ----
+    // ---- Board filter chips (single-select: one board or all) ----
+    const subtitleEl = document.getElementById('calendar-subtitle');
+    function updateBoardChipUI() {
+        const allChips = document.querySelectorAll('.board-chip');
+        if (activeBoardIds.length === 0) {
+            // All boards selected
+            allChips.forEach(c => c.classList.remove('inactive'));
+            subtitleEl.textContent = DEFAULT_SUBTITLE;
+        } else {
+            allChips.forEach(c => {
+                if (c.dataset.boardId === 'all') {
+                    c.classList.add('inactive');
+                } else if (activeBoardIds.indexOf(c.dataset.boardId) !== -1) {
+                    c.classList.remove('inactive');
+                } else {
+                    c.classList.add('inactive');
+                }
+            });
+            // Find board name for subtitle
+            const selectedId = parseInt(activeBoardIds[0], 10);
+            const boardObj = boardsData.find(b => b.id === selectedId);
+            const boardName = boardObj ? boardObj.name : 'Selected Board';
+            subtitleEl.textContent = 'Showing: ' + boardName + ' \u2014 ' + CURRENT_MONTH;
+        }
+    }
+
     document.querySelectorAll('.board-chip').forEach(chip => {
         chip.addEventListener('click', function () {
             const boardId = this.dataset.boardId;
             if (boardId === 'all') {
                 activeBoardIds = [];
-                document.querySelectorAll('.board-chip').forEach(c => c.classList.remove('inactive'));
             } else {
-                const idx = activeBoardIds.indexOf(boardId);
-                if (idx === -1) {
-                    activeBoardIds.push(boardId);
-                    this.classList.remove('inactive');
-                    // Deactivate "All" chip
-                    document.querySelector('.board-chip[data-board-id="all"]').classList.add('inactive');
+                // Single-select toggle: clicking active board deselects it
+                if (activeBoardIds.length === 1 && activeBoardIds[0] === boardId) {
+                    activeBoardIds = [];
                 } else {
-                    activeBoardIds.splice(idx, 1);
-                    this.classList.add('inactive');
-                    if (activeBoardIds.length === 0) {
-                        document.querySelector('.board-chip[data-board-id="all"]').classList.remove('inactive');
-                    }
+                    activeBoardIds = [boardId];
                 }
             }
+            updateBoardChipUI();
             calendar.refetchEvents();
         });
     });
