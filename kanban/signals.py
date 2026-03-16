@@ -512,3 +512,158 @@ def _get_debounce_seconds():
         return getattr(settings, 'AI_SUMMARY_DEBOUNCE_SECONDS', 600)
     except Exception:
         return 600
+
+
+# ---------------------------------------------------------------------------
+# Shadow Board Signal Handlers — Live Recalculation Triggers
+# ---------------------------------------------------------------------------
+
+@receiver(post_save, sender=Task)
+def trigger_branch_recalculation_on_task_completion(sender, instance, created, **kwargs):
+    """
+    Trigger shadow branch recalculation when a task is completed.
+    
+    When a task reaches 100% progress (completion), all active shadow branches
+    on the board should recalculate their feasibility scores to reflect the
+    real-world project progress.
+    """
+    if created:
+        # Skip new task creation
+        return
+    
+    if not hasattr(instance, '_just_completed'):
+        return
+    
+    if not instance._just_completed:
+        # Task progress didn't reach completion
+        return
+    
+    if not instance.column or not instance.column.board:
+        return
+    
+    try:
+        from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+        board_id = instance.column.board_id
+        task_title = instance.title or 'Unknown task'
+        
+        recalculate_branches_for_board.apply_async(
+            args=[board_id],
+            kwargs={'trigger_event': f'Task "{task_title}" completed'},
+            countdown=5,  # 5-second delay to batch multiple completions
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f'Error triggering branch recalculation for task completion: {e}',
+            exc_info=True
+        )
+
+
+@receiver(pre_save, sender='kanban.Board')
+def trigger_branch_recalculation_on_deadline_change(sender, instance, **kwargs):
+    """
+    Trigger shadow branch recalculation when the board deadline changes.
+    
+    The project deadline is part of the Time constraint. When it changes,
+    the feasibility of all shadow branches may shift.
+    """
+    if not instance.pk:
+        # Skip new board creation
+        return
+    
+    try:
+        from kanban.models import Board
+        old_board = Board.objects.get(pk=instance.pk)
+        
+        if old_board.project_deadline != instance.project_deadline:
+            # Deadline changed
+            from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+            
+            old_date_str = old_board.project_deadline.strftime('%b %d, %Y') if old_board.project_deadline else 'Not set'
+            new_date_str = instance.project_deadline.strftime('%b %d, %Y') if instance.project_deadline else 'Not set'
+            
+            recalculate_branches_for_board.apply_async(
+                args=[instance.id],
+                kwargs={'trigger_event': f'Project deadline changed from {old_date_str} to {new_date_str}'},
+                countdown=5,
+            )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            f'Error triggering branch recalculation for deadline change: {e}',
+            exc_info=True
+        )
+
+
+@receiver(post_save, sender='kanban.BoardMembership')
+def trigger_branch_recalculation_on_membership_added(sender, instance, created, **kwargs):
+    """
+    Trigger shadow branch recalculation when a team member is added to the board.
+    
+    Changes to team size affect capacity, velocity, and feasibility calculations.
+    """
+    if not created:
+        # Skip membership updates
+        return
+    
+    try:
+        board = instance.board
+        user_name = instance.user.get_full_name() or instance.user.username
+        
+        from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+        
+        recalculate_branches_for_board.apply_async(
+            args=[board.id],
+            kwargs={'trigger_event': f'Team member "{user_name}" added to board'},
+            countdown=5,
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            f'Error triggering branch recalculation for membership add: {e}',
+            exc_info=True
+        )
+
+
+@receiver(post_save, sender='kanban.BoardMembership')
+def trigger_branch_recalculation_on_membership_removed(sender, instance, **kwargs):
+    """
+    Trigger shadow branch recalculation when a team member is removed from the board.
+    """
+    # Note: This handler is also triggered on post_save, so we need to check
+    # if this is actually a deletion event. Django doesn't offer a direct post_delete
+    # for m2m relationships through explicit through models, so we use pre_delete instead.
+    # This is a limitation we'll address in the pre_delete handler below.
+    pass
+
+
+from django.db.models.signals import post_delete
+
+@receiver(post_delete, sender='kanban.BoardMembership')
+def trigger_branch_recalculation_on_membership_deleted(sender, instance, **kwargs):
+    """
+    Trigger shadow branch recalculation when a team member is removed from the board.
+    
+    Changes to team size affect capacity, velocity, and feasibility calculations.
+    """
+    try:
+        board = instance.board
+        user_name = instance.user.get_full_name() or instance.user.username
+        
+        from kanban.tasks.shadow_branch_tasks import recalculate_branches_for_board
+        
+        recalculate_branches_for_board.apply_async(
+            args=[board.id],
+            kwargs={'trigger_event': f'Team member "{user_name}" removed from board'},
+            countdown=5,
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            f'Error triggering branch recalculation for membership removal: {e}',
+            exc_info=True
+        )

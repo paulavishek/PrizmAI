@@ -17,6 +17,7 @@ from . import calendar_views
 from . import prizmbrief_views
 from . import onboarding_views
 from . import whatif_views
+from . import shadow_views
 
 urlpatterns = [
     path('', views.welcome, name='welcome'),
@@ -272,6 +273,16 @@ urlpatterns = [
     path('boards/<int:board_id>/what-if/save/', whatif_views.whatif_save, name='whatif_save'),
     path('boards/<int:board_id>/what-if/history/', whatif_views.whatif_history, name='whatif_history'),
     path('boards/<int:board_id>/what-if/<int:scenario_id>/delete/', whatif_views.whatif_delete, name='whatif_delete'),
+    
+    # Shadow Board URLs (Parallel Universe Simulator)
+    path('boards/<int:board_id>/shadow/', shadow_views.ShadowBoardListView.as_view(), name='shadow_board_list'),
+    path('boards/<int:board_id>/shadow/create/', shadow_views.CreateBranchView.as_view(), name='create_shadow_branch'),
+    path('boards/<int:board_id>/shadow/<int:branch_id>/', shadow_views.BranchDetailView.as_view(), name='shadow_branch_detail'),
+    path('boards/<int:board_id>/shadow/<int:branch_id>/commit/', shadow_views.CommitBranchView.as_view(), name='commit_shadow_branch'),
+    path('api/boards/<int:board_id>/shadow/conflicts/', shadow_views.merge_conflict_check, name='merge_conflict_check'),
+    path('api/boards/<int:board_id>/shadow/branch/<int:branch_id>/snapshots/', shadow_views.get_branch_snapshots, name='get_branch_snapshots'),
+    path('api/boards/<int:board_id>/shadow/branches/<int:branch_a_id>/<int:branch_b_id>/', shadow_views.get_branches_comparison, name='get_branches_comparison'),
+    path('boards/<int:board_id>/shadow/promote-scenario/', shadow_views.promote_scenario_to_branch, name='promote_scenario'),
     
     # Resource Leveling URLs
     path('api/resource-leveling/', include('kanban.resource_leveling_urls')),

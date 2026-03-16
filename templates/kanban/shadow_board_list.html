@@ -1,0 +1,376 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Shadow Board — {{ board.name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .quantum-standup {
+        background: linear-gradient(135deg, rgba(13, 110, 253, 0.05) 0%, rgba(25, 135, 84, 0.05) 100%);
+        border-left: 5px solid #0d6efd;
+        border-radius: 8px;
+    }
+    
+    .branch-card {
+        position: relative;
+        border-left: 5px solid var(--branch-color);
+        transition: all 0.2s ease;
+    }
+    
+    .branch-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        transform: translateY(-2px);
+    }
+    
+    .branch-card.selected {
+        border: 2px solid #0d6efd;
+        box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.2);
+    }
+    
+    .feasibility-badge {
+        font-size: 2.5rem;
+        font-weight: bold;
+        line-height: 1;
+    }
+    
+    .feasibility-badge.score-high {
+        color: #198754;
+    }
+    
+    .feasibility-badge.score-medium {
+        color: #fd7e14;
+    }
+    
+    .feasibility-badge.score-low {
+        color: #dc3545;
+    }
+    
+    .sparkline {
+        height: 40px;
+        margin-top: 1rem;
+    }
+    
+    .branch-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.5rem;
+        margin-top: 2rem;
+    }
+    
+    .compare-mode .branch-card {
+        cursor: pointer;
+    }
+    
+    .compare-mode .branch-card input[type="checkbox"] {
+        cursor: pointer;
+    }
+    
+    .diff-table {
+        margin-top: 2rem;
+    }
+    
+    .diff-row-match {
+        background-color: #f8f9fa;
+    }
+    
+    .diff-row-diff {
+        background-color: #fff3cd;
+    }
+    
+    .diff-row-conflict {
+        background-color: #f8d7da;
+    }
+
+    .branch-color-picker label {
+        display: inline-block;
+        width: 40px;
+        height: 40px;
+        border-radius: 4px;
+        cursor: pointer;
+        margin: 5px;
+        border: 2px solid transparent;
+        transition: all 0.2s;
+    }
+    
+    .branch-color-picker label:hover {
+        transform: scale(1.1);
+    }
+    
+    .branch-color-picker input[type="radio"] {
+        display: none;
+    }
+    
+    .branch-color-picker input[type="radio"]:checked + span {
+        border: 2px solid #000;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid my-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1><i class="fas fa-atom me-2" style="color: #0d6efd;"></i>Shadow Board</h1>
+            <p class="text-muted mb-0">{{ board.name }} — Living parallel project simulations</p>
+        </div>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createBranchModal">
+            <i class="fas fa-plus me-2"></i>Create Branch
+        </button>
+    </div>
+
+    <!-- Quantum Standup Section -->
+    <div class="card quantum-standup mb-4">
+        <div class="card-header bg-transparent border-0 py-3 d-flex justify-content-between align-items-center" role="button" data-bs-toggle="collapse" data-bs-target="#quantumStandupBody">
+            <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Quantum Standup — Today's Impact</h5>
+            <i class="fas fa-chevron-down"></i>
+        </div>
+        <div class="collapse show" id="quantumStandupBody">
+            <div class="card-body">
+                <!-- Today's Progress -->
+                <div class="mb-4">
+                    <h6><i class="fas fa-tasks me-2 text-success"></i>Real Progress Today</h6>
+                    {% if tasks_completed_today %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Task</th>
+                                    <th>Completed By</th>
+                                    <th class="text-end">Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for task in tasks_completed_today %}
+                                <tr>
+                                    <td><small><i class="fas fa-check-circle text-success me-1"></i>{{ task.title|truncatewords:5 }}</small></td>
+                                    <td><small>{{ task.assigned_to.first_name|default:"Unassigned" }}</small></td>
+                                    <td class="text-end"><small>{{ task.updated_at|time }}</small></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">No tasks completed yet today.</p>
+                    {% endif %}
+                </div>
+
+                <hr>
+
+                <!-- Branch Impacts -->
+                <div>
+                    <h6><i class="fas fa-code-branch me-2 text-info"></i>How It Affected Your Branches</h6>
+                    {% if branch_impacts_today %}
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Branch</th>
+                                    <th class="text-center">Feasibility Before</th>
+                                    <th class="text-center">After</th>
+                                    <th class="text-center">Change</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in branch_impacts_today %}
+                                <tr class="{% if log.score_delta > 0 %}table-success{% elif log.score_delta < 0 %}table-warning{% endif %}">
+                                    <td><small><strong>{{ log.branch.name }}</strong></small></td>
+                                    <td class="text-center"><small><span class="badge bg-secondary">{{ log.old_score }}</span></small></td>
+                                    <td class="text-center"><small><span class="badge {% if log.new_score >= 70 %}bg-success{% elif log.new_score >= 50 %}bg-warning{% else %}bg-danger{% endif %}">{{ log.new_score }}</span></small></td>
+                                    <td class="text-center"><small>
+                                        {% if log.score_delta > 0 %}
+                                            <span class="text-success"><i class="fas fa-arrow-up me-1"></i>+{{ log.score_delta }}</span>
+                                        {% elif log.score_delta < 0 %}
+                                            <span class="text-danger"><i class="fas fa-arrow-down me-1"></i>{{ log.score_delta }}</span>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
+                                        {% endif %}
+                                    </small></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <p class="text-muted mb-0">No branch recalculations today yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Branch Cards Grid -->
+    <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0"><i class="fas fa-object-group me-2"></i>Active Branches</h5>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="compareToggle">
+                <label class="form-check-label" for="compareToggle">
+                    <small>Compare Mode</small>
+                </label>
+            </div>
+        </div>
+
+        <div class="branch-grid" id="branchGrid">
+            {% for branch in branches %}
+                {% if branch.status == 'active' or branch.status == 'committed' %}
+                <div class="card branch-card" data-branch-id="{{ branch.id }}" style="--branch-color: {{ branch.branch_color }};">
+                    <div class="card-body">
+                        <!-- Checkbox for compare mode -->
+                        <input type="checkbox" class="branch-checkbox" style="display: none;" data-branch-id="{{ branch.id }}">
+                        
+                        <!-- Branch name & color -->
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h6 class="card-title mb-1">
+                                    {% if branch.is_starred %}
+                                    <i class="fas fa-star text-warning me-1"></i>
+                                    {% endif %}
+                                    {{ branch.name }}
+                                </h6>
+                                <small class="text-muted">Created {{ branch.created_at|date:"M d, Y" }}</small>
+                            </div>
+                            <span class="badge {% if branch.status == 'committed' %}bg-success{% else %}bg-secondary{% endif %}">
+                                {{ branch.get_status_display }}
+                            </span>
+                        </div>
+
+                        <!-- Latest snapshot data -->
+                        {% if branch.snapshots.all|length > 0 %}
+                            {% with latest=branch.get_latest_snapshot %}
+                            <!-- Feasibility Score -->
+                            <div class="mb-3">
+                                <small class="text-muted d-block">Feasibility Score</small>
+                                <div class="feasibility-badge {% if latest.feasibility_score >= 70 %}score-high{% elif latest.feasibility_score >= 50 %}score-medium{% else %}score-low{% endif %}">
+                                    {{ latest.feasibility_score }}%
+                                </div>
+                            </div>
+
+                            <!-- Projected Completion -->
+                            {% if latest.projected_completion_date %}
+                            <div class="mb-3">
+                                <small class="text-muted d-block">Projected Completion</small>
+                                <strong>{{ latest.projected_completion_date|date:"M d, Y" }}</strong>
+                            </div>
+                            {% endif %}
+
+                            <!-- Sparkline -->
+                            <canvas id="sparkline-{{ branch.id }}" class="sparkline" data-branch-scores="{{ branch_scores|safe }}"></canvas>
+
+                            <!-- Actions -->
+                            <div class="btn-group btn-group-sm w-100 mt-3" role="group">
+                                <a href="{% url 'shadow_branch_detail' board.id branch.id %}" class="btn btn-outline-primary" title="View details">
+                                    <i class="fas fa-eye"></i>
+                                </a>
+                                <button class="btn btn-outline-secondary btn-star" data-branch-id="{{ branch.id }}" title="Star/unstar">
+                                    <i class="fas fa-star{% if not branch.is_starred %} far{% endif %}"></i>
+                                </button>
+                                {% if branch.status == 'active' %}
+                                <button class="btn btn-outline-success btn-commit" data-branch-id="{{ branch.id }}" title="Commit this branch">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                            {% endwith %}
+                        {% else %}
+                            <p class="text-muted text-center my-4"><small>Calculating first snapshot...</small></p>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            {% empty %}
+            <div class="col-12">
+                <div class="alert alert-info text-center">
+                    <i class="fas fa-info-circle me-2"></i>No active branches yet.
+                    <button class="btn btn-sm btn-outline-primary ms-2" data-bs-toggle="modal" data-bs-target="#createBranchModal">
+                        Create your first branch
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Compare Mode Diff Table (hidden by default) -->
+    <div id="compareTable" class="diff-table" style="display: none;">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Comparison: <span id="compareTitle"></span></h6>
+            </div>
+            <div class="card-body table-responsive">
+                <table class="table table-sm" id="diffTable">
+                    <thead>
+                        <tr>
+                            <th style="width: 25%;">Field</th>
+                            <th style="width: 37.5%;" id="branchAHeader"></th>
+                            <th style="width: 37.5%;" id="branchBHeader"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="diffTableBody">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Create Branch Modal -->
+<div class="modal fade" id="createBranchModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-plus me-2"></i>Create Shadow Branch</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="createBranchForm">
+                <div class="modal-body">
+                    {% csrf_token %}
+                    
+                    <div class="mb-3">
+                        <label for="branchName" class="form-label">Branch Name <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="branchName" name="name" placeholder="e.g., Hire 3 contractors" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="branchDescription" class="form-label">Description</label>
+                        <textarea class="form-control" id="branchDescription" name="description" rows="2" placeholder="What's the goal of this branch?"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="scenarioSelect" class="form-label">Link to Saved Scenario (optional)</label>
+                        <select class="form-select" id="scenarioSelect" name="scenario_id">
+                            <option value="">— None —</option>
+                            <!-- Scenarios will be loaded via AJAX -->
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Branch Color</label>
+                        <div class="branch-color-picker">
+                            {% for color in predefined_colors %}
+                            <label style="background-color: {{ color }};">
+                                <input type="radio" name="branch_color" value="{{ color }}" {% if forloop.first %}checked{% endif %}>
+                                <span></span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-check me-2"></i>Create Branch
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script src="{% static 'js/shadow_board.js' %}"></script>
+{% endblock %}

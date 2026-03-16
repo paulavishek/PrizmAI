@@ -354,6 +354,9 @@
                             <button class="btn btn-sm btn-outline-primary btn-load-scenario" data-params='{{ s.input_parameters|safe }}'>
                                 <i class="fas fa-upload me-1"></i> Load
                             </button>
+                            <button class="btn btn-sm btn-outline-success btn-promote-scenario" data-scenario-id="{{ s.id }}" data-scenario-name="{{ s.name }}" title="Promote to Shadow Branch (living simulation)">
+                                <i class="fas fa-atom me-1"></i> Promote
+                            </button>
                             <button class="btn btn-sm btn-outline-danger btn-delete-scenario" data-id="{{ s.id }}">
                                 <i class="fas fa-trash"></i>
                             </button>
@@ -411,4 +414,60 @@
     };
 </script>
 <script src="{% static 'js/whatif_analyzer.js' %}"></script>
+<script>
+    // Handle "Promote to Shadow Branch" buttons
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.btn-promote-scenario')) {
+            const btn = e.target.closest('.btn-promote-scenario');
+            const scenarioId = btn.dataset.scenarioId;
+            const scenarioName = btn.dataset.scenarioName;
+            
+            // Prompt for branch name and color
+            const branchName = prompt(`Branch name (default: "${scenarioName}"):`) || scenarioName;
+            if (!branchName) return;
+            
+            // Show color picker (simple modal-based approach)
+            promoteToBranch(scenarioId, branchName, 'default-color');
+        }
+    });
+
+    async function promoteToBranch(scenarioId, branchName, color) {
+        try {
+            const formData = new FormData();
+            formData.append('scenario_id', scenarioId);
+            formData.append('branch_name', branchName);
+            formData.append('color', color);
+            
+            const response = await fetch(`/boards/{{ board.id }}/shadow/promote-scenario/`, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': window.WHATIF_CONFIG.csrfToken
+                }
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                // Show success message
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-success alert-dismissible fade show';
+                alertDiv.innerHTML = `
+                    ${data.message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.querySelector('.container-fluid').insertBefore(alertDiv, document.querySelector('.container-fluid').firstChild);
+                
+                // Redirect to shadow board after 2 seconds
+                setTimeout(() => {
+                    window.location.href = `/boards/{{ board.id }}/shadow/`;
+                }, 2000);
+            } else {
+                alert(`Error: ${data.message || data.error}`);
+            }
+        } catch (error) {
+            console.error('Error promoting scenario:', error);
+            alert('Error promoting scenario to branch.');
+        }
+    }
+</script>
 {% endblock %}

@@ -1829,6 +1829,10 @@
                     <span class="tile-icon text-info"><i class="fas fa-flask"></i></span>
                     <span class="tile-label">What-If</span>
                 </a>
+                <a class="ai-panel-tile" href="{% url 'shadow_board_list' board.id %}">
+                    <span class="tile-icon" style="color: #9c27b0;"><i class="fas fa-atom"></i></span>
+                    <span class="tile-label">Shadow Board</span>
+                </a>
                 <a class="ai-panel-tile" href="{% url 'premortem_dashboard' board.id %}">
                     <span class="tile-icon text-danger"><i class="fas fa-shield-alt"></i></span>
                     <span class="tile-label">Pre-Mortem</span>
