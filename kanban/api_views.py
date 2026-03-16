@@ -2809,6 +2809,110 @@ def update_task_dates_api(request):
 
 
 @login_required
+@require_http_methods(["PATCH"])
+def reschedule_task_api(request, task_id):
+    """
+    Reschedule a task by updating start_date and/or due_date via Gantt drag.
+    Supports two interactions:
+      - Bar move: both start_date and due_date sent (duration preserved)
+      - Right-edge resize: only due_date sent (start_date unchanged)
+    Also checks for Finish-to-Start dependency cascades and returns affected dependents.
+    """
+    try:
+        task = get_object_or_404(Task, id=task_id)
+        board = task.column.board
+
+        # Permission check: only board creator or members can reschedule
+        if request.user != board.created_by and not board.members.filter(id=request.user.id).exists():
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        data = json.loads(request.body)
+        start_date_str = data.get('start_date')
+        due_date_str = data.get('due_date')
+
+        if not start_date_str and not due_date_str:
+            return JsonResponse({'error': 'At least one of start_date or due_date is required'}, status=400)
+
+        from datetime import datetime as dt, time as dt_time
+
+        changes = []
+        new_start = None
+        new_due = None
+
+        # Update start_date if provided
+        if start_date_str:
+            new_start = dt.strptime(start_date_str, '%Y-%m-%d').date()
+            task.start_date = new_start
+            changes.append(f"Start date set to {start_date_str}")
+
+        # Update due_date if provided
+        if due_date_str:
+            new_due = dt.strptime(due_date_str, '%Y-%m-%d').date()
+            # Preserve time component and timezone of existing due_date
+            if task.due_date:
+                task.due_date = task.due_date.replace(
+                    year=new_due.year, month=new_due.month, day=new_due.day
+                )
+            else:
+                task.due_date = timezone.make_aware(
+                    dt.combine(new_due, dt_time(23, 59, 59))
+                )
+            changes.append(f"Due date set to {due_date_str}")
+
+        # Validate: if both dates are set on the task, due_date must be >= start_date
+        effective_start = task.start_date
+        effective_due = task.due_date.date() if task.due_date else None
+        if effective_start and effective_due and effective_due < effective_start:
+            return JsonResponse({'error': 'Due date cannot be before start date'}, status=400)
+
+        task.save()
+
+        # Log activity
+        if changes:
+            TaskActivity.objects.create(
+                task=task,
+                user=request.user,
+                activity_type='updated',
+                description='Rescheduled via Gantt: ' + '; '.join(changes)
+            )
+
+        # Dependency cascade check (Finish-to-Start):
+        # Find tasks that depend on *this* task (i.e. this task must finish before they start)
+        # and whose start_date is now before this task's new due_date.
+        affected_dependents = []
+        effective_due_date = task.due_date.date() if task.due_date else None
+        if effective_due_date:
+            dependents = task.dependent_tasks.filter(
+                start_date__isnull=False,
+                start_date__lt=effective_due_date
+            ).values('id', 'title', 'start_date')
+            affected_dependents = [
+                {
+                    'id': d['id'],
+                    'title': d['title'],
+                    'start_date': d['start_date'].isoformat() if d['start_date'] else None
+                }
+                for d in dependents
+            ]
+
+        return JsonResponse({
+            'success': True,
+            'task': {
+                'id': task.id,
+                'start_date': task.start_date.isoformat() if task.start_date else None,
+                'due_date': task.due_date.date().isoformat() if task.due_date else None,
+            },
+            'affected_dependents': affected_dependents,
+        })
+
+    except ValueError as e:
+        return JsonResponse({'error': f'Invalid date format: {str(e)}'}, status=400)
+    except Exception as e:
+        logger.error(f"Error in reschedule_task_api: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
 @require_http_methods(["POST"])
 def update_task_fields_api(request, task_id):
     """

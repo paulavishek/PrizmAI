@@ -211,6 +211,7 @@ urlpatterns = [
     
     # Gantt Chart API Endpoints
     path('api/tasks/update-dates/', api_views.update_task_dates_api, name='update_task_dates_api'),
+    path('api/tasks/<int:task_id>/reschedule/', api_views.reschedule_task_api, name='reschedule_task_api'),
     path('api/tasks/<int:task_id>/update-fields/', api_views.update_task_fields_api, name='update_task_fields_api'),
 
     # Phase Management API Endpoints
