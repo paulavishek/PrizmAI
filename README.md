@@ -62,6 +62,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Scope Creep Autopsy** — Forensic post-mortem analysis that traces every scope expansion to its exact cause, contributor, date, and cost or delay impact. Generates exportable PDF reports that turn scope history into actionable lessons for future projects.
 - **What-If Scenario Analyzer** — A decision-support engine that lets PMs simulate the cascading impact of three key variables before committing: scope changes (±20 tasks), team size adjustments (±5 members, modeled with Brooks's Law), and deadline shifts (±8 weeks). Each simulation computes a live baseline from velocity history, budget, and burndown data, then produces a projected state with a feasibility score (0–100), detected conflicts (resource overload, deadline infeasibility, budget overrun), a before/after comparison table, and a Gemini-powered strategic recommendation. Scenarios can be saved, starred, and reloaded for ongoing comparison.
 - **Shadow Board — Parallel Universe Simulator** — Takes What-If further: instead of running one scenario and discarding it, Shadow Board lets you promote saved scenarios into living, parallel *branches* of your project. Each branch keeps updating automatically as real work progresses, so you can compare "hire 3 contractors" vs "cut 5 tasks" side-by-side with live feasibility scores, AI recommendations, and projected completion dates — all powered by Gemini. When you're ready to decide, commit one branch to reality and archive the rest with a full audit trail. See the [Shadow Board guide](#shadow-board--parallel-universe-simulator-1) below.
+- **Living Commitment Protocols (Anti-Roadmap)** — Replace rigid, pretend-certain project plans with living commitments that honestly track how confident your team actually is. Each protocol has a real-time confidence score that decays automatically over time, a prediction market where team members bet tokens on outcomes, an AI coach that triggers renegotiation when confidence drops too low, and a full signal log showing every event that moved the needle. See the [Living Commitment Protocols guide](#living-commitment-protocols--anti-roadmap) below.
 - **Exit Protocol — Project Wind-Down System** — A structured, compassionate system for ending projects deliberately instead of letting them die quietly. When a project is struggling, PrizmAI watches for warning signs and guides the team through a dignified wind-down: extracting all reusable knowledge, generating transition memos for every team member, archiving the project with a full AI-written autopsy report, and preserving the lessons in a searchable Project Cemetery. Reusable components (templates, workflows, automation rules) can be transplanted into future projects. Buried projects can even be "resurrected" as a fresh board pre-loaded with all the lessons from the original. See the [Exit Protocol guide](#exit-protocol--project-wind-down-system-1) below.
 
 ### Enterprise & Collaboration
@@ -230,6 +231,98 @@ At the top of the Shadow Board page is a collapsible **Quantum Standup** panel. 
 - How today's progress changed each branch's feasibility score (with ▲/▼ delta indicators)
 
 It's a one-glance answer to: *"Did today's work make our decision easier or harder?"*
+
+---
+
+## Living Commitment Protocols — Anti-Roadmap
+
+> **In plain English:** A traditional project plan says "we will ship by June 15th" and never updates that statement even when reality changes. Living Commitment Protocols replace that false certainty with an honest answer: *"Right now, we're 72% confident we'll hit this target — and here's exactly why that number moved since last week."*
+
+### Why it exists
+
+Roadmaps lie — not because teams are dishonest, but because plans made months in advance can't account for blockers, team changes, shifting requirements, and the dozen small surprises that hit every project. The result: PMs report green status until the very last week, then the deadline slips.
+
+Living Commitment Protocols treat **confidence as a first-class measurement**. Instead of pretending certainty, your team publicly tracks how likely each commitment actually is — and the system automatically warns you when confidence is eroding before it's too late to act.
+
+### The four parts of a Commitment Protocol
+
+#### 📉 Confidence Decay
+
+Every commitment starts with an initial confidence score (e.g., 80%). That score **automatically decreases over time** based on a decay model you choose when creating the protocol:
+
+- **Exponential** — Confidence drops quickly at first, then levels off. Good for near-term commitments where uncertainty is front-loaded.
+- **Linear** — Confidence drops at a steady, predictable rate. Good for long, stable projects.
+- **Stepped** — Confidence holds steady, then drops sharply when milestones are missed. Good for phase-gated projects.
+
+You set a **half-life** (e.g., 14 days) which controls how fast the decay happens. After 14 days with no positive news, the confidence score halves. The **Confidence Curve** chart shows both what actually happened historically and where the score is heading if nothing changes.
+
+#### 🎯 Prediction Market
+
+Team members can each place a **bet** on what they think the final outcome will be. They wager **tokens** (100 per person, reset weekly) on their prediction.
+
+Why bets? When people put even a small stake behind their opinion, they share honest assessments instead of socially safe ones. The **Market Consensus** — a weighted average of all bets — is often more accurate than the official score because it surfaces what the team *actually* believes privately.
+
+When at least 3 bets are placed, the market opens and shows:
+- **Weighted consensus** — Each person's bet is weighted by their past accuracy (credibility score)
+- **Divergence** — How far the team's honest view is from the official confidence score. A big divergence is an early warning sign.
+- **Total tokens wagered** — How much conviction is behind the market
+
+After the deadline, bets are resolved and accurate predictors earn better credibility scores, making their future bets count more.
+
+#### 📡 Signal Log
+
+Anything that happens on the project can **push the confidence score up or down** in real time. Signals come from two sources:
+
+- **Automatic** — When tasks linked to a protocol are completed, added, or deleted, PrizmAI automatically logs a signal and adjusts the score
+- **Manual** — Team members can log their own signals from the detail page: milestone hit, blocker emerged, stakeholder approval, team change, etc. Each signal requires a short description of what happened
+
+The Signal Log tab shows every event in order — what type it was, how much it moved the score, and who recorded it.
+
+#### 🤝 AI Renegotiation Bot
+
+When confidence drops below a **negotiation threshold** you set (e.g., 30%), PrizmAI's AI coach automatically steps in and opens a **Negotiation Session**. The bot:
+1. Reads the full history of the commitment — all signals, bets, and the original plan
+2. Drafts a plain-English message explaining what's going wrong and why
+3. Proposes **three concrete options** to restore confidence, each with an impact assessment
+
+The team reviews the options and picks one (or writes a custom resolution). The protocol then moves to *Renegotiated* status and the new terms are recorded permanently.
+
+### Creating a Commitment Protocol
+
+From any board, click the **Commitments** tab in the top navigation (next to Kanban, Gantt, Calendar), then click **New Protocol**. Fill in:
+
+| Field | What to enter |
+|---|---|
+| **Title** | A short, clear name — e.g., "Ship Mobile App v2" |
+| **Description** | What exactly you're committing to |
+| **Target date** | The deadline |
+| **Initial confidence** | Your honest starting confidence (0–100%) |
+| **Decay model** | Exponential, linear, or stepped |
+| **Half-life (days)** | How many days before confidence halves without new signals |
+| **Negotiation threshold** | The confidence % that triggers the AI renegotiation bot |
+| **Linked tasks** | Optional — tasks from this board that affect this commitment |
+
+### The portfolio view
+
+The **Commitments dashboard** shows all protocols for a board at a glance — portfolio-level confidence, individual protocol cards with live confidence bars, and counts of at-risk and critical protocols at the top.
+
+### Status meanings
+
+| Status | What it means |
+|---|---|
+| **Active** | On track, confidence above the warning threshold |
+| **At Risk** | Confidence is declining — worth watching |
+| **Critical** | Confidence has fallen to a dangerous level |
+| **Renegotiated** | The team has agreed new terms after a negotiation session |
+| **Met** | Deadline passed and the commitment was fulfilled |
+| **Missed** | Deadline passed and the commitment was not fulfilled |
+
+### Getting to Commitment Protocols
+
+- From any board, click the **Commitments** tab in the navigation bar at the top of the board
+- Or navigate directly to `/boards/<board-id>/commitments/`
+- A summary widget also appears on the **Triple Constraint Dashboard**
+- You can ask **Spectra** directly: *"What is the status of commitment #1?"*, *"Show me all at-risk commitments"*, or *"Place a bet of 5 tokens at 65% confidence on commitment #1"*
 
 ---
 
