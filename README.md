@@ -62,6 +62,7 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Scope Creep Autopsy** — Forensic post-mortem analysis that traces every scope expansion to its exact cause, contributor, date, and cost or delay impact. Generates exportable PDF reports that turn scope history into actionable lessons for future projects.
 - **What-If Scenario Analyzer** — A decision-support engine that lets PMs simulate the cascading impact of three key variables before committing: scope changes (±20 tasks), team size adjustments (±5 members, modeled with Brooks's Law), and deadline shifts (±8 weeks). Each simulation computes a live baseline from velocity history, budget, and burndown data, then produces a projected state with a feasibility score (0–100), detected conflicts (resource overload, deadline infeasibility, budget overrun), a before/after comparison table, and a Gemini-powered strategic recommendation. Scenarios can be saved, starred, and reloaded for ongoing comparison.
 - **Shadow Board — Parallel Universe Simulator** — Takes What-If further: instead of running one scenario and discarding it, Shadow Board lets you promote saved scenarios into living, parallel *branches* of your project. Each branch keeps updating automatically as real work progresses, so you can compare "hire 3 contractors" vs "cut 5 tasks" side-by-side with live feasibility scores, AI recommendations, and projected completion dates — all powered by Gemini. When you're ready to decide, commit one branch to reality and archive the rest with a full audit trail. See the [Shadow Board guide](#shadow-board--parallel-universe-simulator-1) below.
+- **Exit Protocol — Project Wind-Down System** — A structured, compassionate system for ending projects deliberately instead of letting them die quietly. When a project is struggling, PrizmAI watches for warning signs and guides the team through a dignified wind-down: extracting all reusable knowledge, generating transition memos for every team member, archiving the project with a full AI-written autopsy report, and preserving the lessons in a searchable Project Cemetery. Reusable components (templates, workflows, automation rules) can be transplanted into future projects. Buried projects can even be "resurrected" as a fresh board pre-loaded with all the lessons from the original. See the [Exit Protocol guide](#exit-protocol--project-wind-down-system-1) below.
 
 ### Enterprise & Collaboration
 
@@ -95,6 +96,87 @@ PrizmAI is a full-stack project management platform built with Django, Google Ge
 - **Colorblind Accessibility** — Optimized color palettes with pattern indicators
 
 **→ [Detailed feature documentation](FEATURES.md)**
+
+---
+
+## Exit Protocol — Project Wind-Down System
+
+> **In plain English:** Every project eventually ends — but most just *fade out*. Work stops, the team scatters, and nobody writes down what went wrong or what was worth keeping. Exit Protocol is PrizmAI's answer to that: a guided process that helps you close a project properly, preserve everything valuable, and carry the lessons forward.
+
+### Why it exists
+
+Most project management tools are built for starting and running projects. Almost none handle *ending* them well. When a project fails or gets cancelled, teams usually just stop showing up. Critical decisions, hard-won lessons, reusable templates, and important contacts all disappear into the void.
+
+Exit Protocol treats project endings as something worth doing right.
+
+### The three parts of Exit Protocol
+
+#### 🏥 Project Hospice — The Wind-Down Process
+
+PrizmAI quietly monitors every project's health every night, looking at four things: how fast the team is getting work done, whether the budget is being spent responsibly, how many deadlines have been missed recently, and whether the team is still actively working at all.
+
+When the health score crosses **75%** on the risk scale, PrizmAI shows a gentle warning on the project page: *"This project may be struggling — consider a structured review."*
+
+A manager can then click **Initiate Wind-Down Review**, and PrizmAI takes it from there:
+- **AI Assessment** — Gemini reads the entire project history and writes a plain-English summary of what's been happening and why the project is in trouble
+- **Knowledge Extraction Checklist** — PrizmAI pulls every important decision, lesson, risk event, and milestone from the project's memory and presents them as a checklist to review and sign off
+- **Transition Memos** — One personalised AI-written memo per team member, summarising their contributions, open tasks, and what they need to hand over
+- **Organ Scanning** — PrizmAI automatically identifies which parts of this project could be useful in a future one — automation rules, task templates, workflow structures, goal frameworks — and packages them up for reuse
+
+When the team is ready, a manager types a confirmation phrase and clicks **Archive This Project**. PrizmAI then writes the full autopsy report and closes the project permanently.
+
+#### 🫀 Organ Transplant — Keeping What's Valuable
+
+Not everything about a struggling project is bad. Maybe the team built a brilliant automation rule, or designed a task breakdown structure that could save weeks on the next project.
+
+The **Organ Bank** lets you see everything reusable that was extracted from a project — templates, workflows, automation rules, role definitions, knowledge entries.
+
+The **Organ Library** is a searchable catalogue of reusable components from *all* past projects across your organisation. When you're setting up a new project, you can browse it, see how compatible each component is with your new board (scored by AI), and transplant it in with one click.
+
+Think of it like a parts library — built automatically every time a project closes.
+
+#### ⚰️ Project Cemetery — The Permanent Archive
+
+Every project that goes through Exit Protocol gets a permanent entry in the **Project Cemetery** — a searchable archive accessible from the sidebar.
+
+Each entry is a full autopsy report:
+- **Vital Statistics** — Team size, tasks completed vs planned, budget used
+- **Cause of Death** — AI classifies the project's closure into one of eight named categories: *Scope Cancer, Velocity Collapse, Budget Bleed, Zombie Death, Resource Exodus, Market Shift, Strategic Pivot*, or *Natural Completion* — and explains its reasoning
+- **Timeline of Decline** — A chart showing how the health score declined over the project's lifetime
+- **Lessons Learned** — Organised into three buckets: things to repeat on future projects, things to avoid, and open questions that were never resolved
+- **Organ Transplant Record** — Which reusable components were extracted from this project and where they went
+
+You can search the Cemetery by project name, filter by cause of death or date range, and export any autopsy as a **PDF report**.
+
+#### 🌱 Resurrection — Starting Again Smarter
+
+Sometimes a project dies before its time — the timing was wrong, the team changed, or the budget ran out — but the underlying idea was still good.
+
+The Cemetery's **Resurrect as New Board** button creates a brand-new project pre-loaded with:
+- All the decisions and lessons from the original, already in the Knowledge Graph
+- A Pre-Mortem analysis with every risk that contributed to the original project's failure, tagged with a warning: *"⚠️ This risk destroyed the original project this board was resurrected from."*
+
+The Cemetery entry remains permanently — resurrection is a new start, not an undo.
+
+### The health score explained
+
+PrizmAI calculates a **Hospice Risk Score** from 0–100% every night for every project. Higher means more at risk. The dashboard shows a live breakdown so managers know exactly which dimension is driving the number:
+
+| Dimension | What it measures | Weight |
+|---|---|---|
+| **Velocity** | Has the team's work rate been falling? | 30% |
+| **Budget** | Is money being spent faster than work is being completed? | 25% |
+| **Deadlines** | How many tasks were due in the last 30 days and missed? | 25% |
+| **Activity** | How long since anyone last touched this project? | 20% |
+
+Scores below 40% are green (healthy). 40–74% are amber (worth watching). 75%+ are red (concern detected). A **Recalculate Now** button lets managers refresh the score on demand — useful when something significant just happened mid-day.
+
+### Getting to Exit Protocol
+
+- From any board, open the **AI Tools** panel and click **Exit Protocol**
+- Or navigate directly to `/boards/<board-id>/exit-protocol/`
+- The **Project Cemetery** is accessible from the sidebar under **More → Project Cemetery**
+- The **Organ Library** is at `/exit-protocol/organ-library/`
 
 ---
 
