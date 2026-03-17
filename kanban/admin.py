@@ -20,6 +20,7 @@ from .budget_models import (
     BudgetRecommendation, CostPattern
 )
 from .premortem_models import PreMortemAnalysis, PreMortemScenarioAcknowledgment
+from .stress_test_models import StressTestSession, ImmunityScore, StressTestScenario, Vaccine
 from .scope_autopsy_models import ScopeAutopsyReport, ScopeTimelineEvent
 from .whatif_models import WhatIfScenario
 
@@ -1029,3 +1030,44 @@ class WhatIfScenarioAdmin(admin.ModelAdmin):
     list_filter = ('scenario_type', 'is_starred', 'created_at')
     search_fields = ('name', 'board__name', 'created_by__username')
     readonly_fields = ('created_at',)
+
+
+# ── Stress Test ────────────────────────────────────────────────────────
+
+class ImmunityScoreInline(admin.StackedInline):
+    model = ImmunityScore
+    extra = 0
+    readonly_fields = ('overall', 'schedule', 'budget', 'team', 'dependencies', 'scope_stability')
+
+
+@admin.register(StressTestSession)
+class StressTestSessionAdmin(admin.ModelAdmin):
+    list_display = ('board', 'run_by', 'created_at')
+    list_filter = ('board', 'created_at')
+    search_fields = ('board__name', 'run_by__username')
+    readonly_fields = ('created_at',)
+    inlines = [ImmunityScoreInline]
+
+
+@admin.register(ImmunityScore)
+class ImmunityScoreAdmin(admin.ModelAdmin):
+    list_display = ('session', 'overall', 'get_band', 'schedule', 'budget', 'team', 'dependencies', 'scope_stability')
+    list_filter = ('overall',)
+
+    @admin.display(description='Band')
+    def get_band(self, obj):
+        return obj.get_band()
+
+
+@admin.register(StressTestScenario)
+class StressTestScenarioAdmin(admin.ModelAdmin):
+    list_display = ('session', 'title', 'attack_type', 'outcome', 'severity', 'is_addressed')
+    list_filter = ('outcome', 'is_addressed', 'attack_type')
+    search_fields = ('title', 'attack_description')
+
+
+@admin.register(Vaccine)
+class VaccineAdmin(admin.ModelAdmin):
+    list_display = ('session', 'name', 'effort_level', 'projected_score_improvement', 'is_applied')
+    list_filter = ('effort_level', 'is_applied')
+    search_fields = ('name', 'description')

@@ -1837,6 +1837,10 @@
                     <span class="tile-icon text-danger"><i class="fas fa-shield-alt"></i></span>
                     <span class="tile-label">Pre-Mortem</span>
                 </a>
+                <a class="ai-panel-tile" href="{% url 'stress_test_dashboard' board.id %}">
+                    <span class="tile-icon text-warning"><i class="fas fa-bolt"></i></span>
+                    <span class="tile-label">Stress Test</span>
+                </a>
                 <a class="ai-panel-tile" href="{% url 'retrospective_dashboard' board.id %}">
                     <span class="tile-icon text-secondary"><i class="fas fa-history"></i></span>
                     <span class="tile-label">Retrospectives</span>

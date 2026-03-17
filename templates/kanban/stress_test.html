@@ -1,0 +1,634 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Stress Test - {{ board.name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="fas fa-bolt text-warning"></i> Project Stress Test — {{ board.name }}</h2>
+            <p class="text-muted">Simulate failure before it happens. Measure how much your plan can take.</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <a href="{% url 'board_detail' board.id %}" class="btn btn-outline-secondary me-2">
+                <i class="fas fa-arrow-left me-1"></i> Back to Board
+            </a>
+            {% if has_quota %}
+            <button id="btn-run-stress-test" class="btn btn-warning" onclick="runStressTest()">
+                <i class="fas fa-bolt me-1"></i> Run Stress Test
+            </button>
+            {% else %}
+            <button class="btn btn-secondary" disabled>
+                <i class="fas fa-lock me-1"></i> AI Quota Exceeded
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Pre-Mortem Cross-link Banner -->
+    {% if premortem_count > 0 %}
+    <div class="alert alert-info d-flex align-items-center mb-4">
+        <i class="fas fa-shield-alt me-2"></i>
+        <span>Pre-Mortem identified <strong>{{ premortem_count }}</strong> risk scenarios</span>
+        <a href="{% url 'premortem_dashboard' board.id %}" class="btn btn-outline-info btn-sm ms-3">
+            View Pre-Mortem
+        </a>
+    </div>
+    {% endif %}
+
+    <!-- Loading spinner (hidden by default) -->
+    <div id="stress-test-loading" class="text-center py-5" style="display:none;">
+        <div class="spinner-border text-warning" role="status" style="width:3rem;height:3rem;">
+            <span class="visually-hidden">Running stress test…</span>
+        </div>
+        <p class="mt-3 text-muted">Red Team AI is attacking your project plan… this takes 15-20 seconds.</p>
+    </div>
+
+    {% if not session %}
+    <!-- ============================================================ -->
+    <!-- EMPTY STATE — No sessions yet                                 -->
+    <!-- ============================================================ -->
+    <div class="card border-warning">
+        <div class="card-body text-center py-5">
+            <i class="fas fa-bolt fa-3x text-warning mb-3"></i>
+            <h4>Project Stress Test</h4>
+            <p class="text-muted mb-4">
+                Run your first stress test to see how your project plan holds up
+                under adversarial attack simulations.
+            </p>
+            {% if has_quota %}
+            <button class="btn btn-warning btn-lg" onclick="runStressTest()">
+                <i class="fas fa-bolt me-2"></i> Run First Stress Test
+            </button>
+            <p class="text-muted mt-2"><small>Analysis takes 15-20 seconds</small></p>
+            {% else %}
+            <button class="btn btn-secondary btn-lg" disabled>
+                <i class="fas fa-lock me-2"></i> AI Quota Exceeded
+            </button>
+            <p class="text-muted mt-2"><small>Your AI usage quota has been reached. Try again later.</small></p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% else %}
+    <!-- ============================================================ -->
+    <!-- RESULTS STATE                                                 -->
+    <!-- ============================================================ -->
+
+    <!-- Session info bar -->
+    <div class="card mb-4">
+        <div class="card-body d-flex flex-wrap align-items-center justify-content-between">
+            <div>
+                <span class="text-muted me-3">
+                    Last run: {{ session.created_at|date:"M d, Y H:i" }}
+                </span>
+                <span class="text-muted me-3">
+                    Run by: {% if session.run_by %}{{ session.run_by.get_full_name|default:session.run_by.username }}{% else %}Unknown{% endif %}
+                </span>
+                <span class="text-muted">
+                    Sessions: {{ session_count }}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assumptions banner -->
+    {% if session.assumptions_made %}
+    <div class="alert alert-info mb-4">
+        <i class="fas fa-info-circle me-2"></i>
+        <strong>Assumptions made by Red Team AI:</strong>
+        <ul class="mb-0 mt-1">
+            {% for assumption in session.assumptions_made %}
+            <li>{{ assumption }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <!-- ── Immunity Score + Stats Row ── -->
+    <div class="row mb-4">
+        <!-- Immunity Score Gauge -->
+        <div class="col-lg-4 mb-3">
+            <div class="card h-100">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-3">Immunity Score</h6>
+                    <!-- Half-circle gauge -->
+                    <div class="immunity-gauge-wrapper">
+                        <div class="immunity-gauge" style="--score: {{ session.immunity_score.overall }}; --color: {{ session.immunity_score.get_band_colour }};">
+                            <div class="gauge-bg"></div>
+                            <div class="gauge-fill"></div>
+                            <div class="gauge-cover">
+                                <span class="gauge-score">{{ session.immunity_score.overall }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <span class="badge fs-6" style="background-color: {{ session.immunity_score.get_band_colour }}; color: #fff;">
+                            {{ session.immunity_score.get_band }}
+                        </span>
+                    </div>
+                    {% if session.score_rationale %}
+                    <p class="text-muted small mt-2 mb-0">{{ session.score_rationale }}</p>
+                    {% endif %}
+
+                    <!-- Mini trend chart -->
+                    {% if immunity_history != '[]' %}
+                    <div class="mt-3">
+                        <canvas id="trendChart" height="60"></canvas>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats cards -->
+        <div class="col-lg-8 mb-3">
+            <div class="row h-100">
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100 text-center">
+                        <div class="card-body">
+                            <i class="fas fa-crosshairs fa-2x text-danger mb-2"></i>
+                            <h3>{{ total_scenarios }}</h3>
+                            <p class="text-muted mb-0">Attacks Simulated</p>
+                            <small class="text-muted">{{ scenarios_addressed }} addressed</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100 text-center">
+                        <div class="card-body">
+                            <i class="fas fa-syringe fa-2x text-success mb-2"></i>
+                            <h3>{{ vaccines_applied }} / {{ vaccines_total }}</h3>
+                            <p class="text-muted mb-0">Vaccines Applied</p>
+                            <small class="text-muted">across all sessions</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <div class="card h-100 text-center">
+                        <div class="card-body">
+                            <i class="fas fa-history fa-2x text-info mb-2"></i>
+                            <h3>{{ session_count }}</h3>
+                            <p class="text-muted mb-0">Sessions Run</p>
+                            <small class="text-muted">for this board</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Dimension Breakdown (full width) ── -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="text-muted mb-3"><i class="fas fa-chart-bar me-1"></i> Dimension Breakdown</h6>
+                    {% with score=session.immunity_score %}
+                    <div class="row">
+                        <div class="col-md-6 col-lg mb-3 mb-lg-0">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="fw-semibold">Schedule</small>
+                                <small>{{ score.schedule }}/100</small>
+                            </div>
+                            <div class="progress mb-1" style="height: 8px;">
+                                <div class="progress-bar" role="progressbar" style="width: {{ score.schedule }}%; background-color: {{ score.get_band_colour }};"></div>
+                            </div>
+                            {% if score.schedule_rationale %}<small class="text-muted">{{ score.schedule_rationale }}</small>{% endif %}
+                        </div>
+                        <div class="col-md-6 col-lg mb-3 mb-lg-0">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="fw-semibold">Budget</small>
+                                <small>{{ score.budget }}/100</small>
+                            </div>
+                            <div class="progress mb-1" style="height: 8px;">
+                                <div class="progress-bar" role="progressbar" style="width: {{ score.budget }}%; background-color: {{ score.get_band_colour }};"></div>
+                            </div>
+                            {% if score.budget_rationale %}<small class="text-muted">{{ score.budget_rationale }}</small>{% endif %}
+                        </div>
+                        <div class="col-md-6 col-lg mb-3 mb-lg-0">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="fw-semibold">Team</small>
+                                <small>{{ score.team }}/100</small>
+                            </div>
+                            <div class="progress mb-1" style="height: 8px;">
+                                <div class="progress-bar" role="progressbar" style="width: {{ score.team }}%; background-color: {{ score.get_band_colour }};"></div>
+                            </div>
+                            {% if score.team_rationale %}<small class="text-muted">{{ score.team_rationale }}</small>{% endif %}
+                        </div>
+                        <div class="col-md-6 col-lg mb-3 mb-lg-0">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="fw-semibold">Dependencies</small>
+                                <small>{{ score.dependencies }}/100</small>
+                            </div>
+                            <div class="progress mb-1" style="height: 8px;">
+                                <div class="progress-bar" role="progressbar" style="width: {{ score.dependencies }}%; background-color: {{ score.get_band_colour }};"></div>
+                            </div>
+                            {% if score.dependencies_rationale %}<small class="text-muted">{{ score.dependencies_rationale }}</small>{% endif %}
+                        </div>
+                        <div class="col-md-6 col-lg">
+                            <div class="d-flex justify-content-between mb-1">
+                                <small class="fw-semibold">Scope Stability</small>
+                                <small>{{ score.scope_stability }}/100</small>
+                            </div>
+                            <div class="progress mb-1" style="height: 8px;">
+                                <div class="progress-bar" role="progressbar" style="width: {{ score.scope_stability }}%; background-color: {{ score.get_band_colour }};"></div>
+                            </div>
+                            {% if score.scope_stability_rationale %}<small class="text-muted">{{ score.scope_stability_rationale }}</small>{% endif %}
+                        </div>
+                    </div>
+                    {% endwith %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Two-column: Scenarios + Vaccines ── -->
+    <div class="row">
+        <!-- Attack Scenarios -->
+        <div class="col-lg-7 mb-4">
+            <h5 class="mb-3"><i class="fas fa-crosshairs text-danger me-2"></i>Attack Scenarios</h5>
+            {% for scenario in session.scenarios.all %}
+            <div class="card mb-3 border-start border-4
+                {% if scenario.outcome == 'FAIL' %}border-danger
+                {% elif scenario.outcome == 'SURVIVED_BARELY' %}border-warning
+                {% else %}border-success{% endif %}
+                {% if scenario.is_addressed %}opacity-75{% endif %}"
+                id="scenario-{{ scenario.id }}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="card-title mb-0">
+                            <span class="text-muted me-1">#{{ scenario.scenario_number }}</span>
+                            {{ scenario.title }}
+                        </h6>
+                        <span class="badge bg-{{ scenario.get_outcome_css_class }}">
+                            {{ scenario.get_outcome_display_label }}
+                        </span>
+                    </div>
+
+                    <p class="small mb-2"><strong>Attack:</strong> {{ scenario.attack_description }}</p>
+                    <p class="small mb-2"><strong>Cascade Effect:</strong> {{ scenario.cascade_effect }}</p>
+
+                    <div class="d-flex flex-wrap gap-2 mb-2">
+                        <span class="badge
+                            {% if scenario.severity >= 8 %}bg-danger
+                            {% elif scenario.severity >= 5 %}bg-warning text-dark
+                            {% else %}bg-success
+                            {% endif %}">Severity {{ scenario.severity }}/10</span>
+                        {% if scenario.tasks_blocked > 0 %}
+                        <span class="badge bg-secondary">{{ scenario.tasks_blocked }} tasks blocked</span>
+                        {% endif %}
+                        {% if scenario.estimated_delay_weeks %}
+                        <span class="badge bg-secondary">~{{ scenario.estimated_delay_weeks }}wk delay</span>
+                        {% endif %}
+                        {% if scenario.has_recovery_path %}
+                        <span class="badge bg-info text-dark">Recovery path exists</span>
+                        {% else %}
+                        <span class="badge bg-danger">No recovery path</span>
+                        {% endif %}
+                    </div>
+
+                    {% if scenario.early_warning_sign %}
+                    <div class="p-2 bg-light rounded mb-2">
+                        <small><i class="fas fa-exclamation-triangle text-warning me-1"></i>
+                        <strong>Early Warning:</strong> {{ scenario.early_warning_sign }}</small>
+                    </div>
+                    {% endif %}
+
+                    {% if scenario.tags %}
+                    <div class="mb-2">
+                        {% for tag in scenario.tags %}
+                        <span class="badge bg-light text-dark border me-1">{{ tag }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex gap-2 mt-2">
+                        <button class="btn btn-sm {% if scenario.is_addressed %}btn-success{% else %}btn-outline-secondary{% endif %}"
+                                onclick="toggleScenarioAddressed({{ scenario.id }}, this)">
+                            <i class="fas {% if scenario.is_addressed %}fa-check-circle{% else %}fa-circle{% endif %} me-1"></i>
+                            {% if scenario.is_addressed %}Addressed{% else %}Mark Addressed{% endif %}
+                        </button>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-muted">No attack scenarios in this session.</div>
+            {% endfor %}
+        </div>
+
+        <!-- Vaccine Shelf -->
+        <div class="col-lg-5 mb-4">
+            <h5 class="mb-3"><i class="fas fa-syringe text-success me-2"></i>Vaccine Shelf</h5>
+
+            <!-- Pending Vaccines -->
+            {% for vaccine in session.vaccines.all %}
+            <div class="card mb-3 {% if vaccine.is_applied %}border-success opacity-75{% endif %}"
+                 id="vaccine-{{ vaccine.id }}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="card-title mb-0">
+                            {% if vaccine.is_applied %}<i class="fas fa-check-circle text-success me-1"></i>{% endif %}
+                            {{ vaccine.name }}
+                        </h6>
+                        <div>
+                            <span class="badge bg-{{ vaccine.get_effort_css_class }}">
+                                {{ vaccine.get_effort_level_display }}
+                            </span>
+                            <span class="badge bg-info text-dark ms-1">+{{ vaccine.projected_score_improvement }}pts</span>
+                        </div>
+                    </div>
+
+                    <p class="small mb-2">{{ vaccine.description }}</p>
+
+                    <div class="small text-muted mb-1">
+                        <strong>Targets:</strong> Scenario #{{ vaccine.targets_scenario_number }}
+                    </div>
+
+                    {% if vaccine.effort_rationale %}
+                    <div class="small text-muted mb-1">
+                        <strong>Effort:</strong> {{ vaccine.effort_rationale }}
+                    </div>
+                    {% endif %}
+
+                    {% if vaccine.implementation_hint %}
+                    <div class="p-2 bg-light rounded mb-2 small">
+                        <i class="fas fa-lightbulb text-warning me-1"></i>
+                        <strong>First Step:</strong> {{ vaccine.implementation_hint }}
+                    </div>
+                    {% endif %}
+
+                    <div class="form-check mt-2">
+                        <input type="checkbox" class="form-check-input"
+                               id="vaccine-check-{{ vaccine.id }}"
+                               {% if vaccine.is_applied %}checked{% endif %}
+                               onchange="toggleVaccine({{ vaccine.id }}, this)">
+                        <label class="form-check-label small" for="vaccine-check-{{ vaccine.id }}">
+                            {% if vaccine.is_applied %}
+                            Applied{% if vaccine.applied_by %} by {{ vaccine.applied_by.get_full_name|default:vaccine.applied_by.username }}{% endif %}
+                            {% else %}
+                            Mark as applied
+                            {% endif %}
+                        </label>
+                    </div>
+                </div>
+            </div>
+            {% empty %}
+            <div class="text-muted">No vaccines in this session.</div>
+            {% endfor %}
+
+            <!-- Projected score summary -->
+            {% if session.vaccines.all %}
+            <div class="card bg-light">
+                <div class="card-body text-center small">
+                    <strong>Projected score if all vaccines applied:</strong>
+                    <span class="text-success fw-bold" id="projected-score"></span>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% endif %}
+</div>
+
+<style>
+/* ── Immunity Gauge (CSS half-circle) ── */
+.immunity-gauge-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+}
+.immunity-gauge {
+    position: relative;
+    width: 160px;
+    height: 80px;
+    overflow: hidden;
+}
+.gauge-bg {
+    position: absolute;
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: #e9ecef;
+    clip-path: inset(50% 0 0 0);
+    transform: translateY(-50%);
+}
+.gauge-fill {
+    position: absolute;
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    background: conic-gradient(
+        var(--color) 0deg,
+        var(--color) calc(var(--score) * 1.8deg),
+        transparent calc(var(--score) * 1.8deg)
+    );
+    clip-path: inset(50% 0 0 0);
+    transform: translateY(-50%);
+    transition: all 0.5s ease;
+}
+.gauge-cover {
+    position: absolute;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: #fff;
+    top: 20px;
+    left: 20px;
+    clip-path: inset(50% 0 0 0);
+    transform: translateY(-50%);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 0;
+}
+.gauge-score {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--color);
+    line-height: 1;
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+}
+</style>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── CSRF Helper ──
+function getCSRFToken() {
+    const match = document.cookie.match(/csrftoken=([^;]+)/);
+    return match ? match[1] : '';
+}
+
+// ── Run Stress Test ──
+function runStressTest() {
+    const btn = document.getElementById('btn-run-stress-test');
+    const loadingEl = document.getElementById('stress-test-loading');
+
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Running…';
+    }
+    if (loadingEl) loadingEl.style.display = 'block';
+
+    fetch("{% url 'run_stress_test' board.id %}", {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCSRFToken(),
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        if (data.success) {
+            window.location.href = data.redirect;
+        } else {
+            alert(data.error || 'Stress test failed. Please try again.');
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-bolt me-1"></i> Run Stress Test';
+            }
+            if (loadingEl) loadingEl.style.display = 'none';
+        }
+    })
+    .catch(err => {
+        console.error('Stress test error:', err);
+        alert('An error occurred. Please try again.');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-bolt me-1"></i> Run Stress Test';
+        }
+        if (loadingEl) loadingEl.style.display = 'none';
+    });
+}
+
+// ── Toggle Vaccine Applied ──
+function toggleVaccine(vaccineId, checkbox) {
+    fetch("{% url 'apply_vaccine' board.id 0 %}".replace('/0/', '/' + vaccineId + '/'), {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCSRFToken(),
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        if (data.success) {
+            const card = document.getElementById('vaccine-' + vaccineId);
+            if (data.is_applied) {
+                card.classList.add('border-success', 'opacity-75');
+                checkbox.checked = true;
+            } else {
+                card.classList.remove('border-success', 'opacity-75');
+                checkbox.checked = false;
+            }
+            updateProjectedScore();
+        } else {
+            checkbox.checked = !checkbox.checked;
+            alert(data.error || 'Failed to update vaccine.');
+        }
+    })
+    .catch(err => {
+        console.error('Vaccine toggle error:', err);
+        checkbox.checked = !checkbox.checked;
+    });
+}
+
+// ── Toggle Scenario Addressed ──
+function toggleScenarioAddressed(scenarioId, btn) {
+    fetch("{% url 'mark_scenario_addressed' board.id 0 %}".replace('/0/', '/' + scenarioId + '/'), {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCSRFToken(),
+            'Content-Type': 'application/json',
+        },
+    })
+    .then(resp => resp.json())
+    .then(data => {
+        if (data.success) {
+            const card = document.getElementById('scenario-' + scenarioId);
+            if (data.is_addressed) {
+                card.classList.add('opacity-75');
+                btn.classList.remove('btn-outline-secondary');
+                btn.classList.add('btn-success');
+                btn.innerHTML = '<i class="fas fa-check-circle me-1"></i> Addressed';
+            } else {
+                card.classList.remove('opacity-75');
+                btn.classList.remove('btn-success');
+                btn.classList.add('btn-outline-secondary');
+                btn.innerHTML = '<i class="fas fa-circle me-1"></i> Mark Addressed';
+            }
+        }
+    })
+    .catch(err => console.error('Scenario address error:', err));
+}
+
+// ── Projected Score Calculation ──
+function updateProjectedScore() {
+    const projectedEl = document.getElementById('projected-score');
+    if (!projectedEl) return;
+
+    const currentScore = {{ session.immunity_score.overall|default:"0" }};
+    let totalImprovement = 0;
+
+    document.querySelectorAll('[id^="vaccine-check-"]').forEach(cb => {
+        if (!cb.checked) {
+            const card = cb.closest('.card');
+            const badges = card.querySelectorAll('.badge');
+            for (const badge of badges) {
+                const match = badge.textContent.match(/\+(\d+)pts/);
+                if (match) {
+                    totalImprovement += parseInt(match[1]);
+                    break;
+                }
+            }
+        }
+    });
+
+    const projected = Math.min(100, currentScore + totalImprovement);
+    projectedEl.textContent = projected + ' / 100';
+}
+
+// ── Trend Chart (Chart.js) ──
+document.addEventListener('DOMContentLoaded', function() {
+    updateProjectedScore();
+
+    const ctx = document.getElementById('trendChart');
+    if (ctx && typeof Chart !== 'undefined') {
+        const history = {{ immunity_history|safe }};
+        if (history.length > 1) {
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: history.map((_, i) => 'Run ' + (i + 1)),
+                    datasets: [{
+                        data: history,
+                        borderColor: '{{ session.immunity_score.get_band_colour }}',
+                        backgroundColor: '{{ session.immunity_score.get_band_colour }}20',
+                        fill: true,
+                        tension: 0.3,
+                        pointRadius: 3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { min: 0, max: 100, display: false },
+                        x: { display: false }
+                    }
+                }
+            });
+        }
+    }
+});
+</script>
+{% endblock %}
