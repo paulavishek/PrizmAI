@@ -49,6 +49,10 @@ from kanban.tasks.scope_autopsy_tasks import (
     generate_scope_autopsy,
 )
 
+from kanban.tasks.shadow_branch_tasks import (
+    recalculate_branches_for_board,
+)
+
 __all__ = [
     # Conflict tasks
     'detect_conflicts_task',
@@ -80,4 +84,6 @@ __all__ = [
     'run_ab_experiments_task',
     # Scope autopsy tasks
     'generate_scope_autopsy',
+    # Shadow branch tasks
+    'recalculate_branches_for_board',
 ]
