@@ -115,6 +115,12 @@ app.conf.beat_schedule = {
         'task': 'decision_center.generate_decision_briefing',
         'schedule': crontab(hour=7, minute=30),  # Daily 7:30 AM
     },
+    # --- Exit Protocol Tasks ---
+    # Monitor board health daily at 2:15 AM
+    'monitor-board-health-daily': {
+        'task': 'exit_protocol.tasks.monitor_all_boards_health',
+        'schedule': crontab(hour=2, minute=15),  # Daily 2:15 AM
+    },
 }
 
 # Route all AI summary tasks to a dedicated 'summaries' queue so they never

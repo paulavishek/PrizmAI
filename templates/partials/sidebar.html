@@ -125,6 +125,12 @@
                         </span>
                     </a>
                 </li>
+                <li class="sidebar-nav-item">
+                    <a href="{% url 'exit_protocol:cemetery' %}" class="sidebar-nav-link" title="Project Cemetery">
+                        <i class="bi bi-moon-stars sidebar-nav-icon"></i>
+                        <span class="sidebar-label">Project Cemetery</span>
+                    </a>
+                </li>
                 {% if not is_viewing_demo %}
                 <li class="sidebar-nav-item">
                     <form method="post" action="{% url 'toggle_demo_mode' %}" class="d-inline w-100">

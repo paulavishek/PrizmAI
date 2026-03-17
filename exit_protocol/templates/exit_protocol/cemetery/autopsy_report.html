@@ -1,0 +1,244 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Autopsy: {{ entry.project_name }} — PrizmAI{% endblock %}
+
+{% block extra_css %}
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  .autopsy-page { background: #0d0d0d; min-height: 100vh; color: #c9c9c9; padding: 2rem 1rem; }
+  .autopsy-page h1, .autopsy-page h2, .autopsy-page h3 { font-family: 'Playfair Display', serif; color: #e8e0d0; }
+  .autopsy-header { text-align: center; margin-bottom: 2.5rem; }
+  .autopsy-header h1 { font-size: 2rem; margin-bottom: 0.25rem; }
+  .autopsy-header .burial-date { color: #777; font-style: italic; }
+  .autopsy-section { background: #151515; border-radius: 10px; padding: 1.5rem; margin-bottom: 1.5rem; max-width: 900px; margin-left: auto; margin-right: auto; }
+  .autopsy-section h2 { font-size: 1.3rem; margin-bottom: 1rem; border-bottom: 1px solid #2a2a2a; padding-bottom: 0.5rem; }
+  .vital-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+  .vital-item { background: #1a1a1a; border-radius: 8px; padding: 1rem; text-align: center; }
+  .vital-label { font-size: 0.75rem; color: #888; text-transform: uppercase; letter-spacing: 0.05em; }
+  .vital-value { font-size: 1.4rem; color: #e8e0d0; margin-top: 0.25rem; font-weight: 600; }
+  .cod-badge { display: inline-block; background: #252525; color: #d4a574; padding: 0.3rem 0.8rem; border-radius: 5px; font-size: 0.9rem; margin-bottom: 0.75rem; }
+  .cod-rationale { color: #aaa; line-height: 1.6; }
+  .contributing-factors li { color: #999; margin-bottom: 0.3rem; }
+  .timeline-chart-container { width: 100%; height: 250px; }
+  .lesson-card { background: #1a1a1a; border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; }
+  .lesson-card .badge-repeat { background: #2e4a2e; color: #7ec47e; }
+  .lesson-card .badge-avoid { background: #4a2e2e; color: #c47e7e; }
+  .lesson-card .badge-question { background: #2e3a4a; color: #7e9ec4; }
+  .lesson-text { color: #bbb; margin-top: 0.3rem; }
+  .lesson-edit-btn { background: none; border: 1px solid #444; color: #888; border-radius: 4px; padding: 0.2rem 0.5rem; font-size: 0.75rem; cursor: pointer; }
+  .lesson-edit-btn:hover { border-color: #888; color: #ccc; }
+  .transplant-record { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid #222; }
+  .transplant-arrow { color: #555; }
+  .btn-resurrect { background: #2e4a2e; color: #7ec47e; border: 1px solid #3a5a3a; border-radius: 8px; padding: 0.6rem 1.5rem; font-size: 0.9rem; cursor: pointer; transition: all 0.2s; }
+  .btn-resurrect:hover { background: #3a5a3a; color: #9ed49e; }
+  .btn-resurrect:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-export { background: #1a1a1a; color: #aaa; border: 1px solid #333; border-radius: 8px; padding: 0.6rem 1.5rem; font-size: 0.9rem; cursor: pointer; text-decoration: none; }
+  .btn-export:hover { background: #252525; color: #ccc; text-decoration: none; }
+  .action-bar { text-align: center; margin-top: 2rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; max-width: 900px; margin-left: auto; margin-right: auto; }
+  .back-link { color: #666; text-decoration: none; font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; max-width: 900px; margin-left: auto; margin-right: auto; display: block; }
+  .back-link:hover { color: #aaa; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="autopsy-page">
+  <a href="{% url 'exit_protocol:cemetery' %}" class="back-link">← Back to Cemetery</a>
+
+  <div class="autopsy-header">
+    <h1>{{ entry.project_name }}</h1>
+    <p class="burial-date">
+      {% if entry.start_date %}{{ entry.start_date|date:"F Y" }}{% endif %}
+      —
+      {% if entry.end_date %}{{ entry.end_date|date:"F d, Y" }}{% endif %}
+    </p>
+    {% if entry.is_resurrected %}
+    <span style="color: #7ec47e; font-size: 0.85rem;">✨ This project has been resurrected</span>
+    {% endif %}
+  </div>
+
+  <!-- Vital Stats -->
+  <div class="autopsy-section">
+    <h2>📊 Vital Statistics</h2>
+    <div class="vital-grid">
+      <div class="vital-item">
+        <div class="vital-label">Team Size</div>
+        <div class="vital-value">{{ entry.team_size|default:"—" }}</div>
+      </div>
+      <div class="vital-item">
+        <div class="vital-label">Tasks</div>
+        <div class="vital-value">{{ entry.completed_tasks }}/{{ entry.total_tasks }}</div>
+      </div>
+      <div class="vital-item">
+        <div class="vital-label">Budget Allocated</div>
+        <div class="vital-value">{{ entry.budget_allocated|default:"N/A" }}</div>
+      </div>
+      <div class="vital-item">
+        <div class="vital-label">Budget Spent</div>
+        <div class="vital-value">{{ entry.budget_spent|default:"N/A" }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cause of Death -->
+  <div class="autopsy-section">
+    <h2>💀 Cause of Death</h2>
+    <div class="cod-badge">{{ entry.get_cause_of_death_display }}</div>
+    <p class="cod-rationale">{{ entry.ai_cause_rationale|default:"No AI rationale provided." }}</p>
+    {% if entry.contributing_factors %}
+    <div style="margin-top: 1rem;">
+      <strong style="color: #999; font-size: 0.85rem;">Contributing Factors:</strong>
+      <ul class="contributing-factors" style="padding-left: 1.2rem; margin-top: 0.5rem;">
+        {% for factor in entry.contributing_factors %}
+        <li>{{ factor }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Timeline of Decline -->
+  {% if entry.decline_timeline %}
+  <div class="autopsy-section">
+    <h2>📉 Timeline of Decline</h2>
+    <div class="timeline-chart-container">
+      <canvas id="declineTimeline"></canvas>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Lessons Learned -->
+  <div class="autopsy-section" id="lessonsSection">
+    <h2>📚 Lessons Learned
+      <button class="lesson-edit-btn" onclick="toggleLessonEdit()" id="editLessonsBtn">✏️ Edit</button>
+    </h2>
+
+    <h3 style="font-size: 1rem; color: #7ec47e; margin-top: 1rem;">Lessons to Repeat</h3>
+    <div id="lessonsRepeat">
+      {% if entry.lessons_to_repeat %}
+        {% for item in entry.lessons_to_repeat %}
+        <div class="lesson-card">
+          <span class="badge badge-repeat" style="font-size:0.7rem;">REPEAT</span>
+          <p class="lesson-text">{% if item.lesson %}{{ item.lesson }}{% else %}{{ item }}{% endif %}</p>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p style="color: #666; font-style: italic;">No lessons to repeat recorded.</p>
+      {% endif %}
+    </div>
+
+    <h3 style="font-size: 1rem; color: #c47e7e; margin-top: 1.5rem;">Lessons to Avoid</h3>
+    <div id="lessonsAvoid">
+      {% if entry.lessons_to_avoid %}
+        {% for item in entry.lessons_to_avoid %}
+        <div class="lesson-card">
+          <span class="badge badge-avoid" style="font-size:0.7rem;">AVOID</span>
+          <p class="lesson-text">{% if item.lesson %}{{ item.lesson }}{% else %}{{ item }}{% endif %}</p>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p style="color: #666; font-style: italic;">No lessons to avoid recorded.</p>
+      {% endif %}
+    </div>
+
+    <h3 style="font-size: 1rem; color: #7e9ec4; margin-top: 1.5rem;">Open Questions</h3>
+    <div id="openQuestions">
+      {% if entry.open_questions %}
+        {% for item in entry.open_questions %}
+        <div class="lesson-card">
+          <span class="badge badge-question" style="font-size:0.7rem;">QUESTION</span>
+          <p class="lesson-text">{% if item.question %}{{ item.question }}{% else %}{{ item }}{% endif %}</p>
+        </div>
+        {% endfor %}
+      {% else %}
+        <p style="color: #666; font-style: italic;">No open questions recorded.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Organ Transplant Record -->
+  {% if transplants %}
+  <div class="autopsy-section">
+    <h2>🫀 Organ Transplants</h2>
+    {% for tx in transplants %}
+    <div class="transplant-record">
+      <span style="color: #aaa;">{{ tx.organ.name }}</span>
+      <span class="transplant-arrow">→</span>
+      <span style="color: #d4a574;">{{ tx.target_board.name }}</span>
+      <span style="color: #666; font-size: 0.75rem; margin-left: auto;">{{ tx.transplanted_at|date:"M d, Y" }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Actions -->
+  <div class="action-bar">
+    {% if not entry.is_resurrected %}
+    <form method="post" action="{% url 'exit_protocol:resurrect' entry.id %}" style="display:inline;">
+      {% csrf_token %}
+      <button type="submit" class="btn-resurrect" onclick="return confirm('Resurrect this project as a new board? The archive will remain unchanged.');">
+        ✨ Resurrect Project
+      </button>
+    </form>
+    {% else %}
+    <button class="btn-resurrect" disabled title="Already resurrected">✨ Already Resurrected</button>
+    {% endif %}
+    <a href="{% url 'exit_protocol:export_pdf' entry.id %}" class="btn-export">📄 Export PDF</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if entry.decline_timeline %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+(function() {
+  const timeline = {{ entry.decline_timeline|safe }};
+  if (!timeline || !timeline.length) return;
+
+  const ctx = document.getElementById('declineTimeline').getContext('2d');
+  new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: timeline.map(e => e.date),
+      datasets: [{
+        label: 'Severity',
+        data: timeline.map(e => e.severity || 0),
+        borderColor: '#c47e7e',
+        backgroundColor: 'rgba(196,126,126,0.1)',
+        borderWidth: 2,
+        pointRadius: 4,
+        pointBackgroundColor: '#c47e7e',
+        fill: true,
+        tension: 0.3,
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              return timeline[ctx.dataIndex].event || timeline[ctx.dataIndex].event_description || '';
+            }
+          }
+        }
+      },
+      scales: {
+        y: { min: 0, max: 5, ticks: { color: '#666' }, grid: { color: '#222' } },
+        x: { ticks: { color: '#666', maxRotation: 45 }, grid: { color: '#222' } }
+      }
+    }
+  });
+})();
+</script>
+{% endif %}
+<script>
+function toggleLessonEdit() {
+  // Simple inline editing toggle — production version would use a modal
+  alert('Inline lesson editing — use the API endpoint POST {% url "exit_protocol:update_lessons" entry.id %} to update lessons via AJAX.');
+}
+</script>
+{% endblock %}

@@ -569,6 +569,9 @@
     <button type="button" class="btn-close btn-close-sm" data-bs-dismiss="alert" aria-label="Close" style="padding:.5rem;"></button>
 </div>
 
+<!-- Exit Protocol: Hospice Banner -->
+{% include 'exit_protocol/partials/hospice_banner.html' %}
+
 <!-- ═══════ BOARD HEADER ═══════ -->
 <div class="d-flex justify-content-between align-items-center mb-2">
     <div class="d-flex align-items-center gap-2 flex-wrap">
@@ -1848,6 +1851,10 @@
                 <a class="ai-panel-tile" href="{% url 'scope_autopsy_dashboard' board.id %}">
                     <span class="tile-icon text-warning"><i class="fas fa-microscope"></i></span>
                     <span class="tile-label">Scope Autopsy</span>
+                </a>
+                <a class="ai-panel-tile" href="{% url 'exit_protocol:dashboard' board.id %}">
+                    <span class="tile-icon" style="color: #e65100;"><i class="fas fa-skull-crossbones"></i></span>
+                    <span class="tile-label">Exit Protocol</span>
                 </a>
             </div>
         </div>

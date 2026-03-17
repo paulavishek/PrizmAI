@@ -34,6 +34,7 @@ urlpatterns = [
     path('webhooks/', include('webhooks.urls')),  # Webhook management
     path('', include('knowledge_graph.urls')),  # Knowledge Graph Project Memory
     path('', include('decision_center.urls')),  # Decision Center — batch decision dashboard
+    path('', include('exit_protocol.urls', namespace='exit_protocol')),  # Exit Protocol — Hospice, Organs, Cemetery
 ]
 
 if settings.DEBUG:

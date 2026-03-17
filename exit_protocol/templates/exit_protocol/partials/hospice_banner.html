@@ -1,0 +1,25 @@
+{% comment %}
+Hospice banner — include in board_detail.html when hospice_risk_score >= 0.75
+and no active dismissal.
+{% endcomment %}
+{% if hospice_risk_score >= 0.75 and not hospice_dismissed and not hospice_session %}
+<div class="alert alert-warning alert-dismissible fade show d-flex align-items-center" role="alert" id="hospiceBanner" style="border-left: 4px solid #e65100;">
+  <div class="me-3" style="font-size: 1.5rem;">🏥</div>
+  <div class="flex-grow-1">
+    <strong>Project Health Concern Detected</strong>
+    <p class="mb-0" style="font-size: 0.85rem;">
+      PrizmAI has detected sustained challenges on this project.
+      <a href="{% url 'exit_protocol:dashboard' board.id %}" style="color: #e65100; font-weight: 600;">Review the Exit Protocol dashboard →</a>
+    </p>
+  </div>
+  <button type="button" class="btn-close" data-bs-dismiss="alert" id="dismissHospiceBanner"></button>
+</div>
+<script>
+document.getElementById('dismissHospiceBanner')?.addEventListener('click', function() {
+  fetch("{% url 'exit_protocol:dismiss_banner' board.id %}", {
+    method: 'POST',
+    headers: { 'X-CSRFToken': '{{ csrf_token }}' },
+  }).catch(() => {});
+});
+</script>
+{% endif %}
