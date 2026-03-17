@@ -327,7 +327,39 @@ function initBranchCardActions() {
             const branchId = commitBtn.dataset.branchId;
             showCommitConfirmation(branchId);
         }
+
+        const deleteBtn = e.target.closest('.btn-delete');
+        if (deleteBtn) {
+            const branchId = deleteBtn.dataset.branchId;
+            const branchName = deleteBtn.dataset.branchName || 'this branch';
+            showDeleteConfirmation(branchId, branchName);
+        }
     });
+}
+
+/**
+ * Show delete confirmation and delete branch
+ */
+function showDeleteConfirmation(branchId, branchName) {
+    if (!confirm(`Delete "${branchName}"? This will remove all its snapshots and history permanently.`)) return;
+
+    fetch(`/api/boards/${getBoardId()}/shadow/${branchId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            // Reload after brief delay to reflect updated branch list
+            setTimeout(() => window.location.reload(), 600);
+        } else {
+            alertError('Could not delete branch: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(e => alertError('Could not delete branch: ' + e.message));
 }
 
 /**

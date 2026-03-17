@@ -288,6 +288,9 @@ class BranchDetailView(DetailView):
         context = super().get_context_data(**kwargs)
         branch = self.object
 
+        # Add board to context so templates can generate back-links
+        context['board'] = branch.board
+
         # Get last 30 snapshots for history
         snapshots = branch.snapshots.all()[:30]
         context['snapshots'] = snapshots
@@ -683,6 +686,33 @@ def get_branches_comparison(request, board_id, branch_a_id, branch_b_id):
 
     except Exception as e:
         logger.error(f'Error fetching branches comparison: {e}', exc_info=True)
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def delete_branch(request, board_id, branch_id):
+    """
+    API endpoint: Permanently delete a shadow branch and all its snapshots.
+    """
+    try:
+        board = get_object_or_404(Board, id=board_id)
+
+        if request.user not in board.members.all() and request.user != board.created_by:
+            return JsonResponse({'error': 'Permission denied'}, status=403)
+
+        branch = get_object_or_404(ShadowBranch, id=branch_id, board=board)
+        branch_name = branch.name
+        branch.delete()
+
+        logger.info(f'Branch "{branch_name}" (id={branch_id}) deleted by {request.user.username}')
+        return JsonResponse({
+            'success': True,
+            'message': f'Branch "{branch_name}" deleted.',
+            'redirect_url': f'/boards/{board_id}/shadow/',
+        })
+    except Exception as e:
+        logger.error(f'Error deleting branch {branch_id}: {e}', exc_info=True)
         return JsonResponse({'error': str(e)}, status=500)
 
 
