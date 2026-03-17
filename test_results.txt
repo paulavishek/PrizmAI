@@ -1,0 +1,254 @@
+﻿python : C:\Users\Avishek Paul\PrizmAI\kanban_board\settings.py:537: 
+UserWarning: Redis is not running ù falling back to local dev mode. WebSocket 
+messaging and Celery tasks will NOT work. Start Redis (or use 
+start_prizmAI.bat) for full functionality.
+At line:1 char:70
++ ... ivate.ps1"; python manage.py test exit_protocol --settings=kanban_boa ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\Avishe... functionality. 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  warnings.warn(
+Creating test database for alias 'default' 
+('file:memorydb_default?mode=memory&cache=shared')...
+
+Found 24 test(s).
+Operations to perform:
+  Synchronize unmigrated apps: allauth, channels, colorfield, corsheaders, crispy_bootstrap5, crispy_forms, csp, google, messages, rest_framework, staticfiles, widget_tweaks
+  Apply all migrations: account, accounts, admin, ai_assistant, analytics, api, auth, axes, contenttypes, decision_center, django_celery_beat, exit_protocol, kanban, knowledge_graph, messaging, sessions, sites, socialaccount, webhooks, wiki
+Synchronizing apps without migrations:
+  Creating tables...
+    Running deferred SQL...
+Running migrations:
+  Applying contenttypes.0001_initial... OK
+  Applying auth.0001_initial... OK
+  Applying account.0001_initial... OK
+  Applying account.0002_email_max_length... OK
+  Applying account.0003_alter_emailaddress_create_unique_verified_email... OK
+  Applying account.0004_alter_emailaddress_drop_unique_email... OK
+  Applying account.0005_emailaddress_idx_upper_email... OK
+  Applying account.0006_emailaddress_lower... OK
+  Applying account.0007_emailaddress_idx_email... OK
+  Applying account.0008_emailaddress_unique_primary_email_fixup... OK
+  Applying account.0009_emailaddress_unique_primary_email... OK
+  Applying accounts.0001_initial... OK
+  Applying accounts.0002_userprofile_availability_schedule_and_more... OK
+  Applying accounts.0003_userprofile_completed_wizard_and_more... OK
+  Applying accounts.0004_organization_is_demo... OK
+  Applying accounts.0005_organization_nullable... OK
+  Applying accounts.0006_add_onboarding_v2_fields... OK
+  Applying accounts.0007_userprofile_timezone... OK
+  Applying admin.0001_initial... OK
+  Applying admin.0002_logentry_remove_auto_add... OK
+  Applying admin.0003_logentry_add_action_flag_choices... OK
+  Applying kanban.0001_initial... OK
+  Applying kanban.0002_task_progress... OK
+  Applying kanban.0003_tasklabel_category... OK
+  Applying kanban.0004_add_ai_timeline_fields... OK
+  Applying kanban.0005_task_collaboration_required_task_complexity_score_and_more... OK
+  Applying kanban.0006_meetingtranscript... OK
+  Applying kanban.0007_remove_task_planning_fields... OK
+  Applying kanban.0008_task_last_risk_assessment_and_more... OK
+  Applying kanban.0009_task_dependencies... OK
+  Applying kanban.0010_resourcedemandforecast_teamcapacityalert_and_more... OK
+  Applying kanban.0025_stakeholder_engagement_tracking... OK
+  Applying kanban.0026_alter_projectstakeholder_unique_together... OK
+  Applying kanban.0027_taskfile... OK
+  Applying kanban.0028_task_dependencies_task_start_date... OK
+  Applying kanban.0029_update_stakeholder_involvement_types... OK
+  Applying kanban.0030_migrate_stakeholder_to_observer... OK
+  Applying kanban.0031_alter_task_workload_impact... OK
+  Applying contenttypes.0002_remove_content_type_name... OK
+  Applying kanban.0032_role_columnpermission_boardmembership_systemauditlog_and_more... OK
+  Applying kanban.0033_task_actual_duration_days_task_completed_at_and_more... OK
+  Applying kanban.0034_comment_kanban_comm_task_id_6e23a3_idx_and_more... OK
+  Applying kanban.0035_prioritymodel_prioritysuggestionlog_prioritydecision_and_more... OK
+  Applying kanban.0036_skillgap_skilldevelopmentplan_teamskillprofile_and_more... OK
+  Applying kanban.0037_teamvelocitysnapshot_burndownprediction_and_more... OK
+  Applying kanban.0038_alter_burndownprediction_will_meet_target... OK
+  Applying kanban.0039_board_baseline_complexity_total_and_more... OK
+  Applying kanban.0040_add_retrospective_models... OK
+  Applying kanban.0041_alter_projectretrospective_ai_model_used... OK
+  Applying kanban.0042_milestone... OK
+  Applying kanban.0043_projectbudget_taskcost_budgetrecommendation_and_more... OK
+  Applying kanban.0044_coachinginsight_coachingsuggestion_coachingfeedback_and_more... OK
+  Applying kanban.0045_resourcelevelingsuggestion_taskassignmenthistory_and_more... OK
+  Applying kanban.0046_conflict_detection... OK
+  Applying kanban.0047_alter_userperformanceprofile_organization_and_more... OK
+  Applying kanban.0048_add_permission_audit_log... OK
+  Applying kanban.0049_board_created_by_session_and_more... OK
+  Applying kanban.0050_alter_permissionauditlog_action... OK
+  Applying kanban.0051_add_lss_classification_field... OK
+  Applying kanban.0052_add_is_seed_demo_data... OK
+  Applying kanban.0053_mark_existing_seed_demo_data...No demo organization found, skipping seed data marking
+ OK
+  Applying kanban.0054_add_phase_system... OK
+  Applying kanban.0055_migrate_milestones_to_tasks...Successfully migrated 0 milestones to tasks
+ OK
+  Applying kanban.0056_remove_milestone_feature... OK
+  Applying kanban.0057_delete_milestone... OK
+  Applying kanban.0058_organization_nullable... OK
+  Applying kanban.0059_alter_board_is_seed_demo_data_and_more... OK
+  Applying kanban.0060_add_budget_implementation_log... OK
+  Applying kanban.0061_time_entry_max_validator... OK
+  Applying kanban.0062_remove_org_requirement... OK
+  Applying kanban.0063_board_invitation... OK
+  Applying kanban.0064_add_project_deadline_to_board... OK
+  Applying kanban.0065_add_milestone_item_type... OK
+  Applying kanban.0066_add_milestone_position_after_task... OK
+  Applying kanban.0067_add_column_entered_at_to_task... OK
+  Applying kanban.0068_add_board_automation... OK
+  Applying kanban.0069_alter_boardautomation_action_type_and_more... OK
+  Applying kanban.0070_add_mission_strategy_models... OK
+  Applying kanban.0071_add_ai_summary_fields... OK
+  Applying kanban.0072_add_organization_goal_model... OK
+  Applying kanban.0073_add_calendar_event... OK
+  Applying kanban.0074_add_calendarevent_visibility_linkedtask... OK
+  Applying kanban.0075_ai_analysis_fields... OK
+  Applying kanban.0076_add_onboarding_workspace_preview... OK
+  Applying ai_assistant.0001_initial... OK
+  Applying ai_assistant.0002_remove_userpreference_theme... OK
+  Applying ai_assistant.0003_alter_aiassistantmessage_options... OK
+  Applying ai_assistant.0004_aiassistantsession_is_demo... OK
+  Applying ai_assistant.0005_spectra_attachment... OK
+  Applying ai_assistant.0006_spectra_conversation_state... OK
+  Applying ai_assistant.0007_extend_spectra_state_for_new_actions... OK
+  Applying ai_assistant.0008_add_question_count... OK
+  Applying analytics.0001_initial... OK
+  Applying analytics.0002_add_engagement_tracking_improvements... OK
+  Applying analytics.0003_remove_hubspot_fields... OK
+  Applying analytics.0004_demosession_democonversion_demoanalytics_and_more... OK
+  Applying analytics.0005_add_extensions_count_to_demo_session... OK
+  Applying analytics.0006_add_nudges_dismissed_field... OK
+  Applying analytics.0007_add_demo_limitation_tracking... OK
+  Applying analytics.0008_demosession_browser_fingerprint_and_more... OK
+  Applying analytics.0009_demo_abuse_prevention... OK
+  Applying analytics.0010_remove_demoabuseprevention_unique_ip_fingerprint_and_more... OK
+  Applying analytics.0011_add_aha_moment_and_email_tracking... OK
+  Applying analytics.0012_add_client_fingerprint_and_vpn_fields... OK
+  Applying analytics.0013_remove_demo_session_expiry_fields... OK
+  Applying api.0001_initial... OK
+  Applying api.0002_alter_apirequestlog_options... OK
+  Applying api.0003_apitoken_monthly_quota_apitoken_monthly_reset_at_and_more... OK
+  Applying api.0004_aiusagequota_airequestlog... OK
+  Applying api.0005_add_daily_limit_fields... OK
+  Applying api.0006_alter_aiusagequota_daily_limit_and_more... OK
+  Applying auth.0002_alter_permission_name_max_length... OK
+  Applying auth.0003_alter_user_email_max_length... OK
+  Applying auth.0004_alter_user_username_opts... OK
+  Applying auth.0005_alter_user_last_login_null... OK
+  Applying auth.0006_require_contenttypes_0002... OK
+  Applying auth.0007_alter_validators_add_error_messages... OK
+  Applying auth.0008_alter_user_username_max_length... OK
+  Applying auth.0009_alter_user_last_name_max_length... OK
+  Applying auth.0010_alter_group_name_max_length... OK
+  Applying auth.0011_update_proxy_permissions... OK
+  Applying auth.0012_alter_user_first_name_max_length... OK
+  Applying axes.0001_initial... OK
+  Applying axes.0002_auto_20151217_2044... OK
+  Applying axes.0003_auto_20160322_0929... OK
+  Applying axes.0004_auto_20181024_1538... OK
+  Applying axes.0005_remove_accessattempt_trusted... OK
+  Applying axes.0006_remove_accesslog_trusted... OK
+  Applying axes.0007_alter_accessattempt_unique_together... OK
+  Applying axes.0008_accessfailurelog... OK
+  Applying axes.0009_add_session_hash... OK
+  Applying django_celery_beat.0001_initial... OK
+  Applying django_celery_beat.0002_auto_20161118_0346... OK
+  Applying django_celery_beat.0003_auto_20161209_0049... OK
+  Applying django_celery_beat.0004_auto_20170221_0000... OK
+  Applying django_celery_beat.0005_add_solarschedule_events_choices... OK
+  Applying django_celery_beat.0006_auto_20180322_0932... OK
+  Applying django_celery_beat.0007_auto_20180521_0826... OK
+  Applying django_celery_beat.0008_auto_20180914_1922... OK
+  Applying django_celery_beat.0006_auto_20180210_1226... OK
+  Applying django_celery_beat.0006_periodictask_priority... OK
+  Applying django_celery_beat.0009_periodictask_headers... OK
+  Applying django_celery_beat.0010_auto_20190429_0326... OK
+  Applying django_celery_beat.0011_auto_20190508_0153... OK
+  Applying django_celery_beat.0012_periodictask_expire_seconds... OK
+  Applying django_celery_beat.0013_auto_20200609_0727... OK
+  Applying django_celery_beat.0014_remove_clockedschedule_enabled... OK
+  Applying django_celery_beat.0015_edit_solarschedule_events_choices... OK
+  Applying django_celery_beat.0016_alter_crontabschedule_timezone... OK
+  Applying django_celery_beat.0017_alter_crontabschedule_month_of_year... OK
+  Applying django_celery_beat.0018_improve_crontab_helptext... OK
+  Applying kanban.0077_scheduledautomation... OK
+  Applying kanban.0078_board_ai_summary_metadata_and_more... OK
+  Applying kanban.0079_add_organization_learning_profile... OK
+  Applying kanban.0080_add_ai_experiment_result... OK
+  Applying kanban.0081_premortem_analysis... OK
+  Applying kanban.0082_board_archived_at_board_is_archived... OK
+  Applying kanban.0083_alter_systemauditlog_action_type... OK
+  Applying decision_center.0001_initial... OK
+  Applying kanban.0084_scope_autopsy_models... OK
+  Applying kanban.0085_whatif_scenario... OK
+  Applying kanban.0086_board_task_prefix... OK
+  Applying kanban.0087_add_wip_limit_to_column... OK
+  Applying kanban.0088_shadowbranch_branchsnapshot_branchdivergencelog_and_more... OK
+  Applying kanban.0089_add_branch_committed_action_type... OK
+  Applying kanban.0090_stresstestsession_stresstestscenario_immunityscore_and_more... OK
+  Applying kanban.0091_alter_stresstestscenario_options... OK
+  Applying exit_protocol.0001_initial... OK
+  Applying knowledge_graph.0001_initial... OK
+  Applying messaging.0001_initial... OK
+  Applying messaging.0002_fileattachment... OK
+  Applying messaging.0003_chatmessage_is_read_chatmessage_read_at_and_more... OK
+  Applying messaging.0004_add_ai_summary_to_notification... OK
+  Applying messaging.0005_add_notification_action_url... OK
+  Applying messaging.0006_ai_analysis_fields... OK
+  Applying sessions.0001_initial... OK
+  Applying sites.0001_initial... OK
+  Applying sites.0002_alter_domain_unique... OK
+  Applying socialaccount.0001_initial... OK
+  Applying socialaccount.0002_token_max_lengths... OK
+  Applying socialaccount.0003_extra_data_default_dict... OK
+  Applying socialaccount.0004_app_provider_id_settings... OK
+  Applying socialaccount.0005_socialtoken_nullable_app... OK
+  Applying socialaccount.0006_alter_socialaccount_extra_data... OK
+  Applying webhooks.0001_initial... OK
+  Applying wiki.0001_initial... OK
+  Applying wiki.0002_alter_wikicategory_unique_together_and_more... OK
+  Applying wiki.0003_enhance_meeting_notes_with_transcript... OK
+  Applying wiki.0004_wikimeetinganalysis_wikimeetingtask_and_more... OK
+  Applying wiki.0005_alter_wikimeetinganalysis_ai_model_version... OK
+  Applying wiki.0006_alter_wikimeetinganalysis_ai_model_version... OK
+  Applying wiki.0007_alter_wikimeetinganalysis_ai_model_version... OK
+  Applying wiki.0008_wikicategory_ai_assistant_type... OK
+  Applying wiki.0009_wikipage_transcript_metadata... OK
+  Applying wiki.0010_organization_nullable... OK
+  Applying wiki.0011_add_wikitemplate_model... OK
+  Applying wiki.0012_seed_wikitemplate_data... OK
+C:\Users\Avishek Paul\PrizmAI\venv\Lib\site-packages\pydantic\__init__.py:137: 
+UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 
+or greater.
+  warnings.warn(
+System check identified some issues:
+
+WARNINGS:
+?: (axes.W002) You do not have 'axes.middleware.AxesMiddleware' in your 
+settings.MIDDLEWARE.
+?: (axes.W003) You do not have 'axes.backends.AxesStandaloneBackend' or a 
+subclass in your settings.AUTHENTICATION_BACKENDS.
+	HINT: AxesModelBackend was renamed to AxesStandaloneBackend in django-axes 
+version 5.0.
+
+System check identified 2 issues (0 silenced).
+test_perform_burial_creates_entry 
+(exit_protocol.tests.BurialTaskTests.test_perform_burial_creates_entry) ... 
+ERROR
+test_perform_burial_idempotent 
+(exit_protocol.tests.BurialTaskTests.test_perform_burial_idempotent)
+Running burial twice should not create duplicate entries. ... ERROR
+test_healthy_board_scores_low 
+(exit_protocol.tests.HealthScoringTests.test_healthy_board_scores_low) ... 
+ERROR
+test_inactive_board_scores_high 
+(exit_protocol.tests.HealthScoringTests.test_inactive_board_scores_high)
+A board with no activity for 30 days should score high on activity. ... ERROR
+test_new_board_skipped 
+(exit_protocol.tests.HealthScoringTests.test_new_board_skipped)
+Boards < 7 days old should not get a score. ... ERROR
+test_create_cemetery_entry 
+(exit_protocol.tests.ModelTests.test_create_cemetery_entry) ... ERROR

@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+
+{% block title %}Organ Bank: {{ board.name }} — PrizmAI{% endblock %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 0 auto;">
+  <a href="{% url 'exit_protocol:dashboard' board.id %}" class="text-muted text-decoration-none d-block mb-3">← Back to Exit Protocol</a>
+
+  <h1 style="font-size: 1.5rem; margin-bottom: 0.5rem;">🫀 Organ Bank</h1>
+  <p class="text-muted" style="font-size: 0.9rem;">Reusable components from {{ board.name }}</p>
+
+  {% if organs %}
+  <div class="row g-3 mt-2">
+    {% for organ in organs %}
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <h5 class="card-title" style="font-size: 0.95rem; margin-bottom: 0;">{{ organ.name }}</h5>
+            <span class="badge bg-secondary" style="font-size: 0.7rem;">{{ organ.get_organ_type_display }}</span>
+          </div>
+
+          <p class="card-text" style="font-size: 0.8rem; color: #888;">{{ organ.description|truncatewords:30 }}</p>
+
+          <!-- Reusability Score -->
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <div class="progress flex-grow-1" style="height: 6px;">
+              <div class="progress-bar {% if organ.reusability_score >= 70 %}bg-success{% elif organ.reusability_score >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                style="width: {{ organ.reusability_score }}%"></div>
+            </div>
+            <span style="font-size: 0.75rem; color: #888;">{{ organ.reusability_score }}%</span>
+          </div>
+
+          {% if organ.ai_rationale %}
+          <p style="font-size: 0.75rem; color: #999; font-style: italic;">{{ organ.ai_rationale|truncatewords:20 }}</p>
+          {% endif %}
+
+          <div class="d-flex gap-2 mt-2">
+            <span class="badge {% if organ.status == 'available' %}bg-success{% elif organ.status == 'transplanted' %}bg-info{% else %}bg-secondary{% endif %}"
+              style="font-size: 0.7rem;">{{ organ.get_status_display }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center py-5">
+    <p class="text-muted">No organs extracted yet. Organ extraction happens during the hospice process.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

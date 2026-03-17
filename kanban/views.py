@@ -1387,6 +1387,24 @@ def board_detail(request, board_id):
         .order_by('first_name', 'username')
     )
 
+    # Exit Protocol: inject hospice banner context
+    hospice_risk_score = 0
+    hospice_dismissed = False
+    hospice_session = None
+    try:
+        from exit_protocol.models import ProjectHealthSignal, HospiceDismissal, HospiceSession
+        latest_signal = ProjectHealthSignal.objects.filter(
+            board=board, score_is_valid=True
+        ).order_by('-recorded_at').first()
+        if latest_signal:
+            hospice_risk_score = latest_signal.hospice_risk_score
+        hospice_dismissed = HospiceDismissal.objects.filter(
+            board=board, user=request.user, expires_at__gt=timezone.now()
+        ).exists()
+        hospice_session = HospiceSession.objects.filter(board=board).first()
+    except Exception:
+        pass
+
     return render(request, 'kanban/board_detail.html', {
         'board': board,
         'columns': columns,
@@ -1410,6 +1428,9 @@ def board_detail(request, board_id):
         'column_meta': column_meta,  # Per-column WIP/count metadata
         'board_members_list': board_members_list,  # For inline assignee picker
         'task_prefix': board.get_task_prefix(),  # For task ID on kanban cards
+        'hospice_risk_score': hospice_risk_score,
+        'hospice_dismissed': hospice_dismissed,
+        'hospice_session': hospice_session,
     })
 
 def task_detail(request, task_id):

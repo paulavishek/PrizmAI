@@ -105,6 +105,7 @@ INSTALLED_APPS = [
     'analytics',  # Analytics and user feedback system
     'knowledge_graph',  # Knowledge Graph Project Memory system
     'decision_center',  # Decision Batch Dashboard — unified decision queue
+    'exit_protocol',  # Exit Protocol — Project Hospice, Organ Transplant, Cemetery
 ]
 
 MIDDLEWARE = [
