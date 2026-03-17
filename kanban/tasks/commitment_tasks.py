@@ -33,7 +33,20 @@ def run_commitment_decay_all(self):
     # Iterate without loading all at once
     for protocol in qs.iterator(chunk_size=50):
         try:
-            CommitmentService.calculate_decay(protocol)
+            new_confidence = CommitmentService.calculate_decay(protocol)
+            if abs(new_confidence - protocol.current_confidence) > 0.001:
+                CommitmentService.apply_signal(
+                    protocol=protocol,
+                    signal_type='decay',
+                    signal_value=-(protocol.current_confidence - new_confidence),
+                    description=(
+                        f'Time decay applied: confidence dropped from '
+                        f'{protocol.current_confidence:.0%} to {new_confidence:.0%}.'
+                    ),
+                    ai_generated=True,
+                )
+                # Queue AI reasoning generation
+                generate_ai_reasoning_task.delay(protocol.pk)
             processed += 1
         except Exception as exc:
             logger.error(
@@ -59,7 +72,7 @@ def reset_weekly_tokens(self):
 
     today = timezone.now().date()
     updated = UserCredibilityScore.objects.all().update(
-        tokens_remaining=10,
+        tokens_remaining=100,
         tokens_reset_date=today,
     )
     logger.info("reset_weekly_tokens: updated %d credibility scores", updated)
@@ -83,7 +96,7 @@ def auto_detect_signals_for_board(self, board_id):
 
     try:
         signals_created = CommitmentService.detect_auto_signals(board)
-        return {'status': 'ok', 'signals_created': signals_created}
+        return {'status': 'ok', 'signals_created': len(signals_created)}
     except Exception as exc:
         logger.error(
             "auto_detect_signals_for_board failed for board %s: %s",
@@ -102,8 +115,7 @@ def generate_ai_reasoning_task(self, protocol_id):
     from kanban.commitment_service import CommitmentService
 
     try:
-        reasoning = CommitmentService.generate_ai_reasoning(protocol_id)
-        CommitmentProtocol.objects.filter(pk=protocol_id).update(ai_reasoning=reasoning)
+        CommitmentService.generate_ai_reasoning(protocol_id)
         return {'status': 'ok', 'protocol_id': protocol_id}
     except CommitmentProtocol.DoesNotExist:
         logger.warning("generate_ai_reasoning_task: protocol %s not found", protocol_id)

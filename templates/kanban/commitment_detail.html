@@ -89,7 +89,7 @@
     <div>
       <strong>Renegotiation requested by AI coach.</strong>
       The scope negotiation bot has proposed options to restore confidence.
-      <a href="{% url 'kanban:negotiation_session_detail' board.id active_negotiation.id %}" class="alert-link ms-2">
+      <a href="{% url 'negotiation_session_detail' board.id active_negotiation.id %}" class="alert-link ms-2">
         Review Options <i class="bi bi-arrow-right"></i>
       </a>
     </div>
@@ -288,17 +288,31 @@
 <script>
 (function () {
   // ── Confidence Curve (Chart.js) ──────────────────────────────────────
-  var curveData = {{ curve_data_json|safe }};
-  if (curveData && curveData.labels) {
+  var rawCurve = {{ curve_data_json|safe }};
+  if (rawCurve && rawCurve.length) {
+    // Transform list-of-dicts → labels + two datasets
+    var labels = [];
+    var historicalData = [];
+    var projectedData = [];
+    rawCurve.forEach(function(pt) {
+      labels.push(pt.date);
+      if (pt.projected) {
+        historicalData.push(null);
+        projectedData.push(Math.round(pt.confidence * 100));
+      } else {
+        historicalData.push(Math.round(pt.confidence * 100));
+        projectedData.push(null);
+      }
+    });
     var ctx = document.getElementById('curve-chart');
     new Chart(ctx, {
       type: 'line',
       data: {
-        labels: curveData.labels,
+        labels: labels,
         datasets: [
           {
             label: 'Historical Confidence',
-            data: curveData.historical,
+            data: historicalData,
             borderColor: '#0d6efd',
             backgroundColor: 'rgba(13,110,253,.1)',
             fill: true,
@@ -307,7 +321,7 @@
           },
           {
             label: 'Projected Decay',
-            data: curveData.projected,
+            data: projectedData,
             borderColor: '#dc3545',
             borderDash: [6, 4],
             backgroundColor: 'rgba(220,53,69,.05)',
@@ -347,7 +361,7 @@
       fetch(betUrl, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.json())
         .then(data => {
-          betFeedback.innerHTML = data.ok
+          betFeedback.innerHTML = data.success
             ? '<span class="text-success">' + data.message + '</span>'
             : '<span class="text-danger">' + (data.error || 'Error') + '</span>';
         })
@@ -366,7 +380,7 @@
       fetch(signalUrl, { method: 'POST', body: fd, headers: { 'X-Requested-With': 'XMLHttpRequest' } })
         .then(r => r.json())
         .then(data => {
-          if (data.ok) {
+          if (data.success) {
             signalFeedback.innerHTML = '<span class="text-success">' + data.message + '</span>';
             setTimeout(function () { location.reload(); }, 1200);
           } else {
